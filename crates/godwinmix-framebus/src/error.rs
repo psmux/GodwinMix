@@ -48,11 +48,18 @@ impl fmt::Display for Error {
                 "nothing publishes {name} on the frame bus (looked for {path}). \
                  Start the source that owns it, then subscribe again"
             ),
-            Error::NameTaken { name, pid } => write!(
-                f,
-                "{name} is already published by process {pid}, which is running. \
-                 Read it with a Subscriber, or stop that process first"
-            ),
+            Error::NameTaken { name, pid } => {
+                let who = if *pid == 0 {
+                    "another process".to_string()
+                } else {
+                    format!("process {pid}")
+                };
+                write!(
+                    f,
+                    "{name} is already published by {who}, which is running. \
+                     Read it with a Subscriber, or stop that process first"
+                )
+            }
             Error::Protocol(m) => write!(f, "frame bus protocol: {m}"),
             Error::Os(m) => write!(f, "frame bus: the operating system refused {m}"),
             Error::Unsupported(m) => f.write_str(m),

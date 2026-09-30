@@ -24,7 +24,9 @@ impl Returns {
 
     pub fn wait(&self, for_ms: u64) {
         let g = self.lock.lock().unwrap();
-        let _ = self.cv.wait_timeout(g, std::time::Duration::from_millis(for_ms));
+        let _ = self
+            .cv
+            .wait_timeout(g, std::time::Duration::from_millis(for_ms));
     }
 }
 
@@ -47,7 +49,10 @@ impl Frame {
     }
 
     pub fn layout(&self) -> Layout {
-        self.ring.header().layout().expect("checked when the region was attached")
+        self.ring
+            .header()
+            .layout()
+            .expect("checked when the region was attached")
     }
 
     /// Plane `i` from its first row to the end of its last.
@@ -109,6 +114,9 @@ impl Drop for Frame {
 
 impl std::fmt::Debug for Frame {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Frame").field("seq", &self.seq).field("slot", &self.slot).finish()
+        f.debug_struct("Frame")
+            .field("seq", &self.seq)
+            .field("slot", &self.slot)
+            .finish()
     }
 }

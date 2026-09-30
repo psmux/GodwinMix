@@ -1,0 +1,180 @@
+# Frame bus
+
+The crate `godwinmix-framebus`. One owner decodes a device or a stream once
+and publishes each decoded frame into shared memory; any number of readers, in
+the same process or in others, read the frames there without a copy. Why it is
+built this way, and what it costs, is in
+[the explanation](../explanation/frame-bus.md).
+
+Nothing in the mixer uses it yet. Shows will, when they become processes of
+their own.
+
+## Names
+
+| Name | For |
+|---|---|
+| `camera:<id>` | a device this machine opens: a camera, a capture card |
+| `channel:<app>/<stream>` | a stream arriving on a channel |
+
+Each part is 1 to 64 letters, digits, `-` or `_`. Anything else is refused with
+`bad-name` and a sentence showing both forms.
+
+## The registry
+
+A registry is a directory with one Unix socket per published name in it:
+`camera=<id>.sock` and `channel=<app>+<stream>.sock`. The station makes it and
+passes it to each show it starts as `GODWINMIX_BUS_DIR`. Without that variable
+it is `$XDG_RUNTIME_DIR/godwinmix/bus` on Linux, or `godwinmix-<uid>/bus` in the
+temporary directory. The directory is made mode 0700.
+
+A socket path longer than 103 bytes cannot be bound on macOS. A name that would
+make one is refused, naming `GODWINMIX_BUS_DIR` as the way to a shorter
+directory.
+
+An owner that finds a socket for its name connects to it first. If something
+answers, the name is taken (`name-taken`). If nothing does, the socket was left
+by an owner that died, and it is replaced.
+
+## Rust surface
+
+```rust
+use godwinmix_framebus::{BusName, Format, Layout, Publisher, PublisherOptions, Registry, Subscriber};
+
+let reg = Registry::from_env()?;
+let name: BusName = "camera:cam-wide".parse()?;
+
+// Owner.
+let layout = Layout::new(Format::Nv12, 1920, 1080)?.with_fps(30, 1);
+let mut owner = Publisher::create(&reg, &name, layout, PublisherOptions::default())?;
+owner.write(Some(pts_ns), None, |slot| decode_into(slot));   // or write_planes, or push_buffer
+let stats = owner.stats();                                     // published, dropped, per reader
+
+// Reader, here or in another process.
+let mut reader = Subscriber::connect(&reg, &name)?;
+if let Some(frame) = reader.next(Duration::from_millis(100))? {
+    let y = frame.plane(0);                                    // borrowed from shared memory
+    let missed = frame.skipped();
+}                                                              // dropping the frame gives the slot back
+```
+
+### `Publisher`
+
+| Call | Does |
+|---|---|
+| `create(registry, name, layout, options)` | binds the name's socket and starts the bus thread |
+| `write(pts, duration, fill)` | claims a slot, runs `fill` on its bytes, publishes it. `false` if every slot was leased and the frame was dropped |
+| `write_planes(pts, planes)` | the same, copying planes given as `(bytes, stride)` row by row into the slot layout |
+| `push_buffer(buffer, video_info)` | the same for a GStreamer buffer; changes the layout first if the caps changed (`gst` feature) |
+| `set_layout(layout)` | a new format: readers are handed a new region, and frames they hold from the old one stay valid |
+| `stats()` | `published`, `dropped`, `slots`, and per reader `pid`, `delivered`, `skipped`, `holding` |
+
+Dropping the `Publisher` removes its socket. Readers see the owner go and wait
+for the next one.
+
+### `PublisherOptions`
+
+| Field | Default | Meaning |
+|---|---|---|
+| `max_readers` | 8 | readers attached at once, at most 32. One more is refused with a sentence saying so |
+| `leases_per_reader` | 3 | frames one reader may hold at once. A reader holding that many waits for one of its own to drop; the owner never waits |
+| `checksum` | false | write an FNV-1a checksum of each frame into its slot, for `Frame::verify` |
+
+The region has `max_readers * leases_per_reader + 2` slots, at most 64. Slots
+are allocated lazily by the operating system and the owner reuses the lowest
+free one, so a region with room for 26 frames touches four or five while its
+readers keep up.
+
+### `Subscriber` and `Frame`
+
+| Call | Does |
+|---|---|
+| `Subscriber::connect(registry, name)` | attaches; `not-found` when nothing publishes the name |
+| `next(timeout)` | the newest frame this reader has not seen, or `None` when none came in time. Never an older one |
+| `is_connected()`, `reconnects()`, `layout()` | the reader's state |
+| `Frame::data()`, `plane(i)`, `layout()` | the frame's bytes, in place |
+| `Frame::seq()`, `skipped()` | the owner's frame number, and how many frames this reader missed before this one |
+| `Frame::pts()`, `duration()` | as the owner gave them |
+| `Frame::captured_ns()`, `published_ns()` | when the owner was handed the frame and when it became readable, on `monotonic_ns()`, which every process on the machine shares |
+| `Frame::verify()` | `Some(true)` if the bytes match the owner's checksum, `None` if it writes none |
+
+When the owner dies the reader keeps the frames it holds, `next` returns `None`,
+and it attaches to the next owner of the name by itself, whatever format that
+one has. `Frame::seq` starts again at 1.
+
+### Errors
+
+`Error::code()` is one of `bad-name`, `bad-layout`, `not-found`, `name-taken`,
+`owner-gone`, `protocol`, `os`, `unsupported`. Each message says what happened
+and what to do next.
+
+## GStreamer elements
+
+Call `godwinmix_framebus::gst::register()` once after `gst::init()`. The
+elements are registered in the process, not installed as a plugin file, so
+`gst-launch-1.0` does not know them.
+
+```
+... ! videoconvert ! video/x-raw,format=NV12 ! gmxbussink bus-name=camera:cam-wide
+gmxbussrc bus-name=camera:cam-wide ! compositor ...
+```
+
+`gmxbussink`
+
+| Property | Default | |
+|---|---|---|
+| `bus-name` | | required |
+| `bus-dir` | empty | the registry directory; empty for `GODWINMIX_BUS_DIR` or the default |
+| `max-readers` | 8 | as above |
+| `leases` | 3 | frames per reader, as above |
+
+It publishes on its first caps and changes format when the caps change.
+
+`gmxbussrc` is a live source. `bus-name` and `bus-dir` as above. It starts
+whether or not an owner exists yet and waits for one. Each buffer's memory is
+the slot itself, with a `GstVideoMeta` for the plane offsets and strides; the
+lease is returned when the buffer is freed. Each buffer also carries a
+`GstReferenceTimestampMeta` with caps `timestamp/x-gmx-monotonic` holding the
+time the owner was handed the frame, and its offset is `Frame::seq`. Caps come
+from the owner and change when the owner's do.
+
+## Formats
+
+NV12, I420, P010_10LE, YUY2, UYVY, BGRA, RGBA and BGRx, at any size from 1x1 to
+16384x16384. Rows are padded to 64 bytes. Anything else is refused with
+`bad-layout`, which names `videoconvert` to NV12 as the fix.
+
+## Platforms
+
+| | Region | Handed over as | Notices a dead reader by |
+|---|---|---|---|
+| Linux | `memfd_create` | descriptor over the socket (`SCM_RIGHTS`) | its socket closing |
+| macOS | `shm_open`, unlinked at once | the same | the same |
+| Windows | not yet | | |
+
+On Windows the crate builds, `CROSS_PROCESS` is false and `available()` returns
+`unsupported`; a show there decodes its own sources, as every consumer does
+today.
+
+## Limits
+
+| | |
+|---|---|
+| readers per name | 32 |
+| slots per region | 64 |
+| frames one reader holds | `leases_per_reader`, at most 8 through `gmxbussink` |
+
+## Benchmark
+
+`dev/framebus-bench.sh` builds and runs the matrix. Arguments go to
+`framebus-bench matrix`:
+
+| Argument | Default | |
+|---|---|---|
+| `--seconds` | 10 | the measured window |
+| `--readers` | `1,4,8` | reader counts |
+| `--decoder` | `avdec_h264` | any H.264 decoder GStreamer has, `vtdec_hw` for VideoToolbox |
+| `--format` | `NV12` | what the owner publishes |
+| `--repeat` | 1 | runs per scenario; the median by total CPU is kept |
+| `--out` | | also write the table to this file |
+
+The clip is made once, under `target/framebus-bench/`.

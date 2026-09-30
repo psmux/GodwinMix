@@ -17,7 +17,11 @@ impl BusSrc {
     pub(super) fn registry(&self) -> Result<(Registry, BusName), Error> {
         let name: BusName = self.name.lock().unwrap().parse()?;
         let dir = self.dir.lock().unwrap().clone();
-        let reg = if dir.is_empty() { Registry::from_env()? } else { Registry::new(dir)? };
+        let reg = if dir.is_empty() {
+            Registry::from_env()?
+        } else {
+            Registry::new(dir)?
+        };
         Ok((reg, name))
     }
 
@@ -49,15 +53,29 @@ impl BusSrc {
         let offsets: Vec<usize> = layout.offsets[..n].iter().map(|&o| o as usize).collect();
         let strides: Vec<i32> = layout.strides[..n].iter().map(|&s| s as i32).collect();
         let format = gst_video::VideoFormat::from_string(layout.format.name());
-        gst_video::VideoMeta::add_full(b, gst_video::VideoFrameFlags::empty(), format, layout.width, layout.height, &offsets, &strides)
-            .map_err(|_| gst::FlowError::Error)?;
+        gst_video::VideoMeta::add_full(
+            b,
+            gst_video::VideoFrameFlags::empty(),
+            format,
+            layout.width,
+            layout.height,
+            &offsets,
+            &strides,
+        )
+        .map_err(|_| gst::FlowError::Error)?;
         let caps = gst::Caps::new_empty_simple(CAPTURED_CAPS);
-        gst::ReferenceTimestampMeta::add(b, &caps, gst::ClockTime::from_nseconds(captured), gst::ClockTime::NONE);
+        gst::ReferenceTimestampMeta::add(
+            b,
+            &caps,
+            gst::ClockTime::from_nseconds(captured),
+            gst::ClockTime::NONE,
+        );
         if *self.caps_for.lock().unwrap() != Some(layout) {
-            self.obj().set_caps(&caps_of(&layout)).map_err(|_| gst::FlowError::NotNegotiated)?;
+            self.obj()
+                .set_caps(&caps_of(&layout))
+                .map_err(|_| gst::FlowError::NotNegotiated)?;
             *self.caps_for.lock().unwrap() = Some(layout);
         }
         Ok(buffer)
     }
 }
-

@@ -12,7 +12,11 @@ pub fn usage() -> (u64, u64) {
     unsafe { libc::getrusage(libc::RUSAGE_SELF, &mut ru) };
     let ns = |t: libc::timeval| t.tv_sec as u64 * 1_000_000_000 + t.tv_usec as u64 * 1000;
     // Linux reports kilobytes, macOS bytes.
-    let rss = if cfg!(target_os = "linux") { ru.ru_maxrss as u64 * 1024 } else { ru.ru_maxrss as u64 };
+    let rss = if cfg!(target_os = "linux") {
+        ru.ru_maxrss as u64 * 1024
+    } else {
+        ru.ru_maxrss as u64
+    };
     (ns(ru.ru_utime) + ns(ru.ru_stime), rss)
 }
 

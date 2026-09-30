@@ -2,6 +2,7 @@
 
 use std::sync::atomic::Ordering::Relaxed;
 
+use super::Publisher;
 use crate::ring::Ring;
 use crate::Layout;
 
@@ -62,5 +63,14 @@ pub fn copy_planes(layout: &Layout, planes: &[(&[u8], usize)], dst: &mut [u8]) {
             let s = &src[y * src_stride..y * src_stride + row];
             dst[off + y * stride..off + y * stride + row].copy_from_slice(s);
         }
+    }
+}
+
+impl Publisher {
+    /// Publish one frame given as planes with their own strides, copying each
+    /// row into the slot's layout.
+    pub fn write_planes(&mut self, pts: Option<u64>, planes: &[(&[u8], usize)]) -> bool {
+        let layout = self.layout();
+        self.write(pts, None, |dst| copy_planes(&layout, planes, dst))
     }
 }

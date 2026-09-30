@@ -53,8 +53,14 @@ pub fn read_reader((c, inbox): &mut (Arc<Conn>, Inbox)) -> bool {
 }
 
 pub fn poll_all(fds: &[RawFd], timeout_ms: i32) -> Vec<bool> {
-    let mut p: Vec<libc::pollfd> =
-        fds.iter().map(|&fd| libc::pollfd { fd, events: libc::POLLIN, revents: 0 }).collect();
+    let mut p: Vec<libc::pollfd> = fds
+        .iter()
+        .map(|&fd| libc::pollfd {
+            fd,
+            events: libc::POLLIN,
+            revents: 0,
+        })
+        .collect();
     // SAFETY: a valid array of pollfd of the given length.
     let n = unsafe { libc::poll(p.as_mut_ptr(), p.len() as libc::nfds_t, timeout_ms) };
     p.iter().map(|x| n > 0 && x.revents != 0).collect()
@@ -67,7 +73,10 @@ pub fn claim_path(name: &BusName, path: &std::path::Path) -> Result<(), Error> {
         return Ok(());
     }
     if std::os::unix::net::UnixStream::connect(path).is_ok() {
-        return Err(Error::NameTaken { name: name.to_string(), pid: 0 });
+        return Err(Error::NameTaken {
+            name: name.to_string(),
+            pid: 0,
+        });
     }
     std::fs::remove_file(path)
         .map_err(|e| Error::Os(format!("removing the stale socket {}: {e}", path.display())))

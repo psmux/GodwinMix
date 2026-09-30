@@ -8,7 +8,10 @@ use crate::header::{pack_latest, unpack_latest, WRITING};
 
 impl Ring {
     fn leased(&self) -> u64 {
-        self.header().readers.iter().fold(0, |m, r| m | r.leases.load(SeqCst))
+        self.header()
+            .readers
+            .iter()
+            .fold(0, |m, r| m | r.leases.load(SeqCst))
     }
 
     /// A slot to write the next frame into, or `None` when every slot is
@@ -55,9 +58,10 @@ impl Ring {
     /// A reader place that nobody holds, marked as held.
     pub fn take_reader(&self, pid: u32) -> Option<usize> {
         let h = self.header();
-        let i = h.readers.iter().position(|r| {
-            r.live.compare_exchange(0, 1, SeqCst, Relaxed).is_ok()
-        })?;
+        let i = h
+            .readers
+            .iter()
+            .position(|r| r.live.compare_exchange(0, 1, SeqCst, Relaxed).is_ok())?;
         let r = &h.readers[i];
         r.pid.store(pid, Relaxed);
         r.delivered.store(0, Relaxed);

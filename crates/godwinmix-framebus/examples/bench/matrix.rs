@@ -1,13 +1,12 @@
 //! Run every scenario, one after another, and print the table.
 
 use std::collections::HashMap;
-use std::io::{BufRead, BufReader};
-use std::process::{Child, Command, Stdio};
+use std::process::Child;
 
 use godwinmix_framebus::monotonic_ns;
 
 use crate::table::{self, Row};
-use crate::{clip, Args};
+use crate::{clip, procs, Args};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Mech {
@@ -22,20 +21,36 @@ pub struct Scenario {
     pub stalled: bool,
 }
 
-const SEC: u64 = 1_000_000_000;
+pub const SEC: u64 = 1_000_000_000;
 
 pub fn run(args: &Args) {
     let secs = args.num("seconds", 10);
     let decoder = args.get("decoder", "avdec_h264");
     let format = args.get("format", "NV12");
-    let counts: Vec<usize> = args.get("readers", "1,4,8").split(',').filter_map(|n| n.parse().ok()).collect();
+    let counts: Vec<usize> = args
+        .get("readers", "1,4,8")
+        .split(',')
+        .filter_map(|n| n.parse().ok())
+        .collect();
     let clip = clip::make(secs + 12);
-    let mut plan = vec![Scenario { mech: Mech::Bus, readers: 0, stalled: false }];
+    let mut plan = vec![Scenario {
+        mech: Mech::Bus,
+        readers: 0,
+        stalled: false,
+    }];
     for mech in [Mech::Bus, Mech::Decode, Mech::Unixfd] {
         for &n in &counts {
-            plan.push(Scenario { mech, readers: n, stalled: false });
+            plan.push(Scenario {
+                mech,
+                readers: n,
+                stalled: false,
+            });
             if mech != Mech::Decode {
-                plan.push(Scenario { mech, readers: n, stalled: true });
+                plan.push(Scenario {
+                    mech,
+                    readers: n,
+                    stalled: true,
+                });
             }
         }
     }
@@ -48,7 +63,11 @@ pub fn run(args: &Args) {
         let mut runs: Vec<Row> = (0..repeat)
             .map(|i| {
                 eprintln!("running: {label} ({} of {repeat})", i + 1);
-                Row::from(s, label.clone(), one(s, &clip.display().to_string(), &decoder, &format, secs))
+                Row::from(
+                    s,
+                    label.clone(),
+                    one(s, &clip.display().to_string(), &decoder, &format, secs),
+                )
             })
             .collect();
         runs.sort_by(|a, b| a.total().total_cmp(&b.total()));
@@ -63,17 +82,44 @@ pub fn run(args: &Args) {
 }
 
 /// Run one scenario and return every process's `BENCH` line as a map.
-fn one(s: &Scenario, clip: &str, decoder: &str, format: &str, secs: u64) -> Vec<HashMap<String, String>> {
+fn one(
+    s: &Scenario,
+    clip: &str,
+    decoder: &str,
+    format: &str,
+    secs: u64,
+) -> Vec<HashMap<String, String>> {
     let tag = format!("{}-{}", std::process::id(), monotonic_ns() % 100_000);
     let dir = format!("/tmp/gmxfb-bench-{tag}");
     let socket = format!("/tmp/gmxfb-bench-{tag}.sock");
     let t0 = monotonic_ns() + 5 * SEC;
     let t1 = t0 + secs * SEC;
     let common = |role: &str| -> Vec<String> {
-        let mech = if s.mech == Mech::Unixfd { "unixfd" } else { "bus" };
+        let mech = if s.mech == Mech::Unixfd {
+            "unixfd"
+        } else {
+            "bus"
+        };
         [
-            role, "--mechanism", mech, "--clip", clip, "--decoder", decoder, "--format", format, "--dir", &dir, "--socket", &socket,
-            "--t0", &t0.to_string(), "--t1", &t1.to_string(), "--until", &(t1 + 2 * SEC).to_string(),
+            role,
+            "--mechanism",
+            mech,
+            "--clip",
+            clip,
+            "--decoder",
+            decoder,
+            "--format",
+            format,
+            "--dir",
+            &dir,
+            "--socket",
+            &socket,
+            "--t0",
+            &t0.to_string(),
+            "--t1",
+            &t1.to_string(),
+            "--until",
+            &(t1 + 2 * SEC).to_string(),
         ]
         .iter()
         .map(|a| a.to_string())
@@ -81,49 +127,24 @@ fn one(s: &Scenario, clip: &str, decoder: &str, format: &str, secs: u64) -> Vec<
     };
     let mut kids: Vec<Child> = vec![];
     if s.mech != Mech::Decode {
-        kids.push(spawn(common("owner")));
+        kids.push(procs::spawn(common("owner")));
         std::thread::sleep(std::time::Duration::from_millis(500));
     }
     for i in 0..s.readers {
-        let role = if s.mech == Mech::Decode { "decode" } else { "reader" };
+        let role = if s.mech == Mech::Decode {
+            "decode"
+        } else {
+            "reader"
+        };
         let mut a = common(role);
         if s.stalled && i == 0 {
             a.extend(["--stall-ms".to_string(), "1000".to_string()]);
         }
-        kids.push(spawn(a));
+        kids.push(procs::spawn(a));
     }
-    // A process wedged on a stalled reader (unixfdsink does that) must not
-    // hang the run: whatever is still alive well after the window is killed.
-    let pids: Vec<i32> = kids.iter().map(|k| k.id() as i32).collect();
-    std::thread::spawn(move || {
-        crate::measure::sleep_until(t1 + 10 * SEC);
-        for pid in pids {
-            // SAFETY: a signal to a child we started; harmless if it exited.
-            unsafe { libc::kill(pid, libc::SIGKILL) };
-        }
-    });
-    let results = kids.into_iter().filter_map(collect).collect();
+    procs::kill_after(&kids, t1 + 10 * SEC);
+    let results = kids.into_iter().filter_map(procs::collect).collect();
     let _ = std::fs::remove_dir_all(&dir);
     let _ = std::fs::remove_file(&socket);
     results
-}
-
-fn spawn(args: Vec<String>) -> Child {
-    Command::new(std::env::current_exe().unwrap())
-        .args(args)
-        .stdout(Stdio::piped())
-        .spawn()
-        .expect("could not start a bench process")
-}
-
-fn collect(mut child: Child) -> Option<HashMap<String, String>> {
-    let out = BufReader::new(child.stdout.take().unwrap());
-    let mut found = None;
-    for line in out.lines().map_while(Result::ok) {
-        if let Some(rest) = line.strip_prefix("BENCH ") {
-            found = Some(rest.split(' ').filter_map(|kv| kv.split_once('=')).map(|(k, v)| (k.into(), v.into())).collect());
-        }
-    }
-    let _ = child.wait();
-    found
 }

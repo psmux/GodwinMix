@@ -135,6 +135,9 @@ impl Shared {
 
     fn drop_reader(&self, c: &Arc<Conn>) {
         self.readers.lock().unwrap().retain(|x| !Arc::ptr_eq(x, c));
-        self.ring.lock().unwrap().reset_reader(*c.reader.lock().unwrap());
+        self.ring
+            .lock()
+            .unwrap()
+            .reset_reader(*c.reader.lock().unwrap());
     }
 }

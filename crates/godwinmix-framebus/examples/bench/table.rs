@@ -24,7 +24,11 @@ pub fn label(s: &Scenario) -> String {
         Mech::Decode => "each decodes itself",
     };
     let stall = if s.stalled { ", one stalled" } else { "" };
-    format!("{what}, {} reader{}{stall}", s.readers, if s.readers == 1 { "" } else { "s" })
+    format!(
+        "{what}, {} reader{}{stall}",
+        s.readers,
+        if s.readers == 1 { "" } else { "s" }
+    )
 }
 
 fn f(m: &HashMap<String, String>, k: &str) -> f64 {
@@ -33,14 +37,31 @@ fn f(m: &HashMap<String, String>, k: &str) -> f64 {
 
 impl Row {
     pub fn from(_s: &Scenario, label: String, lines: Vec<HashMap<String, String>>) -> Row {
-        let owner = lines.iter().find(|m| m.get("role").is_some_and(|r| r == "owner"));
-        let readers: Vec<_> = lines.iter().filter(|m| m.get("role").is_some_and(|r| r != "owner")).collect();
-        let normal: Vec<_> = readers.iter().filter(|m| m.get("stalled").is_none_or(|v| v != "true")).collect();
-        let stalled = readers.iter().find(|m| m.get("stalled").is_some_and(|v| v == "true"));
-        let lat = normal.iter().filter(|m| m.contains_key("p50_us")).fold(None, |acc: Option<(f64, f64, f64)>, m| {
-            let (a, b, c) = (f(m, "p50_us") / 1000.0, f(m, "p99_us") / 1000.0, f(m, "max_us") / 1000.0);
-            Some(acc.map_or((a, b, c), |(x, y, z)| (x.max(a), y.max(b), z.max(c))))
-        });
+        let owner = lines
+            .iter()
+            .find(|m| m.get("role").is_some_and(|r| r == "owner"));
+        let readers: Vec<_> = lines
+            .iter()
+            .filter(|m| m.get("role").is_some_and(|r| r != "owner"))
+            .collect();
+        let normal: Vec<_> = readers
+            .iter()
+            .filter(|m| m.get("stalled").is_none_or(|v| v != "true"))
+            .collect();
+        let stalled = readers
+            .iter()
+            .find(|m| m.get("stalled").is_some_and(|v| v == "true"));
+        let lat = normal.iter().filter(|m| m.contains_key("p50_us")).fold(
+            None,
+            |acc: Option<(f64, f64, f64)>, m| {
+                let (a, b, c) = (
+                    f(m, "p50_us") / 1000.0,
+                    f(m, "p99_us") / 1000.0,
+                    f(m, "max_us") / 1000.0,
+                );
+                Some(acc.map_or((a, b, c), |(x, y, z)| (x.max(a), y.max(b), z.max(c))))
+            },
+        );
         Row {
             label,
             owner_cpu: owner.map(|m| f(m, "cpu")),
@@ -79,10 +100,20 @@ pub fn render(rows: &[Row], secs: u64, decoder: &str, format: &str, repeat: u64)
         let mean = r.reader_cpu.iter().sum::<f64>() / n;
         let max = r.reader_cpu.iter().cloned().fold(0.0, f64::max);
         let total = r.total();
-        let readers = if r.reader_cpu.is_empty() { String::new() } else { format!("{mean:.1} / {max:.1}") };
-        let owner_frames = r.owner_frames.map_or(String::new(), |f| format!("{f}, {}", opt(r.owner_dropped)));
-        let lat = r.lat_ms.map_or(String::new(), |(a, b, c)| format!("{a:.2} / {b:.2} / {c:.2}"));
-        let stalled = r.stalled.map_or(String::new(), |(g, s)| format!("{g} / {s}"));
+        let readers = if r.reader_cpu.is_empty() {
+            String::new()
+        } else {
+            format!("{mean:.1} / {max:.1}")
+        };
+        let owner_frames = r
+            .owner_frames
+            .map_or(String::new(), |f| format!("{f}, {}", opt(r.owner_dropped)));
+        let lat = r.lat_ms.map_or(String::new(), |(a, b, c)| {
+            format!("{a:.2} / {b:.2} / {c:.2}")
+        });
+        let stalled = r
+            .stalled
+            .map_or(String::new(), |(g, s)| format!("{g} / {s}"));
         out += &format!(
             "| {} | {} | {readers} | {total:.1} | {owner_frames} | {} | {} | {lat} | {stalled} |\n",
             r.label,

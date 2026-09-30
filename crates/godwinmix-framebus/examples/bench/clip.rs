@@ -40,13 +40,18 @@ pub fn make(secs: u64) -> PathBuf {
 
 /// Decode `clip` in real time with `decoder` into `tail`.
 pub fn decode_into(clip: &str, decoder: &str, tail: &str) -> gst::Pipeline {
-    gst::parse::launch(&format!("filesrc location={clip} ! qtdemux ! h264parse ! {decoder} ! {tail}"))
-        .unwrap_or_else(|e| panic!("building the pipeline with {decoder}: {e}"))
-        .downcast::<gst::Pipeline>()
-        .unwrap()
+    gst::parse::launch(&format!(
+        "filesrc location={clip} ! qtdemux ! h264parse ! {decoder} ! {tail}"
+    ))
+    .unwrap_or_else(|e| panic!("building the pipeline with {decoder}: {e}"))
+    .downcast::<gst::Pipeline>()
+    .unwrap()
 }
 
 /// Read every cache line of a frame once, as a compositor reading it would.
 pub fn touch(bytes: &[u8]) -> u64 {
-    bytes.iter().step_by(64).fold(0u64, |a, &b| a.wrapping_add(b as u64))
+    bytes
+        .iter()
+        .step_by(64)
+        .fold(0u64, |a, &b| a.wrapping_add(b as u64))
 }
