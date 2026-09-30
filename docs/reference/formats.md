@@ -42,7 +42,7 @@ Words used below:
 | IP camera snapshot URL, polled 1 to 30 times a second | JPEG | MJPEG, copy | none | `ipcam/source` (plugin `ipcam`) | `plugins/ipcam/src/tests.rs`, behind a basic login |
 | ONVIF discovery of cameras on the LAN | WS-Discovery, SOAP | each profile's RTSP stream, opened by `hls/source` | as the camera sends | `ipcam/discover` (plugin `ipcam`) | `plugins/ipcam/src/onvif/tests.rs` against a simulated device checking the WS-Security digest; no real camera here |
 | Internet radio (Icecast, SHOUTcast), or any audio stream over HTTP | MP3, AAC, Ogg, with ICY titles | none | MP3, AAC, Vorbis, Opus, copy | `icecast/source` (plugin `icecast`), live, the song title in health | `plugins/icecast/src/tests.rs` against a station run by the test |
-| SDI or HDMI capture card (Blackmagic DeckLink) | raw | | | nothing | |
+| SDI or HDMI capture card (Blackmagic DeckLink) | SDI, HDMI | raw, the mode detected | embedded PCM | `decklink/source`, `decklink/devices` (plugin `decklink`), behind detection | `plugins/decklink/src/tests.rs`: the pipeline parsed and the no card path. Not tested on a card: none on this machine |
 
 ### Devices on this machine
 
@@ -133,3 +133,7 @@ Apple M series Mac. Two seconds at 25 fps is 50 frames.
 | AJA capture | `ajasrc` is not in this GStreamer build |
 | NDI in either direction | the NDI runtime is not installed, and its licence forbids shipping it |
 | AAC with `fdkaacenc` | not in this build; `avenc_aac` is used |
+| AV1 over RTMP (enhanced FLV) | no GStreamer 1.28 muxer writes AV1 into FLV (`eflvmux` takes H.264 and HEVC only), and `flvdemux` cannot read it, so a channel refuses it and names SRT as the way out |
+| AV1 in to a channel rendition | the decoder works, but its frame size is not read from the stream yet, so the planner cannot size a rendition |
+| WebRTC (WHEP) with Homebrew's GStreamer alone | `nicesrc` and `nicesink` come from libnice's GStreamer plugin, which Homebrew's `gstreamer` does not install. Install `libnice-gstreamer`, or point `GST_PLUGIN_PATH` at a build of it |
+| SDI out | no card here, and no output kind is written for it yet |

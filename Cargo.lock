@@ -1256,6 +1256,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "gmx-decklink"
+version = "0.2.0"
+dependencies = [
+ "godwinmix-capture-common",
+ "godwinmix-sdk",
+ "gstreamer",
+ "serde_json",
+]
+
+[[package]]
 name = "gmx-director"
 version = "0.2.0"
 dependencies = [

@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SDI or HDMI input",
+  "description": "One input of a Blackmagic DeckLink card. Found inputs fill this in; the connector and the video mode are detected unless set.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "device_number": {
+      "title": "Input",
+      "description": "0 is the first input of the first card, as Blackmagic Desktop Video Setup numbers them.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 63,
+      "default": 0
+    },
+    "connection": {
+      "title": "Connector",
+      "type": "string",
+      "enum": ["auto", "sdi", "hdmi", "optical-sdi", "component", "composite", "svideo"],
+      "x-gmx-labels": ["Detect", "SDI", "HDMI", "Optical SDI", "Component", "Composite", "S-Video"],
+      "default": "auto",
+      "x-gmx-group": "Advanced"
+    },
+    "mode": {
+      "title": "Video mode",
+      "description": "auto follows the signal. Set one, such as 1080i50 or 1080p2997, only for a card that cannot detect it.",
+      "type": "string",
+      "default": "auto",
+      "examples": ["auto", "1080p25", "1080i50", "720p60"],
+      "x-gmx-group": "Advanced"
+    },
+    "audio": {
+      "title": "Take the embedded sound",
+      "type": "boolean",
+      "default": true
+    },
+    "label": { "title": "Name", "type": "string", "default": "" }
+  }
+}
