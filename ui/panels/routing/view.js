@@ -93,7 +93,8 @@ export function openRouting(client) {
     },
   };
   data.start();
-  filter.focus();
+  // Not on a phone, where focus in a box brings the keyboard up over the view.
+  if (window.innerWidth >= 700) filter.focus();
   return view;
 }
 
@@ -125,5 +126,5 @@ function press(e, data, collapsed, draw) {
 
 function legend() {
   const item = (tone, text) => el("span.rt-key", {}, [el(`span.rt-swatch.${tone}`), text]);
-  return el("span.rt-legend", { "aria-hidden": "true" }, [item("copy", "Copy"), item("gpu", "GPU encode"), item("cpu", "CPU encode")]);
+  return el("span.rt-legend", { "aria-hidden": "true" }, [item("copy", "Copy"), item("prog", "Programme encode"), item("gpu", "GPU encode"), item("cpu", "CPU encode")]);
 }

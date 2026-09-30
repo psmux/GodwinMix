@@ -56,3 +56,23 @@ function socketLink(client, id) {
   link.client = { call: link.call, on: () => () => {}, listen: () => () => {}, state: { outputs: [] }, refreshOutputs: async () => {}, transport: t };
   return link;
 }
+
+/** One show's outputs, sources and plan, and which sources are on air. */
+export async function readDetail(link) {
+  const quiet = (p) => p.catch((e) => (e && e.code !== -32601 && console.debug("routing", e), null));
+  const [outputs, sources, plan] = await Promise.all([
+    quiet(link.call("output.list", {})),
+    quiet(link.call("source.list", {})),
+    quiet(link.call("rendition.plan", {})),
+  ]);
+  const s = link.client && link.client.state;
+  const tally = { ...(s && s.tally) };
+  if (s && s.program && !tally[s.program]) tally[s.program] = "program";
+  return { detail: { outputs: list(outputs, "outputs"), sources: list(sources, "sources"), tally: link.tally || tally }, plan };
+}
+
+/** `/rpc` answers with the array; some answers wrap it in an object. */
+function list(answer, field) {
+  if (Array.isArray(answer)) return answer;
+  return (answer && answer[field]) || [];
+}

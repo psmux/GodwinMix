@@ -15,6 +15,7 @@
 .rt-swatch.copy, .rt-route.copy { --tone: var(--ok); }
 .rt-swatch.gpu, .rt-route.gpu { --tone: var(--accent); }
 .rt-swatch.cpu, .rt-route.cpu { --tone: var(--warn); }
+.rt-swatch.prog, .rt-route.prog, .rt-lformat.prog { --tone: var(--dim); }
 .rt-route.wait { --tone: var(--faint); }
 .rt-swatch { background: var(--tone); }
 .rt-scroll { flex: 1; overflow: auto; overscroll-behavior: contain; }
