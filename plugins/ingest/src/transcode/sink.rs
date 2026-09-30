@@ -10,7 +10,6 @@
 use std::sync::{Arc, Mutex};
 
 use gstreamer as gst;
-use gstreamer::prelude::*;
 use gstreamer_app as gst_app;
 
 use crate::media_tag::{MediaTag, TagKind};
@@ -41,7 +40,9 @@ pub fn attach(sink: &gst_app::AppSink, kind: TagKind, node: String, route: Arc<d
 
 fn tags(sample: &gst::Sample, kind: TagKind, header: &Mutex<Option<Vec<u8>>>, base: u32) -> Vec<MediaTag> {
     let Some(buffer) = sample.buffer() else { return Vec::new() };
-    let Some(at) = buffer.dts().or(buffer.pts()) else { return Vec::new() };
+    // Running time, not the buffer's own stamp: an encoder moves its segment
+    // (and its stamps) a thousand hours on so that no DTS is negative.
+    let Some(at) = running_time(sample, buffer) else { return Vec::new() };
     let ms = base.wrapping_add((at.mseconds() & 0xffff_ffff) as u32);
     let mut out = Vec::with_capacity(2);
     if let Some(config) = codec_data(sample) {
@@ -66,6 +67,12 @@ fn make(kind: TagKind, timestamp_ms: u32, keyframe: bool, sequence_header: bool,
     payload.extend_from_slice(head);
     payload.extend_from_slice(body);
     MediaTag { kind, timestamp_ms, keyframe, sequence_header, payload: Arc::from(payload) }
+}
+
+fn running_time(sample: &gst::Sample, buffer: &gst::BufferRef) -> Option<gst::ClockTime> {
+    let at = buffer.dts().or(buffer.pts())?;
+    let segment = sample.segment()?.downcast_ref::<gst::format::Time>()?;
+    segment.to_running_time(at)
 }
 
 fn codec_data(sample: &gst::Sample) -> Option<Vec<u8>> {

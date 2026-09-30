@@ -82,8 +82,9 @@ fn a_destination_waits_sends_while_live_moves_to_the_next_stream_and_stops_when_
         platform: "custom".into(),
         url,
         stream: "*".into(),
+        feed: Feed::Copy,
     };
-    sends.apply(vec![w.clone()]);
+    sends.apply(vec![w.clone()], vec![]);
     std::thread::sleep(Duration::from_millis(400));
     assert_eq!(state(&sends), "waiting", "nothing is live yet");
 
@@ -99,7 +100,7 @@ fn a_destination_waits_sends_while_live_moves_to_the_next_stream_and_stops_when_
     wait_for("the next stream to be sent", || got.load(Ordering::Relaxed) > before + 20);
     assert_eq!(state(&sends), "live");
 
-    sends.apply(vec![]);
+    sends.apply(vec![], vec![]);
     assert!(sends.rates().is_empty());
     stop_b.store(true, Ordering::Relaxed);
     b.join().unwrap();

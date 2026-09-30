@@ -26,6 +26,7 @@ mod listeners;
 mod proto;
 mod srt;
 mod tagger;
+mod transcode;
 mod whip;
 // The restreamer (src/restream/) reads the hub through `subscribe`, so parts
 // of it are public API this binary does not call itself.
@@ -231,7 +232,7 @@ impl Device for Publishers {
         self.settings = device::Settings::from_params(&ready.params);
         let table = channels::Table::from_params(&ready.params);
         let running = device::Discover::start(&self.settings, table, Some(reporter)).map_err(internal)?;
-        running.set_sends(sends::wanted(&ready.params));
+        running.set_sends(sends::wanted(&ready.params), transcode::specs(&ready.params));
         self.running = Some(running);
         Ok(InitializeResult::default())
     }
@@ -242,7 +243,7 @@ impl Device for Publishers {
     fn configure(&mut self, params: Value) -> Result<Configure, RpcError> {
         if let Some(running) = &self.running {
             running.set_table(channels::Table::from_params(&params));
-            running.set_sends(sends::wanted(&params));
+            running.set_sends(sends::wanted(&params), transcode::specs(&params));
         }
         let wanted = device::Settings::from_params(&params);
         if wanted == self.settings {

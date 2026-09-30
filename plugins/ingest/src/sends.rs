@@ -31,12 +31,15 @@ use godwinmix_sdk::plugin::Reporter;
 use serde_json::{json, Value};
 
 use crate::hub::Hub;
+use crate::transcode::{StreamSpec, Transcoders};
 use runner::Runner;
-pub use table::{wanted, Wanted};
+pub use table::{wanted, Feed, Wanted};
 
 /// The running destinations.
 pub struct Sends {
     hub: Hub,
+    /// Streams converted for the destinations that asked for a rendition.
+    transcoders: Arc<Transcoders>,
     reporter: Option<Reporter>,
     running: Arc<Mutex<Vec<Arc<Runner>>>>,
     watching: Arc<AtomicBool>,
@@ -48,12 +51,16 @@ fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
 
 impl Sends {
     pub fn new(hub: Hub, reporter: Option<Reporter>) -> Sends {
-        Sends { hub, reporter, running: Default::default(), watching: Default::default() }
+        let transcoders = Arc::new(Transcoders::new(hub.clone()));
+        Sends { hub, transcoders, reporter, running: Default::default(), watching: Default::default() }
     }
 
     /// Make what runs match what is wanted. A destination that changed in
     /// any way is stopped and started again; one that did not is untouched.
-    pub fn apply(&self, wanted: Vec<Wanted>) {
+    /// The streams `specs` converts are built or changed first, node by
+    /// node, so a converting destination has its pair to read.
+    pub fn apply(&self, wanted: Vec<Wanted>, specs: Vec<StreamSpec>) {
+        self.transcoders.apply(specs, &wanted);
         let mut running = lock(&self.running);
         running.retain(|r| {
             let keep = wanted.contains(&r.wanted);
@@ -67,7 +74,11 @@ impl Sends {
                 if let Some(r) = &self.reporter {
                     r.info(format!("sending {}/{} to destination {}", w.app, w.stream, w.id));
                 }
-                running.push(Runner::start(w, self.hub.clone()));
+                let hub = match w.feed {
+                    Feed::Copy => self.hub.clone(),
+                    Feed::Rendition { .. } => self.transcoders.renditions(),
+                };
+                running.push(Runner::start(w, hub));
             }
         }
         let any = !running.is_empty();
@@ -77,12 +88,18 @@ impl Sends {
         }
     }
 
+    /// Where converted pairs are published, for a test to read one.
+    #[cfg(test)]
+    pub fn renditions(&self) -> Hub {
+        self.transcoders.renditions()
+    }
+
     /// What each destination is sending now, for the `streams` tool.
     pub fn rates(&self) -> Vec<Value> {
         lock(&self.running)
             .iter()
             .map(|r| {
-                let live = r.stats();
+                let live = live_of(r, &self.transcoders);
                 json!({"channel": r.wanted.channel, "destination": r.wanted.id, "state": live.state, "kbps": live.kbps})
             })
             .collect()
@@ -94,6 +111,7 @@ impl Sends {
             return;
         }
         let (running, watching, reporter) = (self.running.clone(), self.watching.clone(), self.reporter.clone());
+        let transcoders = self.transcoders.clone();
         let started = std::thread::Builder::new().name("gmx-sends-watch".into()).spawn(move || {
             let mut said: Vec<(String, String, Value)> = Vec::new();
             loop {
@@ -104,7 +122,7 @@ impl Sends {
                 }
                 said.retain(|(c, d, _)| now.iter().any(|r| &r.wanted.channel == c && &r.wanted.id == d));
                 for r in &now {
-                    report(r, &mut said, reporter.as_ref());
+                    report(r, &mut said, reporter.as_ref(), &transcoders);
                 }
                 std::thread::sleep(Duration::from_millis(500));
             }
@@ -116,8 +134,8 @@ impl Sends {
 }
 
 /// Raise `event/channel.destination` for one runner if what it says moved.
-fn report(r: &Runner, said: &mut Vec<(String, String, Value)>, reporter: Option<&Reporter>) {
-    let live = r.stats();
+fn report(r: &Runner, said: &mut Vec<(String, String, Value)>, reporter: Option<&Reporter>, t: &Transcoders) {
+    let live = live_of(r, t);
     let key = json!([live.state, live.error, live.reconnects]);
     let (channel, id) = (&r.wanted.channel, &r.wanted.id);
     match said.iter_mut().find(|(c, d, _)| c == channel && d == id) {
@@ -136,6 +154,19 @@ fn report(r: &Runner, said: &mut Vec<(String, String, Value)>, reporter: Option<
         params["destination"] = json!(id);
         rep.event("channel.destination", params);
     }
+}
+
+/// What a destination is doing, with a converting destination whose pair
+/// cannot be made shown as failed, with why, rather than waiting forever.
+fn live_of(r: &Runner, t: &Transcoders) -> godwinmix_protocol::destination::DestinationLive {
+    let mut live = r.stats();
+    if live.state == DestinationState::Waiting {
+        if let Some(why) = t.error(&r.wanted) {
+            live.state = DestinationState::Failed;
+            live.error = Some(why);
+        }
+    }
+    live
 }
 
 impl Drop for Sends {
