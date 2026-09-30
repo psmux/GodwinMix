@@ -14,6 +14,8 @@ import { schemeError } from "../outputs/destination.js";
 import { brandMark } from "./brands.js";
 import { tileState } from "./model.js";
 import { field, keyField, streamChoice } from "./fields.js";
+import { formatStep, channelShape } from "../renditions/format-step.js";
+import { isRefusal, showRefusal } from "../renditions/refusal.js";
 
 /** The tile grid, or straight to the form when the platform is known. */
 export function addDestination(view, channel, chosen) {
@@ -52,11 +54,16 @@ function addForm(view, channel, p) {
   const label = field("Name on the tile", { placeholder: p.title });
   const start = el("button.btn.primary", { text: "Start sending" });
   const more = el("details.chn-more-opts", {}, [el("summary", { text: "More options" }), label.node, stream && stream.node]);
+  // Copy first, as the strip promises; a platform's own format one press away.
+  const format = formatStep(view.client, { platform: p.id, platformTitle: p.title, shape: channelShape(channel), id: () => p.id });
+  const refused = el("div", { hidden: true });
   const body = el("div.chn-dform", {}, [
     el("div.chn-dhead", {}, [brandMark(p.id, 48), el("div", {}, [el("strong", { text: p.title }), el("p.chn-dim", { text: p.where })])]),
     p.fixed ? el("div.chn-fixed", {}, [el("span.chn-dim", { text: "Server " }), el("code", { text: p.server })]) : server.node,
     key && key.node,
+    format.node,
     more,
+    refused,
   ]);
   const m = modal({ title: `Send ${channel.name} to ${p.title}`, body, footer: [el("button.btn", { text: "Cancel", onclick: () => m.close() }), start] });
   on(body, "keydown", (e) => { if (e.key === "Enter" && e.target.tagName === "INPUT") { e.preventDefault(); start.click(); } });
@@ -68,16 +75,23 @@ function addForm(view, channel, p) {
       return;
     }
     start.disabled = true;
+    await format.ready;
+    const rendition = format.value();
+    if (rendition !== undefined) asked.params.rendition = rendition;
+    if (!(await send(asked.params))) start.disabled = false;
+  };
+  async function send(params) {
     try {
-      view.accept(await view.client.call("channel.destination.add", asked.params));
+      view.accept(await view.client.call("channel.destination.add", params));
     } catch (e) {
-      errorToast(e, p.title);
-      start.disabled = false;
-      return;
+      if (isRefusal(e)) showRefusal(refused, e, (request) => send({ ...params, rendition: request }));
+      else errorToast(e, p.title);
+      return false;
     }
     m.close();
     toast({ text: `${p.title} added. It goes live whenever ${channel.name} does.` });
-  };
+    return true;
+  }
   (key || server).focus();
   return m;
 }
@@ -98,12 +112,14 @@ export function editDestination(view, channel, dest) {
   const stream = streamChoice(channel, dest.stream || "*");
   const server = p.fixed ? null : field("Server", { placeholder: dest.uri_host || p.example || "", mono: true, note: "Left empty, the one in use is kept." });
   const key = p.key ? keyField("Stream key", "kept", true) : null;
+  const format = formatStep(view.client, { platform: p.id, platformTitle: p.title, shape: channelShape(channel), current: dest.rendition || { preset: "copy" }, id: () => dest.id });
+  const refused = el("div", { hidden: true });
   const status = el("div.chn-dstatus", { "data-state": dest.state }, [el("strong", { text: tileState(dest) }), dest.error ? el("span", { text: dest.error }) : null]);
   const save = el("button.btn.primary", { text: "Save" });
   const remove = el("button.btn.danger", { text: "Remove" });
   const m = modal({
     title: dest.label || p.title,
-    body: el("div.chn-dform", {}, [el("div.chn-dhead", {}, [brandMark(p.id, 48), status]), label.node, stream && stream.node, server && server.node, key && key.node]),
+    body: el("div.chn-dform", {}, [el("div.chn-dhead", {}, [brandMark(p.id, 48), status]), label.node, stream && stream.node, server && server.node, key && key.node, format.node, refused]),
     footer: [remove, el("span.grow"), el("button.btn", { text: "Cancel", onclick: () => m.close() }), save],
   });
   remove.onclick = async () => {
@@ -112,17 +128,23 @@ export function editDestination(view, channel, dest) {
   };
   save.onclick = async () => {
     const params = editParams(channel, dest, { label: label.value(), stream: stream ? stream.value() : undefined, key: key && key.value(), server: server && server.value() });
+    await format.ready;
+    const rendition = format.value();
+    if (rendition !== undefined) params.rendition = rendition;
     if (Object.keys(params).length === 2) return m.close();
-    await act(view, m, "channel.destination.set", params, "Save");
+    await act(view, m, "channel.destination.set", params, "Save", refused);
   };
   return m;
 }
 
-async function act(view, m, method, params, what) {
+async function act(view, m, method, params, what, refused) {
   try {
     view.accept(await view.client.call(method, params));
     m.close();
+    return true;
   } catch (e) {
-    errorToast(e, what);
+    if (refused && isRefusal(e)) showRefusal(refused, e, (request) => act(view, m, method, { ...params, rendition: request }, what, refused));
+    else errorToast(e, what);
+    return false;
   }
 }

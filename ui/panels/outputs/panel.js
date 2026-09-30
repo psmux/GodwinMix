@@ -21,6 +21,8 @@ import { lazyAction } from "../../shell/lazy-action.js";
 import { addChannel } from "../channels/entry.js";
 const addDestination = lazyAction(() => import("./destination.js").then(m => m.addDestination), "Add destination");
 const editDestination = lazyAction(() => import("./destination.js").then(m => m.editDestination), "Edit destination");
+// Resources, plan lines and the HLS card: see views.js.
+const views = () => import("./views.js");
 
 /**
  * How often a row's numbers are read back from the core while the panel is on
@@ -90,10 +92,11 @@ class OutputsPanel extends HTMLElement {
     this.built = true;
     this.count = el("span.sm.dim");
     this.list = el("div.col.pad");
+    const tab = (id, kids) => el("button", { role: "tab", "aria-selected": String(id < 1), onclick: () => this.show(id ? "resources" : "outputs") }, kids);
+    this.tabs = el("div.out-tabs", { role: "tablist" }, [tab(0, [el("strong", { text: "Outputs " }), this.count]), tab(1, ["Resources"])]);
     this.append(
-      el("div.row.pad", {}, [
-        el("strong", { text: "Outputs" }),
-        this.count,
+      el("div.row.pad.out-head", {}, [
+        this.tabs,
         el("span.grow"),
         el("button.btn", { text: "Record", onclick: () => startRecording(this.client) }),
         el("button.btn", { text: "Add destination", onclick: () => this.add() }),
@@ -114,12 +117,25 @@ class OutputsPanel extends HTMLElement {
     for (const off of this.offs || []) off();
     this.offs = [];
     this.follow(false);
+    this.stopViews();
   }
 
   setWorkspaceActive(active) {
     this.workspaceActive = active;
-    if (active) this.render(this.client.state);
-    else this.follow(false);
+    if (active) this.show(this.view || "outputs");
+    else {
+      this.follow(false);
+      this.stopViews();
+    }
+  }
+
+  show(view) {
+    if (view === "outputs" && !this.resources) return this.render(this.client.state);
+    return views().then((m) => m.show(this, view));
+  }
+
+  stopViews() {
+    if (this.unplan || this.resources) views().then((m) => m.stopAll(this));
   }
 
   /**
@@ -175,7 +191,9 @@ class OutputsPanel extends HTMLElement {
     if (this.workspaceActive === false) return;
     const outputs = s.outputs || [];
     this.count.textContent = outputs.length ? String(outputs.length) : "";
+    if (this.view === "resources") return;
     this.follow(outputs.length > 0);
+    if (outputs.length ? !this.unplan : this.unplan) views().then((m) => m.followPlan(this, outputs.length > 0));
     this.rows = this.rows || new Map();
     if (!outputs.length) {
       if (this.rows.size || !this.list.firstChild) {
@@ -224,6 +242,9 @@ class OutputsPanel extends HTMLElement {
     const host = el("span.ellipsis.grow");
     const numbers = el("span.num");
     const advice = el("div.sm.output-advice", { hidden: true });
+    const plan = el("div.output-plan");
+    const extra = el("div");
+    if (output.type === "hls/output") views().then((m) => m.hlsInto(this.client, extra, () => current));
     const node = el("div.output-row", {}, [
       el("div.row", {}, [
         dot,
@@ -258,7 +279,9 @@ class OutputsPanel extends HTMLElement {
         }),
       ]),
       el("div.row.sm.faint.output-detail", {}, [host, numbers]),
+      plan,
       advice,
+      extra,
     ]);
     const update = (next) => {
       current = next;
@@ -272,6 +295,8 @@ class OutputsPanel extends HTMLElement {
       write(label, "textContent", stateLabel(next));
       write(host, "textContent", next.uri_host || "");
       write(numbers, "textContent", `buffer ${Number(next.queue_secs || 0).toFixed(1)}s · ${next.reconnects || 0} reconnects`);
+      write(plan, "textContent", this.planText ? this.planText(next.id) : "");
+      if (extra.update) extra.update(next);
     };
     return { node, update, shape: shape(output) };
   }
