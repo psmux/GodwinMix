@@ -1,0 +1,18 @@
+[package]
+name = "godwinmix-render"
+description = "The GodwinMix rendition planner: turns what every output asks for into the fewest decodes, scales and encoders that serve them all. Pure Rust, no media stack"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+# Pure on purpose. The planner decides and the graph builder in the core acts,
+# so every decision here is tested in microseconds with no camera, no GPU and
+# no GStreamer installed.
+[dependencies]
+# The shared rendition types: requests, shapes, encoder slots, cost.
+godwinmix-protocol = { workspace = true }
+# A plan and its errors go to the page as they are.
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
