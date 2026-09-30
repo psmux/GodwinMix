@@ -4,9 +4,45 @@ A show is one programme with its own scenes, sources and outputs. One machine
 can run several at once: the Sunday service, a loop that runs all week, a
 second room. Each show is a process of its own, so one that crashes is started
 again while the others stay on air, and they all sit behind the one address
-you already open in the browser. The page's show switcher is not built yet;
-until it is, a show is added and chosen with the calls below, from `curl`, a
-script or an agent.
+you already open in the browser. Everything below can be done from the page;
+the calls after it do the same from `curl`, a script or an agent.
+
+## From the page
+
+The show tabs are in the top bar, just after the menu. With one show there is
+its name and a `+` and nothing else, so a setup with one show looks as it
+always did. Once there are two, each show has a tab. A red dot means that show
+is on air. A dimmed name with a small mark means it is not running: `○`
+stopped, `◌` starting, `!` failed. Hover a tab and it says which, and why a
+failed one failed. On a laptop screen the tabs move to a row of their own under
+the live controls, so those keep their size; on a phone the row scrolls
+sideways.
+
+To add a show, click the `+`, or choose File, New show. Give it a name and pick
+how it starts: empty, a copy of the show you are on (its scenes and sources,
+not its outputs), or a project file saved with File, Save project as. The page
+moves to the new show once it is made. A new empty show opens on the welcome
+tiles, the same as a new mixer does.
+
+To switch, click the other show's tab. The page loads again on that show, with
+`?show=<id>` in its address, and your panels stay where you put them. File,
+Switch show lists every show with its state, which is quicker when there are
+many.
+
+Click the tab of the show you are on, or right click any tab, for its menu:
+Rename, Start show or Stop show, and Remove show. Double click a tab, or press
+`F2` on it, to rename it where it is; `Enter` keeps the name and `Escape` puts
+the old one back. Remove asks first. The page will not remove the last show,
+or `main`, and says why when you try. If you remove the show you are on, the
+page moves to another one.
+
+The tabs are reachable from the keyboard: `Tab` lands on the show you are on,
+the arrow keys move along the row, `Enter` switches or opens the menu, and
+`Delete` removes. The [keyboard reference](../reference/keyboard.md#the-show-tabs)
+has the whole table.
+
+To see every show's outputs next to every channel's, open View, Routing: see
+[route inputs to outputs](route-inputs-to-outputs.md).
 
 ## Nothing to change for one show
 

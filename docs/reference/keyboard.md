@@ -138,6 +138,23 @@ so undo, delete and the number keys keep working in a text box.
 
 Below 760 pixels wide the bar is one Menu button, and `F10` opens it.
 
+### The show tabs
+
+After the menu bar come the show tabs, one per show on the machine. `Tab`
+reaches the tab of the show the page is on; the rest of the row is one tab
+stop, as the menu bar is.
+
+| Key | On a show tab |
+|---|---|
+| `Left`, `Right`, `Home`, `End` | move along the tabs |
+| `Enter`, `Space` | on another show's tab, switch to it; on this show's own tab, open its menu |
+| `F2` | rename it in place; `Enter` keeps the name, `Escape` puts it back |
+| `Delete` | remove it, after a yes |
+| the menu key | its menu: Rename, Start or Stop, Remove |
+
+These keys are the tab's, not the page's: `F2` and `Delete` on a tab never
+reach a scene or a source.
+
 ### What a number counts in the web UI
 
 A slot is a scene tile, counted down the scenes panel in the order it shows
