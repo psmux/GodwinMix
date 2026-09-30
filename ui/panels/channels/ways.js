@@ -65,7 +65,7 @@ export function waysFields(protocol, channel, secret, base, stream = "main") {
 /** The line under the panel's title: which ports are open, and for what. */
 export function openPorts(listeners) {
   const open = (listeners || []).filter((r) => r.open);
-  if (!open.length) return "No ingest port is open. One opens when a channel needs it.";
+  if (!open.length) return "No port is open for encoders.";
   const said = open.map((r) => {
     const port = r.last_port ? `${r.port} to ${r.last_port}` : String(r.port);
     const where = r.transport === "udp" ? `${port}/udp` : port;

@@ -87,6 +87,7 @@ export function channelCard(view, first) {
   return {
     node,
     update,
+    connect: fold,
     tick: () => { for (const row of rows.values()) row.tick?.(); },
   };
 }

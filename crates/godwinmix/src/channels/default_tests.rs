@@ -95,3 +95,14 @@ async fn a_mixer_with_channels_or_no_file_gets_none() {
     std::fs::remove_dir_all(&dir).ok();
     std::fs::remove_dir_all(&bare).ok();
 }
+
+#[tokio::test]
+async fn a_second_mixer_on_the_machine_takes_the_live_key_already_sealed() {
+    let dir = scratch("shared");
+    Secrets::open(&dir.join("secrets")).unwrap().set("channel.live", "default-key", "firstmixerskeywxyz").unwrap();
+    let channels = open(&dir, true);
+    assert!(channels.make_default(true));
+    let key = &channels.list().channels[0].keys[0];
+    assert_eq!((key.id.as_str(), key.label.as_str(), key.hint.as_str()), ("default-key", "Default key", "wxyz"));
+    std::fs::remove_dir_all(&dir).ok();
+}
