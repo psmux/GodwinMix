@@ -39,11 +39,12 @@ Every refusal says the state and the next step and carries `data`, with an
     channel.list {}                          -> {channels: [Channel], rtmp: {port, urls: ["rtmp://10.0.0.5:1935", ...]}}
     channel.get {id}                         -> Channel
     channel.add {name, app?, auto_source?, key_mode?}
-                                             -> {channel: Channel, key: {id, label, secret}}   secret shown once
+                                             -> {channel: Channel, key: {id, label, secret}}
     channel.set {id, name?, app?, enabled?, auto_source?, key_mode?}   -> Channel
     channel.remove {id}                      -> {removed: id}
-    channel.key.add {id, label?}             -> {key: {id, label, secret}}                     secret shown once
+    channel.key.add {id, label?}             -> {key: {id, label, secret}}
     channel.key.remove {id, key}             -> Channel
+    channel.key.reveal {id, key}             -> {secret}                 admin; logged with the caller, never the secret
     channel.destination.add {id, platform, label?, server?, key?, stream?, enabled?}  -> Channel
     channel.destination.set {id, destination, label?, server?, key?, stream?, enabled?} -> Channel
     channel.destination.remove {id, destination} -> Channel
@@ -72,6 +73,10 @@ Every refusal says the state and the next step and carries `data`, with an
       enabled, state: "off" | "waiting" | "connecting" | "live" | "reconnecting" | "failed",
       since_ms, kbps, reconnects, error | null,
     }
+
+A key's secret is in the answer that made it and in `channel.key.reveal`,
+and nowhere else: lists and events carry only its hint, so a read token never
+sees one.
 
 `platform` is an id from ui/client/destinations.js PLATFORMS (youtube,
 facebook, twitch, custom, srt) plus any added there. Keys are write only:

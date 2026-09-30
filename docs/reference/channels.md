@@ -22,6 +22,7 @@ and switched on, and `channel.list` says so in `rtmp.problem`.
 | `channel.remove {id}` | `DELETE /api/v1/channels/{id}` | admin | yes | The channel, its keys, and the sources it made that no scene holds |
 | `channel.key.add {id, label?}` | `POST /api/v1/channels/{id}/key/add` | admin | no | One more key |
 | `channel.key.remove {id, key}` | `POST /api/v1/channels/{id}/key/remove` | admin | yes | Take one key back |
+| `channel.key.reveal {id, key}` | `POST /api/v1/channels/{id}/key/reveal` | admin | no | Read one key back, to give it out again |
 
 `channel.destination.*` sends a channel's streams on to YouTube, Facebook,
 Twitch or any RTMP or SRT address; see [Destinations](#destinations) below.
@@ -70,7 +71,7 @@ to `app`, and `data.channel` naming the channel that has it.
 | `enabled` | Off turns every publisher away with a sentence saying the channel is switched off, and cuts off the ones already live |
 | `auto_source` | A stream that goes live becomes a mixer source by itself. On by default |
 | `key_mode` | `query`: the key rides on the stream name as `?psk=`, `?key=`, `?token=` or `?Token=`. `stream`: the whole stream name is the key |
-| `keys` | Write only. `hint` is the last four characters; the key itself is sent once, when it is made, and never again |
+| `keys` | Hints only. `hint` is the last four characters. The key itself is in the answer that made it, and after that only `channel.key.reveal` sends it |
 | `publish.server` | What an encoder's server box takes. The address is this machine's address on its network |
 | `streams` | Every live stream, and any stream that left while a scene still holds its source (`state: "idle"`) |
 | `streams[].key` | The id of the key that let it in |
@@ -107,7 +108,8 @@ answers with the channel and its first key:
 ```
 
 The secret is 24 lower case letters and digits, with 0, o, 1 and l left out
-so it reads back over a phone. It is in this answer and in no other.
+so it reads back over a phone. No list or event carries it. An admin reads it
+again with `channel.key.reveal`.
 
 ## `channel.key.add` and `channel.key.remove`
 
@@ -115,6 +117,35 @@ so it reads back over a phone. It is in this answer and in no other.
 a slug of the label, `Key 2` when there is no label. `channel.key.remove {id,
 key}` answers with the channel. A publisher live on the key taken back is cut
 off at once; publishers on the other keys are not touched.
+
+## `channel.key.reveal`
+
+```json
+{ "jsonrpc": "2.0", "id": 2, "method": "channel.key.reveal", "params": { "id": "sunday-service", "key": "key-1" } }
+```
+
+answers with the key and nothing else:
+
+```json
+{ "secret": "vjktb3s7s868eiquqfgcjca7" }
+```
+
+The keys are sealed in the mixer's secret store, not thrown away, because the
+listener needs them to let publishers in. This reads one back. It needs an
+admin token: a read token calling it is refused with `-32002`, and
+`channel.list`, `channel.get` and `event/channel.changed` still carry only the
+hint, so a read token never sees a key. Keys made before this method existed
+are read back the same way.
+
+Each call is logged at info as `channel key revealed`, with the channel, the
+key's id and the token that asked. The key itself is never logged. The call is
+not a mutation, so it is not in the session log and an idempotency key does
+not cache its answer.
+
+An unknown key answers `-32004` with the channel's key ids in `data.valid`. A
+key whose record is there but whose secret is not (the secret store was
+deleted, or its key file replaced) answers `-32001` saying so, with `data.channel`
+and `data.key`: revoke it and make a new one.
 
 ## Events
 

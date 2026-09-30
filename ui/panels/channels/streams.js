@@ -48,7 +48,7 @@ export function streamRow(view, getChannel, urlOf) {
     node.classList.toggle("idle", !live);
     write(dot, "className", "chn-sdot" + (live ? " live" : ""));
     write(name, "textContent", s.name);
-    copyUrl.hidden = !urlOf || (channel.key_mode !== "stream" && !s.key);
+    copyUrl.hidden = !urlOf || !s.key;
     copyUrl.title = `Copy the full URL ${s.name} publishes to, with its key`;
     const label = keyLabel(channel, s.key);
     write(who, "textContent", live ? [s.from && `from ${s.from}`, label].filter(Boolean).join(", ") : "Not publishing");
