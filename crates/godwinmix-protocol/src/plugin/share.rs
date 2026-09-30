@@ -20,6 +20,11 @@ pub struct Share {
     /// The params that together name what is opened. For `channel`, one param
     /// whose value is `<channel>/<stream>`.
     pub params: Vec<String>,
+    /// Params that say where the thing is read from, when the same name can
+    /// mean different things in different places: two channel servers can
+    /// each have a `live/main`. Sources share only when these match too.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub scope: Vec<String>,
 }
 
 /// The bus kinds a provide may declare.
@@ -27,9 +32,8 @@ pub const BUSES: [&str; 2] = ["camera", "channel"];
 
 impl Share {
     /// Everything wrong with this declaration, as `(key, message)` pairs
-    /// relative to `share`. `audio` is whether the provide declares sound,
-    /// which the frame bus does not carry for a device.
-    pub fn problems(&self, audio: bool) -> Vec<(String, String)> {
+    /// relative to `share`.
+    pub fn problems(&self) -> Vec<(String, String)> {
         let mut out = vec![];
         if !BUSES.contains(&self.bus.as_str()) {
             out.push((
@@ -51,15 +55,6 @@ impl Share {
                 "a channel is named by one param holding <channel>/<stream>.".into(),
             ));
         }
-        if self.bus == "camera" && audio {
-            out.push((
-                "bus".into(),
-                "the frame bus carries pictures, not sound, so a device with audio cannot be \
-                 shared. Declare audio = \"none\" and offer the sound as its own source, or \
-                 remove share."
-                    .into(),
-            ));
-        }
         out
     }
 
@@ -67,15 +62,24 @@ impl Share {
     /// missing or empty is an empty string: two sources that both leave the
     /// device unset both mean the default one.
     pub fn values(&self, params: &Value) -> Vec<String> {
-        self.params
-            .iter()
-            .map(|p| match params.get(p) {
-                None | Some(Value::Null) => String::new(),
-                Some(Value::String(s)) => s.trim().to_string(),
-                Some(other) => other.to_string(),
-            })
-            .collect()
+        text_of(&self.params, params)
     }
+
+    /// The values of the `scope` params, the same way.
+    pub fn scope_values(&self, params: &Value) -> Vec<String> {
+        text_of(&self.scope, params)
+    }
+}
+
+fn text_of(names: &[String], params: &Value) -> Vec<String> {
+    names
+        .iter()
+        .map(|p| match params.get(p) {
+            None | Some(Value::Null) => String::new(),
+            Some(Value::String(s)) => s.trim().to_string(),
+            Some(other) => other.to_string(),
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -84,18 +88,15 @@ mod tests {
     use serde_json::json;
 
     #[test]
-    fn a_camera_with_one_param_is_fine_and_sound_is_refused() {
-        let share = Share { bus: "camera".into(), params: vec!["device".into()] };
-        assert!(share.problems(false).is_empty());
-        let audio = share.problems(true);
-        assert_eq!(audio.len(), 1);
-        assert!(audio[0].1.contains("sound"), "{audio:?}");
+    fn a_camera_with_one_param_is_fine() {
+        let share = Share { bus: "camera".into(), params: vec!["device".into()], ..Share::default() };
+        assert!(share.problems().is_empty());
     }
 
     #[test]
     fn an_unknown_bus_and_no_params_say_what_to_write() {
-        let share = Share { bus: "tape".into(), params: vec![] };
-        let problems = share.problems(false);
+        let share = Share { bus: "tape".into(), ..Share::default() };
+        let problems = share.problems();
         assert!(problems.iter().any(|(k, m)| k == "bus" && m.contains("camera")));
         assert!(problems.iter().any(|(k, m)| k == "params" && m.contains("device")));
     }
@@ -105,8 +106,10 @@ mod tests {
         let share = Share {
             bus: "camera".into(),
             params: vec!["monitor".into(), "region".into(), "device".into()],
+            scope: vec!["relay".into()],
         };
-        let got = share.values(&json!({"monitor": 1, "region": " 0,0,640,360 "}));
-        assert_eq!(got, vec!["1", "0,0,640,360", ""]);
+        let params = json!({"monitor": 1, "region": " 0,0,640,360 ", "relay": "127.0.0.1:1935"});
+        assert_eq!(share.values(&params), vec!["1", "0,0,640,360", ""]);
+        assert_eq!(share.scope_values(&params), vec!["127.0.0.1:1935"]);
     }
 }

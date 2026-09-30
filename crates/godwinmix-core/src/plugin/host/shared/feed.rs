@@ -17,7 +17,7 @@ use godwinmix_protocol::plugin::wire::InstanceState;
 use gstreamer as gst;
 use gstreamer::prelude::*;
 use std::path::PathBuf;
-use super::reader::Samples;
+use super::reader::{Samples, Tracks};
 use parking_lot::Mutex;
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicU64, Ordering::Relaxed};
@@ -39,6 +39,7 @@ pub struct Plan {
     pub name: BusName,
     pub dir: PathBuf,
     pub build: BuildCtx,
+    pub tracks: Tracks,
 }
 
 pub struct Feed {
@@ -70,7 +71,9 @@ impl Feed {
         let published = Arc::new(AtomicU64::new(0));
         let through = Arc::new(Samples::default());
         tap(&ends, plan, &published)?;
-        time_through(&ends, plan, &through)?;
+        if plan.tracks.video {
+            time_through(&ends, plan, &through)?;
+        }
         let pipeline = ends.pipeline.clone();
         if let Err(e) = pipeline.set_state(gst::State::Playing) {
             let _ = pipeline.set_state(gst::State::Null);
@@ -134,17 +137,46 @@ impl Drop for Feed {
     }
 }
 
-/// Take the programme branch off the normaliser's tee and hang the bus sink
-/// there instead.
+/// Take the programme branches off the normaliser's tees and hang a bus sink
+/// on each track the source has instead.
 fn tap(ends: &MediaEnds, plan: &Plan, published: &Arc<AtomicU64>) -> Result<()> {
     let id = &plan.build.id;
     let pipeline = &ends.pipeline;
     if let Some(queue) = pipeline.by_name(&format!("{id}-vprog-q")) {
-        if let Some(peer) = queue.static_pad("sink").and_then(|p| p.peer()) {
-            ends.vtee.release_request_pad(&peer);
-        }
+        unhook(&ends.vtee, &queue)?;
         pipeline.remove_many([&queue, &ends.video]).context("taking the programme branch off")?;
     }
+    unhook(&ends.atee, &ends.audio)?;
+    pipeline.remove(&ends.audio).context("taking the programme's sound off")?;
+    if plan.tracks.video {
+        publish(ends, plan, &ends.vtee, plan.name.clone(), published)?;
+    }
+    if plan.tracks.audio {
+        publish(ends, plan, &ends.atee, plan.name.audio(), published)?;
+    }
+    Ok(())
+}
+
+/// Let go of the tee pad that feeds `el`.
+fn unhook(tee: &gst::Element, el: &gst::Element) -> Result<()> {
+    if let Some(peer) = el.static_pad("sink").and_then(|p| p.peer()) {
+        peer.unlink(&el.static_pad("sink").context("no sink pad")?).ok();
+        tee.release_request_pad(&peer);
+    }
+    Ok(())
+}
+
+/// A bus sink for one track, on `tee`.
+fn publish(
+    ends: &MediaEnds,
+    plan: &Plan,
+    tee: &gst::Element,
+    name: BusName,
+    published: &Arc<AtomicU64>,
+) -> Result<()> {
+    let id = &plan.build.id;
+    let pipeline = &ends.pipeline;
+    let tag = if matches!(name, BusName::Audio(_)) { "-audio" } else { "" };
     // The normaliser's `videorate` fills gaps by holding each frame until the
     // next one arrives, a frame of delay. Every reader runs its own normaliser
     // for its own canvas and fills its own gaps, so here it only drops, which
@@ -152,8 +184,8 @@ fn tap(ends: &MediaEnds, plan: &Plan, published: &Arc<AtomicU64>) -> Result<()> 
     if let Some(rate) = pipeline.by_name(&format!("{id}-vrate")) {
         rate.set_property("drop-only", true);
     }
-    let sink = crate::gstutil::make("gmxbussink", &format!("{id}-bus-sink"))?;
-    sink.set_property("bus-name", plan.name.to_string());
+    let sink = crate::gstutil::make("gmxbussink", &format!("{id}-bus-sink{tag}"))?;
+    sink.set_property("bus-name", name.to_string());
     sink.set_property("bus-dir", plan.dir.display().to_string());
     sink.set_property("max-readers", MAX_READERS);
     sink.set_property("leases", LEASES);
@@ -162,7 +194,7 @@ fn tap(ends: &MediaEnds, plan: &Plan, published: &Arc<AtomicU64>) -> Result<()> 
     sink.set_property("sync", false);
     sink.set_property("async", false);
     pipeline.add(&sink).context("adding the bus sink")?;
-    ends.vtee.link(&sink).context("linking the normaliser to the bus sink")?;
+    tee.link(&sink).context("linking the normaliser to the bus sink")?;
     let pad = sink.static_pad("sink").context("gmxbussink has no sink pad")?;
     let published = published.clone();
     pad.add_probe(gst::PadProbeType::BUFFER, move |_, _| {

@@ -35,10 +35,11 @@ mod feed;
 mod name;
 mod owner;
 mod reader;
+mod retime;
 mod source;
 
 pub use name::bus_name;
-pub use reader::Watch;
+pub use reader::{Tracks, Watch};
 pub use source::SharedSource;
 
 use crate::config::Params;
@@ -70,10 +71,21 @@ pub fn bus_dir() -> PathBuf {
     }
 }
 
-/// The bus name a source of `type_id` with `params` shares on, or `None` when
-/// it is opened on its own: the provide declares no `share`, the bus is off,
-/// or the params name nothing to share (a channel source that listens).
-pub fn plan(type_id: &str, params: &Params) -> Option<BusName> {
+/// Where a shared source's frames are: its name, and the registry it is in.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Place {
+    pub name: BusName,
+    pub dir: PathBuf,
+}
+
+/// Where a source of `type_id` with `params` shares, or `None` when it is
+/// opened on its own: the provide declares no `share`, the bus is off, or the
+/// params name nothing to share (a channel source that listens).
+///
+/// A provide's `scope` params, when they are set, put the name in a registry
+/// of its own under the station's, so a stream called `live/main` on one
+/// channel server is never taken for another server's `live/main`.
+pub fn plan(type_id: &str, params: &Params) -> Option<Place> {
     if !enabled() {
         return None;
     }
@@ -81,13 +93,19 @@ pub fn plan(type_id: &str, params: &Params) -> Option<BusName> {
     let installed = crate::plugin::loader::get(plugin)?;
     let share = installed.manifest.provide(provide)?.share.clone()?;
     let json = super::source::params_json(params);
-    match bus_name(plugin, &share, &json) {
-        Ok(name) => name,
+    let name = match bus_name(plugin, &share, &json) {
+        Ok(name) => name?,
         Err(e) => {
             tracing::warn!(%type_id, error = %e, "these params make no frame bus name; opening the device unshared");
-            None
+            return None;
         }
-    }
+    };
+    let scope = share.scope_values(&json);
+    let dir = match scope.iter().all(String::is_empty) {
+        true => bus_dir(),
+        false => bus_dir().join(format!("at-{}", name::slug(&scope.join("|")))),
+    };
+    Some(Place { name, dir })
 }
 
 /// Make the element names known in this process. Safe to call again.

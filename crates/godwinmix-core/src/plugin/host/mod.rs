@@ -108,8 +108,8 @@ pub fn make_source(req: SourceRequest<'_>) -> Result<Box<dyn Source>> {
     // Windows has no cross process transport for it yet, so there every
     // source opens its own device, as it always has.
     #[cfg(unix)]
-    if let Some(name) = shared::plan(&type_id, &req.cfg.effective_params()) {
-        return shared::SharedSource::make(type_id, name, build);
+    if let Some(place) = shared::plan(&type_id, &req.cfg.effective_params()) {
+        return shared::SharedSource::make(type_id, place, build);
     }
     Ok(Box::new(sidecar_for(&type_id, build)?))
 }

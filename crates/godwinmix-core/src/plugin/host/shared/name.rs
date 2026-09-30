@@ -51,7 +51,7 @@ fn camera(plugin: &str, values: &[String]) -> Result<BusName> {
 
 /// `whole` itself when it is a slug short enough, otherwise a readable slug
 /// of it and eight hex digits of its hash.
-fn slug(whole: &str) -> String {
+pub(super) fn slug(whole: &str) -> String {
     let plain = whole.len() <= MAX_PLAIN
         && whole.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_');
     if plain {
@@ -85,7 +85,7 @@ mod tests {
     use serde_json::json;
 
     fn camera_share() -> Share {
-        Share { bus: "camera".into(), params: vec!["device".into()] }
+        Share { bus: "camera".into(), params: vec!["device".into()], ..Share::default() }
     }
 
     fn name(plugin: &str, share: &Share, params: Value) -> String {
@@ -114,7 +114,11 @@ mod tests {
 
     #[test]
     fn several_params_make_one_name_and_differ_when_any_differs() {
-        let share = Share { bus: "camera".into(), params: vec!["monitor".into(), "region".into()] };
+        let share = Share {
+            bus: "camera".into(),
+            params: vec!["monitor".into(), "region".into()],
+            ..Share::default()
+        };
         let whole = name("screen", &share, json!({"monitor": 1}));
         let part = name("screen", &share, json!({"monitor": 1, "region": "0,0,640,360"}));
         assert_ne!(whole, part);
@@ -122,7 +126,7 @@ mod tests {
 
     #[test]
     fn a_channel_needs_a_stream_and_a_listener_is_not_shared() {
-        let share = Share { bus: "channel".into(), params: vec!["stream".into()] };
+        let share = Share { bus: "channel".into(), params: vec!["stream".into()], ..Share::default() };
         let got = bus_name("ingest", &share, &json!({"stream": "sunday/main_720p"})).unwrap();
         assert_eq!(got.unwrap().to_string(), "channel:sunday/main_720p");
         assert!(bus_name("ingest", &share, &json!({"stream": ""})).unwrap().is_none());
