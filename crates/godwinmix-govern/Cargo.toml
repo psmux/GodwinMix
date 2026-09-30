@@ -1,0 +1,41 @@
+[package]
+name = "godwinmix-govern"
+description = "The GodwinMix resource governor: one budget for CPU, hardware encoder sessions, memory and uplink, calibrated on the machine it runs on"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+# Admission, tickets, shedding, headroom and the load sampler are plain Rust
+# and unit test with no media stack. GStreamer comes in only with the
+# `calibrate` feature, for the one second encodes that measure this machine.
+#
+# This crate does not depend on godwinmix-core, on purpose: the core will ask
+# the governor before it starts a preview or an encoder, and Cargo refuses a
+# cycle even through an optional dependency. The catalogue reaches calibration
+# as a list of `Candidate`s, each carrying a closure that applies the
+# catalogue's own properties with the core's own code.
+[features]
+default = []
+calibrate = ["dep:gstreamer"]
+
+[dependencies]
+godwinmix-protocol = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+parking_lot = { workspace = true }
+libc = { workspace = true }
+gstreamer = { workspace = true, optional = true }
+
+[dev-dependencies]
+# The end to end calibration test reads the real catalogue and applies its
+# properties with the core's code, as the station will. Test only: a dev
+# dependency may point back at a crate that later depends on this one.
+godwinmix-core = { workspace = true }
+gstreamer = { workspace = true }
+
+[[test]]
+name = "calibrate"
+required-features = ["calibrate"]
