@@ -22,7 +22,8 @@ use serde_json::{Map, Value};
 /// `program.take`: put a source on programme.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
 pub struct TakeRequest {
-    /// Id of the source to put on air.
+    /// Id of the source to put on air. An empty string is the slate, even
+    /// while a scene is armed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source: Option<String>,
     /// The scene to take, by name or by id. `source` wins when both are

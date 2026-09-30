@@ -127,7 +127,7 @@ async fn state(call: &Call) -> Result<ProgramState, RpcError> {
 /// Four shapes, in the order they are decided: a source id is shorthand for a
 /// one item full canvas scene and is taken as it always was; a scene name is
 /// taken as a scene; neither, with a scene armed, takes the armed one; neither
-/// with nothing armed cuts to the slate. A name that is both a source id and a
+/// with nothing armed, or an empty `source`, cuts to the slate. A name that is both a source id and a
 /// scene name is read as the source, because `source` is the older word and
 /// everything built on it has to keep working.
 async fn take(call: Call, params: Value) -> Result<Value, RpcError> {
@@ -153,9 +153,13 @@ async fn take(call: Call, params: Value) -> Result<Value, RpcError> {
         return take_one_item(&call, &id, req.at_running_time_ms, spec).await;
     }
 
-    // A scene by name, or the armed one when nothing was named.
+    // A scene by name, or the armed one when nothing was named. A `source`
+    // that is there but empty names the slate on purpose, so Cut to black
+    // stays black while a scene is armed in Studio mode.
+    let slate = req.source.as_deref().is_some_and(|s| s.trim().is_empty());
     let named = match req.scene_name() {
         Some(name) => Some(name),
+        None if slate => None,
         None => call.app.scenes.armed().map(|id| id.to_string()),
     };
     let Some(which) = named else {
