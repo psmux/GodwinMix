@@ -9325,6 +9325,13 @@
         ]
       },
       {
+        "description": "MPEG-TS over RIST (Simple Profile), to a receiver that listens",
+        "id": "rist/output",
+        "schemes": [
+          "rist://"
+        ]
+      },
+      {
         "description": "Record the encoded programme to a new MP4 or Matroska file",
         "id": "record/output",
         "schemes": [
@@ -9334,6 +9341,11 @@
       {
         "description": "HLS and LL-HLS served from the control port, one rung or an ABR ladder",
         "id": "hls/output",
+        "schemes": []
+      },
+      {
+        "description": "WebRTC playback of the programme or a rendition, served from the control port as WHEP",
+        "id": "whep/output",
         "schemes": []
       }
     ],
@@ -9347,14 +9359,15 @@
         ]
       },
       {
-        "description": "A continuous stream: HLS, DASH, RTSP, SRT, RTP or UDP",
+        "description": "A continuous stream: HLS, DASH, RTSP, SRT, RIST, RTP or UDP",
         "id": "hls/source",
         "schemes": [
           "rtsp://",
           "rtsps://",
           "srt://",
           "udp://",
-          "rtp://"
+          "rtp://",
+          "rist://"
         ]
       },
       {
@@ -9363,6 +9376,11 @@
         "schemes": [
           "file://"
         ]
+      },
+      {
+        "description": "A still picture held on screen, or a numbered sequence of pictures played as video",
+        "id": "image/source",
+        "schemes": []
       },
       {
         "description": "A command whose process writes a container to stdout",
