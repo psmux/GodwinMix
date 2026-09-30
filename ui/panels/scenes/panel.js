@@ -31,6 +31,7 @@ import { toast, errorToast } from "../../shell/toast.js";
 import { settings } from "../../shell/settings.js";
 import { openSceneSources } from "../sources/chooser-loader.js";
 import { acquireScenes } from "../../shell/scene-session.js";
+import { sceneNotRunning } from "../../shell/scene-health.js";
 
 /** Colours a scene can be given, matching the swatches in the tile menu. */
 const DEFAULT_COLOUR = "var(--kind-stream)";
@@ -374,6 +375,10 @@ class ScenesPanel extends HTMLElement {
       tab.classList.toggle("armed", is(id, armed));
       tab.classList.toggle("on", id === focused);
       tab.setAttribute("aria-selected", id === focused ? "true" : "false");
+    }
+    // A mark on any scene drawing a source that is not running (marks.js).
+    if (this.marks || this.scenes.scenes().some((x) => sceneNotRunning(this.client, this.scenes, x.id).length)) {
+      (this.marks ||= import("./marks.js")).then((m) => m.paint(this));
     }
   }
 

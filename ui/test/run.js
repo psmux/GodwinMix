@@ -4,6 +4,7 @@ import { mixerSettingsTests } from "./mixer-settings.js";
 import { errorActionTests } from "./error-actions.js";
 import { sourceChooserTests } from "./source-chooser.js";
 import { studioTests } from "./studio.js";
+import { sceneFixTests } from "./scene-fix.js";
 import { dockTests } from "./dock.js";
 import { welcomeStepTests } from "./welcome.js";
 import { channelTests } from "./channels.js";
@@ -2628,6 +2629,12 @@ legacySuite()
     console.error(e);
   })
   .then(() => studioTests(test, eq, ok))
+  .then(() => sceneFixTests(test, eq, ok))
+  .catch((e) => {
+    failed += 1;
+    line("fail", "the scene fix suite threw: " + e.message);
+    console.error(e);
+  })
   .then(welcomeSuite)
   .then(() => welcomeStepTests(test, eq, ok))
   .catch((e) => {

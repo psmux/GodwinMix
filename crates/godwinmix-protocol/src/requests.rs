@@ -399,6 +399,50 @@ pub struct IdRequest {
     pub id: String,
 }
 
+/// `source.missing`: the ids a scene draws, or none for every source the
+/// mixer knows is not running.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+pub struct MissingRequest {
+    #[serde(default)]
+    pub ids: Vec<String>,
+}
+
+/// Why a source is not running.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum MissingWhy {
+    /// In the mixer, and its pipeline failed. The mixer keeps retrying it.
+    Failed,
+    /// Asked for (in the config, or by a rebuild) and could not be started.
+    /// `error` says why and `source.restore` asks again.
+    NotStarted,
+    /// Taken away with `source.remove`. `source.restore` puts it back.
+    Removed,
+    /// Not in the mixer, and the mixer remembers nothing about it: removed
+    /// before the last restart, or never added.
+    Unknown,
+}
+
+/// One source that is not running, and what would bring it back.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct MissingSource {
+    pub id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// The kind, such as `camera/source`, when the mixer knows it.
+    #[serde(rename = "type", default, skip_serializing_if = "Option::is_none")]
+    pub type_id: Option<String>,
+    pub why: MissingWhy,
+    /// The error it failed with, which names the next step.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    /// The button that fixes it, when the error carries one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub action: Option<crate::action::ErrorAction>,
+    /// True when `source.restore` can ask for it again.
+    pub restore: bool,
+}
+
 /// `source.duplicate`.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct DuplicateSourceRequest {
@@ -465,6 +509,12 @@ pub struct ProgramState {
     /// Present while an ad break is armed or on air.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ad: Option<crate::types::AdStatus>,
+    /// Sources the scene on air draws that this mixer does not have. The take
+    /// went ahead without them and they draw nothing, so the slate or whatever
+    /// sits under them shows through, until they are added back. Left out when
+    /// every source is here.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub missing: Vec<String>,
 }
 
 /// `core.subscribe`: which events, and which expensive streams.

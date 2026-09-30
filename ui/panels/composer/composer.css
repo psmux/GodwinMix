@@ -23,11 +23,28 @@
 .composer-body {
   display: grid;
   grid-template-columns: 1fr minmax(240px, 300px);
-  grid-template-rows: auto 1fr;
+  grid-template-rows: auto auto 1fr;
   grid-template-areas:
     "bar bar"
+    "health health"
     "canvas side";
   min-height: 56vh;
+}
+
+.composer-health {
+  grid-area: health;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px var(--pad);
+  font-size: var(--fs-sm);
+  color: var(--warn);
+  background: var(--panel2);
+  border-bottom: var(--border) solid var(--line);
+}
+
+.composer-health[hidden] {
+  display: none;
 }
 
 .composer.composer-full .composer-body {
@@ -137,6 +154,7 @@
     grid-template-columns: 1fr;
     grid-template-areas:
       "bar"
+      "health"
       "canvas"
       "side";
   }
