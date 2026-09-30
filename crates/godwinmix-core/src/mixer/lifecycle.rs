@@ -10,6 +10,7 @@
 
 use super::{offload, Command, Mixer};
 use crate::input::InputPipeline;
+use crate::output::OutputSlot;
 use crate::state::SourceId;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -130,6 +131,26 @@ impl Mixer {
                     warn!(source = %id, ?e, "could not send on an add that waited for a stop");
                 }
             }
+        }
+    }
+
+    /// Rebuild an output's pipeline on a thread of its own. The old pipeline
+    /// has to reach NULL before the new one is built, and its sink decides how
+    /// long that takes.
+    pub(super) fn reconnect_off_thread(&mut self, out: Arc<OutputSlot>) {
+        if !out.claim_reconnect() {
+            debug!(output = %out.id(), "a reconnect of this output is already running");
+            return;
+        }
+        let handle = self.handle.clone();
+        let id = out.id().clone();
+        let worker = out.clone();
+        let started = offload::run("reconnect", out.id().as_str(), move || {
+            let failed = worker.reconnect().err().map(|e| format!("{e:#}"));
+            let _ = handle.send(Command::OutputReconnected(id, failed));
+        });
+        if !started {
+            out.reconnect_abandoned();
         }
     }
 }

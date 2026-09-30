@@ -13,6 +13,9 @@
 //!   restart that gets the lock after that finds the mark and does nothing,
 //!   so a source removed in the middle of a restart does not come back.
 //! * Every wait for the other one is bounded and says so in the log.
+//!
+//! An output's reconnect and detach keep the same order with the same type:
+//! a reconnect is its restart, a detach its stop.
 
 use parking_lot::{Mutex, MutexGuard};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -64,14 +67,25 @@ impl Lifecycle {
     /// Wait for the other restart or stop of this source to finish, for at
     /// most `LIFECYCLE_WAIT`. None when it did not, with a line saying which
     /// source and what was waiting.
-    pub fn enter(&self, source: &str, what: &'static str) -> Option<MutexGuard<'_, ()>> {
-        let guard = self.lock.try_lock_for(LIFECYCLE_WAIT);
+    pub fn enter(&self, id: &str, what: &'static str) -> Option<MutexGuard<'_, ()>> {
+        self.enter_within(id, what, LIFECYCLE_WAIT)
+    }
+
+    /// The same with a wait of the caller's choosing, for a caller on the
+    /// mixer thread that can afford far less than `LIFECYCLE_WAIT`.
+    pub fn enter_within(
+        &self,
+        id: &str,
+        what: &'static str,
+        wait: Duration,
+    ) -> Option<MutexGuard<'_, ()>> {
+        let guard = self.lock.try_lock_for(wait);
         if guard.is_none() {
             warn!(
-                source,
+                id,
                 what,
-                waited_ms = LIFECYCLE_WAIT.as_millis() as u64,
-                "an earlier restart or stop of this source has not finished"
+                waited_ms = wait.as_millis() as u64,
+                "an earlier restart or stop of this has not finished"
             );
         }
         guard
