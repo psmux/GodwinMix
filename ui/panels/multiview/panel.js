@@ -13,8 +13,7 @@ import { el, on } from "../../shell/dom.js";
 import { sheetWidthFor } from "../../client/frames.js";
 import { programLabel } from "../../client/store.js";
 import { settings, setSetting, onSettingsChanged } from "../../shell/settings.js";
-import { toast, errorToast } from "../../shell/toast.js";
-import { register } from "../../shell/commands.js";
+import { errorToast } from "../../shell/toast.js";
 import { mosaicWanted } from "./wanted.js";
 
 class ProgramPanel extends HTMLElement {
@@ -39,33 +38,17 @@ class ProgramPanel extends HTMLElement {
       this.noteSwitch,
     ])]);
 
-    this.previewWrap = el("div.monitor-pane.preview-pane", { hidden: true });
-    this.previewCanvas = el("canvas", { width: 320, height: 180, style: { width: "100%", display: "block", background: "#000" } });
-    this.previewTitle = el("strong", { text: "PREVIEW" });
-    this.previewName = el("span.ellipsis", { text: "Choose a scene" });
-    this.previewWrap.append(el("div.monitor-label", {}, [this.previewTitle, this.previewName]), this.previewCanvas);
-
     this.programName = el("span.ellipsis", { text: "Black" });
     const monitor = el("div.program.monitor-pane", {}, [el("div.monitor-label", {}, [
       el("strong", { text: "PROGRAMME" }), this.programName,
     ]), this.canvas, this.still, this.note]);
-    this.row = el("div.monitor-stage", {}, [this.previewWrap, monitor]);
-
-    this.takeBtn = el("button.btn.primary", { text: "Cut", title: "Take the preview immediately", hidden: true, onclick: () => this.take(0) });
-    this.autoBtn = el("button.btn", { text: "Fade", hidden: true, onclick: () => this.take(Number(this.fadeDuration.value)) });
-    this.fadeDuration = el("select", { "aria-label": "Fade duration", title: "Fade duration" }, [
-      el("option", { value: "250", text: "0.25 s" }), el("option", { value: "500", text: "0.5 s", selected: true }),
-      el("option", { value: "1000", text: "1 s" }), el("option", { value: "2000", text: "2 s" }),
-    ]);
+    this.row = el("div.monitor-stage", {}, [monitor]);
     this.studioButton = el("button.btn", { text: "Studio mode", onclick: () => setSetting("producer", !settings().producer) });
     this.streamState = el("span.sm.dim", { text: "Waiting for preview frames", role: "status" });
     this.bar = el("div.row.pad.monitor-controls", {}, [
       el("span.sm.dim.grow", { text: "What your audience is seeing" }),
       this.streamState,
       this.studioButton,
-      this.fadeDuration,
-      this.takeBtn,
-      this.autoBtn,
     ]);
 
     this.append(this.row, this.bar);
@@ -78,13 +61,6 @@ class ProgramPanel extends HTMLElement {
         this.streamState.textContent = "Preview live";
       }),
       onSettingsChanged(() => this.applyMode()),
-      register({
-        id: "program.take-armed",
-        title: "Take the armed tile",
-        group: "Programme",
-        enabled: () => settings().producer && !!this.armed,
-        run: () => this.take(0),
-      }),
     ];
 
     this.frameTimer = setInterval(() => {
@@ -190,49 +166,13 @@ class ProgramPanel extends HTMLElement {
     }
   }
 
-  /**
-   * The armed scene in the pane beside the programme.
-   *
-   * Its own subscription: `ext.preview` is what builds the compositor, and it
-   * is asked for only in producer mode, with something armed, and while
-   * somebody can see it, which is the rule the monitor above follows too.
-   */
+  /** The preview pane is Studio mode's, in studio.js, loaded when first on. */
   retunePreview(s) {
-    const wanted = !!(settings().producer && s.preview && this.visible && this.workspaceActive !== false && !document.hidden);
-    if (!wanted) {
-      this.releasePreview();
-      return;
-    }
-    const box = this.previewCanvas.getBoundingClientRect();
-    const fps = settings().multiviewFps;
-    // One picture rather than a sheet, so one cell across.
-    const width = this.resizeTimer && this.previewWant ? this.lastPreviewWidth : sheetWidthFor(box.width || 320, 1);
-    if (!this.previewWant) this.previewWant = this.client.want("preview", { fps, width });
-    else if (width !== this.lastPreviewWidth || fps !== this.lastPreviewFps) {
-      this.previewWant.update({ fps, width });
-    }
-    this.lastPreviewWidth = width;
-    this.lastPreviewFps = fps;
-
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const w = Math.round((box.width || 320) * dpr);
-    const h = Math.round((w * 9) / 16);
-    if (!this.resizeTimer && w > 0 && (this.previewCanvas.width !== w || this.previewCanvas.height !== h)) {
-      this.previewCanvas.width = w;
-      this.previewCanvas.height = h;
-    }
-    if (!this.detachPreview) this.detachPreview = this.client.preview.attach(this.previewCanvas);
+    if (this.studio) this.studio.retunePreview(this, s);
   }
 
   releasePreview() {
-    if (this.previewWant) {
-      this.previewWant.release();
-      this.previewWant = null;
-    }
-    if (this.detachPreview) {
-      this.detachPreview();
-      this.detachPreview = null;
-    }
+    if (this.studio) this.studio.releasePreview(this);
   }
 
   release() {
@@ -251,45 +191,41 @@ class ProgramPanel extends HTMLElement {
 
   applyMode() {
     const producer = settings().producer;
-    this.takeBtn.hidden = !producer;
-    this.autoBtn.hidden = !producer;
-    this.fadeDuration.hidden = !producer;
     this.studioButton.setAttribute("aria-pressed", String(producer));
-    this.previewWrap.hidden = !producer;
     document.body.classList.toggle("producer", producer);
+    if (producer && !this.studio) this.loadStudio();
+    if (this.studio) this.studio.show(this, producer);
     this.render(this.client.state);
   }
 
-  /** In producer mode a tap arms; this is what puts the armed tile on air. */
-  async take(durationMs) {
-    const target = this.armed;
-    if (!target) {
-      toast({ text: "Nothing is armed. Tap a tile first." });
-      return;
-    }
+  async loadStudio() {
+    if (this.studioLoading) return;
+    this.studioLoading = true;
     try {
-      const request = this.client.state.preview === target ? { scene: target } : { source: target };
-      if (durationMs) request.transition = { type: "fade", duration_ms: durationMs };
-      await this.client.call("program.take", request);
-      this.armed = null;
-      document.body.dataset.armed = "";
+      const studio = await import("./studio.js");
+      studio.build(this);
+      this.studio = studio;
+      this.applyMode();
     } catch (e) {
-      errorToast(e, "Take");
+      this.studioLoading = false;
+      errorToast(e, "Studio mode");
     }
   }
 
+  /** Preview to programme; Studio mode's, so it waits for studio.js. */
+  take(durationMs) {
+    return this.studio && this.studio.take(this, durationMs);
+  }
+
   render(s) {
-    this.armed = s.preview || (document.body.dataset.armed || null) || null;
     // A scene of more than one item is `scene`, not `program`; reading only
     // the source said "black" under a live two box, and reading the name the
     // core froze at take time said the old one after a rename.
     const named = programLabel(s);
     this.row.querySelector(".program").classList.toggle("on", !!named);
-    this.previewWrap.hidden = !settings().producer;
     this.programName.textContent = named || "Black";
-    this.previewName.textContent = this.armed || "Choose a scene";
-    this.takeBtn.disabled = this.autoBtn.disabled = !this.armed;
     this.bar.firstChild.textContent = named ? `Audience sees ${named}` : "Audience sees black";
+    if (this.studio) this.studio.render(this, s);
     this.retune();
   }
 }

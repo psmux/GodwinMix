@@ -48,7 +48,7 @@ class HeaderPanel extends HTMLElement {
       el("button.btn", {
         text: "Cut to black",
         title: "0",
-        onclick: () => this.client.call("program.take", { source: null }).catch((e) => errorToast(e, "Cut to black")),
+        onclick: () => this.client.call("program.take", { source: "" }).catch((e) => errorToast(e, "Cut to black")),
       }),
       // The palette arrives when it is asked for, here and on Ctrl+K.
       el("button.btn.icon", {

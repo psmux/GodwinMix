@@ -437,15 +437,19 @@ class SourcesPanel extends HTMLElement {
     }
     // Inside a scene the scene is what goes to air, and its tab is what takes
     // it. A tap on one of the pieces it is built from selects that piece, the
-    // way clicking a layer does, and the programme is left alone.
-    if (this.scopedTo()) return;
+    // way clicking a layer does, and the programme is left alone. In
+    // Studio mode a tap only fills the preview, so it arms the piece as well.
+    if (this.scopedTo() && !settings().producer) return;
     this.putOnAir(id);
   }
 
   async putOnAir(id) {
     if (settings().producer) {
-      // Only a scene can be armed on the core's preview; a source is armed here.
+      // Only a scene can be armed on the core's preview; a source is armed
+      // here, and the scene is disarmed so one thing is in preview.
       document.body.dataset.armed = id;
+      if (this.client.state.preview) this.client.call("scene.preview.set", {}).catch((e) => errorToast(e, "Preview"));
+      document.dispatchEvent(new Event("gmx-armed"));
       this.render(this.client.state);
       return;
     }
