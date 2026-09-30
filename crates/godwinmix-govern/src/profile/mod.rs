@@ -78,7 +78,21 @@ impl Profile {
         let x = mpix(shape.width, shape.height, shape.fps);
         let memory_mib = memory_for(shape);
         let Some(e) = self.enc(slot) else {
-            return Cost { cpu_millicores: Guess::encode(shape.codec, x), memory_mib, ..Cost::default() };
+            // Nothing measured for this encoder. A hardware one does its work
+            // on the device, so the CPU share is a feeding cost, not the
+            // encode: priced as software it read 60% of a core for a 720p
+            // encode that costs 5% on the machine it was checked on.
+            let guess = Guess::encode(shape.codec, x);
+            if slot.hardware {
+                return Cost {
+                    cpu_millicores: (guess / 10).max(1),
+                    device_millis: (guess / 6).clamp(1, 1000),
+                    device_sessions: 1,
+                    memory_mib,
+                    egress_kbps: 0,
+                };
+            }
+            return Cost { cpu_millicores: guess, memory_mib, ..Cost::default() };
         };
         let ratio = preset.and_then(|p| e.presets.iter().find(|(n, _)| n == p)).map(|(_, r)| *r).unwrap_or(1.0);
         let cpu = (e.cpu.at(x) * ratio).round() as u32;

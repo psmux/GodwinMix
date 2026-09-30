@@ -67,5 +67,5 @@ pub use graph::Programme;
 pub use refusal::Refusal;
 pub use renditions::{Renditions, RenditionsHandle, PROGRAMME};
 pub use shed::{Tick, RESTORE_AFTER};
-pub use station::Station;
+pub use station::{Station, CALIBRATION_ENV};
 pub use tap::{Feed, Tap};
