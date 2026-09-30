@@ -8,9 +8,10 @@
 #   dev/harness/restream-fanout.sh             two minutes, ports 19352 to 19355
 #   SECS=30 dev/harness/restream-fanout.sh     a shorter run
 #
-# Needs ffmpeg and ffprobe. The receivers are `ffmpeg -listen 1`, so nothing
-# of ours is on the receiving end. Everything lands in $OUT (a temp directory
-# unless given).
+# Needs ffmpeg and ffprobe. The check at the end is the ingest plugin's
+# restream_check example, in Rust. The receivers are `ffmpeg -listen 1`, so
+# nothing of ours is on the receiving end. Everything lands in $OUT (a temp
+# directory unless given).
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 
@@ -22,6 +23,7 @@ BACK_AT=${BACK_AT:-60}
 OUT=${OUT:-$(mktemp -d)}
 echo "restream-fanout: writing to $OUT"
 
+cargo build --release -p gmx-ingest --example restream_check || { echo "could not build the restream_check example" >&2; exit 1; }
 BIN=$(cargo test --release -p gmx-ingest --no-run 2>&1 | grep -o 'target/release/deps/gmx_ingest-[a-f0-9]*' | head -1)
 [ -x "$BIN" ] || { echo "could not build the gmx-ingest test binary" >&2; exit 1; }
 
@@ -69,4 +71,4 @@ echo "CPU time used in all: $(tail -n 1 "$OUT/usage.txt" | awk '{print $4}') (mi
 echo "--- the restreamer's own last report"
 tail -n 3 "$OUT/fanout.log"
 echo "--- the recordings"
-python3 dev/harness/restream_check.py "$OUT" "${PORTS[@]}"
+target/release/examples/restream_check "$OUT" "${PORTS[@]}"
