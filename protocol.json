@@ -7806,6 +7806,11 @@
         "schemes": [
           "record://"
         ]
+      },
+      {
+        "description": "HLS and LL-HLS served from the control port, one rung or an ABR ladder",
+        "id": "hls/output",
+        "schemes": []
       }
     ],
     "source": [
@@ -11262,6 +11267,21 @@
       "method": "PATCH",
       "note": "405: every candidate is in the answer, and none are taken later",
       "path": "/whip/{channel}/{stream}/{session}"
+    },
+    {
+      "method": "GET",
+      "note": "an hls/output's multivariant playlist. Readable with the output's viewer key as ?key= (output.list playback.master_url_path) or a token with read",
+      "path": "/hls/{output}/master.m3u8"
+    },
+    {
+      "method": "GET",
+      "note": "one rung's media playlist; _HLS_msn and _HLS_part hold it until that part exists (LL-HLS blocking reload)",
+      "path": "/hls/{output}/{rung}/index.m3u8"
+    },
+    {
+      "method": "GET",
+      "note": "init.mp4, a CMAF segment {n}.m4s or an LL-HLS part {n}.{p}.m4s, from memory",
+      "path": "/hls/{output}/{rung}/{file}"
     }
   ]
 }
