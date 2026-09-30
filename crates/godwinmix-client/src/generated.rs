@@ -2842,7 +2842,8 @@ pub struct TakeRequest {
     /// given; with neither, the armed scene goes on air.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub scene: Option<String>,
-    /// Id of the source to put on air.
+    /// Id of the source to put on air. An empty string is the slate, even
+    /// while a scene is armed.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source: Option<String>,
     /// "fade", or {type, duration_ms, params}. Absent is a cut.
