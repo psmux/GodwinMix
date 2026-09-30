@@ -164,7 +164,7 @@ again as another program's load.
 
 When the link closes the station drops every ticket it held for that show, so
 a show that died gives its share of the machine back at once. A show that
-cannot reach the station within two seconds admits against its own book.
+cannot get an answer from the station within half a second admits against its own book.
 
 ## What a single show setup costs
 

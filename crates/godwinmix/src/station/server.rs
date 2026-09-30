@@ -70,7 +70,7 @@ async fn api(State(st): State<Arc<Station>>, req: Request) -> Response {
         Ok(t) => t,
         Err(f) => {
             let e = godwinmix_protocol::error::RpcError::new(godwinmix_protocol::ErrorCode::Scope, format!("{}. Send it as `Authorization: Bearer <token>`.", f.message()));
-            return (StatusCode::UNAUTHORIZED, Json(e.body(""))).into_response();
+            return (StatusCode::UNAUTHORIZED, Json(e.body(&godwinmix_protocol::trace::new_id()))).into_response();
         }
     };
     let body = match axum::body::to_bytes(req.into_body(), 1 << 20).await {

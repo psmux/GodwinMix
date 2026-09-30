@@ -17,7 +17,7 @@ impl Relay {
             let Some(id) = id else { return };
             let frame = match answer {
                 Ok(v) => rpc::result_frame(&id, v),
-                Err(e) => rpc::error_frame(&id, &e, ""),
+                Err(e) => rpc::error_frame(&id, &e, &godwinmix_protocol::trace::new_id()),
             };
             let _ = answers.send(frame).await;
         });
