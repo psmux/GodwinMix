@@ -258,7 +258,7 @@ fn merge(
         wanted.queue_secs = secs;
     }
     if let Some(choice) = &req.rendition {
-        wanted.rendition = Some(choice.clone());
+        wanted.rendition = choice.clone();
     }
     for (key, value) in &req.params {
         match toml::Value::try_from(value) {

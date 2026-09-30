@@ -309,13 +309,22 @@ pub struct SetOutputRequest {
     /// Seconds of encoded data to hold before the muxer.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub queue_secs: Option<f64>,
-    /// A new rendition, as `output.add` takes it. `{"preset": "copy"}` puts
-    /// the output back on the programme encoder.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub rendition: Option<crate::rendition::RenditionChoice>,
+    /// A new rendition, as `output.add` takes it. `null` puts the output
+    /// back on the programme's own encode; left out keeps what it has.
+    #[serde(default, deserialize_with = "present", skip_serializing_if = "Option::is_none")]
+    pub rendition: Option<Option<crate::rendition::RenditionChoice>>,
     /// Merged over the params the output already has.
     #[serde(flatten, default, skip_serializing_if = "Map::is_empty")]
     pub params: Map<String, Value>,
+}
+
+/// A field that was sent, even as `null`, is `Some`; one left out is `None`.
+fn present<'de, D, T>(d: D) -> Result<Option<Option<T>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    Option::<T>::deserialize(d).map(Some)
 }
 
 impl SetOutputRequest {

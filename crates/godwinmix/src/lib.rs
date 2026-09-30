@@ -723,6 +723,16 @@ pub async fn run() -> Result<()> {
     let build = core_observe::introspect::stage("mixer build");
     let (mut mix, handle, cmd_rx, mut bus_rx) = mixer::Mixer::build(cfg)?;
     mix.persist_runtime_to(Config::runtime_store_path(&config_path));
+    // One governor for the machine: this machine's calibration if it has
+    // one, the load sampled from now on, and the configured outputs that ask
+    // for a rendition admitted by it when `start` attaches them.
+    let station = godwinmix_core::render::Station::start(
+        cfg_for_control.governor.clone(),
+        &godwinmix_core::catalogue::global(),
+        cfg_for_control.hardware.encode,
+        &core_observe::runtime_dir(&config_path),
+    );
+    mix.set_station(station.clone());
     // A take may name a transition that lives in a plugin. The mixer never
     // launches one: it asks this, with a budget, before the window starts.
     mix.set_transition_renderer(supervisor.clone());
@@ -800,6 +810,10 @@ pub async fn run() -> Result<()> {
         let _stage = core_observe::introspect::stage("mixer start");
         mix.start().context("starting mixer")?;
     }
+    // After `start`, which says whether anything is on air: a first run
+    // calibration waits for the air to clear.
+    station.begin();
+    control::methods::renditions::configure(mix.renditions().handle());
 
     // The node bridge, if the config asked for one. After `mix.start()`,
     // because a node follows the programme clock and there is no clock until
