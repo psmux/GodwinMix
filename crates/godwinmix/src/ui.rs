@@ -80,6 +80,7 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/channels/keys.js", include_str!("../../../ui/panels/channels/keys.js")),
     ("panels/channels/model.js", include_str!("../../../ui/panels/channels/model.js")),
     ("panels/channels/panel.js", include_str!("../../../ui/panels/channels/panel.js")),
+    ("panels/channels/plans.js", include_str!("../../../ui/panels/channels/plans.js")),
     ("panels/channels/protocols.js", include_str!("../../../ui/panels/channels/protocols.js")),
     ("panels/channels/qr-grid.js", include_str!("../../../ui/panels/channels/qr-grid.js")),
     ("panels/channels/qr.js", include_str!("../../../ui/panels/channels/qr.js")),
@@ -104,6 +105,21 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/audio/panel.js", include_str!("../../../ui/panels/audio/panel.js")),
     ("panels/outputs/recording.js", include_str!("../../../ui/panels/outputs/recording.js")),
     ("panels/outputs/panel.js", include_str!("../../../ui/panels/outputs/panel.js")),
+    ("panels/outputs/views.js", include_str!("../../../ui/panels/outputs/views.js")),
+("panels/renditions/bars.js", include_str!("../../../ui/panels/renditions/bars.js")),
+    ("panels/renditions/custom.js", include_str!("../../../ui/panels/renditions/custom.js")),
+    ("panels/renditions/format-step.js", include_str!("../../../ui/panels/renditions/format-step.js")),
+    ("panels/renditions/hls-add.js", include_str!("../../../ui/panels/renditions/hls-add.js")),
+    ("panels/renditions/hls-card.js", include_str!("../../../ui/panels/renditions/hls-card.js")),
+    ("panels/renditions/ladder.js", include_str!("../../../ui/panels/renditions/ladder.js")),
+    ("panels/renditions/model.js", include_str!("../../../ui/panels/renditions/model.js")),
+    ("panels/renditions/plan-feed.js", include_str!("../../../ui/panels/renditions/plan-feed.js")),
+    ("panels/renditions/refusal.js", include_str!("../../../ui/panels/renditions/refusal.js")),
+    ("panels/renditions/renditions.css", include_str!("../../../ui/panels/renditions/renditions.css")),
+    ("panels/renditions/resources.js", include_str!("../../../ui/panels/renditions/resources.js")),
+    ("panels/renditions/shared.js", include_str!("../../../ui/panels/renditions/shared.js")),
+    ("panels/renditions/usage.js", include_str!("../../../ui/panels/renditions/usage.js")),
+    ("panels/renditions/words.js", include_str!("../../../ui/panels/renditions/words.js")),
     ("panels/scenes/more.js", include_str!("../../../ui/panels/scenes/more.js")),
     ("panels/scenes/panel.js", include_str!("../../../ui/panels/scenes/panel.js")),
     ("panels/sources/first-air.js", include_str!("../../../ui/panels/sources/first-air.js")),
@@ -197,6 +213,12 @@ const DEV_ASSETS: &[(&str, &str)] = &[
     ("test/channels-ways.js", include_str!("../../../ui/test/channels-ways.js")),
     ("test/channels-preview.js", include_str!("../../../ui/test/channels-preview.js")),
     ("test/channels.html", include_str!("../../../ui/test/channels.html")),
+    // Renditions against a stub of the wave 2 contract, as tests and as a
+    // page to look at: /test/renditions.html?scene=format.
+    ("test/renditions.js", include_str!("../../../ui/test/renditions.js")),
+    ("test/renditions-stub.js", include_str!("../../../ui/test/renditions-stub.js")),
+    ("test/renditions-preview.js", include_str!("../../../ui/test/renditions-preview.js")),
+    ("test/renditions.html", include_str!("../../../ui/test/renditions.html")),
     // The designer kits' behaviour, as the reference implementation answered
     // it. The TypeScript and Python suites read the same file from the
     // repository; the browser reads it from here, because the page has no file
@@ -578,7 +600,9 @@ mod tests {
         let mut out = Vec::new();
         for line in source.lines() {
             let t = line.trim_start();
-            let is_import = (t.starts_with("import ") && !t.starts_with("import(")) || t.starts_with("} from ");
+            let is_import = (t.starts_with("import ") && !t.starts_with("import("))
+                || t.starts_with("} from ")
+                || (t.starts_with("export ") && t.contains(" from "));
             if !is_import {
                 continue;
             }
@@ -712,6 +736,19 @@ mod tests {
         reachable.extend(closure_of("shell/mixer-settings.js"));
         reachable.extend(closure_of("shell/folder-picker.js"));
         reachable.extend(closure_of("panels/multiview/studio.js"));
+        // Renditions: each is fetched by an `import()` the first time it is
+        // wanted, from the destination form, the Outputs panel or its rows.
+        for entry in [
+            "panels/outputs/views.js",
+            "panels/renditions/format-step.js",
+            "panels/renditions/refusal.js",
+            "panels/renditions/hls-add.js",
+            "panels/renditions/hls-card.js",
+            "panels/renditions/plan-feed.js",
+            "panels/renditions/resources.js",
+        ] {
+            reachable.extend(closure_of(entry));
+        }
         // Not imported by this page at all: it is what a sandboxed panel's own
         // HTML imports, inside the iframe, to talk the same protocol back.
         reachable.extend(closure_of("client/sandbox-client.js"));
@@ -762,6 +799,15 @@ mod tests {
             ("panels/welcome/obs-import.js", "the Import from OBS tile"),
             ("shell/error-actions.js", "a button pressed on an error toast"),
             ("panels/multiview/studio.js", "Studio mode switched on"),
+            ("panels/outputs/views.js", "an output on the list or the Resources tab"),
+            ("panels/renditions/format-step.js", "a destination form opened"),
+            ("panels/renditions/custom.js", "a destination form opened"),
+            ("panels/renditions/refusal.js", "an add the governor refused"),
+            ("panels/renditions/hls-add.js", "Add destination opened"),
+            ("panels/renditions/hls-card.js", "an HLS output on the list"),
+            ("panels/renditions/plan-feed.js", "an output on the list"),
+            ("panels/renditions/resources.js", "the Resources tab"),
+            ("panels/renditions/bars.js", "the Resources tab"),
         ] {
             assert!(known(path).is_some(), "{path} is not served at all");
             assert!(!eager.contains(path), "{path} is fetched at load, but only {who} needs it");

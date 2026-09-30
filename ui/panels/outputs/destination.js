@@ -77,6 +77,12 @@ export async function addDestination(client, opts = {}) {
       }, [el("span.grow", {}, [el("div", { text: p.title }), el("div.dim.sm", { text: p.where })])])
     );
   }
+  // HLS for viewers is not a platform with a key, and only a core that can
+  // serve it gets the tile. Its module comes with it.
+  import("../renditions/hls-add.js")
+    .then((h) => h.hlsTile(client, () => m.close(), opts.onDone))
+    .then((tile) => tile && grid.appendChild(tile))
+    .catch((e) => console.debug("no HLS tile", e));
   return m;
 }
 
@@ -253,9 +259,20 @@ async function openForm(client, p, output, onDone) {
   const editing = !!output;
   const form = new SchemaForm(schemaFor(p, output), {});
   const save = el("button.btn.primary", { text: editing ? "Save" : "Start sending" });
+  // The Format step and the place a refusal goes. Both live in renditions/,
+  // which a core without renditions never makes do anything.
+  const { formatStep, programmeShape } = await import("../renditions/format-step.js");
+  const format = formatStep(client, {
+    platform: p.id,
+    platformTitle: p.title,
+    shape: programmeShape(client),
+    current: editing ? output.rendition || { preset: "copy" } : undefined,
+    id: () => (editing ? output.id : String(form.read().id || p.id).trim()),
+  });
+  const refused = el("div", { hidden: true });
   const m = modal({
     title: editing ? `Edit ${output.id}` : p.title,
-    body: el("div", {}, [el("p.dim.sm", { text: p.where, style: { marginTop: "0" } }), form.el]),
+    body: el("div", {}, [el("p.dim.sm", { text: p.where, style: { marginTop: "0" } }), form.el, format.node, refused]),
     footer: [el("button.btn", { text: "Cancel", onclick: () => m.close() }), save],
   });
 
@@ -301,18 +318,32 @@ async function openForm(client, p, output, onDone) {
       toast({ kind: "warning", text: asked.error });
       return;
     }
+    await format.ready;
+    const rendition = format.value();
+    if (rendition !== undefined) asked.params.rendition = rendition;
     save.disabled = true;
+    const sent = await send(asked.params);
+    if (!sent) save.disabled = false;
+  };
+
+  /** One add or set. A governor refusal stays in the form with its advice. */
+  async function send(params) {
     try {
-      await client.call(editing ? "output.set" : "output.add", asked.params);
+      await client.call(editing ? "output.set" : "output.add", params);
     } catch (e) {
-      errorToast(e, editing ? "Save" : p.title);
-      save.disabled = false;
-      return;
+      const { isRefusal, showRefusal } = await import("../renditions/refusal.js");
+      if (!isRefusal(e)) {
+        errorToast(e, editing ? "Save" : p.title);
+        return false;
+      }
+      showRefusal(refused, e, (request) => send({ ...params, rendition: request }));
+      return false;
     }
     m.close();
-    toast({ text: editing ? `${asked.params.id} saved. It reconnects now.` : "Sending started." });
+    toast({ text: editing ? `${params.id} saved. It reconnects now.` : "Sending started." });
     if (onDone) await onDone();
-  };
+    return true;
+  }
 
   form.focusFirst();
   return m;

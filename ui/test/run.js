@@ -7,6 +7,7 @@ import { studioTests } from "./studio.js";
 import { dockTests } from "./dock.js";
 import { welcomeStepTests } from "./welcome.js";
 import { channelTests } from "./channels.js";
+import { renditionTests } from "./renditions.js";
 // The test runner: forty lines, no dependencies, no toolchain. Open the page,
 // read the console, or read the list. Everything testable without a mixer is
 // here, including the legacy adapter against a stubbed server.
@@ -2638,6 +2639,12 @@ legacySuite()
   .catch((e) => {
     failed += 1;
     line("fail", "the channels suite threw: " + e.message);
+    console.error(e);
+  })
+  .then(() => renditionTests(test, eq, ok))
+  .catch((e) => {
+    failed += 1;
+    line("fail", "the renditions suite threw: " + e.message);
     console.error(e);
   })
   .then(outputNumbersSuite)

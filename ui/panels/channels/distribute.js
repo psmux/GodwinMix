@@ -69,10 +69,11 @@ function destinationTile(view, getChannel) {
   const label = el("span.chn-tlabel");
   const words = el("span.chn-tstate");
   const error = el("span.chn-terr");
+  const plan = el("span.chn-tplan");
   const main = el("button.chn-tmain", { type: "button", onclick: () => editDestination(view, getChannel(), dest) }, [ring, label, words]);
   const box = el("input", { type: "checkbox" });
   const toggle = el("label.chn-switch", {}, [box, el("span.chn-knob")]);
-  const node = el("div.chn-tile", {}, [main, toggle, error]);
+  const node = el("div.chn-tile", {}, [main, toggle, plan, error]);
   box.onchange = () => setEnabled(view, getChannel(), dest, box);
 
   return {
@@ -85,6 +86,10 @@ function destinationTile(view, getChannel) {
       write(label, "textContent", d.label || p.title);
       write(words, "textContent", tileState(d));
       write(box, "checked", !!d.enabled);
+      // What the planner made of it: "Copied", or the encoder, whole on hover.
+      const id = getChannel().id;
+      write(plan, "textContent", view.plans ? view.plans.line(id, d.id, true) : "");
+      write(plan, "title", view.plans ? view.plans.line(id, d.id, false) : "");
       box.setAttribute("aria-label", `Send to ${d.label || p.title}`);
       const why = d.state === "failed" || d.state === "reconnecting" ? d.error || "" : "";
       // Trying again says why too: a person looking at an amber ring wants
