@@ -159,7 +159,7 @@ pub struct AddOutputRequest {
     /// request or `{"preset": "youtube-720p30"}` (`rendition.presets` lists
     /// them). Absent means the programme encoder, at no extra cost.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub rendition: Option<RenditionChoice>,
+    pub rendition: Option<BTreeMap<String, Value>>,
     /// rtmp:// or rtmps:// URL including the stream key.
     pub uri: String,
     /// Anything this build does not know a name for.
@@ -2948,7 +2948,7 @@ pub struct SetOutputRequest {
     /// A new rendition, as `output.add` takes it. `null` puts the output
     /// back on the programme's own encode; left out keeps what it has.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub rendition: Option<RenditionChoice>,
+    pub rendition: Option<BTreeMap<String, Value>>,
     /// The whole new address, stream key and all. Write only: no method ever
     /// reads it back, so leaving it out keeps the address already in force
     /// and a client can offer "change the buffer" without holding the key.

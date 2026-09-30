@@ -266,15 +266,11 @@
           ]
         },
         "rendition": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/RenditionChoice"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "description": "What to make from the programme for this destination: a rendition\nrequest or `{\"preset\": \"youtube-720p30\"}` (`rendition.presets` lists\nthem). Absent means the programme encoder, at no extra cost."
+          "description": "What to make from the programme for this destination: a rendition\nrequest or `{\"preset\": \"youtube-720p30\"}` (`rendition.presets` lists\nthem). Absent means the programme encoder, at no extra cost.",
+          "type": [
+            "object",
+            "null"
+          ]
         },
         "uri": {
           "description": "rtmp:// or rtmps:// URL including the stream key.",
@@ -6573,15 +6569,11 @@
           ]
         },
         "rendition": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/RenditionChoice"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "description": "A new rendition, as `output.add` takes it. `null` puts the output\nback on the programme's own encode; left out keeps what it has."
+          "description": "A new rendition, as `output.add` takes it. `null` puts the output\nback on the programme's own encode; left out keeps what it has.",
+          "type": [
+            "object",
+            "null"
+          ]
         },
         "uri": {
           "description": "The whole new address, stream key and all. Write only: no method ever\nreads it back, so leaving it out keeps the address already in force\nand a client can offer \"change the buffer\" without holding the key.",
