@@ -248,7 +248,26 @@ export interface CellAssignment {
   y: number;
 }
 
-/** A named place encoders publish to, on the mixer's own RTMP port. */
+/** `channel.certificate.generate`: a self signed certificate. */
+export interface CertificateGenerateRequest {
+  names?: string[];
+}
+
+/** The certificate RTMPS answers with. The private key never leaves the core. */
+export interface CertificateInfo {
+  created: string;
+  fingerprint: string;
+  names?: string[];
+  source: string;
+}
+
+/** `channel.certificate.set`: a certificate and its private key, as PEM. */
+export interface CertificateSetRequest {
+  cert: string;
+  key: string;
+}
+
+/** A named place encoders publish to, over every protocol it has switched on. */
 export interface Channel {
   app: string;
   auto_source: boolean;
@@ -258,7 +277,9 @@ export interface Channel {
   key_mode: KeyMode;
   keys: ChannelKey[];
   name: string;
+  protocols?: ChannelProtocol[];
   publish: ChannelPublish;
+  rtmps?: Rtmps;
   streams: ChannelStream[];
 }
 
@@ -268,6 +289,7 @@ export interface ChannelAddRequest {
   auto_source?: boolean | null;
   key_mode?: KeyMode | null;
   name: string;
+  protocols?: ChannelProtocol[] | null;
 }
 
 /** What `channel.add` answers: the channel and its first key. */
@@ -304,12 +326,22 @@ export interface ChannelKeyRevealRequest {
 
 /** `channel.list`. */
 export interface ChannelList {
+  certificate?: CertificateInfo | null;
   channels: Channel[];
+  hosts?: string[];
+  listeners?: Listener[];
   rtmp: RtmpInfo;
 }
 
+/**
+ * A way a publisher reaches a channel. RTMPS is `Rtmps`, set apart
+ * because it has a port of its own.
+ */
+export type ChannelProtocol = "rtmp" | "srt" | "whip";
+
 /** Where an encoder is pointed. */
 export interface ChannelPublish {
+  addresses?: PublishAddress[];
   example: string;
   server: string;
 }
@@ -327,6 +359,8 @@ export interface ChannelSetRequest {
   id: string;
   key_mode?: KeyMode | null;
   name?: string | null;
+  protocols?: ChannelProtocol[] | null;
+  rtmps?: Rtmps | null;
 }
 
 /** One stream on a channel. */
@@ -336,6 +370,7 @@ export interface ChannelStream {
   from: string;
   key?: string | null;
   name: string;
+  protocol?: string | null;
   since_ms: number;
   source?: string | null;
   state: string;
@@ -912,6 +947,18 @@ export interface Limits {
   max_upload_bytes: number;
 }
 
+/** One listener a channel needs, and whether it is open now. */
+export interface Listener {
+  because: string[];
+  last_port?: number | null;
+  loopback?: boolean;
+  open: boolean;
+  port: number;
+  problem?: string | null;
+  protocol: string;
+  transport: string;
+}
+
 /** `log.gst`. */
 export interface LogGstRequest {
   categories: string;
@@ -1305,6 +1352,13 @@ export interface ProgramState {
   scene?: string | null;
 }
 
+/** Where an encoder is pointed for one protocol. */
+export interface PublishAddress {
+  example: string;
+  protocol: string;
+  server: string;
+}
+
 /** One scene or one item. */
 export interface ProtocolRecord {
   id: Id;
@@ -1380,6 +1434,12 @@ export interface RtmpInfo {
   port: number;
   problem?: string | null;
   urls: string[];
+}
+
+/** RTMPS for one channel: off, or on at a port. */
+export interface Rtmps {
+  enabled: boolean;
+  port: number;
 }
 
 export interface SaveRequest {
@@ -1893,6 +1953,8 @@ export interface MethodParams {
   "adbreak.start": AdBreakRequest;
   "agent.state": AgentStateRequest;
   "channel.add": ChannelAddRequest;
+  "channel.certificate.generate": CertificateGenerateRequest;
+  "channel.certificate.set": CertificateSetRequest;
   "channel.destination.add": AddDestinationRequest;
   "channel.destination.remove": RemoveDestinationRequest;
   "channel.destination.set": SetDestinationRequest;
@@ -2041,6 +2103,8 @@ export interface MethodResults {
   "adbreak.start": Record<string, unknown>;
   "agent.state": Record<string, unknown>;
   "channel.add": ChannelAdded;
+  "channel.certificate.generate": CertificateInfo;
+  "channel.certificate.set": CertificateInfo;
   "channel.destination.add": Record<string, unknown>;
   "channel.destination.remove": Record<string, unknown>;
   "channel.destination.set": Record<string, unknown>;
@@ -2230,6 +2294,8 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "adbreak.start", summary: "Interrupt the programme with a clip, then rejoin live when it ends.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/adbreak/start" } },
   { name: "agent.state", summary: "The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/agent/state" } },
   { name: "channel.add", summary: "Make a channel and its first key, which is in this answer. channel.key.reveal reads it again later.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/channels" } },
+  { name: "channel.certificate.generate", summary: "Make a self signed certificate for RTMPS, for this machine's addresses unless names are given. Encoders must be told to accept it; one from a certificate authority needs no such step.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/channels/{id}/certificate/generate" } },
+  { name: "channel.certificate.set", summary: "Give RTMPS a certificate: the PEM of the certificate (and its chain) and of its private key, as a certificate authority issued them. Checked before it is kept; the key is sealed and never read back.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/channels/{id}/certificate" } },
   { name: "channel.destination.add", summary: "Send a channel's stream on to YouTube, Facebook, Twitch, an RTMP server or an SRT receiver as it arrives. Nothing is decoded or encoded. The key is write only.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/channels/{id}/destination/add" } },
   { name: "channel.destination.remove", summary: "Stop sending a channel's stream to one destination and forget it. The publisher and the other destinations are not touched.", scope: "admin", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/channels/{id}/destination/remove" } },
   { name: "channel.destination.set", summary: "Change one of a channel's destinations, naming only what moves: a new key, another server, which stream it sends, on or off. A key left out is kept.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/channels/{id}/destination" } },
@@ -2237,9 +2303,9 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "channel.key.add", summary: "Make another key for a channel, to give to one more person or encoder. The key is in this answer, and channel.key.reveal reads it again later.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/channels/{id}/key/add" } },
   { name: "channel.key.remove", summary: "Take one key back. A publisher on air with it is cut off and the next one is turned away; the other keys are untouched.", scope: "admin", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/channels/{id}/key/remove" } },
   { name: "channel.key.reveal", summary: "Read one key of a channel back, to give it to an encoder again. Admin only; a list shows only the last four characters. Each read is logged with who asked, never with the key.", scope: "admin", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/channels/{id}/key/reveal" } },
-  { name: "channel.list", summary: "Every RTMP channel with its keys (as hints), the address to publish to, and what is live on it, beside the port they all share.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/channels" } },
+  { name: "channel.list", summary: "Every channel with its keys (as hints), the address to publish to over each protocol it has on, and what is live on it; and which ingest ports are open and for which channels.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/channels" } },
   { name: "channel.remove", summary: "Remove a channel and forget its keys. Sources it made that no scene holds go with it.", scope: "admin", mutating: true, destructive: true, rest: { method: "DELETE", path: "/api/v1/channels/{id}" } },
-  { name: "channel.set", summary: "Rename a channel, switch it on or off, or change its application name, whether its streams become sources, or how its key is given. Only what is named moves.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/channels/{id}/set" } },
+  { name: "channel.set", summary: "Rename a channel, switch it on or off, or change its application name, whether its streams become sources, how its key is given, which protocols it takes (rtmp, srt, whip) or RTMPS and its port. A port opens when the first channel needs it and closes when the last one stops. Only what is named moves.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/channels/{id}/set" } },
   { name: "codec.list", summary: "Every codec and element in the catalogue, which of them this machine actually has, and what it would pick.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/codecs" } },
   { name: "config.get", summary: "The mixer's settings: each key's value in the config file, its default, when a change to it takes effect, and which keys are waiting for a restart. Secrets say only whether one is set.", scope: "admin", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/config" } },
   { name: "config.reset", summary: "Put settings back to their defaults by taking them out of the config file. Answers like config.set.", scope: "admin", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/config/reset" } },
@@ -2444,6 +2510,16 @@ export class GeneratedMethods {
     return this._call("channel.add", params as unknown as Record<string, unknown>) as Promise<ChannelAdded>;
   }
 
+  /** Make a self signed certificate for RTMPS, for this machine's addresses unless names are given. Encoders must be told to accept it; one from a certificate authority needs no such step. */
+  channelCertificateGenerate(params: CertificateGenerateRequest = {}): Promise<CertificateInfo> {
+    return this._call("channel.certificate.generate", params as unknown as Record<string, unknown>) as Promise<CertificateInfo>;
+  }
+
+  /** Give RTMPS a certificate: the PEM of the certificate (and its chain) and of its private key, as a certificate authority issued them. Checked before it is kept; the key is sealed and never read back. */
+  channelCertificateSet(params: CertificateSetRequest): Promise<CertificateInfo> {
+    return this._call("channel.certificate.set", params as unknown as Record<string, unknown>) as Promise<CertificateInfo>;
+  }
+
   /** Send a channel's stream on to YouTube, Facebook, Twitch, an RTMP server or an SRT receiver as it arrives. Nothing is decoded or encoded. The key is write only. */
   channelDestinationAdd(params: AddDestinationRequest): Promise<Record<string, unknown>> {
     return this._call("channel.destination.add", params as unknown as Record<string, unknown>) as Promise<Record<string, unknown>>;
@@ -2479,7 +2555,7 @@ export class GeneratedMethods {
     return this._call("channel.key.reveal", params as unknown as Record<string, unknown>) as Promise<KeyRevealed>;
   }
 
-  /** Every RTMP channel with its keys (as hints), the address to publish to, and what is live on it, beside the port they all share. */
+  /** Every channel with its keys (as hints), the address to publish to over each protocol it has on, and what is live on it; and which ingest ports are open and for which channels. */
   channelList(): Promise<ChannelList> {
     return this._call("channel.list", {}) as Promise<ChannelList>;
   }
@@ -2489,7 +2565,7 @@ export class GeneratedMethods {
     return this._call("channel.remove", params as unknown as Record<string, unknown>) as Promise<ChannelRemoved>;
   }
 
-  /** Rename a channel, switch it on or off, or change its application name, whether its streams become sources, or how its key is given. Only what is named moves. */
+  /** Rename a channel, switch it on or off, or change its application name, whether its streams become sources, how its key is given, which protocols it takes (rtmp, srt, whip) or RTMPS and its port. A port opens when the first channel needs it and closes when the last one stops. Only what is named moves. */
   channelSet(params: ChannelSetRequest): Promise<Channel> {
     return this._call("channel.set", params as unknown as Record<string, unknown>) as Promise<Channel>;
   }

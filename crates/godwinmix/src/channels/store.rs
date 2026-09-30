@@ -11,6 +11,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
+use godwinmix_protocol::channel_ingest::{rtmp_only, CertificateInfo, ChannelProtocol, Rtmps};
 use godwinmix_protocol::channels::KeyMode;
 use serde::{Deserialize, Serialize};
 
@@ -26,6 +27,11 @@ pub struct Record {
     pub auto_source: bool,
     #[serde(default)]
     pub key_mode: KeyMode,
+    /// A channel written before protocols existed took RTMP alone.
+    #[serde(default = "rtmp_only")]
+    pub protocols: Vec<ChannelProtocol>,
+    #[serde(default, skip_serializing_if = "is_off")]
+    pub rtmps: Rtmps,
     #[serde(default)]
     pub keys: Vec<KeyRecord>,
     /// Sources this channel added, so a restart knows which are its own to
@@ -44,6 +50,10 @@ pub struct Record {
 
 fn yes() -> bool {
     true
+}
+
+fn is_off(rtmps: &Rtmps) -> bool {
+    *rtmps == Rtmps::default()
 }
 
 /// A key without its secret.
@@ -71,8 +81,19 @@ pub struct DestinationRecord {
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 struct File {
+    /// What RTMPS answers with, without the certificate or its key: those
+    /// are sealed in the secret store.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    certificate: Option<CertificateInfo>,
     #[serde(default)]
     channels: Vec<Record>,
+}
+
+/// Everything the channels file keeps.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Stored {
+    pub channels: Vec<Record>,
+    pub certificate: Option<CertificateInfo>,
 }
 
 /// The channels file's path, given the runtime store's.
@@ -87,24 +108,25 @@ pub fn path_beside(runtime_store: &Path) -> PathBuf {
 /// Read the channels, or none when there is no file yet. A file that will not
 /// parse is an error rather than an empty list: saving over it would lose
 /// somebody's channels.
-pub fn load(path: &Path) -> Result<Vec<Record>> {
+pub fn load(path: &Path) -> Result<Stored> {
     if !path.exists() {
-        return Ok(Vec::new());
+        return Ok(Stored::default());
     }
     let text = std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
     let file: File = toml::from_str(&text).with_context(|| format!("reading {}", path.display()))?;
-    Ok(file.channels)
+    Ok(Stored { channels: file.channels, certificate: file.certificate })
 }
 
 /// Write them, through a temporary file and a rename.
-pub fn save(path: &Path, channels: &[Record]) -> Result<()> {
+pub fn save(path: &Path, stored: &Stored) -> Result<()> {
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir).with_context(|| format!("making {}", dir.display()))?;
     }
-    let body = toml::to_string_pretty(&File { channels: channels.to_vec() })
+    let file = File { channels: stored.channels.clone(), certificate: stored.certificate.clone() };
+    let body = toml::to_string_pretty(&file)
         .context("the channels would not serialise")?;
     let text = format!(
-        "# RTMP channels, managed from the GodwinMix UI or API.\n\
+        "# Channels, managed from the GodwinMix UI or API.\n\
          # Keys are sealed in the secret store; only their hints are here.\n\n{body}"
     );
     let temp = path.with_extension("toml.tmp");
@@ -128,6 +150,8 @@ mod tests {
             enabled: true,
             auto_source: true,
             key_mode: KeyMode::Query,
+            protocols: vec![ChannelProtocol::Rtmp, ChannelProtocol::Srt],
+            rtmps: Rtmps { enabled: true, port: 8443 },
             keys: vec![KeyRecord {
                 id: "obs".into(),
                 label: "OBS".into(),
@@ -147,10 +171,11 @@ mod tests {
             extra: BTreeMap::new(),
         };
         record.extra.insert("later".into(), toml::Value::Array(vec![]));
-        save(&path, std::slice::from_ref(&record)).unwrap();
+        let stored = Stored { channels: vec![record], certificate: None };
+        save(&path, &stored).unwrap();
         let text = std::fs::read_to_string(&path).unwrap();
         assert!(!text.contains("secret ="), "a key's secret is never written here: {text}");
-        assert_eq!(load(&path).unwrap(), vec![record]);
+        assert_eq!(load(&path).unwrap(), stored);
         std::fs::remove_dir_all(&dir).ok();
     }
 
@@ -159,7 +184,11 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("gmx-channels-bad-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("x.channels.toml");
-        assert!(load(&path).unwrap().is_empty());
+        assert!(load(&path).unwrap().channels.is_empty());
+        std::fs::write(&path, "[[channels]]\nid = \"old\"\nname = \"Old\"\napp = \"old\"\n").unwrap();
+        let old = load(&path).unwrap();
+        assert_eq!(old.channels[0].protocols, vec![ChannelProtocol::Rtmp], "a channel from before protocols is RTMP");
+        assert!(!old.channels[0].rtmps.enabled);
         std::fs::write(&path, "channels = 7").unwrap();
         assert!(load(&path).is_err());
         std::fs::remove_dir_all(&dir).ok();

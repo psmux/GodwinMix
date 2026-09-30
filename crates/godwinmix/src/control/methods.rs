@@ -73,6 +73,7 @@ pub fn registry() -> Registry<Call> {
     preview::register(&mut reg);
     plugins::register(&mut reg);
     channels::register(&mut reg);
+    channels::register_certificate(&mut reg);
     nodes::register(&mut reg);
     presets::register(&mut reg);
     config::register(&mut reg);

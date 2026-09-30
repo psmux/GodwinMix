@@ -7,6 +7,8 @@ use godwinmix_protocol::channels::{
 use godwinmix_protocol::error::RpcError;
 use godwinmix_protocol::types::Event;
 
+use godwinmix_protocol::channel_ingest::{rtmp_only, ChannelProtocol, Rtmps};
+
 use super::keys::{self, check_app, free, slug};
 use super::store::{KeyRecord, Record};
 use super::Channels;
@@ -24,6 +26,7 @@ impl Channels {
         }
         let app = req.app.map(|a| a.trim().to_string()).unwrap_or_else(|| base.clone());
         check_app(&app)?;
+        let protocols = self.check_protocols(req.protocols.unwrap_or_else(rtmp_only), Rtmps::default())?;
         let record = {
             let mut records = self.records.lock();
             if let Some(other) = records.iter().find(|r| r.app == app) {
@@ -37,6 +40,8 @@ impl Channels {
                 enabled: true,
                 auto_source: req.auto_source.unwrap_or(true),
                 key_mode: req.key_mode.unwrap_or_default(),
+                protocols,
+                rtmps: Rtmps::default(),
                 keys: Vec::new(),
                 auto_sources: Vec::new(),
                 destinations: Vec::new(),
@@ -55,6 +60,14 @@ impl Channels {
         if let Some(app) = &req.app {
             check_app(app.trim())?;
         }
+        let (protocols, rtmps) = {
+            let records = self.records.lock();
+            let current = records.iter().find(|r| r.id == req.id);
+            let protocols = req.protocols.clone().or_else(|| current.map(|r| r.protocols.clone())).unwrap_or_else(rtmp_only);
+            let rtmps = req.rtmps.or_else(|| current.map(|r| r.rtmps)).unwrap_or_default();
+            (protocols, rtmps)
+        };
+        let protocols = self.check_protocols(protocols, rtmps)?;
         {
             let mut records = self.records.lock();
             if let Some(app) = &req.app {
@@ -76,6 +89,8 @@ impl Channels {
             record.enabled = req.enabled.unwrap_or(record.enabled);
             record.auto_source = req.auto_source.unwrap_or(record.auto_source);
             record.key_mode = req.key_mode.unwrap_or(record.key_mode);
+            record.protocols = protocols;
+            record.rtmps = rtmps;
         }
         self.commit(Some(&req.id))?;
         if req.auto_source == Some(true) {
@@ -184,6 +199,31 @@ impl Channels {
             .map_err(|e| RpcError::internal(format!("sealing the key: {e:#}")))?;
         record.keys.push(KeyRecord { id: id.clone(), label: label.clone(), created: keys::now(), hint: keys::hint(&secret) });
         Ok(NewKey { id, label, secret })
+    }
+}
+
+impl Channels {
+    /// A channel takes at least one protocol, and RTMPS on a port nothing
+    /// else of the mixer's already holds.
+    fn check_protocols(&self, mut protocols: Vec<ChannelProtocol>, rtmps: Rtmps) -> Result<Vec<ChannelProtocol>, RpcError> {
+        protocols.sort();
+        protocols.dedup();
+        if protocols.is_empty() && !rtmps.enabled {
+            return Err(RpcError::invalid_params(
+                "a channel needs at least one way in. Switch on RTMP, SRT, WHIP or RTMPS.",
+            )
+            .with("field", "protocols"));
+        }
+        let (rtmp, control) = (self.port.load(std::sync::atomic::Ordering::Relaxed), self.ports.control);
+        if rtmps.enabled && (rtmps.port == 0 || rtmps.port == rtmp || rtmps.port == control) {
+            return Err(RpcError::invalid_params(format!(
+                "RTMPS cannot use port {}: the RTMP port is {rtmp} and this page's own is {control}. \
+                 Pick another, such as 443 or 8443.",
+                rtmps.port
+            ))
+            .with("field", "rtmps.port"));
+        }
+        Ok(protocols)
     }
 }
 
