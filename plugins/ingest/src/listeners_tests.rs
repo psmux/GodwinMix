@@ -62,7 +62,7 @@ fn nothing_is_open_until_a_channel_asks_and_it_closes_when_the_last_one_goes() {
     }
 
     l.apply(&Table::default());
-    assert!(!tcp_open(rtmp), "the RTMP port closed with the last channel");
+    assert!(l.rows().iter().all(|r| r["open"] == false), "every listener closed with the last channel");
     let until = std::time::Instant::now() + std::time::Duration::from_secs(5);
     while udp_taken(srt) && std::time::Instant::now() < until {
         std::thread::sleep(std::time::Duration::from_millis(100));
