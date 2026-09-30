@@ -151,9 +151,10 @@ encoder that cannot set a passphrase can put the key in the stream id
 instead, `sunday-service/main?psk=<the key>`, and leave the passphrase empty;
 the stream is then not encrypted.
 
-The stream has to be H.264 video and AAC audio in MPEG-TS, which is what
-every SRT encoder sends unless told otherwise. A stream in HEVC is turned away
-with a sentence saying so.
+The stream has to be H.264 or HEVC video and AAC audio in MPEG-TS, which is
+what every SRT encoder sends. HEVC is carried on as enhanced RTMP HEVC; a
+stream in another codec (AV1, MP2 audio) is turned away with a sentence
+saying so.
 
 A caller with the wrong passphrase is refused by SRT itself during the
 handshake, so the mixer never sees it and cannot log it; the encoder says
