@@ -79,7 +79,7 @@ function altKeys(bar, all) {
 
 function enter(bar, all) {
   // Not while a dialog is up: it holds the keyboard until it is closed.
-  const dialog = [...document.querySelectorAll(".scrim")].some((s) => s.offsetParent !== null);
+  const dialog = [...document.querySelectorAll(".scrim")].some((s) => s.getClientRects().length);
   if (dialog || document.documentElement.hasAttribute("data-native-menu")) return;
   if (bar.offsetParent === null) return all.click();
   const first = bar.querySelector("[data-menu]");
