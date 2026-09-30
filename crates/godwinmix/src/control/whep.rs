@@ -35,7 +35,7 @@ fn refuse(status: u16, message: &str) -> Response {
 }
 
 /// The viewer key if one was presented, else the control token with `read`.
-fn let_in(ctx: &Ctx, target: &str, headers: &HeaderMap, query: &HashMap<String, String>) -> Result<(), Response> {
+fn let_in(ctx: &Ctx, target: &str, headers: &HeaderMap, query: &HashMap<String, String>) -> Result<(), Box<Response>> {
     let bearer = headers
         .get(header::AUTHORIZATION)
         .and_then(|v| v.to_str().ok())
@@ -50,9 +50,9 @@ fn let_in(ctx: &Ctx, target: &str, headers: &HeaderMap, query: &HashMap<String, 
         .app
         .tokens
         .authenticate(presented_token(&Method::POST, headers, &uri).as_deref())
-        .map_err(|reason| refuse(401, &format!("{} Or add ?key=<the output's viewer key>, which the output's status shows.", reason.message())))?;
+        .map_err(|reason| Box::new(refuse(401, &format!("{} Or add ?key=<the output's viewer key>, which the output's status shows.", reason.message()))))?;
     if !token.has(godwinmix_protocol::scope::Scope::Read) {
-        return Err(refuse(403, "this token does not carry the read scope, which watching needs"));
+        return Err(Box::new(refuse(403, "this token does not carry the read scope, which watching needs")));
     }
     Ok(())
 }
@@ -72,7 +72,7 @@ pub async fn offer(
         return refuse(501, &godwinmix_core::preview::whep::missing_message());
     }
     if let Err(r) = let_in(&ctx, &target, &headers, &query) {
-        return r;
+        return *r;
     }
     let who = target.clone();
     match tokio::task::spawn_blocking(move || whep::offer(&who, &body)).await {
@@ -93,7 +93,7 @@ async fn end(
     headers: HeaderMap,
 ) -> Response {
     if let Err(r) = let_in(&ctx, &target, &headers, &query) {
-        return r;
+        return *r;
     }
     match tokio::task::spawn_blocking(move || whep::end(&target, &session)).await {
         Ok(true) => StatusCode::OK.into_response(),
