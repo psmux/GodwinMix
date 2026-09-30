@@ -257,7 +257,12 @@ fn two_sources_in_one_process_open_the_device_once_and_the_second_takes_over() {
     assert_eq!(opens(&root), 1, "the device was opened once for two sources");
     assert_eq!(a.share()["owner"], true);
     assert_eq!(b.share()["owner"], false);
-    println!("latency on the bus: {}", b.share()["latency_ms"]);
+    let (owner, reader) = (a.share(), b.share());
+    println!("owner publishes in {}, reader holds it {} later", owner["publish_ms"], reader["hop_ms"]);
+    // The owner's normaliser holds no frame: publishing takes well under one.
+    let publish = owner["publish_ms"]["p50"].as_f64().expect("the owner timed its frames");
+    assert!(publish < 10.0, "the feed held frames: {}", owner["publish_ms"]);
+    assert!(reader["hop_ms"]["p50"].as_f64().unwrap() < 10.0, "{}", reader["hop_ms"]);
 
     b.count.gap_reset();
     let before = b.frames();
@@ -309,8 +314,9 @@ fn a_mixer_killed_with_sigkill_hands_its_camera_to_the_one_reading_it() {
     assert!(until(Duration::from_secs(10), || b.frames() > 30), "the second mixer has a picture");
     assert_eq!(opens(&root), 1, "one open for two mixers");
     assert_eq!(b.share()["owner"], false);
-    let lat = b.share()["latency_ms"].clone();
-    println!("latency on the bus across processes: {lat}");
+    let hop = b.share()["hop_ms"].clone();
+    println!("from the owner's publish to this process holding the frame: {hop}");
+    assert!(hop["p50"].as_f64().unwrap() < 10.0, "{hop}");
 
     b.count.gap_reset();
     let before = b.frames();
