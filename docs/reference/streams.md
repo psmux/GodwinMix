@@ -177,34 +177,53 @@ saying which element is missing.
 
 ## `POST /whep/{target}`
 
-WebRTC through WHEP. The body is an SDP offer, `Content-Type: application/sdp`.
-The answer is an SDP answer.
+WebRTC playback through WHEP, from a `whep/output`. The body is an SDP offer,
+`Content-Type: application/sdp`; the answer is an SDP answer carrying every
+candidate (no trickle). Media leaves on UDP ports ICE picks, only while
+somebody is watching. See [watch over WebRTC](../how-to/watch-over-webrtc.md).
 
 ### Targets
 
-`program` (or `programme`), or a source id.
+A `whep/output` id, or `program` (`programme`) for the first one there is.
+There is nothing to watch until one exists: a person adds it in Outputs, or
+`output.add {id, type: "whep/output", uri: ""}`.
 
-### Status codes
+### Who may watch
 
-| Code | When |
-|---|---|
-| 201 | An SDP answer, with a `Location` for the session |
-| 405 | A `GET`. WHEP is a POST; the message says so |
-| 501 | `whepserversink` is not installed. The message names the package for this platform, or says the session path is not wired yet on a build that has the element |
+The output's viewer key, as `?key=` or as the bearer token, or a control
+token with the `read` scope. The output's status carries the path with the
+key in it, `whep_path`, and the key is derived from the output's id on this
+machine, as an HLS output's is.
+
+### Routes and status codes
+
+| Route | Code | When |
+|---|---|---|
+| `POST /whep/{target}` | 201 | the SDP answer, with `Location: /whep/<output>/<session>` |
+| | 401, 403 | no viewer key and no read token |
+| | 404 | no WHEP output by that id; the message lists the ones there are |
+| | 406 | the offer has no video in the codec the output sends (H.264 unless its rendition says otherwise) |
+| | 415 | the body is not `application/sdp` |
+| | 501 | `webrtcbin` or libnice's `nicesrc` is not installed; the message names the package |
+| | 503 | the output is not running yet, or already has `max_viewers` viewers |
+| `GET /whep/{target}` | 405 | WHEP is a POST; the message says so |
+| `DELETE /whep/{output}/{session}` | 200, 404 | the viewer's session ends |
+| `PATCH /whep/{output}/{session}` | 405 | no trickle ICE; every candidate is in the answer |
 
 Ask `GET /api/v1/core/info` for `whep` in `features` before building on it.
 
-### Configuration
+### `whep/output` params
 
-```toml
-[whep]
-# Discover the public address. Empty offers host candidates only, which is what
-# a mixer on a LAN that should not talk to the internet wants.
-stun = "stun://stun.l.google.com:19302"
-# Relay where no direct path exists. Tried in order. Nothing is relayed unless
-# it has to be.
-turn = ["turn://user:password@turn.example.com:3478"]
-```
+| Key | Default | What |
+|---|---|---|
+| `max_viewers` | 10 | viewers at once, 1 to 500 |
+| `stun` | `stun://stun.l.google.com:19302` | empty offers host candidates only, for a mixer that should not talk to the internet |
+| `turn` | none | `turn://user:password@host:port` relays, tried in order |
+| `viewer_key` | derived from the id | at least 16 characters |
+| `rendition` | none | as on any output: the programme as it is, or a rendition of it (H.264, H.265, AV1, VP8 or VP9 video) |
+
+The video is sent as encoded, never encoded again. The sound is made Opus once
+for every viewer, because WebRTC carries no AAC.
 
 ---
 
@@ -271,7 +290,7 @@ dashboard can tell "none" from "not scraped yet".
 |---|---|
 | `mjpeg` | `/mjpeg/*` answers |
 | `audio-monitor` | `/pcm/*` and `/opus/*` answer |
-| `whep` | `whepserversink` is installed |
+| `whep` | `webrtcbin` and libnice's `nicesrc` are installed |
 | `local-preview` | `preview.open` can make a socket here |
 | `multiview` | `[multiview] enabled = true`, so there is a mosaic to cut from |
 
