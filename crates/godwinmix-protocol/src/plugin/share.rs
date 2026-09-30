@@ -101,6 +101,25 @@ mod tests {
         assert!(problems.iter().any(|(k, m)| k == "params" && m.contains("device")));
     }
 
+    /// The plugins that ship with the mixer and share what they open declare
+    /// it in a way the validator accepts, and say what the core reads.
+    #[test]
+    fn the_bundled_plugins_that_share_declare_it_validly() {
+        let plugins = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plugins");
+        for (plugin, provide, bus, first) in [
+            ("camera", "source", "camera", "device"),
+            ("screen", "source", "camera", "monitor"),
+            ("ingest", "rtmp", "channel", "stream"),
+        ] {
+            let root = plugins.join(plugin);
+            let manifest = super::super::Manifest::load(root.join("gmx-plugin.toml")).unwrap();
+            let problems = manifest.validate(Some(&root));
+            assert!(problems.is_empty(), "{plugin}: {problems:?}");
+            let share = manifest.provide(provide).and_then(|p| p.share.clone()).unwrap();
+            assert_eq!((share.bus.as_str(), share.params[0].as_str()), (bus, first), "{plugin}");
+        }
+    }
+
     #[test]
     fn values_come_out_in_order_and_missing_is_empty() {
         let share = Share {

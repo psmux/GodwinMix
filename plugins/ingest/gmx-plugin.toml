@@ -38,6 +38,11 @@ capabilities = ["restart-in-place", "health"]
 latency_ms = 0
 settings = "schemas/rtmp.json"
 skill = "skills/rtmp/SKILL.md"
+# A stream on a channel is decoded once however many shows use it: the first
+# source reading `stream` from the channel server at `relay` decodes it and
+# publishes the pictures and the sound on the frame bus, and every other one
+# reads them there. A source that listens for itself (no `stream`) is its own.
+share = { bus = "channel", params = ["stream"], scope = ["relay"] }
 
 [provides.designer]
 icon = "designer/icon.svg"
