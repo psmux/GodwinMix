@@ -41,6 +41,11 @@ capabilities = ["restart-in-place", "health", "programme-timeline"]
 latency_ms = 0
 settings = "schemas/source.json"
 skill = "skills/source/SKILL.md"
+# A camera is opened once on this machine, by whichever source asks first, and
+# every other source naming the same `device` (in this mixer or another show)
+# reads its frames from the frame bus. Most platforms will not open a camera
+# twice, and a second decode would cost as much as the first.
+share = { bus = "camera", params = ["device"] }
 
 [provides.designer]
 icon = "ui/icons/camera.svg"
