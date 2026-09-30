@@ -86,7 +86,7 @@ export function renditionStub(opts = {}) {
     "rendition.plan": (p) => stub.plans[p.scope || "programme"] || { nodes: [], totals: {} },
     "governor.status": () => stub.status,
     "governor.calibrate": () => ({ started: true }),
-    "config.get": () => ({ keys: [["canvas.width", 1920], ["canvas.height", 1080], ["canvas.fps", 30], ["program.video_bitrate_kbps", opts.programmeKbps || 4500]].map(([key, value]) => ({ key, value })) }),
+    "config.get": () => ({ keys: [["canvas.width", 1920], ["canvas.height", 1080], ["canvas.fps", 30], ["program.video_bitrate_kbps", opts.programmeKbps || 3000]].map(([key, value]) => ({ key, value })) }),
     "output.add": (p) => admit(stub, p),
     "output.set": (p) => admit(stub, p),
   };

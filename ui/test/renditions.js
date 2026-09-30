@@ -270,6 +270,7 @@ async function outputsPanelTests(test, eq, ok) {
     eq(stub.rcalls.at(-1).method, "governor.calibrate");
   });
   panel.setWorkspaceActive(false);
+  await wait(30);
   test("off screen, the panel asks for nothing", () => {
     eq(stub.patterns.get("governor.*"), undefined);
     eq(stub.patterns.get("rendition.*"), undefined);
