@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "UDP or multicast output",
+  "description": "The programme as MPEG-TS over UDP or RTP, to one receiver or a multicast group.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["uri"],
+  "properties": {
+    "uri": {
+      "title": "Address",
+      "description": "Where to send: a multicast group such as udp://239.1.1.1:5000, or one receiver such as udp://192.168.1.50:5000. Write rtp:// instead of udp:// for receivers that want RTP (SMPTE 2022-2).",
+      "type": "string",
+      "default": "",
+      "examples": ["udp://239.1.1.1:5000", "rtp://239.1.1.1:5004"]
+    },
+    "ttl": {
+      "title": "TTL",
+      "description": "How many routers a multicast packet may cross. 1 keeps it on this network segment; raise it only when the receivers are across a router that forwards multicast.",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 255,
+      "default": 8,
+      "examples": [8, 1, 32],
+      "x-gmx-group": "Advanced"
+    },
+    "interface": {
+      "title": "Network interface",
+      "description": "The interface multicast leaves by, by name: en0 or eth1. Leave empty to use the default route. Set it on a machine with a separate media network.",
+      "type": "string",
+      "default": "",
+      "examples": ["", "eth1"],
+      "x-gmx-group": "Advanced"
+    },
+    "cbr_kbps": {
+      "title": "Constant bitrate",
+      "description": "Pad the stream with null packets to exactly this rate and send it evenly, for hardware decoders and modulators that need a constant rate. Set it at least 10% above the programme's video and audio together. 0 sends what the programme makes.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1000000,
+      "default": 0,
+      "x-gmx-unit": "kbit",
+      "x-gmx-zero": "Off (variable)",
+      "examples": [0, 8000],
+      "x-gmx-group": "Advanced"
+    },
+    "packets_per_datagram": {
+      "title": "TS packets per datagram",
+      "description": "Seven 188 byte packets make 1316 bytes, which fits an ordinary 1500 byte network with room for the headers. Fewer only for a receiver that asks for it.",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 7,
+      "default": 7,
+      "examples": [7, 1],
+      "x-gmx-group": "Advanced"
+    },
+    "dscp": {
+      "title": "DSCP",
+      "description": "The DiffServ class to mark packets with, for a network that prioritises media: 34 (AF41) for video is common. -1 leaves the system default.",
+      "type": "integer",
+      "minimum": -1,
+      "maximum": 63,
+      "default": -1,
+      "examples": [-1, 34],
+      "x-gmx-group": "Advanced"
+    }
+  }
+}
