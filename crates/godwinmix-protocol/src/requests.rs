@@ -262,6 +262,11 @@ pub struct AddOutputRequest {
     /// backs off harder, for platforms that penalise hammering.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub policy: Option<String>,
+    /// What to make from the programme for this destination: a rendition
+    /// request or `{"preset": "youtube-720p30"}` (`rendition.presets` lists
+    /// them). Absent means the programme encoder, at no extra cost.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rendition: Option<crate::rendition::RenditionChoice>,
     /// Passed through to the output config untouched.
     #[serde(flatten, default, skip_serializing_if = "Map::is_empty")]
     pub params: Map<String, Value>,
@@ -276,6 +281,9 @@ impl AddOutputRequest {
         map.insert("uri".into(), Value::String(self.uri.clone()));
         if let Some(p) = &self.policy {
             map.insert("policy".into(), Value::String(p.clone()));
+        }
+        if let Some(r) = &self.rendition {
+            map.insert("rendition".into(), serde_json::to_value(r).unwrap_or(Value::Null));
         }
         Value::Object(map)
     }
@@ -301,6 +309,10 @@ pub struct SetOutputRequest {
     /// Seconds of encoded data to hold before the muxer.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub queue_secs: Option<f64>,
+    /// A new rendition, as `output.add` takes it. `{"preset": "copy"}` puts
+    /// the output back on the programme encoder.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rendition: Option<crate::rendition::RenditionChoice>,
     /// Merged over the params the output already has.
     #[serde(flatten, default, skip_serializing_if = "Map::is_empty")]
     pub params: Map<String, Value>,
@@ -313,6 +325,7 @@ impl SetOutputRequest {
         self.uri.is_none()
             && self.policy.is_none()
             && self.queue_secs.is_none()
+            && self.rendition.is_none()
             && self.params.is_empty()
     }
 }
@@ -747,6 +760,7 @@ mod tests {
             id: "yt".into(),
             uri: "rtmp://a/b".into(),
             policy: Some("cdn".into()),
+            rendition: None,
             params: [("bitrate_kbps".to_string(), json!(4500))].into_iter().collect(),
         };
         let v = r.to_config_json();

@@ -114,6 +114,18 @@ impl Call {
                 None => refusal,
             };
         }
+        // A rendition that was not started: Safety from the governor, with
+        // what it needs, what is free and what would fit; or the planner's
+        // reason it cannot be made here at all.
+        if let Some(r) = e.downcast_ref::<godwinmix_core::render::Refusal>() {
+            let mut err = RpcError::new(r.code, r.message.clone());
+            if let Some(map) = r.data.as_object() {
+                for (k, v) in map {
+                    err = err.with(k, v.clone());
+                }
+            }
+            return err.with("method", self.method);
+        }
         if let Some(busy) = e.downcast_ref::<godwinmix_core::mixer::Busy>() {
             return RpcError::not_in_state(busy.to_string())
                 .with("method", self.method)
