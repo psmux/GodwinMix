@@ -1,7 +1,8 @@
 //! The window, the menu and the tray: everything the operator can click on
 //! that belongs to the shell rather than to the mixer's own page.
 
-use tauri::menu::{AboutMetadata, Menu, MenuBuilder, MenuItemBuilder, PredefinedMenuItem, SubmenuBuilder};
+use tauri::menu::{AboutMetadata, Menu, MenuBuilder, MenuItemBuilder, PredefinedMenuItem, Submenu, SubmenuBuilder};
+use tauri::webview::PageLoadEvent;
 use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Manager, Url, WebviewWindow, WebviewWindowBuilder};
 use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
@@ -41,6 +42,13 @@ pub fn build_window(app: &AppHandle) -> tauri::Result<WebviewWindow> {
         .user_agent(crate::USER_AGENT)
         .initialization_script(SEED_TOKEN)
         .on_navigation(move |url| on_navigation(&handle, url))
+        // Each page the core serves is told again that the menu bar is the
+        // native one, since a reload forgets.
+        .on_page_load(|window, payload| {
+            if payload.event() == PageLoadEvent::Finished {
+                crate::page_menu::mark_page(window.app_handle());
+            }
+        })
         .build()?;
     // Where the shell's own page lives, kept so that Connect can come back to
     // it from whatever the core was showing.
@@ -62,36 +70,22 @@ fn on_navigation(app: &AppHandle, url: &Url) -> bool {
         "quit" => crate::quit(app, false),
         "quit-all" => crate::quit(app, true),
         "restart" => crate::restart::from_page(app),
+        "save-project" => crate::page_menu::save_project(app, url),
         _ => {}
     }
     false
 }
 
 /// The application menu. On macOS the first submenu is the application menu,
-/// which is where About and Quit belong.
+/// which is where About and Quit belong. Once the window is showing a core,
+/// `page_menu` replaces this with the same first submenu and the page's own.
 pub fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
-    let connect = MenuItemBuilder::with_id("connect", "Connect to a mixer...")
-        .accelerator("CmdOrCtrl+Shift+C")
-        .build(app)?;
-    let logs = MenuItemBuilder::with_id("logs", "Open logs folder").build(app)?;
-    let config = MenuItemBuilder::with_id("config", "Open config folder").build(app)?;
-    let restart = MenuItemBuilder::with_id("restart", "Restart the mixer").build(app)?;
-    let updates = MenuItemBuilder::with_id("updates", "Check for updates...").build(app)?;
-    let quit = MenuItemBuilder::with_id("quit", "Quit").accelerator("CmdOrCtrl+Q").build(app)?;
-    let quit_all = MenuItemBuilder::with_id("quit-all", "Quit and stop the mixer")
-        .accelerator("CmdOrCtrl+Shift+Q")
-        .build(app)?;
-
-    let about = PredefinedMenuItem::about(app, Some("About GodwinMix"), Some(about_metadata()))?;
-    let separator = || PredefinedMenuItem::separator(app);
-    let app_menu = SubmenuBuilder::new(app, "GodwinMix")
-        .items(&[&about, &updates, &separator()?, &connect, &restart, &separator()?, &logs, &config, &separator()?, &quit, &quit_all])
-        .build()?;
+    let app_menu = app_submenu(app)?;
     let edit = SubmenuBuilder::new(app, "Edit")
         .items(&[
             &PredefinedMenuItem::undo(app, None)?,
             &PredefinedMenuItem::redo(app, None)?,
-            &separator()?,
+            &PredefinedMenuItem::separator(app)?,
             &PredefinedMenuItem::cut(app, None)?,
             &PredefinedMenuItem::copy(app, None)?,
             &PredefinedMenuItem::paste(app, None)?,
@@ -106,6 +100,27 @@ pub fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         ])
         .build()?;
     MenuBuilder::new(app).items(&[&app_menu, &edit, &window]).build()
+}
+
+/// The shell's own submenu: About, updates, connect, restart, folders, quit.
+pub fn app_submenu(app: &AppHandle) -> tauri::Result<Submenu<tauri::Wry>> {
+    let connect = MenuItemBuilder::with_id("connect", "Connect to a mixer...")
+        .accelerator("CmdOrCtrl+Shift+C")
+        .build(app)?;
+    let logs = MenuItemBuilder::with_id("logs", "Open logs folder").build(app)?;
+    let config = MenuItemBuilder::with_id("config", "Open config folder").build(app)?;
+    let restart = MenuItemBuilder::with_id("restart", "Restart the mixer").build(app)?;
+    let updates = MenuItemBuilder::with_id("updates", "Check for updates...").build(app)?;
+    let quit = MenuItemBuilder::with_id("quit", "Quit").accelerator("CmdOrCtrl+Q").build(app)?;
+    let quit_all = MenuItemBuilder::with_id("quit-all", "Quit and stop the mixer")
+        .accelerator("CmdOrCtrl+Shift+Q")
+        .build(app)?;
+
+    let about = PredefinedMenuItem::about(app, Some("About GodwinMix"), Some(about_metadata()))?;
+    let separator = || PredefinedMenuItem::separator(app);
+    SubmenuBuilder::new(app, "GodwinMix")
+        .items(&[&about, &updates, &separator()?, &connect, &restart, &separator()?, &logs, &config, &separator()?, &quit, &quit_all])
+        .build()
 }
 
 fn about_metadata() -> AboutMetadata<'static> {
@@ -142,6 +157,9 @@ pub fn build_tray(app: &AppHandle) -> tauri::Result<()> {
 /// One handler for the menu bar and the tray, since the items mean the same
 /// thing in both.
 pub fn on_menu(app: &AppHandle, id: &str) {
+    if crate::page_menu::on_menu(app, id) {
+        return;
+    }
     match id {
         "show" => show(app),
         "connect" => connect(app),
