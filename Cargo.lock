@@ -1364,6 +1364,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "gmx-udp"
+version = "0.2.0"
+dependencies = [
+ "gmx-netkit",
+ "godwinmix-capture-common",
+ "godwinmix-sdk",
+ "gstreamer",
+ "libc",
+ "serde_json",
+]
+
+[[package]]
 name = "gmx-whip"
 version = "0.2.0"
 dependencies = [

@@ -1,0 +1,27 @@
+[package]
+name = "gmx-udp"
+description = "The udp/source and udp/output plugin: MPEG-TS over UDP and RTP, unicast and multicast, with program selection, loss counting and a constant bitrate mode"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[[bin]]
+name = "gmx-udp"
+path = "src/main.rs"
+
+[dependencies]
+godwinmix-sdk = { path = "../../crates/godwinmix-sdk" }
+gmx-netkit = { path = "../netkit" }
+# For the programme FIFO an output reads: opened without waiting for the core,
+# and pumped into an appsrc because poll on a FIFO lies on macOS.
+godwinmix-capture-common = { path = "../capture-common" }
+
+gstreamer = { workspace = true }
+serde_json = { workspace = true }
+
+# getifaddrs and setsockopt, for the interface multicast leaves by. See src/iface.rs.
+[target.'cfg(unix)'.dependencies]
+libc = { workspace = true }

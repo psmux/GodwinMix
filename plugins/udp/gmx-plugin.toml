@@ -1,0 +1,57 @@
+# udp/source and udp/output: MPEG-TS over UDP, bare or in RTP, unicast and
+# multicast. One plugin, because both ends speak the same addresses, the same
+# interface choice and the same packet layout. See docs/how-to/udp-and-multicast.md.
+
+[plugin]
+name = "udp"
+version = "0.1.0"
+api = 1
+description = "MPEG-TS over UDP or RTP, unicast or multicast. Takes one program out of an IRD, encoder or IPTV feed, or puts the programme on a group."
+license = "Apache-2.0"
+authors = ["GodwinMix"]
+repository = "https://github.com/psmux/godwinmix"
+platforms = ["linux-x86_64", "linux-aarch64", "macos-aarch64", "macos-x86_64", "windows-x86_64"]
+placements = ["sidecar", "node"]
+process = "per-instance"
+
+[run]
+bin = { "linux-x86_64" = "bin/gmx-udp", "linux-aarch64" = "bin/gmx-udp", "macos-aarch64" = "bin/gmx-udp", "macos-x86_64" = "bin/gmx-udp", "windows-x86_64" = "bin/gmx-udp.exe" }
+
+[[provides]]
+kind = "source"
+id = "source"
+uri_schemes = ["udp://", "rtp://"]
+# Above hls/source's 200, which claims udp:// and rtp:// through uridecodebin
+# and cannot choose a program, join on an interface or count loss.
+rank = 240
+# The chosen program crosses to the core as MPEG-TS. The core demuxes and
+# decodes it once, on its hardware aware path.
+media = { video = "container", audio = "container", alpha = false, thumb = true }
+transports = ["container"]
+capabilities = ["restart-in-place", "health", "latency-report"]
+latency_ms = 0
+settings = "schemas/source.json"
+skill = "skills/source/SKILL.md"
+
+[provides.designer]
+icon = "designer/icon.svg"
+
+[[provides]]
+kind = "output"
+id = "output"
+uri_schemes = ["udp://", "rtp://"]
+rank = 240
+# The core hands an output the encoded programme on a FIFO. It is remuxed to
+# MPEG-TS here and nothing is decoded or encoded.
+media = { video = "container", audio = "container", alpha = false, thumb = false }
+capabilities = ["restart-in-place", "health"]
+settings = "schemas/output.json"
+skill = "skills/output/SKILL.md"
+
+# `gmx plugin add ./plugins/udp` runs this when bin/gmx-udp is not there.
+# The command runs in the directory you named, not in the installed copy:
+# this plugin is a workspace member and its dependencies are path
+# dependencies two levels up, so the copy is not a tree cargo can build.
+[build]
+command = "sh build"
+output = "bin/gmx-udp"
