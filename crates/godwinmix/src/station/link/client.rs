@@ -20,7 +20,7 @@ use std::time::Duration;
 use tracing::{info, warn};
 
 /// How long a show waits for its station to admit something.
-pub const ASK_WAIT: Duration = Duration::from_secs(2);
+pub const ASK_WAIT: Duration = Duration::from_millis(500);
 
 type Pending = Arc<Mutex<HashMap<u64, SyncSender<Answer>>>>;
 /// What the station last said to give up, until the mixer thread takes it.

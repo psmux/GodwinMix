@@ -137,7 +137,7 @@ impl Relay {
                     self.up = Some(tx);
                     *up_rx = Some(rx);
                 }
-                Err(e) => return frame.get("id").map(|id| rpc::error_frame(id, &e, "")),
+                Err(e) => return frame.get("id").map(|id| rpc::error_frame(id, &e, &godwinmix_protocol::trace::new_id())),
             }
         }
         self.send_show(Up::Text(text.into())).await;

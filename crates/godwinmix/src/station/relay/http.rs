@@ -64,14 +64,14 @@ pub async fn forward(st: Arc<Station>, req: Request) -> Response {
                 "show {show} did not answer ({e}). It may be restarting; show.list says how it is."
             ))
             .with("show", show.as_str());
-            (StatusCode::BAD_GATEWAY, axum::Json(e.body(""))).into_response()
+            (StatusCode::BAD_GATEWAY, axum::Json(e.body(&godwinmix_protocol::trace::new_id()))).into_response()
         }
     }
 }
 
 /// An error the station decided on, in the shape `/api/v1` answers with.
 pub fn refusal(e: &RpcError) -> Response {
-    crate::control::rest::error_response(e, "")
+    crate::control::rest::error_response(e, &godwinmix_protocol::trace::new_id())
 }
 
 #[cfg(test)]
