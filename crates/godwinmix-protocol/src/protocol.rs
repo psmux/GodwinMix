@@ -524,6 +524,9 @@ pub const WELL_KNOWN: &[(&str, &str, &str)] = &[
     ("POST", "/whip/{channel}/{stream}", "WHIP ingest for a channel that has WHIP on. The body is the SDP offer, the channel's key is the bearer token, and the answer is 201 with the SDP answer and the session's Location."),
     ("DELETE", "/whip/{channel}/{stream}/{session}", "ends a WHIP session, as the WHIP client does when it stops publishing"),
     ("PATCH", "/whip/{channel}/{stream}/{session}", "405: every candidate is in the answer, and none are taken later"),
+    ("GET", "/hls/{output}/master.m3u8", "an hls/output's multivariant playlist. Readable with the output's viewer key as ?key= (output.list playback.master_url_path) or a token with read"),
+    ("GET", "/hls/{output}/{rung}/index.m3u8", "one rung's media playlist; _HLS_msn and _HLS_part hold it until that part exists (LL-HLS blocking reload)"),
+    ("GET", "/hls/{output}/{rung}/{file}", "init.mp4, a CMAF segment {n}.m4s or an LL-HLS part {n}.{p}.m4s, from memory"),
 ];
 
 /// Build the whole document.
