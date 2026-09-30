@@ -23,7 +23,7 @@ function channelGroup(c) {
   const streams = (c.streams || []).filter((s) => s.state !== "gone");
   const rows = streams.map((s) => ({ key: `ch:${c.id}/${s.name}`, id: s.name, label: s.name, sub: [String(s.protocol || "").toUpperCase(), shape(s.video)].filter(Boolean).join(" · "), live: s.state === "live", stream: s }));
   if (!rows.length) rows.push({ key: `ch:${c.id}/*`, id: "*", label: "Nothing publishing", sub: "Waiting for a stream", idle: true });
-  const cols = (c.destinations || []).map((d) => ({ key: `chd:${c.id}/${d.id}`, id: d.id, label: d.label || d.platform || d.id, sub: d.platform || "", state: d.state, dest: d }));
+  const cols = (c.destinations || []).map((d) => ({ key: `chd:${c.id}/${d.id}`, id: d.id, label: d.label || d.platform || d.id, sub: bare(d.uri_host) || d.platform || "", state: d.state, dest: d }));
   return { kind: "channel", id: c.id, key: `c:${c.id}`, name: c.name || c.id, rows, cols, channel: c };
 }
 
@@ -37,7 +37,8 @@ function showGroup(s) {
   return { kind: "show", id: s.id, key: `s:${s.id}`, name: s.name || s.id, state: s.state, rows, cols, show: s, loaded: !!d };
 }
 
-const host = (o) => (o.type === "hls/output" ? "HLS for viewers" : o.type === "record/output" ? "Recording" : String(o.uri_host || "").replace(/^\w+:\/\//, "").replace(/[/:].*$/, ""));
+const bare = (uri) => String(uri || "").replace(/^\w+:\/\//, "").replace(/[/:].*$/, "");
+const host = (o) => (o.type === "hls/output" ? "HLS for viewers" : o.type === "record/output" ? "Recording" : bare(o.uri_host));
 
 /** The stream a channel destination reads now: its own, or the one `*` resolves to. */
 export function streamOf(group, dest) {
@@ -82,9 +83,9 @@ function route(plan, id, rendition, destPlan, copyable) {
 
 /** A catalogue id short enough for a cell: `h264-videotoolbox` is VideoToolbox. */
 export function encoderName(id) {
-  const bare = String(id || "").replace(/^(h264|h265|hevc|av1|vp8|vp9)-/, "").replace(/^software-/, "");
+  const plain = String(id || "").replace(/^(h264|h265|hevc|av1|vp8|vp9)-/, "").replace(/^software-/, "");
   const known = { videotoolbox: "VideoToolbox", nvenc: "NVENC", nvidia: "NVENC", vaapi: "VA-API", va: "VA-API", qsv: "Quick Sync", amf: "AMF", v4l2: "V4L2" };
-  return known[bare] || bare;
+  return known[plain] || plain;
 }
 
 /** "YouTube 720p", or "1280×720 30 fps · 3 Mb/s" for a request written out. */

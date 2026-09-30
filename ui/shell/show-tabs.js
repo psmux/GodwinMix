@@ -1,8 +1,5 @@
-// The show tabs in the top bar, one per show on this machine, the show this
-// page talks to selected. Only the drawing is here, because it is on every
-// page; whatever a person does to a tab is show-actions.js, fetched the first
-// time they do it. A core without shows answers "no such method" and the
-// row never appears.
+// The show tabs: drawn here, on every page; whatever is done to one is
+// show-actions.js, fetched on first use. No show.* on the core, no row.
 
 import { el } from "./dom.js";
 
@@ -25,7 +22,7 @@ export function showTabs(client) {
   const stop = () => { held(); offs.forEach((f) => f()); row.remove(); };
   for (const type of ["click", "dblclick", "keydown", "contextmenu"]) {
     row.addEventListener(type, (e) => {
-      // The page's own keys (F2 renames a scene, Delete removes one) are not these.
+      // Not the page's F2 or Delete, which act on scenes.
       if (type === "contextmenu" || /^(F2|Arrow|Home|End|ContextMenu|Delete)/.test(e.key)) e.preventDefault(), e.stopPropagation();
       if (type !== "keydown" || e.key !== "Tab") actions().then((m) => m.handle(view, e));
     });

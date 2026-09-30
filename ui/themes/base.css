@@ -442,7 +442,6 @@ label { display: block; }
 .shows { display: flex; align-items: center; min-width: 60px; padding-left: 6px; border-left: var(--border) solid var(--line-soft); }
 .showtabs { display: flex; gap: 2px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
 .showtab, .shows-add { display: flex; align-items: center; gap: 6px; padding: 4px 10px; border: 0; border-radius: var(--radius-sm); background: none; color: var(--dim); white-space: nowrap; }
-/* Short of room, the other shows' names give way first; the + never does. */
 .showtab { min-width: 0; flex: 0 1 auto; }
 .showtab[aria-selected="true"], .shows-add, .showtab .dot { flex-shrink: 0; }
 .showtab-name { min-width: 0; max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
@@ -456,7 +455,7 @@ label { display: block; }
 .showtab[aria-selected="true"] { color: var(--text); background: var(--panel2); box-shadow: inset 0 -2px var(--accent); }
 .shows.one .showtab[aria-selected="true"] { background: none; box-shadow: none; }
 .showtab .dot { background: var(--live); }
-/* The word is for screen readers and the tooltip; a mark takes its room. */
+/* The state's word is for screen readers; a mark shows it. */
 .showtab-state { font-size: 0; color: var(--faint); }
 .showtab-state::before { content: "○"; font-size: var(--fs-sm); }
 .showtab-state.starting::before { content: "◌"; color: var(--warn); }
@@ -469,6 +468,7 @@ label { display: block; }
   .menubar-all { display: inline-block; }
   .menubar-every { right: 8px; }
   .shows { border: 0; padding: 0; }
+  .showtab { flex-shrink: 0; }
 }
 
 /* ---------------------------------------------------------------- empty */
