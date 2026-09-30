@@ -22,6 +22,9 @@ pub struct Live {
     pub source: Option<String>,
     /// Where a source reads it: the listener's own port on 127.0.0.1.
     pub relay: String,
+    /// The frame rate the publisher's `onMetaData` states, exact where the
+    /// measured `fps` is only near. A converting destination plans from it.
+    pub declared_fps: Option<f64>,
 }
 
 fn text(v: &Value, key: &str) -> String {
@@ -55,6 +58,7 @@ impl Live {
             dropped_gops: 0,
             source: None,
             relay: text(v, "relay"),
+            declared_fps: None,
         };
         live.absorb(v);
         Some(live)
@@ -79,6 +83,7 @@ impl Live {
         if !relay.is_empty() {
             self.relay = relay;
         }
+        self.declared_fps = v["video"]["frame_rate"].as_f64().or(self.declared_fps);
         self.video = video(&v["video"]).or(self.video.take());
         self.audio = audio(&v["audio"]).or(self.audio.take());
         self.dropped_gops = number(v, "dropped_gops");

@@ -97,7 +97,7 @@ impl Channels {
         let same = |id: &str| {
             let b = before.iter().find(|d| d.id == id);
             let a = after.iter().find(|d| d.id == id);
-            matches!((b, a), (Some(b), Some(a)) if b.url() == a.url() && b.stream == a.stream && b.enabled == a.enabled)
+            matches!((b, a), (Some(b), Some(a)) if b.url() == a.url() && b.stream == a.stream && b.enabled == a.enabled && b.rendition == a.rendition)
         };
         self.sending.lock().retain(|s| s.channel != channel || same(&s.id));
     }
