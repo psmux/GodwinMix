@@ -213,3 +213,6 @@ fn a_node_that_cannot_be_built_fails_its_destination_with_the_reason() {
     wait_for("the failure to show", 15, || sends.rates().first().is_some_and(|r| r["state"] == "failed"));
     drop(source);
 }
+
+#[path = "tests_hevc.rs"]
+mod hevc;

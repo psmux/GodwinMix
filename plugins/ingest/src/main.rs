@@ -40,6 +40,8 @@ mod rtmp;
 mod sends;
 mod source;
 mod sps;
+mod hevc;
+mod eflv;
 mod whip_in;
 
 use godwinmix_sdk::prelude::*;

@@ -1,6 +1,7 @@
 //! The stream's own tags into the decoders.
 //!
-//! An FLV video body is a five byte prefix and an AVC access unit, and an
+//! An FLV video body is a short prefix and an access unit (AVC, or HEVC and
+//! AV1 as enhanced RTMP frames them; see `crate::eflv`), and an
 //! audio body two bytes and a raw AAC frame; the sequence headers carry the
 //! configuration a decoder is given as `codec_data` in its caps. So each tag
 //! becomes one buffer with its time on the pipeline's clock (the publisher's
@@ -35,15 +36,22 @@ fn lock(m: &Mutex<Feed>) -> MutexGuard<'_, Feed> {
 }
 
 fn caps_for(header: &MediaTag) -> Option<gst::Caps> {
-    let (skip, name) = match header.kind {
-        TagKind::Video => (5, "video/x-h264"),
-        TagKind::Audio => (2, "audio/mpeg"),
-        TagKind::Script => return None,
-    };
+    let skip = if header.kind == TagKind::Audio { 2 } else { 5 };
     let config = gst::Buffer::from_slice(header.payload.get(skip..)?.to_vec());
-    let caps = match header.kind {
-        TagKind::Video => gst::Caps::builder(name).field("stream-format", "avc").field("alignment", "au").field("codec_data", config),
-        _ => gst::Caps::builder(name).field("mpegversion", 4i32).field("stream-format", "raw").field("codec_data", config),
+    let caps = match (header.kind, crate::eflv::fourcc(&header.payload)) {
+        (TagKind::Video, None) => {
+            gst::Caps::builder("video/x-h264").field("stream-format", "avc").field("alignment", "au").field("codec_data", config)
+        }
+        // Enhanced RTMP: the configuration record is the one the codec's
+        // parser takes as codec_data, hvcC for HEVC and av1C for AV1.
+        (TagKind::Video, Some(cc)) if &cc == crate::eflv::HEVC => {
+            gst::Caps::builder("video/x-h265").field("stream-format", "hvc1").field("alignment", "au").field("codec_data", config)
+        }
+        (TagKind::Video, Some(cc)) if &cc == crate::eflv::AV1 => {
+            gst::Caps::builder("video/x-av1").field("stream-format", "obu-stream").field("alignment", "tu").field("codec_data", config)
+        }
+        (TagKind::Audio, _) => gst::Caps::builder("audio/mpeg").field("mpegversion", 4i32).field("stream-format", "raw").field("codec_data", config),
+        _ => return None,
     };
     Some(caps.build())
 }
@@ -115,11 +123,7 @@ impl AsRef<[u8]> for Tail {
 
 fn buffer(tag: &MediaTag, base: u32) -> Option<gst::Buffer> {
     let (skip, cts) = match tag.kind {
-        TagKind::Video => {
-            let b = tag.payload.get(2..5)?;
-            let raw = (i32::from(b[0]) << 16) | (i32::from(b[1]) << 8) | i32::from(b[2]);
-            (5, (raw << 8) >> 8)
-        }
+        TagKind::Video => crate::eflv::frame(&tag.payload)?,
         _ => (2, 0),
     };
     // A tag from before the session's first is from before the decoder's

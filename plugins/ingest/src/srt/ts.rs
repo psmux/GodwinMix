@@ -1,14 +1,15 @@
 //! One SRT caller's MPEG-TS, demuxed into the hub's tags.
 //!
 //! ```text
-//!   appsrc ──► tsdemux ─┬─► queue ──► h264parse ──► appsink (video tags)
+//!   appsrc ──► tsdemux ─┬─► queue ──► h264parse or h265parse ──► appsink (video tags)
 //!                       └─► queue ──► aacparse ──► appsink (audio tags)
 //! ```
 //!
 //! A demux and two parsers, and nothing decoded: the bytes an encoder sent
-//! are the bytes a reader of the hub gets, framed the way RTMP frames them.
-//! A stream in any other codec (HEVC, MP2 audio) is said so once and its
-//! pads go to a fakesink, because the hub carries what FLV can.
+//! are the bytes a reader of the hub gets, framed the way RTMP frames them,
+//! HEVC as enhanced RTMP frames it. A stream in any other codec (AV1, MP2
+//! audio) is said so once and its pads go to a fakesink, because the hub
+//! carries what FLV can.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -90,6 +91,8 @@ fn attach(pipeline: &gst::Pipeline, pad: &gst::Pad, to: &Shared, zero: &Arc<Zero
     let mpeg = s.as_ref().and_then(|s| s.get::<i32>("mpegversion").ok()).unwrap_or(0);
     let (parser, sink, carried) = match kind.as_str() {
         "video/x-h264" => ("h264parse", tagger::video_sink(to.clone(), zero.clone()), true),
+        // Carried on as enhanced RTMP, as an HEVC publisher over RTMP is.
+        "video/x-h265" => ("h265parse", tagger::hevc_sink(to.clone(), zero.clone()), true),
         "audio/mpeg" if mpeg == 2 || mpeg == 4 => ("aacparse", tagger::audio_sink(to.clone(), zero.clone()), true),
         _ => ("identity", make("fakesink")?, false),
     };
@@ -107,7 +110,7 @@ fn attach(pipeline: &gst::Pipeline, pad: &gst::Pad, to: &Shared, zero: &Arc<Zero
     } else {
         Err(format!(
             "an SRT stream carries {kind}, which a channel does not carry yet. Channels take \
-             H.264 video and AAC audio; set the encoder to those."
+             H.264 or HEVC video and AAC audio; set the encoder to those."
         ))
     }
 }
