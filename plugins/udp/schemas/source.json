@@ -63,7 +63,7 @@
       "x-gmx-group": "Advanced"
     },
     "receive_buffer_kb": {
-      "title": "Receive buffer",
+      "title": "Receive buffer, KB",
       "description": "How much the operating system may hold for this socket while the mixer is busy. 4 MB rides out a short pause at 30 Mbit/s. The system may cap it: on Linux raise net.core.rmem_max if the log says so.",
       "type": "integer",
       "minimum": 64,

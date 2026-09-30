@@ -21,3 +21,7 @@ godwinmix-capture-common = { path = "../capture-common" }
 
 gstreamer = { workspace = true }
 serde_json = { workspace = true }
+
+# getifaddrs and setsockopt, for the interface multicast leaves by. See src/iface.rs.
+[target.'cfg(unix)'.dependencies]
+libc = { workspace = true }

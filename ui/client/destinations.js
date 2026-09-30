@@ -96,7 +96,7 @@ export const OUTPUT_KINDS = [
         uri: { type: "string", title: "Address", examples: ["udp://239.1.1.1:5000"], description: "A multicast group or one receiver. rtp:// for a receiver that wants RTP." },
         ttl: { type: "integer", title: "TTL", default: 8, minimum: 1, maximum: 255, "x-gmx-group": "Advanced", description: "How many routers multicast may cross. 1 keeps it on this network." },
         interface: { type: "string", title: "Network interface", "x-gmx-group": "Advanced", description: "The interface multicast leaves by, such as eth1. Empty uses the default route." },
-        cbr_kbps: { type: "integer", title: "Constant bitrate", default: 0, minimum: 0, "x-gmx-unit": "kbit", "x-gmx-zero": "Off (variable)", "x-gmx-group": "Advanced", description: "Pad with null packets to this rate, for hardware that needs one. At least 10% above the programme's bitrate." },
+        cbr_kbps: { type: "integer", title: "Constant bitrate", minimum: 0, examples: ["Off (variable)"], "x-gmx-unit": "kbit", "x-gmx-group": "Advanced", description: "Pad with null packets to this rate, for hardware that needs one. At least 10% above the programme's bitrate." },
         queue_secs: QUEUE_FIELD,
       },
     },

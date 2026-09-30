@@ -66,6 +66,10 @@ impl Sender {
         let mut pipe = Pipe::wrap(pipeline);
         pipe.play(reporter.clone())?;
         let sink = tail.last().cloned().ok_or("no sink")?;
+        // Before the pump starts, so not one packet leaves by the wrong way.
+        if !s.interface.is_empty() && s.endpoint()?.multicast() {
+            crate::iface::send_multicast_out(&sink, &s.interface)?;
+        }
         let mut sender = Sender {
             pipe,
             pump: Some(Pump::start(fifo, src)),
@@ -177,9 +181,9 @@ fn tail(s: &Settings) -> Result<Vec<gst::Element>, String> {
         sink.set_property("qos-dscp", s.dscp);
     }
     if s.cbr_kbps > 0 {
-        // Pace to a hair over the constant rate, so the stream leaves as an
-        // even trickle rather than a burst per frame. The margin covers the
-        // RTP header and keeps the pacing from ever falling behind.
+        // A ceiling a hair over the constant rate, so a frame leaves spread
+        // over its interval rather than in one burst. The margin covers the RTP
+        // header and keeps the sink from ever falling behind the programme.
         sink.set_property("max-bitrate", u64::from(s.cbr_kbps) * 1030);
     }
     out.push(sink);
