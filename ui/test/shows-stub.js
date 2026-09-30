@@ -72,6 +72,7 @@ export function showStub(opts = {}) {
       find(id);
       if (stub.shows.length === 1) throw Object.assign(new Error("That is the only show; a station keeps one. Add another show before removing this one."), { code: -32001, data: { id, action: { method: "show.add" } } });
       stub.shows = stub.shows.filter((s) => s.id !== id);
+      if (stub.current === id) stub.current = stub.shows[0].id;
       stub.emit("event", { name: "show.removed", params: { id } });
       return { removed: id };
     },
