@@ -27,6 +27,14 @@ pub struct Meter {
     video_kbps: u32,
     audio_kbps: u32,
     fps: f64,
+    /// The frame rate last worth an event: the first one measured, and any
+    /// that moves by more than a tenth from it. A plan for a converting
+    /// destination follows the frame rate, so the core has to hear of it.
+    told_fps: f64,
+    /// The frame rate the publisher's `onMetaData` states, which is exact
+    /// where the measured one is only near: 29.97 and 30 look alike over a
+    /// second of frames.
+    declared_fps: Option<f64>,
     pub total_bytes: u64,
 }
 
@@ -49,6 +57,8 @@ impl Meter {
             video_kbps: 0,
             audio_kbps: 0,
             fps: 0.0,
+            told_fps: 0.0,
+            declared_fps: None,
             total_bytes: 0,
         }
     }
@@ -77,7 +87,7 @@ impl Meter {
                 self.frames += 1;
             }
             TagKind::Audio => self.audio_bytes += len,
-            TagKind::Script => {}
+            TagKind::Script => news = self.declare(tag),
         }
         let elapsed = now.duration_since(self.window_start);
         if elapsed >= WINDOW {
@@ -89,8 +99,30 @@ impl Meter {
             self.video_bytes = 0;
             self.audio_bytes = 0;
             self.frames = 0;
+            news |= self.rate_moved();
         }
         news
+    }
+
+    /// Read the frame rate out of `onMetaData`. True when it is new.
+    fn declare(&mut self, tag: &MediaTag) -> bool {
+        let rate = crate::restream::meta::parse(&tag.payload).and_then(|m| m.video_frame_rate);
+        let rate = rate.map(f64::from).filter(|r| r.is_finite() && *r > 0.0);
+        let news = rate.is_some() && rate != self.declared_fps;
+        if news {
+            self.declared_fps = rate;
+        }
+        news
+    }
+
+    /// True once when the frame rate is first known, and again when it moves
+    /// by more than a tenth.
+    fn rate_moved(&mut self) -> bool {
+        let moved = self.fps > 0.0 && (self.told_fps == 0.0 || (self.fps - self.told_fps).abs() > self.told_fps / 10.0);
+        if moved {
+            self.told_fps = self.fps;
+        }
+        moved
     }
 
     /// Has any video arrived this session? An audio only publisher never
@@ -105,10 +137,14 @@ impl Meter {
         let quiet = self.last_tag.elapsed() > WINDOW * 3;
         let rate = |kbps: u32| if quiet { 0 } else { kbps };
         let video = self.video.as_ref().map_or(Value::Null, |v| {
-            json!({
+            let mut video = json!({
                 "codec": v.codec, "width": v.width, "height": v.height,
                 "fps": if quiet { 0.0 } else { self.fps }, "kbps": rate(self.video_kbps),
-            })
+            });
+            if let Some(declared) = self.declared_fps {
+                video["frame_rate"] = json!(declared);
+            }
+            video
         });
         let audio = self.audio.as_ref().map_or(Value::Null, |a| {
             json!({

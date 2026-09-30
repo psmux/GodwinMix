@@ -181,6 +181,7 @@ impl AppState {
             plugins,
         } = engine;
         let channels = channels_for(cfg, &plugins, &mixer, &scenes);
+        join_channels_to_renditions(&channels);
         let tokens = cfg.tokens(rehearsal);
         let safety =
             godwinmix_core::safety::Guard::new(cfg.safety.clone(), cfg.canvas.fps.max(1) as u32);
@@ -261,6 +262,17 @@ impl AppState {
         godwinmix_core::config::edit::write_plugin_settings(path, name, &settings)?;
         Ok(settings)
     }
+}
+
+/// One governor for the machine, and one `rendition.plan` for every scope:
+/// channel transcodes count against the station's governor rather than one
+/// of their own, and a channel's plan answers `{scope: "channel:<id>"}`.
+fn join_channels_to_renditions(channels: &Arc<crate::channels::Channels>) {
+    if let Some(station) = methods::renditions::station() {
+        channels.use_governor(station.governor().clone());
+    }
+    let plans = channels.clone();
+    methods::renditions::configure_channels(Arc::new(move |id: &str| plans.rendition_plan(id)));
 }
 
 /// The channel registry, opened beside the runtime store. Built here, before

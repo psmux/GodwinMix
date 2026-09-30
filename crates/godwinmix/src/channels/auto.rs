@@ -134,6 +134,7 @@ impl Channels {
                 dropped_gops: 0,
                 source: Some(source.clone()),
                 relay: String::new(),
+                declared_fps: None,
             });
         }
     }

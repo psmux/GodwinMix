@@ -7,7 +7,7 @@
 //! the whole address in its table and runs one restream per destination that
 //! is on; what it reports comes back through `sending.rs`.
 
-use godwinmix_protocol::destination::{uri_host, Destination, StoredDestination};
+use godwinmix_protocol::destination::{uri_host, Destination, DestinationState, StoredDestination};
 use godwinmix_protocol::error::RpcError;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -49,6 +49,7 @@ impl Channels {
                     key: sealed.key,
                     stream: d.stream.clone(),
                     enabled: d.enabled,
+                    rendition: d.rendition.clone(),
                 }
             })
             .collect()
@@ -83,37 +84,70 @@ impl Channels {
                 has_key: d.has_key(),
                 stream: d.stream.clone(),
                 enabled: d.enabled,
+                rendition: d.rendition.clone(),
             });
         }
         Ok(records)
     }
 
     /// What the listener is handed for one channel: each destination that is
-    /// on, with its whole address.
+    /// on, with its whole address. One that asked for a rendition carries
+    /// what the plan gave it (`transcode::Transcode::row`); one the plan
+    /// copies, or that asked for nothing, is the same row as ever.
     pub(super) fn destination_table(&self, r: &Record) -> Vec<Value> {
         self.stored(r)
             .iter()
             .filter(|d| d.enabled)
-            .map(|d| json!({"id": d.id, "platform": d.platform, "url": d.url(), "stream": d.stream}))
+            .filter_map(|d| {
+                let row = json!({"id": d.id, "platform": d.platform, "url": d.url(), "stream": d.stream});
+                self.transcode.row(&r.id, d, row)
+            })
             .collect()
     }
 
     /// A channel's destinations as a client sees them, each with what the
-    /// listener last said about it.
+    /// listener last said about it, and what its rendition was planned to.
     pub(super) fn destination_views(&self, r: &Record) -> Vec<Destination> {
         r.destinations
             .iter()
-            .map(|d| Destination {
-                id: d.id.clone(),
-                platform: d.platform.clone(),
-                label: d.label.clone(),
-                uri_host: d.uri_host.clone(),
-                has_key: d.has_key,
-                stream: d.stream.clone(),
-                enabled: d.enabled,
-                live: self.sending_view(&r.id, &d.id, d.enabled),
+            .map(|d| {
+                let mut live = self.sending_view(&r.id, &d.id, d.enabled);
+                let (plan, refused) = match (&d.rendition, d.enabled) {
+                    (Some(_), true) => self.transcode.view(&r.id, &d.id),
+                    _ => (None, None),
+                };
+                if let Some(no) = &refused {
+                    live.state = DestinationState::Failed;
+                    live.error = Some(no.message.clone());
+                    live.kbps = 0;
+                }
+                Destination {
+                    id: d.id.clone(),
+                    platform: d.platform.clone(),
+                    label: d.label.clone(),
+                    uri_host: d.uri_host.clone(),
+                    has_key: d.has_key,
+                    stream: d.stream.clone(),
+                    enabled: d.enabled,
+                    live,
+                    rendition: d.rendition.clone(),
+                    plan,
+                    refused,
+                }
             })
             .collect()
+    }
+}
+
+impl Channels {
+    /// Seal, keep, persist and hand over a channel's new destination list.
+    fn keep_destinations(&self, channel: &str, before: &[StoredDestination], after: &[StoredDestination]) -> Result<(), RpcError> {
+        let kept = self.seal(channel, before, after)?;
+        if let Some(r) = self.records.lock().iter_mut().find(|r| r.id == channel) {
+            r.destinations = kept;
+        }
+        self.forget_sending(channel, before, after);
+        self.commit(Some(channel))
     }
 }
 
@@ -126,12 +160,15 @@ impl ChannelStore for Channels {
         let mut after = before.clone();
         edit(&mut after)?;
         if after != before {
-            let kept = self.seal(channel, &before, &after)?;
-            if let Some(r) = self.records.lock().iter_mut().find(|r| r.id == channel) {
-                r.destinations = kept;
+            self.keep_destinations(channel, &before, &after)?;
+            // The governor had no room for a rendition this edit asked for:
+            // the edit is undone and the refusal, with what would fit, is
+            // the answer, as it is for a programme output.
+            let touched = after.iter().filter(|d| !before.contains(d));
+            if let Some(no) = touched.filter_map(|d| self.transcode.refusal_error(channel, d)).next() {
+                self.keep_destinations(channel, &after, &before)?;
+                return Err(no);
             }
-            self.forget_sending(channel, &before, &after);
-            self.commit(Some(channel))?;
         }
         let answer = self.get(channel)?;
         serde_json::to_value(answer).map_err(|e| RpcError::internal(format!("the channel would not serialise: {e}")))

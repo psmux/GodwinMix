@@ -344,7 +344,8 @@ stream.
 A channel's destinations are where its stream is sent on to as it arrives:
 YouTube, Facebook, Twitch, any RTMP or RTMPS server, or an SRT receiver. The
 publisher's own bytes are remuxed and sent. Nothing is decoded or encoded, so
-a destination costs a socket and a little memory, not a CPU core.
+a destination costs a socket and a little memory, not a CPU core, unless it
+asks for a rendition of its own (see below).
 
 All three methods need the `admin` scope. Each answers the whole channel, with
 its `destinations` list as below. A core started with `--rehearsal` refuses
@@ -381,14 +382,91 @@ What is refused, with `data.field` naming the field:
 `srt` keeps no key: an SRT passphrase goes in the address, and the address is
 never shown back.
 
+`rendition` is optional too: `{"preset": "youtube-720p30"}`, or a rendition
+request written out (`{"video": {"height": 480, "bitrate_kbps": 1400}}`), as
+`output.add` takes. See [Converting a destination](#converting-a-destination).
+
 ### `channel.destination.set`
 
 `POST /api/v1/channels/{id}/destination`
 
 `id` and `destination` pick the destination; `label`, `server`, `key`,
-`stream` and `enabled` change only what is named. A key left out is kept. An
-empty key clears it, which only `custom` allows. Moving a destination to
-another platform is a remove and an add.
+`stream`, `enabled` and `rendition` change only what is named. A key left out
+is kept. An empty key clears it, which only `custom` allows. `rendition: null`
+or `{"preset": "copy"}` goes back to sending the stream as it arrives. Moving a
+destination to another platform is a remove and an add.
+
+### Converting a destination
+
+A destination with no `rendition` is sent the publisher's own bytes, exactly
+as before renditions existed. One with a `rendition` is planned with every
+other converting destination of its channel, by the same planner the
+programme's outputs use:
+
+* A rendition the stream already matches (same codec, size and frame rate, a
+  bit rate within a quarter of the one asked for, AAC sound at the rate and
+  channel count asked for) is a copy. Its table row, its queue and its
+  sender are the ones a destination with no rendition gets.
+* Otherwise the stream is decoded once, however many destinations convert
+  it; scaled once per distinct size and frame rate; and encoded once per
+  distinct rendition. Three destinations asking for `youtube-720p30` read the
+  bytes of one encoder. Sound the stream already has in the right shape is
+  copied beside converted video.
+* Hardware decoders and encoders are used when the codec catalogue says this
+  machine has them (`vtdec_hw` and `vtenc_h264_hw` on a Mac), software
+  otherwise. Setting `GMX_CODEC_DISABLE` to the hardware entries' ids makes a
+  run CPU only.
+* Every node costs a ticket from the resource governor before it starts, and
+  holds it while it runs.
+
+A destination sends H.264 and AAC: RTMP here is classic RTMP, and SRT is
+MPEG-TS made from the same tags. A rendition that asks for another codec is
+refused with that reason. A stream that is not H.264 and AAC can be copied
+but not converted.
+
+`rendition` in the record is what was asked. While the stream is live, `plan`
+is what the plan gave it:
+
+| Field | |
+|---|---|
+| `mode` | `copy` or `transcode` |
+| `stream` | the stream it was planned against, when the destination sends `*` |
+| `reason` | `copied: the source's video goes out as it is`, or `encoded because the source is 1920x1080 and this output wants 1280x720` |
+| `encoder`, `encoder_reason` | the catalogue id (`h264-videotoolbox`) and why that one |
+| `video`, `audio` | the shapes going out |
+| `nodes` | the ids of the plan's nodes it reads, which other destinations may share |
+
+A destination the plan cannot serve has `state: "failed"`, the reason in
+`error`, and `refused`:
+
+| Field | |
+|---|---|
+| `code` | `governor` (no room on this machine), `plan` (nothing here can make it) or `shed` (it ran and was stopped to keep what is on air) |
+| `message` | the same sentence as `error` |
+| `need`, `have` | what it would cost and what is free, for `governor` |
+| `advice` | `[{text, request}]`, each a rendition that fits now, to offer as a button that sets it |
+
+When the stream is live and the governor refuses a rendition that
+`channel.destination.add` or `.set` asked for, the edit is not kept and the
+call fails with `Safety` (`-32003`), `data: {need, have, advice, destination,
+channel}`, as a refused programme output does. A refusal that only happens
+later, when the stream goes live or changes, shows on the destination
+instead, and is asked about again every ten seconds.
+
+When the machine runs short on air the governor sheds channel conversions
+before a show's own renditions. The destination is marked `refused.code:
+"shed"` with the governor's sentence, an alert and `event/governor.shed` say
+the same, and it is planned again once the machine has had 30 seconds with
+nothing to shed.
+
+The plan follows the stream. When a publisher changes size or frame rate,
+the channel is planned again and only the nodes whose work changed are
+rebuilt: a 480p branch keeps running when the 720p one moves. A new bit rate
+alone changes nothing.
+
+`Channels::rendition_plan(id)` in the core is the channel's plan in the
+`rendition.plan` shape, for the `channel:<id>` scope, and `event/rendition.plan`
+is sent with `scope: "channel:<id>"` whenever the channel's table changes.
 
 ### `channel.destination.remove`
 
@@ -414,6 +492,9 @@ touched. It is destructive, so `dry_run: true` answers what it would stop.
 | `kbps` | what is going out, over the last second |
 | `reconnects` | connections lost and made again since it was switched on |
 | `error` | the last thing that went wrong, in words, or `null` |
+| `rendition` | what it asked to be converted to; absent for a plain copy |
+| `plan` | what the plan gave it, while its stream is live; absent for a plain copy |
+| `refused` | why it is not sending what it asked for, and what would fit; absent otherwise |
 
 The states:
 

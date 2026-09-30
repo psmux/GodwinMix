@@ -36,6 +36,7 @@ export interface AddDestinationRequest {
   key?: string | null;
   label?: string | null;
   platform: string;
+  rendition?: RenditionChoice | null;
   server?: string | null;
   stream?: string | null;
 }
@@ -180,6 +181,14 @@ export interface AudioSetParams {
   media?: Array<number | null>;
   muted?: boolean | null;
   page?: number | null;
+}
+
+/** A sound as it is. */
+export interface AudioShape {
+  bitrate_kbps: number;
+  channels: number;
+  codec: AudioCodec;
+  sample_rate: number;
 }
 
 /** The audio an output wants. Every field left out is taken from the source. */
@@ -524,12 +533,42 @@ export interface Destination {
   id: string;
   kbps: number;
   label: string;
+  plan?: DestinationPlan | null;
   platform: string;
   reconnects: number;
+  refused?: DestinationRefusal | null;
+  rendition?: RenditionChoice | null;
   since_ms: number;
   state: DestinationState;
   stream: string;
   uri_host: string;
+}
+
+/** Copied as it arrives, or converted. */
+export type DestinationMode = "copy" | "transcode";
+
+/** The plan's answer for one destination. */
+export interface DestinationPlan {
+  audio?: AudioShape | null;
+  encoder?: string | null;
+  encoder_reason?: string | null;
+  mode: DestinationMode;
+  nodes: string[];
+  reason: string;
+  stream: string;
+  video?: VideoShape | null;
+}
+
+/**
+ * Why a destination that asked for a rendition is not sending, and what
+ * would. `error` on the destination carries the same sentence.
+ */
+export interface DestinationRefusal {
+  advice?: RenditionAdvice[];
+  code: string;
+  have?: Cost | null;
+  message: string;
+  need?: Cost | null;
 }
 
 /** Where a destination has got to. */
@@ -1511,6 +1550,12 @@ export interface RenameSceneRequest {
   scene: string;
 }
 
+/** One thing a refused rendition could be instead, as a button. */
+export interface RenditionAdvice {
+  request: RenditionRequest;
+  text: string;
+}
+
 /**
  * What an output asks for: a whole request, or a preset by id.
  *
@@ -1543,8 +1588,8 @@ export interface RenditionPreset {
  */
 export interface RenditionRequest {
   audio?: AudioWant | null;
-  container: Container;
-  id: string;
+  container?: Container;
+  id?: string;
   no_audio?: boolean;
   no_video?: boolean;
   video?: VideoWant | null;
@@ -1686,6 +1731,7 @@ export interface SetDestinationRequest {
   id: string;
   key?: string | null;
   label?: string | null;
+  rendition?: RenditionChoice | null;
   server?: string | null;
   stream?: string | null;
 }
@@ -2022,6 +2068,16 @@ export interface Vec2 {
 }
 
 export type VideoCodec = "h264" | "h265" | "av1" | "vp8" | "vp9" | "mpeg2" | "prores" | "other";
+
+/** A picture as it is: codec, size, rate, bitrate. */
+export interface VideoShape {
+  bitrate_kbps: number;
+  codec: VideoCodec;
+  fps: Fps;
+  height: number;
+  keyframe_ms: number;
+  width: number;
+}
 
 /** The video an output wants. Every field left out is taken from the source. */
 export interface VideoWant {

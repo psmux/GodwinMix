@@ -37,6 +37,12 @@ pub fn configure_channels(plans: ChannelPlans) {
     *CHANNELS.get_or_init(|| RwLock::new(None)).write() = Some(plans);
 }
 
+/// The station the programme's renditions run on, once `configure` has run.
+/// The channel side takes its governor from here, so the machine has one.
+pub fn station() -> Option<godwinmix_core::render::Station> {
+    HANDLE.get().and_then(|h| h.read().as_ref().map(|h| h.station.clone()))
+}
+
 fn held() -> Result<RenditionsHandle, RpcError> {
     HANDLE
         .get()

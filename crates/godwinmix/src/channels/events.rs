@@ -79,6 +79,11 @@ impl Channels {
                 self.adopt(&record, &incoming.name, &incoming.relay);
             }
         }
+        // A plan follows its stream: news of its codecs, size or rate is
+        // planned again, and only what changed moves.
+        if self.converts(&record.id) {
+            self.replan();
+        }
         self.announce(&record.id);
     }
 
@@ -107,6 +112,9 @@ impl Channels {
                 l.video = None;
                 l.audio = None;
             }
+        }
+        if self.converts(&record.id) {
+            self.replan();
         }
         self.announce(&record.id);
     }

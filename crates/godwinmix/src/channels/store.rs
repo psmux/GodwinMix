@@ -13,6 +13,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use godwinmix_protocol::channel_ingest::{rtmp_only, CertificateInfo, ChannelProtocol, Rtmps};
 use godwinmix_protocol::channels::KeyMode;
+use godwinmix_protocol::rendition::RenditionChoice;
 use serde::{Deserialize, Serialize};
 
 /// One channel, as it is kept.
@@ -77,6 +78,9 @@ pub struct DestinationRecord {
     pub has_key: bool,
     pub stream: String,
     pub enabled: bool,
+    /// What it asked to be converted to, when it asked.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rendition: Option<RenditionChoice>,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -167,6 +171,7 @@ mod tests {
                 has_key: true,
                 stream: "*".into(),
                 enabled: true,
+                rendition: Some(RenditionChoice::Preset(godwinmix_protocol::rendition::PresetRef { preset: "youtube-720p30".into() })),
             }],
             extra: BTreeMap::new(),
         };
