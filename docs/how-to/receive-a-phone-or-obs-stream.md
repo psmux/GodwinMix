@@ -116,8 +116,11 @@ address of its own, which is what the command line puts there too.
 ## Over SRT rather than RTMP
 
 SRT is the better choice over a link that loses packets, because it asks for
-lost packets again inside a delay budget you choose. The listener for it is not
-in `ingest`: `srt/source` is one already, and `listener` is its default mode.
+lost packets again inside a delay budget you choose. A channel can take SRT
+on the mixer's one SRT port, with the channel's key as the passphrase: switch
+SRT on in its settings ([Take streams from several encoders into one
+channel](channels.md)). For one feed and no channel, `srt/source` listens on a
+port of its own:
 
 ```sh
 gmx plugin add ./plugins/srt

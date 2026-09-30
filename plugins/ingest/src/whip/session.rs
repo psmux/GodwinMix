@@ -98,6 +98,11 @@ fn build(name: &str, ports: (u16, u16), to: &Shared) -> Result<(Pipe, gst::Eleme
     if let Some(ice) = ice.filter(|i| i.has_property("min-rtp-port")) {
         ice.set_property("min-rtp-port", u32::from(ports.0));
         ice.set_property("max-rtp-port", u32::from(ports.1));
+        // No ICE over TCP: it would open a TCP listener per interface for
+        // every session, and publishers reach the mixer over UDP anyway.
+        if ice.has_property("ice-tcp") {
+            ice.set_property("ice-tcp", false);
+        }
     }
     pipeline.add(&bin).map_err(|e| e.to_string())?;
     for (kind, caps) in [("video", "application/x-rtp,media=video,encoding-name=H264,clock-rate=90000"), ("audio", "application/x-rtp,media=audio,encoding-name=OPUS,clock-rate=48000")] {
