@@ -46,7 +46,9 @@
 //! `docs/explanation/hls-output.md` says why it is built this way and what
 //! it costs.
 
+pub mod boxes;
 pub mod cutter;
+pub mod dash;
 pub mod key;
 pub mod ladder;
 pub mod master;

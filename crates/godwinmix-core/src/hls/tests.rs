@@ -199,14 +199,14 @@ fn a_slow_reader_holds_bytes_not_the_ring() {
     let track = Track::new("r", TrackKind::Video, HlsParams { window_s: 6, ..HlsParams::default() }, 0);
     track.set_init(Bytes::from_static(b"\0\0\0\x08ftyp"));
     let part = |n: u8| Part { bytes: Bytes::from(vec![n; 64 * 1024]), duration_ns: 2_000_000_000, independent: true };
-    track.begin(0, 0);
+    track.begin(0, 0, None);
     track.push_part(part(0));
     track.close();
     // A viewer that took segment 0 and then stopped reading.
     let held = track.segment(0).unwrap();
     let start = Instant::now();
     for i in 1..200u64 {
-        track.begin(i * 2_000_000_000, 0);
+        track.begin(i * 2_000_000_000, 0, None);
         track.push_part(part(i as u8));
         track.close();
     }
@@ -228,7 +228,7 @@ async fn a_blocking_reload_wakes_when_its_part_arrives() {
     let producer = track.clone();
     std::thread::spawn(move || {
         let part = || Part { bytes: Bytes::from_static(b"p"), duration_ns: 250_000_000, independent: false };
-        producer.begin(7 * 2_000_000_000, 0);
+        producer.begin(7 * 2_000_000_000, 0, None);
         for _ in 0..3 {
             std::thread::sleep(Duration::from_millis(100));
             producer.push_part(part());

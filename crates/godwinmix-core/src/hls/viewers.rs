@@ -51,6 +51,11 @@ impl Viewers {
             match seen.get_mut(who) {
                 Some(t) => *t = now,
                 None => {
+                    // Forget the ones past the horizon every so often, so a
+                    // map nobody reads the count of cannot grow without end.
+                    if seen.len() % 256 == 255 {
+                        seen.retain(|_, t| now.saturating_duration_since(*t) <= self.horizon);
+                    }
                     seen.insert(who.to_string(), now);
                 }
             }
@@ -127,6 +132,20 @@ mod tests {
         assert_eq!(v.count_at(t + Duration::from_secs(95)), 1, "b was last seen at 30 s");
         assert_eq!(v.count_at(t + Duration::from_secs(101)), 0);
         assert_eq!(v.total_bytes(), 30);
+    }
+
+    #[test]
+    fn the_map_forgets_old_viewers_without_being_asked() {
+        let v = Viewers::new(Duration::from_secs(60));
+        let t = Instant::now();
+        for i in 0..1000 {
+            v.served_at(&format!("old{i}"), 1, t);
+        }
+        for i in 0..300 {
+            v.served_at(&format!("new{i}"), 1, t + Duration::from_secs(120));
+        }
+        assert!(v.seen.lock().len() < 600, "{} kept", v.seen.lock().len());
+        assert_eq!(v.count_at(t + Duration::from_secs(120)), 300);
     }
 
     #[test]

@@ -54,7 +54,8 @@ impl Cutter {
             (true, Some(b"moof" | b"styp")) => {
                 self.finish_part();
                 if !piece.delta {
-                    self.track.begin(piece.running_ns.unwrap_or(0), piece.wall_ms);
+                    let decode_time = super::boxes::decode_time(data);
+                    self.track.begin(piece.running_ns.unwrap_or(0), piece.wall_ms, decode_time);
                 }
                 let independent = !piece.delta || self.all_independent;
                 let mut bytes = Vec::with_capacity(data.len() + 16 * 1024);

@@ -43,6 +43,7 @@ pub struct SegmentView {
     pub msn: u64,
     pub pdt_ms: i64,
     pub init: u32,
+    pub decode_time: Option<u64>,
     pub complete: bool,
     pub duration_ns: u64,
     pub bytes: usize,

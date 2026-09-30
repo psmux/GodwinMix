@@ -3,6 +3,7 @@
 //! | Route | Answer |
 //! |---|---|
 //! | `GET /hls/{output}/master.m3u8` | the multivariant playlist |
+//! | `GET /hls/{output}/manifest.mpd` | the same segments as a DASH MPD |
 //! | `GET /hls/{output}/{rung}/index.m3u8` | a media playlist; `_HLS_msn` and `_HLS_part` block |
 //! | `GET /hls/{output}/{rung}/init.mp4` | the init segment (`init1.mp4` after a rebuild) |
 //! | `GET /hls/{output}/{rung}/{n}.m4s` | a whole segment |
@@ -40,6 +41,7 @@ use serde_json::{json, Value};
 pub fn router(ctx: Ctx) -> Router<Ctx> {
     Router::new()
         .route("/hls/{output}/master.m3u8", get(playlists::master))
+        .route("/hls/{output}/manifest.mpd", get(playlists::dash))
         .route("/hls/{output}/{rung}/index.m3u8", get(playlists::media))
         .route("/hls/{output}/{rung}/{file}", get(files::file))
         .with_state(ctx)
@@ -56,9 +58,14 @@ fn refuse(code: StatusCode, message: String, data: Value) -> Response {
 }
 
 fn playlist_response(text: String) -> Response {
+    listing(text, PLAYLIST)
+}
+
+/// A playlist or an MPD: text that changes every part and may not be kept.
+fn listing(text: String, content_type: &'static str) -> Response {
     let mut r = (StatusCode::OK, text).into_response();
     let h = r.headers_mut();
-    h.insert(header::CONTENT_TYPE, HeaderValue::from_static(PLAYLIST));
+    h.insert(header::CONTENT_TYPE, HeaderValue::from_static(content_type));
     // A playlist changes every part; nothing between here and the player
     // may keep one.
     h.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));

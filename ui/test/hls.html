@@ -2,7 +2,8 @@
 <!--
   A development page for HLS outputs: hls.js against /hls/<output>/master.m3u8
   on this core, with the numbers a person checks beside the picture. Served
-  only with GMX_UI_DEV=1, at /test/hls.html?out=<output>&key=<viewer key>.
+  only with GMX_UI_DEV=1, at /test/hls.html?out=<output>&key=<viewer key>,
+  and with &player=dash it plays the same output's MPD with dash.js.
 
   hls.js is not part of the product (the page carries no player, see
   ui/panels/renditions/hls-card.js for why), so it is fetched into

@@ -106,19 +106,35 @@ impl Stream {
             && tracks.iter().all(|t| t.position().complete.is_some() && !t.info().codecs.is_empty())
     }
 
-    /// The multivariant playlist. Peak bandwidth is what was measured over
-    /// the window, or what the rendition asked for if that is higher.
+    /// What a playlist or an MPD says about one track. Peak bandwidth is what
+    /// was measured over the window, or what the rendition asked for if that
+    /// is higher.
+    fn variant(t: &Arc<Track>) -> Variant {
+        let info = t.info();
+        let declared = u64::from(info.declared_kbps) * 1000;
+        let (peak, average) = t.measured_bps().map(|(p, a)| (p, Some(a))).unwrap_or((0, None));
+        Variant { id: t.id.clone(), bandwidth: peak.max(declared).max(1), average, info }
+    }
+
+    /// The multivariant playlist.
     pub fn master(&self) -> String {
-        let variant = |t: &Arc<Track>| {
-            let info = t.info();
-            let declared = u64::from(info.declared_kbps) * 1000;
-            let (peak, average) = t.measured_bps().map(|(p, a)| (p, Some(a))).unwrap_or((0, None));
-            Variant { id: t.id.clone(), bandwidth: peak.max(declared).max(1), average, info }
-        };
         let tracks = self.tracks();
-        let video: Vec<Variant> = tracks.iter().filter(|t| t.kind == TrackKind::Video).map(variant).collect();
-        let audio = tracks.iter().find(|t| t.kind == TrackKind::Audio).map(variant);
+        let video: Vec<Variant> = tracks.iter().filter(|t| t.kind == TrackKind::Video).map(Self::variant).collect();
+        let audio = tracks.iter().find(|t| t.kind == TrackKind::Audio).map(Self::variant);
         playlist::master(&video, audio.as_ref())
+    }
+
+    /// The same tracks as a DASH MPD, with `query` on every URL. None until
+    /// there is a whole segment to list.
+    pub fn mpd(&self, now_ms: i64, query: &str) -> Option<String> {
+        let tracks = self.tracks();
+        let parts: Vec<(Variant, TrackKind, super::ring::View)> =
+            tracks.iter().map(|t| (Self::variant(t), t.kind, t.view())).collect();
+        let reps: Vec<super::dash::Rep<'_>> = parts
+            .iter()
+            .map(|(v, kind, view)| super::dash::Rep { id: &v.id, kind: *kind, info: &v.info, view, bandwidth: v.bandwidth })
+            .collect();
+        super::dash::mpd(&reps, &self.params, now_ms, query)
     }
 
     pub fn memory(&self) -> usize {
@@ -146,7 +162,11 @@ impl Stream {
             .collect();
         let viewers = self.viewers.count();
         json!({
-            "playback": { "master_url_path": self.master_url_path(), "viewers": viewers },
+            "playback": {
+                "master_url_path": self.master_url_path(),
+                "dash_url_path": format!("/hls/{}/manifest.mpd?key={}", self.id, self.viewer_key),
+                "viewers": viewers,
+            },
             "low_latency": self.params.low_latency(),
             "segment_ms": self.params.segment_ms,
             "part_ms": self.params.part_ms,

@@ -167,6 +167,17 @@ async fn a_viewer_key_plays_ll_hls_and_nothing_else_gets_in() {
     let init = get(&format!("{base}/hls/viewers/programme/init.mp4?{query}")).await.bytes().await.unwrap();
     assert_eq!(&init[4..8], b"ftyp");
 
+    // The same segments as DASH, with the key on every URL.
+    let mpd = get(&format!("{base}/hls/viewers/manifest.mpd?key={key}")).await;
+    assert_eq!(mpd.status(), 200);
+    assert_eq!(mpd.headers()["content-type"], "application/dash+xml");
+    let mpd = mpd.text().await.unwrap();
+    assert!(mpd.contains("type=\"dynamic\"") && mpd.contains("<Representation id=\"programme\""), "{mpd}");
+    assert!(mpd.contains(&format!("media=\"programme/$Number$.m4s?key={key}&amp;v=")), "{mpd}");
+    let start: u64 = mpd.split("startNumber=\"").nth(1).unwrap().split('"').next().unwrap().parse().unwrap();
+    let listed = get(&format!("{base}/hls/viewers/programme/{start}.m4s?key={key}")).await;
+    assert_eq!(listed.status(), 200, "the MPD's first segment is there");
+
     // Wrong names are 404s that say what there is.
     let rung = get(&format!("{base}/hls/viewers/4k/index.m3u8?{query}")).await;
     assert_eq!(rung.status(), 404);

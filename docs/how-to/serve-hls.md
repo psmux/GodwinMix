@@ -86,6 +86,12 @@ plays the same link a few seconds further back.
 A web page on another site can play it too: the control port answers
 cross origin requests.
 
+The control port speaks HTTP/1.1. Apple's LL-HLS specification asks for
+HTTP/2, so to give Safari and iPhones low latency, put the mixer behind a
+reverse proxy with HTTPS (`docs/how-to/reverse-proxy.md`). hls.js needs
+nothing more: it keeps two or three requests open, well inside the six a
+browser allows one host.
+
 ## See who is watching
 
 `viewers` on the output's row counts players that fetched something in the
