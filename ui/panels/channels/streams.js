@@ -4,7 +4,7 @@
 // seconds while the stream is live.
 
 import { el, svg } from "../../shell/dom.js";
-import { write } from "./keyed.js";
+import { write, copy } from "./keyed.js";
 import { badges, resolution, fmtFps, fmtKbps, fmtUptime, keyLabel, startedAt, streamKbps } from "./model.js";
 
 const CLOCK = "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 7v5l3 2";
@@ -12,10 +12,16 @@ const NS = "http://www.w3.org/2000/svg";
 const W = 96;
 const H = 26;
 
-export function streamRow(view, getChannel) {
+/** `urlOf(stream)` answers the whole URL it came in on, key and all, or null. */
+export function streamRow(view, getChannel, urlOf) {
   const dot = el("span.chn-sdot");
   const name = el("strong.chn-sname");
   const who = el("span.chn-who");
+  const copyUrl = el("button.chn-copy.chn-surl", { type: "button", text: "Copy URL" });
+  copyUrl.onclick = async () => {
+    const url = current && (await urlOf(current));
+    if (url) copy(copyUrl, url);
+  };
   const res = el("span.chn-spec");
   const fps = el("span.chn-spec");
   const chips = el("span.chn-badges");
@@ -26,7 +32,7 @@ export function streamRow(view, getChannel) {
   const feeds = el("span.chn-feeds");
   const node = el("div.chn-stream", {}, [
     dot,
-    el("div.chn-sid", {}, [name, who]),
+    el("div.chn-sid", {}, [el("div.chn-snameline", {}, [name, copyUrl]), who]),
     el("div.chn-specs", {}, [res, fps, chips]),
     el("div.chn-bits", {}, [spark.node, rate]),
     clock,
@@ -42,6 +48,8 @@ export function streamRow(view, getChannel) {
     node.classList.toggle("idle", !live);
     write(dot, "className", "chn-sdot" + (live ? " live" : ""));
     write(name, "textContent", s.name);
+    copyUrl.hidden = !urlOf || (channel.key_mode !== "stream" && !s.key);
+    copyUrl.title = `Copy the full URL ${s.name} publishes to, with its key`;
     const label = keyLabel(channel, s.key);
     write(who, "textContent", live ? [s.from && `from ${s.from}`, label].filter(Boolean).join(", ") : "Not publishing");
     write(res, "textContent", resolution(s));

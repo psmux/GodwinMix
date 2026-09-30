@@ -1,5 +1,6 @@
 // The Channels panel against a stub that answers as the real channel.*
-// methods do: create, the key shown once, revoke, a destination added and
+// methods do: create, the key shown after create and again under Connect,
+// revoke, a destination added and
 // switched, an event updating a card, and the numbers read while live. No
 // core needed.
 
@@ -39,6 +40,13 @@ export async function channelTests(test, eq, ok) {
     const c = { app: "sunday", key_mode: "query", publish: { server: "rtmp://a:1935/sunday" } };
     eq(model.obsFields(c, "SECRET", "rtmp://10.0.0.5:1935"), { server: "rtmp://10.0.0.5:1935/sunday", key: "main?psk=SECRET", url: "rtmp://10.0.0.5:1935/sunday/main?psk=SECRET" });
     eq(model.obsFields({ ...c, key_mode: "stream" }, "SECRET", "").key, "SECRET");
+    eq(model.obsFields(c, "SECRET", "rtmp://10.0.0.5:1935", "main_720p").url, "rtmp://10.0.0.5:1935/sunday/main_720p?psk=SECRET");
+  });
+
+  test("a stream name typed in is cut to what an encoder sends", () => {
+    eq(model.streamName(" cam 2/x "), "cam2x");
+    eq(model.streamName("main_720p"), "main_720p");
+    eq(model.streamName("  "), "main");
   });
 
   test("Kick and Twitch share an ingest domain and are still told apart", () => {
@@ -88,10 +96,13 @@ export async function channelTests(test, eq, ok) {
     ok(host.querySelector(".chn-card"), "a card");
     eq(host.querySelector(".chn-addr").textContent, "rtmp://10.0.0.5:1935/sunday-service");
   });
-  test("the new key is shown large, as OBS asks for it, with a QR code", () => {
+  test("the new key is shown large, as OBS asks for it, with the full URL and a QR code", () => {
     const shown = top().querySelector(".chn-secret");
     eq(shown.textContent, `main?psk=${secret}`);
-    ok(top().textContent.includes("shown once"), "it says it is shown once");
+    const codes = [...top().querySelectorAll(".chn-obsval code")].map((c) => c.textContent);
+    ok(codes.includes(`rtmp://10.0.0.5:1935/sunday-service/main?psk=${secret}`), codes.join(" "));
+    ok(top().textContent.includes("see this key again any time under Connect"), "it says where the key is found again");
+    ok(!top().textContent.includes("shown once"), "and nothing false about it");
     ok(top().querySelector(".chn-qrpic svg path"), "a QR code");
     ok(button(top(), "Make another key"), "and the way to another key");
   });
@@ -189,6 +200,8 @@ export async function channelTests(test, eq, ok) {
     eq(card().querySelector(".chn-tile .chn-terr").textContent, "nothing answered at rtmp://10.0.0.9:1935");
   });
 
+  await connectTests(test, eq, ok, stub, card);
+
   stub.emit("event", { name: "channel.removed", params: { id: "sunday-service" } });
   await wait();
   test("event/channel.removed takes the card away", () => ok(!card(), "no card"));
@@ -196,4 +209,63 @@ export async function channelTests(test, eq, ok) {
   view.stop();
   test("hidden, the panel lets go of its events", () => eq(stub.patterns.size, 0));
   host.remove();
+}
+
+/** The card's Connect section, then a live stream's own Copy URL. */
+async function connectTests(test, eq, ok, stub, card) {
+  let copied = "";
+  Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: async (t) => { copied = t; } } });
+  const reveals = () => stub.calls.filter((c) => c.method === "channel.key.reveal").length;
+  const secret = stub.secrets.get("key-1");
+  const box = () => card().querySelector(".chn-connectbox");
+  const values = () => [...box().querySelectorAll(".chn-ckey .chn-obsval code")].map((c) => c.textContent);
+  const press = async (root, text, n = 0) => { [...root.querySelectorAll("button")].filter((b) => b.textContent.trim() === text)[n].click(); await wait(30); };
+
+  test("Connect is folded until it is opened", () => ok(box().hidden));
+  card().querySelector(".chn-connect").click();
+  await wait();
+  test("opened, it lists every key with Server, Stream key and Full URL, the key hidden", () => {
+    ok(!box().hidden);
+    eq(box().querySelectorAll(".chn-ckey").length, 1);
+    eq(values()[0], "rtmp://10.0.0.5:1935/sunday-service");
+    ok(values()[1].startsWith("main?psk=\u2022") && values()[1].endsWith(secret.slice(-4)), values()[1]);
+    ok(!box().innerHTML.includes(secret), "no key until Show");
+    eq(reveals(), 0, "and nothing asked for yet");
+  });
+
+  await press(box(), "Show");
+  test("Show asks the core once and shows all three fields and a QR code", () => {
+    eq(stub.calls.at(-1), { method: "channel.key.reveal", params: { id: "sunday-service", key: "key-1" } });
+    eq(values()[2], `rtmp://10.0.0.5:1935/sunday-service/main?psk=${secret}`);
+    ok(box().querySelector(".chn-cqr svg path"), "a QR code of it");
+  });
+
+  const name = box().querySelector(".chn-streamin");
+  name.value = "main_720p";
+  name.dispatchEvent(new Event("input"));
+  await press(box().querySelector(".chn-seg"), "192.168.1.20");
+  await press(box(), "Copy", 2);
+  test("the stream name and the address follow into every field, and Copy asks nothing again", () => {
+    eq(values()[1], `main_720p?psk=${secret}`);
+    eq(copied, `rtmp://192.168.1.20:1935/sunday-service/main_720p?psk=${secret}`);
+    eq(reveals(), 1);
+  });
+
+  card().querySelector(".chn-connect").click();
+  await wait();
+  test("closed, the key is gone from the page", () => ok(!document.body.innerHTML.includes(secret)));
+  card().querySelector(".chn-connect").click();
+  await press(box(), "Copy", 1);
+  test("opened again, Copy asks the core again, since nothing was kept", () => {
+    eq(reveals(), 2);
+    eq(copied, `main_720p?psk=${secret}`);
+    ok(!box().innerHTML.includes(secret), "Copy alone does not show it");
+  });
+
+  await press(card().querySelector(".chn-stream"), "Copy URL");
+  test("a live stream copies the URL it came in on, with the key that let it in", () => {
+    eq(copied, `rtmp://192.168.1.20:1935/sunday-service/main?psk=${secret}`);
+  });
+  card().querySelector(".chn-connect").click();
+  delete navigator.clipboard;
 }
