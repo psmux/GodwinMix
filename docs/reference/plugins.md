@@ -17,6 +17,7 @@ makes the same argument about the UI).
 | [audio-device](../../plugins/audio-device/README.md) | `audio-device/source`, `audio-device/devices`, tool `list_audio_inputs` | Linux, macOS, Windows | container | conformant; verified on macOS |
 | [screen](../../plugins/screen/README.md) | `screen/source`, `screen/devices`, tool `list_screens` | Linux, macOS, Windows | `unixfd`, else container | conformant; verified on macOS. The Wayland portal handshake is not implemented |
 | [udp](../../plugins/udp/README.md) | `udp/source`, `udp/output` | Linux, macOS, Windows (source only) | container; the output reads a FIFO | tested on macOS: a 60 s multicast soak, 1% loss, two receivers, output checked frame for frame. See [the reference](udp.md) |
+| [ipcam](../../plugins/ipcam/README.md) | `ipcam/source`, `ipcam/discover` | Linux, macOS, Windows | container | tested on macOS against cameras simulated in the test (MJPEG, snapshot behind a login, ONVIF with WS-Security); through the release core by hand. No real ONVIF camera tried |
 | [rtsp](../../plugins/rtsp/README.md) | `rtsp/output` | Linux, macOS | container, on a FIFO | tested on macOS: ffmpeg over TCP and UDP gets the encoder's frames bit for bit, and `uridecodebin` decodes it |
 | [file-record](../../plugins/file-record/README.md) | `file-record/output`, tool `list_recordings` | Linux, macOS | container, on a FIFO | conformant; a ten second recording verified on macOS. Not Windows |
 

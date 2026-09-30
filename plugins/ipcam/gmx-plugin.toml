@@ -1,0 +1,46 @@
+# ipcam/source and ipcam/discover: IP cameras. The source reads what a camera
+# serves over HTTP (an MJPEG stream, or a snapshot picture asked for a few
+# times a second); discovery finds ONVIF cameras on the LAN and hands the core
+# each profile's RTSP address. See docs/how-to/add-an-ip-camera.md.
+
+[plugin]
+name = "ipcam"
+version = "0.1.0"
+api = 1
+description = "IP cameras: an MJPEG stream or a snapshot picture over HTTP as a source, and ONVIF discovery of the cameras on the network, each profile ready to add as an RTSP stream."
+license = "Apache-2.0"
+authors = ["GodwinMix"]
+repository = "https://github.com/psmux/godwinmix"
+platforms = ["linux-x86_64", "linux-aarch64", "macos-aarch64", "macos-x86_64", "windows-x86_64"]
+placements = ["sidecar", "node"]
+process = "per-instance"
+
+[run]
+bin = { "linux-x86_64" = "bin/gmx-ipcam", "linux-aarch64" = "bin/gmx-ipcam", "macos-aarch64" = "bin/gmx-ipcam", "macos-x86_64" = "bin/gmx-ipcam", "windows-x86_64" = "bin/gmx-ipcam.exe" }
+
+[[provides]]
+kind = "source"
+id = "source"
+# http:// is claimed by file/source and browser/source through the address,
+# so this kind is named outright rather than guessed.
+uri_schemes = []
+rank = 200
+# The JPEGs cross to the core in Matroska, as they came. The core decodes.
+media = { video = "container", audio = "container", alpha = false, thumb = true }
+transports = ["container"]
+capabilities = ["restart-in-place", "health"]
+latency_ms = 100
+settings = "schemas/source.json"
+skill = "skills/source/SKILL.md"
+
+[[provides]]
+kind = "device"
+id = "discover"
+# ONVIF's WS-Discovery: one probe to 239.255.255.250:3702 for video
+# transmitters, answered by every ONVIF camera on the segment.
+discovery = { ws_discovery = ["dn:NetworkVideoTransmitter"] }
+settings = "schemas/discover.json"
+
+[build]
+command = "sh build"
+output = "bin/gmx-ipcam"

@@ -38,9 +38,9 @@ Words used below:
 | RIST (Simple Profile), listening | RTP MPEG-TS | any | any | `hls/source` (built in) claims `rist://` as live | `plugin/outputs/rist_tests.rs`: `uridecodebin` on `rist://` decodes what `rist/output` sends |
 | Still picture (PNG, JPEG, BMP, WebP, TIFF), file or HTTP | image | held live with `imagefreeze` | silence | `image/source` (built in) | `plugin/kinds/image_tests.rs`: the conformance harness every kind passes |
 | Picture sequence (`frame%04d.png`) | images | played at `params.fps`, looping | silence | `image/source` (built in) | `plugin/kinds/image_tests.rs`: the conformance harness |
-| IP camera MJPEG over HTTP | `multipart/x-mixed-replace` | | | nothing (`file/source` sits at `connecting`) | by hand |
-| IP camera snapshot URL, polled | JPEG | | | nothing (one frame, then EOS) | by hand |
-| ONVIF discovery of cameras on the LAN | | | | nothing | |
+| IP camera MJPEG over HTTP or HTTPS, with its login | `multipart/x-mixed-replace` | MJPEG, copy | none | `ipcam/source` (plugin `ipcam`) | `plugins/ipcam/src/tests.rs` against a camera served by the test; by hand through the release core |
+| IP camera snapshot URL, polled 1 to 30 times a second | JPEG | MJPEG, copy | none | `ipcam/source` (plugin `ipcam`) | `plugins/ipcam/src/tests.rs`, behind a basic login |
+| ONVIF discovery of cameras on the LAN | WS-Discovery, SOAP | each profile's RTSP stream, opened by `hls/source` | as the camera sends | `ipcam/discover` (plugin `ipcam`) | `plugins/ipcam/src/onvif/tests.rs` against a simulated device checking the WS-Security digest; no real camera here |
 | Internet radio (Icecast, SHOUTcast) | MP3, AAC, Ogg over HTTP | none | MP3, AAC, Vorbis, Opus | `file/source`, finite rather than live | not tested |
 | SDI or HDMI capture card (Blackmagic DeckLink) | raw | | | nothing | |
 
