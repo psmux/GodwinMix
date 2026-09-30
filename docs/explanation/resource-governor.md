@@ -134,7 +134,9 @@ planner can price a graph with the numbers this machine actually produced.
 
 ## What it does not do yet
 
-It is not wired into anything. Nothing asks it before starting today; the
-station and the planner do that in the next phase. It does not read NVIDIA,
+It governs the programme's renditions and nothing else yet: previews,
+thumbnails and channel transcodes do not ask it before they start. It does
+not apply a faster software preset to an encoder that is already running,
+because that means restarting it. It does not read NVIDIA,
 Apple or Windows encoder load, and it does not measure the uplink: an output
 that measures its own throughput will set that.

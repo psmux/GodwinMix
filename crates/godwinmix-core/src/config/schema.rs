@@ -77,6 +77,7 @@ pub fn derived() -> Map<String, Value> {
         ("snapshot", schema_of::<super::SnapshotConfig>()),
         ("control", schema_of::<super::ControlConfig>()),
         ("hardware", schema_of::<super::HardwareConfig>()),
+        ("governor", schema_of::<godwinmix_govern::GovernorConfig>()),
         ("media", schema_of::<super::MediaConfig>()),
         ("security", schema_of::<super::SecurityConfig>()),
         ("safety", schema_of::<crate::safety::SafetyConfig>()),

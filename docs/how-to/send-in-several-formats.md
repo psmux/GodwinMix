@@ -1,3 +1,14 @@
+# Send in several formats
+
+Each destination can take the programme in the format it wants: YouTube at
+1080p, Facebook at 720p, a church's own server at 480p to spare its uplink.
+The mixer works out the fewest encoders that make all of them, shares one
+encoder between every destination that wants the same thing, and will not
+start a format that would make what is already on air drop frames.
+
+The Format row and the Resources tab described below arrive with the
+renditions page in this release.
+
 ## From the page
 
 Every destination can go out in its own format. You pick it when you add the
@@ -73,3 +84,49 @@ so. The tab only asks the mixer for these numbers while it is on screen.
 
 A mixer older than this page has no formats to offer: the Format row does not
 appear, and destinations go out the way they always did.
+
+## What the mixer does with your choices
+
+* A destination left on **Same as the source** reads the programme's own
+  encode, exactly as every destination always has. Choosing formats for
+  other destinations costs it nothing.
+* Destinations that pick the same format share one encoder. Four
+  destinations on YouTube 720p cost one 720p encode, not four.
+* Each size is scaled once, however many formats use it.
+* A GPU encoder is used first when this machine has one with room, the CPU
+  after that. The line under each output says which, and why.
+* Adding or removing a destination starts or stops only its own encoder.
+  Nothing else on air notices: the programme and every other destination go
+  on without losing a frame.
+* The sizes of an HLS ladder put their keyframes on the same frames, so a
+  player moves between them without a pause.
+
+## When the machine runs short on air
+
+If something else on the machine takes the CPU while you are live (another
+program, the fans losing to the heat), the mixer gives up the least
+important work first: the smallest size of an HLS ladder, then the next.
+The programme and the top size of every destination are never dropped. An
+alert says what was stopped and why, the destination's row says so too, and
+it comes back by itself once there has been room again for ten seconds.
+
+## A machine with no GPU
+
+Everything above works on the CPU alone; it fits fewer formats. To see what
+a machine without a GPU encoder would do, open **Mixer settings**, find
+**Hardware** and set **Encode** to **Software**, then restart the mixer.
+The formats, their costs and the Resources tab then describe the CPU only.
+
+The first time the mixer runs on a machine it measures each encoder for a
+few seconds, in the background, once nothing is on air. Until then the
+costs it shows are cautious guesses and a refusal says so.
+
+## From a script or an agent
+
+`output.add` and `output.set` take `rendition`: `{"preset": "youtube-720p30"}`,
+a custom ladder `{"ladder": [...]}` for HLS, or a whole rendition request.
+`rendition.presets` lists what this machine can make and what each costs,
+`rendition.plan` shows the encoders and why each was chosen, and
+`governor.status` shows what is in use and free. A refusal carries a button
+for each format that fits, as `data.advice`. The shapes are in
+[the renditions reference](../reference/renditions.md).
