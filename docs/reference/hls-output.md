@@ -1,6 +1,7 @@
 # HLS output
 
-`hls/output` serves the programme as HLS or LL-HLS from the control port.
+`hls/output` serves the programme as HLS or LL-HLS, and the same segments
+as DASH, from the control port.
 It opens no port of its own, writes nothing to disk, and keeps each rung's
 last `window` seconds in memory. It is a built in output on Windows, macOS
 and Linux, and needs `cmafmux` from gst-plugins-rs (the `fmp4` plugin); a
@@ -55,6 +56,7 @@ All on the control port.
 | Route | Answer | `Cache-Control` |
 |---|---|---|
 | `GET /hls/{output}/master.m3u8` | multivariant playlist, `application/vnd.apple.mpegurl` | `no-store` |
+| `GET /hls/{output}/manifest.mpd` | the same rungs as a DASH MPD, `application/dash+xml` | `no-store` |
 | `GET /hls/{output}/{rung}/index.m3u8` | media playlist | `no-store` |
 | `GET /hls/{output}/{rung}/init.mp4` | init segment (`init1.mp4` and on after a rebuild) | `max-age=<2 x window>, immutable` |
 | `GET /hls/{output}/{rung}/{n}.m4s` | CMAF segment `n` | the same |
@@ -95,6 +97,18 @@ the longest segment there has been if a source's keyframes wandered; it grows
 and never shrinks. Segment numbers are consecutive, and the first is set from
 the running time, so every rung numbers the same seconds alike.
 
+### DASH
+
+`manifest.mpd` is a dynamic MPD (`isoff-live`) over the same CMAF files: one
+video `AdaptationSet` with a `Representation` per rung and one audio set, each
+with a `SegmentTemplate` naming `{rung}/$Number$.m4s` and a `SegmentTimeline`
+whose `t` is each segment's `tfdt` and whose `d` is the gap to the next.
+`availabilityStartTime` is the first segment's programme date time less its
+media time, `suggestedPresentationDelay` three segments, and `UTCTiming` the
+server's clock. It lists whole segments only, so it plays at ordinary DASH
+latency (about three segments) whatever `low_latency` says. After a rebuild
+of the output it lists only the segments decoded by the newest init segment.
+
 ## Who may read
 
 Two ways in, and nothing else on the port changes:
@@ -126,6 +140,7 @@ the right link is.
 | Field | Meaning |
 |---|---|
 | `playback.master_url_path` | `/hls/<id>/master.m3u8?key=<viewer key>`: put the page's own origin in front of it for the link |
+| `playback.dash_url_path` | `/hls/<id>/manifest.mpd?key=<viewer key>`, the same for DASH |
 | `playback.viewers`, `viewers` | clients that fetched a segment or part in the last two windows |
 | `egress_kbps` | what the output sent over the last few seconds |
 | `memory_bytes` | every rung's ring, segments and inits |
@@ -149,6 +164,5 @@ output, the number the governor's uplink budget counts.
 
 ## Not here yet
 
-DASH is not served. The ring and the CMAF segments would serve an MPD
-unchanged; what is missing is a SegmentTimeline built from each segment's
-decode time, and it is not written yet.
+Low latency DASH (chunked transfer of the part being written) is not served;
+the MPD lists whole segments.

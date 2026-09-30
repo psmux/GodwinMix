@@ -11275,6 +11275,11 @@
     },
     {
       "method": "GET",
+      "note": "the same segments as a DASH MPD, dynamic, with a SegmentTimeline per representation; the same keys as the playlists",
+      "path": "/hls/{output}/manifest.mpd"
+    },
+    {
+      "method": "GET",
       "note": "one rung's media playlist; _HLS_msn and _HLS_part hold it until that part exists (LL-HLS blocking reload)",
       "path": "/hls/{output}/{rung}/index.m3u8"
     },
