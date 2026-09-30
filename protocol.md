@@ -117,6 +117,8 @@ Keys accepted on every method, handled before a method runs.
 | `program.history` | `GET /api/v1/program/history` | read |  | 1 | The last hundred takes, newest first, with the token that asked for each. |
 | `program.revert` | `POST /api/v1/program/revert` | operate |  | 1 | Take back to the shot before this one. |
 | `program.take` | `POST /api/v1/program/take` | operate |  | 1 | Put a scene or a source on programme. The cut is instant and the outgoing stream is not disturbed. |
+| `project.export` | `POST /api/v1/project/export` | admin |  | 1 | This mixer as one project file: settings, sources, outputs and renditions, channels, scenes, the page's layout, and its clips by name and size. Keys only with include_secrets. |
+| `project.import` | `POST /api/v1/project/import` | admin | yes | 1 | Open a project file: answers with what it would change (dry_run is true unless false is sent), then replaces this mixer's setup or merges beside it. Says which settings wait for a restart. |
 | `rendition.plan` | `POST /api/v1/rendition/plan` | read |  | 1 | What the planner built for every output that asked for a rendition: each node, what it serves, which encoder and why, and the totals. |
 | `rendition.presets` | `POST /api/v1/rendition/presets` | read |  | 1 | Every rendition preset, priced on this machine by the governor. One this machine cannot make says so, with why. |
 | `scene.add` | `POST /api/v1/scenes` | operate |  | 1 | Make an empty scene, or one built from a set of sources. |
@@ -1568,6 +1570,36 @@ MCP tool `take` in the `minimal` profile: readOnlyHint false, destructiveHint fa
 }
 ```
 
+#### `project.export`
+
+This mixer as one project file: settings, sources, outputs and renditions, channels, scenes, the page's layout, and its clips by name and size. Keys only with include_secrets.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ExportRequest"
+  },
+  "result": {
+    "type": "object"
+  }
+}
+```
+
+#### `project.import`
+
+Open a project file: answers with what it would change (dry_run is true unless false is sent), then replaces this mixer's setup or merges beside it. Says which settings wait for a restart.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ImportRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/Report"
+  }
+}
+```
+
 #### `rendition.plan`
 
 What the planner built for every output that asked for a rendition: each node, what it serves, which encoder and why, and the totals.
@@ -1737,7 +1769,7 @@ MCP tool `export_collection` in the `search` profile: readOnlyHint true, destruc
 ```json
 {
   "params": {
-    "$ref": "#/$defs/ExportRequest"
+    "$ref": "#/$defs/ExportRequest2"
   },
   "result": {
     "type": "object"
@@ -1805,7 +1837,7 @@ MCP tool `import_collection` in the `search` profile: readOnlyHint false, destru
 ```json
 {
   "params": {
-    "$ref": "#/$defs/ImportRequest"
+    "$ref": "#/$defs/ImportRequest2"
   },
   "result": {
     "$ref": "#/$defs/ImportedReport"

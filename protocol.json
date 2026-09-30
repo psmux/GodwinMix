@@ -1143,6 +1143,42 @@
       ],
       "type": "object"
     },
+    "Change": {
+      "description": "One thing an import does or would do.",
+      "properties": {
+        "action": {
+          "description": "`add`, `replace`, `remove`, `keep`, `rename`, `set`, `wait`, `skip` or `missing`.",
+          "type": "string"
+        },
+        "id": {
+          "description": "The id, key, scene name or clip name, as the file has it.",
+          "type": "string"
+        },
+        "note": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "part": {
+          "description": "`setting`, `source`, `output`, `channel`, `scene` or `media`.",
+          "type": "string"
+        },
+        "to": {
+          "description": "The new id or name, for a rename.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "part",
+        "id",
+        "action"
+      ],
+      "type": "object"
+    },
     "Channel": {
       "description": "A named place encoders publish to, over every protocol it has switched on.",
       "properties": {
@@ -2655,6 +2691,33 @@
       "type": "object"
     },
     "ExportRequest": {
+      "properties": {
+        "include_media": {
+          "default": false,
+          "description": "Put the clips themselves in, as base64, rather than their names and\nsizes. Refused past 256 MB: copy the media folder instead.",
+          "type": "boolean"
+        },
+        "include_secrets": {
+          "default": false,
+          "description": "Put stream keys, channel keys, destination addresses and the control\ntoken in the file. Off unless asked; admin scope either way.",
+          "type": "boolean"
+        },
+        "name": {
+          "default": null,
+          "description": "What to call the project. Defaults to \"GodwinMix project\".",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "page": {
+          "default": null,
+          "description": "Whatever the page wants back when the file is opened: its layout and\nits settings. Carried as it is."
+        }
+      },
+      "type": "object"
+    },
+    "ExportRequest2": {
       "description": "`scene.export`.",
       "properties": {
         "collection": {
@@ -3563,6 +3626,33 @@
       "type": "object"
     },
     "ImportRequest": {
+      "properties": {
+        "dry_run": {
+          "default": null,
+          "description": "Answer with what would change and change nothing. True unless false is sent.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "file": {
+          "description": "The project: the object `project.export` answered with, or its text."
+        },
+        "machine": {
+          "default": false,
+          "description": "Also write the file's machine settings: addresses, folders, hardware.",
+          "type": "boolean"
+        },
+        "mode": {
+          "$ref": "#/$defs/Mode"
+        }
+      },
+      "required": [
+        "file"
+      ],
+      "type": "object"
+    },
+    "ImportRequest2": {
       "description": "`scene.import`.",
       "properties": {
         "path": {
@@ -4593,6 +4683,20 @@
         "backend"
       ],
       "type": "object"
+    },
+    "Mode": {
+      "oneOf": [
+        {
+          "const": "replace",
+          "description": "The file's sources, outputs, channels and scenes become this mixer's.",
+          "type": "string"
+        },
+        {
+          "const": "merge",
+          "description": "Everything in the file is added beside what is here, renamed on a clash.",
+          "type": "string"
+        }
+      ]
     },
     "MoveItemRequest": {
       "description": "`scene.item.move` and `scene.item.copy`.",
@@ -6307,6 +6411,61 @@
       "required": [
         "scene",
         "item"
+      ],
+      "type": "object"
+    },
+    "Report": {
+      "description": "What `project.import` answers with.",
+      "properties": {
+        "changes": {
+          "items": {
+            "$ref": "#/$defs/Change"
+          },
+          "type": "array"
+        },
+        "dry_run": {
+          "type": "boolean"
+        },
+        "failed": {
+          "description": "What was tried and refused, each with the reason.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "name": {
+          "type": "string"
+        },
+        "needs_restart": {
+          "description": "Settings written to the file that take effect on the next start.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "page": {
+          "description": "The page part of the file, for the page to put back."
+        },
+        "waiting": {
+          "description": "What a person still has to do: a key to give again, a clip to copy.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "written_by": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "dry_run",
+        "name",
+        "written_by",
+        "changes",
+        "waiting",
+        "needs_restart",
+        "failed",
+        "page"
       ],
       "type": "object"
     },
@@ -11199,6 +11358,44 @@
       "destructive": false,
       "idempotent": true,
       "mutating": false,
+      "name": "project.export",
+      "params": {
+        "$ref": "#/$defs/ExportRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/project/export"
+      },
+      "result": {
+        "type": "object"
+      },
+      "scope": "admin",
+      "since": "1",
+      "summary": "This mixer as one project file: settings, sources, outputs and renditions, channels, scenes, the page's layout, and its clips by name and size. Keys only with include_secrets."
+    },
+    {
+      "destructive": true,
+      "idempotent": false,
+      "mutating": true,
+      "name": "project.import",
+      "params": {
+        "$ref": "#/$defs/ImportRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/project/import"
+      },
+      "result": {
+        "$ref": "#/$defs/Report"
+      },
+      "scope": "admin",
+      "since": "1",
+      "summary": "Open a project file: answers with what it would change (dry_run is true unless false is sent), then replaces this mixer's setup or merges beside it. Says which settings wait for a restart."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mutating": false,
       "name": "rendition.plan",
       "params": {
         "$ref": "#/$defs/PlanRequest"
@@ -11428,7 +11625,7 @@
       "mutating": false,
       "name": "scene.export",
       "params": {
-        "$ref": "#/$defs/ExportRequest"
+        "$ref": "#/$defs/ExportRequest2"
       },
       "rest": {
         "method": "GET",
@@ -11527,7 +11724,7 @@
       "mutating": true,
       "name": "scene.import",
       "params": {
-        "$ref": "#/$defs/ImportRequest"
+        "$ref": "#/$defs/ImportRequest2"
       },
       "rest": {
         "method": "POST",

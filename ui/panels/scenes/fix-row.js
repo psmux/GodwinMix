@@ -26,8 +26,9 @@ const isCamera = (fact) => /(^|\/)camera\/source$/.test(fact.type || "");
  * @param {Set<string>} checked the ids ticked for removal, shared with the dialog
  * @param {() => void} refresh draw the list again once something changed
  * @param {() => void} paint recount the Remove button
+ * @param {() => void} [removeOne] take this source alone out of the scene
  */
-export function row(client, fact, checked, refresh, paint) {
+export function row(client, fact, checked, refresh, paint, removeOne) {
   const name = fact.name || nameOf(client, fact.id);
   const box = el("input", {
     type: "checkbox",
@@ -44,7 +45,15 @@ export function row(client, fact, checked, refresh, paint) {
     el("div.sm", { text: reason(fact) }),
     fact.error ? el("div.sm.dim.fix-error", { text: fact.error }) : null,
   ]);
-  const actions = el("div.fix-actions", {}, buttons(client, fact, name, refresh));
+  const fixes = buttons(client, fact, name, refresh);
+  // A source the page cannot bring back still gets a button of its own, so
+  // no row is a sentence with nothing to press beside it.
+  if (!fixes.length && removeOne) {
+    const out = el("button.btn.sm", { text: "Remove", type: "button", title: `Take ${name} out of this scene. Ctrl+Z puts it back.` });
+    out.onclick = (e) => { e.preventDefault(); removeOne(); };
+    fixes.push(out);
+  }
+  const actions = el("div.fix-actions", {}, fixes);
   return el("label.fix-row", { role: "listitem" }, [box, text, actions]);
 }
 

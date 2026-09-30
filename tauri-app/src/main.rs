@@ -26,6 +26,7 @@
 
 mod commands;
 mod core_link;
+mod page_menu;
 mod plugins;
 mod restart;
 mod settings;
@@ -57,6 +58,8 @@ pub struct Shell {
     /// Where the shell's own connect page lives, so the menu can go back to
     /// it from whatever the core is showing.
     pub app_url: Mutex<Option<String>>,
+    /// The page's menu is up as the native one. See `page_menu`.
+    pub native_menu: Mutex<bool>,
 }
 
 fn main() {

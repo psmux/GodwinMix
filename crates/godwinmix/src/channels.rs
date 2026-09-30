@@ -35,6 +35,7 @@ pub(crate) mod keys;
 mod live;
 mod net;
 mod ports;
+pub mod project;
 mod reveal;
 mod sending;
 mod store;

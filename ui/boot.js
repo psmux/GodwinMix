@@ -22,7 +22,7 @@ const PANELS = [
   "./panels/outputs/panel.js",
   "./panels/channels/entry.js",
   "./panels/audio/panel.js",
-  "./panels/media/panel.js",
+  "./panels/media/entry.js",
   "./panels/alerts/panel.js",
   "./panels/welcome/panel.js",
 ];
@@ -83,7 +83,10 @@ async function main() {
   meterClient(client);
 
   // The core's [ui] section: the theme, the gallery mode and the layout a
-  // preset chose. Applied before the panels mount so nothing flashes.
+  // preset chose. Applied before the panels mount so nothing flashes. Asked
+  // once the socket is open: asked before, it was refused, and a set up mixer
+  // opened on the first run chooser as though nobody had set it up.
+  await client.opened();
   await applyCoreDefaults(client);
   watchCoreDefaults(client);
 

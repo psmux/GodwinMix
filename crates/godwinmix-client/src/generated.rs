@@ -545,6 +545,23 @@ pub struct CertificateSetRequest {
     pub key: String,
 }
 
+/// One thing an import does or would do.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Change {
+    /// `add`, `replace`, `remove`, `keep`, `rename`, `set`, `wait`, `skip` or `missing`.
+    pub action: String,
+    /// The id, key, scene name or clip name, as the file has it.
+    pub id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+    /// `setting`, `source`, `output`, `channel`, `scene` or `media`.
+    pub part: String,
+    /// The new id or name, for a rename.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub to: Option<String>,
+}
+
 /// A named place encoders publish to, over every protocol it has switched on.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -1188,10 +1205,29 @@ pub struct ErrorAction {
     pub value: Value,
 }
 
-/// `scene.export`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ExportRequest {
+    /// Put the clips themselves in, as base64, rather than their names and
+    /// sizes. Refused past 256 MB: copy the media folder instead.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub include_media: Option<bool>,
+    /// Put stream keys, channel keys, destination addresses and the control
+    /// token in the file. Off unless asked; admin scope either way.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub include_secrets: Option<bool>,
+    /// What to call the project. Defaults to "GodwinMix project".
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// Whatever the page wants back when the file is opened: its layout and
+    /// its settings. Carried as it is.
+    pub page: Value,
+}
+
+/// `scene.export`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ExportRequest2 {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub collection: Option<String>,
     /// `json` for the document alone, `zip` for a bundle with its assets, or
@@ -1583,10 +1619,25 @@ pub struct ImportReport {
     pub sources_not_added: Option<Vec<SourceNotAdded>>,
 }
 
-/// `scene.import`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ImportRequest {
+    /// Answer with what would change and change nothing. True unless false is sent.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dry_run: Option<bool>,
+    /// The project: the object `project.export` answered with, or its text.
+    pub file: Value,
+    /// Also write the file's machine settings: addresses, folders, hardware.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub machine: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mode: Option<Mode>,
+}
+
+/// `scene.import`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ImportRequest2 {
     /// The bundle: a `.zip` or the directory it unpacks to, as a path on the
     /// machine the core is running on.
     pub path: String,
@@ -2037,6 +2088,10 @@ pub struct MixerStatus {
     pub sources: Vec<SourceStatus>,
     pub uptime_secs: u64,
 }
+
+pub type Mode = String;
+/// The values api_level 1 knows for [`Mode`].
+pub const MODE_VALUES: &[&str] = &["replace", "merge"];
 
 /// `scene.item.move` and `scene.item.copy`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -2804,6 +2859,24 @@ pub struct ReorderRequest {
     /// A client's own sequence number, echoed on the patch.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub seq: Option<u64>,
+}
+
+/// What `project.import` answers with.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Report {
+    pub changes: Vec<Change>,
+    pub dry_run: bool,
+    /// What was tried and refused, each with the reason.
+    pub failed: Vec<String>,
+    pub name: String,
+    /// Settings written to the file that take effect on the next start.
+    pub needs_restart: Vec<String>,
+    /// The page part of the file, for the page to put back.
+    pub page: Value,
+    /// What a person still has to do: a key to give again, a clip to copy.
+    pub waiting: Vec<String>,
+    pub written_by: String,
 }
 
 /// One plugin the collection needs.
@@ -3914,7 +3987,7 @@ pub struct MethodInfo {
     pub rest: Option<(&'static str, &'static str)>,
 }
 
-pub const METHODS: [MethodInfo; 158] = [
+pub const METHODS: [MethodInfo; 160] = [
     MethodInfo { name: "adbreak.end", summary: "Cut a running ad short, or disarm one that is scheduled.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/end")) },
     MethodInfo { name: "adbreak.start", summary: "Interrupt the programme with a clip, then rejoin live when it ends.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/start")) },
     MethodInfo { name: "agent.state", summary: "The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/agent/state")) },
@@ -3999,6 +4072,8 @@ pub const METHODS: [MethodInfo; 158] = [
     MethodInfo { name: "program.history", summary: "The last hundred takes, newest first, with the token that asked for each.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/program/history")) },
     MethodInfo { name: "program.revert", summary: "Take back to the shot before this one.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/program/revert")) },
     MethodInfo { name: "program.take", summary: "Put a scene or a source on programme. The cut is instant and the outgoing stream is not disturbed.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/program/take")) },
+    MethodInfo { name: "project.export", summary: "This mixer as one project file: settings, sources, outputs and renditions, channels, scenes, the page's layout, and its clips by name and size. Keys only with include_secrets.", scope: "admin", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/project/export")) },
+    MethodInfo { name: "project.import", summary: "Open a project file: answers with what it would change (dry_run is true unless false is sent), then replaces this mixer's setup or merges beside it. Says which settings wait for a restart.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/project/import")) },
     MethodInfo { name: "rendition.plan", summary: "What the planner built for every output that asked for a rendition: each node, what it serves, which encoder and why, and the totals.", scope: "read", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/rendition/plan")) },
     MethodInfo { name: "rendition.presets", summary: "Every rendition preset, priced on this machine by the governor. One this machine cannot make says so, with why.", scope: "read", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/rendition/presets")) },
     MethodInfo { name: "scene.add", summary: "Make an empty scene, or one built from a set of sources.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes")) },
@@ -4756,6 +4831,16 @@ impl Client {
         self.call("program.take", params).await
     }
 
+    /// This mixer as one project file: settings, sources, outputs and renditions, channels, scenes, the page's layout, and its clips by name and size. Keys only with include_secrets.
+    pub async fn project_export(&self, params: &ExportRequest) -> Result<BTreeMap<String, Value>> {
+        self.call("project.export", params).await
+    }
+
+    /// Open a project file: answers with what it would change (dry_run is true unless false is sent), then replaces this mixer's setup or merges beside it. Says which settings wait for a restart.
+    pub async fn project_import(&self, params: &ImportRequest) -> Result<Report> {
+        self.call("project.import", params).await
+    }
+
     /// What the planner built for every output that asked for a rendition: each node, what it serves, which encoder and why, and the totals.
     pub async fn rendition_plan(&self, params: &PlanRequest) -> Result<PlanView> {
         self.call("rendition.plan", params).await
@@ -4807,7 +4892,7 @@ impl Client {
     }
 
     /// The whole collection: as JSON, or as a zip bundle carrying its assets with a hash each, which is what you send somebody.
-    pub async fn scene_export(&self, params: &ExportRequest) -> Result<BTreeMap<String, Value>> {
+    pub async fn scene_export(&self, params: &ExportRequest2) -> Result<BTreeMap<String, Value>> {
         self.call("scene.export", params).await
     }
 
@@ -4827,7 +4912,7 @@ impl Client {
     }
 
     /// Read a collection bundle, a zip or the directory it unpacks to, and add its scenes to this one. Answers with a relink report for any asset that did not come across.
-    pub async fn scene_import(&self, params: &ImportRequest) -> Result<ImportedReport> {
+    pub async fn scene_import(&self, params: &ImportRequest2) -> Result<ImportedReport> {
         self.call("scene.import", params).await
     }
 

@@ -28,7 +28,7 @@ import { registerAll } from "../../shell/commands.js";
 import { focusedScene, setFocusedScene, onFocusChanged } from "../../shell/focus.js";
 import { shell } from "../../shell/shell.js";
 import { toast, errorToast } from "../../shell/toast.js";
-import { settings } from "../../shell/settings.js";
+import { settings, onSettingsChanged } from "../../shell/settings.js";
 import { openSceneSources } from "../sources/chooser-loader.js";
 import { acquireScenes } from "../../shell/scene-session.js";
 import { sceneNotRunning } from "../../shell/scene-health.js";
@@ -138,13 +138,22 @@ class ScenesPanel extends HTMLElement {
       on(this.grid, "keydown", (e) => this.key(e)),
       on(this.grid, "pointerdown", () => this.grid.focus({ preventScroll: true })),
       registerAll(this.commands()),
-      this.client.onRender(() => this.paintTally()),
+      this.client.onRender(() => { this.paintTally(); this.tunePictures(); }),
+      on(document, "visibilitychange", () => this.tunePictures()),
+      onSettingsChanged((_, key) => key === "gallery" && this.tunePictures()),
       // The focus is the shell's, not this panel's: the composer and the
       // source list move it too, and the strip follows wherever it goes.
       onFocusChanged(() => this.paintTally()),
     ];
 
     this.offs.push(this.scenes.onChange(() => this.render()));
+    // On screen or not, for the scene pictures: nothing is asked of the mixer
+    // for them while the panel is scrolled away or behind another tab.
+    this.io = new IntersectionObserver((entries) => {
+      this.visible = entries.some((e) => e.isIntersecting);
+      this.tunePictures();
+    }, { threshold: 0.01 });
+    this.io.observe(this);
     this.sceneSession.ready.catch((e) => console.error("the scene server did not answer", e));
     this.render();
   }
@@ -153,6 +162,19 @@ class ScenesPanel extends HTMLElement {
     this.workspaceActive = active;
     // Sources shares this mirror; only the hidden surface stops painting.
     if (active) this.render();
+    this.tunePictures();
+  }
+
+  /**
+   * A live picture of each scene, while this panel is on screen and the
+   * gallery is on live pictures (pictures.js). Loaded the first time that is
+   * true, and a page on icons never fetches it.
+   */
+  tunePictures() {
+    const live = settings().gallery === "live" && this.visible !== false && this.workspaceActive !== false && !document.hidden;
+    if (!live && !this.picturesLoad) return;
+    this.picturesLoad ||= import("./pictures.js").then((m) => (this.pictures = new m.ScenePictures(this)));
+    this.picturesLoad.then((p) => (this.isConnected ? p.tune() : p.destroy())).catch((e) => console.error("scene pictures", e));
   }
 
   disconnectedCallback() {
@@ -160,6 +182,8 @@ class ScenesPanel extends HTMLElement {
     this.offs = [];
     if (this.drag) this.drag.destroy();
     if (this.sceneSession) this.sceneSession.release();
+    if (this.io) this.io.disconnect();
+    if (this.pictures) this.pictures.destroy();
   }
 
   // ---------------------------------------------------------------- render
@@ -197,6 +221,8 @@ class ScenesPanel extends HTMLElement {
     this.renderTabs(list);
     this.paintSelection();
     this.paintTally();
+    // Tabs and tiles made since the pictures last looked get a canvas.
+    if (this.pictures && this.pictures.want) this.pictures.sync();
   }
 
   /** Tabs or tiles, for this panel and for the next time this browser opens. */
@@ -208,6 +234,7 @@ class ScenesPanel extends HTMLElement {
       /* the choice lasts the session */
     }
     this.render();
+    this.tunePictures();
   }
 
   /**
@@ -419,7 +446,14 @@ class ScenesPanel extends HTMLElement {
       const made = await this.scenes.add("Scene");
       this.scenes.undo.record("Added a scene");
       await this.scenes.refresh();
-      if (made && made.id) this.beginRename(made.id);
+      if (!made || !made.id) return;
+      // The new scene is the one being worked on, so Sources shows it, empty,
+      // rather than going on listing the inputs of the scene focused before.
+      setFocusedScene(made.id);
+      this.render();
+      // Named in place where there is a tile to hold the caret. The strip has
+      // none, and flipping the whole panel to tiles for it was a surprise.
+      if (this.view === "tiles") this.beginRename(made.id);
     } catch (e) {
       errorToast(e, "New scene");
     }

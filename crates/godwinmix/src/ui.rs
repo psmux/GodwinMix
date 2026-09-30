@@ -94,6 +94,7 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/composer/inspector.js", include_str!("../../../ui/panels/composer/inspector.js")),
     ("panels/composer/ops.js", include_str!("../../../ui/panels/composer/ops.js")),
     ("panels/header/panel.js", include_str!("../../../ui/panels/header/panel.js")),
+    ("panels/media/entry.js", include_str!("../../../ui/panels/media/entry.js")),
     ("panels/media/panel.js", include_str!("../../../ui/panels/media/panel.js")),
     ("panels/multiview/panel.js", include_str!("../../../ui/panels/multiview/panel.js")),
     ("panels/multiview/wanted.js", include_str!("../../../ui/panels/multiview/wanted.js")),
@@ -104,6 +105,7 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/outputs/destination.js", include_str!("../../../ui/panels/outputs/destination.js")),
     ("panels/audio/panel.js", include_str!("../../../ui/panels/audio/panel.js")),
     ("panels/outputs/recording.js", include_str!("../../../ui/panels/outputs/recording.js")),
+    ("panels/outputs/record-start.js", include_str!("../../../ui/panels/outputs/record-start.js")),
     ("panels/outputs/panel.js", include_str!("../../../ui/panels/outputs/panel.js")),
     ("panels/outputs/views.js", include_str!("../../../ui/panels/outputs/views.js")),
 ("panels/renditions/bars.js", include_str!("../../../ui/panels/renditions/bars.js")),
@@ -126,6 +128,9 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/scenes/fix-note.js", include_str!("../../../ui/panels/scenes/fix-note.js")),
     ("panels/scenes/fix.css", include_str!("../../../ui/panels/scenes/fix.css")),
     ("panels/scenes/marks.js", include_str!("../../../ui/panels/scenes/marks.js")),
+    ("panels/scenes/pictures.js", include_str!("../../../ui/panels/scenes/pictures.js")),
+    ("panels/scenes/pictures.css", include_str!("../../../ui/panels/scenes/pictures.css")),
+    ("panels/scenes/draw.js", include_str!("../../../ui/panels/scenes/draw.js")),
     ("panels/scenes/panel.js", include_str!("../../../ui/panels/scenes/panel.js")),
     ("panels/sources/first-air.js", include_str!("../../../ui/panels/sources/first-air.js")),
     ("panels/sources/local.js", include_str!("../../../ui/panels/sources/local.js")),
@@ -159,6 +164,14 @@ const ASSETS: &[(&str, &str)] = &[
     ("shell/dock-pointer.js", include_str!("../../../ui/shell/dock-pointer.js")),
     ("shell/dock-menu.js", include_str!("../../../ui/shell/dock-menu.js")),
     ("shell/menu.js", include_str!("../../../ui/shell/menu.js")),
+    ("shell/menubar.js", include_str!("../../../ui/shell/menubar.js")),
+    ("shell/menus.js", include_str!("../../../ui/shell/menus.js")),
+    // The menu bar's contents, for the page and for the desktop app's native
+    // menu. Data, fetched when a menu first opens.
+    ("shell/menus.json", include_str!("../../../ui/shell/menus.json")),
+    ("shell/menu-actions.js", include_str!("../../../ui/shell/menu-actions.js")),
+    ("shell/project.js", include_str!("../../../ui/shell/project.js")),
+    ("shell/project-open.js", include_str!("../../../ui/shell/project-open.js")),
     ("shell/mixer-config.js", include_str!("../../../ui/shell/mixer-config.js")),
     ("shell/mixer-fields.js", include_str!("../../../ui/shell/mixer-fields.js")),
     ("shell/mixer-form.js", include_str!("../../../ui/shell/mixer-form.js")),
@@ -211,9 +224,11 @@ const DEV_ASSETS: &[(&str, &str)] = &[
     ("test/source-chooser.js", include_str!("../../../ui/test/source-chooser.js")),
     ("test/studio.js", include_str!("../../../ui/test/studio.js")),
     ("test/scene-fix.js", include_str!("../../../ui/test/scene-fix.js")),
+    ("test/scene-pictures.js", include_str!("../../../ui/test/scene-pictures.js")),
     ("test/monitor-resize.js", include_str!("../../../ui/test/monitor-resize.js")),
     ("test/dock.js", include_str!("../../../ui/test/dock.js")),
     ("test/welcome.js", include_str!("../../../ui/test/welcome.js")),
+    ("test/menubar.js", include_str!("../../../ui/test/menubar.js")),
     // The Channels panel against a stub of the channel contract, as tests and
     // as a page to look at: /test/channels.html?scene=cards&theme=light.
     ("test/channels.js", include_str!("../../../ui/test/channels.js")),
@@ -753,10 +768,12 @@ mod tests {
         reachable.extend(closure_of("panels/scenes/more.js"));
         reachable.extend(closure_of("panels/scenes/fix.js"));
         reachable.extend(closure_of("panels/scenes/marks.js"));
+        reachable.extend(closure_of("panels/scenes/pictures.js"));
         reachable.extend(closure_of("client/transport-legacy.js"));
         reachable.extend(closure_of("client/schema-form.js"));
         reachable.extend(closure_of("shell/palette.js"));
         reachable.extend(closure_of("shell/settings-dialog.js"));
+        reachable.extend(closure_of("panels/media/panel.js"));
         reachable.extend(closure_of("shell/dock-menu.js"));
         reachable.extend(closure_of("shell/picker.js"));
         reachable.extend(closure_of("panels/sources/chooser.js"));
@@ -772,6 +789,11 @@ mod tests {
         reachable.extend(closure_of("shell/mixer-settings.js"));
         reachable.extend(closure_of("shell/folder-picker.js"));
         reachable.extend(closure_of("panels/multiview/studio.js"));
+        // The menu bar's menus, the first time one opens, and File's project
+        // dialogs after that.
+        reachable.extend(closure_of("shell/menus.js"));
+        reachable.extend(closure_of("shell/project-open.js"));
+        reachable.extend(closure_of("panels/outputs/record-start.js"));
         // Renditions: each is fetched by an `import()` the first time it is
         // wanted, from the destination form, the Outputs panel or its rows.
         for entry in [
@@ -789,7 +811,7 @@ mod tests {
         // HTML imports, inside the iframe, to talk the same protocol back.
         reachable.extend(closure_of("client/sandbox-client.js"));
         for (path, _) in ASSETS {
-            if path.ends_with(".css") || path.ends_with(".html") {
+            if path.ends_with(".css") || path.ends_with(".html") || path.ends_with(".json") {
                 continue;
             }
             assert!(reachable.contains(path), "{path} is served but nothing imports it");
@@ -821,6 +843,8 @@ mod tests {
             ("panels/scenes/more.js", "a right click or Ctrl+C on a scene"),
             ("panels/scenes/fix.js", "Fix on a scene whose sources are not running"),
             ("panels/scenes/marks.js", "a scene with a source that is not running"),
+            ("panels/scenes/pictures.js", "the Scenes panel on screen with live pictures on"),
+            ("panels/scenes/draw.js", "the Scenes panel on screen with live pictures on"),
             ("client/transport-legacy.js", "a core with no /rpc"),
             ("client/schema-form.js", "the add picker and the settings drawer"),
             ("shell/palette.js", "Ctrl+K"),
@@ -846,6 +870,12 @@ mod tests {
             ("panels/renditions/plan-feed.js", "an output on the list"),
             ("panels/renditions/resources.js", "the Resources tab"),
             ("panels/renditions/bars.js", "the Resources tab"),
+            ("shell/menus.js", "a menu opened on the menu bar"),
+            ("shell/menu-actions.js", "a menu opened on the menu bar"),
+            ("shell/project.js", "Save, Open or New project"),
+            ("shell/project-open.js", "Open project"),
+            ("shell/settings-dialog.js", "Settings for this page"),
+            ("panels/outputs/record-start.js", "Record pressed"),
         ] {
             assert!(known(path).is_some(), "{path} is not served at all");
             assert!(!eager.contains(path), "{path} is fetched at load, but only {who} needs it");
@@ -858,6 +888,25 @@ mod tests {
         let eager = eager_set();
         for wanted in ["boot.js", "client/index.js", "shell/shell.js", "panels/sources/panel.js", "panels/scenes/panel.js", "kits/protocol/mirror.js"] {
             assert!(eager.contains(wanted), "the import walk did not reach {wanted}");
+        }
+    }
+
+    #[test]
+    fn every_menu_item_runs_a_command_the_page_registers() {
+        // menus.json is the one menu, for the page and for the desktop app.
+        // An item naming a command nothing registers would be a dead entry in
+        // both, so every id has to appear, quoted, in a module that is served.
+        let menus: serde_json::Value = serde_json::from_str(source_of("shell/menus.json").unwrap()).unwrap();
+        let code: String = ASSETS.iter().filter(|(p, _)| p.ends_with(".js")).map(|(_, b)| *b).collect();
+        let bar = source_of("shell/menubar.js").unwrap();
+        for menu in menus["menus"].as_array().unwrap() {
+            let title = menu["title"].as_str().unwrap();
+            assert!(bar.contains(&format!("\"{title}\"]")), "menubar.js has no title {title}");
+            for item in menu["items"].as_array().unwrap() {
+                let Some(id) = item["command"].as_str() else { continue };
+                let quoted = format!("\"{id}\"");
+                assert!(code.contains(&quoted), "the menu item {id} runs a command no module registers");
+            }
         }
     }
 

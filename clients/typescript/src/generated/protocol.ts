@@ -296,6 +296,15 @@ export interface CertificateSetRequest {
   key: string;
 }
 
+/** One thing an import does or would do. */
+export interface Change {
+  action: string;
+  id: string;
+  note?: string | null;
+  part: string;
+  to?: string | null;
+}
+
 /** A named place encoders publish to, over every protocol it has switched on. */
 export interface Channel {
   app: string;
@@ -658,8 +667,15 @@ export interface ErrorAction {
   value?: unknown;
 }
 
-/** `scene.export`. */
 export interface ExportRequest {
+  include_media?: boolean;
+  include_secrets?: boolean;
+  name?: string | null;
+  page?: unknown;
+}
+
+/** `scene.export`. */
+export interface ExportRequest2 {
   collection?: string | null;
   format?: string | null;
   path?: string | null;
@@ -908,8 +924,15 @@ export interface ImportReport {
   sources_not_added?: SourceNotAdded[] | null;
 }
 
-/** `scene.import`. */
 export interface ImportRequest {
+  dry_run?: boolean | null;
+  file: unknown;
+  machine?: boolean;
+  mode?: Mode;
+}
+
+/** `scene.import`. */
+export interface ImportRequest2 {
   path: string;
 }
 
@@ -1169,6 +1192,8 @@ export interface MixerStatus {
   sources: SourceStatus[];
   uptime_secs: number;
 }
+
+export type Mode = "replace" | "merge";
 
 /** `scene.item.move` and `scene.item.copy`. */
 export interface MoveItemRequest {
@@ -1627,6 +1652,18 @@ export interface ReorderRequest {
   item: string;
   scene: string;
   seq?: number | null;
+}
+
+/** What `project.import` answers with. */
+export interface Report {
+  changes: Change[];
+  dry_run: boolean;
+  failed: string[];
+  name: string;
+  needs_restart: string[];
+  page: unknown;
+  waiting: string[];
+  written_by: string;
 }
 
 /** One plugin the collection needs. */
@@ -2351,6 +2388,8 @@ export interface MethodParams {
   "program.history": HistoryRequest;
   "program.revert": Record<string, never>;
   "program.take": TakeRequest;
+  "project.export": ExportRequest;
+  "project.import": ImportRequest;
   "rendition.plan": PlanRequest;
   "rendition.presets": Record<string, never>;
   "scene.add": AddSceneRequest;
@@ -2361,11 +2400,11 @@ export interface MethodParams {
   "scene.edit.apply": DraftRequest;
   "scene.edit.begin": EditBeginRequest;
   "scene.edit.discard": DraftRequest;
-  "scene.export": ExportRequest;
+  "scene.export": ExportRequest2;
   "scene.get": SceneRequest;
   "scene.graphic.list": Record<string, never>;
   "scene.history.mark": MarkRequest;
-  "scene.import": ImportRequest;
+  "scene.import": ImportRequest2;
   "scene.import.obs": ImportObsRequest;
   "scene.item.add": AddItemRequest;
   "scene.item.align": ItemsRequest;
@@ -2513,6 +2552,8 @@ export interface MethodResults {
   "program.history": TakeRecord[];
   "program.revert": ProgramState;
   "program.take": ProgramState;
+  "project.export": Record<string, unknown>;
+  "project.import": Report;
   "rendition.plan": PlanView;
   "rendition.presets": PresetsResult;
   "scene.add": SceneView;
@@ -2720,6 +2761,8 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "program.history", summary: "The last hundred takes, newest first, with the token that asked for each.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/program/history" } },
   { name: "program.revert", summary: "Take back to the shot before this one.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/program/revert" } },
   { name: "program.take", summary: "Put a scene or a source on programme. The cut is instant and the outgoing stream is not disturbed.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/program/take" } },
+  { name: "project.export", summary: "This mixer as one project file: settings, sources, outputs and renditions, channels, scenes, the page's layout, and its clips by name and size. Keys only with include_secrets.", scope: "admin", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/project/export" } },
+  { name: "project.import", summary: "Open a project file: answers with what it would change (dry_run is true unless false is sent), then replaces this mixer's setup or merges beside it. Says which settings wait for a restart.", scope: "admin", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/project/import" } },
   { name: "rendition.plan", summary: "What the planner built for every output that asked for a rendition: each node, what it serves, which encoder and why, and the totals.", scope: "read", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/rendition/plan" } },
   { name: "rendition.presets", summary: "Every rendition preset, priced on this machine by the governor. One this machine cannot make says so, with why.", scope: "read", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/rendition/presets" } },
   { name: "scene.add", summary: "Make an empty scene, or one built from a set of sources.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes" } },
@@ -3272,6 +3315,16 @@ export class GeneratedMethods {
     return this._call("program.take", params as unknown as Record<string, unknown>) as Promise<ProgramState>;
   }
 
+  /** This mixer as one project file: settings, sources, outputs and renditions, channels, scenes, the page's layout, and its clips by name and size. Keys only with include_secrets. */
+  projectExport(params: ExportRequest = {}): Promise<Record<string, unknown>> {
+    return this._call("project.export", params as unknown as Record<string, unknown>) as Promise<Record<string, unknown>>;
+  }
+
+  /** Open a project file: answers with what it would change (dry_run is true unless false is sent), then replaces this mixer's setup or merges beside it. Says which settings wait for a restart. */
+  projectImport(params: ImportRequest): Promise<Report> {
+    return this._call("project.import", params as unknown as Record<string, unknown>) as Promise<Report>;
+  }
+
   /** What the planner built for every output that asked for a rendition: each node, what it serves, which encoder and why, and the totals. */
   renditionPlan(params: PlanRequest = {}): Promise<PlanView> {
     return this._call("rendition.plan", params as unknown as Record<string, unknown>) as Promise<PlanView>;
@@ -3323,7 +3376,7 @@ export class GeneratedMethods {
   }
 
   /** The whole collection: as JSON, or as a zip bundle carrying its assets with a hash each, which is what you send somebody. */
-  sceneExport(params: ExportRequest = {}): Promise<Record<string, unknown>> {
+  sceneExport(params: ExportRequest2 = {}): Promise<Record<string, unknown>> {
     return this._call("scene.export", params as unknown as Record<string, unknown>) as Promise<Record<string, unknown>>;
   }
 
@@ -3343,7 +3396,7 @@ export class GeneratedMethods {
   }
 
   /** Read a collection bundle, a zip or the directory it unpacks to, and add its scenes to this one. Answers with a relink report for any asset that did not come across. */
-  sceneImport(params: ImportRequest): Promise<ImportedReport> {
+  sceneImport(params: ImportRequest2): Promise<ImportedReport> {
     return this._call("scene.import", params as unknown as Record<string, unknown>) as Promise<ImportedReport>;
   }
 

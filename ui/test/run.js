@@ -4,11 +4,13 @@ import { mixerSettingsTests } from "./mixer-settings.js";
 import { errorActionTests } from "./error-actions.js";
 import { sourceChooserTests } from "./source-chooser.js";
 import { studioTests } from "./studio.js";
-import { sceneFixTests } from "./scene-fix.js";
+import { sceneFixTests, sceneFixLoadTests } from "./scene-fix.js";
+import { scenePictureTests } from "./scene-pictures.js";
 import { dockTests } from "./dock.js";
 import { welcomeStepTests } from "./welcome.js";
 import { channelTests } from "./channels.js";
 import { renditionTests } from "./renditions.js";
+import { menubarTests } from "./menubar.js";
 // The test runner: forty lines, no dependencies, no toolchain. Open the page,
 // read the console, or read the list. Everything testable without a mixer is
 // here, including the legacy adapter against a stubbed server.
@@ -2374,7 +2376,10 @@ async function liveSuite() {
   const { nameOf } = await import("../panels/sources/local.js");
   const addButton = choose.el.querySelector(`[aria-label="Add ${nameOf(nextSource)}"]`);
   addButton.click();
-  await waitFor(() => panel.scenes.mirror.items(addCheck.id).length === 2, 3000, "the chooser to add an existing source");
+  // The item lands in the mirror before the chooser has finished its own
+  // awaits and redrawn the row, so wait for the row as well.
+  await waitFor(() => panel.scenes.mirror.items(addCheck.id).length === 2 &&
+    choose.el.querySelector(`[aria-label="Already in scene: ${nameOf(nextSource)}"]`), 3000, "the chooser to add an existing source");
   test("the scene chooser reuses an existing source through scene.item.add", () => {
     eq(panel.scenes.mirror.items(addCheck.id).length, 2);
     eq(panel.scenes.summary(addCheck.id).sources.slice().sort(), sources.slice().sort());
@@ -2630,6 +2635,8 @@ legacySuite()
   })
   .then(() => studioTests(test, eq, ok))
   .then(() => sceneFixTests(test, eq, ok))
+  .then(() => sceneFixLoadTests(test, eq, ok))
+  .then(() => scenePictureTests(test, eq, ok))
   .catch((e) => {
     failed += 1;
     line("fail", "the scene fix suite threw: " + e.message);
@@ -2652,6 +2659,12 @@ legacySuite()
   .catch((e) => {
     failed += 1;
     line("fail", "the renditions suite threw: " + e.message);
+    console.error(e);
+  })
+  .then(() => menubarTests(test, eq, ok))
+  .catch((e) => {
+    failed += 1;
+    line("fail", "the menu bar suite threw: " + e.message);
     console.error(e);
   })
   .then(outputNumbersSuite)

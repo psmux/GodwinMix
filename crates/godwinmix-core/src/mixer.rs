@@ -2775,6 +2775,19 @@ impl Mixer {
         }
     }
 
+    /// Remove a source that is wanted but never started. It has nothing to
+    /// detach, so forgetting it, and writing the store without it, is the
+    /// whole removal. False when the id is a running source or unknown.
+    fn forget_unstarted(&mut self, id: &SourceId) -> bool {
+        let waiting = self.unstarted.configs().any(|c| &c.id == id);
+        if !waiting || self.sources.iter().any(|s| &s.input.id == id) {
+            return false;
+        }
+        self.unstarted.forget(id);
+        self.persist_runtime();
+        true
+    }
+
     /// Keep a source's config as it stands, for `source.add` with `restore`.
     ///
     /// Only on a caller's `source.remove`. A rebuild detaches a source too and
@@ -3687,8 +3700,12 @@ impl Mixer {
                 r?;
             }
             Command::RemoveSource(id, ack) => {
-                self.remember_removed(&id);
-                let r = self.remove_source(&id);
+                let r = if self.forget_unstarted(&id) {
+                    Ok(())
+                } else {
+                    self.remember_removed(&id);
+                    self.remove_source(&id)
+                };
                 reply(ack, &r);
                 r?;
             }
@@ -6863,6 +6880,14 @@ mod tests {
         let saved = std::fs::read_to_string(&store).expect("the runtime store was written");
         assert!(saved.contains("id = \"slides\""), "the unstarted source was not saved: {saved}");
         assert!(saved.contains("id = \"cam1\""), "{saved}");
+
+        // Removing it forgets it, from the list and from the store, where
+        // it used to fail as "no such source" and stay wanted for ever.
+        assert!(mix.forget_unstarted(&"slides".to_string()), "the unstarted source was removed");
+        assert!(mix.runtime_configs().unstarted.is_empty());
+        let saved = std::fs::read_to_string(&store).expect("the runtime store was written");
+        assert!(!saved.contains("id = \"slides\""), "the removed source is still saved: {saved}");
+        assert!(!mix.forget_unstarted(&"cam1".to_string()), "a running source is not an unstarted one");
         mix.shutdown();
         let _ = std::fs::remove_dir_all(&dir);
     }

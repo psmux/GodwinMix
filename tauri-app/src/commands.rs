@@ -68,8 +68,9 @@ pub async fn connect_core(app: AppHandle, wanted: Wanted) -> Result<CoreInfo, St
             token: if wanted.mode == Mode::Remote { target.token.clone() } else { String::new() },
         },
     );
-    *app.state::<Shell>().target.lock().unwrap() = Some(target);
+    *app.state::<Shell>().target.lock().unwrap() = Some(target.clone());
     crate::ui::set_title(&app, &info);
+    tauri::async_runtime::spawn(crate::page_menu::install(app.clone(), target));
     Ok(info)
 }
 
