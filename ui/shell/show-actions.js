@@ -9,8 +9,8 @@
 
 import { el } from "./dom.js";
 import { contextMenu } from "./menu.js";
-import { confirmModal } from "./modal.js";
-import { toast, errorToast } from "./toast.js";
+import { errorToast } from "./toast.js";
+import { remove } from "./show-remove.js";
 
 /** The styles for the rename box and New show, once. */
 export function sheet() {
@@ -127,24 +127,4 @@ export function rename(view, show) {
     if (e.key === "Escape") finish(false);
   });
   input.addEventListener("blur", () => finish(true));
-}
-
-/** Remove, after a yes. The last show stays, and says why. */
-export async function remove(view, show) {
-  if (view.shows.length < 2) {
-    return toast({ text: `${show.name} is the only show on this machine, so it stays. Add another show first if you want this one gone.` });
-  }
-  // The first show runs from the file the station was started with.
-  if (show.id === "main") return toast({ text: `${show.name} runs from the station's own settings file, so it cannot be removed. Stop it from its menu instead.` });
-  const live = show.on_air ? ` It is on air now, and stops first.` : " It stops first if it is running.";
-  const yes = await confirmModal(`Remove the show ${show.name}?${live} Its scenes, sources and outputs go with it.`, "Remove show");
-  if (!yes) return;
-  try {
-    await view.client.call("show.remove", { id: show.id });
-  } catch (e) {
-    return errorToast(e, `Removing ${show.name}`);
-  }
-  toast({ text: `${show.name} removed.` });
-  if (show.id === view.current) switchTo(view.shows.find((s) => s.id !== show.id).id);
-  else view.read();
 }

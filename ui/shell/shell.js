@@ -15,7 +15,7 @@ import { toast, errorToast, alertToast } from "./toast.js";
 import { openPicker, pickFromDrop } from "./picker-loader.js";
 import { modal } from "./modal.js";
 import { Workspace } from "./dock.js";
-import { mountRestartBar } from "./restart-bar.js";
+import { restartBar } from "./restart-check.js";
 
 /** Everything a panel might want that is not the client. One object, one import. */
 export const shell = {
@@ -117,7 +117,7 @@ export async function mountShell(client, root) {
   shell.keymap.attach(window);
   connectionBanner(client);
   // Settings written to the file that wait for a restart, and the restart.
-  mountRestartBar(client);
+  restartBar(client);
   // Notifications belong to the window, including when Alerts is closed.
   client.on("alert", a => alertToast(client, a));
   fileDrop(client);

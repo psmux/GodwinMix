@@ -119,6 +119,23 @@ async function actionTests(test, eq, ok) {
   });
   single.remove();
 
+  const onKids = showStub({ current: "kids" });
+  const kidsRow = await row(onKids);
+  went.length = 0;
+  key(kidsRow.querySelector('[data-show="kids"]'), "Delete");
+  await until(() => dialogs().length);
+  button(dialogs().at(-1), "Remove show").click();
+  await until(() => went.length);
+  test("removing the show the page is on asks over another show's line, then moves there", () => {
+    eq(onKids.links.map((l) => [l.id, l.closed]), [["main", true]]);
+    eq(onKids.links[0].calls.map((c) => c.method), ["show.remove"]);
+    ok(/[?&]show=main\b/.test(went[0] || ""), went[0]);
+  });
+  kidsRow.remove();
+  key(tab("main"), "Delete");
+  await wait(120);
+  test("the first show says why it cannot be removed", () => ok([...document.querySelectorAll(".toast")].some((t) => /station's own settings file/.test(t.textContent)), "said"));
+
   const file = await import("../shell/show-file.js");
   went.length = 0;
   await file.newShow(stub);

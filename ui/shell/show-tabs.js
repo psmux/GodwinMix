@@ -15,6 +15,8 @@ export function showTabs(client) {
   view.read = () => client.call("show.list", {}).then((a) => {
     view.shows = a.shows || [];
     view.current = new URLSearchParams(location.search).get("show") || a.current;
+    // This page's show was removed, here or elsewhere: go to the first one.
+    if (!view.shows.some((s) => s.id === view.current)) return actions().then((m) => m.switchTo(a.current));
     draw(view);
   }, (e) => e && e.code === -32601 && stop());
   const held = client.listen ? client.listen("show.*") : () => {};
