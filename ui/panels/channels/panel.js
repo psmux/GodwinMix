@@ -51,7 +51,11 @@ export class ChannelsView {
     this.list = el("div.chn-list");
     this.count = el("span.chn-count");
     const add = (this.addButton = el("button.btn.primary.chn-add", { text: "Add Channel", onclick: () => this.add() }));
-    this.ports = el("p.chn-ports", { role: "status" });
+    // What is open, in the text's own colour; a port a channel wants that
+    // would not open is the only part said in amber.
+    this.portsOpen = el("span");
+    this.portsBad = el("span.bad");
+    this.ports = el("p.chn-ports", { role: "status" }, [this.portsOpen, " ", this.portsBad]);
     this.head = el("header.chn-top", {}, [
       el("div.grow", {}, [
         el("h2", {}, ["Channels ", this.count]),
@@ -122,6 +126,9 @@ export class ChannelsView {
 
   render() {
     const channels = this.model.list();
+    // Only what the panel first opens on counts, not a channel made later.
+    const first = !this.opened && !this.missing && !this.failure;
+    if (first) this.opened = true;
     this.count.textContent = channels.length ? String(channels.length) : "";
     if (this.missing || this.failure || !channels.length) {
       this.cards.clear();
@@ -137,12 +144,23 @@ export class ChannelsView {
     this.head.hidden = false;
     this.addButton.hidden = false;
     const problems = portProblems(this.model.listeners);
-    write(this.ports, "textContent", [openPorts(this.model.listeners), ...problems].join(" "));
-    this.ports.classList.toggle("bad", problems.length > 0);
+    write(this.portsOpen, "textContent", openPorts(this.model.listeners));
+    write(this.portsBad, "textContent", problems.join(" "));
     if (!this.cards.size) clear(this.list);
     keyed(this.list, this.cards, channels, (c) => c.id, (c) => channelCard(this, c), (c) => (c.enabled ? "on" : "off"));
+    if (first) this.openOnDefault(channels);
     if (this.running) this.plans.sync(channels);
     this.clock(channels.some(isLive));
+  }
+
+  /**
+   * A panel that opens on one channel with nothing publishing to it (a new
+   * mixer's default `live`) opens its Connect, so the server and the key are
+   * there to copy into OBS.
+   */
+  openOnDefault(channels) {
+    if (channels.length !== 1 || isLive(channels[0]) || !channels[0].enabled) return;
+    this.cards.get(channels[0].id)?.connect(true);
   }
 
   /** Uptime moves every second while something is live, and every second

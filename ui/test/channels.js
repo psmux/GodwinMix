@@ -6,6 +6,7 @@
 
 import { ChannelStub, liveStream } from "./channels-stub.js";
 import { waysTests } from "./channels-ways.js";
+import { defaultChannelTests } from "./channels-default.js";
 
 const wait = (ms = 30) => new Promise((r) => setTimeout(r, ms));
 const dialogs = () => [...document.querySelectorAll(".dialog")];
@@ -211,6 +212,7 @@ export async function channelTests(test, eq, ok) {
   view.stop();
   test("hidden, the panel lets go of its events", () => eq(stub.patterns.size, 0));
   host.remove();
+  await defaultChannelTests(test, eq, ok);
 }
 
 /** The card's Connect section, then a live stream's own Copy URL. */

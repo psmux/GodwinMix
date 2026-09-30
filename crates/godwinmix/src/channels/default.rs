@@ -7,6 +7,11 @@
 //! mixer that already had channels of its own when this arrived gets none.
 //! A core with no config file on disk gets none either: it could not
 //! remember the deletion, and would make it again at every start.
+//!
+//! The secret store is per machine rather than per mixer, so a second mixer
+//! on the same machine finds the first one's `live` key sealed already. It
+//! takes that key rather than sealing a new one over it, which would cut off
+//! the first mixer's encoders.
 
 use std::sync::atomic::Ordering;
 
@@ -14,13 +19,16 @@ use godwinmix_protocol::channel_ingest::{rtmp_only, Rtmps};
 use godwinmix_protocol::channels::KeyMode;
 use tracing::{info, warn};
 
-use super::store::Record;
+use super::keys;
+use super::store::{KeyRecord, Record};
 use super::Channels;
 
 /// Its id, and the application name in its address.
 pub const ID: &str = "live";
 const NAME: &str = "Live";
 const KEY_LABEL: &str = "Default key";
+/// The key's id, which `make_key` would give `KEY_LABEL`.
+const KEY_ID: &str = "default-key";
 
 impl Channels {
     /// Make the default channel if it is due, before the listener is first
@@ -36,8 +44,8 @@ impl Channels {
             }
             records.push(record());
         }
-        if let Err(e) = self.make_key(ID, Some(KEY_LABEL.into())) {
-            warn!(error = %e.message, "the default channel's key could not be sealed; no default channel is made");
+        if let Err(e) = self.default_key() {
+            warn!(error = %e, "the default channel's key could not be sealed; no default channel is made");
             self.records.lock().retain(|r| r.id != ID);
             return false;
         }
@@ -47,6 +55,20 @@ impl Channels {
         }
         info!(channel = ID, "made the default channel");
         true
+    }
+
+    /// A key sealed for `live` already, by another mixer on this machine, or
+    /// a new one.
+    fn default_key(&self) -> Result<(), String> {
+        let sealed = self.secrets.get(&keys::scope(ID), KEY_ID).filter(|s| !s.is_empty());
+        let Some(secret) = sealed else {
+            return self.make_key(ID, Some(KEY_LABEL.into())).map(|_| ()).map_err(|e| e.message);
+        };
+        let key = KeyRecord { id: KEY_ID.into(), label: KEY_LABEL.into(), created: keys::now(), hint: keys::hint(&secret) };
+        if let Some(record) = self.records.lock().iter_mut().find(|r| r.id == ID) {
+            record.keys.push(key);
+        }
+        Ok(())
     }
 
     /// The same, on a running core: after the ingest plugin is installed
