@@ -22,6 +22,17 @@
           "separator": true
         },
         {
+          "command": "show.new",
+          "title": "New show…"
+        },
+        {
+          "command": "show.switch",
+          "title": "Switch show…"
+        },
+        {
+          "separator": true
+        },
+        {
           "command": "mixer.settings",
           "title": "Mixer settings…"
         },
@@ -122,6 +133,11 @@
           "command": "view.studio",
           "title": "Studio mode",
           "check": "studio"
+        },
+        {
+          "command": "view.routing",
+          "title": "Routing",
+          "check": "routing"
         },
         {
           "command": "view.reset-layout",

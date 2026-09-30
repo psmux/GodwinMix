@@ -16,40 +16,6 @@ import { openPicker } from "../../shell/picker-loader.js";
 import { run } from "../../shell/commands.js";
 import { applyCoreDefaults, forgetPreset } from "./defaults.js";
 
-/** The five choices, in the order a person reads them. */
-const CHOICES = [
-  {
-    id: "church",
-    art: "church",
-    title: "Church service",
-    line: "Two cameras, lyrics over the picture, slides, and YouTube and Facebook at once.",
-  },
-  {
-    id: "classroom",
-    art: "classroom",
-    title: "Classroom",
-    line: "A camera on the teacher, the screen beside it, recorded and streamed.",
-  },
-  {
-    id: "esports",
-    art: "esports",
-    title: "Streamer or gaming",
-    line: "The game full screen, your camera in the corner, an overlay from a page.",
-  },
-  {
-    id: null,
-    art: "empty",
-    title: "Start empty",
-    line: "Nothing configured. Add your first source yourself.",
-  },
-  {
-    id: "obs",
-    art: "obs",
-    title: "Import from OBS",
-    line: "Bring a scene collection across from OBS Studio and keep your scenes.",
-  },
-];
-
 export class WelcomePanel extends HTMLElement {
   static get panel() {
     return { id: "core/welcome", title: "Welcome", slots: ["modal"], tag: "gmx-welcome" };
@@ -89,8 +55,9 @@ export class WelcomePanel extends HTMLElement {
   async open() {
     if (this.dialog) return;
     // The five pictures are five kilobytes of inline SVG, and a mixer that has
-    // been set up never draws them. They arrive with the dialog.
-    const { art } = await import("./tiles.js");
+    // been set up never draws them. They arrive with the dialog, and so do
+    // the words on the tiles.
+    const { art, CHOICES } = await import("./tiles.js");
     const grid = el("div.welcome-grid");
     for (const choice of CHOICES) grid.appendChild(this.tile(choice, art));
     this.dialog = modal({

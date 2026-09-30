@@ -9,6 +9,40 @@
 // language as the rest of the page: a rounded rectangle is a picture, a filled
 // bar is a piece of furniture, the red rectangle is what is on air.
 
+/** The five choices, in the order a person reads them. */
+export const CHOICES = [
+  {
+    id: "church",
+    art: "church",
+    title: "Church service",
+    line: "Two cameras, lyrics over the picture, slides, and YouTube and Facebook at once.",
+  },
+  {
+    id: "classroom",
+    art: "classroom",
+    title: "Classroom",
+    line: "A camera on the teacher, the screen beside it, recorded and streamed.",
+  },
+  {
+    id: "esports",
+    art: "esports",
+    title: "Streamer or gaming",
+    line: "The game full screen, your camera in the corner, an overlay from a page.",
+  },
+  {
+    id: null,
+    art: "empty",
+    title: "Start empty",
+    line: "Nothing configured. Add your first source yourself.",
+  },
+  {
+    id: "obs",
+    art: "obs",
+    title: "Import from OBS",
+    line: "Bring a scene collection across from OBS Studio and keep your scenes.",
+  },
+];
+
 const OPEN = '<svg viewBox="0 0 160 90" width="100%" role="img" aria-hidden="true">';
 const CLOSE = "</svg>";
 

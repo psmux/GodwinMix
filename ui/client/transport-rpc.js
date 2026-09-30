@@ -24,7 +24,7 @@ export class RpcTransport {
     const u = new URL("/rpc", this.base);
     u.protocol = u.protocol === "https:" ? "wss:" : "ws:";
     if (this.token) u.searchParams.set("token", this.token);
-    return u.toString();
+    return withShow(u).toString();
   }
 
   open() {
@@ -74,8 +74,15 @@ export class RpcTransport {
     if (width) u.searchParams.set("width", String(Math.round(width)));
     u.searchParams.set("t", String(Date.now()));
     if (this.token) u.searchParams.set("token", this.token);
-    return u.toString();
+    return withShow(u).toString();
   }
+}
+
+/** The show this page addresses, from its own `?show=`, on every URL it calls. */
+export function withShow(u) {
+  const show = new URLSearchParams(location.search).get("show");
+  if (show) u.searchParams.set("show", show);
+  return u;
 }
 
 /** Shared by both transports: one file, streamed, with a progress callback. */
@@ -84,6 +91,7 @@ export function httpUpload(base, token, name, file, onProgress) {
     const xhr = new XMLHttpRequest();
     const u = new URL("/api/media/upload", base);
     u.searchParams.set("name", name);
+    withShow(u);
     xhr.open("POST", u.toString());
     xhr.setRequestHeader("Content-Type", "application/octet-stream");
     if (token) xhr.setRequestHeader("Authorization", "Bearer " + token);

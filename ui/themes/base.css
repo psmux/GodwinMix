@@ -437,6 +437,17 @@ label { display: block; }
 .menubar-tick { width: 1em; flex: none; color: var(--accent); }
 .menubar-heading { padding: 6px 8px 2px; color: var(--faint); font-size: var(--fs-sm); }
 [data-native-menu] .menubar-wrap { display: none; }
+/* Show tabs, after the menu bar. One show reads as a plain name. */
+.shows { display: flex; align-items: center; min-width: 0; padding-left: 6px; border-left: var(--border) solid var(--line-soft); }
+.showtabs { display: flex; gap: 2px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.showtab, .shows-add { display: flex; align-items: center; gap: 6px; padding: 4px 10px; border: 0; border-radius: var(--radius-sm); background: none; color: var(--dim); white-space: nowrap; }
+.showtab-name { max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
+.showtab:hover, .shows-add:hover, .showtab:focus-visible, .shows-add:focus-visible { background: var(--panel2); color: var(--text); outline: none; }
+.showtab[aria-selected="true"] { color: var(--text); background: var(--panel2); box-shadow: inset 0 -2px var(--accent); }
+.shows.one .showtab[aria-selected="true"] { background: none; box-shadow: none; }
+.showtab .dot { background: var(--live); }
+.showtab-state { font-size: var(--fs-sm); color: var(--faint); }
+.showtab-state.failed { color: var(--bad); }
 .project-counts { align-self: flex-start; border-collapse: collapse; }
 .project-counts th, .project-counts td { text-align: left; padding: 2px 24px 2px 0; }
 @media (max-width: 760px) {

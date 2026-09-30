@@ -192,6 +192,10 @@ const ASSETS: &[(&str, &str)] = &[
     ("shell/sandbox.js", include_str!("../../../ui/shell/sandbox.js")),
     ("shell/selection.js", include_str!("../../../ui/shell/selection.js")),
     ("shell/settings.js", include_str!("../../../ui/shell/settings.js")),
+    ("shell/show-tabs.js", include_str!("../../../ui/shell/show-tabs.js")),
+    ("shell/show-actions.js", include_str!("../../../ui/shell/show-actions.js")),
+    ("shell/show-file.js", include_str!("../../../ui/shell/show-file.js")),
+    ("shell/shows.css", include_str!("../../../ui/shell/shows.css")),
     ("shell/settings-dialog.js", include_str!("../../../ui/shell/settings-dialog.js")),
     ("shell/shell.js", include_str!("../../../ui/shell/shell.js")),
     ("shell/theme.js", include_str!("../../../ui/shell/theme.js")),
@@ -793,6 +797,9 @@ mod tests {
         // dialogs after that.
         reachable.extend(closure_of("shell/menus.js"));
         reachable.extend(closure_of("shell/project-open.js"));
+        // The show tabs' work, the first time a tab is clicked, and New show.
+        reachable.extend(closure_of("shell/show-actions.js"));
+        reachable.extend(closure_of("shell/show-file.js"));
         reachable.extend(closure_of("panels/outputs/record-start.js"));
         // Renditions: each is fetched by an `import()` the first time it is
         // wanted, from the destination form, the Outputs panel or its rows.
@@ -873,6 +880,8 @@ mod tests {
             ("shell/menus.js", "a menu opened on the menu bar"),
             ("shell/menu-actions.js", "a menu opened on the menu bar"),
             ("shell/project.js", "Save, Open or New project"),
+            ("shell/show-actions.js", "a show tab clicked, or a key pressed on one"),
+            ("shell/show-file.js", "New show or Switch show"),
             ("shell/project-open.js", "Open project"),
             ("shell/settings-dialog.js", "Settings for this page"),
             ("panels/outputs/record-start.js", "Record pressed"),
