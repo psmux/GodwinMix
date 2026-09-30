@@ -1,11 +1,9 @@
-//! A ladder made here: one raw picture scaled and encoded once per rung,
-//! with every rung's keyframes on the same frames.
+//! A ladder made here, for the tests: one raw picture scaled and encoded
+//! once per rung with x264, with every rung's keyframes on the same frames.
 //!
-//! This is the stand in for the rendition planner. The tests drive the
-//! packager with it from a `videotestsrc`, and an `hls/output` asked for a
-//! ladder preset builds one from the programme until the planner hands this
-//! module its own encoders' pads (see the seam in `mod.rs`). When it does,
-//! nothing here is on the programme's path.
+//! The output itself never does this; the rendition planner makes its
+//! rungs. The tests drive the packager with it from a `videotestsrc`, with
+//! no planner and no mixer.
 //!
 //! Keyframes are forced rather than left to the encoder's interval: each
 //! rung's encoder input is watched, and the first frame at or past every
@@ -30,19 +28,6 @@ pub struct Rung {
 impl Rung {
     pub fn new(id: &str, width: u32, height: u32, kbps: u32) -> Rung {
         Rung { id: id.into(), width, height, kbps }
-    }
-}
-
-/// The two ladders `rendition.presets` names, as rungs.
-pub fn preset(name: &str) -> Option<Vec<Rung>> {
-    let r1080 = Rung::new("1080p", 1920, 1080, 6000);
-    let r720 = Rung::new("720p", 1280, 720, 3000);
-    let r480 = Rung::new("480p", 854, 480, 1500);
-    let r360 = Rung::new("360p", 640, 360, 800);
-    match name {
-        "abr-ladder-4" => Some(vec![r1080, r720, r480, r360]),
-        "abr-ladder-3" => Some(vec![r720, r480, r360]),
-        _ => None,
     }
 }
 

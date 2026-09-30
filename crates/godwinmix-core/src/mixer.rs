@@ -2628,7 +2628,7 @@ impl Mixer {
     /// Attach a new RTMP destination while the broadcast is running.
     pub fn add_output(&mut self, cfg: &OutputConfig) -> Result<()> {
         anyhow::ensure!(!cfg.id.trim().is_empty(), "an output needs an id");
-        anyhow::ensure!(!cfg.uri.trim().is_empty(), "an output needs a uri");
+        crate::plugin::output::check_uri(cfg)?;
         anyhow::ensure!(
             !self.outputs.iter().any(|o| o.id() == &cfg.id),
             "output {} already exists",
@@ -2658,7 +2658,7 @@ impl Mixer {
     /// alternative is an operator who asked to correct a typo and is now off
     /// air with nothing.
     pub fn set_output(&mut self, cfg: &OutputConfig) -> Result<()> {
-        anyhow::ensure!(!cfg.uri.trim().is_empty(), "an output needs a uri");
+        crate::plugin::output::check_uri(cfg)?;
         let Some(pos) = self.outputs.iter().position(|o| o.id() == &cfg.id) else {
             anyhow::bail!("no such output {}", cfg.id);
         };
