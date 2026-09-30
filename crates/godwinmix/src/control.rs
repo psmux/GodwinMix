@@ -21,6 +21,7 @@
 
 pub mod call;
 pub mod history;
+pub mod hls;
 pub mod hooks;
 pub mod methods;
 pub mod push;
@@ -371,6 +372,8 @@ pub fn router(app: AppState, snapshots: Arc<Tracker>) -> Router {
         .merge(crate::ui::router())
         .route("/rpc", get(rpc_upgrade))
         .merge(streams::router(ctx.clone()))
+        // Players, which carry the output's viewer key or the control token.
+        .merge(hls::router(ctx.clone()))
         // WHIP ingest for a channel: the channel's key lets a publisher in,
         // not the control token, so it sits outside every token check.
         .merge(whip::router(ctx.clone()))

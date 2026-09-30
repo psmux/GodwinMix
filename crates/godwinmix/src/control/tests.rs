@@ -120,6 +120,7 @@ fn every_route_is_in_the_protocol() {
         include_str!("../control.rs"),
         include_str!("rest.rs"),
         include_str!("whip.rs"),
+        include_str!("hls/mod.rs"),
     ];
     let mut checked = 0;
     for text in sources {

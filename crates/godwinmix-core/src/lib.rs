@@ -48,6 +48,7 @@ pub mod config;
 pub mod convert;
 pub mod encoder;
 pub mod gstutil;
+pub mod hls;
 pub mod hooks;
 pub mod input;
 pub mod media;
