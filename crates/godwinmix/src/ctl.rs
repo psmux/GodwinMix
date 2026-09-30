@@ -536,6 +536,7 @@ async fn output(api: &Api, cmd: OutputCmd) -> Result<()> {
                 id: id.clone(),
                 uri,
                 policy: Some(policy),
+                rendition: None,
                 params: Default::default(),
             };
             let added: OutputStatus = api.call("output.add", None, &req).await?;

@@ -20,18 +20,30 @@ An output (programme output or channel destination) carries an optional
 rendition request. Absent means what it means today: the programme's own
 encode, or a copy of the channel stream.
 
-    output.add / output.set      {..., rendition?: RenditionRequest | {preset: "<id>"}}
-    channel.destination.add/set  {..., rendition?: RenditionRequest | {preset: "<id>"}}
+    output.add / output.set      {..., rendition?: RenditionRequest | {preset: "<id>"} | {ladder: [RenditionRequest]}}
+    channel.destination.add/set  {..., rendition?: RenditionRequest | {preset: "<id>"} | {ladder: [RenditionRequest]}}
 
-    rendition.presets {}  -> {presets: [{id, title, group, request: RenditionRequest, ladder?: [RenditionRequest]}]}
+`output.set` with `rendition: null` clears the format: the output goes back
+to the programme's own encode (a channel destination back to a copy).
+Leaving `rendition` out keeps what it has. `{ladder: [...]}` is a custom ABR
+ladder, top rung first, for an `hls/output`; each rung's request id names
+the rung (`<output>-<rung id>`).
+
+    rendition.presets {}  -> {presets: [{id, title, group, request: RenditionRequest, ladder?: [RenditionRequest], cost?: Cost}]}
         Built in: youtube-1080p30, youtube-720p30, facebook-720p30, twitch-1080p60,
         twitch-720p30, audio-only-aac, abr-ladder-4 (1080p, 720p, 480p, 360p),
         abr-ladder-3 (720p, 480p, 360p), copy. Only presets this machine can
         make are listed; the rest come back with `available: false, why`.
+        `cost` is the governor's estimate of the whole preset on this
+        machine (every rung, scaling and sound), so the page's Free, Light
+        and Heavy badge is measured rather than guessed.
 
     rendition.plan {scope?: "programme" | "channel:<id>"}
         -> {nodes: [{id, kind, serves: [request ids], encoder?, reason: {code, text}, cost}],
             totals: {cpu_millicores, devices: {<device>: {millis, sessions}}, egress_kbps}}
+        `serves` lists output ids (for a channel's plan, destination ids), each
+        once, even where a node works for several rungs of one ladder.
+        `encoder` is the catalogue id string, `h264-videotoolbox`.
 
     governor.status {}
         -> {calibrated_at, fingerprint, cpu: {cores, used_millicores, room_millicores},
