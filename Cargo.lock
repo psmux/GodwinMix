@@ -1479,6 +1479,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "godwinmix-govern"
+version = "0.2.0"
+dependencies = [
+ "godwinmix-core",
+ "godwinmix-protocol",
+ "gstreamer",
+ "libc",
+ "parking_lot",
+ "serde",
+ "serde_json",
+ "tracing",
+]
+
+[[package]]
 name = "godwinmix-host"
 version = "0.2.0"
 dependencies = [
