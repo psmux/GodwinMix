@@ -148,7 +148,12 @@ impl Subscriber {
             match live.inbox.pop() {
                 Ok(Some(Event::Region(msg, fd))) => {
                     let region = Region::open(fd, msg.header_len as usize, msg.total_len as usize)?;
-                    live.ring = Some(Arc::new(Ring::attach(region)?));
+                    let ring = Arc::new(Ring::attach(region)?);
+                    let place = ring.header().readers.get(msg.reader as usize).ok_or_else(|| {
+                        Error::Protocol(format!("reader place {} is out of range", msg.reader))
+                    })?;
+                    place.pid.store(std::process::id(), std::sync::atomic::Ordering::Relaxed);
+                    live.ring = Some(ring);
                     live.reader = msg.reader as usize;
                     live.last = 0;
                 }

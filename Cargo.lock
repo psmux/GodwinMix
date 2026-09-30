@@ -1479,6 +1479,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "godwinmix-framebus"
+version = "0.2.0"
+dependencies = [
+ "gstreamer",
+ "gstreamer-base",
+ "gstreamer-video",
+ "libc",
+]
+
+[[package]]
 name = "godwinmix-host"
 version = "0.2.0"
 dependencies = [
