@@ -1802,7 +1802,7 @@ class TakeRequest(TypedDict, total=False):
     scene: Optional[str]
     # The scene to take, by name or by id. `source` wins when both are given; with neither, the armed scene goes on air.
     source: Optional[str]
-    # Id of the source to put on air. An empty string is the slate, even while a scene is armed.
+    # Id of the source to put on air.
     transition: Union[Transition, None]
     # "fade", or {type, duration_ms, params}. Absent is a cut.
 
