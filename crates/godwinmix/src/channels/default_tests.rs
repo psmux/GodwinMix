@@ -41,7 +41,7 @@ fn open(dir: &Path, stored: bool) -> Arc<Channels> {
         Ports::default(),
         Supervisor::new(caps.clone(), Default::default()),
         handle.clone(),
-        Arc::new(super::target::Local { mixer: handle, scenes: SceneServer::in_memory(caps) }),
+        Arc::new(crate::channels::target::Local { mixer: handle, scenes: SceneServer::in_memory(caps) }),
         secrets,
     )
 }
