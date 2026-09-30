@@ -211,6 +211,7 @@ const DEV_ASSETS: &[(&str, &str)] = &[
     ("test/channels.js", include_str!("../../../ui/test/channels.js")),
     ("test/channels-stub.js", include_str!("../../../ui/test/channels-stub.js")),
     ("test/channels-ways.js", include_str!("../../../ui/test/channels-ways.js")),
+    ("test/channels-default.js", include_str!("../../../ui/test/channels-default.js")),
     ("test/channels-preview.js", include_str!("../../../ui/test/channels-preview.js")),
     ("test/channels.html", include_str!("../../../ui/test/channels.html")),
     // hls.js against an HLS output on this core, beside a clock to the
