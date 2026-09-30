@@ -1,18 +1,42 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Publisher discovery",
-  "description": "One RTMP port for many publishers. Each one that arrives is reported as a candidate ready for source.add.",
+  "title": "Channels",
+  "description": "The channel server: one port per protocol for every channel, each opened only while a channel that is switched on uses it.",
   "type": "object",
   "additionalProperties": false,
   "properties": {
     "rtmp_port": {
       "title": "RTMP port",
-      "description": "The port every publisher uses. Only one process can hold it, so run either this device or an ingest/rtmp source on it, not both.",
+      "description": "The port every RTMP publisher uses. Open only while a channel has RTMP on. Only one process can hold it, so run either this device or an ingest/rtmp source on it, not both.",
       "type": "integer",
       "minimum": 0,
       "maximum": 65535,
       "default": 1935,
       "examples": [1935, 1936]
+    },
+    "srt_port": {
+      "title": "SRT port",
+      "description": "The one UDP port SRT callers use for every channel, told apart by stream id. Open only while a channel has SRT on.",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 65535,
+      "default": 9000,
+      "examples": [9000]
+    },
+    "webrtc_port": {
+      "title": "First WebRTC media port",
+      "description": "WHIP publishers send their media over UDP, one port each from this one up to fifteen above it, and only while one is publishing.",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 65520,
+      "default": 8189,
+      "examples": [8189]
+    },
+    "open_door": {
+      "title": "Take any RTMP publisher when there are no channels",
+      "description": "How this device worked before channels: with no channel at all, the RTMP port stays open and takes anybody. Off, nothing listens until a channel needs it.",
+      "type": "boolean",
+      "default": false
     },
     "bind": {
       "title": "Interface",

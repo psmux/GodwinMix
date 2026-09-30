@@ -11,7 +11,7 @@ and `main` picks the handler from it:
 |---|---|---|
 | `ingest/rtmp` | source | `src/source.rs` over `src/rtmp.rs`, `src/flv.rs` and `src/remux.rs` |
 | `ingest/whip` | source | `src/whip_in.rs` |
-| `ingest/discover` | device | `src/device.rs` over `src/rtmp.rs`, `src/gate.rs`, `src/channels.rs`, `src/hub.rs`, `src/relay.rs`, `src/rest.rs` |
+| `ingest/discover` | device | `src/device.rs` over `src/listeners.rs`, `src/rtmp.rs`, `src/srt.rs`, `src/whip.rs`, `src/gate.rs`, `src/channels.rs`, `src/hub.rs`, `src/relay.rs`, `src/rest.rs` |
 
 The RTMP half is pure Rust: `rml_rtmp` parses chunks and raises events, this
 plugin owns the sockets, and the published messages become FLV tags with a
@@ -56,15 +56,24 @@ gmx plugin test plugins/ingest --offline     # replay tests/transcript.jsonl
    key is answered with `reject_request` and a sentence, because the publisher's
    own error box is the only place the person sending will look.
 7. **No dependency without a reason written down.** This crate is the SDK,
-   netkit, gstreamer, serde_json and `rml_rtmp`. The comparison against mediamtx
+   netkit, gstreamer, serde_json and `rml_rtmp`, with `libloading` for libsrt
+   and `gstreamer-webrtc` and `gstreamer-sdp` for WHIP; `Cargo.toml` says why. The comparison against mediamtx
    is at the top of `src/rtmp.rs` and in the README; keep it true if it changes.
    `src/rest.rs` is a hand written HTTP client precisely so that a plugin does
    not carry a TLS stack and a runtime to call a process on the same machine.
 
 ## The channel server
 
-`ingest/discover` is the channel server: one RTMP port, many channels, many
-streams on each (`dev/plans/channels-contract.md`). The core owns channels and
+`ingest/discover` is the channel server: one port per protocol, many
+channels, many streams on each (`dev/plans/channels-contract.md`,
+`dev/plans/shows-and-renditions.md`). No port opens until a channel that is
+switched on uses it; `src/listeners.rs` opens and closes them each time the
+table arrives. RTMP and RTMPS are `src/rtmp.rs` (TLS in `src/rtmp/io.rs`),
+SRT is libsrt loaded at run time (`src/srt.rs`), and WHIP sessions are
+`webrtcbin` (`src/whip.rs`), their offers handed over by the core from its
+control port. SRT and WHIP media become the same `MediaTag`s RTMP does
+(`src/tagger.rs`), parsed and never decoded, except WHIP's Opus sound, which
+is turned into AAC. The core owns channels and
 hands this process its table as `channels` in the settings; `src/channels.rs`
 decides who is let in, `src/gate.rs` tells the core, and `src/hub.rs` carries
 each stream to its readers:
@@ -86,7 +95,7 @@ on purpose: `src/source/relayed.rs` says why.
 
 ## What is deliberately not here
 
-* No SRT listener: `srt/source` is one, and `listener` is its default mode.
+* No SRT source for one feed without a channel: `srt/source` is that.
 * No RTSP server: `gstreamer-rtsp-server` needs `libgstrtspserver-1.0` at link
   time on every platform, which would break this plugin's build for people who
   only wanted RTMP. It belongs in its own plugin with its own platform list.

@@ -86,7 +86,7 @@ second is refused while the first is live, and its own error box says why.
 
 While there are no channels the door is open to anyone who can reach the
 port. Make a channel and only its encoders, with its keys, get in: [Take
-streams from several encoders on one port](rtmp-channels.md). Each key can be
+streams from several encoders on one port](channels.md). Each key can be
 given to one person and taken back without touching the others. RTMP itself
 sends the key in the clear, so across the internet use SRT with a passphrase
 instead.

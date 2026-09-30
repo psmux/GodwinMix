@@ -2,7 +2,9 @@
 //!
 //! The HTTP is `crate::control::whip`; the key check and the WebRTC session
 //! are the ingest plugin's, which answers `whip.offer` with the SDP answer
-//! or with the status and sentence to refuse with.
+//! or with the status and sentence to refuse with. Both go as `tool.call`,
+//! the one call a device takes besides the standard ones; neither is in the
+//! plugin's `[[tools]]`, so no agent is offered them.
 
 use serde_json::{json, Value};
 
@@ -26,7 +28,7 @@ impl Channels {
             return Whip::Refused { status: 503, why: net::why_not_listening(PLUGIN) };
         }
         let params = json!({"app": app, "stream": stream, "key": key, "sdp": sdp, "peer": peer});
-        match self.plugins.call_provide(PLUGIN, PROVIDE, "whip.offer", params) {
+        match self.plugins.call_provide(PLUGIN, PROVIDE, "tool.call", json!({"name": "whip.offer", "arguments": params})) {
             Ok(answer) => read(&answer),
             Err(e) => Whip::Refused { status: 502, why: format!("{e:#}") },
         }
@@ -34,7 +36,8 @@ impl Channels {
 
     /// The publisher is done (`DELETE` on its session).
     pub fn whip_end(&self, session: &str) -> bool {
-        let answer = self.plugins.call_provide(PLUGIN, PROVIDE, "whip.end", json!({"session": session}));
+        let arguments = json!({"session": session});
+        let answer = self.plugins.call_provide(PLUGIN, PROVIDE, "tool.call", json!({"name": "whip.end", "arguments": arguments}));
         answer.map(|a| a["ended"] == true).unwrap_or(false)
     }
 }

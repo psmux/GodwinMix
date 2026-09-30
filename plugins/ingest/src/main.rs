@@ -268,14 +268,14 @@ impl Device for Publishers {
     }
 
     fn call(&mut self, method: &str, params: Value) -> Result<Value, RpcError> {
-        if let Some(answer) = self.whip_call(method, &params) {
-            return answer;
-        }
         if method != "tool.call" {
-            return Err(no_method("ingest/discover", method, "tool.call, whip.offer, whip.end"));
+            return Err(no_method("ingest/discover", method, "tool.call"));
         }
         let name = params.get("name").and_then(Value::as_str).unwrap_or("");
         let arguments = params.get("arguments").cloned().unwrap_or(json!({}));
+        if let Some(answer) = self.whip_call(name, &arguments) {
+            return answer;
+        }
         let short = name.rsplit('/').next().unwrap_or(name);
         if !matches!(short, "streams" | "add_publishers") {
             return Err(RpcError::new(
@@ -303,7 +303,9 @@ impl Device for Publishers {
 
 impl Publishers {
     /// `whip.offer` and `whip.end`, which the core calls from its control
-    /// port. `None` for any other method.
+    /// port. They come as `tool.call`, the one call a device takes besides
+    /// the standard ones, and are not in the manifest's `[[tools]]`: they are
+    /// the core's to call, not an agent's. `None` for any other name.
     fn whip_call(&self, method: &str, params: &Value) -> Option<Result<Value, RpcError>> {
         if !matches!(method, "whip.offer" | "whip.end") {
             return None;
