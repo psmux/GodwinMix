@@ -140,6 +140,62 @@ It builds two binaries from one library: `godwinmix`, which is the name a
 package manager and a service unit use, and `gmx`, which is the name an
 operator types. They are the same code.
 
+## The station and its shows
+
+`crates/godwinmix/src/station/`
+
+A machine can run several shows, each an independent programme, and each is
+a process of its own. The process a person starts is the station: the same
+binary with no `--show`. It mixes nothing. It owns what there is one of per
+machine: the control port and the page, the channels with the ingest plugin
+that serves them, the governor, and the list of shows with the supervisor
+that keeps each one running.
+
+```
+  browser, CLI, agent
+        |
+        v
+  the station (control port) ---- show.*, channel.*, governor.*: answered here
+        |  relay, byte for byte
+        +--------------+------------------+
+        v              v                  v
+     show main      show b      ...    one process each, on loopback
+        |              |
+        +--- link -----+--> station: governor.admit, release, on air
+```
+
+Why a process each: the programme never stops. A show that leaks, deadlocks
+or crashes is started again by the supervisor while every other show stays on
+air; a thread in a shared process could not promise that. The same code that
+was the whole mixer is each show, so every method, panel and plugin works in
+a show unchanged, and a show is started with `--show <id> --station <link>`.
+
+What crosses between them is small on purpose:
+
+* A client's call and its answer, relayed to the show it names (`?show=`, or
+  `show` in `core.subscribe`). The relay parses a frame only to see whether it
+  is the station's; the rest passes as the client wrote it and the show's
+  answers, events and mosaic frames come back untouched. It adds about 40
+  microseconds to a call on a laptop.
+* The link: one loopback connection per show, over which the show's governor
+  asks the station's (`governor.admit`), so the machine has one budget. When
+  a show dies its link closes and its tickets go back.
+* Media never crosses the station. A channel's stream is read by each show
+  from the ingest plugin's own loopback port. Sharing one decoded camera
+  between shows is the frame bus's work, which lands separately.
+
+The pieces are small modules: `registry.rs` (which shows exist and where
+their files are), `supervise/` (starting, restarting, the backoff and the
+limit, the rules as a pure function in `decide.rs`), `link/` (both halves of
+the link), `relay/` (`http.rs` for REST and the byte streams, `pipe.rs` for a
+WebSocket, `rpc/` for `/rpc`), `methods.rs` with `shows_api.rs` and
+`channel_calls.rs` (what the station answers), and `show.rs` (what a show
+does differently under a station). The two seams in the engine are
+`MixerHandle::detached`, an event bus with no mixer behind it for the
+station's channels, and `render::Station::for_show`, a governor that neither
+samples nor measures and asks its station. See
+[the shows reference](../reference/shows.md).
+
 ## Where the data files live
 
 `codecs.toml`, `layouts/`, `presets/`, `schemas/` and `ui/` stay at the
