@@ -117,3 +117,66 @@ fn a_caller_leaves_and_the_stream_ends_and_closing_the_port_ends_the_listener() 
     // a second or two of the last SRT socket on it closing.
     assert!(wait_for(|| std::net::UdpSocket::bind(("127.0.0.1", port)).is_ok()), "the port is free again");
 }
+
+/// An HEVC encoder over SRT: its stream goes on the hub as enhanced RTMP
+/// HEVC, with its size read, rather than being turned away.
+#[test]
+fn an_hevc_caller_is_carried_as_enhanced_rtmp_hevc() {
+    let Some((server, gate)) = server() else { return };
+    gmx_netkit::init().unwrap();
+    if gst::ElementFactory::find("x265enc").is_none() {
+        eprintln!("skipping: no x265enc");
+        return;
+    }
+    let line = format!(
+        "videotestsrc is-live=true ! video/x-raw,format=I420,width=320,height=240,framerate=30/1 ! \
+         x265enc tune=zerolatency speed-preset=ultrafast key-int-max=15 ! h265parse config-interval=-1 ! mux. \
+         audiotestsrc is-live=true ! audioconvert ! avenc_aac ! aacparse ! mux. \
+         mpegtsmux name=mux ! srtsink uri=srt://127.0.0.1:{} mode=caller streamid=church/hevc passphrase={KEY_ONE}",
+        server.port()
+    );
+    let pipeline = gst::parse::launch(&line).unwrap();
+    pipeline.set_state(gst::State::Playing).unwrap();
+    let coded = wait_for(|| gate.hub.stream("church", "hevc").is_some_and(|s| s["video"]["width"] == 320));
+    let described = gate.hub.stream("church", "hevc");
+    stop(pipeline);
+    assert!(coded, "the HEVC stream's size was read: {described:?}");
+    assert_eq!(described.unwrap()["video"]["codec"], "h265");
+}
+
+/// A player on the same port as the encoder: GStreamer's `srtsrc` as a
+/// caller with `m=request`, which is what vMix, OBS and `srt-live-transmit`
+/// send, decodes the channel's stream; one asking for a stream that is not on
+/// air is turned away.
+#[test]
+fn a_player_on_the_publishers_port_is_sent_the_stream() {
+    let Some((server, gate)) = server() else { return };
+    let Some(encoder) = caller(server.port(), "church/main", KEY_ONE) else {
+        eprintln!("skipping: GStreamer has no srtsink or x264enc");
+        return;
+    };
+    assert!(wait_for(|| gate.hub.is_live("church", "main")), "the encoder is on air");
+    let line = format!(
+        "srtsrc uri=\"srt://127.0.0.1:{}?mode=caller\" streamid=\"#!::r=church/main,m=request\" passphrase={KEY_ONE} \
+         ! tsdemux ! h264parse ! avdec_h264 ! fakesink name=end",
+        server.port()
+    );
+    let player = gst::parse::launch(&line).unwrap().downcast::<gst::Pipeline>().unwrap();
+    let frames = Arc::new(std::sync::atomic::AtomicU32::new(0));
+    let f = frames.clone();
+    player.by_name("end").unwrap().static_pad("sink").unwrap().add_probe(gst::PadProbeType::BUFFER, move |_, _| {
+        f.fetch_add(1, Ordering::Relaxed);
+        gst::PadProbeReturn::Ok
+    });
+    player.set_state(gst::State::Playing).unwrap();
+    let played = wait_for(|| frames.load(Ordering::Relaxed) >= 30);
+    let _ = player.set_state(gst::State::Null);
+    let refused = decide::decide(
+        &gate.table.read().unwrap(),
+        &gate.hub,
+        &streamid::parse("#!::r=church/nothere,m=request").unwrap(),
+    );
+    stop(encoder);
+    assert!(played, "the player decoded {} frames", frames.load(Ordering::Relaxed));
+    assert!(matches!(refused, decide::Decision::Refuse { code: decide::NOT_FOUND, .. }), "{refused:?}");
+}

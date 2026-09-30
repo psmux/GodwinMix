@@ -1,6 +1,6 @@
 //! `hls/source`: any continuous stream `uridecodebin` opens.
 //!
-//! HLS, DASH, RTSP, SRT, RTP and plain UDP. The name is the common case; the
+//! HLS, DASH, RTSP, SRT, RIST, RTP and plain UDP. The name is the common case; the
 //! rank table below is what actually claims a URI. What these have in common
 //! and a file does not is that they run indefinitely and drift against our
 //! clock, so they go through `livesync`.
@@ -22,8 +22,8 @@ pub const MANIFEST: Manifest = Manifest {
     id: "source",
     kind: ProvideKind::Source,
     api: API_LEVEL,
-    description: "A continuous stream: HLS, DASH, RTSP, SRT, RTP or UDP",
-    uri_schemes: &["rtsp://", "rtsps://", "srt://", "udp://", "rtp://"],
+    description: "A continuous stream: HLS, DASH, RTSP, SRT, RIST, RTP or UDP",
+    uri_schemes: &["rtsp://", "rtsps://", "srt://", "udp://", "rtp://", "rist://"],
     rank: 200,
     media: MediaDecl {
         video: StreamMode::Container,
@@ -42,7 +42,7 @@ pub const PROVIDE: Provide = Provide { manifest: MANIFEST, claims, make: new };
 
 fn claims(uri: &str) -> Option<u16> {
     let lower = uri.trim().to_lowercase();
-    if ["rtsp://", "rtsps://", "srt://", "udp://", "rtp://"]
+    if ["rtsp://", "rtsps://", "srt://", "udp://", "rtp://", "rist://"]
         .iter()
         .any(|p| lower.starts_with(p))
     {

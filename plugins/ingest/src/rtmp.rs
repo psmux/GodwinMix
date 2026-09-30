@@ -20,9 +20,9 @@
 //! would have made the mixer heavier than the tool it replaces, on a project
 //! whose first constraint is running on a Raspberry Pi.
 //!
-//! The one thing `mediamtx` gives that this does not is Enhanced RTMP (HEVC and
-//! AV1 over RTMP). If that becomes the thing people need, `rtmpx` is the crate
-//! to look at again; today it wants Rust 1.97 and the workspace is on 1.82.
+//! Enhanced RTMP (HEVC and AV1 over RTMP) needs nothing from the library:
+//! its video bodies are bytes like any other, and `crate::eflv` reads and
+//! writes them. An ffmpeg HEVC publisher is taken in `device_tests.rs`.
 //!
 //! # What this does
 //!

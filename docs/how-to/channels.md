@@ -151,13 +151,28 @@ encoder that cannot set a passphrase can put the key in the stream id
 instead, `sunday-service/main?psk=<the key>`, and leave the passphrase empty;
 the stream is then not encrypted.
 
-The stream has to be H.264 video and AAC audio in MPEG-TS, which is what
-every SRT encoder sends unless told otherwise. A stream in HEVC is turned away
-with a sentence saying so.
+The stream has to be H.264 or HEVC video and AAC audio in MPEG-TS, which is
+what every SRT encoder sends. HEVC is carried on as enhanced RTMP HEVC; a
+stream in another codec (AV1, MP2 audio) is turned away with a sentence
+saying so.
 
 A caller with the wrong passphrase is refused by SRT itself during the
 handshake, so the mixer never sees it and cannot log it; the encoder says
 the passphrase was wrong.
+
+## Pull a channel's stream over SRT
+
+Another site, a decoder, vMix or OBS can take a channel's live stream from
+the same SRT port the encoders publish to. Set it to caller mode with the
+access control stream id ending `m=request` and the same passphrase:
+
+```
+srt://192.168.1.20:9000?streamid=#!::r=sunday-service/main,m=request&passphrase=<the key>
+```
+
+It gets the stream as MPEG-TS, exactly as the encoder sent it, for as long as
+it reads. A stream that is not on air yet is refused; try again once the
+encoder is publishing. No second port is opened for players.
 
 ## Publish from a browser or OBS by WHIP
 

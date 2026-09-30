@@ -1,0 +1,42 @@
+# decklink/source and decklink/devices: SDI and HDMI capture through a
+# Blackmagic DeckLink card. Needs GStreamer's decklink elements
+# (gst-plugins-bad) and Blackmagic's Desktop Video driver. See
+# docs/how-to/capture-sdi.md.
+
+[plugin]
+name = "decklink"
+version = "0.1.0"
+api = 1
+description = "SDI and HDMI capture through a Blackmagic DeckLink card: picture and embedded sound, the connector and video mode chosen or detected, and every input the driver reports found by itself."
+license = "Apache-2.0"
+authors = ["GodwinMix"]
+repository = "https://github.com/psmux/godwinmix"
+platforms = ["linux-x86_64", "linux-aarch64", "macos-aarch64", "macos-x86_64", "windows-x86_64"]
+placements = ["sidecar", "node"]
+process = "per-instance"
+
+[run]
+bin = { "linux-x86_64" = "bin/gmx-decklink", "linux-aarch64" = "bin/gmx-decklink", "macos-aarch64" = "bin/gmx-decklink", "macos-x86_64" = "bin/gmx-decklink", "windows-x86_64" = "bin/gmx-decklink.exe" }
+
+[[provides]]
+kind = "source"
+id = "source"
+media = { video = "raw", audio = "raw", alpha = false, thumb = true }
+# unixfd costs the core nothing per frame where it exists; the container is
+# the fallback.
+transports = ["unixfd", "container"]
+capabilities = ["restart-in-place", "health"]
+latency_ms = 0
+settings = "schemas/source.json"
+skill = "skills/source/SKILL.md"
+
+[[provides]]
+kind = "device"
+id = "devices"
+discovery = { local = ["Video/Source"] }
+settings = "schemas/devices.json"
+skill = "skills/source/SKILL.md"
+
+[build]
+command = "sh build"
+output = "bin/gmx-decklink"

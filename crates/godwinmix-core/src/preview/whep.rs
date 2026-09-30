@@ -3,10 +3,12 @@
 //!
 //! # What this needs and what it says when it is not there
 //!
-//! `whepserversink` lives in the Rust `webrtc` plugin (`gst-plugins-rs`), which
-//! GStreamer 1.28 ships but which many distributions package separately. The
-//! element is looked for once at startup rather than per request, and when it
-//! is missing every `/whep/*` route answers 501 with the package to install,
+//! The sessions are `webrtcbin`s the core answers itself (see `crate::whep`),
+//! so no second HTTP server and no signalling port. `webrtcbin` is in
+//! gst-plugins-bad; it carries its media over libnice's `nicesrc` and
+//! `nicesink`, which many distributions and Homebrew package separately. Both
+//! are looked for once at startup rather than per request, and when either is
+//! missing every `/whep/*` route answers 501 with the package to install,
 //! naming the platform's own spelling. An operator should never have to read a
 //! GStreamer error to find out that a plugin is not installed.
 //!
@@ -36,41 +38,44 @@
 
 use crate::probe;
 
-/// The element every `/whep/*` route needs.
-pub const ELEMENT: &str = "whepserversink";
+/// The element every `/whep/*` session is built on.
+pub const ELEMENT: &str = "webrtcbin";
 
-/// Whether this build of GStreamer has the WHEP sink, asked once.
+/// What `webrtcbin` carries its media over, packaged apart from it.
+pub const NICE: &str = "nicesrc";
+
+/// Whether this build of GStreamer can answer a WHEP offer, asked once.
 ///
 /// `probe::exists` walks the registry, which is cheap but not free, and every
 /// WHEP route asks. Once at startup is enough: a plugin installed while the
 /// mixer runs is not picked up by a running process anyway.
 pub fn available() -> bool {
     static PRESENT: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *PRESENT.get_or_init(|| probe::exists(ELEMENT))
+    *PRESENT.get_or_init(|| probe::exists(ELEMENT) && probe::exists(NICE))
 }
 
-/// What to tell a client on a build without the element.
+/// What to tell a client on a build without the elements.
 ///
 /// Names the package for the platform the core is running on, because "install
-/// gst-plugins-rs" is not something anybody can act on directly.
+/// libnice" is not something anybody can act on directly.
 pub fn missing_message() -> String {
     format!(
-        "WHEP is not available on this core: the GStreamer element '{ELEMENT}' is not \
-         installed. It is in the Rust webrtc plugin. Install {}, restart the core, and \
-         POST here again. Until then use /mjpeg/program for picture and /pcm/program or \
-         /opus/program for sound, which need nothing extra.",
+        "WHEP is not available on this core: it needs the GStreamer elements '{ELEMENT}' \
+         and '{NICE}'. Install {}, restart the core, and POST here again. Until then use \
+         /mjpeg/program for picture and /pcm/program or /opus/program for sound, which \
+         need nothing extra.",
         package()
     )
 }
 
-/// The package that carries the Rust webrtc plugin on this platform.
+/// The packages that carry webrtcbin and libnice's elements on this platform.
 fn package() -> &'static str {
     if cfg!(target_os = "macos") {
-        "the GStreamer 1.28 runtime from gstreamer.freedesktop.org, or `brew install gst-plugins-rs`"
+        "the GStreamer 1.28 runtime from gstreamer.freedesktop.org, or `brew install gstreamer libnice-gstreamer`"
     } else if cfg!(target_os = "windows") {
-        "the GStreamer 1.28 MSI from gstreamer.freedesktop.org, which carries it"
+        "the GStreamer 1.28 MSI from gstreamer.freedesktop.org, which carries both"
     } else {
-        "`gstreamer1.0-plugins-rs` (Debian and Ubuntu) or `gstreamer1-plugins-rs` (Fedora)"
+        "`gstreamer1.0-plugins-bad` and `gstreamer1.0-nice` (Debian and Ubuntu)"
     }
 }
 

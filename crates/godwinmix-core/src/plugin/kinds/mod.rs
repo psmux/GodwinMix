@@ -9,6 +9,7 @@
 pub mod browser;
 pub mod exec;
 pub mod file;
+pub mod image;
 pub mod layered;
 pub mod live;
 pub mod normalise;

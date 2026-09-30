@@ -196,3 +196,30 @@ fn rtmps_on_its_own_port_lets_a_publisher_in_over_tls_into_the_same_hub() {
     assert!(live, "an RTMPS publisher went live: {said}");
     assert_eq!(described.unwrap()["protocol"], "rtmps");
 }
+
+/// OBS 30 and ffmpeg 6.1 and later publish HEVC as enhanced RTMP. The
+/// channel takes it, reads its size, and a reader of the hub gets it as it
+/// came, sequence start first.
+#[test]
+fn an_enhanced_rtmp_hevc_publisher_is_taken_with_its_size() {
+    let device = a_device(table());
+    let Some(ffmpeg) = which("ffmpeg") else {
+        eprintln!("skipping: no ffmpeg on PATH");
+        return;
+    };
+    let url = format!("rtmp://127.0.0.1:{}/church/hevc?psk=s3cret", device.port());
+    let mut child = Command::new(ffmpeg)
+        .args(["-loglevel", "error", "-re", "-f", "lavfi", "-i", "testsrc2=size=640x360:rate=30"])
+        .args(["-f", "lavfi", "-i", "sine=frequency=440", "-t", "4"])
+        .args(["-c:v", "libx265", "-g", "15", "-preset", "ultrafast", "-c:a", "aac", "-f", "flv", &url])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    let sized = wait_for(|| device.hub().stream("church", "hevc").is_some_and(|s| s["video"]["width"] == 640));
+    let described = device.hub().stream("church", "hevc");
+    let _ = child.kill();
+    let _ = child.wait();
+    assert!(sized, "the HEVC publisher's size was read: {described:?}");
+    assert_eq!(described.unwrap()["video"]["codec"], "h265");
+}

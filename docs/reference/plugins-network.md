@@ -14,6 +14,7 @@ until then.
 |---|---|---|---|---|
 | `srt/source` | source | `srt` | receive SRT, caller or listener | yes |
 | `srt/output` | output | built into the core, not a plugin | send MPEG-TS over SRT | yes |
+| `rist/output` | output | built into the core, not a plugin | send MPEG-TS over RIST (Simple Profile) | yes |
 | `whip/output` | output | `whip` | send the programme to a WHIP endpoint | needs the core to load plugin outputs |
 | `whip/whep` | source | `whip` | receive a stream over WHEP | yes |
 | `ingest/rtmp` | source | `ingest` | listen for an RTMP publisher | yes |
@@ -24,6 +25,11 @@ until then.
 | `ndi/discover` | device | `ndi` | list NDI senders, `list_senders` | yes, with the NDI runtime |
 | `udp/source` | source | `udp` | MPEG-TS over UDP or RTP, unicast or multicast, one program chosen | yes; every setting is in [udp.md](udp.md) |
 | `udp/output` | output | `udp` | the programme as MPEG-TS over UDP or RTP | yes, Linux and macOS |
+| `rtsp/output` | output | `rtsp` | serve the programme over RTSP for players, decoders and NVRs that pull | yes, Linux and macOS |
+| `ipcam/source` | source | `ipcam` | an IP camera's MJPEG stream or snapshot picture over HTTP | yes |
+| `ipcam/discover` | device | `ipcam` | ONVIF cameras on the LAN, each profile as an RTSP `hls/source` | yes |
+| `icecast/output` | output | `icecast` | the programme's sound to an Icecast or SHOUTcast 2 mount | yes, Linux and macOS |
+| `icecast/source` | source | `icecast` | an internet radio station or any audio stream over HTTP, live | yes |
 
 ### What "needs the core" means, precisely
 
@@ -252,6 +258,104 @@ Annotations: `readOnlyHint = true`, `destructiveHint = false`,
 Where the runtime is absent the tool is an error naming the download page, and
 `discover` answers with an empty list rather than an error, because a machine
 with no NDI on it is not broken.
+
+## `icecast/output` and `icecast/source`
+
+`icecast/output` sends the programme's sound to an Icecast 2 or SHOUTcast 2
+server (the Icecast HTTP source protocol). The sound is decoded and encoded
+once; the picture is dropped at the demuxer.
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `uri` | string | empty | `icecast://<user>:<password>@<host>:<port>/<mount>`; fills every field below |
+| `host` | string | required | the server |
+| `port` | integer 1 to 65535 | `8000` | |
+| `mount` | string | `live.mp3` | what listeners open after the port |
+| `user` | string | `source` | |
+| `password` | string, `format: secret` | required | the source password |
+| `format` | `mp3`, `vorbis`, `opus` | `mp3` | Ogg for the last two |
+| `bitrate_kbps` | integer 32 to 320 | `128` | |
+| `name` | string | `GodwinMix` | the station name players show |
+| `public` | boolean | `false` | list the mount in the server's directory |
+
+Song title updates are not sent. Health says how much has been sent, or why
+the server refused.
+
+`icecast/source` plays an audio stream over HTTP or HTTPS (`uri`) as a live
+source: `souphttpsrc` in ICY mode, `icydemux`, `parsebin`, and the sound as it
+came (MP3, AAC, Vorbis, Opus) to the core in Matroska. Health carries the last
+song title the station sent; `stats` answers `{address, title}`.
+
+## `ipcam/source` and `ipcam/discover`
+
+`ipcam/source` reads what a camera serves over HTTP or HTTPS, as JPEGs that
+cross to the core in Matroska; the core decodes them. It has no sound.
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `uri` | string | required | the camera's `http://` or `https://` MJPEG or snapshot address |
+| `mode` | `auto`, `mjpeg`, `snapshot` | `auto` | `auto` takes a `.jpg`, `snapshot`, `still` or `image.cgi` address as a snapshot and anything else as MJPEG |
+| `fps` | integer 1 to 30 | `5` | snapshots asked for a second |
+| `user` | string | empty | the camera's login, basic or digest, as the camera asks |
+| `password` | string, `format: secret` | empty | |
+
+Health says how many pictures have arrived, or why the last snapshot failed.
+`stats` answers `{address, mode, pictures}`.
+
+`ipcam/discover` sends one WS-Discovery probe to `239.255.255.250:3702` for
+ONVIF video transmitters, and for each that answers asks GetCapabilities,
+GetProfiles and GetStreamUri, with a WS-Security password digest when a login
+is set. Each profile becomes a candidate of the core's own `hls/source`, named
+`<camera> (<profile>)`, with the RTSP address and the login in it. Cameras that
+refuse without a login are named in its health.
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `user` | string | empty | tried on every camera found |
+| `password` | string, `format: secret` | empty | |
+
+Discovery stays on the local segment (TTL 1) and answers within the time the
+core gives it. Cameras that want HTTP digest on their ONVIF service rather
+than WS-Security are not yet logged in to.
+
+## `rist/output`, and RIST in
+
+Built into the core, beside `srt/output`. RIST (VSF TR-06-1, the Simple
+Profile) is RTP with retransmission asked for over RTCP: the output muxes the
+programme to MPEG-TS, seven packets a datagram, and hands it to `ristsink`.
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `uri` | string | required | `rist://<receiver>:<port>`. The port must be even; RTCP uses the one above it |
+| `buffer_ms` | integer 50 to 30000 | `1000` | how much sent video is kept to answer retransmission requests; match the receiver's buffer |
+
+The output says it is connected once the receiver's RTCP has given a round
+trip time. `stats` answers `ristsink`'s own statistics. It opens no port on
+this machine: it sends, and the receiver listens.
+
+To receive RIST, add a source with the address to listen on,
+`rist://0.0.0.0:5004`: `hls/source` claims `rist://` and treats it as a live
+stream, as it does SRT and RTSP. Bonding and the Main Profile's encryption are
+not offered yet.
+
+## `rtsp/output`
+
+Serves the programme at `rtsp://<this machine>:<port>/<path>`. The port opens at
+`start` and closes at `stop`; nothing listens before the output exists. Every
+player shares one media and one packetiser; a player may ask for RTP over UDP
+or interleaved in the RTSP connection (TCP). Nothing is encoded again.
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `port` | integer 1 to 65535 | `8554` | the TCP port players connect to. 554 needs the machine's administrator |
+| `path` | string | `live` | what follows the port; letters, digits, `-`, `_` and `/` |
+| `bind` | string | `0.0.0.0` | the address to accept players on |
+
+Carries H.264 and H.265 video, AAC, MP3 and Opus audio, as the programme or its
+rendition has them. A player that asks before the programme has arrived is
+answered 404 and tries again; one that joins starts at the next keyframe.
+Health says how many players are connected and how many frames have gone
+out. `stats` answers `{url, clients, bytes_read}`.
 
 ## Where they look for their elements
 

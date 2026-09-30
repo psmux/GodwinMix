@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "IP camera over HTTP",
+  "description": "A camera's MJPEG stream, or its snapshot picture asked for a few times a second. For an RTSP camera, add its rtsp:// address as a stream, or let discovery find it.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["uri"],
+  "properties": {
+    "uri": {
+      "title": "Camera address",
+      "description": "The camera's MJPEG or snapshot address, from its manual or its web page.",
+      "type": "string",
+      "default": "",
+      "examples": ["http://192.168.1.64/video.mjpg", "http://192.168.1.64/snapshot.jpg"]
+    },
+    "mode": {
+      "title": "What the address gives",
+      "description": "auto decides from the address: a .jpg or snapshot name is a still picture, anything else a stream.",
+      "type": "string",
+      "enum": ["auto", "mjpeg", "snapshot"],
+      "x-gmx-labels": ["Work it out from the address", "A moving MJPEG stream", "One picture per request"],
+      "default": "auto",
+      "x-gmx-group": "Advanced"
+    },
+    "fps": {
+      "title": "Snapshots a second",
+      "description": "Only for a snapshot address. Most cameras answer 5 a second comfortably; more makes the camera and the network work harder.",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 30,
+      "default": 5,
+      "x-gmx-group": "Advanced"
+    },
+    "user": {
+      "title": "User name",
+      "description": "The camera's login, when it asks for one.",
+      "type": "string",
+      "default": ""
+    },
+    "password": {
+      "title": "Password",
+      "type": "string",
+      "format": "secret",
+      "default": ""
+    }
+  }
+}

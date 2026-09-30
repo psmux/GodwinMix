@@ -7,6 +7,7 @@
 use crate::config::{OutputConfig, Params};
 use crate::gstutil::make;
 use crate::plugin::output::{link_to_mux, Output, OutputCtx, OutputProvide};
+use super::flv::muxer_for;
 use crate::plugin::source::unknown_method;
 use crate::plugin::{
     Capability, CapabilitySet, Configure, Health, Hello, Manifest, MediaDecl, PluginState,
@@ -78,7 +79,7 @@ impl Output for RtmpOutput {
         audio: &gst::Element,
     ) -> Result<()> {
         let (id, gen) = (ctx.id, ctx.generation);
-        let mux = make("flvmux", &format!("out-{id}-mux-{gen}"))?;
+        let mux = make(muxer_for(ctx)?, &format!("out-{id}-mux-{gen}"))?;
         mux.set_property("streamable", true);
         // Each connection is its own FLV stream and starts at zero. The
         // continuity a viewer cares about is in the encoded bitstream, which is
@@ -96,7 +97,8 @@ impl Output for RtmpOutput {
         crate::probe::set_bool(&sink, "async", false);
 
         ctx.pipeline.add_many([&mux, &sink]).context("adding the rtmp muxer and sink")?;
-        link_to_mux(video, &mux, &["video"])?;
+        let vpad = link_to_mux(video, &mux, &["video"])?;
+        super::flv::enhanced(&vpad);
         link_to_mux(audio, &mux, &["audio"])?;
         mux.link(&sink).context("linking muxer to rtmp sink")?;
         *self.sink.lock() = Some(sink);

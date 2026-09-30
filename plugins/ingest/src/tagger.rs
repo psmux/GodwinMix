@@ -40,6 +40,7 @@ pub fn close(shared: &Shared) {
 /// The caps each sink asks its parser for.
 pub const VIDEO_CAPS: &str = "video/x-h264,stream-format=avc,alignment=au";
 pub const AUDIO_CAPS: &str = "audio/mpeg,mpegversion=4,stream-format=raw";
+pub const HEVC_CAPS: &str = "video/x-h265,stream-format=hvc1,alignment=au";
 
 /// The first running time either sink saw, so both timelines start at zero
 /// together and stay in step.
@@ -56,15 +57,21 @@ impl Zero {
 
 /// An appsink that hands each H.264 access unit on as a video tag.
 pub fn video_sink(to: Shared, zero: Arc<Zero>) -> gst::Element {
-    sink(VIDEO_CAPS, TagKind::Video, to, zero)
+    sink(VIDEO_CAPS, TagKind::Video, None, to, zero)
+}
+
+/// An appsink that hands each HEVC access unit on as an enhanced RTMP tag.
+pub fn hevc_sink(to: Shared, zero: Arc<Zero>) -> gst::Element {
+    sink(HEVC_CAPS, TagKind::Video, Some(crate::eflv::HEVC), to, zero)
 }
 
 /// An appsink that hands each AAC frame on as an audio tag.
 pub fn audio_sink(to: Shared, zero: Arc<Zero>) -> gst::Element {
-    sink(AUDIO_CAPS, TagKind::Audio, to, zero)
+    sink(AUDIO_CAPS, TagKind::Audio, None, to, zero)
 }
 
-fn sink(caps: &str, kind: TagKind, to: Shared, zero: Arc<Zero>) -> gst::Element {
+/// `cc` is the enhanced RTMP FourCC, for a codec classic FLV has no id for.
+fn sink(caps: &str, kind: TagKind, cc: Option<&'static [u8; 4]>, to: Shared, zero: Arc<Zero>) -> gst::Element {
     let caps = caps.parse::<gst::Caps>().expect("the caps above parse");
     let header: Mutex<Option<Vec<u8>>> = Mutex::new(None);
     let sink = gst_app::AppSink::builder()
@@ -76,7 +83,7 @@ fn sink(caps: &str, kind: TagKind, to: Shared, zero: Arc<Zero>) -> gst::Element 
             gst_app::AppSinkCallbacks::builder()
                 .new_sample(move |sink| {
                     let sample = sink.pull_sample().map_err(|_| gst::FlowError::Eos)?;
-                    let tags = tags(&sample, kind, &header, &zero);
+                    let tags = tags(&sample, kind, cc, &header, &zero);
                     let mut inlet = to.lock().unwrap_or_else(|e| e.into_inner());
                     let Some(inlet) = inlet.as_mut() else { return Err(gst::FlowError::Eos) };
                     for tag in tags {
@@ -92,7 +99,11 @@ fn sink(caps: &str, kind: TagKind, to: Shared, zero: Arc<Zero>) -> gst::Element 
 
 /// The tags one sample makes: its sequence header first when the codec
 /// configuration is new, then the frame.
-fn tags(sample: &gst::Sample, kind: TagKind, header: &Mutex<Option<Vec<u8>>>, zero: &Zero) -> Vec<MediaTag> {
+fn tags(sample: &gst::Sample, kind: TagKind, cc: Option<&[u8; 4]>, header: &Mutex<Option<Vec<u8>>>, zero: &Zero) -> Vec<MediaTag> {
+    let head = |key: bool, hdr: bool, cts: i64| match cc {
+        Some(cc) => crate::eflv::prefix(cc, key, hdr, cts),
+        None => prefix(kind, key, hdr, cts),
+    };
     let Some(buffer) = sample.buffer() else { return Vec::new() };
     let Some(at) = running_time(sample, buffer) else { return Vec::new() };
     let ms = zero.ms(at);
@@ -100,7 +111,7 @@ fn tags(sample: &gst::Sample, kind: TagKind, header: &Mutex<Option<Vec<u8>>>, ze
     if let Some(config) = codec_data(sample) {
         let mut last = header.lock().unwrap_or_else(|e| e.into_inner());
         if last.as_deref() != Some(config.as_slice()) {
-            out.push(make(kind, ms, true, true, &prefix(kind, true, true, 0), &config));
+            out.push(make(kind, ms, true, true, &head(true, true, 0), &config));
             *last = Some(config);
         }
     }
@@ -110,7 +121,7 @@ fn tags(sample: &gst::Sample, kind: TagKind, header: &Mutex<Option<Vec<u8>>>, ze
         (Some(pts), Some(dts)) => pts.mseconds() as i64 - dts.mseconds() as i64,
         _ => 0,
     };
-    out.push(make(kind, ms, keyframe, false, &prefix(kind, keyframe, false, cts), map.as_slice()));
+    out.push(make(kind, ms, keyframe, false, &head(keyframe, false, cts), map.as_slice()));
     out
 }
 

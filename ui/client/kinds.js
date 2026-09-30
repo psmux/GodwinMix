@@ -28,11 +28,11 @@ export const ICONS = {
 export const SOURCE_KINDS = [
   {
     id: "file",
-    provides: ["file/source"],
+    provides: ["file/source", "image/source"],
     title: "Video file",
     group: "Files and pages",
     icon: "file",
-    description: "A clip on this machine. Scrubs and loops.",
+    description: "A clip or a picture on this machine. Clips scrub and loop; pictures hold.",
     plugin: "built in",
     schema: {
       type: "object",
@@ -200,7 +200,7 @@ export const CATEGORIES = [
     icon: "camera",
     devices: true,
     kinds: [],
-    provides: ["camera/source"],
+    provides: ["camera/source", "decklink/source"],
     plugin: {
       name: "camera",
       label: "Install camera support",
@@ -242,15 +242,18 @@ export const CATEGORIES = [
     icon: "file",
     media: true,
     kinds: ["file"],
-    provides: ["file/source"],
+    provides: ["file/source", "image/source"],
   },
   { id: "web", title: "Web pages", icon: "page", kinds: ["page"], provides: ["browser/source", "layered/source"] },
   {
     id: "streams",
     title: "Streams and feeds",
     icon: "stream",
+    // Found on the network: ONVIF cameras (as their RTSP streams) and NDI senders.
+    devices: true,
     kinds: ["stream"],
-    provides: ["rtmp/source", "hls/source", "srt/source", "udp/source", "ndi/source", "ingest/source", "whip/source"],
+    provides: ["rtmp/source", "hls/source", "srt/source", "udp/source", "ndi/source", "ingest/source", "whip/source", "ipcam/source"],
+    nothing: "No network camera or NDI sender answered. Type an address below, or rescan.",
   },
   { id: "test", title: "Test patterns", icon: "pattern", patterns: true, kinds: ["test"], provides: ["test/source"] },
   { id: "more", title: "More", icon: "more", kinds: ["exec"], provides: ["exec/source"] },
@@ -413,6 +416,7 @@ function iconFor(id, what) {
   if (ICONS[name]) return name;
   if (name === "audio-device") return "mic";
   if (name === "ndi" || name === "srt" || name === "udp" || name === "ingest" || name === "whip") return "stream";
+  if (name === "ipcam") return "camera";
   return what === "output" ? "output" : "device";
 }
 

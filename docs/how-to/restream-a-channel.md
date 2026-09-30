@@ -107,7 +107,9 @@ follows: only the part that has to change is rebuilt, and the other
 destinations keep sending.
 
 Converted destinations go out as H.264 video and AAC sound, which every
-platform takes. A stream that arrives as anything else can be sent on as it
+platform takes, or as HEVC when the destination asks for it (enhanced RTMP,
+which YouTube and current OBS and ffmpeg take). A stream that arrives as H.264
+or HEVC can be converted; anything else (AV1) can be sent on as it
 is, but not converted.
 
 ## Change or remove one

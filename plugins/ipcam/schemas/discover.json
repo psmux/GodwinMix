@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Finding IP cameras",
+  "description": "ONVIF cameras on this network are found by themselves. Most will only say their stream addresses to a login: the one given here is used for every camera.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "user": {
+      "title": "Cameras' user name",
+      "type": "string",
+      "default": "",
+      "examples": ["admin"]
+    },
+    "password": {
+      "title": "Cameras' password",
+      "type": "string",
+      "format": "secret",
+      "default": ""
+    }
+  }
+}

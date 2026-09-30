@@ -13,7 +13,7 @@ hang up.
 | A picture, anywhere, in two lines | [MJPEG](#a-picture-in-two-lines) | under 200 ms on a LAN | an HTTP client |
 | Sound, in any language | [PCM over a WebSocket](#sound-in-fifteen-lines) | under 100 ms | a WebSocket client |
 | Sound over a slow link | [Opus](#sound-over-a-slow-link) | under 100 ms | a WebSocket client and an Opus decoder |
-| Both, smoothly, in a browser | [WHEP](#webrtc-through-whep) | under 500 ms | `whepserversink` installed |
+| Both, smoothly, in a browser | [WHEP](#webrtc-through-whep) | under 500 ms | a WHEP output, and libnice installed |
 | Raw frames, same machine, no encode | [a local socket](#raw-frames-on-the-same-machine) | one frame | Linux or macOS |
 
 Everything below assumes a core on `http://localhost:8080` with a token in
@@ -155,21 +155,22 @@ the core says so rather than pretending otherwise.
 
 WHEP gives you picture and sound together with under half a second of delay,
 which is what you want for a browser, Flutter, or anything with a WebRTC
-library.
+library. It plays from a `whep/output`, which you add once: in the page, press
+the palette button, choose **Add an output**, then **WebRTC viewers (WHEP)**.
+[Watch over WebRTC](watch-over-webrtc.md) is the whole walk through.
 
 ```bash
-curl -X POST -H "Authorization: Bearer $TOKEN" \
-     -H "Content-Type: application/sdp" \
+curl -X POST -H "Content-Type: application/sdp" \
      --data-binary @offer.sdp \
-     http://localhost:8080/whep/program
+     "http://localhost:8080/whep/monitor?key=$VIEWER_KEY"
 ```
 
-WHEP needs the GStreamer element `whepserversink`, which is in the Rust webrtc
-plugin. Not every distribution installs it. Ask the core before you build
+WHEP needs `webrtcbin` and libnice's GStreamer elements, which not every
+distribution or Homebrew installs together. Ask the core before you build
 anything on it:
 
 ```bash
-curl -s -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/v1/core/info | grep whep
+curl -s http://localhost:8080/api/v1/core/info | grep whep
 ```
 
 If `whep` is not in the feature list, `POST /whep/...` answers 501 and the
@@ -181,18 +182,15 @@ streams with no extra plugin.
 
 A WebRTC connection needs a path between the viewer and the core.
 
-* On a LAN, the addresses both ends already have are enough. Set `stun = ""` and
-  nothing leaves your network.
+* On a LAN, the addresses both ends already have are enough. Leave the
+  output's STUN server empty and nothing leaves your network.
 * Across the internet, a STUN server discovers your public address.
 * Where both ends are behind an unhelpful NAT, a TURN server relays the media.
   Nothing is relayed unless it has to be, so a TURN server costs bandwidth only
   for the connections that need it.
 
-```toml
-[whep]
-stun = "stun://stun.l.google.com:19302"
-turn = ["turn://user:password@turn.example.com:3478"]
-```
+Both are params of the output: `stun = "stun://stun.l.google.com:19302"` and
+`turn = ["turn://user:password@turn.example.com:3478"]`.
 
 ## Raw frames on the same machine
 
