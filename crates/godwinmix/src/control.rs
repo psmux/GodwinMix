@@ -27,6 +27,7 @@ pub mod push;
 pub mod rest;
 pub mod streams;
 mod upload;
+pub mod whip;
 pub mod ws;
 
 use godwinmix_protocol::error::{ErrorCode, RpcError};
@@ -273,17 +274,10 @@ fn channels_for(
 ) -> Arc<crate::channels::Channels> {
     let path = cfg.source_path.clone();
     let runtime = (!path.as_os_str().is_empty()).then(|| Config::runtime_store_path(&path));
-    let port = cfg
-        .plugins
-        .settings
-        .get(crate::channels::PLUGIN)
-        .and_then(|t| t.get("rtmp_port"))
-        .and_then(|v| v.as_integer())
-        .and_then(|p| u16::try_from(p).ok())
-        .unwrap_or(1935);
+    let ports = crate::channels::Ports::from_config(cfg);
     crate::channels::Channels::open(
         runtime,
-        port,
+        ports,
         plugins.clone(),
         mixer.clone(),
         scenes.clone(),
@@ -365,6 +359,9 @@ pub fn router(app: AppState, snapshots: Arc<Tracker>) -> Router {
         .merge(crate::ui::router())
         .route("/rpc", get(rpc_upgrade))
         .merge(streams::router(ctx.clone()))
+        // WHIP ingest for a channel: the channel's key lets a publisher in,
+        // not the control token, so it sits outside every token check.
+        .merge(whip::router(ctx.clone()))
         .merge(legacy(ctx.clone(), max_upload))
         .merge(rest::router(ctx.clone(), max_upload))
         // The Tauri shell and a browser on another origin both need this. It

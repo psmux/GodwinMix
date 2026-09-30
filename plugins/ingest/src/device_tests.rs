@@ -11,7 +11,9 @@ fn table() -> Table {
 }
 
 fn a_device(table: Table) -> Discover {
-    let settings = Settings::from_params(&json!({"bind": "127.0.0.1", "rtmp_port": 0}));
+    // The open door is asked for, so the tests that use it have a port with
+    // no channels; with channels it makes no difference.
+    let settings = Settings::from_params(&json!({"bind": "127.0.0.1", "rtmp_port": 0, "open_door": true}));
     Discover::start(&settings, table, None).expect("the loopback has a free port")
 }
 
@@ -26,7 +28,10 @@ fn publish(url: &str) -> Option<Child> {
     Command::new(ffmpeg)
         .args(["-loglevel", "error", "-re", "-f", "lavfi", "-i", "testsrc2=size=320x240:rate=30"])
         .args(["-f", "lavfi", "-i", "sine=frequency=440", "-t", "4"])
-        .args(["-c:v", "libx264", "-g", "15", "-preset", "ultrafast", "-c:a", "aac", "-f", "flv", url])
+        .args(["-c:v", "libx264", "-g", "15", "-preset", "ultrafast", "-c:a", "aac"])
+        // The RTMPS test's certificate is self signed, which is the point.
+        .args(if url.starts_with("rtmps:") { &["-tls_verify", "0"][..] } else { &[][..] })
+        .args(["-f", "flv", url])
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
         .spawn()
@@ -147,4 +152,47 @@ fn taking_a_key_back_cuts_off_the_publisher_on_air_with_it() {
     let _ = publisher.kill();
     let _ = publisher.wait();
     assert!(cut, "the stream on the key that was taken back is still live");
+}
+
+fn free_port() -> u16 {
+    std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port()
+}
+
+#[test]
+fn with_no_channels_nothing_listens_and_a_channel_opens_the_port_it_needs() {
+    let port = free_port();
+    let settings = Settings::from_params(&json!({"bind": "127.0.0.1", "rtmp_port": port}));
+    let device = Discover::start(&settings, Table::default(), None).expect("nothing to bind");
+    assert!(std::net::TcpStream::connect(("127.0.0.1", port)).is_err(), "no channel, no port");
+    device.set_table(table());
+    assert!(std::net::TcpStream::connect(("127.0.0.1", port)).is_ok(), "an RTMP channel opened it");
+    let rows = device.listeners();
+    assert!(rows.iter().any(|r| r["protocol"] == "rtmp" && r["open"] == true && r["because"] == json!(["church"])), "{rows:?}");
+    device.set_table(Table::default());
+    // Asked of the device rather than of the port: another test running at
+    // the same time may be handed the port number the moment it is free.
+    let rows = device.listeners();
+    assert!(rows.iter().all(|r| r["open"] == false), "closed with the last channel: {rows:?}");
+}
+
+#[test]
+fn rtmps_on_its_own_port_lets_a_publisher_in_over_tls_into_the_same_hub() {
+    let secure = free_port();
+    let cert = rcgen::generate_simple_self_signed(vec!["localhost".into()]).expect("a certificate");
+    let table = Table::from_params(&json!({
+        "channels": [{"id": "church", "app": "church", "protocols": [], "rtmps_port": secure,
+                      "keys": [{"id": "obs", "secret": "s3cret"}]}],
+        "tls": {"cert": cert.cert.pem(), "key": cert.key_pair.serialize_pem()},
+    }));
+    let device = a_device(table);
+    let Some(mut publisher) = publish(&format!("rtmps://127.0.0.1:{secure}/church/main?psk=s3cret")) else {
+        eprintln!("skipping: no ffmpeg on PATH");
+        return;
+    };
+    let live = wait_for(|| device.hub().is_live("church", "main"));
+    let described = device.hub().stream("church", "main");
+    let _ = publisher.kill();
+    let said = publisher.wait_with_output().map(|o| String::from_utf8_lossy(&o.stderr).into_owned()).unwrap_or_default();
+    assert!(live, "an RTMPS publisher went live: {said}");
+    assert_eq!(described.unwrap()["protocol"], "rtmps");
 }

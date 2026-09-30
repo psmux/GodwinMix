@@ -37,6 +37,7 @@ pub mod action;
 pub mod destination;
 pub mod rendition;
 pub mod channels;
+pub mod channel_ingest;
 pub mod error;
 pub mod idempotency;
 pub mod mcp_tools;

@@ -67,6 +67,8 @@ struct Session {
     id: u64,
     from: String,
     key: Option<String>,
+    /// `rtmp`, `rtmps`, `srt` or `whip`: how it arrived.
+    via: &'static str,
     meter: meter::Meter,
 }
 
@@ -93,13 +95,21 @@ impl Hub {
             .clone()
     }
 
-    /// Start a session. Refused while somebody else is publishing that name.
-    pub fn publish(
+    /// Start an RTMP session. Refused while somebody else is publishing that
+    /// name.
+    pub fn publish(&self, app: &str, stream: &str, from: &str, key: Option<String>) -> Result<Publication, String> {
+        self.publish_via(app, stream, from, key, "rtmp")
+    }
+
+    /// Start a session that arrived over `via`. Every protocol ends up here,
+    /// so a stream is a stream to every reader whatever carried it.
+    pub fn publish_via(
         &self,
         app: &str,
         stream: &str,
         from: &str,
         key: Option<String>,
+        via: &'static str,
     ) -> Result<Publication, String> {
         let mut slots = lock(&self.inner.slots);
         let slot = Hub::slot(&mut slots, app, stream);
@@ -113,7 +123,7 @@ impl Hub {
             ));
         }
         let id = self.inner.sessions.fetch_add(1, Ordering::Relaxed) + 1;
-        let session = Session { id, from: from.to_string(), key, meter: meter::Meter::new() };
+        let session = Session { id, from: from.to_string(), key, via, meter: meter::Meter::new() };
         state.session = Some(session);
         state.headers = queue::Headers::default();
         state.dropped_gops = 0;
@@ -168,6 +178,7 @@ fn describe(slot: &Slot) -> Option<Value> {
         "since_ms": session.meter.since_ms,
         "from": session.from,
         "key": session.key,
+        "protocol": session.via,
         "video": video,
         "audio": audio,
         "readers": state.readers.len(),

@@ -1,4 +1,4 @@
-// Add RTMP Channel: one box for a name, the address it will have drawn under
+// Add Channel: one box for a name, the address it will have drawn under
 // it as it is typed, and on Create the card with the key on it.
 
 import { el, on } from "../../shell/dom.js";
@@ -26,12 +26,12 @@ export async function addChannel(client) {
   const preview = el("div.chn-preview", {}, [el("span.chn-kicker", { text: "Encoders will publish to" }), el("code", {}, [base, slug])]);
   const create = el("button.btn.primary", { text: "Create channel", disabled: true });
   const m = modal({
-    title: "Add RTMP Channel",
+    title: "Add Channel",
     body: el("div.chn-create", {}, [
       el("label.chn-kicker", { text: "Name", for: "chn-name" }),
       input,
       preview,
-      el("p.chn-dim", { text: "Each channel has its own address and keys. OBS, a phone or a hardware encoder can publish to it, several at once." }),
+      el("p.chn-dim", { text: "Each channel has its own address and keys. OBS, a phone or a hardware encoder can publish to it by RTMP, several at once. SRT and WHIP are switched on in its settings." }),
     ]),
     footer: [el("button.btn", { text: "Cancel", onclick: () => m.close() }), create],
   });
@@ -55,7 +55,7 @@ export async function addChannel(client) {
     try {
       answer = await client.call("channel.add", { name, app: slugify(name) });
     } catch (e) {
-      errorToast(e, "Add RTMP Channel");
+      errorToast(e, "Add Channel");
       create.disabled = false;
       return;
     }

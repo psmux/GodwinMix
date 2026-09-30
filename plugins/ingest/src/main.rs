@@ -9,12 +9,12 @@
 //! |---|---|
 //! | `ingest/rtmp` | an RTMP listener written in Rust, remuxed to Matroska |
 //! | `ingest/whip` | a WHIP endpoint, so a browser needs nothing but the URL |
-//! | `ingest/discover` | the channel server: one RTMP port, many channels, many streams on each |
+//! | `ingest/discover` | the channel server: RTMP, RTMPS, SRT and WHIP, one port per protocol, opened only while a channel uses it |
 //!
-//! The SRT listener is not here: `srt/source` already is one, and its default
-//! mode is `listener`. Duplicating it would mean two places to fix a bug.
-//! `docs/how-to/receive-a-phone-or-obs-stream.md` says so where a reader looking
-//! for it will be.
+//! `srt/source` is still the way to take one SRT feed as one source with no
+//! channel. A channel's SRT is here, because it shares one port between every
+//! channel and tells callers apart by stream id, which `srtsrc` cannot
+//! (`src/srt.rs` says why).
 
 mod channels;
 mod codec;
@@ -22,6 +22,11 @@ mod device;
 mod flv;
 mod restream;
 mod gate;
+mod listeners;
+mod proto;
+mod srt;
+mod tagger;
+mod whip;
 // The restreamer (src/restream/) reads the hub through `subscribe`, so parts
 // of it are public API this binary does not call itself.
 #[allow(dead_code)]
@@ -268,6 +273,9 @@ impl Device for Publishers {
         }
         let name = params.get("name").and_then(Value::as_str).unwrap_or("");
         let arguments = params.get("arguments").cloned().unwrap_or(json!({}));
+        if let Some(answer) = self.whip_call(name, &arguments) {
+            return answer;
+        }
         let short = name.rsplit('/').next().unwrap_or(name);
         if !matches!(short, "streams" | "add_publishers") {
             return Err(RpcError::new(
@@ -290,6 +298,28 @@ impl Device for Publishers {
             }
         };
         serde_json::to_value(result).map_err(|e| RpcError::new(codes::INTERNAL_ERROR, e.to_string()))
+    }
+}
+
+impl Publishers {
+    /// `whip.offer` and `whip.end`, which the core calls from its control
+    /// port. They come as `tool.call`, the one call a device takes besides
+    /// the standard ones, and are not in the manifest's `[[tools]]`: they are
+    /// the core's to call, not an agent's. `None` for any other name.
+    fn whip_call(&self, method: &str, params: &Value) -> Option<Result<Value, RpcError>> {
+        if !matches!(method, "whip.offer" | "whip.end") {
+            return None;
+        }
+        let Some(running) = self.running.as_ref() else {
+            return Some(Err(RpcError::new(codes::WRONG_STATE, "the channel server is not running")));
+        };
+        if method == "whip.end" {
+            let session = params.get("session").and_then(Value::as_str).unwrap_or_default();
+            return Some(Ok(json!({"ended": running.whip.end(session)})));
+        }
+        // A refusal is an answer, with the HTTP status the core should send:
+        // the core's plugin channel carries an error's message and not its data.
+        Some(Ok(running.whip.offer(params).unwrap_or_else(|(status, why)| json!({"status": status, "why": why}))))
     }
 }
 

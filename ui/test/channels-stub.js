@@ -1,4 +1,4 @@
-// A stand in for a core with RTMP channels, answering in the shapes the real
+// A stand in for a core with channels, answering in the shapes the real
 // channel.* methods answer with (checked against a running core and the
 // ingest plugin), for the tests and the preview page. It keeps
 // channels in memory, answers the channel.* methods and sends
@@ -73,9 +73,28 @@ export class ChannelStub {
   }
 }
 
+/** The ports the channels need, as the core reports them, all open. */
+function listeners(channels) {
+  const on = (p) => channels.filter((c) => c.enabled && (c.protocols || ["rtmp"]).includes(p)).map((c) => c.id);
+  const rows = [
+    { protocol: "rtmp", transport: "tcp", port: 1935, open: on("rtmp").length > 0, because: on("rtmp") },
+    { protocol: "srt", transport: "udp", port: 9000, open: on("srt").length > 0, because: on("srt") },
+    { protocol: "whip", transport: "tcp", port: 8080, open: on("whip").length > 0, because: on("whip") },
+  ];
+  for (const c of channels.filter((c) => c.enabled && c.rtmps && c.rtmps.enabled)) {
+    rows.push({ protocol: "rtmps", transport: "tcp", port: c.rtmps.port, open: true, because: [c.id] });
+  }
+  return rows;
+}
+
 const METHODS = {
   "channel.list"() {
-    return { channels: [...this.channels.values()], rtmp: { port: 1935, urls: this.urls, listening: true } };
+    const channels = [...this.channels.values()];
+    return { channels, rtmp: { port: 1935, urls: this.urls, listening: true }, listeners: listeners(channels), hosts: ["10.0.0.5", "192.168.1.20"], certificate: this.certificate || null };
+  },
+  "channel.certificate.generate"() {
+    this.certificate = { source: "self_signed", names: ["10.0.0.5", "localhost"], fingerprint: "AB:CD:EF:01:23:45:67:89:AB:CD:EF", created: "2026-09-30T10:00:00Z" };
+    return this.certificate;
   },
   "channel.get"({ id }) {
     return this.channel(id);
@@ -85,6 +104,7 @@ const METHODS = {
     if (this.channels.has(id)) throw Object.assign(new Error(`A channel called "${id}" is here already. Pick another name.`), { code: -32602, data: { id } });
     const c = {
       id, name, app: id, enabled: true, auto_source: auto_source !== false, key_mode: key_mode || "query", keys: [],
+      protocols: ["rtmp"], rtmps: { enabled: false, port: 443 },
       publish: { server: `${this.urls[0]}/${id}`, example: `${this.urls[0]}/${id}/main?psk=<key>` },
       streams: [], destinations: [],
     };
@@ -95,7 +115,7 @@ const METHODS = {
   },
   "channel.set"(p) {
     const c = this.channel(p.id);
-    for (const k of ["name", "enabled", "auto_source", "key_mode"]) if (p[k] !== undefined) c[k] = p[k];
+    for (const k of ["name", "enabled", "auto_source", "key_mode", "protocols", "rtmps"]) if (p[k] !== undefined) c[k] = p[k];
     this.changed(c.id);
     return c;
   },

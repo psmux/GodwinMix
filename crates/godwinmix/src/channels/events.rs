@@ -149,6 +149,9 @@ impl Channels {
         if let Some(rows) = body["destinations"].as_array() {
             self.destination_rates(rows);
         }
+        if let Some(rows) = body["listeners"].as_array() {
+            self.listener_report(rows);
+        }
         let rows = body["streams"].as_array().cloned().unwrap_or_default();
         let mut live = self.live.lock();
         for row in &rows {

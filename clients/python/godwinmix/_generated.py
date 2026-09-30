@@ -281,8 +281,34 @@ class CellAssignment(TypedDict, total=False):
     x: int
     y: int
 
+class CertificateGenerateRequest(TypedDict, total=False):
+    """`channel.certificate.generate`: a self signed certificate."""
+
+    names: List[str]
+    # Host names and addresses it is for. Defaults to this machine's address, `localhost` and `127.0.0.1`.
+
+class CertificateInfo(TypedDict, total=False):
+    """The certificate RTMPS answers with. The private key never leaves the core."""
+
+    created: str
+    # When it was set, RFC 3339 in UTC.
+    fingerprint: str
+    # SHA-256 of the certificate, as colon separated hex, to compare with what an encoder shows.
+    names: List[str]
+    # The names it was made for, for a self signed one.
+    source: str
+    # `uploaded`, or `self_signed` for one the mixer made.
+
+class CertificateSetRequest(TypedDict, total=False):
+    """`channel.certificate.set`: a certificate and its private key, as PEM."""
+
+    cert: str
+    # The certificate, and any chain after it, as PEM.
+    key: str
+    # Its private key, as PEM.
+
 class Channel(TypedDict, total=False):
-    """A named place encoders publish to, on the mixer's own RTMP port."""
+    """A named place encoders publish to, over every protocol it has switched on."""
 
     app: str
     # The RTMP application name: the path segment after the port.
@@ -299,7 +325,11 @@ class Channel(TypedDict, total=False):
     # The keys as hints, never the key itself: a read token sees only these.
     name: str
     # What a person calls it.
+    protocols: List[ChannelProtocol]
+    # The protocols it takes publishers over, besides RTMPS.
     publish: ChannelPublish
+    rtmps: Rtmps
+    # RTMPS, on a port of its own, when a person has turned it on.
     streams: List[ChannelStream]
     # Live streams, and streams that left while a scene still holds their source.
 
@@ -311,6 +341,8 @@ class ChannelAddRequest(TypedDict, total=False):
     auto_source: Optional[bool]
     key_mode: Union[KeyMode, None]
     name: str
+    protocols: Optional[List[ChannelProtocol]]
+    # Defaults to RTMP alone.
 
 class ChannelAdded(TypedDict, total=False):
     """What `channel.add` answers: the channel and its first key."""
@@ -349,12 +381,20 @@ class ChannelKeyRevealRequest(TypedDict, total=False):
 class ChannelList(TypedDict, total=False):
     """`channel.list`."""
 
+    certificate: Union[CertificateInfo, None]
+    # The certificate RTMPS answers with, when there is one.
     channels: List[Channel]
+    hosts: List[str]
+    # The addresses an encoder can reach this machine at, first one first.
+    listeners: List[Listener]
+    # Every listener a channel needs, open or not, and why: the ports this mixer has open for ingest, and the channels each is open for.
     rtmp: RtmpInfo
 
 class ChannelPublish(TypedDict, total=False):
     """Where an encoder is pointed."""
 
+    addresses: List[PublishAddress]
+    # The same for every protocol the channel has on, RTMP first.
     example: str
     # `<server>/main?psk=<key>`, with `<key>` left for the person to fill.
     server: str
@@ -374,6 +414,10 @@ class ChannelSetRequest(TypedDict, total=False):
     id: str
     key_mode: Union[KeyMode, None]
     name: Optional[str]
+    protocols: Optional[List[ChannelProtocol]]
+    # Which protocols it takes, as a whole list: `["rtmp", "srt"]`.
+    rtmps: Union[Rtmps, None]
+    # RTMPS on or off, and its port.
 
 ChannelStream = TypedDict("ChannelStream", {
     "audio": Union[StreamAudio, None],
@@ -381,6 +425,7 @@ ChannelStream = TypedDict("ChannelStream", {
     "from": str,
     "key": Optional[str],
     "name": str,
+    "protocol": Optional[str],
     "since_ms": int,
     "source": Optional[str],
     "state": str,
@@ -1001,6 +1046,24 @@ class Limits(TypedDict, total=False):
     max_upload_bytes: int
     # Largest upload the media endpoint accepts, in bytes.
 
+class Listener(TypedDict, total=False):
+    """One listener a channel needs, and whether it is open now."""
+
+    because: List[str]
+    # The channels it is open for. Empty when nothing needs it.
+    last_port: Optional[int]
+    # The last port of a range, for WebRTC media.
+    loopback: bool
+    # Bound to 127.0.0.1 only, so nothing off this machine reaches it.
+    open: bool
+    port: int
+    problem: Optional[str]
+    # Why it is not open although a channel wants it, and what to do.
+    protocol: str
+    # `rtmp`, `rtmps`, `srt`, `whip`, `webrtc` (the media ports WHIP sessions use) or `relay` (the RTMP port on the loopback alone, for the mixer's own sources, while no channel has RTMP on).
+    transport: str
+    # `tcp` or `udp`.
+
 class LogGstRequest(TypedDict, total=False):
     """`log.gst`."""
 
@@ -1422,6 +1485,16 @@ class ProgramState(TypedDict, total=False):
     scene: Optional[str]
     # The scene on air, when one was taken by name.
 
+class PublishAddress(TypedDict, total=False):
+    """Where an encoder is pointed for one protocol."""
+
+    example: str
+    # The whole address with `<key>` where the key goes.
+    protocol: str
+    # `rtmp`, `rtmps`, `srt` or `whip`.
+    server: str
+    # The address without the key: `srt://10.0.0.5:9000`.
+
 class Record(TypedDict, total=False):
     """One scene or one item."""
 
@@ -1512,6 +1585,13 @@ class RtmpInfo(TypedDict, total=False):
     # Why not, and what to do, when it is not.
     urls: List[str]
     # `rtmp://<address>:<port>` for each address this machine has.
+
+class Rtmps(TypedDict, total=False):
+    """RTMPS for one channel: off, or on at a port."""
+
+    enabled: bool
+    port: int
+    # The port it listens on while enabled. 443 is offered first.
 
 class SaveRequest(TypedDict, total=False):
     name: str
@@ -2049,6 +2129,9 @@ Blend = Literal['normal', 'add', 'screen', 'multiply', 'lighten', 'darken', 'sub
 # How media crosses between a node and the core.
 BridgeTransport = Literal['rtp', 'srt', 'whip']
 
+# A way a publisher reaches a channel. RTMPS is `Rtmps`, set apart because it has a port of its own.
+ChannelProtocol = Literal['rtmp', 'srt', 'whip']
+
 ConversionPhase = Literal['running', 'done', 'failed']
 
 # Where a destination has got to.
@@ -2102,6 +2185,8 @@ METHODS = (
     {"name": "adbreak.start", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/adbreak/start"), "summary": 'Interrupt the programme with a clip, then rejoin live when it ends.'},
     {"name": "agent.state", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/agent/state"), "summary": "The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing."},
     {"name": "channel.add", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/channels"), "summary": 'Make a channel and its first key, which is in this answer. channel.key.reveal reads it again later.'},
+    {"name": "channel.certificate.generate", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/channels/certificate/generate"), "summary": "Make a self signed certificate for RTMPS, for this machine's addresses unless names are given. Encoders must be told to accept it; one from a certificate authority needs no such step."},
+    {"name": "channel.certificate.set", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/channels/certificate/set"), "summary": 'Give RTMPS a certificate: the PEM of the certificate (and its chain) and of its private key, as a certificate authority issued them. Checked before it is kept; the key is sealed and never read back.'},
     {"name": "channel.destination.add", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/channels/{id}/destination/add"), "summary": "Send a channel's stream on to YouTube, Facebook, Twitch, an RTMP server or an SRT receiver as it arrives. Nothing is decoded or encoded. The key is write only."},
     {"name": "channel.destination.remove", "scope": "admin", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/channels/{id}/destination/remove"), "summary": "Stop sending a channel's stream to one destination and forget it. The publisher and the other destinations are not touched."},
     {"name": "channel.destination.set", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/channels/{id}/destination"), "summary": "Change one of a channel's destinations, naming only what moves: a new key, another server, which stream it sends, on or off. A key left out is kept."},
@@ -2109,9 +2194,9 @@ METHODS = (
     {"name": "channel.key.add", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/channels/{id}/key/add"), "summary": 'Make another key for a channel, to give to one more person or encoder. The key is in this answer, and channel.key.reveal reads it again later.'},
     {"name": "channel.key.remove", "scope": "admin", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/channels/{id}/key/remove"), "summary": 'Take one key back. A publisher on air with it is cut off and the next one is turned away; the other keys are untouched.'},
     {"name": "channel.key.reveal", "scope": "admin", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/channels/{id}/key/reveal"), "summary": 'Read one key of a channel back, to give it to an encoder again. Admin only; a list shows only the last four characters. Each read is logged with who asked, never with the key.'},
-    {"name": "channel.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/channels"), "summary": 'Every RTMP channel with its keys (as hints), the address to publish to, and what is live on it, beside the port they all share.'},
+    {"name": "channel.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/channels"), "summary": 'Every channel with its keys (as hints), the address to publish to over each protocol it has on, and what is live on it; and which ingest ports are open and for which channels.'},
     {"name": "channel.remove", "scope": "admin", "mutating": True, "destructive": True, "rest": ("DELETE", "/api/v1/channels/{id}"), "summary": 'Remove a channel and forget its keys. Sources it made that no scene holds go with it.'},
-    {"name": "channel.set", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/channels/{id}/set"), "summary": 'Rename a channel, switch it on or off, or change its application name, whether its streams become sources, or how its key is given. Only what is named moves.'},
+    {"name": "channel.set", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/channels/{id}/set"), "summary": 'Rename a channel, switch it on or off, or change its application name, whether its streams become sources, how its key is given, which protocols it takes (rtmp, srt, whip) or RTMPS and its port. A port opens when the first channel needs it and closes when the last one stops. Only what is named moves.'},
     {"name": "codec.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/codecs"), "summary": 'Every codec and element in the catalogue, which of them this machine actually has, and what it would pick.'},
     {"name": "config.get", "scope": "admin", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/config"), "summary": "The mixer's settings: each key's value in the config file, its default, when a change to it takes effect, and which keys are waiting for a restart. Secrets say only whether one is set."},
     {"name": "config.reset", "scope": "admin", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/config/reset"), "summary": 'Put settings back to their defaults by taking them out of the config file. Answers like config.set.'},
@@ -2336,6 +2421,7 @@ class GeneratedMethods:
         app: Optional[str] = None,
         auto_source: Optional[bool] = None,
         key_mode: Optional[Union[KeyMode, None]] = None,
+        protocols: Optional[List[ChannelProtocol]] = None,
     ) -> ChannelAdded:
         """Make a channel and its first key, which is in this answer. channel.key.reveal reads it again later."""
         params: Dict[str, Any] = {}
@@ -2346,7 +2432,31 @@ class GeneratedMethods:
             params["auto_source"] = auto_source
         if key_mode is not None:
             params["key_mode"] = key_mode
+        if protocols is not None:
+            params["protocols"] = protocols
         return await self._call("channel.add", params)
+
+    async def channel_certificate_generate(
+        self,
+        *,
+        names: Optional[List[str]] = None,
+    ) -> CertificateInfo:
+        """Make a self signed certificate for RTMPS, for this machine's addresses unless names are given. Encoders must be told to accept it; one from a certificate authority needs no such step."""
+        params: Dict[str, Any] = {}
+        if names is not None:
+            params["names"] = names
+        return await self._call("channel.certificate.generate", params)
+
+    async def channel_certificate_set(
+        self,
+        cert: str,
+        key: str,
+    ) -> CertificateInfo:
+        """Give RTMPS a certificate: the PEM of the certificate (and its chain) and of its private key, as a certificate authority issued them. Checked before it is kept; the key is sealed and never read back."""
+        params: Dict[str, Any] = {}
+        params["cert"] = cert
+        params["key"] = key
+        return await self._call("channel.certificate.set", params)
 
     async def channel_destination_add(
         self,
@@ -2460,7 +2570,7 @@ class GeneratedMethods:
     async def channel_list(
         self,
     ) -> ChannelList:
-        """Every RTMP channel with its keys (as hints), the address to publish to, and what is live on it, beside the port they all share."""
+        """Every channel with its keys (as hints), the address to publish to over each protocol it has on, and what is live on it; and which ingest ports are open and for which channels."""
         params: Dict[str, Any] = {}
         return await self._call("channel.list", params)
 
@@ -2482,8 +2592,10 @@ class GeneratedMethods:
         enabled: Optional[bool] = None,
         key_mode: Optional[Union[KeyMode, None]] = None,
         name: Optional[str] = None,
+        protocols: Optional[List[ChannelProtocol]] = None,
+        rtmps: Optional[Union[Rtmps, None]] = None,
     ) -> Channel:
-        """Rename a channel, switch it on or off, or change its application name, whether its streams become sources, or how its key is given. Only what is named moves."""
+        """Rename a channel, switch it on or off, or change its application name, whether its streams become sources, how its key is given, which protocols it takes (rtmp, srt, whip) or RTMPS and its port. A port opens when the first channel needs it and closes when the last one stops. Only what is named moves."""
         params: Dict[str, Any] = {}
         params["id"] = id
         if app is not None:
@@ -2496,6 +2608,10 @@ class GeneratedMethods:
             params["key_mode"] = key_mode
         if name is not None:
             params["name"] = name
+        if protocols is not None:
+            params["protocols"] = protocols
+        if rtmps is not None:
+            params["rtmps"] = rtmps
         return await self._call("channel.set", params)
 
     async def codec_list(

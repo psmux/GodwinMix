@@ -35,6 +35,6 @@ export function emptyArt(onAdd) {
     art,
     el("h3", { text: "Let an encoder in" }),
     el("p", { text: "OBS, a phone or a hardware encoder publishes to a channel. It can go on air and on to YouTube, Facebook and the rest." }),
-    el("button.btn.primary.chn-big", { text: "Add RTMP Channel", onclick: onAdd }),
+    el("button.btn.primary.chn-big", { text: "Add Channel", onclick: onAdd }),
   ]);
 }

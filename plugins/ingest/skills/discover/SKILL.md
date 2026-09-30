@@ -1,11 +1,12 @@
 ---
 name: ingest-discover
-description: The channel server. Holds the mixer's RTMP port for every channel, lets in the encoders whose keys match, measures each live stream, and hands it to a mixer source or a restream. Use when asked what is publishing right now, at what size, frame rate and bit rate, or why an encoder was turned away.
+description: The channel server. Holds the mixer's RTMP, SRT and RTMPS ports for every channel (each only while a channel uses it) and takes the WHIP publishers the core hands it, lets in the encoders whose keys match, measures each live stream, and hands it to a mixer source or a restream. Use when asked what is publishing right now, over what, at what size, frame rate and bit rate, which ports are open, or why an encoder was turned away.
 ---
 
 # ingest/discover
 
-One RTMP port, many channels, many streams on each. Channels are the core's:
+One port per protocol, many channels, many streams on each, and no port open
+until a channel that is switched on uses it. Channels are the core's:
 make and change them with the `channel.*` methods, and the core hands this
 device the table. What it does with it:
 
@@ -15,8 +16,9 @@ device the table. What it does with it:
   its encoder is told why in a sentence;
 * taking a key back cuts off whoever is on air with it.
 
-With no channels at all it takes anybody, the way it always did, and each
-publisher becomes a source named after its path.
+With no channels at all nothing listens, unless the plugin's `open_door`
+setting is on: then it takes any RTMP publisher, the way it did before
+channels, and each becomes a source named after its path.
 
 ## streams
 

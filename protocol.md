@@ -37,6 +37,8 @@ Keys accepted on every method, handled before a method runs.
 | `adbreak.start` | `POST /api/v1/adbreak/start` | operate |  | 1 | Interrupt the programme with a clip, then rejoin live when it ends. |
 | `agent.state` | `GET /api/v1/agent/state` | read |  | 1 | The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing. |
 | `channel.add` | `POST /api/v1/channels` | admin |  | 1 | Make a channel and its first key, which is in this answer. channel.key.reveal reads it again later. |
+| `channel.certificate.generate` | `POST /api/v1/channels/certificate/generate` | admin |  | 1 | Make a self signed certificate for RTMPS, for this machine's addresses unless names are given. Encoders must be told to accept it; one from a certificate authority needs no such step. |
+| `channel.certificate.set` | `POST /api/v1/channels/certificate/set` | admin |  | 1 | Give RTMPS a certificate: the PEM of the certificate (and its chain) and of its private key, as a certificate authority issued them. Checked before it is kept; the key is sealed and never read back. |
 | `channel.destination.add` | `POST /api/v1/channels/{id}/destination/add` | admin |  | 1 | Send a channel's stream on to YouTube, Facebook, Twitch, an RTMP server or an SRT receiver as it arrives. Nothing is decoded or encoded. The key is write only. |
 | `channel.destination.remove` | `POST /api/v1/channels/{id}/destination/remove` | admin | yes | 1 | Stop sending a channel's stream to one destination and forget it. The publisher and the other destinations are not touched. |
 | `channel.destination.set` | `POST /api/v1/channels/{id}/destination` | admin |  | 1 | Change one of a channel's destinations, naming only what moves: a new key, another server, which stream it sends, on or off. A key left out is kept. |
@@ -44,9 +46,9 @@ Keys accepted on every method, handled before a method runs.
 | `channel.key.add` | `POST /api/v1/channels/{id}/key/add` | admin |  | 1 | Make another key for a channel, to give to one more person or encoder. The key is in this answer, and channel.key.reveal reads it again later. |
 | `channel.key.remove` | `POST /api/v1/channels/{id}/key/remove` | admin | yes | 1 | Take one key back. A publisher on air with it is cut off and the next one is turned away; the other keys are untouched. |
 | `channel.key.reveal` | `POST /api/v1/channels/{id}/key/reveal` | admin |  | 1 | Read one key of a channel back, to give it to an encoder again. Admin only; a list shows only the last four characters. Each read is logged with who asked, never with the key. |
-| `channel.list` | `GET /api/v1/channels` | read |  | 1 | Every RTMP channel with its keys (as hints), the address to publish to, and what is live on it, beside the port they all share. |
+| `channel.list` | `GET /api/v1/channels` | read |  | 1 | Every channel with its keys (as hints), the address to publish to over each protocol it has on, and what is live on it; and which ingest ports are open and for which channels. |
 | `channel.remove` | `DELETE /api/v1/channels/{id}` | admin | yes | 1 | Remove a channel and forget its keys. Sources it made that no scene holds go with it. |
-| `channel.set` | `POST /api/v1/channels/{id}/set` | admin |  | 1 | Rename a channel, switch it on or off, or change its application name, whether its streams become sources, or how its key is given. Only what is named moves. |
+| `channel.set` | `POST /api/v1/channels/{id}/set` | admin |  | 1 | Rename a channel, switch it on or off, or change its application name, whether its streams become sources, how its key is given, which protocols it takes (rtmp, srt, whip) or RTMPS and its port. A port opens when the first channel needs it and closes when the last one stops. Only what is named moves. |
 | `codec.list` | `GET /api/v1/codecs` | read |  | 1 | Every codec and element in the catalogue, which of them this machine actually has, and what it would pick. |
 | `config.get` | `GET /api/v1/config` | admin |  | 1 | The mixer's settings: each key's value in the config file, its default, when a change to it takes effect, and which keys are waiting for a restart. Secrets say only whether one is set. |
 | `config.reset` | `POST /api/v1/config/reset` | admin | yes | 1 | Put settings back to their defaults by taking them out of the config file. Answers like config.set. |
@@ -248,6 +250,36 @@ Make a channel and its first key, which is in this answer. channel.key.reveal re
 }
 ```
 
+#### `channel.certificate.generate`
+
+Make a self signed certificate for RTMPS, for this machine's addresses unless names are given. Encoders must be told to accept it; one from a certificate authority needs no such step.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/CertificateGenerateRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/CertificateInfo"
+  }
+}
+```
+
+#### `channel.certificate.set`
+
+Give RTMPS a certificate: the PEM of the certificate (and its chain) and of its private key, as a certificate authority issued them. Checked before it is kept; the key is sealed and never read back.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/CertificateSetRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/CertificateInfo"
+  }
+}
+```
+
 #### `channel.destination.add`
 
 Send a channel's stream on to YouTube, Facebook, Twitch, an RTMP server or an SRT receiver as it arrives. Nothing is decoded or encoded. The key is write only.
@@ -355,7 +387,7 @@ Read one key of a channel back, to give it to an encoder again. Admin only; a li
 
 #### `channel.list`
 
-Every RTMP channel with its keys (as hints), the address to publish to, and what is live on it, beside the port they all share.
+Every channel with its keys (as hints), the address to publish to over each protocol it has on, and what is live on it; and which ingest ports are open and for which channels.
 
 MCP tool `list_channels` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
 
@@ -389,7 +421,7 @@ Remove a channel and forget its keys. Sources it made that no scene holds go wit
 
 #### `channel.set`
 
-Rename a channel, switch it on or off, or change its application name, whether its streams become sources, or how its key is given. Only what is named moves.
+Rename a channel, switch it on or off, or change its application name, whether its streams become sources, how its key is given, which protocols it takes (rtmp, srt, whip) or RTMPS and its port. A port opens when the first channel needs it and closes when the last one stops. Only what is named moves.
 
 ```json
 {
@@ -2595,6 +2627,9 @@ The paths below still answer, for one release, with a `Deprecation: true` header
 | `GET /rpc` | the JSON-RPC WebSocket. Everything in `methods` is reachable here. |
 | `GET /api/v1/status` | an alias for GET /api/v1/core/status, because it is what people type |
 | `ANY /api/v1/{*rest}` | every method's REST route, generated by the transform rule |
+| `POST /whip/{channel}/{stream}` | WHIP ingest for a channel that has WHIP on. The body is the SDP offer, the channel's key is the bearer token, and the answer is 201 with the SDP answer and the session's Location. |
+| `DELETE /whip/{channel}/{stream}/{session}` | ends a WHIP session, as the WHIP client does when it stops publishing |
+| `PATCH /whip/{channel}/{stream}/{session}` | 405: every candidate is in the answer, and none are taken later |
 
 ## The ext table
 
