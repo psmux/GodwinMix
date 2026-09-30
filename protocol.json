@@ -4430,6 +4430,96 @@
       ],
       "type": "object"
     },
+    "MissingRequest": {
+      "description": "`source.missing`: the ids a scene draws, or none for every source the\nmixer knows is not running.",
+      "properties": {
+        "ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "MissingSource": {
+      "description": "One source that is not running, and what would bring it back.",
+      "properties": {
+        "action": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ErrorAction"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The button that fixes it, when the error carries one."
+        },
+        "error": {
+          "description": "The error it failed with, which names the next step.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "restore": {
+          "description": "True when `source.restore` can ask for it again.",
+          "type": "boolean"
+        },
+        "type": {
+          "description": "The kind, such as `camera/source`, when the mixer knows it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "why": {
+          "$ref": "#/$defs/MissingWhy"
+        }
+      },
+      "required": [
+        "id",
+        "why",
+        "restore"
+      ],
+      "type": "object"
+    },
+    "MissingWhy": {
+      "description": "Why a source is not running.",
+      "oneOf": [
+        {
+          "const": "failed",
+          "description": "In the mixer, and its pipeline failed. The mixer keeps retrying it.",
+          "type": "string"
+        },
+        {
+          "const": "not_started",
+          "description": "Asked for (in the config, or by a rebuild) and could not be started.\n`error` says why and `source.restore` asks again.",
+          "type": "string"
+        },
+        {
+          "const": "removed",
+          "description": "Taken away with `source.remove`. `source.restore` puts it back.",
+          "type": "string"
+        },
+        {
+          "const": "unknown",
+          "description": "Not in the mixer, and the mixer remembers nothing about it: removed\nbefore the last restart, or never added.",
+          "type": "string"
+        }
+      ]
+    },
     "MixerStatus": {
       "properties": {
         "ad": {
@@ -5804,6 +5894,13 @@
             }
           ],
           "description": "Present while an ad break is armed or on air."
+        },
+        "missing": {
+          "description": "Sources the scene on air draws that this mixer does not have. The take\nwent ahead without them and they draw nothing, so the slate or whatever\nsits under them shows through, until they are added back. Left out when\nevery source is here.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
         },
         "preview": {
           "description": "The scene armed for the next `program.take` with no argument.",
@@ -12134,6 +12231,28 @@
       "summary": "Every source, with its state, whether it has video and audio, and its fader."
     },
     {
+      "destructive": false,
+      "idempotent": true,
+      "mutating": false,
+      "name": "source.missing",
+      "params": {
+        "$ref": "#/$defs/MissingRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/sources/{id}/missing"
+      },
+      "result": {
+        "items": {
+          "$ref": "#/$defs/MissingSource"
+        },
+        "type": "array"
+      },
+      "scope": "read",
+      "since": "1",
+      "summary": "Sources that are not running, and why: failed, could not be started (with the error and the action that fixes it), removed, or unknown. Pass the ids a scene draws, or none for every one the mixer knows about."
+    },
+    {
       "destructive": true,
       "idempotent": true,
       "mcp": {
@@ -12158,6 +12277,25 @@
       "scope": "operate",
       "since": "1",
       "summary": "Remove a source. If it is on programme the mixer cuts to the slate first."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mutating": true,
+      "name": "source.restart",
+      "params": {
+        "$ref": "#/$defs/IdRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/sources/{id}/restart"
+      },
+      "result": {
+        "$ref": "#/$defs/SourceStatus"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "Build a source's pipeline again now, rather than waiting for its next retry. For a source that could not be started or was removed, use source.restore."
     },
     {
       "destructive": false,

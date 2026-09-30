@@ -1135,6 +1135,28 @@ export interface Meters {
   sources: Record<string, unknown>;
 }
 
+/**
+ * `source.missing`: the ids a scene draws, or none for every source the
+ * mixer knows is not running.
+ */
+export interface MissingRequest {
+  ids?: string[];
+}
+
+/** One source that is not running, and what would bring it back. */
+export interface MissingSource {
+  action?: ErrorAction | null;
+  error?: string | null;
+  id: string;
+  name?: string | null;
+  restore: boolean;
+  type?: string | null;
+  why: MissingWhy;
+}
+
+/** Why a source is not running. */
+export type MissingWhy = "failed" | "not_started" | "removed" | "unknown";
+
 export interface MixerStatus {
   ad?: AdStatus | null;
   backend: BackendInfo;
@@ -1508,6 +1530,7 @@ export interface PreviewSocket {
  */
 export interface ProgramState {
   ad?: AdStatus | null;
+  missing?: string[];
   preview?: string | null;
   previous?: string | null;
   program?: string | null;
@@ -2330,7 +2353,9 @@ export interface MethodParams {
   "source.get": IdRequest;
   "source.group": GroupSourcesRequest;
   "source.list": Record<string, never>;
+  "source.missing": MissingRequest;
   "source.remove": IdRequest;
+  "source.restart": IdRequest;
   "source.restore": IdRequest;
   "source.seek": SeekParams;
   "source.set": SetSourceRequest;
@@ -2484,7 +2509,9 @@ export interface MethodResults {
   "source.get": SourceStatus;
   "source.group": Record<string, unknown>;
   "source.list": SourceStatus[];
+  "source.missing": MissingSource[];
   "source.remove": Record<string, unknown>;
+  "source.restart": SourceStatus;
   "source.restore": SourceStatus;
   "source.seek": SourcePositionState;
   "source.set": SourceStatus;
@@ -2681,7 +2708,9 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "source.get", summary: "One source. Refused with the ids that exist when there is no such source.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/sources/{id}" } },
   { name: "source.group", summary: "Put sources in a tray folder. A tag for finding things, not a group on the canvas.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/sources/{id}/group" } },
   { name: "source.list", summary: "Every source, with its state, whether it has video and audio, and its fader.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/sources" } },
+  { name: "source.missing", summary: "Sources that are not running, and why: failed, could not be started (with the error and the action that fixes it), removed, or unknown. Pass the ids a scene draws, or none for every one the mixer knows about.", scope: "read", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/sources/{id}/missing" } },
   { name: "source.remove", summary: "Remove a source. If it is on programme the mixer cuts to the slate first.", scope: "operate", mutating: true, destructive: true, rest: { method: "DELETE", path: "/api/v1/sources/{id}" } },
+  { name: "source.restart", summary: "Build a source's pipeline again now, rather than waiting for its next retry. For a source that could not be started or was removed, use source.restore.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/sources/{id}/restart" } },
   { name: "source.restore", summary: "Put back a source that source.remove took away, as it was: same id, address, settings, fader and mute. The mixer remembers the last sixteen it removed, until it restarts.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/sources/{id}/restore" } },
   { name: "source.seek", summary: "Move a seekable source to a position. Answers with where it actually landed.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/sources/{id}/seek" } },
   { name: "source.set", summary: "Change a running source: its name and colour, its params, or where it runs. The name and colour live on the scene document. Moving a source between the core, a sidecar and a node is `place`; the programme keeps its frame rate across the move and the compositor covers the swap.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/sources/{id}/set" } },
@@ -3455,9 +3484,19 @@ export class GeneratedMethods {
     return this._call("source.list", {}) as Promise<SourceStatus[]>;
   }
 
+  /** Sources that are not running, and why: failed, could not be started (with the error and the action that fixes it), removed, or unknown. Pass the ids a scene draws, or none for every one the mixer knows about. */
+  sourceMissing(params: MissingRequest = {}): Promise<MissingSource[]> {
+    return this._call("source.missing", params as unknown as Record<string, unknown>) as Promise<MissingSource[]>;
+  }
+
   /** Remove a source. If it is on programme the mixer cuts to the slate first. */
   sourceRemove(params: IdRequest): Promise<Record<string, unknown>> {
     return this._call("source.remove", params as unknown as Record<string, unknown>) as Promise<Record<string, unknown>>;
+  }
+
+  /** Build a source's pipeline again now, rather than waiting for its next retry. For a source that could not be started or was removed, use source.restore. */
+  sourceRestart(params: IdRequest): Promise<SourceStatus> {
+    return this._call("source.restart", params as unknown as Record<string, unknown>) as Promise<SourceStatus>;
   }
 
   /** Put back a source that source.remove took away, as it was: same id, address, settings, fader and mute. The mixer remembers the last sixteen it removed, until it restarts. */
