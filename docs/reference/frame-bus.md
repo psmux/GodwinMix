@@ -234,10 +234,11 @@ whose provide declares `share` is a `SharedSource`:
   it, starts the plugin, and publishes under the same name. Every reader's
   `gmxbussrc` finds the new owner by itself.
 
-`source.call share` is not a protocol method; the numbers are in the mixer's
-log instead: `this source opened the device and shares it` with how long the
-plugin took to start, `the picture came back after a gap` with the gap, and
-`stopping a shared source` with the whole report:
+No protocol method answers with these numbers yet. The source answers
+`share` through the `Source` trait's `call`, and the mixer's log has the same:
+`this source opened the device and shares it` with how long the plugin took to
+start, `the picture came back after a gap` with the gap, and `stopping a shared
+source` with the whole report:
 
 | Field | |
 |---|---|
