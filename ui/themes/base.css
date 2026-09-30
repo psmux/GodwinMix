@@ -438,7 +438,8 @@ label { display: block; }
 .menubar-heading { padding: 6px 8px 2px; color: var(--faint); font-size: var(--fs-sm); }
 [data-native-menu] .menubar-wrap { display: none; }
 /* Show tabs, after the menu bar. One show reads as a plain name. */
-.shows { display: flex; align-items: center; min-width: 0; padding-left: 6px; border-left: var(--border) solid var(--line-soft); }
+.header > .pill, .header > .tally { flex-shrink: 0; white-space: nowrap; }
+.shows { display: flex; align-items: center; min-width: 60px; padding-left: 6px; border-left: var(--border) solid var(--line-soft); }
 .showtabs { display: flex; gap: 2px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
 .showtab, .shows-add { display: flex; align-items: center; gap: 6px; padding: 4px 10px; border: 0; border-radius: var(--radius-sm); background: none; color: var(--dim); white-space: nowrap; }
 .showtab-name { max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
@@ -454,6 +455,7 @@ label { display: block; }
   .menubar { display: none; }
   .menubar-all { display: inline-block; }
   .menubar-every { right: 8px; }
+  .shows { border: 0; padding: 0; }
 }
 
 /* ---------------------------------------------------------------- empty */

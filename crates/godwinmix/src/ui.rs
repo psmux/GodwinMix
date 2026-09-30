@@ -109,6 +109,14 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/outputs/panel.js", include_str!("../../../ui/panels/outputs/panel.js")),
     ("panels/outputs/views.js", include_str!("../../../ui/panels/outputs/views.js")),
 ("panels/renditions/bars.js", include_str!("../../../ui/panels/renditions/bars.js")),
+    ("panels/routing/act.js", include_str!("../../../ui/panels/routing/act.js")),
+    ("panels/routing/data.js", include_str!("../../../ui/panels/routing/data.js")),
+    ("panels/routing/grid.js", include_str!("../../../ui/panels/routing/grid.js")),
+    ("panels/routing/link.js", include_str!("../../../ui/panels/routing/link.js")),
+    ("panels/routing/list.js", include_str!("../../../ui/panels/routing/list.js")),
+    ("panels/routing/model.js", include_str!("../../../ui/panels/routing/model.js")),
+    ("panels/routing/routing.css", include_str!("../../../ui/panels/routing/routing.css")),
+    ("panels/routing/view.js", include_str!("../../../ui/panels/routing/view.js")),
     ("panels/renditions/custom.js", include_str!("../../../ui/panels/renditions/custom.js")),
     ("panels/renditions/format-step.js", include_str!("../../../ui/panels/renditions/format-step.js")),
     ("panels/renditions/hls-add.js", include_str!("../../../ui/panels/renditions/hls-add.js")),
@@ -251,6 +259,12 @@ const DEV_ASSETS: &[(&str, &str)] = &[
     ("test/renditions-stub.js", include_str!("../../../ui/test/renditions-stub.js")),
     ("test/renditions-preview.js", include_str!("../../../ui/test/renditions-preview.js")),
     ("test/renditions.html", include_str!("../../../ui/test/renditions.html")),
+    // Show tabs and the routing view against a stub of the wave 3 contract,
+    // as tests and as a page to look at: /test/shows.html?scene=routing.
+    ("test/shows.js", include_str!("../../../ui/test/shows.js")),
+    ("test/shows-stub.js", include_str!("../../../ui/test/shows-stub.js")),
+    ("test/shows-preview.js", include_str!("../../../ui/test/shows-preview.js")),
+    ("test/shows.html", include_str!("../../../ui/test/shows.html")),
     // The designer kits' behaviour, as the reference implementation answered
     // it. The TypeScript and Python suites read the same file from the
     // repository; the browser reads it from here, because the page has no file
@@ -800,6 +814,8 @@ mod tests {
         // The show tabs' work, the first time a tab is clicked, and New show.
         reachable.extend(closure_of("shell/show-actions.js"));
         reachable.extend(closure_of("shell/show-file.js"));
+        // View > Routing, and what its cells open.
+        reachable.extend(closure_of("panels/routing/view.js"));
         reachable.extend(closure_of("panels/outputs/record-start.js"));
         // Renditions: each is fetched by an `import()` the first time it is
         // wanted, from the destination form, the Outputs panel or its rows.
@@ -882,6 +898,9 @@ mod tests {
             ("shell/project.js", "Save, Open or New project"),
             ("shell/show-actions.js", "a show tab clicked, or a key pressed on one"),
             ("shell/show-file.js", "New show or Switch show"),
+            ("panels/routing/view.js", "View > Routing"),
+            ("panels/routing/data.js", "View > Routing"),
+            ("panels/routing/model.js", "View > Routing"),
             ("shell/project-open.js", "Open project"),
             ("shell/settings-dialog.js", "Settings for this page"),
             ("panels/outputs/record-start.js", "Record pressed"),
