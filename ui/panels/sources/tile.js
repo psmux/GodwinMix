@@ -6,7 +6,7 @@
 // toggle never ends a gesture.
 
 import { el, svg } from "../../shell/dom.js";
-import { ICONS, KIND_COLOUR, kindOfUri } from "../../client/kinds.js";
+import { ICONS, KIND_COLOUR, kindOfSource } from "../../client/kinds.js";
 import { meterElement } from "../../shell/meter.js";
 import { UNITY, gainToPos, gainLabel, fmtPosition } from "../../shell/fader.js";
 import { nameOf, colourOf, isLocal } from "./local.js";
@@ -16,7 +16,7 @@ import { nameOf, colourOf, isLocal } from "./local.js";
  * @param {object} deps     {audio, scrub, onTake, onRename, onGear, onMute}
  */
 export function buildTile(source, deps) {
-  const kind = kindOfUri(source.uri);
+  const kind = kindOfSource(source);
   const node = el("div.tile", { "data-id": source.id, "data-drop": source.id, tabindex: "0", role: "button" });
   node.style.setProperty("--tile-color", colourOf(source, KIND_COLOUR[kind] || "var(--kind-other)"));
 

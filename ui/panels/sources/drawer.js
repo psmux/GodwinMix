@@ -9,7 +9,7 @@ import { confirmModal } from "../../shell/modal.js";
 import { toast, errorToast } from "../../shell/toast.js";
 import { shell } from "../../shell/shell.js";
 import { SchemaForm } from "../../client/schema-form.js";
-import { SOURCE_KINDS, kindOfUri, discoverDevices } from "../../client/kinds.js";
+import { SOURCE_KINDS, kindOfSource, discoverDevices } from "../../client/kinds.js";
 import { schemaForSource, easeSchema, unease } from "../../client/devices.js";
 import { settableOnly, setRequest } from "./setreq.js";
 import { nameOf, setLocal } from "./local.js";
@@ -18,7 +18,7 @@ import { nameOf, setLocal } from "./local.js";
 export async function openSourceDrawer(panel, source) {
   const client = panel.client;
   const id = source.id;
-  const kind = SOURCE_KINDS.find((k) => k.id === kindOfUri(source.uri)) || SOURCE_KINDS[0];
+  const kind = SOURCE_KINDS.find((k) => k.id === kindOfSource(source)) || SOURCE_KINDS[0];
   // The plugin's own form for this kind of source, with the box that picks
   // a device offered as a list of the devices there are. It used to ask
   // `plugin.describe` for an instance, which that method does not take, so
