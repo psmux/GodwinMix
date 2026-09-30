@@ -78,6 +78,7 @@ pub struct OutputProvide {
 static REGISTRY: &[OutputProvide] = &[
     super::outputs::rtmp::PROVIDE,
     super::outputs::srt::PROVIDE,
+    super::outputs::rist::PROVIDE,
     super::outputs::record::PROVIDE,
     crate::hls::output::PROVIDE,
     crate::whep::output::PROVIDE,

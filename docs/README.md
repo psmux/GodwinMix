@@ -76,6 +76,7 @@ Start here if you have never run it.
 * [Serve HLS to viewers](how-to/serve-hls.md)
 * [Watch the programme over WebRTC](how-to/watch-over-webrtc.md)
 * [Serve the programme over RTSP](how-to/serve-rtsp.md)
+* [Send and receive RIST](how-to/rist.md)
 * [Run your own code when something happens](how-to/hooks.md)
 * [Turn a bug into a test](how-to/turn-a-bug-into-a-test.md)
 * [Add a built in source kind](how-to/add-a-built-in-source-kind.md)

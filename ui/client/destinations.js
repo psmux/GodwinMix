@@ -81,6 +81,27 @@ export const OUTPUT_KINDS = [
     }),
   },
   {
+    id: "rist",
+    provides: ["rist/output"],
+    title: "RIST destination",
+    group: "Streams and servers",
+    icon: "output",
+    description: "MPEG-TS over RIST to a receiver that listens: the broadcast contribution link, with lost packets sent again.",
+    plugin: "built in",
+    schema: {
+      type: "object",
+      required: ["id", "uri"],
+      properties: {
+        id: { type: "string", title: "Name", examples: ["contribution"], description: "A short id. It appears in alerts and in the outputs list." },
+        uri: { type: "string", title: "Address", examples: ["rist://192.168.1.50:5004"], description: "The receiver and its even RTP port. RTCP uses the port above it." },
+        buffer_ms: { type: "integer", title: "Retransmit buffer", default: 1000, minimum: 50, maximum: 30000, "x-gmx-unit": "ms", "x-gmx-group": "Advanced", description: "How much sent video is kept to answer the receiver's requests for lost packets. Match the receiver's buffer." },
+        policy: POLICY_FIELD,
+        queue_secs: QUEUE_FIELD,
+      },
+    },
+    build: (v) => ({ id: v.id, type: "rist/output", uri: v.uri, buffer_ms: v.buffer_ms ?? 1000, policy: v.policy || "own", queue_secs: v.queue_secs ?? 4 }),
+  },
+  {
     id: "udp",
     provides: ["udp/output"],
     title: "UDP or multicast",
