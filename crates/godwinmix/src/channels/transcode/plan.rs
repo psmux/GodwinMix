@@ -9,11 +9,12 @@
 use std::collections::BTreeMap;
 
 use godwinmix_protocol::destination::DestinationRefusal;
-use godwinmix_protocol::rendition::{AudioCodec, RenditionAdvice, RenditionRequest, StreamInfo, VideoCodec};
-use godwinmix_render::{CostModel, NodeKind, Plan, PlanError, Track};
+use godwinmix_protocol::rendition::{RenditionRequest, StreamInfo};
+use godwinmix_render::{CostModel, Plan};
 
 use super::outcome::{describe, Outcome};
-use super::source::video_codec;
+use super::refuse::{from_plan_error, request_of, undecodable};
+pub use super::refuse::refusal;
 
 /// A destination that asked for a rendition.
 #[derive(Debug, Clone)]
@@ -98,57 +99,4 @@ fn refuse(out: &mut Planned, requests: &mut Vec<(String, RenditionRequest)>, ids
     for id in ids {
         out.outcomes.insert(id.clone(), Outcome::Refused(no.clone()));
     }
-}
-
-/// The listener decodes H.264 and AAC, which is what RTMP carries. A plan
-/// that would decode anything else is refused for the destinations it
-/// serves, with the reason.
-fn undecodable(plan: &Plan, sources: &[(String, StreamInfo)]) -> Option<(Vec<String>, DestinationRefusal)> {
-    for n in &plan.nodes {
-        let NodeKind::Decode { source, track } = &n.kind else { continue };
-        let info = sources.iter().find(|(s, _)| s == source).map(|(_, i)| i)?;
-        let (ok, name) = match track {
-            Track::Video => (info.video.is_some_and(|v| v.codec == VideoCodec::H264), "its video"),
-            Track::Audio => (info.audio.is_some_and(|a| a.codec == AudioCodec::Aac), "its sound"),
-        };
-        if !ok {
-            let message = format!(
-                "Stream `{source}` would have to be decoded to make this, and {name} is not H.264 or AAC, \
-                 which is all the channel server converts from. Ask for a copy, or send H.264 and AAC."
-            );
-            return Some((n.serves.clone(), refusal("plan", message)));
-        }
-    }
-    None
-}
-
-pub fn refusal(code: &str, message: String) -> DestinationRefusal {
-    DestinationRefusal { code: code.into(), message, need: None, have: None, advice: Vec::new() }
-}
-
-fn request_of(e: &PlanError) -> String {
-    match e {
-        PlanError::UnknownSource { request, .. }
-        | PlanError::DuplicateRequest { request }
-        | PlanError::ContainerCodec { request, .. }
-        | PlanError::MissingTrack { request, .. }
-        | PlanError::NothingAsked { request }
-        | PlanError::NoAudioEncoder { request, .. } => request.clone(),
-        PlanError::NoEncoder(b) => b.request.clone(),
-    }
-}
-
-/// A planner refusal, with the nearest shape it found as a button.
-fn from_plan_error(e: &PlanError, requests: &[(String, RenditionRequest)]) -> DestinationRefusal {
-    let mut no = refusal("plan", e.to_string());
-    if let PlanError::NoEncoder(b) = e {
-        let base = requests.iter().find(|(_, r)| r.id == b.request).map(|(_, r)| r.clone());
-        if let (Some(s), Some(mut request)) = (&b.nearest, base) {
-            let video = request.video.get_or_insert_with(Default::default);
-            video.codec = Some(video_codec(&s.codec));
-            (video.width, video.height, video.fps) = (Some(s.width), Some(s.height), Some(s.fps));
-            no.advice.push(RenditionAdvice { text: s.text.clone(), request });
-        }
-    }
-    no
 }

@@ -4,15 +4,13 @@
 use std::collections::BTreeMap;
 use std::time::Instant;
 
-use godwinmix_govern::headroom::UNLIMITED;
-use godwinmix_govern::Governor;
 use godwinmix_protocol::destination::{Carriage, DestinationRefusal, StoredDestination};
 use godwinmix_protocol::rendition::{Container, RenditionRequest, StreamInfo};
-use godwinmix_render::{Plan, Room};
+use godwinmix_render::Plan;
 use serde_json::{json, Value};
 
 use super::admit::{self, Held};
-use super::model::Model;
+use super::model::{rooms, Model};
 use super::outcome::Outcome;
 use super::plan::{self, Stream, Want};
 use super::{source, spec, Transcode};
@@ -148,20 +146,4 @@ fn shed_refusals(shed: &BTreeMap<(String, String), (String, Instant)>, channel: 
         .filter(|((c, _), _)| c == channel)
         .map(|((_, d), (why, _))| (d.clone(), plan::refusal("shed", why.clone())))
         .collect()
-}
-
-/// What is left on each hardware device for this channel's plan, with what
-/// the channel already holds there given back, so a replan does not find the
-/// device full of its own encoders.
-fn rooms(gov: &Governor, held: &BTreeMap<String, Held>, machine: &super::Machine) -> BTreeMap<String, Room> {
-    let mut out = BTreeMap::new();
-    for device in machine.slots().into_iter().filter_map(|s| s.device) {
-        let have = gov.headroom(Some(&device));
-        let mine = held.values().filter(|h| h.node.device == device).fold((0, 0), |(m, s), h| {
-            (m + h.ticket.cost().device_millis, s + h.ticket.cost().device_sessions)
-        });
-        let sessions = (have.device_sessions != UNLIMITED).then(|| have.device_sessions + mine.1);
-        out.insert(device, Room { sessions, device_millis: Some(have.device_millis + mine.0) });
-    }
-    out
 }
