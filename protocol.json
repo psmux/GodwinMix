@@ -284,13 +284,13 @@
           ]
         },
         "uri": {
-          "description": "rtmp:// or rtmps:// URL including the stream key.",
+          "default": "",
+          "description": "rtmp:// or rtmps:// URL including the stream key. Left out for a\nkind with no address of its own, such as `hls/output`, which is\nserved from the control port.",
           "type": "string"
         }
       },
       "required": [
-        "id",
-        "uri"
+        "id"
       ],
       "type": "object"
     },
@@ -7044,6 +7044,209 @@
       ],
       "type": "object"
     },
+    "Show": {
+      "description": "One show, as `show.list` and `event/show.changed` carry it.",
+      "properties": {
+        "cpu_millicores": {
+          "description": "Its process's CPU, in thousandths of one core, measured between two\nreads of `show.list`. Zero on the first read and while it is stopped.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "error": {
+          "description": "Why it is not running, when it is not and a person did not ask.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "description": "A slug: `main`, `second-room`.",
+          "type": "string"
+        },
+        "memory_mib": {
+          "default": 0,
+          "description": "Its process's resident memory, in MiB.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "name": {
+          "type": "string"
+        },
+        "on_air": {
+          "description": "The scene, or the source, on its programme. None while it shows the\nslate or is not running.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "programme_kbps": {
+          "description": "What its outputs are sending, summed, in kilobits a second.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "restarts": {
+          "default": 0,
+          "description": "How many times the station has started it again after it died.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "state": {
+          "$ref": "#/$defs/ShowState"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "state",
+        "programme_kbps",
+        "cpu_millicores"
+      ],
+      "type": "object"
+    },
+    "ShowAddRequest": {
+      "description": "`show.add`.",
+      "properties": {
+        "from": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ShowFrom"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "`\"empty\"` (the default), the id of a show to copy, or\n`{project: <file>}`. A copy takes the show's settings, sources and\nscenes, and leaves its outputs behind so nothing goes out twice."
+        },
+        "name": {
+          "description": "What a person calls it. The id is made from it.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "ShowChanged": {
+      "description": "`event/show.changed`.",
+      "properties": {
+        "show": {
+          "$ref": "#/$defs/Show"
+        }
+      },
+      "required": [
+        "show"
+      ],
+      "type": "object"
+    },
+    "ShowFrom": {
+      "anyOf": [
+        {
+          "description": "`\"empty\"`, or the id of a show to copy.",
+          "type": "string"
+        },
+        {
+          "description": "A file `project.export` wrote, opened into the new show.",
+          "properties": {
+            "project": true
+          },
+          "required": [
+            "project"
+          ],
+          "type": "object"
+        }
+      ],
+      "description": "What a new show starts from."
+    },
+    "ShowList": {
+      "description": "`show.list`.",
+      "properties": {
+        "current": {
+          "description": "The show a client reaches when it names none: the first one, which is\nthe one the station was started with.",
+          "type": "string"
+        },
+        "shows": {
+          "items": {
+            "$ref": "#/$defs/Show"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "shows",
+        "current"
+      ],
+      "type": "object"
+    },
+    "ShowRemoved": {
+      "description": "`show.remove`.",
+      "properties": {
+        "removed": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "removed"
+      ],
+      "type": "object"
+    },
+    "ShowRemovedEvent": {
+      "description": "`event/show.removed`.",
+      "properties": {
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object"
+    },
+    "ShowRenameRequest": {
+      "description": "`show.rename`.",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ],
+      "type": "object"
+    },
+    "ShowState": {
+      "description": "Where a show is in its life.",
+      "oneOf": [
+        {
+          "const": "starting",
+          "description": "Its process is starting and has not said it is ready yet.",
+          "type": "string"
+        },
+        {
+          "const": "running",
+          "description": "Up, and answering on its own socket.",
+          "type": "string"
+        },
+        {
+          "const": "stopped",
+          "description": "Stopped by a person. Its config is kept and `show.start` brings it back.",
+          "type": "string"
+        },
+        {
+          "const": "failed",
+          "description": "It kept dying and the station stopped restarting it. `error` says why.",
+          "type": "string"
+        }
+      ]
+    },
     "Snapshot": {
       "description": "`event/snapshot`: the full state, and where in the stream it sits.",
       "properties": {
@@ -7503,6 +7706,13 @@
           "$ref": "#/$defs/Ext",
           "default": {},
           "description": "The expensive streams this client wants. Nothing here runs unless a\nclient asks for it."
+        },
+        "show": {
+          "description": "Which show this connection follows, on a station running several. The\nstation opens the connection to that show from here on. Omitted means\nthe show the URL named with `?show=`, or the first show.",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "type": "object"
@@ -8850,6 +9060,28 @@
       },
       "since": "1",
       "summary": "The machine ran short while on air and the governor stopped something to keep what is on air whole: what it was and why. It is brought back by itself when there is room again."
+    },
+    {
+      "ext": null,
+      "legacy": null,
+      "name": "event/show.changed",
+      "pattern": "show.changed",
+      "payload": {
+        "$ref": "#/$defs/ShowChanged"
+      },
+      "since": "1",
+      "summary": "A show was added, renamed, started, stopped, died or came back. Sent by the station to every client, whichever show it is looking at."
+    },
+    {
+      "ext": null,
+      "legacy": null,
+      "name": "event/show.removed",
+      "pattern": "show.removed",
+      "payload": {
+        "$ref": "#/$defs/ShowRemovedEvent"
+      },
+      "since": "1",
+      "summary": "A show was removed. Its process was stopped first."
     }
   ],
   "ext": [
@@ -12063,6 +12295,129 @@
       "scope": "read",
       "since": "1",
       "summary": "Overlaps, items off the canvas, safe area breaches and missing sources: what to fix before saying a scene is done."
+    },
+    {
+      "destructive": false,
+      "idempotent": false,
+      "mutating": true,
+      "name": "show.add",
+      "params": {
+        "$ref": "#/$defs/ShowAddRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/shows"
+      },
+      "result": {
+        "$ref": "#/$defs/Show"
+      },
+      "scope": "admin",
+      "since": "1",
+      "summary": "Make another show and start it: empty, a copy of a show (without its outputs, so nothing goes out twice), or from a project file."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": true,
+        "tool": "list_shows"
+      },
+      "mutating": false,
+      "name": "show.list",
+      "params": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      },
+      "rest": {
+        "method": "GET",
+        "path": "/api/v1/shows"
+      },
+      "result": {
+        "$ref": "#/$defs/ShowList"
+      },
+      "scope": "read",
+      "since": "1",
+      "summary": "Every show on this machine: its name, whether it is running, what is on air, what its outputs send and what its process costs. `current` is the show a client reaches when it names none."
+    },
+    {
+      "destructive": true,
+      "idempotent": true,
+      "mutating": true,
+      "name": "show.remove",
+      "params": {
+        "$ref": "#/$defs/IdRequest"
+      },
+      "rest": {
+        "method": "DELETE",
+        "path": "/api/v1/shows/{id}"
+      },
+      "result": {
+        "$ref": "#/$defs/ShowRemoved"
+      },
+      "scope": "admin",
+      "since": "1",
+      "summary": "Stop a show and remove it with its folder. Refused for the last show and for main, the show the station was started with."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mutating": true,
+      "name": "show.rename",
+      "params": {
+        "$ref": "#/$defs/ShowRenameRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/shows/{id}/rename"
+      },
+      "result": {
+        "$ref": "#/$defs/Show"
+      },
+      "scope": "admin",
+      "since": "1",
+      "summary": "Give a show another name. Its id stays."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mutating": true,
+      "name": "show.start",
+      "params": {
+        "$ref": "#/$defs/IdRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/shows/{id}/start"
+      },
+      "result": {
+        "$ref": "#/$defs/Show"
+      },
+      "scope": "admin",
+      "since": "1",
+      "summary": "Start a stopped or failed show."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mutating": true,
+      "name": "show.stop",
+      "params": {
+        "$ref": "#/$defs/IdRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/shows/{id}/stop"
+      },
+      "result": {
+        "$ref": "#/$defs/Show"
+      },
+      "scope": "admin",
+      "since": "1",
+      "summary": "Stop a show. It keeps its config, and stays stopped when the station starts again, until show.start."
     },
     {
       "destructive": false,

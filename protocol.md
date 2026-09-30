@@ -168,6 +168,12 @@ Keys accepted on every method, handled before a method runs.
 | `scene.transaction.commit` | `POST /api/v1/scenes/transaction/commit` | operate |  | 1 | Apply the batch. |
 | `scene.undo` | `POST /api/v1/scenes/undo` | operate |  | 1 | Undo the last change. A drag marked with scene.history.mark undoes as one step. |
 | `scene.validate` | `GET /api/v1/scenes/validate` | read |  | 1 | Overlaps, items off the canvas, safe area breaches and missing sources: what to fix before saying a scene is done. |
+| `show.add` | `POST /api/v1/shows` | admin |  | 1 | Make another show and start it: empty, a copy of a show (without its outputs, so nothing goes out twice), or from a project file. |
+| `show.list` | `GET /api/v1/shows` | read |  | 1 | Every show on this machine: its name, whether it is running, what is on air, what its outputs send and what its process costs. `current` is the show a client reaches when it names none. |
+| `show.remove` | `DELETE /api/v1/shows/{id}` | admin | yes | 1 | Stop a show and remove it with its folder. Refused for the last show and for main, the show the station was started with. |
+| `show.rename` | `POST /api/v1/shows/{id}/rename` | admin |  | 1 | Give a show another name. Its id stays. |
+| `show.start` | `POST /api/v1/shows/{id}/start` | admin |  | 1 | Start a stopped or failed show. |
+| `show.stop` | `POST /api/v1/shows/{id}/stop` | admin |  | 1 | Stop a show. It keeps its config, and stays stopped when the station starts again, until show.start. |
 | `snapshot.get` | `GET /api/v1/snapshot/{id}` | read |  | 1 | One JPEG: the whole contact sheet, the programme, or one source cut out of the mosaic. |
 | `source.add` | `POST /api/v1/sources` | operate |  | 1 | Add a source while the mixer runs. Answers with the id it got and the whole source record. |
 | `source.audio.set` | `POST /api/v1/sources/{id}/audio` | operate |  | 1 | Move a source's audio: the fader, the mute, and for a superimposed page the balance between its own sound and the videos under it. |
@@ -2381,6 +2387,100 @@ MCP tool `validate_scene` in the `search` profile: readOnlyHint true, destructiv
 }
 ```
 
+#### `show.add`
+
+Make another show and start it: empty, a copy of a show (without its outputs, so nothing goes out twice), or from a project file.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ShowAddRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/Show"
+  }
+}
+```
+
+#### `show.list`
+
+Every show on this machine: its name, whether it is running, what is on air, what its outputs send and what its process costs. `current` is the show a client reaches when it names none.
+
+MCP tool `list_shows` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "$ref": "#/$defs/ShowList"
+  }
+}
+```
+
+#### `show.remove`
+
+Stop a show and remove it with its folder. Refused for the last show and for main, the show the station was started with.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/IdRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/ShowRemoved"
+  }
+}
+```
+
+#### `show.rename`
+
+Give a show another name. Its id stays.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ShowRenameRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/Show"
+  }
+}
+```
+
+#### `show.start`
+
+Start a stopped or failed show.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/IdRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/Show"
+  }
+}
+```
+
+#### `show.stop`
+
+Stop a show. It keeps its config, and stays stopped when the station starts again, until show.start.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/IdRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/Show"
+  }
+}
+```
+
 #### `snapshot.get`
 
 One JPEG: the whole contact sheet, the programme, or one source cut out of the mosaic.
@@ -2699,6 +2799,8 @@ Subscribe with `core.subscribe`. Patterns match the part after `event/`, so `pro
 | `event/flush` |  |  | The end of a batch. Render here and not before, so a client never paints half an update. |
 | `event/rendition.plan` |  |  | The programme's rendition plan changed: an output that asks for a rendition was added, changed or removed, or the governor stopped or brought back an encoder. plan is what rendition.plan answers. |
 | `event/governor.shed` |  |  | The machine ran short while on air and the governor stopped something to keep what is on air whole: what it was and why. It is brought back by itself when there is room again. |
+| `event/show.changed` |  |  | A show was added, renamed, started, stopped, died or came back. Sent by the station to every client, whichever show it is looking at. |
+| `event/show.removed` |  |  | A show was removed. Its process was stopped first. |
 
 ## The routes this replaces
 
