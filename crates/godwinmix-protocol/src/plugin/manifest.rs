@@ -149,6 +149,10 @@ pub struct Provide {
     /// `[provides.designer]`, rendered by every designer client (11 section 5).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub designer: Option<Designer>,
+    /// `source` only: the params that name what it opens, so two sources
+    /// opening the same device or stream decode it once. See `share.rs`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub share: Option<super::share::Share>,
 }
 
 /// `media = { video = "raw", audio = "raw", alpha = false, thumb = true }`.
@@ -787,6 +791,14 @@ impl Manifest {
                 ));
             }
         };
+        if let Some(share) = &p.share {
+            if p.kind != "source" {
+                out.push(problem(format!("{at}.share"), "only a source provide can be shared."));
+            }
+            for (key, message) in share.problems() {
+                out.push(problem(format!("{at}.share.{key}"), message));
+            }
+        }
         match p.kind.as_str() {
             "source" => {
                 require_media(out);

@@ -11,6 +11,8 @@ pub struct Ticket {
     id: u64,
     cost: Cost,
     preset: Option<String>,
+    /// The number is the station's, and the share is in its book.
+    remote: bool,
     // Weak, so a ticket outliving its governor (a test, a shutdown) is
     // harmless: there is no book left to give back to.
     inner: Weak<Inner>,
@@ -18,7 +20,12 @@ pub struct Ticket {
 
 impl Ticket {
     pub(crate) fn new(id: u64, cost: Cost, preset: Option<String>, inner: Weak<Inner>) -> Ticket {
-        Ticket { id, cost, preset, inner }
+        Ticket { id, cost, preset, remote: false, inner }
+    }
+
+    /// A ticket the station granted: dropping it tells the station.
+    pub(crate) fn remote(id: u64, cost: Cost, preset: Option<String>, inner: Weak<Inner>) -> Ticket {
+        Ticket { id, cost, preset, remote: true, inner }
     }
 
     /// The id a [`crate::ShedStep`] names.
@@ -54,7 +61,10 @@ impl Ticket {
 impl Drop for Ticket {
     fn drop(&mut self) {
         if let Some(inner) = self.inner.upgrade() {
-            inner.release(self.id);
+            match self.remote {
+                true => inner.release_remote(self.id),
+                false => inner.release(self.id),
+            }
         }
     }
 }

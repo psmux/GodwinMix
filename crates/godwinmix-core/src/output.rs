@@ -41,7 +41,13 @@ use std::sync::Arc;
 use tokio::sync::mpsc;
 use tracing::{debug, info, warn};
 
+mod boundary;
+
 const RELINK_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+
+/// How long a detach, which runs on the mixer thread, waits for a reconnect
+/// already running on another. Short: the detach goes ahead either way.
+const DETACH_WAIT: std::time::Duration = std::time::Duration::from_millis(250);
 
 /// The currently running output pipeline and the pieces of it we keep hold of.
 struct Live {
@@ -84,6 +90,9 @@ pub struct OutputSlot {
     /// bus errors in quick succession, and without this each one would arm its
     /// own reconnect, producing a storm rather than a retry.
     reconnect_armed: AtomicBool,
+    /// One reconnect at a time, off the mixer thread, and a detach wins over
+    /// it. See `input::lifecycle`.
+    turn: crate::input::lifecycle::Lifecycle,
     /// The destination itself: the muxer, the sink and the honest answer to
     /// whether the far end has accepted us. Everything above this line is the
     /// same for RTMP, SRT and whatever comes next.
@@ -129,6 +138,10 @@ impl OutputSlot {
 
         let feed_video = gstutil::queue_time(&format!("out-{id}-vq"), cfg.queue_secs, true)?;
         let feed_audio = gstutil::queue_time(&format!("out-{id}-aq"), cfg.queue_secs, true)?;
+        // Leaky drops buffers; it does not let a query past a destination
+        // that has stopped reading. See `boundary`.
+        boundary::answer_serialized_queries(&feed_video)?;
+        boundary::answer_serialized_queries(&feed_audio)?;
         let vproxy = make("proxysink", &format!("out-{id}-vproxy"))?;
         let aproxy = make("proxysink", &format!("out-{id}-aproxy"))?;
 
@@ -166,11 +179,21 @@ impl OutputSlot {
             failed: AtomicBool::new(false),
             overfull_ticks: AtomicU32::new(0),
             reconnect_armed: AtomicBool::new(false),
+            turn: Default::default(),
             kind: Mutex::new(kind),
             manifest: ready.manifest,
             capabilities: ready.capabilities,
             taps,
         });
+        // An address still carrying a preset's placeholder is not one anybody
+        // can publish to, and dialling it anyway had the example config
+        // knocking on YouTube and Facebook twice a minute with
+        // `YOUR-STREAM-KEY`. It waits, attached, for the key: the page shows
+        // it as needing one, and the edit that adds it builds it again.
+        if !slot.has_key() {
+            info!(output = %id, "no stream key yet; not connecting until one is added");
+            return Ok(slot);
+        }
         // A destination that cannot be built takes its feed back out with it.
         if let Err(e) = slot.spin_up(false) {
             slot.detach(program);
@@ -319,8 +342,37 @@ impl OutputSlot {
             .is_ok()
     }
 
+    /// Claim the one reconnect this output may have running. The mixer runs
+    /// `reconnect` on a thread of its own after a true, and only then.
+    pub fn claim_reconnect(&self) -> bool {
+        self.turn.claim_restart()
+    }
+
+    /// A claimed reconnect that never ran. Lets the next one in.
+    pub fn reconnect_abandoned(&self) {
+        self.turn.end_restart();
+    }
+
     /// Rebuild the output pipeline. The program pipeline is untouched.
+    ///
+    /// Run off the mixer thread: taking the old pipeline to NULL waits for its
+    /// sink, and a sink waiting on a server that never answers can take its
+    /// time about it.
     pub fn reconnect(&self) -> Result<()> {
+        let r = self.reconnect_in_turn();
+        self.turn.end_restart();
+        r
+    }
+
+    fn reconnect_in_turn(&self) -> Result<()> {
+        let Some(_turn) = self.turn.enter(&self.cfg.id, "reconnect") else {
+            self.reconnect_armed.store(false, Ordering::SeqCst);
+            anyhow::bail!("{} is still inside an earlier reconnect; this one was skipped", self.cfg.id);
+        };
+        if self.turn.stopped() || !self.has_key() {
+            self.reconnect_armed.store(false, Ordering::SeqCst);
+            return Ok(());
+        }
         let n = self.reconnects.fetch_add(1, Ordering::SeqCst) + 1;
         info!(output = %self.cfg.id, attempt = n, "reconnecting output");
         self.overfull_ticks.store(0, Ordering::Relaxed);
@@ -328,6 +380,17 @@ impl OutputSlot {
         // Released whether or not it worked: a failed spin-up re-arms through
         // the normal error path with the next backoff step.
         self.reconnect_armed.store(false, Ordering::SeqCst);
+        if self.turn.stopped() {
+            // Overtaken by a detach while it ran: what it built has nothing
+            // to feed it and goes straight back down.
+            warn!(output = %self.cfg.id, "removed while reconnecting; taking the new connection down again");
+            self.shutdown();
+            let _ = self.vproxy.lock().set_state(gst::State::Null);
+            let _ = self.aproxy.lock().set_state(gst::State::Null);
+            let _ = self.program.remove(&*self.vproxy.lock());
+            let _ = self.program.remove(&*self.aproxy.lock());
+            return Ok(());
+        }
         result?;
         self.failed.store(false, Ordering::Relaxed);
         Ok(())
@@ -361,7 +424,12 @@ impl OutputSlot {
     /// `rtmp2sink`'s `stats.out-chunk-size`, which no other sink has; an output
     /// that cannot answer that question can still answer this one.
     pub fn refresh_connected(&self) {
-        let now = self.pipeline.lock().is_some() && self.kind.lock().connected();
+        // Not asked while a reconnect on another thread holds the kind, which
+        // it does for as long as the old pipeline takes to reach NULL: this
+        // runs on the mixer thread, and the answer then is "not yet" anyway.
+        let Some(kind) = self.kind.try_lock() else { return };
+        let now = self.pipeline.lock().is_some() && kind.connected();
+        drop(kind);
         if now != self.connected.swap(now, Ordering::Relaxed) {
             if now {
                 info!(output = %self.cfg.id, kind = %self.manifest.provide_id(), "output connection established");
@@ -426,7 +494,7 @@ impl OutputSlot {
             // The address itself never leaves the core. This is the one bit
             // of it that does: whether a preset's placeholder is still in
             // there, so a surface can put its own key form up and say so.
-            has_key: uri_has_key(&self.cfg.uri),
+            has_key: self.has_key(),
             state: self.state(),
             reconnects: self.reconnects.load(Ordering::Relaxed),
             queue_secs: gstutil::queue_level_secs(&self.feed_video),
@@ -435,7 +503,9 @@ impl OutputSlot {
             shed: None,
             // Per kind data, for an output built by a plugin rather than by
             // the core. Nothing the core builds itself has any.
-            extra: self.kind.lock().status(),
+            // Skipped for a turn while a reconnect holds the kind; see
+            // `refresh_connected`.
+            extra: self.kind.try_lock().map(|k| k.status()).unwrap_or_default(),
         }
     }
 
@@ -443,7 +513,16 @@ impl OutputSlot {
         &self.cfg.id
     }
 
+    /// Whether the address carries a real key rather than a preset's
+    /// placeholder. An output without one is attached and never dialled.
+    pub fn has_key(&self) -> bool {
+        uri_has_key(&self.cfg.uri)
+    }
+
     pub fn shutdown(&self) {
+        // Said first, so a reconnect running on another thread takes down
+        // whatever it builds rather than leaving it up behind this.
+        self.turn.mark_stopped();
         if let Some(live) = self.pipeline.lock().take() {
             drop(live.watch);
             self.kind.lock().shutdown(live.pipeline);
@@ -456,6 +535,10 @@ impl OutputSlot {
     /// queues and proxy sinks back out and releases the tee pads, so an output
     /// removed at runtime leaves nothing behind.
     pub fn detach(&self, program: &gst::Pipeline) {
+        // A reconnect that has not started yet will not; one that is running
+        // gets a moment to finish, and is overtaken if it does not.
+        self.turn.mark_stopped();
+        let _turn = self.turn.enter_within(&self.cfg.id, "detach", DETACH_WAIT);
         self.shutdown();
         for (el, pad) in [
             (&self.feed_video, "feed video"),
@@ -636,6 +719,24 @@ mod tests {
         }
         slot.shutdown();
         assert!(slot.pipeline.lock().is_none());
+        let _ = program.set_state(gst::State::Null);
+    }
+
+    /// A preset's placeholder key is attached and waits: no pipeline, no
+    /// connection to the platform, not on a reconnect either.
+    #[test]
+    fn a_placeholder_key_is_never_dialled() {
+        init();
+        let (program, vtee, atee, tx) = harness();
+        let mut c = cfg("keyless");
+        c.uri = "rtmp://a.rtmp.youtube.com/live2/YOUR-STREAM-KEY".into();
+        let slot = OutputSlot::attach(&program, &vtee, &atee, &c, tx).expect("it attaches");
+        assert!(!slot.has_key());
+        assert!(slot.pipeline.lock().is_none(), "a placeholder address was dialled");
+        slot.reconnect().unwrap();
+        assert!(slot.pipeline.lock().is_none(), "a reconnect dialled a placeholder address");
+        assert_eq!(slot.status().reconnects, 0);
+        slot.detach(&program);
         let _ = program.set_state(gst::State::Null);
     }
 

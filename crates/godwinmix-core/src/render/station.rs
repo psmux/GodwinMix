@@ -25,7 +25,13 @@ struct Inner {
     calibrating: AtomicBool,
     /// Nothing stored for this machine: measure once the air is clear.
     wanted: AtomicBool,
+    /// Told when on air changes, for a show whose station decides when to
+    /// measure. Called on the mixer thread, so it must not block.
+    on_air_told: parking_lot::Mutex<Option<OnAirHook>>,
 }
+
+/// What a show tells its station when something starts or stops going out.
+pub type OnAirHook = Box<dyn Fn(bool) + Send + Sync>;
 
 /// Cheap to clone; every clone is the same station.
 #[derive(Clone)]
@@ -57,6 +63,7 @@ impl Station {
                 on_air: AtomicBool::new(false),
                 calibrating: AtomicBool::new(false),
                 wanted: AtomicBool::new(false),
+                on_air_told: parking_lot::Mutex::new(None),
             }),
         }
     }
@@ -94,6 +101,19 @@ impl Station {
         st
     }
 
+    /// The station a show under a station has: no sampler, no calibration and
+    /// nothing stored, because the station's governor does all three for the
+    /// machine. The caller gives the governor its remote before the first
+    /// claim.
+    pub fn for_show(config: GovernorConfig, cat: &Catalogue, pin: Accel) -> Station {
+        Self::build(Governor::new(config, Profile::uncalibrated()), cat, pin, None)
+    }
+
+    /// Say when on air changes, from now on.
+    pub fn on_air_changes(&self, hook: OnAirHook) {
+        *self.inner.on_air_told.lock() = Some(hook);
+    }
+
     /// Called once the core is up and the mixer has said whether anything
     /// is on air: starts the first run calibration if this machine needs one.
     pub fn begin(&self) -> bool {
@@ -115,7 +135,12 @@ impl Station {
     /// Whether anything is going out. The mixer says so as outputs come
     /// and go; a calibration never starts while it is true.
     pub fn set_on_air(&self, on: bool) {
-        self.inner.on_air.store(on, Ordering::Relaxed);
+        let was = self.inner.on_air.swap(on, Ordering::Relaxed);
+        if was != on {
+            if let Some(hook) = self.inner.on_air_told.lock().as_ref() {
+                hook(on);
+            }
+        }
     }
 
     pub fn on_air(&self) -> bool {

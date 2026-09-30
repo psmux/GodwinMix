@@ -469,6 +469,7 @@ ChannelStream = TypedDict("ChannelStream", {
     "key": Optional[str],
     "name": str,
     "protocol": Optional[str],
+    "relay": Optional[str],
     "since_ms": int,
     "source": Optional[str],
     "state": str,
@@ -2064,6 +2065,59 @@ class ShedNote(TypedDict, total=False):
     why: str
     # The alert text.
 
+class Show(TypedDict, total=False):
+    """One show, as `show.list` and `event/show.changed` carry it."""
+
+    cpu_millicores: int
+    # Its process's CPU, in thousandths of one core, measured between two reads of `show.list`. Zero on the first read and while it is stopped.
+    error: Optional[str]
+    # Why it is not running, when it is not and a person did not ask.
+    id: str
+    # A slug: `main`, `second-room`.
+    memory_mib: int
+    # Its process's resident memory, in MiB.
+    name: str
+    on_air: Optional[str]
+    # The scene, or the source, on its programme. None while it shows the slate or is not running.
+    programme_kbps: int
+    # What its outputs are sending, summed, in kilobits a second.
+    restarts: int
+    # How many times the station has started it again after it died.
+    state: ShowState
+
+ShowAddRequest = TypedDict("ShowAddRequest", {
+    "from": Union[ShowFrom, None],
+    "name": str,
+}, total=False)
+
+class ShowChanged(TypedDict, total=False):
+    """`event/show.changed`."""
+
+    show: Show
+
+class ShowList(TypedDict, total=False):
+    """`show.list`."""
+
+    current: str
+    # The show a client reaches when it names none: the first one, which is the one the station was started with.
+    shows: List[Show]
+
+class ShowRemoved(TypedDict, total=False):
+    """`show.remove`."""
+
+    removed: str
+
+class ShowRemovedEvent(TypedDict, total=False):
+    """`event/show.removed`."""
+
+    id: str
+
+class ShowRenameRequest(TypedDict, total=False):
+    """`show.rename`."""
+
+    id: str
+    name: str
+
 class Snapshot(TypedDict, total=False):
     """`event/snapshot`: the full state, and where in the stream it sits."""
 
@@ -2170,6 +2224,8 @@ class SubscribeRequest(TypedDict, total=False):
     # Event name patterns, matched against the part after `event/`. `*` matches one or more characters: "program.*" matches `event/program.took`. An empty list subscribes to everything.
     ext: Ext
     # The expensive streams this client wants. Nothing here runs unless a client asks for it.
+    show: Optional[str]
+    # Which show this connection follows, on a station running several. The station opens the connection to that show from here on. Omitted means the show the URL named with `?show=`, or the first show.
 
 class SubscribeResult(TypedDict, total=False):
     """What `core.subscribe` answers with, before the snapshot arrives."""
@@ -2520,6 +2576,12 @@ Severity = Literal['error', 'warning', 'info']
 
 Severity2 = Union[Literal['info', 'warning', 'error'], Literal['critical']]
 
+# What a new show starts from.
+ShowFrom = Union[str, Dict[str, Any]]
+
+# Where a show is in its life.
+ShowState = Literal['starting', 'running', 'stopped', 'failed']
+
 SourceState = Literal['connecting', 'live', 'stalled', 'failed']
 
 TaskState = Literal['running', 'completed', 'failed', 'cancelled']
@@ -2670,6 +2732,12 @@ METHODS = (
     {"name": "scene.transaction.commit", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/transaction/commit"), "summary": 'Apply the batch.'},
     {"name": "scene.undo", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/undo"), "summary": 'Undo the last change. A drag marked with scene.history.mark undoes as one step.'},
     {"name": "scene.validate", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/scenes/validate"), "summary": 'Overlaps, items off the canvas, safe area breaches and missing sources: what to fix before saying a scene is done.'},
+    {"name": "show.add", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/shows"), "summary": 'Make another show and start it: empty, a copy of a show (without its outputs, so nothing goes out twice), or from a project file.'},
+    {"name": "show.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/shows"), "summary": 'Every show on this machine: its name, whether it is running, what is on air, what its outputs send and what its process costs. `current` is the show a client reaches when it names none.'},
+    {"name": "show.remove", "scope": "admin", "mutating": True, "destructive": True, "rest": ("DELETE", "/api/v1/shows/{id}"), "summary": 'Stop a show and remove it with its folder. Refused for the last show and for main, the show the station was started with.'},
+    {"name": "show.rename", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/shows/{id}/rename"), "summary": 'Give a show another name. Its id stays.'},
+    {"name": "show.start", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/shows/{id}/start"), "summary": 'Start a stopped or failed show.'},
+    {"name": "show.stop", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/shows/{id}/stop"), "summary": 'Stop a show. It keeps its config, and stays stopped when the station starts again, until show.start.'},
     {"name": "snapshot.get", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/snapshot/{id}"), "summary": 'One JPEG: the whole contact sheet, the programme, or one source cut out of the mosaic.'},
     {"name": "source.add", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/sources"), "summary": 'Add a source while the mixer runs. Answers with the id it got and the whole source record.'},
     {"name": "source.audio.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/sources/{id}/audio"), "summary": "Move a source's audio: the fader, the mute, and for a superimposed page the balance between its own sound and the videos under it."},
@@ -2716,6 +2784,8 @@ EVENT_NAMES = (
     "flush",
     "rendition.plan",
     "governor.shed",
+    "show.changed",
+    "show.removed",
 )
 
 EXT_KEYS = {
@@ -3098,6 +3168,7 @@ class GeneratedMethods:
         *,
         events: Optional[List[str]] = None,
         ext: Optional[Ext] = None,
+        show: Optional[str] = None,
     ) -> SubscribeResult:
         """Subscribe to the event stream. WebSocket only: the core answers event/snapshot then deltas, ending every batch with event/flush."""
         params: Dict[str, Any] = {}
@@ -3105,6 +3176,8 @@ class GeneratedMethods:
             params["events"] = events
         if ext is not None:
             params["ext"] = ext
+        if show is not None:
+            params["show"] = show
         return await self._call("core.subscribe", params)
 
     async def device_discover(
@@ -4597,6 +4670,64 @@ class GeneratedMethods:
         if scene is not None:
             params["scene"] = scene
         return await self._call("scene.validate", params)
+
+    async def show_add(
+        self,
+        name: str,
+        *,
+        from_: Optional[Union[ShowFrom, None]] = None,
+    ) -> Show:
+        """Make another show and start it: empty, a copy of a show (without its outputs, so nothing goes out twice), or from a project file."""
+        params: Dict[str, Any] = {}
+        params["name"] = name
+        if from_ is not None:
+            params["from"] = from_
+        return await self._call("show.add", params)
+
+    async def show_list(
+        self,
+    ) -> ShowList:
+        """Every show on this machine: its name, whether it is running, what is on air, what its outputs send and what its process costs. `current` is the show a client reaches when it names none."""
+        params: Dict[str, Any] = {}
+        return await self._call("show.list", params)
+
+    async def show_remove(
+        self,
+        id: str,
+    ) -> ShowRemoved:
+        """Stop a show and remove it with its folder. Refused for the last show and for main, the show the station was started with."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        return await self._call("show.remove", params)
+
+    async def show_rename(
+        self,
+        id: str,
+        name: str,
+    ) -> Show:
+        """Give a show another name. Its id stays."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        params["name"] = name
+        return await self._call("show.rename", params)
+
+    async def show_start(
+        self,
+        id: str,
+    ) -> Show:
+        """Start a stopped or failed show."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        return await self._call("show.start", params)
+
+    async def show_stop(
+        self,
+        id: str,
+    ) -> Show:
+        """Stop a show. It keeps its config, and stays stopped when the station starts again, until show.start."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        return await self._call("show.stop", params)
 
     async def snapshot_get(
         self,

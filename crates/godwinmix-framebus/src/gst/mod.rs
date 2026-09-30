@@ -60,10 +60,11 @@ pub fn caps_of(layout: &Layout) -> gst::Caps {
         .build()
 }
 
-/// The formats both elements accept, as caps.
+/// The formats both elements accept, as caps: pictures, and sound for a
+/// name ending in `#audio`.
 pub fn template_caps() -> gst::Caps {
     let formats: Vec<&str> = Format::ALL.iter().map(|f| f.name()).collect();
-    gst::Caps::builder("video/x-raw")
+    let mut caps = gst::Caps::builder("video/x-raw")
         .field("format", gst::List::new(formats))
         .field("width", gst::IntRange::new(1, 16384))
         .field("height", gst::IntRange::new(1, 16384))
@@ -71,6 +72,42 @@ pub fn template_caps() -> gst::Caps {
             "framerate",
             gst::FractionRange::new(gst::Fraction::new(0, 1), gst::Fraction::new(i32::MAX, 1)),
         )
+        .build();
+    let sounds: Vec<&str> = Format::AUDIO.iter().map(|f| f.name()).collect();
+    caps.merge(
+        gst::Caps::builder("audio/x-raw")
+            .field("format", gst::List::new(sounds))
+            .field("layout", "interleaved")
+            .field("rate", gst::IntRange::new(1, 768_000))
+            .field("channels", gst::IntRange::new(1, 64))
+            .build(),
+    );
+    caps
+}
+
+/// The bus layout for sound GStreamer describes with `s`.
+pub fn audio_layout_of(s: &gst::StructureRef) -> Result<Layout, Error> {
+    let name = s.get::<&str>("format").unwrap_or_default();
+    let format = Format::from_name(name).filter(|f| f.is_audio()).ok_or_else(|| {
+        Error::BadLayout(format!(
+            "the frame bus does not carry {name} sound. Put an audioconvert before it, to F32LE"
+        ))
+    })?;
+    if s.get::<&str>("layout").is_ok_and(|l| l != "interleaved") {
+        return Err(Error::BadLayout("the frame bus carries interleaved sound only".into()));
+    }
+    let rate = s.get::<i32>("rate").unwrap_or(0).max(0) as u32;
+    let channels = s.get::<i32>("channels").unwrap_or(0).max(0) as u32;
+    Layout::audio(format, rate, channels)
+}
+
+/// Caps for sound laid out as `layout`.
+pub fn audio_caps_of(layout: &Layout) -> gst::Caps {
+    gst::Caps::builder("audio/x-raw")
+        .field("format", layout.format.name())
+        .field("layout", "interleaved")
+        .field("rate", layout.rate() as i32)
+        .field("channels", layout.channels() as i32)
         .build()
 }
 

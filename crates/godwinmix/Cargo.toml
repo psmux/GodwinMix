@@ -65,7 +65,9 @@ tracing = { workspace = true }
 clap = { workspace = true, features = ["derive", "env"] }
 parking_lot = { workspace = true }
 futures-util = { workspace = true, features = ["sink", "std"] }
-reqwest = { workspace = true, features = ["json", "rustls-tls"] }
+# `stream` for the station's relay, which passes a show's MJPEG and PCM
+# streams and an upload through without holding them in memory.
+reqwest = { workspace = true, features = ["json", "rustls-tls", "stream"] }
 libc = { workspace = true }
 base64 = { workspace = true }
 

@@ -737,6 +737,12 @@ pub struct ChannelStream {
     /// How it arrived: `rtmp`, `rtmps`, `srt` or `whip`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub protocol: Option<String>,
+    /// Where a mixer on this machine reads it: the listener's own port on
+    /// loopback. Any show adds it as a source with `source.add {type:
+    /// "ingest/rtmp", relay, stream: "<app>/<name>"}`, and every show that
+    /// does reads the one stream the station received.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub relay: Option<String>,
     /// When it last went live, in milliseconds since 1970.
     pub since_ms: u64,
     /// The mixer source it feeds, when it feeds one.
@@ -3231,6 +3237,94 @@ pub struct ShedNote {
     pub why: String,
 }
 
+/// One show, as `show.list` and `event/show.changed` carry it.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Show {
+    /// Its process's CPU, in thousandths of one core, measured between two
+    /// reads of `show.list`. Zero on the first read and while it is stopped.
+    pub cpu_millicores: u32,
+    /// Why it is not running, when it is not and a person did not ask.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    /// A slug: `main`, `second-room`.
+    pub id: String,
+    /// Its process's resident memory, in MiB.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub memory_mib: Option<u64>,
+    pub name: String,
+    /// The scene, or the source, on its programme. None while it shows the
+    /// slate or is not running.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub on_air: Option<String>,
+    /// What its outputs are sending, summed, in kilobits a second.
+    pub programme_kbps: u64,
+    /// How many times the station has started it again after it died.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub restarts: Option<u32>,
+    pub state: ShowState,
+}
+
+/// `show.add`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ShowAddRequest {
+    /// `"empty"` (the default), the id of a show to copy, or
+    /// `{project: <file>}`. A copy takes the show's settings, sources and
+    /// scenes, and leaves its outputs behind so nothing goes out twice.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub from: Option<ShowFrom>,
+    /// What a person calls it. The id is made from it.
+    pub name: String,
+}
+
+/// `event/show.changed`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ShowChanged {
+    pub show: Show,
+}
+
+/// What a new show starts from.
+pub type ShowFrom = Value;
+
+/// `show.list`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ShowList {
+    /// The show a client reaches when it names none: the first one, which is
+    /// the one the station was started with.
+    pub current: String,
+    pub shows: Vec<Show>,
+}
+
+/// `show.remove`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ShowRemoved {
+    pub removed: String,
+}
+
+/// `event/show.removed`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ShowRemovedEvent {
+    pub id: String,
+}
+
+/// `show.rename`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ShowRenameRequest {
+    pub id: String,
+    pub name: String,
+}
+
+/// Where a show is in its life.
+pub type ShowState = String;
+/// The values api_level 1 knows for [`ShowState`].
+pub const SHOW_STATE_VALUES: &[&str] = &["starting", "running", "stopped", "failed"];
+
 /// `event/snapshot`: the full state, and where in the stream it sits.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -3420,6 +3514,11 @@ pub struct SubscribeRequest {
     /// client asks for it.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ext: Option<Ext>,
+    /// Which show this connection follows, on a station running several. The
+    /// station opens the connection to that show from here on. Omitted means
+    /// the show the URL named with `?show=`, or the first show.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub show: Option<String>,
 }
 
 /// What `core.subscribe` answers with, before the snapshot arrives.
@@ -3888,7 +3987,7 @@ pub struct MethodInfo {
     pub rest: Option<(&'static str, &'static str)>,
 }
 
-pub const METHODS: [MethodInfo; 154] = [
+pub const METHODS: [MethodInfo; 160] = [
     MethodInfo { name: "adbreak.end", summary: "Cut a running ad short, or disarm one that is scheduled.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/end")) },
     MethodInfo { name: "adbreak.start", summary: "Interrupt the programme with a clip, then rejoin live when it ends.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/start")) },
     MethodInfo { name: "agent.state", summary: "The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/agent/state")) },
@@ -4026,6 +4125,12 @@ pub const METHODS: [MethodInfo; 154] = [
     MethodInfo { name: "scene.transaction.commit", summary: "Apply the batch.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/transaction/commit")) },
     MethodInfo { name: "scene.undo", summary: "Undo the last change. A drag marked with scene.history.mark undoes as one step.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/undo")) },
     MethodInfo { name: "scene.validate", summary: "Overlaps, items off the canvas, safe area breaches and missing sources: what to fix before saying a scene is done.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/scenes/validate")) },
+    MethodInfo { name: "show.add", summary: "Make another show and start it: empty, a copy of a show (without its outputs, so nothing goes out twice), or from a project file.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/shows")) },
+    MethodInfo { name: "show.list", summary: "Every show on this machine: its name, whether it is running, what is on air, what its outputs send and what its process costs. `current` is the show a client reaches when it names none.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/shows")) },
+    MethodInfo { name: "show.remove", summary: "Stop a show and remove it with its folder. Refused for the last show and for main, the show the station was started with.", scope: "admin", mutating: true, destructive: true, rest: Some(("DELETE", "/api/v1/shows/{id}")) },
+    MethodInfo { name: "show.rename", summary: "Give a show another name. Its id stays.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/shows/{id}/rename")) },
+    MethodInfo { name: "show.start", summary: "Start a stopped or failed show.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/shows/{id}/start")) },
+    MethodInfo { name: "show.stop", summary: "Stop a show. It keeps its config, and stays stopped when the station starts again, until show.start.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/shows/{id}/stop")) },
     MethodInfo { name: "snapshot.get", summary: "One JPEG: the whole contact sheet, the programme, or one source cut out of the mosaic.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/snapshot/{id}")) },
     MethodInfo { name: "source.add", summary: "Add a source while the mixer runs. Answers with the id it got and the whole source record.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/sources")) },
     MethodInfo { name: "source.audio.set", summary: "Move a source's audio: the fader, the mute, and for a superimposed page the balance between its own sound and the videos under it.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/sources/{id}/audio")) },
@@ -4045,7 +4150,7 @@ pub const METHODS: [MethodInfo; 154] = [
     MethodInfo { name: "tool.call", summary: "Call one of a plugin's tools, in MCP's shape. The name is `<plugin>/<tool>`, or the bare tool name when only one plugin has it.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/tool/call")) },
 ];
 
-pub const EVENT_NAMES: [&str; 26] = [
+pub const EVENT_NAMES: [&str; 28] = [
     "snapshot",
     "program.took",
     "scene.patch",
@@ -4072,6 +4177,8 @@ pub const EVENT_NAMES: [&str; 26] = [
     "flush",
     "rendition.plan",
     "governor.shed",
+    "show.changed",
+    "show.removed",
 ];
 
 pub const EXT_KEYS: [&str; 8] = [
@@ -4143,6 +4250,10 @@ pub enum Event {
     RenditionPlan(RenditionPlanEvent),
     /// The machine ran short while on air and the governor stopped something to keep what is on air whole: what it was and why. It is brought back by itself when there is room again.
     GovernorShed(ShedNote),
+    /// A show was added, renamed, started, stopped, died or came back. Sent by the station to every client, whichever show it is looking at.
+    ShowChanged(ShowChanged),
+    /// A show was removed. Its process was stopped first.
+    ShowRemoved(ShowRemovedEvent),
     /// An event name this api_level does not know, with its params as they came.
     Other { name: String, params: Value },
 }
@@ -4249,6 +4360,14 @@ impl Event {
                 Ok(payload) => Event::GovernorShed(payload),
                 Err(_) => Event::Other { name: pattern.to_string(), params },
             },
+            "show.changed" => match serde_json::from_value(params.clone()) {
+                Ok(payload) => Event::ShowChanged(payload),
+                Err(_) => Event::Other { name: pattern.to_string(), params },
+            },
+            "show.removed" => match serde_json::from_value(params.clone()) {
+                Ok(payload) => Event::ShowRemoved(payload),
+                Err(_) => Event::Other { name: pattern.to_string(), params },
+            },
             _ => Event::Other { name: pattern.to_string(), params },
         }
     }
@@ -4282,6 +4401,8 @@ impl Event {
             Event::Flush(_) => "flush",
             Event::RenditionPlan(_) => "rendition.plan",
             Event::GovernorShed(_) => "governor.shed",
+            Event::ShowChanged(_) => "show.changed",
+            Event::ShowRemoved(_) => "show.removed",
             Event::Other { name, .. } => name,
         }
     }
@@ -4973,6 +5094,36 @@ impl Client {
     /// Overlaps, items off the canvas, safe area breaches and missing sources: what to fix before saying a scene is done.
     pub async fn scene_validate(&self, params: &ValidateRequest) -> Result<Validation> {
         self.call("scene.validate", params).await
+    }
+
+    /// Make another show and start it: empty, a copy of a show (without its outputs, so nothing goes out twice), or from a project file.
+    pub async fn show_add(&self, params: &ShowAddRequest) -> Result<Show> {
+        self.call("show.add", params).await
+    }
+
+    /// Every show on this machine: its name, whether it is running, what is on air, what its outputs send and what its process costs. `current` is the show a client reaches when it names none.
+    pub async fn show_list(&self) -> Result<ShowList> {
+        self.call("show.list", &serde_json::json!({})).await
+    }
+
+    /// Stop a show and remove it with its folder. Refused for the last show and for main, the show the station was started with.
+    pub async fn show_remove(&self, params: &IdRequest) -> Result<ShowRemoved> {
+        self.call("show.remove", params).await
+    }
+
+    /// Give a show another name. Its id stays.
+    pub async fn show_rename(&self, params: &ShowRenameRequest) -> Result<Show> {
+        self.call("show.rename", params).await
+    }
+
+    /// Start a stopped or failed show.
+    pub async fn show_start(&self, params: &IdRequest) -> Result<Show> {
+        self.call("show.start", params).await
+    }
+
+    /// Stop a show. It keeps its config, and stays stopped when the station starts again, until show.start.
+    pub async fn show_stop(&self, params: &IdRequest) -> Result<Show> {
+        self.call("show.stop", params).await
     }
 
     /// One JPEG: the whole contact sheet, the programme, or one source cut out of the mosaic.

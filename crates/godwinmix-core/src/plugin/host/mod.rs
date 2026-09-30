@@ -8,6 +8,7 @@
 //!   output.rs     SidecarOutput:  the programme, muxed, down a FIFO
 //!   filter.rs     SidecarFilter:  raw out and raw back on two sockets
 //!   service.rs    SidecarService and SidecarDevice: no media at all
+//!   shared/       SharedSource: one process opens a device, every source reads it
 //! ```
 //!
 //! The split with `godwinmix-host` is the split between a pipeline and a
@@ -25,6 +26,8 @@ pub mod filter;
 pub mod output;
 pub mod process;
 pub mod service;
+#[cfg(unix)]
+pub mod shared;
 pub mod source;
 pub mod transport;
 
@@ -98,14 +101,33 @@ pub fn make_source(req: SourceRequest<'_>) -> Result<Box<dyn Source>> {
     if let Some(node) = req.cfg.placement().node() {
         return bridged::make(req, &type_id, node);
     }
-    let instance = req.cfg.id.clone();
+    let mut build = req.ctx();
+    build.tier = crate::plugin::Tier::Sidecar;
+    // A provide that says what it opens is opened once on this machine and
+    // read by every other source that opens the same thing. See `shared`.
+    // Windows has no cross process transport for it yet, so there every
+    // source opens its own device, as it always has.
+    #[cfg(unix)]
+    if let Some(place) = shared::plan(&type_id, &req.cfg.effective_params()) {
+        return shared::SharedSource::make(type_id, place, build);
+    }
+    Ok(Box::new(sidecar_for(&type_id, build)?))
+}
+
+/// The process behind one source instance: launched, not yet started.
+///
+/// Split out of `make_source` because a shared source starts one of these
+/// each time it becomes the owner of what it opens, which may be long after
+/// it was made and more than once.
+pub fn sidecar_for(type_id: &str, build: crate::plugin::kinds::BuildCtx) -> Result<SidecarSource> {
+    let instance = build.id.to_string();
     let launched = crate::plugin::loader::launch_for(
-        &type_id,
+        type_id,
         &instance,
-        crate::plugin::loader::mint_token(&type_id, &instance),
+        crate::plugin::loader::mint_token(type_id, &instance),
         crate::plugin::loader::rpc_url(),
     )?;
-    let manifest = crate::plugin::loader::source_provide(&type_id)
+    let manifest = crate::plugin::loader::source_provide(type_id)
         .map(|p| p.manifest)
         .with_context(|| format!("`{type_id}` is not a loaded source provide"))?;
     let spec = SidecarSpec {
@@ -114,10 +136,8 @@ pub fn make_source(req: SourceRequest<'_>) -> Result<Box<dyn Source>> {
         manifest,
         launch: launched.launch,
         ctx: launched.ctx,
-        canvas: req.canvas.clone(),
+        canvas: build.canvas.clone(),
         runtime: crate::plugin::loader::runtime_dir(),
     };
-    let mut build = req.ctx();
-    build.tier = crate::plugin::Tier::Sidecar;
-    Ok(Box::new(SidecarSource::new(spec, build)))
+    Ok(SidecarSource::new(spec, build))
 }

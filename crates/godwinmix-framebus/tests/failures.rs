@@ -119,3 +119,21 @@ fn a_reader_carries_on_when_the_owner_dies_and_another_starts_with_a_new_size() 
     assert_eq!(sub.reconnects(), 1);
     second.kill9();
 }
+
+#[test]
+fn a_claim_held_by_a_process_killed_with_sigkill_is_free_at_once() {
+    let reg = registry();
+    let mut kid = spawn("claim", &reg, "");
+    assert_eq!(num(&kid.result(), "claimed"), 1);
+    assert!(godwinmix_framebus::Claim::try_take(&reg, &name()).unwrap().is_none());
+    kid.kill9();
+    let start = Instant::now();
+    let taken = loop {
+        if let Some(c) = godwinmix_framebus::Claim::try_take(&reg, &name()).unwrap() {
+            break c;
+        }
+        assert!(start.elapsed() < Duration::from_secs(2), "the claim outlived its holder");
+        std::thread::sleep(Duration::from_millis(5));
+    };
+    assert_eq!(taken.name(), &name());
+}

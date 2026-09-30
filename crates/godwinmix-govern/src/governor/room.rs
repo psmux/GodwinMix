@@ -15,7 +15,12 @@ impl Governor {
     /// The line is capacity less the reserve. Shedding starts once live load
     /// has eaten half the reserve, and frees enough to be back under the line.
     pub fn shed(&self) -> Vec<ShedStep> {
-        let load = self.inner.load.load();
+        // A show's book is the station's, and so is the load: the station
+        // decides and says which of this show's tickets to give up.
+        if let Some(remote) = self.remote() {
+            return remote.shed();
+        }
+        let load = self.load();
         if load.samples == 0 {
             return Vec::new();
         }
