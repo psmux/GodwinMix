@@ -36,13 +36,14 @@ Keys accepted on every method, handled before a method runs.
 | `adbreak.end` | `POST /api/v1/adbreak/end` | operate |  | 1 | Cut a running ad short, or disarm one that is scheduled. |
 | `adbreak.start` | `POST /api/v1/adbreak/start` | operate |  | 1 | Interrupt the programme with a clip, then rejoin live when it ends. |
 | `agent.state` | `GET /api/v1/agent/state` | read |  | 1 | The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing. |
-| `channel.add` | `POST /api/v1/channels` | admin |  | 1 | Make a channel and its first key. The key is in this answer and never again. |
+| `channel.add` | `POST /api/v1/channels` | admin |  | 1 | Make a channel and its first key, which is in this answer. channel.key.reveal reads it again later. |
 | `channel.destination.add` | `POST /api/v1/channels/{id}/destination/add` | admin |  | 1 | Send a channel's stream on to YouTube, Facebook, Twitch, an RTMP server or an SRT receiver as it arrives. Nothing is decoded or encoded. The key is write only. |
 | `channel.destination.remove` | `POST /api/v1/channels/{id}/destination/remove` | admin | yes | 1 | Stop sending a channel's stream to one destination and forget it. The publisher and the other destinations are not touched. |
 | `channel.destination.set` | `POST /api/v1/channels/{id}/destination` | admin |  | 1 | Change one of a channel's destinations, naming only what moves: a new key, another server, which stream it sends, on or off. A key left out is kept. |
 | `channel.get` | `GET /api/v1/channels/{id}` | read |  | 1 | One channel. |
-| `channel.key.add` | `POST /api/v1/channels/{id}/key/add` | admin |  | 1 | Make another key for a channel, to give to one more person or encoder. The key is in this answer and never again. |
+| `channel.key.add` | `POST /api/v1/channels/{id}/key/add` | admin |  | 1 | Make another key for a channel, to give to one more person or encoder. The key is in this answer, and channel.key.reveal reads it again later. |
 | `channel.key.remove` | `POST /api/v1/channels/{id}/key/remove` | admin | yes | 1 | Take one key back. A publisher on air with it is cut off and the next one is turned away; the other keys are untouched. |
+| `channel.key.reveal` | `POST /api/v1/channels/{id}/key/reveal` | admin |  | 1 | Read one key of a channel back, to give it to an encoder again. Admin only; a list shows only the last four characters. Each read is logged with who asked, never with the key. |
 | `channel.list` | `GET /api/v1/channels` | read |  | 1 | Every RTMP channel with its keys (as hints), the address to publish to, and what is live on it, beside the port they all share. |
 | `channel.remove` | `DELETE /api/v1/channels/{id}` | admin | yes | 1 | Remove a channel and forget its keys. Sources it made that no scene holds go with it. |
 | `channel.set` | `POST /api/v1/channels/{id}/set` | admin |  | 1 | Rename a channel, switch it on or off, or change its application name, whether its streams become sources, or how its key is given. Only what is named moves. |
@@ -234,7 +235,7 @@ MCP tool `agent_state` in the `minimal` profile: readOnlyHint true, destructiveH
 
 #### `channel.add`
 
-Make a channel and its first key. The key is in this answer and never again.
+Make a channel and its first key, which is in this answer. channel.key.reveal reads it again later.
 
 ```json
 {
@@ -309,7 +310,7 @@ One channel.
 
 #### `channel.key.add`
 
-Make another key for a channel, to give to one more person or encoder. The key is in this answer and never again.
+Make another key for a channel, to give to one more person or encoder. The key is in this answer, and channel.key.reveal reads it again later.
 
 ```json
 {
@@ -333,6 +334,21 @@ Take one key back. A publisher on air with it is cut off and the next one is tur
   },
   "result": {
     "$ref": "#/$defs/Channel"
+  }
+}
+```
+
+#### `channel.key.reveal`
+
+Read one key of a channel back, to give it to an encoder again. Admin only; a list shows only the last four characters. Each read is logged with who asked, never with the key.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ChannelKeyRevealRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/KeyRevealed"
   }
 }
 ```
