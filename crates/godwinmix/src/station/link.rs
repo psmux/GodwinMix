@@ -18,7 +18,7 @@
 //! no use to anybody. See `client.rs` for the show's half.
 
 pub mod client;
-mod serve;
+pub mod serve;
 
 use serde::{Deserialize, Serialize};
 
