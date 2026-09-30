@@ -4,6 +4,8 @@
 // after a source clears the source, since arming a source disarmed the scene
 // and anything armed since is newer.
 
+import { fillNote, sceneNotRunning } from "../scenes/fix-note.js";
+
 /** What is in preview: the armed scene, else a source armed on this page. */
 export function render(panel, s) {
   const scene = armedScene(s);
@@ -17,29 +19,15 @@ export function render(panel, s) {
   panel.previewName.textContent = (known && known.name) || panel.armed || "Click a scene or a source";
   panel.previewWrap.classList.toggle("unarmed", !panel.armed);
   panel.takeBtn.disabled = panel.cutBtn.disabled = !panel.armed;
-  const missing = notRunning(panel, scene);
-  panel.previewNote.hidden = !missing.length;
-  panel.previewNote.textContent = missing.length
-    ? `${missing.join(", ")} ${missing.length === 1 ? "is" : "are"} in this scene but not running, so the mixer will not take it. ` +
-      "Get them running, or open the scene with the pencil beside its tab and delete them."
-    : "";
-}
-
-/**
- * The sources an armed scene draws that this mixer does not have.
- *
- * The core refuses to take such a scene, and says so only once Take is
- * pressed; the preview draws the scene without them, so without this note
- * the picture looks ready when it is not. Read from the Scenes panel, when
- * one is on the page, as the Sources panel does.
- */
-function notRunning(panel, scene) {
-  const scenes = scene && sceneKit();
-  const summary = scenes ? scenes.summary(scene) : null;
-  if (!summary || !summary.sources || !panel.client.store) return [];
-  const sources = panel.client.state.sources || [];
-  if (!sources.length) return [];
-  return summary.sources.filter((id) => !panel.client.store.source(id));
+  // The take goes ahead without them, so the note says so while there is
+  // still time to fix it, and its button opens the dialog that does. Read
+  // from the Scenes panel, when one is on the page, as the Sources panel does.
+  const kit = scene ? sceneKit() : null;
+  const summary = kit ? kit.summary(scene) : null;
+  const missing = summary ? sceneNotRunning(panel.client, kit, summary.id) : [];
+  fillNote(panel.previewNote, panel.client, missing,
+    () => ({ client: panel.client, scenes: kit, scene: summary.id }),
+    `The take goes ahead without ${missing.length === 1 ? "it" : "them"}.`);
 }
 
 /**

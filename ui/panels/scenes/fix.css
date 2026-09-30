@@ -1,0 +1,19 @@
+/* A scene that draws a source that is not running, and the Fix dialog.
+   Linked by marks.js and fix.js on first use, so not in the eager page. */
+.scene-tabs button.scene-warn:not(.btn), .tile .scene-warn { display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: 50%; background: var(--warn); color: #1a1300; cursor: pointer; font-weight: 800; line-height: 1; padding: 0; width: 18px; height: 18px; font-size: 12px; margin: 0 2px; }
+.scene-tabs button.scene-warn[hidden], .tile .scene-warn[hidden] { display: none; }
+.scene-tabs button.scene-warn:not(.btn):focus-visible, .tile .scene-warn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.tile .scene-warn { position: absolute; right: 8px; top: 8px; width: 26px; height: 26px; font-size: 15px; }
+.fix-dialog { max-width: min(640px, 96vw); }
+.fix-row { display: flex; align-items: flex-start; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--line); cursor: pointer; }
+.fix-row:last-child { border-bottom: 0; }
+.fix-row input[type="checkbox"] { margin-top: 3px; }
+.fix-text { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.fix-error { overflow-wrap: anywhere; }
+.fix-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; max-width: 45%; }
+.fix-camera { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+.fix-camera [hidden] { display: none; }
+@media (max-width: 560px) {
+  .fix-row { flex-wrap: wrap; }
+  .fix-actions { max-width: none; width: 100%; justify-content: flex-start; }
+}

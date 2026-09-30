@@ -121,6 +121,11 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/renditions/usage.js", include_str!("../../../ui/panels/renditions/usage.js")),
     ("panels/renditions/words.js", include_str!("../../../ui/panels/renditions/words.js")),
     ("panels/scenes/more.js", include_str!("../../../ui/panels/scenes/more.js")),
+    ("panels/scenes/fix.js", include_str!("../../../ui/panels/scenes/fix.js")),
+    ("panels/scenes/fix-row.js", include_str!("../../../ui/panels/scenes/fix-row.js")),
+    ("panels/scenes/fix-note.js", include_str!("../../../ui/panels/scenes/fix-note.js")),
+    ("panels/scenes/fix.css", include_str!("../../../ui/panels/scenes/fix.css")),
+    ("panels/scenes/marks.js", include_str!("../../../ui/panels/scenes/marks.js")),
     ("panels/scenes/panel.js", include_str!("../../../ui/panels/scenes/panel.js")),
     ("panels/sources/first-air.js", include_str!("../../../ui/panels/sources/first-air.js")),
     ("panels/sources/local.js", include_str!("../../../ui/panels/sources/local.js")),
@@ -161,6 +166,7 @@ const ASSETS: &[(&str, &str)] = &[
     ("shell/folder-picker.js", include_str!("../../../ui/shell/folder-picker.js")),
     ("shell/meter.js", include_str!("../../../ui/shell/meter.js")),
     ("shell/modal.js", include_str!("../../../ui/shell/modal.js")),
+    ("shell/scene-health.js", include_str!("../../../ui/shell/scene-health.js")),
     ("shell/palette.js", include_str!("../../../ui/shell/palette.js")),
     ("shell/lazy-action.js", include_str!("../../../ui/shell/lazy-action.js")),
     ("shell/restart-bar.js", include_str!("../../../ui/shell/restart-bar.js")),
@@ -742,6 +748,8 @@ mod tests {
         let mut reachable = eager_set();
         reachable.extend(closure_of("panels/composer/composer.js"));
         reachable.extend(closure_of("panels/scenes/more.js"));
+        reachable.extend(closure_of("panels/scenes/fix.js"));
+        reachable.extend(closure_of("panels/scenes/marks.js"));
         reachable.extend(closure_of("client/transport-legacy.js"));
         reachable.extend(closure_of("client/schema-form.js"));
         reachable.extend(closure_of("shell/palette.js"));
@@ -807,6 +815,8 @@ mod tests {
             ("kits/schema/render.js", "the composer's inspector"),
             ("kits/protocol/predict.js", "the composer's canvas"),
             ("panels/scenes/more.js", "a right click or Ctrl+C on a scene"),
+            ("panels/scenes/fix.js", "Fix on a scene whose sources are not running"),
+            ("panels/scenes/marks.js", "a scene with a source that is not running"),
             ("client/transport-legacy.js", "a core with no /rpc"),
             ("client/schema-form.js", "the add picker and the settings drawer"),
             ("shell/palette.js", "Ctrl+K"),
