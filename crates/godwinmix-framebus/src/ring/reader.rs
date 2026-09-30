@@ -32,6 +32,8 @@ impl Ring {
 
     /// Done with `slot`.
     pub fn release(&self, reader: usize, slot: usize) {
-        self.header().readers[reader].leases.fetch_and(!(1 << slot), SeqCst);
+        self.header().readers[reader]
+            .leases
+            .fetch_and(!(1 << slot), SeqCst);
     }
 }

@@ -63,7 +63,13 @@ pub fn no_sigpipe(_fd: RawFd) {
         let one: libc::c_int = 1;
         // SAFETY: a valid option pointer and length on a socket we hold.
         unsafe {
-            libc::setsockopt(_fd, libc::SOL_SOCKET, libc::SO_NOSIGPIPE, (&one as *const libc::c_int).cast(), 4)
+            libc::setsockopt(
+                _fd,
+                libc::SOL_SOCKET,
+                libc::SO_NOSIGPIPE,
+                (&one as *const libc::c_int).cast(),
+                4,
+            )
         };
     }
 }
@@ -71,7 +77,10 @@ pub fn no_sigpipe(_fd: RawFd) {
 /// Send `bytes`, with `fd` attached when given. Blocking unless the socket is
 /// non blocking or `dontwait` is set.
 pub fn send(sock: RawFd, bytes: &[u8], fd: Option<RawFd>, dontwait: bool) -> io::Result<usize> {
-    let mut iov = libc::iovec { iov_base: bytes.as_ptr() as *mut _, iov_len: bytes.len() };
+    let mut iov = libc::iovec {
+        iov_base: bytes.as_ptr() as *mut _,
+        iov_len: bytes.len(),
+    };
     // Room for one descriptor; u64 keeps the buffer aligned for cmsghdr.
     let mut cbuf = [0u64; 8];
     // SAFETY: msghdr is plain data; zero is a valid starting value.

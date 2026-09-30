@@ -20,6 +20,8 @@ use crate::shm::{page_size, Region};
 use crate::Error;
 
 mod owner;
+#[cfg(test)]
+mod pages;
 mod reader;
 #[cfg(test)]
 mod tests;
@@ -35,7 +37,11 @@ pub enum Lease {
     Nothing,
     /// It already holds as many frames as the owner allows one reader.
     Full,
-    Leased { slot: usize, seq: u64, skipped: u64 },
+    Leased {
+        slot: usize,
+        seq: u64,
+        skipped: u64,
+    },
 }
 
 /// A frame's timing, written with it.
@@ -84,7 +90,9 @@ impl Ring {
     /// Wrap a region another process made, after checking it is one.
     pub fn attach(region: Region) -> Result<Ring, Error> {
         if region.header_len() < std::mem::size_of::<Header>() {
-            return Err(Error::Protocol("the region is too small for a frame bus header".into()));
+            return Err(Error::Protocol(
+                "the region is too small for a frame bus header".into(),
+            ));
         }
         let ring = Ring { region };
         let h = ring.header();
@@ -100,7 +108,9 @@ impl Ring {
             || h.frame_size > h.slot_stride
             || h.data_offset as usize != ring.region.header_len()
         {
-            return Err(Error::Protocol("the region header describes an impossible layout".into()));
+            return Err(Error::Protocol(
+                "the region header describes an impossible layout".into(),
+            ));
         }
         Ok(ring)
     }
@@ -122,7 +132,8 @@ impl Ring {
     /// The first byte of slot `slot`'s frame, `frame_size` bytes long.
     pub fn data(&self, slot: usize) -> *mut u8 {
         let h = self.header();
-        self.region.at((h.data_offset + slot as u64 * h.slot_stride) as usize)
+        self.region
+            .at((h.data_offset + slot as u64 * h.slot_stride) as usize)
     }
 
     /// The frame in `slot` as bytes. Only for a slot the caller leases (a

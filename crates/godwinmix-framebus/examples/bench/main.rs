@@ -15,6 +15,7 @@ mod clip;
 mod matrix;
 mod measure;
 mod owner;
+mod procs;
 mod reader;
 mod table;
 
@@ -34,11 +35,17 @@ impl Args {
     }
 
     pub fn get(&self, k: &str, default: &str) -> String {
-        self.0.get(k).cloned().unwrap_or_else(|| default.to_string())
+        self.0
+            .get(k)
+            .cloned()
+            .unwrap_or_else(|| default.to_string())
     }
 
     pub fn num(&self, k: &str, default: u64) -> u64 {
-        self.0.get(k).and_then(|v| v.parse().ok()).unwrap_or(default)
+        self.0
+            .get(k)
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(default)
     }
 }
 

@@ -18,7 +18,9 @@ pub enum BusName {
 /// a path or in the file name below.
 fn valid(part: &str) -> bool {
     (1..=64).contains(&part.len())
-        && part.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+        && part
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
 }
 
 impl BusName {
@@ -65,9 +67,10 @@ impl FromStr for BusName {
         match s.split_once(':').ok_or_else(bad)? {
             ("camera", id) if valid(id) => Ok(BusName::Camera(id.into())),
             ("channel", rest) => match rest.split_once('/') {
-                Some((app, stream)) if valid(app) && valid(stream) => {
-                    Ok(BusName::Channel { app: app.into(), stream: stream.into() })
-                }
+                Some((app, stream)) if valid(app) && valid(stream) => Ok(BusName::Channel {
+                    app: app.into(),
+                    stream: stream.into(),
+                }),
                 _ => Err(bad()),
             },
             _ => Err(bad()),
@@ -95,12 +98,22 @@ mod tests {
             assert_eq!(n.to_string(), text);
             assert_eq!(BusName::from_file_name(&n.file_name()), Some(n));
         }
-        assert_eq!(BusName::channel("a", "b").unwrap().file_name(), "channel=a+b.sock");
+        assert_eq!(
+            BusName::channel("a", "b").unwrap().file_name(),
+            "channel=a+b.sock"
+        );
     }
 
     #[test]
     fn a_bad_name_says_what_a_good_one_looks_like() {
-        for text in ["cam-wide", "camera:", "camera:../x", "channel:app", "screen:1", "camera:a b"] {
+        for text in [
+            "cam-wide",
+            "camera:",
+            "camera:../x",
+            "channel:app",
+            "screen:1",
+            "camera:a b",
+        ] {
             let e = text.parse::<BusName>().unwrap_err();
             assert!(e.to_string().contains("camera:<id>"), "{e}");
         }

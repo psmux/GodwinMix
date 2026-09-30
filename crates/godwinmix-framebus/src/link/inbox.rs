@@ -21,12 +21,20 @@ const RECV_FLAGS: libc::c_int = libc::MSG_DONTWAIT;
 /// Wait up to `timeout_ms` for `sock` to be readable. `true` if it is, or
 /// if it closed (the read then says so).
 pub fn wait_readable(sock: RawFd, timeout_ms: i32) -> io::Result<bool> {
-    let mut p = libc::pollfd { fd: sock, events: libc::POLLIN, revents: 0 };
+    let mut p = libc::pollfd {
+        fd: sock,
+        events: libc::POLLIN,
+        revents: 0,
+    };
     // SAFETY: one valid pollfd.
     let n = unsafe { libc::poll(&mut p, 1, timeout_ms) };
     if n < 0 {
         let e = io::Error::last_os_error();
-        return if e.kind() == io::ErrorKind::Interrupted { Ok(false) } else { Err(e) };
+        return if e.kind() == io::ErrorKind::Interrupted {
+            Ok(false)
+        } else {
+            Err(e)
+        };
     }
     Ok(n > 0)
 }
@@ -35,7 +43,10 @@ impl Inbox {
     /// One non blocking read. `Ok(false)` when the other end closed.
     pub fn fill(&mut self, sock: RawFd) -> io::Result<bool> {
         let mut data = [0u8; 512];
-        let mut iov = libc::iovec { iov_base: data.as_mut_ptr().cast(), iov_len: data.len() };
+        let mut iov = libc::iovec {
+            iov_base: data.as_mut_ptr().cast(),
+            iov_len: data.len(),
+        };
         let mut cbuf = [0u64; 16];
         // SAFETY: msghdr is plain data; zero is a valid starting value.
         let mut msg: libc::msghdr = unsafe { std::mem::zeroed() };
@@ -78,7 +89,9 @@ impl Inbox {
 
     /// The next whole event in what has been read, if there is one.
     pub fn pop(&mut self) -> io::Result<Option<Event>> {
-        let Some(&kind) = self.buf.first() else { return Ok(None) };
+        let Some(&kind) = self.buf.first() else {
+            return Ok(None);
+        };
         let (len, event) = match kind {
             NUDGE => (1, Some(Event::Nudge)),
             REGION | JOIN if self.buf.len() < RECORD => return Ok(None),
@@ -110,32 +123,5 @@ pub fn join_record(pid: u32) -> [u8; RECORD] {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use std::os::unix::net::UnixStream;
-
-    #[test]
-    fn records_and_descriptors_arrive_in_order_whatever_the_reads() {
-        let (a, b) = UnixStream::pair().unwrap();
-        let region = crate::shm::Region::create(4096).unwrap();
-        let msg = RegionMsg { reader: 3, header_len: 4096, total_len: 4096, owner_pid: 7 };
-        send(a.as_raw_fd(), &[NUDGE, NUDGE], None, true).unwrap();
-        send_region(a.as_raw_fd(), &msg, region.fd()).unwrap();
-        write_all(a.as_raw_fd(), &join_record(42)).unwrap();
-        let mut inbox = Inbox::default();
-        let mut got = vec![];
-        while got.len() < 4 {
-            wait_readable(b.as_raw_fd(), 1000).unwrap();
-            assert!(inbox.fill(b.as_raw_fd()).unwrap());
-            while let Some(e) = inbox.pop().unwrap() {
-                got.push(e);
-            }
-        }
-        assert!(matches!(got[..2], [Event::Nudge, Event::Nudge]));
-        assert!(matches!(&got[2], Event::Region(m, _) if *m == msg));
-        assert!(matches!(got[3], Event::Join(42)));
-        drop(a);
-        wait_readable(b.as_raw_fd(), 1000).unwrap();
-        assert!(!inbox.fill(b.as_raw_fd()).unwrap(), "a closed socket reads as closed");
-    }
-}
+#[path = "inbox_tests.rs"]
+mod tests;

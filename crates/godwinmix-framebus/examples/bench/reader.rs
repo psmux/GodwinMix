@@ -23,9 +23,20 @@ pub fn run(args: &Args) {
     match args.get("mechanism", "bus").as_str() {
         "unixfd" => {
             let stall = args.num("stall-ms", 0);
-            let hold = if stall > 0 { format!("identity sleep-time={} ! ", stall * 1000) } else { String::new() };
-            let pipeline = format!("unixfdsrc socket-path={} ! {hold}appsink name=out sync=false", args.get("socket", ""));
-            by_pipeline(args, gst::parse::launch(&pipeline).unwrap().downcast().unwrap(), "reader");
+            let hold = if stall > 0 {
+                format!("identity sleep-time={} ! ", stall * 1000)
+            } else {
+                String::new()
+            };
+            let pipeline = format!(
+                "unixfdsrc socket-path={} ! {hold}appsink name=out sync=false",
+                args.get("socket", "")
+            );
+            by_pipeline(
+                args,
+                gst::parse::launch(&pipeline).unwrap().downcast().unwrap(),
+                "reader",
+            );
         }
         _ => bus(args),
     }
@@ -34,7 +45,11 @@ pub fn run(args: &Args) {
 /// Decode the clip in this process, as each consumer does without the bus.
 pub fn decode(args: &Args) {
     let tail = "appsink name=out sync=true max-buffers=1";
-    let p = clip::decode_into(&args.get("clip", ""), &args.get("decoder", "avdec_h264"), tail);
+    let p = clip::decode_into(
+        &args.get("clip", ""),
+        &args.get("decoder", "avdec_h264"),
+        tail,
+    );
     by_pipeline(args, p, "decode");
 }
 
@@ -55,7 +70,9 @@ fn bus(args: &Args) {
         };
         let mut sink = 0u64;
         while !s.load(Relaxed) {
-            let Ok(Some(f)) = sub.next(Duration::from_millis(100)) else { continue };
+            let Ok(Some(f)) = sub.next(Duration::from_millis(100)) else {
+                continue;
+            };
             let now = monotonic_ns();
             sink = sink.wrapping_add(clip::touch(f.data()));
             if (t0..t1).contains(&now) {
@@ -90,7 +107,11 @@ fn bus(args: &Args) {
 fn by_pipeline(args: &Args, p: gst::Pipeline, role: &str) {
     let (t0, t1) = (args.num("t0", 0), args.num("t1", 0));
     let frames = Arc::new(AtomicU64::new(0));
-    let sink = p.by_name("out").unwrap().downcast::<gst_app::AppSink>().unwrap();
+    let sink = p
+        .by_name("out")
+        .unwrap()
+        .downcast::<gst_app::AppSink>()
+        .unwrap();
     let f = frames.clone();
     sink.set_callbacks(
         gst_app::AppSinkCallbacks::builder()
@@ -103,7 +124,8 @@ fn by_pipeline(args: &Args, p: gst::Pipeline, role: &str) {
             })
             .build(),
     );
-    p.set_state(gst::State::Playing).expect("the reader pipeline would not play");
+    p.set_state(gst::State::Playing)
+        .expect("the reader pipeline would not play");
     sleep_until(t0);
     let f0 = frames.load(Relaxed);
     let (cpu, rss) = cpu_over(t0, t1);

@@ -33,8 +33,14 @@ impl ObjectImpl for BusSrc {
     fn properties() -> &'static [glib::ParamSpec] {
         static P: LazyLock<Vec<glib::ParamSpec>> = LazyLock::new(|| {
             vec![
-                glib::ParamSpecString::builder("bus-name").nick("Bus name").blurb("camera:<id> or channel:<app>/<stream>").build(),
-                glib::ParamSpecString::builder("bus-dir").nick("Bus directory").blurb("The registry directory; empty for GODWINMIX_BUS_DIR or the default").build(),
+                glib::ParamSpecString::builder("bus-name")
+                    .nick("Bus name")
+                    .blurb("camera:<id> or channel:<app>/<stream>")
+                    .build(),
+                glib::ParamSpecString::builder("bus-dir")
+                    .nick("Bus directory")
+                    .blurb("The registry directory; empty for GODWINMIX_BUS_DIR or the default")
+                    .build(),
             ]
         });
         P.as_ref()
@@ -81,7 +87,13 @@ impl ElementImpl for BusSrc {
 
     fn pad_templates() -> &'static [gst::PadTemplate] {
         static T: LazyLock<Vec<gst::PadTemplate>> = LazyLock::new(|| {
-            vec![gst::PadTemplate::new("src", gst::PadDirection::Src, gst::PadPresence::Always, &template_caps()).unwrap()]
+            vec![gst::PadTemplate::new(
+                "src",
+                gst::PadDirection::Src,
+                gst::PadPresence::Always,
+                &template_caps(),
+            )
+            .unwrap()]
         });
         T.as_ref()
     }
@@ -89,7 +101,8 @@ impl ElementImpl for BusSrc {
 
 impl BaseSrcImpl for BusSrc {
     fn start(&self) -> Result<(), gst::ErrorMessage> {
-        self.registry().map_err(|e| gst::error_msg!(gst::ResourceError::Settings, ["{e}"]))?;
+        self.registry()
+            .map_err(|e| gst::error_msg!(gst::ResourceError::Settings, ["{e}"]))?;
         Ok(())
     }
 

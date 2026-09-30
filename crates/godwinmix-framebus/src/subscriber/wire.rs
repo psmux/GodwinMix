@@ -43,12 +43,20 @@ impl Subscriber {
         })?;
         link::write_all(stream.as_raw_fd(), &link::join_record(std::process::id()))?;
         stream.set_nonblocking(true)?;
-        Ok(Live { stream: Arc::new(stream), inbox: Inbox::default(), ring: None, reader: 0, last: 0 })
+        Ok(Live {
+            stream: Arc::new(stream),
+            inbox: Inbox::default(),
+            ring: None,
+            reader: 0,
+            last: 0,
+        })
     }
 
     /// Wait up to `ms` for the socket, then act on what it said.
     pub(super) fn pump(&mut self, ms: i32) -> Result<(), Error> {
-        let Some(live) = self.live.as_mut() else { return Ok(()) };
+        let Some(live) = self.live.as_mut() else {
+            return Ok(());
+        };
         let fd = live.stream.as_raw_fd();
         if !link::wait_readable(fd, ms)? {
             return Ok(());
@@ -59,10 +67,19 @@ impl Subscriber {
                 Ok(Some(Event::Region(msg, fd))) => {
                     let region = Region::open(fd, msg.header_len as usize, msg.total_len as usize)?;
                     let ring = Arc::new(Ring::attach(region)?);
-                    let place = ring.header().readers.get(msg.reader as usize).ok_or_else(|| {
-                        Error::Protocol(format!("reader place {} is out of range", msg.reader))
-                    })?;
-                    place.pid.store(std::process::id(), std::sync::atomic::Ordering::Relaxed);
+                    let place =
+                        ring.header()
+                            .readers
+                            .get(msg.reader as usize)
+                            .ok_or_else(|| {
+                                Error::Protocol(format!(
+                                    "reader place {} is out of range",
+                                    msg.reader
+                                ))
+                            })?;
+                    place
+                        .pid
+                        .store(std::process::id(), std::sync::atomic::Ordering::Relaxed);
                     live.ring = Some(ring);
                     live.reader = msg.reader as usize;
                     live.last = 0;

@@ -44,7 +44,11 @@ fn reader(dir: &str) -> (gst::Pipeline, gst_app::AppSink) {
     .unwrap()
     .downcast::<gst::Pipeline>()
     .unwrap();
-    let sink = p.by_name("out").unwrap().downcast::<gst_app::AppSink>().unwrap();
+    let sink = p
+        .by_name("out")
+        .unwrap()
+        .downcast::<gst_app::AppSink>()
+        .unwrap();
     p.set_state(gst::State::Playing).unwrap();
     (p, sink)
 }
@@ -54,16 +58,26 @@ fn reader(dir: &str) -> (gst::Pipeline, gst_app::AppSink) {
 fn check(sample: &gst::Sample, w: u32, h: u32) -> u8 {
     let caps = sample.caps().unwrap();
     let info = gst_video::VideoInfo::from_caps(caps).unwrap();
-    assert_eq!((info.format(), info.width(), info.height()), (gst_video::VideoFormat::Nv12, w, h));
+    assert_eq!(
+        (info.format(), info.width(), info.height()),
+        (gst_video::VideoFormat::Nv12, w, h)
+    );
     let buffer = sample.buffer().unwrap();
-    let meta = buffer.meta::<gst_video::VideoMeta>().expect("a video meta with the slot's strides");
-    assert_eq!(meta.stride()[0] as usize % godwinmix_framebus::format::ROW_ALIGN, 0);
+    let meta = buffer
+        .meta::<gst_video::VideoMeta>()
+        .expect("a video meta with the slot's strides");
+    assert_eq!(
+        meta.stride()[0] as usize % godwinmix_framebus::format::ROW_ALIGN,
+        0
+    );
     let frame = gst_video::VideoFrameRef::from_buffer_ref_readable(buffer, &info).unwrap();
     let y = frame.plane_data(0).unwrap();
     let stride = frame.plane_stride()[0] as usize;
     let first = y[0];
     for row in 0..h as usize {
-        assert!(y[row * stride..row * stride + w as usize].iter().all(|&v| v == first));
+        assert!(y[row * stride..row * stride + w as usize]
+            .iter()
+            .all(|&v| v == first));
     }
     assert!(buffer.meta::<gst::ReferenceTimestampMeta>().is_some());
     first
@@ -75,21 +89,33 @@ fn a_reader_started_first_waits_for_the_owner_and_follows_a_new_size() {
     let (rp, sink) = reader(&dir);
     std::thread::sleep(Duration::from_millis(300));
     let op = owner(&dir, 320, 240);
-    let s = sink.try_pull_sample(gst::ClockTime::from_seconds(5)).expect("a frame from the owner");
+    let s = sink
+        .try_pull_sample(gst::ClockTime::from_seconds(5))
+        .expect("a frame from the owner");
     let luma = check(&s, 320, 240);
-    assert!((140..=150).contains(&luma), "green is about 145 in luma, got {luma}");
+    assert!(
+        (140..=150).contains(&luma),
+        "green is about 145 in luma, got {luma}"
+    );
     drop(s);
     op.set_state(gst::State::Null).unwrap();
     let op = owner(&dir, 640, 360);
     let deadline = std::time::Instant::now() + Duration::from_secs(5);
     loop {
-        let s = sink.try_pull_sample(gst::ClockTime::from_seconds(1)).expect("frames keep coming");
-        let w = gst_video::VideoInfo::from_caps(s.caps().unwrap()).unwrap().width();
+        let s = sink
+            .try_pull_sample(gst::ClockTime::from_seconds(1))
+            .expect("frames keep coming");
+        let w = gst_video::VideoInfo::from_caps(s.caps().unwrap())
+            .unwrap()
+            .width();
         if w == 640 {
             check(&s, 640, 360);
             break;
         }
-        assert!(std::time::Instant::now() < deadline, "never saw the new size");
+        assert!(
+            std::time::Instant::now() < deadline,
+            "never saw the new size"
+        );
     }
     op.set_state(gst::State::Null).unwrap();
     rp.set_state(gst::State::Null).unwrap();

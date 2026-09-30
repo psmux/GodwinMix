@@ -17,30 +17,13 @@ use crate::ring::{Meta, Ring};
 use crate::{monotonic_ns, BusName, Error, Layout, Registry};
 
 mod conn;
+mod options;
 mod service;
-mod stats;
+pub(crate) mod stats;
 
+pub use options::PublisherOptions;
 use service::Shared;
-pub(crate) use stats::copy_planes;
 pub use stats::{PublisherStats, ReaderStats};
-
-#[derive(Clone, Debug)]
-pub struct PublisherOptions {
-    /// Readers that can be attached at once. At most 32.
-    pub max_readers: usize,
-    /// Frames one reader may hold at once. A reader that holds this many
-    /// waits for one to be dropped; the owner never does.
-    pub leases_per_reader: usize,
-    /// Write a checksum of every frame into its slot, for tests and the
-    /// benchmark's check pass. Costs one pass over the frame.
-    pub checksum: bool,
-}
-
-impl Default for PublisherOptions {
-    fn default() -> Self {
-        PublisherOptions { max_readers: 8, leases_per_reader: 3, checksum: false }
-    }
-}
 
 pub struct Publisher {
     name: BusName,
@@ -65,13 +48,25 @@ impl Publisher {
         let listener = UnixListener::bind(&path)
             .map_err(|e| Error::Os(format!("binding {}: {e}", path.display())))?;
         listener.set_nonblocking(true)?;
-        let ring = Arc::new(Ring::create(&layout, opts.max_readers, opts.leases_per_reader)?);
+        let ring = Arc::new(Ring::create(
+            &layout,
+            opts.max_readers,
+            opts.leases_per_reader,
+        )?);
         let shared = Arc::new(Shared::new(ring.clone())?);
         let thread = shared.clone();
         let service = std::thread::Builder::new()
             .name(format!("framebus {name}"))
             .spawn(move || thread.run(listener))?;
-        Ok(Publisher { name: name.clone(), path, opts, ring, seq: 0, shared, service: Some(service) })
+        Ok(Publisher {
+            name: name.clone(),
+            path,
+            opts,
+            ring,
+            seq: 0,
+            shared,
+            service: Some(service),
+        })
     }
 
     pub fn name(&self) -> &BusName {
@@ -79,7 +74,10 @@ impl Publisher {
     }
 
     pub fn layout(&self) -> Layout {
-        self.ring.header().layout().expect("our own header is valid")
+        self.ring
+            .header()
+            .layout()
+            .expect("our own header is valid")
     }
 
     /// Change the frame format. Readers are handed a new region; frames they
@@ -88,7 +86,11 @@ impl Publisher {
         if layout == self.layout() {
             return Ok(());
         }
-        let ring = Arc::new(Ring::create(&layout, self.opts.max_readers, self.opts.leases_per_reader)?);
+        let ring = Arc::new(Ring::create(
+            &layout,
+            self.opts.max_readers,
+            self.opts.leases_per_reader,
+        )?);
         self.ring.header().retired.store(1, Relaxed);
         self.ring = ring.clone();
         self.seq = 0;
@@ -98,15 +100,26 @@ impl Publisher {
 
     /// Publish one frame, written by `fill` straight into shared memory.
     /// `false` when every slot was leased and the frame was dropped.
-    pub fn write(&mut self, pts: Option<u64>, duration: Option<u64>, fill: impl FnOnce(&mut [u8])) -> bool {
+    pub fn write(
+        &mut self,
+        pts: Option<u64>,
+        duration: Option<u64>,
+        fill: impl FnOnce(&mut [u8]),
+    ) -> bool {
         let captured_ns = monotonic_ns();
-        let Some(slot) = self.ring.claim() else { return false };
+        let Some(slot) = self.ring.claim() else {
+            return false;
+        };
         let len = self.ring.header().frame_size as usize;
         // SAFETY: the slot is claimed: no reader leases it and none can until
         // it is published, so this is the only reference to its bytes.
         let bytes = unsafe { std::slice::from_raw_parts_mut(self.ring.data(slot), len) };
         fill(bytes);
-        let sum = if self.opts.checksum { checksum(bytes) } else { 0 };
+        let sum = if self.opts.checksum {
+            checksum(bytes)
+        } else {
+            0
+        };
         self.seq += 1;
         let meta = Meta {
             pts: pts.unwrap_or(NO_PTS),
@@ -117,13 +130,6 @@ impl Publisher {
         self.ring.publish(slot, self.seq, meta, monotonic_ns());
         self.shared.nudge();
         true
-    }
-
-    /// Publish one frame given as planes with their own strides, copying each
-    /// row into the slot's layout.
-    pub fn write_planes(&mut self, pts: Option<u64>, planes: &[(&[u8], usize)]) -> bool {
-        let layout = self.layout();
-        self.write(pts, None, |dst| copy_planes(&layout, planes, dst))
     }
 
     pub fn stats(&self) -> PublisherStats {

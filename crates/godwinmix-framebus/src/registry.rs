@@ -23,11 +23,18 @@ pub struct Registry {
 }
 
 impl Registry {
-    /// A registry in `dir`, made (owner only, 0700) if it does not exist.
+    /// A registry in `dir`, made (owner only, 0700) if it does not exist. An
+    /// existing directory keeps the permissions it has.
     pub fn new(dir: impl Into<PathBuf>) -> Result<Registry, Error> {
         let dir = dir.into();
+        if dir.is_dir() {
+            return Ok(Registry { dir });
+        }
         std::fs::create_dir_all(&dir).map_err(|e| {
-            Error::Os(format!("making the frame bus directory {}: {e}", dir.display()))
+            Error::Os(format!(
+                "making the frame bus directory {}: {e}",
+                dir.display()
+            ))
         })?;
         #[cfg(unix)]
         {
@@ -54,7 +61,9 @@ impl Registry {
                 return Path::new(&d).join("godwinmix").join("bus");
             }
         }
-        std::env::temp_dir().join(format!("godwinmix-{}", user_id())).join("bus")
+        std::env::temp_dir()
+            .join(format!("godwinmix-{}", user_id()))
+            .join("bus")
     }
 
     pub fn dir(&self) -> &Path {
@@ -80,7 +89,9 @@ impl Registry {
     /// that died is listed until the next owner of that name replaces it; a
     /// subscribe to it answers `NotFound`.
     pub fn list(&self) -> Vec<BusName> {
-        let Ok(entries) = std::fs::read_dir(&self.dir) else { return vec![] };
+        let Ok(entries) = std::fs::read_dir(&self.dir) else {
+            return vec![];
+        };
         let mut names: Vec<BusName> = entries
             .filter_map(|e| BusName::from_file_name(e.ok()?.file_name().to_str()?))
             .collect();
@@ -106,7 +117,9 @@ mod tests {
 
     #[test]
     fn a_long_directory_is_refused_with_the_way_out() {
-        let r = Registry { dir: PathBuf::from(format!("/tmp/{}", "d".repeat(100))) };
+        let r = Registry {
+            dir: PathBuf::from(format!("/tmp/{}", "d".repeat(100))),
+        };
         let e = r.path(&BusName::camera("cam").unwrap()).unwrap_err();
         assert!(e.to_string().contains(DIR_ENV), "{e}");
     }

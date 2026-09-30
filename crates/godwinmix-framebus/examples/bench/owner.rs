@@ -24,7 +24,10 @@ pub fn run(args: &Args) {
     let dropped = Arc::new(AtomicU64::new(0));
     let pipeline = match args.get("mechanism", "bus").as_str() {
         "unixfd" => {
-            let tail = format!("{convert} ! identity name=count ! unixfdsink socket-path={} sync=true", args.get("socket", ""));
+            let tail = format!(
+                "{convert} ! identity name=count ! unixfdsink socket-path={} sync=true",
+                args.get("socket", "")
+            );
             let p = clip::decode_into(&clip, &decoder, &tail);
             count_on(&p, "count", frames.clone());
             p
@@ -36,7 +39,9 @@ pub fn run(args: &Args) {
             p
         }
     };
-    pipeline.set_state(gst::State::Playing).expect("the owner pipeline would not play");
+    pipeline
+        .set_state(gst::State::Playing)
+        .expect("the owner pipeline would not play");
     sleep_until(t0);
     let (f0, d0) = (frames.load(Relaxed), dropped.load(Relaxed));
     let (cpu, rss) = cpu_over(t0, t1);
@@ -72,7 +77,11 @@ fn publish_from(p: &gst::Pipeline, args: &Args, frames: Arc<AtomicU64>, dropped:
         checksum: args.num("checksum", 0) == 1,
     };
     let publisher: Mutex<Option<Publisher>> = Mutex::new(None);
-    let sink = p.by_name("out").unwrap().downcast::<gst_app::AppSink>().unwrap();
+    let sink = p
+        .by_name("out")
+        .unwrap()
+        .downcast::<gst_app::AppSink>()
+        .unwrap();
     let callbacks = gst_app::AppSinkCallbacks::builder()
         .new_sample(move |s| {
             let sample = s.pull_sample().map_err(|_| gst::FlowError::Eos)?;

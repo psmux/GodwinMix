@@ -10,7 +10,9 @@ use std::path::PathBuf;
 use std::process::{Child, ChildStdout, Command, Stdio};
 use std::time::{Duration, Instant};
 
-use godwinmix_framebus::{BusName, Format, Layout, Publisher, PublisherOptions, Registry, Subscriber};
+use godwinmix_framebus::{
+    BusName, Format, Layout, Publisher, PublisherOptions, Registry, Subscriber,
+};
 
 pub mod roles;
 
@@ -32,7 +34,11 @@ pub fn small() -> Layout {
 }
 
 pub fn publisher(reg: &Registry, layout: Layout, max_readers: usize, leases: usize) -> Publisher {
-    let opts = PublisherOptions { max_readers, leases_per_reader: leases, checksum: true };
+    let opts = PublisherOptions {
+        max_readers,
+        leases_per_reader: leases,
+        checksum: true,
+    };
     Publisher::create(reg, &name(), layout, opts).unwrap()
 }
 
@@ -102,12 +108,17 @@ impl Kid {
 }
 
 pub fn num(m: &HashMap<String, String>, k: &str) -> u64 {
-    m.get(k).unwrap_or_else(|| panic!("no {k} in {m:?}")).parse().unwrap()
+    m.get(k)
+        .unwrap_or_else(|| panic!("no {k} in {m:?}"))
+        .parse()
+        .unwrap()
 }
 
 /// Run by `child_entry` in every test binary.
 pub fn child_main() {
-    let Ok(role) = std::env::var("FRAMEBUS_CHILD") else { return };
+    let Ok(role) = std::env::var("FRAMEBUS_CHILD") else {
+        return;
+    };
     let args = std::env::var("FRAMEBUS_ARGS").unwrap_or_default();
     let reg = Registry::from_env().unwrap();
     roles::run(&role, &args, &reg);

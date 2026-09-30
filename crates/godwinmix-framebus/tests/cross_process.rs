@@ -19,7 +19,10 @@ fn pump(p: &mut godwinmix_framebus::Publisher, ms: u64, fps: u64) -> Duration {
     while start.elapsed() < Duration::from_millis(ms) {
         seq += 1;
         let t = Instant::now();
-        assert!(p.write(Some(seq), None, |b| paint(seq, b)), "the owner dropped frame {seq}");
+        assert!(
+            p.write(Some(seq), None, |b| paint(seq, b)),
+            "the owner dropped frame {seq}"
+        );
         worst = worst.max(t.elapsed());
         std::thread::sleep(Duration::from_micros(1_000_000 / fps).saturating_sub(t.elapsed()));
     }
@@ -54,7 +57,10 @@ fn every_frame_a_reader_gets_in_another_process_matches_its_checksum() {
         assert_eq!(num(&r, "out_of_order"), 0, "{r:?}");
     }
     let (got, bad) = inproc.join().unwrap();
-    assert!(got > 100 && bad == 0, "in process reader got {got}, {bad} bad");
+    assert!(
+        got > 100 && bad == 0,
+        "in process reader got {got}, {bad} bad"
+    );
     assert_eq!(p.stats().dropped, 0);
 }
 
@@ -70,10 +76,19 @@ fn a_stalled_reader_skips_frames_and_never_slows_the_owner_or_the_others() {
     let (s, f) = (slow.result(), fast.result());
     // The slow one sleeps 400 ms a frame: about five frames in two seconds,
     // and everything else skipped. The fast one sees nearly every frame.
-    assert!(num(&s, "got") <= 7 && num(&s, "skipped") > 20 * num(&s, "got"), "slow reader: {s:?}");
+    assert!(
+        num(&s, "got") <= 7 && num(&s, "skipped") > 20 * num(&s, "got"),
+        "slow reader: {s:?}"
+    );
     assert!(num(&f, "got") > 100, "fast reader: {f:?}");
-    assert!(num(&f, "skipped") * 10 < num(&f, "got"), "fast reader: {f:?}");
+    assert!(
+        num(&f, "skipped") * 10 < num(&f, "got"),
+        "fast reader: {f:?}"
+    );
     assert_eq!(num(&s, "bad") + num(&f, "bad"), 0);
     assert_eq!(p.stats().dropped, 0, "the owner never ran out of slots");
-    assert!(worst < Duration::from_millis(20), "one write took {worst:?}");
+    assert!(
+        worst < Duration::from_millis(20),
+        "one write took {worst:?}"
+    );
 }

@@ -53,7 +53,9 @@ impl Format {
     }
 
     pub fn from_name(name: &str) -> Option<Format> {
-        Format::ALL.into_iter().find(|f| f.name().eq_ignore_ascii_case(name))
+        Format::ALL
+            .into_iter()
+            .find(|f| f.name().eq_ignore_ascii_case(name))
     }
 
     pub fn from_code(code: u32) -> Option<Format> {

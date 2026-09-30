@@ -44,7 +44,13 @@ pub fn anonymous_fd() -> Result<OwnedFd, Error> {
     let c = std::ffi::CString::new(name).expect("no nul in the name");
     let mode: libc::c_uint = 0o600;
     // SAFETY: a valid C string; the result is checked.
-    let fd = unsafe { libc::shm_open(c.as_ptr(), libc::O_RDWR | libc::O_CREAT | libc::O_EXCL, mode) };
+    let fd = unsafe {
+        libc::shm_open(
+            c.as_ptr(),
+            libc::O_RDWR | libc::O_CREAT | libc::O_EXCL,
+            mode,
+        )
+    };
     if fd < 0 {
         return Err(os_err("shm_open"));
     }
@@ -72,4 +78,3 @@ pub fn map(fd: &OwnedFd, len: usize, offset: usize, write: bool) -> Result<NonNu
     }
     Ok(NonNull::new(p.cast()).expect("mmap never returns null on success"))
 }
-

@@ -31,7 +31,14 @@ impl Region {
             return Err(os_err("ftruncate"));
         }
         let p = map(&fd, len, 0, true)?;
-        Ok(Region { fd, header: p, header_len: len, data: p, data_len: len, split: false })
+        Ok(Region {
+            fd,
+            header: p,
+            header_len: len,
+            data: p,
+            data_len: len,
+            split: false,
+        })
     }
 
     /// Map a region another process made: `header_len` bytes read and write,
@@ -40,14 +47,23 @@ impl Region {
         // SAFETY: an fstat on a descriptor we own.
         let mut st: libc::stat = unsafe { std::mem::zeroed() };
         if unsafe { libc::fstat(fd.as_raw_fd(), &mut st) } != 0 || (st.st_size as usize) < total {
-            return Err(Error::Protocol("the region is smaller than its header says".into()));
+            return Err(Error::Protocol(
+                "the region is smaller than its header says".into(),
+            ));
         }
         let header = map(&fd, header_len, 0, true)?;
         let data = map(&fd, total - header_len, header_len, false).inspect_err(|_| {
             // SAFETY: header was mapped just above with this length.
             unsafe { libc::munmap(header.as_ptr().cast(), header_len) };
         })?;
-        Ok(Region { fd, header, header_len, data, data_len: total - header_len, split: true })
+        Ok(Region {
+            fd,
+            header,
+            header_len,
+            data,
+            data_len: total - header_len,
+            split: true,
+        })
     }
 
     pub fn fd(&self) -> &OwnedFd {
