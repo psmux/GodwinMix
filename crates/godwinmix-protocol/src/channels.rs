@@ -35,7 +35,7 @@ pub struct Channel {
     /// A stream that goes live becomes a mixer source by itself.
     pub auto_source: bool,
     pub key_mode: KeyMode,
-    /// The keys, write only: a hint of each and never the key.
+    /// The keys as hints, never the key itself: a read token sees only these.
     pub keys: Vec<ChannelKey>,
     pub publish: ChannelPublish,
     /// Live streams, and streams that left while a scene still holds their
@@ -58,12 +58,13 @@ pub struct ChannelKey {
     pub hint: String,
 }
 
-/// A key as it is made: the only time its secret is ever sent.
+/// A key as it is made, with its secret. Afterwards only an admin gets the
+/// secret again, one key at a time, from `channel.key.reveal`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct NewKey {
     pub id: String,
     pub label: String,
-    /// Shown once. Nothing reads it back.
+    /// The key. A list never carries it; `channel.key.reveal` reads it back.
     pub secret: String,
 }
 
@@ -190,6 +191,20 @@ pub struct KeyAdded {
 pub struct ChannelKeyRemoveRequest {
     pub id: String,
     pub key: String,
+}
+
+/// `channel.key.reveal`: one key of one channel.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct ChannelKeyRevealRequest {
+    pub id: String,
+    pub key: String,
+}
+
+/// What `channel.key.reveal` answers: the key itself, and nothing a list
+/// would carry.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct KeyRevealed {
+    pub secret: String,
 }
 
 /// What `channel.remove` answers.
