@@ -4,7 +4,6 @@
 //! the plugin that opens the device, is the owner thread's business and can
 //! change while the source runs; the mixer never sees it change.
 
-use super::feed::Plan;
 use super::owner::Owner;
 use super::reader::{self, Watch};
 use crate::caps::CanvasCaps;
@@ -16,17 +15,16 @@ use anyhow::{Context, Result};
 use godwinmix_framebus::BusName;
 use serde_json::{json, Value};
 use std::path::PathBuf;
-use std::sync::atomic::Ordering::Relaxed;
 use std::sync::Arc;
 
 pub struct SharedSource {
-    type_id: String,
-    name: BusName,
-    dir: PathBuf,
-    manifest: Manifest,
-    build: BuildCtx,
-    watch: Arc<Watch>,
-    owner: Option<Owner>,
+    pub(super) type_id: String,
+    pub(super) name: BusName,
+    pub(super) dir: PathBuf,
+    pub(super) manifest: Manifest,
+    pub(super) build: BuildCtx,
+    pub(super) watch: Arc<Watch>,
+    pub(super) owner: Option<Owner>,
 }
 
 impl SharedSource {
@@ -43,61 +41,6 @@ impl SharedSource {
             watch: Arc::default(),
             owner: None,
         }))
-    }
-
-    fn plan(&self) -> Plan {
-        Plan {
-            type_id: self.type_id.clone(),
-            name: self.name.clone(),
-            dir: self.dir.clone(),
-            build: self.build.clone(),
-            tracks: self.tracks(),
-        }
-    }
-
-    fn tracks(&self) -> reader::Tracks {
-        let media = self.manifest.media;
-        reader::Tracks { video: media.video.present(), audio: media.audio.present() }
-    }
-
-    fn is_owner(&self) -> bool {
-        self.owner.as_ref().is_some_and(Owner::is_owner)
-    }
-
-    /// What `call("share")` answers: the name, who owns it from here, and what
-    /// the bus has cost this source.
-    fn report(&self) -> Value {
-        let shared = self.owner.as_ref().map(|o| o.shared.clone());
-        let pid = shared.as_ref().and_then(|s| s.feed.lock().as_ref().and_then(|f| f.pid()));
-        let publish = shared.as_ref().and_then(|s| s.feed.lock().as_ref().map(|f| f.through.report()));
-        let mut out = json!({
-            "bus": self.name.to_string(),
-            "dir": self.dir.display().to_string(),
-            "owner": self.is_owner(),
-            "plugin_pid": pid,
-            "publish_ms": publish,
-            "takeovers": shared.as_ref().map_or(0, |s| s.takeovers.load(Relaxed)),
-            "last_start_ms": shared.as_ref().map_or(0, |s| s.last_start_ms.load(Relaxed)),
-        });
-        if let (Some(obj), Value::Object(read)) = (out.as_object_mut(), self.watch.report()) {
-            obj.extend(read);
-        }
-        out
-    }
-
-    /// Run `f` on the plugin process, which only the owner has.
-    fn on_plugin<R>(&self, f: impl FnOnce(&mut super::super::SidecarSource) -> Result<R>) -> Result<R> {
-        let not_here = || {
-            anyhow::anyhow!(
-                "{} is opened by another source, which is where its plugin runs. The change \
-                 reaches the picture only from there; `call share` on this source says which",
-                self.name
-            )
-        };
-        let owner = self.owner.as_ref().ok_or_else(not_here)?;
-        let mut feed = owner.shared.feed.lock();
-        let feed = feed.as_mut().ok_or_else(not_here)?;
-        f(feed.sidecar())
     }
 }
 
