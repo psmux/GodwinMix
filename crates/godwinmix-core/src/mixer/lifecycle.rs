@@ -148,11 +148,10 @@ impl Mixer {
             return;
         }
         let handle = self.handle.clone();
-        let id = out.id().clone();
         let worker = out.clone();
         let started = offload::run("reconnect", out.id().as_str(), move || {
             let failed = worker.reconnect().err().map(|e| format!("{e:#}"));
-            let _ = handle.send(Command::OutputReconnected(id, failed));
+            let _ = handle.send(Command::OutputReconnected(worker, failed));
         });
         if !started {
             out.reconnect_abandoned();

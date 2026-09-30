@@ -100,3 +100,30 @@ async fn work_for_a_removed_source_never_touches_the_one_added_in_its_place() {
     );
     assert_eq!(starts.load(Ordering::Relaxed), 0, "the new hall was restarted for the old one");
 }
+
+/// The same for an output: a reconnect armed for one output is dropped once
+/// that output has been removed, and the one added under its id is left to
+/// connect in peace.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_reconnect_armed_for_a_removed_output_leaves_its_successor_alone() {
+    let _ = gst::init();
+    let (mut mix, _handle, mut rx, _bus) =
+        Mixer::build(programme_config(crate::config::Accel::Software)).expect("mixer builds");
+    mix.start().expect("the programme starts");
+    let uri = format!("rtmp://127.0.0.1:{}/live/key", super::slow_output::silent_server());
+    let cfg = OutputConfig::bare("dest", &uri);
+    mix.add_output(&cfg).expect("the output attaches");
+    let delay = mix.outputs[0].cfg.reconnect_policy().delay_for(0);
+    mix.arm_output_reconnect("dest".into());
+
+    mix.handle(Command::RemoveOutput("dest".into(), None)).unwrap();
+    mix.add_output(&cfg).expect("the output attaches again");
+    let new = mix.outputs[0].clone();
+    pump(&mut mix, &mut rx, delay + Duration::from_secs(1)).await;
+    let still = mix.outputs.iter().any(|o| Arc::ptr_eq(o, &new));
+    let reconnects = new.status().reconnects;
+    mix.shutdown();
+
+    assert!(still, "the new output was replaced");
+    assert_eq!(reconnects, 0, "the new output was reconnected for the old one");
+}
