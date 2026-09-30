@@ -98,3 +98,32 @@ fn a_gap_in_the_continuity_counter_is_counted_as_loss() {
     // 256 carried cc 0 in `mux`, then 0 again (a repeat, allowed), 1, then 4.
     assert_eq!(n.ts_lost.load(std::sync::atomic::Ordering::Relaxed), 2);
 }
+
+fn sdt(services: &[(u16, &str)]) -> Vec<u8> {
+    let mut body = vec![0, 1, 0xFF]; // original_network_id, reserved
+    for (id, name) in services {
+        let head = [0x48u8, (3 + 4 + name.len()) as u8, 0x01, 4];
+        let desc = [&head[..], b"Test", &[name.len() as u8], name.as_bytes()].concat();
+        body.extend_from_slice(&id.to_be_bytes());
+        body.push(0xFC);
+        body.extend_from_slice(&(0x8000 | desc.len() as u16).to_be_bytes());
+        body.extend(desc);
+    }
+    let len = 5 + body.len() + 4;
+    let mut s = vec![0x42, 0xF0 | (len >> 8) as u8, len as u8, 0, 1, 0xC1, 0, 0];
+    s.extend(body);
+    let crc = crate::ts::crc32(&s);
+    s.extend_from_slice(&crc.to_be_bytes());
+    s
+}
+
+#[test]
+fn service_names_that_arrive_before_the_pat_still_name_the_programs() {
+    let mut input = Vec::new();
+    packetize(SDT_PID, &sdt(&[(1, "News"), (2, "Sport")]), &mut 0, &mut input);
+    input.extend(mux());
+    let (f, _, _) = run(Choice::default(), &input);
+    let names: Vec<&str> = f.programs().iter().map(|p| p.name.as_str()).collect();
+    assert_eq!(names, ["News", "Sport"]);
+    assert_eq!(f.programs()[0].provider, "Test");
+}

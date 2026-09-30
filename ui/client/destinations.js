@@ -80,6 +80,36 @@ export const OUTPUT_KINDS = [
       latency_ms: v.latency_ms ?? 125,
     }),
   },
+  {
+    id: "udp",
+    provides: ["udp/output"],
+    title: "UDP or multicast",
+    group: "Streams and servers",
+    icon: "output",
+    description: "MPEG-TS on a multicast group or to one receiver, for VLC, an IRD, a modulator or an IPTV network.",
+    plugin: "udp",
+    schema: {
+      type: "object",
+      required: ["id", "uri"],
+      properties: {
+        id: { type: "string", title: "Name", examples: ["lan"], description: "A short id. It appears in alerts and in the outputs list." },
+        uri: { type: "string", title: "Address", examples: ["udp://239.1.1.1:5000"], description: "A multicast group or one receiver. rtp:// for a receiver that wants RTP." },
+        ttl: { type: "integer", title: "TTL", default: 8, minimum: 1, maximum: 255, "x-gmx-group": "Advanced", description: "How many routers multicast may cross. 1 keeps it on this network." },
+        interface: { type: "string", title: "Network interface", "x-gmx-group": "Advanced", description: "The interface multicast leaves by, such as eth1. Empty uses the default route." },
+        cbr_kbps: { type: "integer", title: "Constant bitrate", default: 0, minimum: 0, "x-gmx-unit": "kbit", "x-gmx-zero": "Off (variable)", "x-gmx-group": "Advanced", description: "Pad with null packets to this rate, for hardware that needs one. At least 10% above the programme's bitrate." },
+        queue_secs: QUEUE_FIELD,
+      },
+    },
+    build: (v) => ({
+      id: v.id,
+      type: "udp/output",
+      uri: v.uri,
+      queue_secs: v.queue_secs ?? 4,
+      ttl: v.ttl ?? 8,
+      interface: v.interface || "",
+      cbr_kbps: v.cbr_kbps ?? 0,
+    }),
+  },
 ];
 
 /**

@@ -250,7 +250,7 @@ export const CATEGORIES = [
     title: "Streams and feeds",
     icon: "stream",
     kinds: ["stream"],
-    provides: ["rtmp/source", "hls/source", "srt/source", "ndi/source", "ingest/source", "whip/source"],
+    provides: ["rtmp/source", "hls/source", "srt/source", "udp/source", "ndi/source", "ingest/source", "whip/source"],
   },
   { id: "test", title: "Test patterns", icon: "pattern", patterns: true, kinds: ["test"], provides: ["test/source"] },
   { id: "more", title: "More", icon: "more", kinds: ["exec"], provides: ["exec/source"] },
@@ -412,7 +412,7 @@ function iconFor(id, what) {
   const [name] = id.split("/");
   if (ICONS[name]) return name;
   if (name === "audio-device") return "mic";
-  if (name === "ndi" || name === "srt" || name === "ingest" || name === "whip") return "stream";
+  if (name === "ndi" || name === "srt" || name === "udp" || name === "ingest" || name === "whip") return "stream";
   return what === "output" ? "output" : "device";
 }
 

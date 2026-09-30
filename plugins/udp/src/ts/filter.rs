@@ -21,6 +21,9 @@ pub struct Filter {
     /// The CRC of the last section parsed on each PID.
     seen: HashMap<u16, u32>,
     programs: Vec<Program>,
+    /// Service names by program number, kept apart because the SDT may
+    /// arrive before the PAT has said which programs there are.
+    names: HashMap<u16, (String, String)>,
     parsed: HashSet<u16>,
     ts_id: u16,
     plan: Plan,
@@ -40,6 +43,7 @@ impl Filter {
             assemblers: assemblers.into_iter().collect(),
             seen: HashMap::new(),
             programs: Vec::new(),
+            names: HashMap::new(),
             parsed: HashSet::new(),
             ts_id: 0,
             plan: Plan::Waiting,
@@ -157,6 +161,7 @@ impl Filter {
             self.programs.push(kept.cloned().unwrap_or(Program { number, pmt_pid, ..Default::default() }));
             self.assemblers.entry(pmt_pid).or_default();
         }
+        self.name_programs();
         let live: HashSet<u16> = self.programs.iter().map(|p| p.pmt_pid).collect();
         self.parsed.retain(|pid| live.contains(pid));
     }
@@ -174,8 +179,15 @@ impl Filter {
 
     fn on_sdt(&mut self, s: &[u8]) {
         for (id, provider, name) in tables::parse_sdt(s) {
-            if let Some(p) = self.programs.iter_mut().find(|p| p.number == id) {
-                (p.provider, p.name) = (provider, name);
+            self.names.insert(id, (provider, name));
+        }
+        self.name_programs();
+    }
+
+    fn name_programs(&mut self) {
+        for p in &mut self.programs {
+            if let Some((provider, name)) = self.names.get(&p.number) {
+                (p.provider, p.name) = (provider.clone(), name.clone());
             }
         }
     }
