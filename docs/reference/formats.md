@@ -35,7 +35,7 @@ Words used below:
 | A command's stdout | any container | any | any | `exec/source` (built in) | `plugin/harness.rs` |
 | A web page | rendered | rendered | page audio | `browser/source`, `layered/source` (built in) | the sidecar's own tests under `browser/test` |
 | Test pattern and tone | raw | bars, ball, black, snow | sine | `test/source` (built in) | throughout |
-| RIST | RTP MPEG-TS | any | any | falls to `file/source` at the lowest rank | not tested |
+| RIST (Simple Profile), listening | RTP MPEG-TS | any | any | `hls/source` (built in) claims `rist://` as live | `plugin/outputs/rist_tests.rs`: `uridecodebin` on `rist://` decodes what `rist/output` sends |
 | Still image (PNG, JPEG) | image | one frame | none | `file/source` | by hand: the source goes `stalled` after its one frame |
 | Image sequence (`frame%04d.png`) | images | | | nothing | |
 | IP camera MJPEG over HTTP | `multipart/x-mixed-replace` | | | nothing (`file/source` sits at `connecting`) | by hand |
@@ -80,7 +80,7 @@ has switched on. The hub carries what FLV carries.
 | File | MP4 (fragmented), MKV | copy | copy | `record/output` (built in), `file-record/output` (plugin) | `crates/godwinmix-core/tests/recording*.rs`, `plugins/file-record/tests/records.rs` |
 | WHEP playback, served from the control port (`/whep/<output>`) | WebRTC | copy of the programme or a rendition: H.264, and H.265, AV1, VP8, VP9 from a rendition | Opus, encoded once for every viewer | `whep/output` (built in) | `whep/tests.rs` against a real `webrtcbin` receiver; by hand with `whepsrc` and headless Chrome against the release core |
 | RTSP server, for decoders, NVRs and players that pull, on a port chosen when added | RTP over UDP or TCP | H.264, H.265 copy | AAC, MP3, Opus copy | `rtsp/output` (plugin `rtsp`) | `plugins/rtsp/src/tests.rs`: ffmpeg over TCP and UDP, frame hashes equal to the encoder's; by hand against the release core |
-| RIST | RTP MPEG-TS | | | nothing | |
+| RIST (Simple Profile) | RTP MPEG-TS | copy (H.264, HEVC, AV1) | copy | `rist/output` (built in) | `plugin/outputs/rist_tests.rs`: a real `ristsrc` receiver decodes 60 frames and its RTCP marks the output connected |
 | Icecast or SHOUTcast (audio only) | MP3, Ogg | | | nothing | |
 | SDI out | | | | nothing | |
 

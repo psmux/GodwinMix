@@ -14,6 +14,7 @@ until then.
 |---|---|---|---|---|
 | `srt/source` | source | `srt` | receive SRT, caller or listener | yes |
 | `srt/output` | output | built into the core, not a plugin | send MPEG-TS over SRT | yes |
+| `rist/output` | output | built into the core, not a plugin | send MPEG-TS over RIST (Simple Profile) | yes |
 | `whip/output` | output | `whip` | send the programme to a WHIP endpoint | needs the core to load plugin outputs |
 | `whip/whep` | source | `whip` | receive a stream over WHEP | yes |
 | `ingest/rtmp` | source | `ingest` | listen for an RTMP publisher | yes |
@@ -253,6 +254,26 @@ Annotations: `readOnlyHint = true`, `destructiveHint = false`,
 Where the runtime is absent the tool is an error naming the download page, and
 `discover` answers with an empty list rather than an error, because a machine
 with no NDI on it is not broken.
+
+## `rist/output`, and RIST in
+
+Built into the core, beside `srt/output`. RIST (VSF TR-06-1, the Simple
+Profile) is RTP with retransmission asked for over RTCP: the output muxes the
+programme to MPEG-TS, seven packets a datagram, and hands it to `ristsink`.
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `uri` | string | required | `rist://<receiver>:<port>`. The port must be even; RTCP uses the one above it |
+| `buffer_ms` | integer 50 to 30000 | `1000` | how much sent video is kept to answer retransmission requests; match the receiver's buffer |
+
+The output says it is connected once the receiver's RTCP has given a round
+trip time. `stats` answers `ristsink`'s own statistics. It opens no port on
+this machine: it sends, and the receiver listens.
+
+To receive RIST, add a source with the address to listen on,
+`rist://0.0.0.0:5004`: `hls/source` claims `rist://` and treats it as a live
+stream, as it does SRT and RTSP. Bonding and the Main Profile's encryption are
+not offered yet.
 
 ## `rtsp/output`
 
