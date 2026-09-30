@@ -5,13 +5,13 @@
 //! codes, read once per publisher.
 
 /// A bit reader over an RBSP with the emulation prevention bytes taken out.
-struct Bits {
+pub(crate) struct Bits {
     data: Vec<u8>,
     at: usize,
 }
 
 impl Bits {
-    fn new(nal: &[u8]) -> Bits {
+    pub(crate) fn new(nal: &[u8]) -> Bits {
         // 00 00 03 is written wherever the payload would otherwise look like a
         // start code; the 03 is not part of the payload.
         let mut data = Vec::with_capacity(nal.len());
@@ -27,14 +27,14 @@ impl Bits {
         Bits { data, at: 0 }
     }
 
-    fn bit(&mut self) -> Option<u32> {
+    pub(crate) fn bit(&mut self) -> Option<u32> {
         let byte = *self.data.get(self.at / 8)?;
         let bit = (byte >> (7 - self.at % 8)) & 1;
         self.at += 1;
         Some(u32::from(bit))
     }
 
-    fn bits(&mut self, n: u32) -> Option<u32> {
+    pub(crate) fn bits(&mut self, n: u32) -> Option<u32> {
         let mut out = 0;
         for _ in 0..n {
             out = (out << 1) | self.bit()?;
@@ -43,7 +43,7 @@ impl Bits {
     }
 
     /// ue(v).
-    fn ue(&mut self) -> Option<u32> {
+    pub(crate) fn ue(&mut self) -> Option<u32> {
         let mut zeros = 0;
         while self.bit()? == 0 {
             zeros += 1;

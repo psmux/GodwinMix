@@ -117,8 +117,14 @@ fn encode(node: &NodeSpec) -> Result<Built, String> {
     if let Some(p) = node.text("parser") {
         elements.push(make(p)?);
     }
-    let codec = node.text("codec").unwrap_or("h264");
-    elements.push(caps(&format!("video/x-{codec},stream-format=avc,alignment=au"))?);
+    // The framing FLV carries each codec in: AVC and HEVC with their
+    // configuration record as codec_data, AV1 as OBUs a temporal unit at a time.
+    let framing = match node.text("codec").unwrap_or("h264") {
+        "h265" => "video/x-h265,stream-format=hvc1,alignment=au",
+        "av1" => "video/x-av1,stream-format=obu-stream,alignment=tu",
+        _ => "video/x-h264,stream-format=avc,alignment=au",
+    };
+    elements.push(caps(framing)?);
     let sink = appsink()?;
     elements.push(sink.clone().upcast());
     Ok(Built { head: Some(elements[0].clone()), elements, tee: None, appsrc: None, appsink: Some(sink) })

@@ -1,15 +1,17 @@
 //! Sending to an SRT receiver: the tags become MPEG-TS, still undecoded.
 //!
 //! ```text
-//!   appsrc(FLV) ──► flvdemux ──┬─► h264parse ─┐
-//!                              └─► aacparse ──┴─► mpegtsmux ──► srtsink
+//!   appsrc(FLV) ──► flvdemux ──┬─► h264parse or h265parse ─┐
+//!                              └─► aacparse ──────────────────┴─► mpegtsmux ──► srtsink
 //! ```
 //!
 //! This is the one place the restreamer uses GStreamer, and it is there for
 //! the transport and not the media. SRT is libsrt, which only GStreamer brings
 //! into this process; writing MPEG-TS by hand would still leave nothing to
 //! carry it. The parsers turn the AVC and AAC framing FLV uses into the
-//! Annex B and ADTS framing MPEG-TS wants. No decoder, no encoder.
+//! Annex B and ADTS framing MPEG-TS wants. No decoder, no encoder. The video
+//! parser is chosen by the stream's caps, so an enhanced RTMP publisher's HEVC
+//! crosses as HEVC; flvdemux does not read enhanced RTMP's AV1 yet.
 
 use gmx_netkit::pipe::Pipe;
 use gstreamer as gst;
@@ -21,6 +23,7 @@ use crate::media_tag::{MediaTag, TagKind};
 
 use super::link::{Failure, Link};
 use super::target::Target;
+use super::ts_video::video_by_codec;
 
 /// What the pipeline may hold before the far end counts as slow. Past it a
 /// tag is refused and the sender drops to the next keyframe.
@@ -38,17 +41,17 @@ impl SrtLink {
     pub fn dial(target: &Target) -> Result<SrtLink, Failure> {
         let name = target.name();
         gmx_netkit::init().map_err(Failure::Refused)?;
-        gmx_netkit::elements::require(&["appsrc", "flvdemux", "h264parse", "aacparse", "mpegtsmux", "srtsink"])
+        gmx_netkit::elements::require(&["appsrc", "flvdemux", "h264parse", "h265parse", "aacparse", "mpegtsmux", "srtsink"])
             .map_err(Failure::Refused)?;
         let uri = target.url.replace('"', "");
         let description = format!(
             "appsrc name=in is-live=true format=bytes caps=video/x-flv \
              ! flvdemux name=d \
-             d.video ! queue ! h264parse config-interval=-1 ! mux. \
              d.audio ! queue ! aacparse ! mux. \
              mpegtsmux name=mux alignment=7 ! srtsink uri=\"{uri}\" wait-for-connection=false sync=false"
         );
         let mut pipe = Pipe::launch(&description).map_err(Failure::Refused)?;
+        video_by_codec(pipe.pipeline());
         let src: AppSrc = pipe
             .by_name("in")
             .and_then(|e| e.downcast().ok())
@@ -124,3 +127,4 @@ impl Link for SrtLink {
         let _ = self.pipe.pipeline().set_state(gst::State::Null);
     }
 }
+
