@@ -73,6 +73,15 @@ error line into the log naming that command, so a CI run or an operator can
 see which one it was. A page that loads while this is happening shows the
 warning instead of drawing nothing.
 
+Restarting a source, stopping a removed one and reconnecting an output do not
+run on the command loop. Each runs on a thread of its own, named `restart-<id>`,
+`stop-<id>` or `reconnect-<id>`, so a pipeline that takes seconds to come down
+costs that source or output and nothing else: status and takes keep answering.
+One that runs past three seconds writes a warning naming it, and another line
+when it finishes. `source.restart` and `output.reconnect` answer as soon as the
+work has started. A source added again under an id whose old pipeline is still
+stopping waits for it, three seconds at most, before it is built.
+
 With `[control] token` set (or `GODWINMIX_TOKEN` in the environment) every
 request carries `Authorization: Bearer <token>`. `GET` requests and the
 WebSocket also accept `?token=`, so an `<img>` tag can fetch a snapshot.

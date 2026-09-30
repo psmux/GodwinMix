@@ -17,6 +17,7 @@ pub fn run(role: &str, args: &str, reg: &Registry) {
         "reader" => reader(reg, arg(0), arg(1)),
         "hold" => hold(reg, arg(0)),
         "owner" => owner(reg, arg(0) as u32, arg(1) as u32),
+        "claim" => claim(reg),
         other => panic!("no role {other}"),
     }
 }
@@ -67,4 +68,11 @@ fn owner(reg: &Registry, width: u32, height: u32) {
         p.write(Some(seq * 10_000_000), None, |b| paint(seq, b));
         std::thread::sleep(Duration::from_millis(10));
     }
+}
+
+/// Take the name's claim, say so, and wait to be killed.
+fn claim(reg: &Registry) {
+    let held = godwinmix_framebus::Claim::try_take(reg, &super::name()).unwrap();
+    println!("RESULT claimed={}", u8::from(held.is_some()));
+    std::thread::sleep(Duration::from_secs(60));
 }

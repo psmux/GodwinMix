@@ -87,6 +87,15 @@ They are separate on purpose. It is what lets you take the picture from the
 camera at the back of the room and the sound from the desk, which is what every
 church with a sound engineer actually wants.
 
+## One camera, several sources
+
+Add the same camera to two sources, in one mixer or in two shows on the same
+machine, and it is opened once: the first source runs this plugin, and the
+others read its frames from the frame bus. The manifest's `share` line is what
+asks for that. The first source's `resolution` and `framerate` are the ones
+every source gets. See
+[Share a camera between shows](../../docs/how-to/share-a-camera-between-shows.md).
+
 ## When it fails
 
 | What you see | What to do |

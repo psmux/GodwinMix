@@ -31,7 +31,7 @@ mod destinations;
 mod edit;
 mod events;
 mod handover;
-mod keys;
+pub(crate) mod keys;
 mod live;
 mod net;
 mod ports;
@@ -39,6 +39,7 @@ pub mod project;
 mod reveal;
 mod sending;
 mod store;
+pub mod target;
 mod tls;
 pub(crate) mod transcode;
 mod view;
@@ -50,7 +51,6 @@ use std::sync::{Arc, OnceLock, Weak};
 
 use godwinmix_core::mixer::MixerHandle;
 use godwinmix_core::plugin::supervisor::Supervisor;
-use godwinmix_core::scene::server::SceneServer;
 use godwinmix_core::secrets::Secrets;
 use godwinmix_protocol::channels::{CertificateInfo, Channel, ChannelList, RtmpInfo};
 use godwinmix_protocol::error::RpcError;
@@ -100,8 +100,10 @@ pub struct Channels {
     /// Itself, for the watch thread.
     me: OnceLock<Weak<Channels>>,
     plugins: Arc<Supervisor>,
+    /// Where events go: this core's clients, or the station's.
     mixer: MixerHandle,
-    scenes: Arc<SceneServer>,
+    /// Where a live stream becomes a source. See `target.rs`.
+    target: Arc<dyn target::Programme>,
     secrets: &'static Secrets,
 }
 
@@ -113,7 +115,7 @@ impl Channels {
         ports: Ports,
         plugins: Arc<Supervisor>,
         mixer: MixerHandle,
-        scenes: Arc<SceneServer>,
+        target: Arc<dyn target::Programme>,
         secrets: &'static Secrets,
     ) -> Arc<Channels> {
         let data_dir = runtime_store.as_deref().and_then(|p| p.parent()).map(|p| p.to_path_buf());
@@ -150,10 +152,15 @@ impl Channels {
             ports,
             plugins,
             mixer,
-            scenes,
+            target,
             secrets,
         });
         let _ = channels.me.set(Arc::downgrade(&channels));
+        // A show under a station has no channels of its own: it neither makes
+        // the default one nor talks to a listener, which is the station's.
+        if crate::station::show::under_station() {
+            return channels;
+        }
         channels.make_default(godwinmix_core::plugin::loader::get(PLUGIN).is_some());
         channels.hand_over(false);
         events::start(&channels);

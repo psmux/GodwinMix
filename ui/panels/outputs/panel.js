@@ -220,6 +220,9 @@ class OutputsPanel extends HTMLElement {
       let row = this.rows.get(output.id);
       if (!row || row.shape !== shape(output)) {
         const made = this.row(output);
+        // The row being replaced may be the one the next insert is placed
+        // before; once it is out of the list, the new one takes its place.
+        if (row && before === row.node) before = made.node;
         if (row) row.node.replaceWith(made.node);
         row = made;
         this.rows.set(output.id, row);
@@ -258,7 +261,9 @@ class OutputsPanel extends HTMLElement {
           text: needsKey ? "Add key" : "Edit",
           onclick: () => editDestination(this.client, current),
         }),
-        el("button.btn.icon", {
+        // A destination with no key is never dialled, so there is nothing to
+        // reconnect until the key is in.
+        needsKey ? null : el("button.btn.icon", {
           text: "Reconnect",
           onclick: async () => {
             try {

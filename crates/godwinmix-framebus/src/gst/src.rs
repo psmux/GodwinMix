@@ -11,5 +11,6 @@ glib::wrapper! {
         @extends gst_base::PushSrc, gst_base::BaseSrc, gst::Element, gst::Object;
 }
 
+mod base;
 mod imp;
 mod read;

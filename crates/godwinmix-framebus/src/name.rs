@@ -1,4 +1,5 @@
-//! What a frame bus is called: `camera:<id>` or `channel:<app>/<stream>`.
+//! What a frame bus is called: `camera:<id>` or `channel:<app>/<stream>`,
+//! and `#audio` after either for the sound of the same device or stream.
 
 use std::fmt;
 use std::str::FromStr;
@@ -11,7 +12,12 @@ pub enum BusName {
     Camera(String),
     /// A stream arriving on a channel, as `<app>/<stream>`.
     Channel { app: String, stream: String },
+    /// The sound of a device or stream, published beside its pictures.
+    Audio(Box<BusName>),
 }
+
+/// What an audio name ends with, in its text and in its file name.
+const AUDIO: &str = "#audio";
 
 /// Ids are slugs. Stream names come from encoders, so they may also carry
 /// capitals and underscores (`main_720p`); nothing that means something in
@@ -32,18 +38,30 @@ impl BusName {
         format!("channel:{app}/{stream}").parse()
     }
 
-    /// The socket's file name in the registry directory. `=` and `+` never
-    /// appear in a part, so two names never share a file.
+    /// The name the sound of this device or stream is published under.
+    pub fn audio(&self) -> BusName {
+        match self {
+            BusName::Audio(_) => self.clone(),
+            other => BusName::Audio(Box::new(other.clone())),
+        }
+    }
+
+    /// The socket's file name in the registry directory. `=`, `+` and `#`
+    /// never appear in a part, so two names never share a file.
     pub fn file_name(&self) -> String {
         match self {
             BusName::Camera(id) => format!("camera={id}.sock"),
             BusName::Channel { app, stream } => format!("channel={app}+{stream}.sock"),
+            BusName::Audio(of) => of.file_name().replace(".sock", &format!("{AUDIO}.sock")),
         }
     }
 
     /// The name back from a file name, or `None` for a file that is not one.
     pub fn from_file_name(file: &str) -> Option<BusName> {
         let stem = file.strip_suffix(".sock")?;
+        if let Some(of) = stem.strip_suffix(AUDIO) {
+            return Some(BusName::from_file_name(&format!("{of}.sock"))?.audio());
+        }
         let (kind, rest) = stem.split_once('=')?;
         let text = match kind {
             "camera" => format!("camera:{rest}"),
@@ -61,9 +79,13 @@ impl FromStr for BusName {
         let bad = || {
             Error::BadName(format!(
                 "'{s}' is not a frame bus name. Use camera:<id> or channel:<app>/<stream>, \
-                 each part 1 to 64 letters, digits, '-' or '_'"
+                 each part 1 to 64 letters, digits, '-' or '_', and #audio after either \
+                 for its sound"
             ))
         };
+        if let Some(of) = s.strip_suffix(AUDIO) {
+            return Ok(of.parse::<BusName>().map_err(|_| bad())?.audio());
+        }
         match s.split_once(':').ok_or_else(bad)? {
             ("camera", id) if valid(id) => Ok(BusName::Camera(id.into())),
             ("channel", rest) => match rest.split_once('/') {
@@ -83,6 +105,7 @@ impl fmt::Display for BusName {
         match self {
             BusName::Camera(id) => write!(f, "camera:{id}"),
             BusName::Channel { app, stream } => write!(f, "channel:{app}/{stream}"),
+            BusName::Audio(of) => write!(f, "{of}{AUDIO}"),
         }
     }
 }
@@ -93,7 +116,12 @@ mod tests {
 
     #[test]
     fn names_parse_print_and_survive_the_file_system() {
-        for text in ["camera:cam-wide", "channel:sunday-service/main_720p"] {
+        for text in [
+            "camera:cam-wide",
+            "channel:sunday-service/main_720p",
+            "camera:cam-wide#audio",
+            "channel:sunday-service/main_720p#audio",
+        ] {
             let n: BusName = text.parse().unwrap();
             assert_eq!(n.to_string(), text);
             assert_eq!(BusName::from_file_name(&n.file_name()), Some(n));

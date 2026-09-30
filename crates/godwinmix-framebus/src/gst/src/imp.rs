@@ -5,8 +5,6 @@ use glib::prelude::*;
 use glib::subclass::prelude::*;
 use gst::subclass::prelude::*;
 use gst_base::prelude::*;
-use gst_base::subclass::base_src::CreateSuccess;
-use gst_base::subclass::prelude::*;
 use gstreamer as gst;
 use gstreamer_base as gst_base;
 
@@ -19,7 +17,9 @@ pub struct BusSrc {
     pub(super) dir: Mutex<String>,
     pub(super) sub: Mutex<Option<Subscriber>>,
     pub(super) caps_for: Mutex<Option<Layout>>,
-    flushing: AtomicBool,
+    /// Stamp buffers with the owner's timestamps rather than on arrival.
+    pub(super) owner_time: AtomicBool,
+    pub(super) flushing: AtomicBool,
 }
 
 #[glib::object_subclass]
@@ -41,6 +41,14 @@ impl ObjectImpl for BusSrc {
                     .nick("Bus directory")
                     .blurb("The registry directory; empty for GODWINMIX_BUS_DIR or the default")
                     .build(),
+                glib::ParamSpecString::builder("timestamps")
+                    .nick("Timestamps")
+                    .blurb(
+                        "arrival: stamp each buffer when it arrives, on this pipeline's clock. \
+                         owner: keep the owner's timestamps, for a reader that places them itself",
+                    )
+                    .default_value(Some("arrival"))
+                    .build(),
             ]
         });
         P.as_ref()
@@ -50,6 +58,11 @@ impl ObjectImpl for BusSrc {
         let v = value.get::<Option<String>>().unwrap().unwrap_or_default();
         match pspec.name() {
             "bus-name" => *self.name.lock().unwrap() = v,
+            "timestamps" => {
+                let owner = v == "owner";
+                self.owner_time.store(owner, SeqCst);
+                self.obj().set_do_timestamp(!owner);
+            }
             _ => *self.dir.lock().unwrap() = v,
         }
     }
@@ -57,6 +70,9 @@ impl ObjectImpl for BusSrc {
     fn property(&self, _id: usize, pspec: &glib::ParamSpec) -> glib::Value {
         match pspec.name() {
             "bus-name" => self.name.lock().unwrap().to_value(),
+            "timestamps" => {
+                if self.owner_time.load(SeqCst) { "owner" } else { "arrival" }.to_value()
+            }
             _ => self.dir.lock().unwrap().to_value(),
         }
     }
@@ -96,51 +112,5 @@ impl ElementImpl for BusSrc {
             .unwrap()]
         });
         T.as_ref()
-    }
-}
-
-impl BaseSrcImpl for BusSrc {
-    fn start(&self) -> Result<(), gst::ErrorMessage> {
-        self.registry()
-            .map_err(|e| gst::error_msg!(gst::ResourceError::Settings, ["{e}"]))?;
-        Ok(())
-    }
-
-    fn stop(&self) -> Result<(), gst::ErrorMessage> {
-        self.sub.lock().unwrap().take();
-        self.caps_for.lock().unwrap().take();
-        Ok(())
-    }
-
-    /// Caps are set from the first frame, so there is nothing to agree on
-    /// before one arrives.
-    fn negotiate(&self) -> Result<(), gst::LoggableError> {
-        Ok(())
-    }
-
-    fn unlock(&self) -> Result<(), gst::ErrorMessage> {
-        self.flushing.store(true, SeqCst);
-        Ok(())
-    }
-
-    fn unlock_stop(&self) -> Result<(), gst::ErrorMessage> {
-        self.flushing.store(false, SeqCst);
-        Ok(())
-    }
-}
-
-impl PushSrcImpl for BusSrc {
-    fn create(&self, _buf: Option<&mut gst::BufferRef>) -> Result<CreateSuccess, gst::FlowError> {
-        while !self.flushing.load(SeqCst) {
-            match self.frame() {
-                Ok(Some(f)) => return Ok(CreateSuccess::NewBuffer(self.wrap(f)?)),
-                Ok(None) => continue,
-                Err(e) => {
-                    gst::element_imp_error!(self, gst::ResourceError::Read, ["{e}"]);
-                    return Err(gst::FlowError::Error);
-                }
-            }
-        }
-        Err(gst::FlowError::Flushing)
     }
 }

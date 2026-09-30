@@ -74,7 +74,12 @@ impl Subscriber {
                 continue;
             };
             if let Some(ring) = &live.ring {
-                match ring.lease_latest(live.reader, live.last) {
+                let lease = if ring.in_order() {
+                    ring.lease_next(live.reader, live.last)
+                } else {
+                    ring.lease_latest(live.reader, live.last)
+                };
+                match lease {
                     Lease::Leased { slot, seq, skipped } => {
                         live.last = seq;
                         return Ok(Some(Frame {

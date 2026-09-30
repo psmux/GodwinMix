@@ -141,3 +141,14 @@ fn a_ticket_outliving_its_governor_is_harmless() {
     drop(g);
     drop(t);
 }
+
+#[test]
+fn a_shows_measured_work_is_not_counted_twice_by_its_station() {
+    let g = governor();
+    let _t = g.admit(cpu(3000), "show a's programme").granted().unwrap();
+    // The station's sampler sees show a's encoder as another program.
+    still(&g, 100, 3000);
+    assert_eq!(g.headroom(None).cpu_millicores, 8000 - 666 - 3000 - 3000, "counted twice");
+    g.set_elsewhere(3000);
+    assert_eq!(g.headroom(None).cpu_millicores, 8000 - 666 - 3100, "once, as the station's own");
+}

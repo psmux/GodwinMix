@@ -5,7 +5,7 @@ use crate::calibration::mpix;
 use crate::headroom::short;
 use crate::profile::Profile;
 use godwinmix_protocol::rendition::{Cost, EncoderSlot, Fps, VideoCodec, VideoShape};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct Advice {
@@ -17,7 +17,7 @@ pub struct Advice {
     pub fits: Vec<Fit>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Fit {
     /// `720p30 H.264 on h264-software-x264`, `1080p30 H.264 on the GPU
     /// encoder h264-videotoolbox`.
