@@ -29,6 +29,8 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tracing::{debug, info, warn};
 
+pub mod lifecycle;
+
 /// Thumbnails are produced at a fixed size in the input pipeline. The
 /// multiview compositor scales each one to whatever its cell happens to be, so
 /// adding or removing a source never rebuilds an input pipeline.
@@ -251,6 +253,9 @@ pub struct InputPipeline {
     kind: Mutex<Box<dyn crate::plugin::Source>>,
     /// Filters inserted per source, on the input side of the proxy boundary.
     filters: Mutex<Vec<crate::plugin::FilterSlot>>,
+    /// Keeps a restart and a stop, which both run off the mixer thread, in
+    /// order. See `lifecycle`.
+    lifecycle: lifecycle::Lifecycle,
 }
 
 /// A command line to run as a source: the program and its arguments, already
@@ -809,6 +814,7 @@ impl InputPipeline {
             capabilities: ready.capabilities,
             kind: Mutex::new(kind),
             filters: Mutex::new(Vec::new()),
+            lifecycle: lifecycle::Lifecycle::default(),
         }
     }
 
@@ -1151,6 +1157,11 @@ impl InputPipeline {
     }
 
     pub fn stop(&self) {
+        // Marked before the wait, so a restart queued behind this one finds it
+        // and does nothing. Carries on without the lock if a restart is stuck:
+        // a source being removed is going either way.
+        self.lifecycle.mark_stopped();
+        let _turn = self.lifecycle.enter(&self.id, "stop");
         self.wake_branches();
         let _ = self.pipeline.set_state(gst::State::Null);
         // The kind releases whatever it holds outside the pipeline: a child
@@ -1208,6 +1219,46 @@ impl InputPipeline {
     /// that before it gets here; a kind without it is built again from
     /// nothing.
     pub fn restart(&self) -> Result<()> {
+        let r = self.restart_in_turn();
+        self.lifecycle.end_restart();
+        r
+    }
+
+    /// Claim the one restart this source may have running; see `lifecycle`.
+    /// The caller runs `restart` after a true, and only then.
+    pub fn claim_restart(&self) -> bool {
+        self.lifecycle.claim_restart()
+    }
+
+    /// True while a restart handed to a worker thread is still running.
+    pub fn restarting(&self) -> bool {
+        self.lifecycle.restarting()
+    }
+
+    /// A claimed restart that never ran, because no thread could be started
+    /// for it. Lets the next one in.
+    pub fn restart_abandoned(&self) {
+        self.lifecycle.end_restart();
+    }
+
+    /// Say this source is going, ahead of `stop`, so a restart that is
+    /// already queued does nothing when its turn comes.
+    pub fn mark_stopping(&self) {
+        self.lifecycle.mark_stopped();
+    }
+
+    fn restart_in_turn(&self) -> Result<()> {
+        let Some(_turn) = self.lifecycle.enter(&self.id, "restart") else {
+            anyhow::bail!(
+                "{} is still inside an earlier restart or stop, so this restart was skipped; \
+                 the supervisor asks again on its next tick",
+                self.id
+            );
+        };
+        if self.lifecycle.stopped() {
+            debug!(source = %self.id, "removed while a restart waited its turn; not restarting");
+            return Ok(());
+        }
         info!(source = %self.id, "restarting input pipeline");
         self.restart_armed.store(false, Ordering::SeqCst);
         self.wake_branches();
