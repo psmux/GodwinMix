@@ -24,7 +24,6 @@ pub mod format;
 pub mod header;
 pub mod name;
 pub mod registry;
-pub mod ring;
 mod time;
 
 #[cfg(unix)]
@@ -32,11 +31,13 @@ mod link;
 #[cfg(unix)]
 mod publisher;
 #[cfg(unix)]
+pub mod ring;
+#[cfg(unix)]
 pub mod shm;
 #[cfg(unix)]
 mod subscriber;
 
-#[cfg(feature = "gst")]
+#[cfg(all(unix, feature = "gst"))]
 pub mod gst;
 
 pub use error::Error;
@@ -44,6 +45,25 @@ pub use format::{Format, Layout};
 pub use name::BusName;
 pub use registry::Registry;
 pub use time::monotonic_ns;
+
+/// Whether this build can publish and read across processes. Linux and macOS
+/// can. On Windows the ring, the names and the registry build, but there is
+/// no transport yet: `available` says so, and a show there decodes its
+/// sources itself, which is what the bus replaces elsewhere. See
+/// docs/explanation/frame-bus.md.
+pub const CROSS_PROCESS: bool = cfg!(unix);
+
+/// `Ok` where the bus works, or the reason and the fallback where it does not.
+pub fn available() -> Result<(), Error> {
+    if CROSS_PROCESS {
+        return Ok(());
+    }
+    Err(Error::Unsupported(
+        "the frame bus has no Windows transport yet, so frames cannot be shared between \
+         processes here. Each show decodes its own sources instead; nothing needs to change"
+            .into(),
+    ))
+}
 
 #[cfg(unix)]
 pub use publisher::{Publisher, PublisherOptions, PublisherStats, ReaderStats};
