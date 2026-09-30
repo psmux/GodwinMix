@@ -41,6 +41,8 @@ use std::sync::Arc;
 use tokio::sync::mpsc;
 use tracing::{debug, info, warn};
 
+mod boundary;
+
 const RELINK_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 
 /// The currently running output pipeline and the pieces of it we keep hold of.
@@ -129,6 +131,10 @@ impl OutputSlot {
 
         let feed_video = gstutil::queue_time(&format!("out-{id}-vq"), cfg.queue_secs, true)?;
         let feed_audio = gstutil::queue_time(&format!("out-{id}-aq"), cfg.queue_secs, true)?;
+        // Leaky drops buffers; it does not let a query past a destination
+        // that has stopped reading. See `boundary`.
+        boundary::answer_serialized_queries(&feed_video)?;
+        boundary::answer_serialized_queries(&feed_audio)?;
         let vproxy = make("proxysink", &format!("out-{id}-vproxy"))?;
         let aproxy = make("proxysink", &format!("out-{id}-aproxy"))?;
 
