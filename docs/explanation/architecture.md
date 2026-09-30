@@ -175,8 +175,10 @@ What crosses between them is small on purpose:
 * A client's call and its answer, relayed to the show it names (`?show=`, or
   `show` in `core.subscribe`). The relay parses a frame only to see whether it
   is the station's; the rest passes as the client wrote it and the show's
-  answers, events and mosaic frames come back untouched. It adds about 40
-  microseconds to a call on a laptop.
+  answers, events and mosaic frames come back untouched. On a laptop it adds
+  about 25 microseconds to a call and 30 to an event, and relaying the mosaic
+  and the preview at ten frames a second each costs the station a tenth of a
+  percent of one core.
 * The link: one loopback connection per show, over which the show's governor
   asks the station's (`governor.admit`), so the machine has one budget. When
   a show dies its link closes and its tickets go back.
