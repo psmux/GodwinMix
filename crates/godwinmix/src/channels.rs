@@ -38,7 +38,7 @@ mod reveal;
 mod sending;
 mod store;
 mod tls;
-mod transcode;
+pub(crate) mod transcode;
 mod view;
 mod whip;
 

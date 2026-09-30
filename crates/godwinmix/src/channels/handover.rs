@@ -8,6 +8,8 @@
 //! and only the nodes whose work changed move.
 
 use godwinmix_govern::Governor;
+use godwinmix_protocol::rendition::PlanView;
+use godwinmix_protocol::types::Event;
 use serde_json::{json, Value};
 use tracing::warn;
 
@@ -55,9 +57,21 @@ impl Channels {
     }
 
     /// One channel's plan, for `rendition.plan {scope: "channel:<id>"}`:
-    /// `None` for a channel that converts nothing.
-    pub fn rendition_plan(&self, channel: &str) -> Option<godwinmix_render::Plan> {
-        self.transcode.plan_of(channel)
+    /// `None` for a channel that converts nothing. The `rendition.plan`
+    /// handler (the graph work's) answers a `channel:` scope with this.
+    pub fn rendition_plan(&self, channel: &str) -> Option<PlanView> {
+        self.transcode.plan_view(channel)
+    }
+
+    /// `event/rendition.plan` with scope `channel:<id>` for every channel
+    /// that converts something.
+    fn announce_plans(&self) {
+        let ids: Vec<String> = self.records.lock().iter().map(|r| r.id.clone()).collect();
+        for id in ids {
+            if let Some(plan) = self.transcode.plan_view(&id) {
+                self.mixer.emit(Event::RenditionPlan { scope: format!("channel:{id}"), plan });
+            }
+        }
     }
 
     fn table(&self) -> Value {
@@ -109,6 +123,7 @@ impl Channels {
                     warn!(%instance, error = %format!("{e:#}"), "the channel server did not take the new channel table");
                 }
             }
+            self.announce_plans();
         }
         self.watch_renditions();
     }

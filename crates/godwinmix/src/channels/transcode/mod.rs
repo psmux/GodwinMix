@@ -22,6 +22,7 @@
 //! its row is the row it always was. One the plan copies gets that same row.
 
 mod admit;
+mod answers;
 mod governor;
 mod machine;
 mod model;
@@ -40,12 +41,28 @@ use std::sync::OnceLock;
 
 use godwinmix_govern::Governor;
 use godwinmix_protocol::destination::{DestinationPlan, DestinationRefusal, StoredDestination};
+use godwinmix_protocol::rendition::{RenditionChoice, RenditionRequest};
 use parking_lot::Mutex;
 use serde_json::{json, Value};
 
 pub use machine::Machine;
 use outcome::Outcome;
 use state::State;
+
+/// The one request a destination's rendition asks for, named after the
+/// destination. `Ok(None)` is a copy: the `copy` preset, or a request that
+/// asks for nothing. A ladder is refused: a destination sends one stream.
+pub fn request_for(id: &str, choice: &RenditionChoice) -> Result<Option<RenditionRequest>, String> {
+    let Some(mut requests) = godwinmix_render::presets::expand(id, choice)? else { return Ok(None) };
+    if requests.len() > 1 {
+        return Err("that preset is a ladder of renditions, and a destination sends one. Pick a single \
+                    rendition such as youtube-720p30, or send the ladder to an HLS output."
+            .into());
+    }
+    let request = requests.remove(0);
+    let empty = request.video.is_none() && request.audio.is_none() && !request.no_video && !request.no_audio;
+    Ok((!empty).then_some(request))
+}
 
 /// The channels' renditions.
 pub struct Transcode {
@@ -124,8 +141,4 @@ impl Transcode {
         }
     }
 
-    /// The plan for one channel, for `rendition.plan {scope: "channel:<id>"}`.
-    pub fn plan_of(&self, channel: &str) -> Option<godwinmix_render::Plan> {
-        self.state.lock().channels.get(channel).map(|c| c.plan.clone())
-    }
 }

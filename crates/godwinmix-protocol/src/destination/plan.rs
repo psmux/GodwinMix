@@ -7,7 +7,7 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::rendition::{AudioShape, Cost, RenditionRequest, VideoShape};
+use crate::rendition::{AudioShape, Cost, RenditionAdvice, VideoShape};
 
 /// Copied as it arrives, or converted.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -40,14 +40,6 @@ pub struct DestinationPlan {
     /// The plan's nodes this destination reads, so a page can show which
     /// work it shares with the channel's other destinations.
     pub nodes: Vec<String>,
-}
-
-/// One thing the page can offer as a button: retry with this request.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
-pub struct RenditionAdvice {
-    /// "720p30 H.264 on h264-software-x264".
-    pub text: String,
-    pub request: RenditionRequest,
 }
 
 /// Why a destination that asked for a rendition is not sending, and what

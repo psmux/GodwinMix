@@ -8,8 +8,8 @@
 
 use std::collections::BTreeMap;
 
-use godwinmix_protocol::destination::{DestinationRefusal, RenditionAdvice};
-use godwinmix_protocol::rendition::{AudioCodec, RenditionRequest, StreamInfo, VideoCodec};
+use godwinmix_protocol::destination::DestinationRefusal;
+use godwinmix_protocol::rendition::{AudioCodec, RenditionAdvice, RenditionRequest, StreamInfo, VideoCodec};
 use godwinmix_render::{CostModel, NodeKind, Plan, PlanError, Track};
 
 use super::outcome::{describe, Outcome};

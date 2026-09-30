@@ -139,6 +139,18 @@ impl Channels {
     }
 }
 
+impl Channels {
+    /// Seal, keep, persist and hand over a channel's new destination list.
+    fn keep_destinations(&self, channel: &str, before: &[StoredDestination], after: &[StoredDestination]) -> Result<(), RpcError> {
+        let kept = self.seal(channel, before, after)?;
+        if let Some(r) = self.records.lock().iter_mut().find(|r| r.id == channel) {
+            r.destinations = kept;
+        }
+        self.forget_sending(channel, before, after);
+        self.commit(Some(channel))
+    }
+}
+
 impl ChannelStore for Channels {
     fn edit_destinations(&self, channel: &str, edit: Edit) -> Result<Value, RpcError> {
         let _one_at_a_time = self.edits.lock();
@@ -148,12 +160,15 @@ impl ChannelStore for Channels {
         let mut after = before.clone();
         edit(&mut after)?;
         if after != before {
-            let kept = self.seal(channel, &before, &after)?;
-            if let Some(r) = self.records.lock().iter_mut().find(|r| r.id == channel) {
-                r.destinations = kept;
+            self.keep_destinations(channel, &before, &after)?;
+            // The governor had no room for a rendition this edit asked for:
+            // the edit is undone and the refusal, with what would fit, is
+            // the answer, as it is for a programme output.
+            let touched = after.iter().filter(|d| !before.contains(d));
+            if let Some(no) = touched.filter_map(|d| self.transcode.refusal_error(channel, d)).next() {
+                self.keep_destinations(channel, &after, &before)?;
+                return Err(no);
             }
-            self.forget_sending(channel, &before, &after);
-            self.commit(Some(channel))?;
         }
         let answer = self.get(channel)?;
         serde_json::to_value(answer).map_err(|e| RpcError::internal(format!("the channel would not serialise: {e}")))

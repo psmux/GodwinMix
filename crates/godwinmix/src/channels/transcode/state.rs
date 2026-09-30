@@ -52,7 +52,7 @@ fn wants(stored: &[StoredDestination]) -> Vec<Want> {
         .iter()
         .filter(|d| d.enabled)
         .filter_map(|d| {
-            let mut request = d.rendition.as_ref()?.request(&d.id).ok()?;
+            let mut request = super::request_for(&d.id, d.rendition.as_ref()?).ok()??;
             request.container = container_for(d);
             Some(Want { id: d.id.clone(), stream: d.stream.clone(), request })
         })

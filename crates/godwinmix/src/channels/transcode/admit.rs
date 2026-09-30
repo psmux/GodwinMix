@@ -10,8 +10,8 @@
 use std::collections::BTreeMap;
 
 use godwinmix_govern::{Admit, Advice, Claim, Governor, Kind, Ticket};
-use godwinmix_protocol::destination::{DestinationRefusal, RenditionAdvice};
-use godwinmix_protocol::rendition::{Cost, EncoderSlot, Fps, RenditionRequest, VideoCodec, VideoShape};
+use godwinmix_protocol::destination::DestinationRefusal;
+use godwinmix_protocol::rendition::{Cost, EncoderSlot, Fps, RenditionAdvice, RenditionRequest, VideoCodec, VideoShape};
 use godwinmix_render::container::{audio_name, shape_text, video_name};
 use godwinmix_render::{CostModel, Node, NodeKind, Plan, CPU};
 

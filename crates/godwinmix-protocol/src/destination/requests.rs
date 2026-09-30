@@ -3,7 +3,7 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize};
 
-use crate::rendition::RenditionAsk;
+use crate::rendition::RenditionChoice;
 
 /// `channel.destination.add`. Send a channel's stream on to a platform.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
@@ -33,7 +33,7 @@ pub struct AddDestinationRequest {
     /// or a rendition request written out. Left out, or one the stream
     /// already matches, the stream is sent as it arrives.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub rendition: Option<RenditionAsk>,
+    pub rendition: Option<RenditionChoice>,
 }
 
 /// `channel.destination.set`. Change one destination, naming only what moves.
@@ -58,13 +58,13 @@ pub struct SetDestinationRequest {
     /// A new rendition. Left out keeps the one it has; `null` or
     /// `{"preset": "copy"}` goes back to sending the stream as it arrives.
     #[serde(default, deserialize_with = "present", skip_serializing_if = "Option::is_none")]
-    #[schemars(with = "Option<RenditionAsk>")]
-    pub rendition: Option<Option<RenditionAsk>>,
+    #[schemars(with = "Option<RenditionChoice>")]
+    pub rendition: Option<Option<RenditionChoice>>,
 }
 
 /// A field that is there, even as `null`, is `Some`; one left out is `None`.
-fn present<'de, D: Deserializer<'de>>(d: D) -> Result<Option<Option<RenditionAsk>>, D::Error> {
-    Option::<RenditionAsk>::deserialize(d).map(Some)
+fn present<'de, D: Deserializer<'de>>(d: D) -> Result<Option<Option<RenditionChoice>>, D::Error> {
+    Option::<RenditionChoice>::deserialize(d).map(Some)
 }
 
 /// `channel.destination.remove`.
