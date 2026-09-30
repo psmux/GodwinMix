@@ -106,14 +106,28 @@ impl Publisher {
         duration: Option<u64>,
         fill: impl FnOnce(&mut [u8]),
     ) -> bool {
+        self.write_len(pts, duration, 0, fill)
+    }
+
+    /// The same, filling only the first `len` bytes of the slot (0 for all of
+    /// it). A chunk of sound is shorter than the slot it is in.
+    pub fn write_len(
+        &mut self,
+        pts: Option<u64>,
+        duration: Option<u64>,
+        len: u64,
+        fill: impl FnOnce(&mut [u8]),
+    ) -> bool {
         let captured_ns = monotonic_ns();
         let Some(slot) = self.ring.claim() else {
             return false;
         };
-        let len = self.ring.header().frame_size as usize;
+        let size = self.ring.header().frame_size;
+        let len = if len == 0 { size } else { len.min(size) };
         // SAFETY: the slot is claimed: no reader leases it and none can until
         // it is published, so this is the only reference to its bytes.
-        let bytes = unsafe { std::slice::from_raw_parts_mut(self.ring.data(slot), len) };
+        let bytes =
+            unsafe { std::slice::from_raw_parts_mut(self.ring.data(slot), len as usize) };
         fill(bytes);
         let sum = if self.opts.checksum {
             checksum(bytes)
@@ -126,6 +140,7 @@ impl Publisher {
             duration: duration.unwrap_or(NO_PTS),
             captured_ns,
             checksum: sum,
+            len,
         };
         self.ring.publish(slot, self.seq, meta, monotonic_ns());
         self.shared.nudge();

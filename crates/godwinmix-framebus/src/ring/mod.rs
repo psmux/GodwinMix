@@ -24,6 +24,8 @@ mod owner;
 mod pages;
 mod reader;
 #[cfg(test)]
+mod sound_tests;
+#[cfg(test)]
 mod tests;
 
 pub struct Ring {
@@ -51,6 +53,8 @@ pub struct Meta {
     pub duration: u64,
     pub captured_ns: u64,
     pub checksum: u64,
+    /// Bytes filled; 0 for the whole slot.
+    pub len: u64,
 }
 
 impl Ring {
@@ -139,9 +143,19 @@ impl Ring {
     /// The frame in `slot` as bytes. Only for a slot the caller leases (a
     /// reader) or has claimed (the owner).
     pub fn frame(&self, slot: usize) -> &[u8] {
-        // SAFETY: data() points at frame_size mapped bytes; the lease or the
-        // claim is what keeps the other side from writing them.
-        unsafe { std::slice::from_raw_parts(self.data(slot), self.header().frame_size as usize) }
+        let size = self.header().frame_size;
+        let len = match self.slot(slot).len.load(std::sync::atomic::Ordering::Relaxed) {
+            0 => size,
+            n => n.min(size),
+        };
+        // SAFETY: data() points at frame_size mapped bytes and len is at most
+        // that; the lease or the claim keeps the other side from writing them.
+        unsafe { std::slice::from_raw_parts(self.data(slot), len as usize) }
+    }
+
+    /// Whether this region carries sound, which is read in order.
+    pub fn in_order(&self) -> bool {
+        self.header().layout().is_some_and(|l| l.is_audio())
     }
 
     pub fn slot(&self, slot: usize) -> &Slot {
