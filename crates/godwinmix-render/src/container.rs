@@ -17,7 +17,15 @@ pub fn video_codecs(container: Container) -> &'static [VideoCodec] {
         Container::Webrtc => &[V::H264, V::Vp8, V::Vp9, V::Av1],
         Container::MpegTs => &[V::H264, V::H265, V::Av1, V::Mpeg2],
         Container::Mp4Fragmented => &[V::H264, V::H265, V::Av1, V::Vp9],
-        Container::Mkv => &[V::H264, V::H265, V::Av1, V::Vp8, V::Vp9, V::Mpeg2, V::Prores],
+        Container::Mkv => &[
+            V::H264,
+            V::H265,
+            V::Av1,
+            V::Vp8,
+            V::Vp9,
+            V::Mpeg2,
+            V::Prores,
+        ],
         Container::Hls | Container::LlHls => &[V::H264, V::H265, V::Av1],
         Container::Dash => &[V::H264, V::H265, V::Av1, V::Vp9],
         Container::Rtp => &[V::H264, V::H265, V::Av1, V::Vp8, V::Vp9, V::Mpeg2],
@@ -73,7 +81,12 @@ pub fn audio_name(codec: AudioCodec) -> &'static str {
 
 /// "1920x1080 at 30 fps", "1920x1080 at 29.97 fps".
 pub fn shape_text(shape: &VideoShape) -> String {
-    format!("{}x{} at {} fps", shape.width, shape.height, fps_text(shape.fps))
+    format!(
+        "{}x{} at {} fps",
+        shape.width,
+        shape.height,
+        fps_text(shape.fps)
+    )
 }
 
 pub fn fps_text(fps: Fps) -> String {

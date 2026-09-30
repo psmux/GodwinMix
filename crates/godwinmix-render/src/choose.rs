@@ -38,7 +38,13 @@ pub fn choose(
     for enc in &list {
         let Some(cost) = model.encode_cost(shape, enc) else {
             let why = format!("{} cannot make {}", enc.id, shape_text(shape));
-            skips.push((Skip { encoder: enc.id.clone(), why }, ReasonCode::ShapeUnsupported));
+            skips.push((
+                Skip {
+                    encoder: enc.id.clone(),
+                    why,
+                },
+                ReasonCode::ShapeUnsupported,
+            ));
             continue;
         };
         if enc.hardware {
@@ -47,12 +53,22 @@ pub fn choose(
             let held = used.get(device).copied().unwrap_or_default();
             if !room.fits(&held, &cost) {
                 let why = format!("the GPU {device} is full");
-                skips.push((Skip { encoder: enc.id.clone(), why }, ReasonCode::DeviceFull));
+                skips.push((
+                    Skip {
+                        encoder: enc.id.clone(),
+                        why,
+                    },
+                    ReasonCode::DeviceFull,
+                ));
                 continue;
             }
         }
         let reason = reason_for(enc, shape, skips.first());
-        return Ok(Choice { encoder: (*enc).clone(), cost, reason });
+        return Ok(Choice {
+            encoder: (*enc).clone(),
+            cost,
+            reason,
+        });
     }
     Err(skips.into_iter().map(|(s, _)| s).collect())
 }
@@ -68,12 +84,25 @@ fn reason_for(
         return Reason { code: *code, text };
     }
     if enc.hardware {
-        let text = format!("{} is a hardware {codec} encoder on {}", enc.id, device_of(enc));
-        return Reason { code: ReasonCode::Hardware, text };
+        let text = format!(
+            "{} is a hardware {codec} encoder on {}",
+            enc.id,
+            device_of(enc)
+        );
+        return Reason {
+            code: ReasonCode::Hardware,
+            text,
+        };
     }
     // Hardware sorts first, so software with nothing skipped means none.
-    let text = format!("using {} because this machine has no hardware {codec} encoder", enc.id);
-    Reason { code: ReasonCode::SoftwareOnly, text }
+    let text = format!(
+        "using {} because this machine has no hardware {codec} encoder",
+        enc.id
+    );
+    Reason {
+        code: ReasonCode::SoftwareOnly,
+        text,
+    }
 }
 
 /// Records an encoder's cost against its device.

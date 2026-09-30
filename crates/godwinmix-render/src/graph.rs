@@ -26,15 +26,31 @@ pub enum NodeKind {
     /// The source's one decoder for this track.
     Decode { source: String, track: Track },
     /// Scale, convert and change the frame rate, once per distinct result.
-    Scale { source: String, width: u32, height: u32, fps: Fps },
+    Scale {
+        source: String,
+        width: u32,
+        height: u32,
+        fps: Fps,
+    },
     /// One video encoder, shared by every output that wants this shape.
-    Encode { source: String, shape: VideoShape, encoder: EncoderSlot },
+    Encode {
+        source: String,
+        shape: VideoShape,
+        encoder: EncoderSlot,
+    },
     /// Resample or remix, once per distinct result.
-    AudioConvert { source: String, channels: u8, sample_rate: u32 },
+    AudioConvert {
+        source: String,
+        channels: u8,
+        sample_rate: u32,
+    },
     /// One audio encoder, shared by every output that wants this shape.
     AudioEncode { source: String, shape: AudioShape },
     /// One output's container. Every request has exactly one.
-    Mux { request: String, container: Container },
+    Mux {
+        request: String,
+        container: Container,
+    },
 }
 
 /// Why the planner decided what it did, for the page to show as it is.
@@ -105,7 +121,9 @@ impl Plan {
     }
 
     pub fn encodes(&self) -> impl Iterator<Item = &Node> {
-        self.nodes.iter().filter(|n| matches!(n.kind, NodeKind::Encode { .. }))
+        self.nodes
+            .iter()
+            .filter(|n| matches!(n.kind, NodeKind::Encode { .. }))
     }
 
     pub fn count(&self, pred: impl Fn(&NodeKind) -> bool) -> usize {

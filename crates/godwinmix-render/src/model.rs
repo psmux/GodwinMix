@@ -36,7 +36,10 @@ pub struct Room {
 
 impl Room {
     /// No limit known.
-    pub const OPEN: Room = Room { sessions: None, device_millis: None };
+    pub const OPEN: Room = Room {
+        sessions: None,
+        device_millis: None,
+    };
 
     /// Whether `used` so far plus `more` still fits.
     pub fn fits(&self, used: &Cost, more: &Cost) -> bool {
@@ -80,7 +83,12 @@ pub trait CostModel {
     /// Wrapping `egress_kbps` of streams in `container` and sending it out.
     fn mux_cost(&self, container: Container, egress_kbps: u32) -> Cost {
         let _ = container;
-        Cost { cpu_millicores: 5, memory_mib: 2, egress_kbps, ..Cost::default() }
+        Cost {
+            cpu_millicores: 5,
+            memory_mib: 2,
+            egress_kbps,
+            ..Cost::default()
+        }
     }
 
     /// What is left on a hardware device (a key from `device_of`). The CPU is

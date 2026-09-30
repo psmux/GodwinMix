@@ -3,7 +3,9 @@
 
 use godwinmix_protocol::rendition::{RenditionRequest, StreamInfo, VideoCodec, VideoShape};
 
-use crate::container::{carries_video, container_slug, fps_text, video_codecs, video_name, video_slug};
+use crate::container::{
+    carries_video, container_slug, fps_text, video_codecs, video_name, video_slug,
+};
 use crate::error::PlanError;
 use crate::sizing::{default_kbps, size};
 
@@ -16,7 +18,10 @@ pub enum VideoDecision {
     Copy,
     /// `target.keyframe_ms` is what the request asked for, 0 for no view;
     /// the ladder settles the real one.
-    Encode { target: VideoShape, why: String },
+    Encode {
+        target: VideoShape,
+        why: String,
+    },
 }
 
 /// The codec the output gets: the one asked for, else the source's own when
@@ -34,12 +39,18 @@ pub fn codec_for(
                 request: req.id.clone(),
                 container: container_slug(container).into(),
                 codec: video_slug(codec).into(),
-                allowed: video_codecs(container).iter().map(|c| video_slug(*c).into()).collect(),
+                allowed: video_codecs(container)
+                    .iter()
+                    .map(|c| video_slug(*c).into())
+                    .collect(),
             });
         }
         return Ok((codec, true));
     }
-    let own = info.video.map(|v| v.codec).filter(|c| carries_video(container, *c));
+    let own = info
+        .video
+        .map(|v| v.codec)
+        .filter(|c| carries_video(container, *c));
     if let (true, Some(codec)) = (info.encoded, own) {
         return Ok((codec, false));
     }
@@ -49,7 +60,11 @@ pub fn codec_for(
 /// The first codec the container carries that this machine can encode.
 fn fallback(req: &RenditionRequest, available: &[VideoCodec]) -> VideoCodec {
     let allowed = video_codecs(req.container);
-    allowed.iter().copied().find(|c| available.contains(c)).unwrap_or(allowed[0])
+    allowed
+        .iter()
+        .copied()
+        .find(|c| available.contains(c))
+        .unwrap_or(allowed[0])
 }
 
 pub fn resolve_video(
@@ -73,7 +88,14 @@ pub fn resolve_video(
     let fps = want.fps.unwrap_or(src.fps);
     let keyframe_ms = want.keyframe_ms.unwrap_or(0);
     let tolerance = want.bitrate_tolerance.unwrap_or(DEFAULT_TOLERANCE);
-    let mut target = VideoShape { codec, width, height, fps, bitrate_kbps: 0, keyframe_ms };
+    let mut target = VideoShape {
+        codec,
+        width,
+        height,
+        fps,
+        bitrate_kbps: 0,
+        keyframe_ms,
+    };
     let why = mismatch(req, info, &src, &target, want.bitrate_kbps, tolerance);
     let Some(why) = why else {
         return Ok(VideoDecision::Copy);
@@ -86,7 +108,11 @@ pub fn resolve_video(
 }
 
 pub fn missing(req: &RenditionRequest, source: &str, track: &str) -> PlanError {
-    PlanError::MissingTrack { request: req.id.clone(), source: source.into(), track: track.into() }
+    PlanError::MissingTrack {
+        request: req.id.clone(),
+        source: source.into(),
+        track: track.into(),
+    }
 }
 
 /// The first reason the source cannot be copied, or `None` when it can.
@@ -103,10 +129,17 @@ fn mismatch(
     }
     if !carries_video(req.container, src.codec) {
         let c = container_slug(req.container);
-        return Some(format!("{c} cannot carry the source's {}", video_name(src.codec)));
+        return Some(format!(
+            "{c} cannot carry the source's {}",
+            video_name(src.codec)
+        ));
     }
     if src.codec != t.codec {
-        return Some(format!("the source is {} and this output wants {}", video_name(src.codec), video_name(t.codec)));
+        return Some(format!(
+            "the source is {} and this output wants {}",
+            video_name(src.codec),
+            video_name(t.codec)
+        ));
     }
     if (src.width, src.height) != (t.width, t.height) {
         return Some(format!(
@@ -115,7 +148,11 @@ fn mismatch(
         ));
     }
     if src.fps.as_f64() != t.fps.as_f64() {
-        return Some(format!("the source runs at {} fps and this output wants {}", fps_text(src.fps), fps_text(t.fps)));
+        return Some(format!(
+            "the source runs at {} fps and this output wants {}",
+            fps_text(src.fps),
+            fps_text(t.fps)
+        ));
     }
     if let (Some(want), true) = (kbps, src.bitrate_kbps > 0) {
         let off = (f64::from(src.bitrate_kbps) - f64::from(want)).abs();
@@ -134,4 +171,3 @@ fn mismatch(
     }
     None
 }
-

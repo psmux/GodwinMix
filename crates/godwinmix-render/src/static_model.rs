@@ -32,7 +32,12 @@ impl StaticCostModel {
     /// Software encoders only, as a machine with no GPU has: x264, x265,
     /// SVT-AV1, libvpx for VP8 and VP9, AAC and Opus.
     pub fn software() -> StaticCostModel {
-        let sw = |id: &str, codec| EncoderSlot { id: id.into(), codec, hardware: false, device: None };
+        let sw = |id: &str, codec| EncoderSlot {
+            id: id.into(),
+            codec,
+            hardware: false,
+            device: None,
+        };
         StaticCostModel {
             encoders: vec![
                 sw("h264-software-x264", VideoCodec::H264),
@@ -48,7 +53,12 @@ impl StaticCostModel {
 
     /// Adds a hardware encoder on `device`, in front of the others.
     pub fn with_hardware(mut self, id: &str, codec: VideoCodec, device: &str) -> Self {
-        let slot = EncoderSlot { id: id.into(), codec, hardware: true, device: Some(device.into()) };
+        let slot = EncoderSlot {
+            id: id.into(),
+            codec,
+            hardware: true,
+            device: Some(device.into()),
+        };
         self.encoders.insert(0, slot);
         self
     }
@@ -99,15 +109,29 @@ impl CostModel for StaticCostModel {
             }
             let device_millis = millicores(160.0, shape).max(1);
             let cpu_millicores = millicores(100.0, shape);
-            return Some(Cost { cpu_millicores, device_millis, device_sessions: 1, memory_mib: mem, egress_kbps: 0 });
+            return Some(Cost {
+                cpu_millicores,
+                device_millis,
+                device_sessions: 1,
+                memory_mib: mem,
+                egress_kbps: 0,
+            });
         }
         let per_ref = software_ref(enc.codec)?;
-        Some(Cost { cpu_millicores: millicores(per_ref, shape), memory_mib: mem * 2, ..Cost::default() })
+        Some(Cost {
+            cpu_millicores: millicores(per_ref, shape),
+            memory_mib: mem * 2,
+            ..Cost::default()
+        })
     }
 
     fn scale_cost(&self, from: &VideoShape, to: &VideoShape) -> Cost {
         let cpu = millicores(60.0, from) + millicores(60.0, to);
-        Cost { cpu_millicores: cpu, memory_mib: 8 + (24.0 * load(to)).ceil() as u32, ..Cost::default() }
+        Cost {
+            cpu_millicores: cpu,
+            memory_mib: 8 + (24.0 * load(to)).ceil() as u32,
+            ..Cost::default()
+        }
     }
 
     fn decode_cost(&self, shape: &VideoShape) -> Cost {
@@ -117,16 +141,26 @@ impl CostModel for StaticCostModel {
             VideoCodec::Av1 => 500.0,
             _ => 300.0,
         };
-        Cost { cpu_millicores: millicores(per_ref, shape), memory_mib: 48, ..Cost::default() }
+        Cost {
+            cpu_millicores: millicores(per_ref, shape),
+            memory_mib: 48,
+            ..Cost::default()
+        }
     }
 
     fn audio_cost(&self, shape: &AudioShape, work: AudioWork) -> Option<Cost> {
         let cpu = match work {
             AudioWork::Decode | AudioWork::Convert => 5,
-            AudioWork::Encode if self.audio.contains(&shape.codec) => 15 + 2 * u32::from(shape.channels),
+            AudioWork::Encode if self.audio.contains(&shape.codec) => {
+                15 + 2 * u32::from(shape.channels)
+            }
             AudioWork::Encode => return None,
         };
-        Some(Cost { cpu_millicores: cpu, memory_mib: 2, ..Cost::default() })
+        Some(Cost {
+            cpu_millicores: cpu,
+            memory_mib: 2,
+            ..Cost::default()
+        })
     }
 
     fn room(&self, device: &str) -> Room {

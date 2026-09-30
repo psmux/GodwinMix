@@ -3,7 +3,9 @@
 
 use std::collections::{BTreeMap, HashSet};
 
-use godwinmix_protocol::rendition::{AudioCodec, AudioShape, RenditionRequest, StreamInfo, VideoCodec};
+use godwinmix_protocol::rendition::{
+    AudioCodec, AudioShape, RenditionRequest, StreamInfo, VideoCodec,
+};
 
 use crate::audio::{resolve_audio, AudioDecision};
 use crate::build::Builder;
@@ -48,9 +50,17 @@ pub fn plan(
     let mut resolved = Vec::with_capacity(requests.len());
     for (source, request) in requests {
         if !seen.insert(request.id.as_str()) {
-            return Err(PlanError::DuplicateRequest { request: request.id.clone() });
+            return Err(PlanError::DuplicateRequest {
+                request: request.id.clone(),
+            });
         }
-        resolved.push(resolve(sources, source, request, &video_codecs, &audio_codecs)?);
+        resolved.push(resolve(
+            sources,
+            source,
+            request,
+            &video_codecs,
+            &audio_codecs,
+        )?);
     }
     let ladder = ladder(&resolved);
     let mut b = Builder::new(model, encoders);
@@ -70,22 +80,45 @@ fn resolve<'a>(
 ) -> Result<Resolved<'a>, PlanError> {
     let Some((_, info)) = sources.iter().find(|(id, _)| id == source) else {
         let known = sources.iter().map(|(id, _)| id.clone()).collect();
-        return Err(PlanError::UnknownSource { request: request.id.clone(), source: source.into(), known });
+        return Err(PlanError::UnknownSource {
+            request: request.id.clone(),
+            source: source.into(),
+            known,
+        });
     };
     let video = resolve_video(request, source, info, video_codecs)?;
     let audio = resolve_audio(request, source, info, audio_codecs)?;
     if matches!((&video, &audio), (VideoDecision::None, AudioDecision::None)) {
-        return Err(PlanError::NothingAsked { request: request.id.clone() });
+        return Err(PlanError::NothingAsked {
+            request: request.id.clone(),
+        });
     }
-    Ok(Resolved { request, source, info, video, audio })
+    Ok(Resolved {
+        request,
+        source,
+        info,
+        video,
+        audio,
+    })
 }
 
 /// The audio codecs this machine can encode, asked once per plan.
 fn audio_available(model: &dyn CostModel) -> Vec<AudioCodec> {
-    let all = [AudioCodec::Aac, AudioCodec::Opus, AudioCodec::Mp3, AudioCodec::Ac3, AudioCodec::Pcm];
+    let all = [
+        AudioCodec::Aac,
+        AudioCodec::Opus,
+        AudioCodec::Mp3,
+        AudioCodec::Ac3,
+        AudioCodec::Pcm,
+    ];
     all.into_iter()
         .filter(|codec| {
-            let shape = AudioShape { codec: *codec, channels: 2, sample_rate: 48_000, bitrate_kbps: 0 };
+            let shape = AudioShape {
+                codec: *codec,
+                channels: 2,
+                sample_rate: 48_000,
+                bitrate_kbps: 0,
+            };
             model.audio_cost(&shape, AudioWork::Encode).is_some()
         })
         .collect()
@@ -111,7 +144,10 @@ pub fn ladder(resolved: &[Resolved]) -> BTreeMap<String, u32> {
         let ms = if ms == 0 { DEFAULT_KEYFRAME_MS } else { ms };
         shortest(ms, copied.get(s).copied().unwrap_or(0))
     };
-    asked.into_iter().map(|(s, ms)| (s.to_string(), pick(s, ms))).collect()
+    asked
+        .into_iter()
+        .map(|(s, ms)| (s.to_string(), pick(s, ms)))
+        .collect()
 }
 
 /// The smaller of two intervals, where 0 means "no view".
@@ -123,7 +159,11 @@ fn shortest(a: u32, b: u32) -> u32 {
 }
 
 fn finish(b: Builder, keyframe_ms: BTreeMap<String, u32>) -> Plan {
-    let mut plan = Plan { nodes: b.nodes, keyframe_ms, ..Plan::default() };
+    let mut plan = Plan {
+        nodes: b.nodes,
+        keyframe_ms,
+        ..Plan::default()
+    };
     for node in &plan.nodes {
         let entry = plan.cost.entry(node.device.clone()).or_default();
         *entry = entry.plus(node.cost);

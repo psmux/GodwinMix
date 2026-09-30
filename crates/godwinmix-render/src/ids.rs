@@ -47,5 +47,11 @@ pub fn aconvert_id(source: &str, s: &AudioShape) -> String {
 
 /// `aencode:cam:aac:2ch48000:128k`.
 pub fn aencode_id(source: &str, s: &AudioShape) -> String {
-    format!("aencode:{source}:{}:{}ch{}:{}k", audio_slug(s.codec), s.channels, s.sample_rate, s.bitrate_kbps)
+    format!(
+        "aencode:{source}:{}:{}ch{}:{}k",
+        audio_slug(s.codec),
+        s.channels,
+        s.sample_rate,
+        s.bitrate_kbps
+    )
 }

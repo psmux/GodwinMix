@@ -5,7 +5,8 @@ use godwinmix_protocol::rendition::{VideoCodec, VideoShape};
 
 /// Fills a missing side from the source's aspect ratio, rounded to even.
 pub fn size(width: Option<u32>, height: Option<u32>, src: &VideoShape) -> (u32, u32) {
-    let scale = |n: u32, num: u32, den: u32| even(u64::from(n) * u64::from(num) / u64::from(den.max(1)));
+    let scale =
+        |n: u32, num: u32, den: u32| even(u64::from(n) * u64::from(num) / u64::from(den.max(1)));
     match (width, height) {
         (Some(w), Some(h)) => (w, h),
         (Some(w), None) => (w, scale(w, src.height, src.width)),

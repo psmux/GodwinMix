@@ -42,7 +42,11 @@ pub fn resolve_audio(
     };
     if want.codec.is_none() && !available.contains(&target.codec) {
         let allowed = audio_codecs(req.container);
-        target.codec = allowed.iter().copied().find(|c| available.contains(c)).unwrap_or(allowed[0]);
+        target.codec = allowed
+            .iter()
+            .copied()
+            .find(|c| available.contains(c))
+            .unwrap_or(allowed[0]);
     }
     target.bitrate_kbps = want.bitrate_kbps.unwrap_or_else(|| default_kbps(&target));
     Ok(AudioDecision::Encode { target, why })
@@ -61,17 +65,27 @@ fn audio_codec(
                 request: req.id.clone(),
                 container: container_slug(container).into(),
                 codec: audio_slug(codec).into(),
-                allowed: audio_codecs(container).iter().map(|c| audio_slug(*c).into()).collect(),
+                allowed: audio_codecs(container)
+                    .iter()
+                    .map(|c| audio_slug(*c).into())
+                    .collect(),
             });
         }
         return Ok(codec);
     }
-    let own = info.audio.map(|a| a.codec).filter(|c| carries_audio(container, *c));
+    let own = info
+        .audio
+        .map(|a| a.codec)
+        .filter(|c| carries_audio(container, *c));
     if let (true, Some(codec)) = (info.encoded, own) {
         return Ok(codec);
     }
     let allowed = audio_codecs(container);
-    Ok(allowed.iter().copied().find(|c| available.contains(c)).unwrap_or(allowed[0]))
+    Ok(allowed
+        .iter()
+        .copied()
+        .find(|c| available.contains(c))
+        .unwrap_or(allowed[0]))
 }
 
 fn mismatch(
@@ -86,10 +100,17 @@ fn mismatch(
     }
     if !carries_audio(req.container, src.codec) {
         let c = container_slug(req.container);
-        return Some(format!("{c} cannot carry the source's {}", audio_name(src.codec)));
+        return Some(format!(
+            "{c} cannot carry the source's {}",
+            audio_name(src.codec)
+        ));
     }
     if src.codec != t.codec {
-        return Some(format!("the source is {} and this output wants {}", audio_name(src.codec), audio_name(t.codec)));
+        return Some(format!(
+            "the source is {} and this output wants {}",
+            audio_name(src.codec),
+            audio_name(t.codec)
+        ));
     }
     if (src.channels, src.sample_rate) != (t.channels, t.sample_rate) {
         return Some(format!(
@@ -100,7 +121,10 @@ fn mismatch(
     let want = kbps?;
     let off = (f64::from(src.bitrate_kbps) - f64::from(want)).abs();
     if src.bitrate_kbps > 0 && off > f64::from(want) * f64::from(DEFAULT_TOLERANCE) {
-        return Some(format!("the source's sound is {} kbit/s and this output wants {want}", src.bitrate_kbps));
+        return Some(format!(
+            "the source's sound is {} kbit/s and this output wants {want}",
+            src.bitrate_kbps
+        ));
     }
     None
 }
