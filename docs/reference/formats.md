@@ -36,8 +36,8 @@ Words used below:
 | A web page | rendered | rendered | page audio | `browser/source`, `layered/source` (built in) | the sidecar's own tests under `browser/test` |
 | Test pattern and tone | raw | bars, ball, black, snow | sine | `test/source` (built in) | throughout |
 | RIST (Simple Profile), listening | RTP MPEG-TS | any | any | `hls/source` (built in) claims `rist://` as live | `plugin/outputs/rist_tests.rs`: `uridecodebin` on `rist://` decodes what `rist/output` sends |
-| Still image (PNG, JPEG) | image | one frame | none | `file/source` | by hand: the source goes `stalled` after its one frame |
-| Image sequence (`frame%04d.png`) | images | | | nothing | |
+| Still picture (PNG, JPEG, BMP, WebP, TIFF), file or HTTP | image | held live with `imagefreeze` | silence | `image/source` (built in) | `plugin/kinds/image_tests.rs`: the conformance harness every kind passes |
+| Picture sequence (`frame%04d.png`) | images | played at `params.fps`, looping | silence | `image/source` (built in) | `plugin/kinds/image_tests.rs`: the conformance harness |
 | IP camera MJPEG over HTTP | `multipart/x-mixed-replace` | | | nothing (`file/source` sits at `connecting`) | by hand |
 | IP camera snapshot URL, polled | JPEG | | | nothing (one frame, then EOS) | by hand |
 | ONVIF discovery of cameras on the LAN | | | | nothing | |
