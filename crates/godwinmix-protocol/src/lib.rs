@@ -21,6 +21,7 @@
 //!   openapi.rs      openapi.json for the REST layer
 //!   rpc.rs          JSON-RPC framing, subscriptions, frame headers
 //!   scope.rs        tokens, scopes, confirmation, rehearsal
+//!   shows.rs        the station's show.* methods and events
 //!   idempotency.rs  the 24 hour replay cache
 //!   trace.rs        one trace id per call
 //!   mcp_tools.rs    the tool list, generated, in two profiles
@@ -48,6 +49,7 @@ pub mod protocol;
 pub mod requests;
 pub mod rpc;
 pub mod scope;
+pub mod shows;
 pub mod trace;
 pub mod types;
 

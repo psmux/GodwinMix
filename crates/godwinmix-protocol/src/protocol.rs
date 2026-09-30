@@ -42,6 +42,7 @@ pub fn events() -> Vec<EventDef> {
     let mut all = state_events();
     all.extend(stream_events());
     all.extend(crate::rendition::events());
+    all.extend(crate::shows::events());
     all
 }
 

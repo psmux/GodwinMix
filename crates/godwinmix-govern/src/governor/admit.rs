@@ -96,6 +96,14 @@ impl Governor {
 
     /// The general form: a claim with its kind and device stated.
     pub fn admit_claim(&self, mut claim: Claim) -> Admit {
+        // A show under a station: the station's governor decides, and its
+        // book is the one that counts. Its own is only for when it cannot
+        // be reached.
+        if let Some(remote) = self.remote() {
+            if let Some(answer) = remote.ask(&crate::remote::ask_of(&claim)) {
+                return crate::remote::admit_of(answer, self);
+            }
+        }
         let profile = self.profile();
         if claim.device.is_none() && (claim.cost.device_millis > 0 || claim.cost.device_sessions > 0) {
             claim.device = profile.devices().into_iter().next();
