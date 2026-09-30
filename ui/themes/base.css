@@ -164,6 +164,19 @@ label { display: block; }
 
 /* ---------------------------------------------------------------- header */
 
+/* The wordmark: Godwin in a moving blue gradient, Mix in white. The sweep is
+   slow and stops for anyone who asked for less motion. */
+.wordmark { font-size: 15px; font-weight: 800; letter-spacing: 0.01em; white-space: nowrap; }
+.wm-godwin {
+  background: linear-gradient(100deg, #1e6bff, #4fb3ff 40%, #9fd8ff 50%, #4fb3ff 60%, #1e6bff);
+  background-size: 250% 100%; -webkit-background-clip: text; background-clip: text; color: transparent;
+  animation: wm-sweep 6s ease-in-out infinite;
+}
+.wm-mix { color: #fff; }
+:root[data-theme="light"] .wm-mix { color: var(--text); }
+@keyframes wm-sweep { 0%, 100% { background-position: 100% 0; } 50% { background-position: 0 0; } }
+@media (prefers-reduced-motion: reduce) { .wm-godwin { animation: none; } }
+
 .header {
   display: flex; align-items: center; gap: var(--gap);
   height: var(--header-h); padding: 0 var(--pad);
