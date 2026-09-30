@@ -29,11 +29,13 @@ export function channelCard(view, first) {
 
   const section = connectSection(view, () => channel, () => openSettings(view, channel));
   const connect = el("button.btn.chn-connect", { type: "button", "aria-expanded": "false", title: "Server, stream keys and full URLs, to copy" }, [svg(PLUG, 15), el("span", { text: "Connect" }), svg(CHEVRON, 14)]);
-  const fold = (want) => {
+  // Opened by a press, it is scrolled into view; opened by the panel as it
+  // first shows, the panel stays at its top so the title and ports line show.
+  const fold = (want, scroll = true) => {
     const open = section.toggle(want);
     connect.setAttribute("aria-expanded", String(open));
     node.classList.toggle("connecting", open);
-    if (open) section.node.scrollIntoView?.({ block: "nearest" });
+    if (open && scroll) section.node.scrollIntoView?.({ block: "nearest" });
   };
   connect.onclick = () => fold();
   const settings = el("button.btn.icon.chn-gear", { type: "button", title: "Channel settings", "aria-label": "Channel settings", onclick: () => openSettings(view, channel) }, [svg(GEAR, 16)]);
@@ -87,7 +89,7 @@ export function channelCard(view, first) {
   return {
     node,
     update,
-    connect: fold,
+    connect: (want) => fold(want, false),
     tick: () => { for (const row of rows.values()) row.tick?.(); },
   };
 }

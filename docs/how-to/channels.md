@@ -27,14 +27,26 @@ The listener is the ingest plugin. If the Channels tab says nothing is
 listening, it says why and offers the fix: install the ingest plugin from the
 Plugins page, or switch it on there.
 
-No port is open until a channel needs it. With no channels the mixer listens
-on the port this page is on and nothing else. Make a channel and the RTMP port
-opens; switch SRT on and the SRT port opens; remove the last channel that
-uses a port and it closes again. The line under **Channels** at the top of the
-tab says which ports are open and for which channels, for example
-`Open ports: RTMP 1935 for sunday-service · SRT 9000/udp for sunday-service`.
-If a port a channel wants would not open (another program has it), the same
-line says so in amber, with the reason.
+A mixer with the ingest plugin already has one channel the first time it
+starts, called Live (`live`), with RTMP on and one key labelled Default key.
+So the RTMP port is open from that first start, and the Channels tab opens on
+Live with its Connect section unfolded: the server, the stream key and the
+full URL, each with a Copy button. Put those in OBS and press Start Streaming;
+you do not have to make a channel first. Make more channels when you want
+them.
+
+The default is made once. Remove it and it stays removed, at the next start
+too. A mixer that had channels of its own before the default existed does
+not get one. If the plugin is installed later, from the Plugins page, Live is
+made as it installs.
+
+Any other port opens when a channel needs it: switch SRT on and the SRT port
+opens, and removing the last channel that uses a port closes it, the RTMP
+port included. The line under **Channels** at the top of the tab says which
+ports are open and for which channels, for example
+`Open ports: RTMP 1935 for live · SRT 9000/udp for sunday-service`. If a port
+a channel wants would not open (another program has it), the same line says
+so in amber, with the reason.
 
 The ports are 1935 for RTMP and 9000 for SRT unless the ingest plugin's
 settings say otherwise (`rtmp_port`, `srt_port`).
