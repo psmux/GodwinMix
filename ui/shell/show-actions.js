@@ -134,6 +134,8 @@ export async function remove(view, show) {
   if (view.shows.length < 2) {
     return toast({ text: `${show.name} is the only show on this machine, so it stays. Add another show first if you want this one gone.` });
   }
+  // The first show runs from the file the station was started with.
+  if (show.id === "main") return toast({ text: `${show.name} runs from the station's own settings file, so it cannot be removed. Stop it from its menu instead.` });
   const live = show.on_air ? ` It is on air now, and stops first.` : " It stops first if it is running.";
   const yes = await confirmModal(`Remove the show ${show.name}?${live} Its scenes, sources and outputs go with it.`, "Remove show");
   if (!yes) return;

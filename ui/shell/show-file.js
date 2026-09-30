@@ -40,7 +40,7 @@ export async function newShow(client) {
   const file = el("input", { type: "file", accept: ".gmxproject,.json,application/json", hidden: true });
   const from = el("div.show-froms", { role: "radiogroup", "aria-label": "Start from" }, [
     choice(group, "empty", "Empty", "No sources, scenes or outputs yet.", true),
-    current ? choice(group, current.id, `A copy of ${current.name}`, "Its scenes, sources and outputs, as they are now.") : null,
+    current ? choice(group, current.id, `A copy of ${current.name}`, "Its scenes and sources, without its outputs, so nothing goes out twice.") : null,
     choice(group, "project", "From a project file", "A file saved with File, Save project as."),
   ]);
   const choose = el("button.btn", { type: "button", text: "Choose file…", onclick: () => file.click() });
