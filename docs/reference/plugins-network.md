@@ -1,7 +1,8 @@
 # The network plugins
 
-Four first party plugins carry media over a network: `srt`, `whip`, `ingest` and
-`ndi`. Every setting they have is here.
+Five first party plugins carry media over a network: `srt`, `whip`, `ingest`,
+`ndi` and `udp`. Every setting they have is here, but for `udp`, which has
+its own page, [udp.md](udp.md).
 
 If `docs/reference/plugins.md` exists in your checkout, it is the index of every
 first party plugin and these rows belong in it; this page is where they live
@@ -21,6 +22,8 @@ until then.
 | `ndi/source` | source | `ndi` | receive an NDI sender | yes, with the NDI runtime |
 | `ndi/output` | output | `ndi` | announce the programme as an NDI sender | needs the core to load plugin outputs |
 | `ndi/discover` | device | `ndi` | list NDI senders, `list_senders` | yes, with the NDI runtime |
+| `udp/source` | source | `udp` | MPEG-TS over UDP or RTP, unicast or multicast, one program chosen | yes; every setting is in [udp.md](udp.md) |
+| `udp/output` | output | `udp` | the programme as MPEG-TS over UDP or RTP | yes, Linux and macOS |
 
 ### What "needs the core" means, precisely
 

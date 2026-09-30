@@ -29,7 +29,7 @@ if [ "${1:-}" = "--debug" ]; then
 fi
 
 # The plugin directory, the cargo package, and the binary it produces.
-plugins="srt:gmx-srt whip:gmx-whip ingest:gmx-ingest ndi:gmx-ndi"
+plugins="srt:gmx-srt whip:gmx-whip ingest:gmx-ingest ndi:gmx-ndi udp:gmx-udp"
 
 exe=""
 if [ "${OS:-}" = "Windows_NT" ]; then exe=".exe"; fi

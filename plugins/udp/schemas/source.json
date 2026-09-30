@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "UDP or multicast source",
+  "description": "MPEG-TS arriving over UDP, bare or in RTP, on a port or a multicast group.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "address": {
+      "title": "Address",
+      "description": "A multicast group to join, such as 239.1.1.1, or 0.0.0.0 to take whatever is sent to this machine's port.",
+      "type": "string",
+      "default": "0.0.0.0",
+      "examples": ["239.1.1.1", "0.0.0.0"]
+    },
+    "port": {
+      "title": "Port",
+      "description": "The UDP port the feed is sent to. Nothing listens on it until the source starts.",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 65535,
+      "default": 5000,
+      "examples": [5000, 1234]
+    },
+    "uri": {
+      "title": "Full address",
+      "description": "An address copied from VLC, ffmpeg or an IRD's settings, such as udp://@239.1.1.1:5000, rtp://@239.1.1.1:5004 or udp://10.0.0.9@232.1.1.1:5000. When set it wins over address and port. Bare MPEG-TS and RTP are told apart by themselves.",
+      "type": "string",
+      "default": "",
+      "examples": ["", "udp://@239.1.1.1:5000"]
+    },
+    "program": {
+      "title": "Program",
+      "description": "Which program to take when the feed carries several, by number. 0 takes the first. The source's status lists the programs it finds, with their names and streams.",
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 65535,
+      "default": 0,
+      "x-gmx-zero": "First program",
+      "examples": [0, 1, 1041]
+    },
+    "interface": {
+      "title": "Network interface",
+      "description": "The interface to join the multicast group on, by name: en0 or eth0 on macOS and Linux. Leave empty to use the one the default route goes through. Only needed on a machine with more than one network.",
+      "type": "string",
+      "default": "",
+      "examples": ["", "eth1"],
+      "x-gmx-group": "Advanced"
+    },
+    "source_address": {
+      "title": "Only from sender",
+      "description": "Source specific multicast: accept the group only from this sender's address. The group is usually in 232.0.0.0/8, and the network must support IGMPv3. Leave empty to accept any sender.",
+      "type": "string",
+      "default": "",
+      "examples": ["", "10.0.0.9"],
+      "x-gmx-group": "Advanced"
+    },
+    "pids": {
+      "title": "Streams by PID",
+      "description": "Keep only these elementary streams, as PIDs separated by commas (256, 0x101). Useful to pick one audio language. Empty keeps every stream of the program. Naming PIDs without a program picks the program they belong to.",
+      "type": "string",
+      "default": "",
+      "examples": ["", "256, 258"],
+      "x-gmx-group": "Advanced"
+    },
+    "receive_buffer_kb": {
+      "title": "Receive buffer, KB",
+      "description": "How much the operating system may hold for this socket while the mixer is busy. 4 MB rides out a short pause at 30 Mbit/s. The system may cap it: on Linux raise net.core.rmem_max if the log says so.",
+      "type": "integer",
+      "minimum": 64,
+      "maximum": 262144,
+      "default": 4096,
+      "examples": [4096, 16384],
+      "x-gmx-group": "Advanced"
+    }
+  }
+}
