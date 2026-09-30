@@ -104,6 +104,12 @@ pub fn offer(target: &str, sdp: &str) -> Result<(String, String, String), Refusa
     Ok((server.id.clone(), session, answer))
 }
 
+/// Whether `key` is the viewer key of the output `target` names. A viewer
+/// with the key needs no control token, as with an HLS output.
+pub fn admits(target: &str, key: &str) -> bool {
+    !key.is_empty() && resolve(target).is_ok_and(|s| s.admits(key))
+}
+
 /// `DELETE` on a session. False when there was none by that id.
 pub fn end(target: &str, session: &str) -> bool {
     resolve(target).map(|s| s.end(session)).unwrap_or(false)
