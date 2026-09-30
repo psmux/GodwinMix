@@ -16,6 +16,7 @@ use crate::header::{checksum, NO_PTS};
 use crate::ring::{Meta, Ring};
 use crate::{monotonic_ns, BusName, Error, Layout, Registry};
 
+mod conn;
 mod service;
 mod stats;
 
