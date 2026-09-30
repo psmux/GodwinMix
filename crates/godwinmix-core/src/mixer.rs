@@ -3291,7 +3291,7 @@ impl Mixer {
                     );
                 }
                 if let Some(over) = over {
-                    ramp_pads(applied.ramps, over, self.take_generation.clone());
+                    self.glide(applied.ramps, over);
                 }
             }
             Err(e) => {
@@ -3334,6 +3334,35 @@ impl Mixer {
                 }
             }
         }
+    }
+
+    /// Bind a layout change's curves, as a transition's are, and settle
+    /// them when the window has passed. See `transition::glide`.
+    fn glide(&mut self, ramps: Vec<slots::Ramp>, over: Duration) {
+        let start = self.compositor_now();
+        let duration = gst::ClockTime::from_nseconds(over.as_nanos() as u64);
+        let curves = transition::glide(&ramps, start, duration);
+        if curves.is_empty() {
+            return;
+        }
+        let bound = self.controllers.bind(curves);
+        if !bound.unbound.is_empty() {
+            ramp_curves(bound.unbound.clone(), over, self.take_generation.clone());
+        }
+        let id = self.take_generation.load(Ordering::SeqCst);
+        let now = self.running_time().unwrap_or(gst::ClockTime::ZERO);
+        let frame = gst::ClockTime::from_mseconds(1000 / self.canvas.fps.numer().max(1) as u64);
+        let end = self
+            .schedule_command(Command::TransitionEnd { transition: id }, (now + duration + frame).mseconds())
+            .ok();
+        self.running_transition = Some(RunningTransition {
+            id,
+            kind: "move".into(),
+            bound,
+            window: (start, start + duration),
+            end,
+            clip: None,
+        });
     }
 
     fn running_time(&self) -> Option<gst::ClockTime> {
@@ -4748,55 +4777,6 @@ impl Drop for Mixer {
     }
 }
 
-/// Ease a set of compositor pads from where they are to where a scene wants
-/// them.
-///
-/// The same shape as `ramp_volumes` below, and for the same reason: a ramp
-/// cannot run on the mixer thread, which has commands to answer, and it must
-/// not run on a streaming thread, which is carrying the programme. A thread
-/// that writes properties and checks a generation is what this codebase
-/// already does for a take's audio fade.
-///
-/// Properties, not control bindings. `GstInterpolationControlSource` sampled
-/// by the aggregator is the accurate way and is what transitions will want;
-/// it needs a crate this build does not carry, and at 60 steps a second the
-/// difference is not visible. The step is written down so the swap is a swap.
-fn ramp_pads(ramps: Vec<slots::Ramp>, over: Duration, generation: Arc<AtomicU64>) {
-    let moving: Vec<slots::Ramp> = ramps.into_iter().filter(|r| r.from != r.to).collect();
-    if moving.is_empty() {
-        return;
-    }
-    let mine = generation.load(Ordering::SeqCst);
-    std::thread::Builder::new()
-        .name("scene-ramp".into())
-        .spawn(move || {
-            let start = Instant::now();
-            loop {
-                // A newer take owns the pads now. Stopping here rather than
-                // finishing leaves them where that take put them.
-                if generation.load(Ordering::SeqCst) != mine {
-                    return;
-                }
-                let elapsed = start.elapsed();
-                if elapsed >= over {
-                    break;
-                }
-                let t = ease(elapsed.as_secs_f64() / over.as_secs_f64());
-                for r in &moving {
-                    r.from.lerp(&r.to, t).write(&r.pad);
-                }
-                std::thread::sleep(Duration::from_millis(16));
-            }
-            if generation.load(Ordering::SeqCst) == mine {
-                for r in &moving {
-                    r.from.lerp(&r.to, 1.0).write(&r.pad);
-                }
-            }
-        })
-        .map(|_| ())
-        .unwrap_or_else(|e| warn!(?e, "could not start the scene ramp; the change was a cut"));
-}
-
 /// Run curves the pads would not take, the old way.
 ///
 /// The property thread is the fallback and nothing else now. A `compositor`
@@ -4836,13 +4816,6 @@ fn ramp_curves(curves: Vec<transition::Curve>, over: Duration, generation: Arc<A
         })
         .map(|_| ())
         .unwrap_or_else(|e| warn!(?e, "could not start the transition fallback; it was a cut"));
-}
-
-/// Smooth at both ends. The one easing this build has; `easing` on the wire
-/// accepts `linear` and `ease` and anything else is refused by the command.
-fn ease(t: f64) -> f64 {
-    let t = t.clamp(0.0, 1.0);
-    t * t * (3.0 - 2.0 * t)
 }
 
 /// Fade a set of audiomixer pads to their targets.
@@ -5884,11 +5857,18 @@ mod tests {
         }).unwrap();
         mix.take_scene_over(scene("pip", big.clone()), None, Some(300), None)
             .expect("the animated change");
-        // A second of programme after a 300 ms ramp on a machine that keeps
-        // time; a slow runner declares its slack and gets that much longer,
-        // because the ramp thread is one more thing it is not scheduling.
-        let frames = (30.0 * crate::plugin::harness::timing_slack()) as u64;
-        gaps.wait_for(frames).await;
+        // A second of programme after a 300 ms ramp, counted where the ramp
+        // is drawn. The encoder's own output is the wrong clock for this:
+        // an encoder still working through a backlog hands on frames that
+        // were composited before the take, and counting those made the test
+        // stop while the move was still on its way.
+        let frames = (30.0 * crate::plugin::harness::timing_slack()) as usize;
+        for _ in 0..600 {
+            if widths.lock().len() >= frames {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
         output.remove_probe(probe);
         {
             let widths = widths.lock();
