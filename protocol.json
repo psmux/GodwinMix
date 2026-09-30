@@ -988,7 +988,7 @@
           "$ref": "#/$defs/KeyMode"
         },
         "keys": {
-          "description": "The keys, write only: a hint of each and never the key.",
+          "description": "The keys as hints, never the key itself: a read token sees only these.",
           "items": {
             "$ref": "#/$defs/ChannelKey"
           },
@@ -1119,6 +1119,22 @@
     },
     "ChannelKeyRemoveRequest": {
       "description": "`channel.key.remove`.",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "key": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "key"
+      ],
+      "type": "object"
+    },
+    "ChannelKeyRevealRequest": {
+      "description": "`channel.key.reveal`: one key of one channel.",
       "properties": {
         "id": {
           "type": "string"
@@ -3249,6 +3265,18 @@
         }
       ]
     },
+    "KeyRevealed": {
+      "description": "What `channel.key.reveal` answers: the key itself, and nothing a list\nwould carry.",
+      "properties": {
+        "secret": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "secret"
+      ],
+      "type": "object"
+    },
     "Layout": {
       "description": "A scene's geometry, for copying onto another one.",
       "properties": {
@@ -3878,7 +3906,7 @@
       "type": "object"
     },
     "NewKey": {
-      "description": "A key as it is made: the only time its secret is ever sent.",
+      "description": "A key as it is made, with its secret. Afterwards only an admin gets the\nsecret again, one key at a time, from `channel.key.reveal`.",
       "properties": {
         "id": {
           "type": "string"
@@ -3887,7 +3915,7 @@
           "type": "string"
         },
         "secret": {
-          "description": "Shown once. Nothing reads it back.",
+          "description": "The key. A list never carries it; `channel.key.reveal` reads it back.",
           "type": "string"
         }
       },
@@ -7769,7 +7797,7 @@
       },
       "scope": "admin",
       "since": "1",
-      "summary": "Make a channel and its first key. The key is in this answer and never again."
+      "summary": "Make a channel and its first key, which is in this answer. channel.key.reveal reads it again later."
     },
     {
       "destructive": false,
@@ -7864,7 +7892,7 @@
       },
       "scope": "admin",
       "since": "1",
-      "summary": "Make another key for a channel, to give to one more person or encoder. The key is in this answer and never again."
+      "summary": "Make another key for a channel, to give to one more person or encoder. The key is in this answer, and channel.key.reveal reads it again later."
     },
     {
       "destructive": true,
@@ -7884,6 +7912,25 @@
       "scope": "admin",
       "since": "1",
       "summary": "Take one key back. A publisher on air with it is cut off and the next one is turned away; the other keys are untouched."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mutating": false,
+      "name": "channel.key.reveal",
+      "params": {
+        "$ref": "#/$defs/ChannelKeyRevealRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/channels/{id}/key/reveal"
+      },
+      "result": {
+        "$ref": "#/$defs/KeyRevealed"
+      },
+      "scope": "admin",
+      "since": "1",
+      "summary": "Read one key of a channel back, to give it to an encoder again. Admin only; a list shows only the last four characters. Each read is logged with who asked, never with the key."
     },
     {
       "destructive": false,

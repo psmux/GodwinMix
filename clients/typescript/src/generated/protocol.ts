@@ -296,6 +296,12 @@ export interface ChannelKeyRemoveRequest {
   key: string;
 }
 
+/** `channel.key.reveal`: one key of one channel. */
+export interface ChannelKeyRevealRequest {
+  id: string;
+  key: string;
+}
+
 /** `channel.list`. */
 export interface ChannelList {
   channels: Channel[];
@@ -849,6 +855,14 @@ export interface KeyAdded {
 /** How a publisher gives its key. */
 export type KeyMode = "query" | "stream";
 
+/**
+ * What `channel.key.reveal` answers: the key itself, and nothing a list
+ * would carry.
+ */
+export interface KeyRevealed {
+  secret: string;
+}
+
 /** A scene's geometry, for copying onto another one. */
 export interface Layout {
   canvas: Canvas;
@@ -1005,7 +1019,10 @@ export interface NameRequest {
   name: string;
 }
 
-/** A key as it is made: the only time its secret is ever sent. */
+/**
+ * A key as it is made, with its secret. Afterwards only an admin gets the
+ * secret again, one key at a time, from `channel.key.reveal`.
+ */
 export interface NewKey {
   id: string;
   label: string;
@@ -1882,6 +1899,7 @@ export interface MethodParams {
   "channel.get": IdRequest;
   "channel.key.add": ChannelKeyAddRequest;
   "channel.key.remove": ChannelKeyRemoveRequest;
+  "channel.key.reveal": ChannelKeyRevealRequest;
   "channel.list": Record<string, never>;
   "channel.remove": IdRequest;
   "channel.set": ChannelSetRequest;
@@ -2029,6 +2047,7 @@ export interface MethodResults {
   "channel.get": Channel;
   "channel.key.add": KeyAdded;
   "channel.key.remove": Channel;
+  "channel.key.reveal": KeyRevealed;
   "channel.list": ChannelList;
   "channel.remove": ChannelRemoved;
   "channel.set": Channel;
@@ -2210,13 +2229,14 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "adbreak.end", summary: "Cut a running ad short, or disarm one that is scheduled.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/adbreak/end" } },
   { name: "adbreak.start", summary: "Interrupt the programme with a clip, then rejoin live when it ends.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/adbreak/start" } },
   { name: "agent.state", summary: "The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/agent/state" } },
-  { name: "channel.add", summary: "Make a channel and its first key. The key is in this answer and never again.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/channels" } },
+  { name: "channel.add", summary: "Make a channel and its first key, which is in this answer. channel.key.reveal reads it again later.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/channels" } },
   { name: "channel.destination.add", summary: "Send a channel's stream on to YouTube, Facebook, Twitch, an RTMP server or an SRT receiver as it arrives. Nothing is decoded or encoded. The key is write only.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/channels/{id}/destination/add" } },
   { name: "channel.destination.remove", summary: "Stop sending a channel's stream to one destination and forget it. The publisher and the other destinations are not touched.", scope: "admin", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/channels/{id}/destination/remove" } },
   { name: "channel.destination.set", summary: "Change one of a channel's destinations, naming only what moves: a new key, another server, which stream it sends, on or off. A key left out is kept.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/channels/{id}/destination" } },
   { name: "channel.get", summary: "One channel.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/channels/{id}" } },
-  { name: "channel.key.add", summary: "Make another key for a channel, to give to one more person or encoder. The key is in this answer and never again.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/channels/{id}/key/add" } },
+  { name: "channel.key.add", summary: "Make another key for a channel, to give to one more person or encoder. The key is in this answer, and channel.key.reveal reads it again later.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/channels/{id}/key/add" } },
   { name: "channel.key.remove", summary: "Take one key back. A publisher on air with it is cut off and the next one is turned away; the other keys are untouched.", scope: "admin", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/channels/{id}/key/remove" } },
+  { name: "channel.key.reveal", summary: "Read one key of a channel back, to give it to an encoder again. Admin only; a list shows only the last four characters. Each read is logged with who asked, never with the key.", scope: "admin", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/channels/{id}/key/reveal" } },
   { name: "channel.list", summary: "Every RTMP channel with its keys (as hints), the address to publish to, and what is live on it, beside the port they all share.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/channels" } },
   { name: "channel.remove", summary: "Remove a channel and forget its keys. Sources it made that no scene holds go with it.", scope: "admin", mutating: true, destructive: true, rest: { method: "DELETE", path: "/api/v1/channels/{id}" } },
   { name: "channel.set", summary: "Rename a channel, switch it on or off, or change its application name, whether its streams become sources, or how its key is given. Only what is named moves.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/channels/{id}/set" } },
@@ -2419,7 +2439,7 @@ export class GeneratedMethods {
     return this._call("agent.state", params as unknown as Record<string, unknown>) as Promise<Record<string, unknown>>;
   }
 
-  /** Make a channel and its first key. The key is in this answer and never again. */
+  /** Make a channel and its first key, which is in this answer. channel.key.reveal reads it again later. */
   channelAdd(params: ChannelAddRequest): Promise<ChannelAdded> {
     return this._call("channel.add", params as unknown as Record<string, unknown>) as Promise<ChannelAdded>;
   }
@@ -2444,7 +2464,7 @@ export class GeneratedMethods {
     return this._call("channel.get", params as unknown as Record<string, unknown>) as Promise<Channel>;
   }
 
-  /** Make another key for a channel, to give to one more person or encoder. The key is in this answer and never again. */
+  /** Make another key for a channel, to give to one more person or encoder. The key is in this answer, and channel.key.reveal reads it again later. */
   channelKeyAdd(params: ChannelKeyAddRequest): Promise<KeyAdded> {
     return this._call("channel.key.add", params as unknown as Record<string, unknown>) as Promise<KeyAdded>;
   }
@@ -2452,6 +2472,11 @@ export class GeneratedMethods {
   /** Take one key back. A publisher on air with it is cut off and the next one is turned away; the other keys are untouched. */
   channelKeyRemove(params: ChannelKeyRemoveRequest): Promise<Channel> {
     return this._call("channel.key.remove", params as unknown as Record<string, unknown>) as Promise<Channel>;
+  }
+
+  /** Read one key of a channel back, to give it to an encoder again. Admin only; a list shows only the last four characters. Each read is logged with who asked, never with the key. */
+  channelKeyReveal(params: ChannelKeyRevealRequest): Promise<KeyRevealed> {
+    return this._call("channel.key.reveal", params as unknown as Record<string, unknown>) as Promise<KeyRevealed>;
   }
 
   /** Every RTMP channel with its keys (as hints), the address to publish to, and what is live on it, beside the port they all share. */

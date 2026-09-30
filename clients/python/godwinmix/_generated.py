@@ -296,7 +296,7 @@ class Channel(TypedDict, total=False):
     # A slug, and never changes once the channel exists.
     key_mode: KeyMode
     keys: List[ChannelKey]
-    # The keys, write only: a hint of each and never the key.
+    # The keys as hints, never the key itself: a read token sees only these.
     name: str
     # What a person calls it.
     publish: ChannelPublish
@@ -336,6 +336,12 @@ class ChannelKeyAddRequest(TypedDict, total=False):
 
 class ChannelKeyRemoveRequest(TypedDict, total=False):
     """`channel.key.remove`."""
+
+    id: str
+    key: str
+
+class ChannelKeyRevealRequest(TypedDict, total=False):
+    """`channel.key.reveal`: one key of one channel."""
 
     id: str
     key: str
@@ -938,6 +944,11 @@ class KeyAdded(TypedDict, total=False):
 
     key: NewKey
 
+class KeyRevealed(TypedDict, total=False):
+    """What `channel.key.reveal` answers: the key itself, and nothing a list would carry."""
+
+    secret: str
+
 class Layout(TypedDict, total=False):
     """A scene's geometry, for copying onto another one."""
 
@@ -1113,12 +1124,12 @@ class NameRequest(TypedDict, total=False):
     # File name as it appears in the media listing. The REST layer puts it in the path, where the transform rule calls it `id`, so both spellings are read.
 
 class NewKey(TypedDict, total=False):
-    """A key as it is made: the only time its secret is ever sent."""
+    """A key as it is made, with its secret. Afterwards only an admin gets the secret again, one key at a time, from `channel.key.reveal`."""
 
     id: str
     label: str
     secret: str
-    # Shown once. Nothing reads it back.
+    # The key. A list never carries it; `channel.key.reveal` reads it back.
 
 class NodeInstance(TypedDict, total=False):
     detail: Optional[str]
@@ -2090,13 +2101,14 @@ METHODS = (
     {"name": "adbreak.end", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/adbreak/end"), "summary": 'Cut a running ad short, or disarm one that is scheduled.'},
     {"name": "adbreak.start", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/adbreak/start"), "summary": 'Interrupt the programme with a clip, then rejoin live when it ends.'},
     {"name": "agent.state", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/agent/state"), "summary": "The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing."},
-    {"name": "channel.add", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/channels"), "summary": 'Make a channel and its first key. The key is in this answer and never again.'},
+    {"name": "channel.add", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/channels"), "summary": 'Make a channel and its first key, which is in this answer. channel.key.reveal reads it again later.'},
     {"name": "channel.destination.add", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/channels/{id}/destination/add"), "summary": "Send a channel's stream on to YouTube, Facebook, Twitch, an RTMP server or an SRT receiver as it arrives. Nothing is decoded or encoded. The key is write only."},
     {"name": "channel.destination.remove", "scope": "admin", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/channels/{id}/destination/remove"), "summary": "Stop sending a channel's stream to one destination and forget it. The publisher and the other destinations are not touched."},
     {"name": "channel.destination.set", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/channels/{id}/destination"), "summary": "Change one of a channel's destinations, naming only what moves: a new key, another server, which stream it sends, on or off. A key left out is kept."},
     {"name": "channel.get", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/channels/{id}"), "summary": 'One channel.'},
-    {"name": "channel.key.add", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/channels/{id}/key/add"), "summary": 'Make another key for a channel, to give to one more person or encoder. The key is in this answer and never again.'},
+    {"name": "channel.key.add", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/channels/{id}/key/add"), "summary": 'Make another key for a channel, to give to one more person or encoder. The key is in this answer, and channel.key.reveal reads it again later.'},
     {"name": "channel.key.remove", "scope": "admin", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/channels/{id}/key/remove"), "summary": 'Take one key back. A publisher on air with it is cut off and the next one is turned away; the other keys are untouched.'},
+    {"name": "channel.key.reveal", "scope": "admin", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/channels/{id}/key/reveal"), "summary": 'Read one key of a channel back, to give it to an encoder again. Admin only; a list shows only the last four characters. Each read is logged with who asked, never with the key.'},
     {"name": "channel.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/channels"), "summary": 'Every RTMP channel with its keys (as hints), the address to publish to, and what is live on it, beside the port they all share.'},
     {"name": "channel.remove", "scope": "admin", "mutating": True, "destructive": True, "rest": ("DELETE", "/api/v1/channels/{id}"), "summary": 'Remove a channel and forget its keys. Sources it made that no scene holds go with it.'},
     {"name": "channel.set", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/channels/{id}/set"), "summary": 'Rename a channel, switch it on or off, or change its application name, whether its streams become sources, or how its key is given. Only what is named moves.'},
@@ -2325,7 +2337,7 @@ class GeneratedMethods:
         auto_source: Optional[bool] = None,
         key_mode: Optional[Union[KeyMode, None]] = None,
     ) -> ChannelAdded:
-        """Make a channel and its first key. The key is in this answer and never again."""
+        """Make a channel and its first key, which is in this answer. channel.key.reveal reads it again later."""
         params: Dict[str, Any] = {}
         params["name"] = name
         if app is not None:
@@ -2416,7 +2428,7 @@ class GeneratedMethods:
         *,
         label: Optional[str] = None,
     ) -> KeyAdded:
-        """Make another key for a channel, to give to one more person or encoder. The key is in this answer and never again."""
+        """Make another key for a channel, to give to one more person or encoder. The key is in this answer, and channel.key.reveal reads it again later."""
         params: Dict[str, Any] = {}
         params["id"] = id
         if label is not None:
@@ -2433,6 +2445,17 @@ class GeneratedMethods:
         params["id"] = id
         params["key"] = key
         return await self._call("channel.key.remove", params)
+
+    async def channel_key_reveal(
+        self,
+        id: str,
+        key: str,
+    ) -> KeyRevealed:
+        """Read one key of a channel back, to give it to an encoder again. Admin only; a list shows only the last four characters. Each read is logged with who asked, never with the key."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        params["key"] = key
+        return await self._call("channel.key.reveal", params)
 
     async def channel_list(
         self,

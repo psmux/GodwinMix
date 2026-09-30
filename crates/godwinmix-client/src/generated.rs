@@ -469,7 +469,7 @@ pub struct Channel {
     /// A slug, and never changes once the channel exists.
     pub id: String,
     pub key_mode: KeyMode,
-    /// The keys, write only: a hint of each and never the key.
+    /// The keys as hints, never the key itself: a read token sees only these.
     pub keys: Vec<ChannelKey>,
     /// What a person calls it.
     pub name: String,
@@ -526,6 +526,14 @@ pub struct ChannelKeyAddRequest {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ChannelKeyRemoveRequest {
+    pub id: String,
+    pub key: String,
+}
+
+/// `channel.key.reveal`: one key of one channel.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ChannelKeyRevealRequest {
     pub id: String,
     pub key: String,
 }
@@ -1462,6 +1470,14 @@ pub type KeyMode = String;
 /// The values api_level 1 knows for [`KeyMode`].
 pub const KEY_MODE_VALUES: &[&str] = &["query", "stream"];
 
+/// What `channel.key.reveal` answers: the key itself, and nothing a list
+/// would carry.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct KeyRevealed {
+    pub secret: String,
+}
+
 /// A scene's geometry, for copying onto another one.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -1738,13 +1754,14 @@ pub struct NameRequest {
     pub name: String,
 }
 
-/// A key as it is made: the only time its secret is ever sent.
+/// A key as it is made, with its secret. Afterwards only an admin gets the
+/// secret again, one key at a time, from `channel.key.reveal`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct NewKey {
     pub id: String,
     pub label: String,
-    /// Shown once. Nothing reads it back.
+    /// The key. A list never carries it; `channel.key.reveal` reads it back.
     pub secret: String,
 }
 
@@ -3225,17 +3242,18 @@ pub struct MethodInfo {
     pub rest: Option<(&'static str, &'static str)>,
 }
 
-pub const METHODS: [MethodInfo; 143] = [
+pub const METHODS: [MethodInfo; 144] = [
     MethodInfo { name: "adbreak.end", summary: "Cut a running ad short, or disarm one that is scheduled.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/end")) },
     MethodInfo { name: "adbreak.start", summary: "Interrupt the programme with a clip, then rejoin live when it ends.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/start")) },
     MethodInfo { name: "agent.state", summary: "The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/agent/state")) },
-    MethodInfo { name: "channel.add", summary: "Make a channel and its first key. The key is in this answer and never again.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/channels")) },
+    MethodInfo { name: "channel.add", summary: "Make a channel and its first key, which is in this answer. channel.key.reveal reads it again later.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/channels")) },
     MethodInfo { name: "channel.destination.add", summary: "Send a channel's stream on to YouTube, Facebook, Twitch, an RTMP server or an SRT receiver as it arrives. Nothing is decoded or encoded. The key is write only.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/channels/{id}/destination/add")) },
     MethodInfo { name: "channel.destination.remove", summary: "Stop sending a channel's stream to one destination and forget it. The publisher and the other destinations are not touched.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/channels/{id}/destination/remove")) },
     MethodInfo { name: "channel.destination.set", summary: "Change one of a channel's destinations, naming only what moves: a new key, another server, which stream it sends, on or off. A key left out is kept.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/channels/{id}/destination")) },
     MethodInfo { name: "channel.get", summary: "One channel.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/channels/{id}")) },
-    MethodInfo { name: "channel.key.add", summary: "Make another key for a channel, to give to one more person or encoder. The key is in this answer and never again.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/channels/{id}/key/add")) },
+    MethodInfo { name: "channel.key.add", summary: "Make another key for a channel, to give to one more person or encoder. The key is in this answer, and channel.key.reveal reads it again later.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/channels/{id}/key/add")) },
     MethodInfo { name: "channel.key.remove", summary: "Take one key back. A publisher on air with it is cut off and the next one is turned away; the other keys are untouched.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/channels/{id}/key/remove")) },
+    MethodInfo { name: "channel.key.reveal", summary: "Read one key of a channel back, to give it to an encoder again. Admin only; a list shows only the last four characters. Each read is logged with who asked, never with the key.", scope: "admin", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/channels/{id}/key/reveal")) },
     MethodInfo { name: "channel.list", summary: "Every RTMP channel with its keys (as hints), the address to publish to, and what is live on it, beside the port they all share.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/channels")) },
     MethodInfo { name: "channel.remove", summary: "Remove a channel and forget its keys. Sources it made that no scene holds go with it.", scope: "admin", mutating: true, destructive: true, rest: Some(("DELETE", "/api/v1/channels/{id}")) },
     MethodInfo { name: "channel.set", summary: "Rename a channel, switch it on or off, or change its application name, whether its streams become sources, or how its key is given. Only what is named moves.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/channels/{id}/set")) },
@@ -3615,7 +3633,7 @@ impl Client {
         self.call("agent.state", params).await
     }
 
-    /// Make a channel and its first key. The key is in this answer and never again.
+    /// Make a channel and its first key, which is in this answer. channel.key.reveal reads it again later.
     pub async fn channel_add(&self, params: &ChannelAddRequest) -> Result<ChannelAdded> {
         self.call("channel.add", params).await
     }
@@ -3640,7 +3658,7 @@ impl Client {
         self.call("channel.get", params).await
     }
 
-    /// Make another key for a channel, to give to one more person or encoder. The key is in this answer and never again.
+    /// Make another key for a channel, to give to one more person or encoder. The key is in this answer, and channel.key.reveal reads it again later.
     pub async fn channel_key_add(&self, params: &ChannelKeyAddRequest) -> Result<KeyAdded> {
         self.call("channel.key.add", params).await
     }
@@ -3648,6 +3666,11 @@ impl Client {
     /// Take one key back. A publisher on air with it is cut off and the next one is turned away; the other keys are untouched.
     pub async fn channel_key_remove(&self, params: &ChannelKeyRemoveRequest) -> Result<Channel> {
         self.call("channel.key.remove", params).await
+    }
+
+    /// Read one key of a channel back, to give it to an encoder again. Admin only; a list shows only the last four characters. Each read is logged with who asked, never with the key.
+    pub async fn channel_key_reveal(&self, params: &ChannelKeyRevealRequest) -> Result<KeyRevealed> {
+        self.call("channel.key.reveal", params).await
     }
 
     /// Every RTMP channel with its keys (as hints), the address to publish to, and what is live on it, beside the port they all share.
