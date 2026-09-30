@@ -11,7 +11,7 @@ use crate::container::video_slug;
 use crate::error::{NoEncoder, PlanError, Skip};
 use crate::graph::{Node, NodeKind, Track};
 use crate::ids::{encode_id, scale_id, track_slug};
-use crate::model::{device_of, CostModel, CPU};
+use crate::model::{device_of, AudioWork, CostModel, CPU};
 use crate::nearest::nearest;
 use crate::plan::Resolved;
 
@@ -25,7 +25,13 @@ pub struct Builder<'m> {
 
 impl<'m> Builder<'m> {
     pub fn new(model: &'m dyn CostModel, encoders: Vec<EncoderSlot>) -> Self {
-        Builder { model, encoders, nodes: Vec::new(), index: HashMap::new(), used: Used::new() }
+        Builder {
+            model,
+            encoders,
+            nodes: Vec::new(),
+            index: HashMap::new(),
+            used: Used::new(),
+        }
     }
 
     /// Adds `request` to an existing node's `serves`. False when there is no
@@ -42,10 +48,24 @@ impl<'m> Builder<'m> {
     }
 
     /// Adds a node doing `kind` for `request` on the CPU, unless one exists.
-    pub fn cpu(&mut self, id: String, request: &str, inputs: Vec<String>, work: impl FnOnce() -> (NodeKind, Cost)) -> String {
+    pub fn cpu(
+        &mut self,
+        id: String,
+        request: &str,
+        inputs: Vec<String>,
+        work: impl FnOnce() -> (NodeKind, Cost),
+    ) -> String {
         if !self.share(&id, request) {
             let (kind, cost) = work();
-            self.push(Node { id: id.clone(), kind, inputs, serves: vec![request.into()], device: CPU.into(), cost, reason: None });
+            self.push(Node {
+                id: id.clone(),
+                kind,
+                inputs,
+                serves: vec![request.into()],
+                device: CPU.into(),
+                cost,
+                reason: None,
+            });
         }
         id
     }
@@ -57,7 +77,9 @@ impl<'m> Builder<'m> {
 
     pub fn source(&mut self, r: &Resolved) -> String {
         let source = r.source.to_string();
-        self.cpu(format!("source:{source}"), r.id(), Vec::new(), || (NodeKind::Source { source }, Cost::default()))
+        self.cpu(format!("source:{source}"), r.id(), Vec::new(), || {
+            (NodeKind::Source { source }, Cost::default())
+        })
     }
 
     /// The source's one decoder for a track, or the source itself when its
@@ -72,8 +94,11 @@ impl<'m> Builder<'m> {
         let model = self.model;
         let info = r.info;
         self.cpu(format!("decode:{source}:{tag}"), r.id(), vec![src], || {
-            let cost = match (track, info.video) {
-                (Track::Video, Some(v)) => model.decode_cost(&v),
+            let cost = match (track, info.video, info.audio) {
+                (Track::Video, Some(v), _) => model.decode_cost(&v),
+                (Track::Audio, _, Some(a)) => {
+                    model.audio_cost(&a, AudioWork::Decode).unwrap_or_default()
+                }
                 _ => Cost::default(),
             };
             (NodeKind::Decode { source, track }, cost)
@@ -84,11 +109,18 @@ impl<'m> Builder<'m> {
         let src = self.source(r);
         let source = r.source.to_string();
         let id = format!("copy:{source}:{}", track_slug(track));
-        self.cpu(id, r.id(), vec![src], || (NodeKind::Copy { source, track }, Cost::default()))
+        self.cpu(id, r.id(), vec![src], || {
+            (NodeKind::Copy { source, track }, Cost::default())
+        })
     }
 
     /// Decode, scale when the size or rate differs, and encode, each shared.
-    pub fn encoded(&mut self, r: &Resolved, target: &VideoShape, src: &VideoShape) -> Result<String, PlanError> {
+    pub fn encoded(
+        &mut self,
+        r: &Resolved,
+        target: &VideoShape,
+        src: &VideoShape,
+    ) -> Result<String, PlanError> {
         let mut upstream = self.decoded(r, Track::Video);
         if (target.width, target.height, target.fps) != (src.width, src.height, src.fps) {
             let source = r.source.to_string();
@@ -96,7 +128,15 @@ impl<'m> Builder<'m> {
             let id = scale_id(&source, target);
             let model = self.model;
             upstream = self.cpu(id, r.id(), vec![upstream], || {
-                (NodeKind::Scale { source, width, height, fps }, model.scale_cost(src, target))
+                (
+                    NodeKind::Scale {
+                        source,
+                        width,
+                        height,
+                        fps,
+                    },
+                    model.scale_cost(src, target),
+                )
             });
         }
         let id = encode_id(r.source, target);
@@ -109,15 +149,33 @@ impl<'m> Builder<'m> {
         };
         hold(&mut self.used, &choice.encoder, &choice.cost);
         let device = device_of(&choice.encoder).to_string();
-        let kind = NodeKind::Encode { source: r.source.into(), shape: *target, encoder: choice.encoder };
+        let kind = NodeKind::Encode {
+            source: r.source.into(),
+            shape: *target,
+            encoder: choice.encoder,
+        };
         let reason = Some(choice.reason);
         let serves = vec![r.id().to_string()];
-        self.push(Node { id: id.clone(), kind, inputs: vec![upstream], serves, device, cost: choice.cost, reason });
+        self.push(Node {
+            id: id.clone(),
+            kind,
+            inputs: vec![upstream],
+            serves,
+            device,
+            cost: choice.cost,
+            reason,
+        });
         Ok(id)
     }
 
     fn no_encoder(&self, r: &Resolved, target: &VideoShape, tried: Vec<Skip>) -> PlanError {
-        let found = nearest(self.model, &self.encoders, target, r.request.container, &self.used);
+        let found = nearest(
+            self.model,
+            &self.encoders,
+            target,
+            r.request.container,
+            &self.used,
+        );
         PlanError::NoEncoder(Box::new(NoEncoder {
             request: r.id().into(),
             codec: video_slug(target.codec).into(),

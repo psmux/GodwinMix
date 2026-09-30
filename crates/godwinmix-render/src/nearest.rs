@@ -21,7 +21,12 @@ pub fn nearest(
     used: &Used,
 ) -> Option<Suggestion> {
     let mut codecs = vec![want.codec];
-    codecs.extend(video_codecs(container).iter().copied().filter(|c| *c != want.codec));
+    codecs.extend(
+        video_codecs(container)
+            .iter()
+            .copied()
+            .filter(|c| *c != want.codec),
+    );
     for codec in codecs {
         let base = VideoShape { codec, ..*want };
         for shape in steps(&base) {
@@ -38,13 +43,24 @@ pub fn nearest(
 fn steps(want: &VideoShape) -> Vec<VideoShape> {
     let mut rates = vec![want.fps];
     if want.fps.as_f64() > 30.5 {
-        rates.push(Fps { num: want.fps.num, den: want.fps.den.max(1) * 2 });
+        rates.push(Fps {
+            num: want.fps.num,
+            den: want.fps.den.max(1) * 2,
+        });
     }
-    let mut out: Vec<VideoShape> = rates.iter().map(|fps| VideoShape { fps: *fps, ..*want }).collect();
+    let mut out: Vec<VideoShape> = rates
+        .iter()
+        .map(|fps| VideoShape { fps: *fps, ..*want })
+        .collect();
     for h in HEIGHTS.iter().copied().filter(|h| *h < want.height) {
         let (width, height) = size(None, Some(h), want);
         for fps in &rates {
-            out.push(VideoShape { width, height, fps: *fps, ..*want });
+            out.push(VideoShape {
+                width,
+                height,
+                fps: *fps,
+                ..*want
+            });
         }
     }
     out
@@ -57,6 +73,10 @@ fn suggest(shape: &VideoShape, encoder: &str) -> Suggestion {
         height: shape.height,
         fps: shape.fps,
         encoder: encoder.into(),
-        text: format!("{} {} with {encoder}", video_name(shape.codec), shape_text(shape)),
+        text: format!(
+            "{} {} with {encoder}",
+            video_name(shape.codec),
+            shape_text(shape)
+        ),
     }
 }

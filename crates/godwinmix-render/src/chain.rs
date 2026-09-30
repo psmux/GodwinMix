@@ -27,14 +27,29 @@ pub fn build(b: &mut Builder, r: &Resolved, keyframe_ms: u32) -> Result<(), Plan
     let request = r.id().to_string();
     let container = r.request.container;
     let cost = b.model.mux_cost(container, egress);
-    let kind = NodeKind::Mux { request: request.clone(), container };
+    let kind = NodeKind::Mux {
+        request: request.clone(),
+        container,
+    };
     let id = format!("mux:{request}");
     let reason = Some(reason(r));
-    b.push(Node { id, kind, inputs, serves: vec![request], device: CPU.into(), cost, reason });
+    b.push(Node {
+        id,
+        kind,
+        inputs,
+        serves: vec![request],
+        device: CPU.into(),
+        cost,
+        reason,
+    });
     Ok(())
 }
 
-fn video(b: &mut Builder, r: &Resolved, keyframe_ms: u32) -> Result<Option<(String, u32)>, PlanError> {
+fn video(
+    b: &mut Builder,
+    r: &Resolved,
+    keyframe_ms: u32,
+) -> Result<Option<(String, u32)>, PlanError> {
     let Some(src) = r.info.video else {
         return Ok(None);
     };
@@ -42,7 +57,10 @@ fn video(b: &mut Builder, r: &Resolved, keyframe_ms: u32) -> Result<Option<(Stri
         VideoDecision::None => Ok(None),
         VideoDecision::Copy => Ok(Some((b.copied(r, Track::Video), src.bitrate_kbps))),
         VideoDecision::Encode { target, .. } => {
-            let target = VideoShape { keyframe_ms, ..*target };
+            let target = VideoShape {
+                keyframe_ms,
+                ..*target
+            };
             Ok(Some((b.encoded(r, &target, &src)?, target.bitrate_kbps)))
         }
     }
@@ -68,12 +86,29 @@ fn audio(b: &mut Builder, r: &Resolved) -> Result<Option<(String, u32)>, PlanErr
         let id = aconvert_id(&source, &target);
         let s = source.clone();
         upstream = b.cpu(id, r.id(), vec![upstream], || {
-            let cost = model.audio_cost(&target, AudioWork::Convert).unwrap_or_default();
-            (NodeKind::AudioConvert { source: s, channels, sample_rate }, cost)
+            let cost = model
+                .audio_cost(&target, AudioWork::Convert)
+                .unwrap_or_default();
+            (
+                NodeKind::AudioConvert {
+                    source: s,
+                    channels,
+                    sample_rate,
+                },
+                cost,
+            )
         });
     }
     let id = aencode_id(&source, &target);
-    let id = b.cpu(id, r.id(), vec![upstream], || (NodeKind::AudioEncode { source, shape: target }, cost));
+    let id = b.cpu(id, r.id(), vec![upstream], || {
+        (
+            NodeKind::AudioEncode {
+                source,
+                shape: target,
+            },
+            cost,
+        )
+    });
     Ok(Some((id, target.bitrate_kbps)))
 }
 
@@ -82,11 +117,18 @@ fn no_audio_encoder(b: &Builder, r: &Resolved, target: &AudioShape) -> PlanError
     let nearest = audio_codecs(container)
         .iter()
         .find(|c| {
-            let alt = AudioShape { codec: **c, ..*target };
+            let alt = AudioShape {
+                codec: **c,
+                ..*target
+            };
             b.model.audio_cost(&alt, AudioWork::Encode).is_some()
         })
         .map(|c| audio_name(*c).to_string());
-    PlanError::NoAudioEncoder { request: r.id().into(), codec: audio_name(target.codec).into(), nearest }
+    PlanError::NoAudioEncoder {
+        request: r.id().into(),
+        codec: audio_name(target.codec).into(),
+        nearest,
+    }
 }
 
 /// The sentence on a Mux node: copied, or what made it an encode.
@@ -98,7 +140,13 @@ fn reason(r: &Resolved) -> Reason {
         (VideoDecision::None, _) => (true, "the source's sound goes out as it is"),
     };
     if copied {
-        return Reason { code: ReasonCode::Copied, text: format!("copied: {why}") };
+        return Reason {
+            code: ReasonCode::Copied,
+            text: format!("copied: {why}"),
+        };
     }
-    Reason { code: ReasonCode::Transcoded, text: format!("encoded because {why}") }
+    Reason {
+        code: ReasonCode::Transcoded,
+        text: format!("encoded because {why}"),
+    }
 }
