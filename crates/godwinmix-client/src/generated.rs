@@ -72,6 +72,11 @@ pub struct AddDestinationRequest {
     pub label: Option<String>,
     /// youtube, facebook, twitch, custom or srt.
     pub platform: String,
+    /// Convert the stream before sending it: `{"preset": "youtube-720p30"}`
+    /// or a rendition request written out. Left out, or one the stream
+    /// already matches, the stream is sent as it arrives.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rendition: Option<RenditionChoice>,
     /// The ingest address. Left out, the platform's own; custom and srt need
     /// one.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -326,6 +331,10 @@ pub type Audio = String;
 /// The values api_level 1 knows for [`Audio`].
 pub const AUDIO_VALUES: &[&str] = &["follow", "always", "never"];
 
+pub type AudioCodec = String;
+/// The values api_level 1 knows for [`AudioCodec`].
+pub const AUDIO_CODEC_VALUES: &[&str] = &["aac", "opus", "mp3", "ac3", "pcm", "other"];
+
 /// `source.audio.set` takes an id as well as the levels: the id comes off the
 /// path on REST and out of the params on `/rpc`, and both land in one object.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -348,6 +357,31 @@ pub struct AudioSetParams {
     /// Gain on a superimposed page's own sound.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub page: Option<f64>,
+}
+
+/// A sound as it is.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AudioShape {
+    /// 0 when unknown.
+    pub bitrate_kbps: u32,
+    pub channels: u8,
+    pub codec: AudioCodec,
+    pub sample_rate: u32,
+}
+
+/// The audio an output wants. Every field left out is taken from the source.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AudioWant {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bitrate_kbps: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub channels: Option<u8>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub codec: Option<AudioCodec>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sample_rate: Option<u32>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -769,6 +803,12 @@ pub struct ConfigSetResult {
     pub unchanged: Vec<String>,
 }
 
+/// How the bytes leave. Decides which codecs are allowed: FLV carries H.264
+/// (and HEVC and AV1 in enhanced RTMP), WebRTC wants VP8, VP9, H.264 or AV1.
+pub type Container = String;
+/// The values api_level 1 knows for [`Container`].
+pub const CONTAINER_VALUES: &[&str] = &["flv", "mpeg-ts", "mp4-fragmented", "mkv", "hls", "ll-hls", "dash", "rtp", "webrtc"];
+
 pub type ConversionPhase = String;
 /// The values api_level 1 knows for [`ConversionPhase`].
 pub const CONVERSION_PHASE_VALUES: &[&str] = &["running", "done", "failed"];
@@ -826,6 +866,23 @@ pub struct CoreInfo {
     pub version: String,
 }
 
+/// What running one piece of work costs, in units the governor adds up.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Cost {
+    /// Thousandths of one CPU core. 1000 is one whole core.
+    pub cpu_millicores: u32,
+    /// Share of one hardware device, in thousandths of what it can do, when
+    /// the work runs on one.
+    pub device_millis: u32,
+    /// Hardware encoder sessions held (consumer NVIDIA cards cap these).
+    pub device_sessions: u32,
+    /// Bytes per second out of the machine, in kbit/s.
+    pub egress_kbps: u32,
+    /// Resident memory the work adds, in MiB.
+    pub memory_mib: u32,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct CreateFromRequest {
@@ -866,10 +923,19 @@ pub struct Destination {
     /// What is going out, over the last second.
     pub kbps: u32,
     pub label: String,
+    /// What the plan gave it, while its stream is live.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub plan: Option<DestinationPlan>,
     /// A platform id from the table: youtube, facebook, twitch, custom, srt.
     pub platform: String,
     /// Connections lost and made again since it was switched on.
     pub reconnects: u32,
+    /// Why it is not sending what it asked for, and what would fit.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub refused: Option<DestinationRefusal>,
+    /// What it asked to be converted to. Absent: sent as it arrives.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rendition: Option<RenditionChoice>,
     /// Milliseconds since `state` last changed.
     pub since_ms: u64,
     pub state: DestinationState,
@@ -877,6 +943,54 @@ pub struct Destination {
     pub stream: String,
     /// The scheme, host and port, and nothing that could carry a key.
     pub uri_host: String,
+}
+
+/// Copied as it arrives, or converted.
+pub type DestinationMode = String;
+/// The values api_level 1 knows for [`DestinationMode`].
+pub const DESTINATION_MODE_VALUES: &[&str] = &["copy", "transcode"];
+
+/// The plan's answer for one destination.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct DestinationPlan {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub audio: Option<AudioShape>,
+    /// The video encoder, `h264-videotoolbox`, and why that one. Absent for a
+    /// copy.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub encoder: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub encoder_reason: Option<String>,
+    pub mode: DestinationMode,
+    /// The plan's nodes this destination reads, so a page can show which
+    /// work it shares with the channel's other destinations.
+    pub nodes: Vec<String>,
+    /// One sentence: "copied: the source's video goes out as it is", "encoded
+    /// because the source is 1920x1080 and this output wants 1280x720".
+    pub reason: String,
+    /// The stream it was planned against, when the destination names `*`.
+    pub stream: String,
+    /// What goes out.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub video: Option<VideoShape>,
+}
+
+/// Why a destination that asked for a rendition is not sending, and what
+/// would. `error` on the destination carries the same sentence.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct DestinationRefusal {
+    /// Renditions that would fit now, largest first.
+    pub advice: Vec<RenditionAdvice>,
+    /// `governor` (the machine has no room), `plan` (nothing here can make
+    /// it), `shed` (it ran and was stopped to keep what is on air).
+    pub code: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub have: Option<Cost>,
+    pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub need: Option<Cost>,
 }
 
 /// Where a destination has got to.
@@ -1173,6 +1287,14 @@ pub struct Found {
     pub name: String,
     /// `node` or `core`.
     pub role: String,
+}
+
+/// A frame rate as a fraction, so 29.97 is exact.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Fps {
+    pub den: u32,
+    pub num: u32,
 }
 
 /// The rectangle an item is fitted into.
@@ -1543,6 +1665,13 @@ pub const KEY_MODE_VALUES: &[&str] = &["query", "stream"];
 #[serde(default)]
 pub struct KeyRevealed {
     pub secret: String,
+}
+
+/// A custom ladder.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct LadderRef {
+    pub ladder: Vec<RenditionRequest>,
 }
 
 /// A scene's geometry, for copying onto another one.
@@ -2242,6 +2371,13 @@ pub struct PluginUpdated {
     pub to: String,
 }
 
+/// A preset named by id.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PresetRef {
+    pub preset: String,
+}
+
 /// What `preview.close` answers with.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -2380,6 +2516,46 @@ pub struct RenameSceneRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     pub scene: String,
+}
+
+/// One thing a refused rendition could be instead, as a button.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct RenditionAdvice {
+    /// Send this as the output's `rendition` to take the advice.
+    pub request: RenditionRequest,
+    /// "720p30 H.264 on h264-videotoolbox fits".
+    pub text: String,
+}
+
+/// What an output asks for: a whole request, or a preset by id.
+///
+/// A request's `id` is replaced by the output's own id (a ladder's rungs get
+/// `<output>-<rung>`), so a client may send any slug there.
+pub type RenditionChoice = Value;
+
+/// What one output wants. A field left out means "whatever the source has",
+/// so an empty request is a plain copy.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct RenditionRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub audio: Option<AudioWant>,
+    /// How the bytes are wrapped on the way out. FLV when left out.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub container: Option<Container>,
+    /// Slug, unique within the show or channel that asks. Left out, the
+    /// output's own id is used.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    /// Drop the audio altogether.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub no_audio: Option<bool>,
+    /// Drop the video altogether (an audio only stream).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub no_video: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub video: Option<VideoWant>,
 }
 
 /// `scene.item.reorder`.
@@ -2621,6 +2797,10 @@ pub struct SetDestinationRequest {
     pub key: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,
+    /// A new rendition. Left out keeps the one it has; `null` or
+    /// `{"preset": "copy"}` goes back to sending the stream as it arrives.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rendition: Option<RenditionChoice>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub server: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -3175,6 +3355,49 @@ pub struct Vec2 {
     pub x: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub y: Option<f64>,
+}
+
+pub type VideoCodec = String;
+/// The values api_level 1 knows for [`VideoCodec`].
+pub const VIDEO_CODEC_VALUES: &[&str] = &["other", "h264", "h265", "av1", "vp8", "vp9", "mpeg2", "prores"];
+
+/// A picture as it is: codec, size, rate, bitrate.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct VideoShape {
+    /// Measured or configured. 0 when unknown (a raw source).
+    pub bitrate_kbps: u32,
+    pub codec: VideoCodec,
+    pub fps: Fps,
+    pub height: u32,
+    /// 0 when unknown.
+    pub keyframe_ms: u32,
+    pub width: u32,
+}
+
+/// The video an output wants. Every field left out is taken from the source.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct VideoWant {
+    /// Target bitrate. A copy is kept when the source is within
+    /// `bitrate_tolerance` of it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bitrate_kbps: Option<u32>,
+    /// Fraction either way a source's bitrate may differ and still be copied.
+    /// 0.25 when left out.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bitrate_tolerance: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub codec: Option<VideoCodec>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fps: Option<Fps>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub height: Option<u32>,
+    /// Keyframe interval. Renditions in one ladder share it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub keyframe_ms: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub width: Option<u32>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]

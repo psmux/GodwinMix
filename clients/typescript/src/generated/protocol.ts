@@ -36,6 +36,7 @@ export interface AddDestinationRequest {
   key?: string | null;
   label?: string | null;
   platform: string;
+  rendition?: RenditionChoice | null;
   server?: string | null;
   stream?: string | null;
 }
@@ -167,6 +168,8 @@ export interface Asset {
  */
 export type Audio = "follow" | "always" | "never";
 
+export type AudioCodec = "aac" | "opus" | "mp3" | "ac3" | "pcm" | "other";
+
 /**
  * `source.audio.set` takes an id as well as the levels: the id comes off the
  * path on REST and out of the params on `/rpc`, and both land in one object.
@@ -177,6 +180,22 @@ export interface AudioSetParams {
   media?: Array<number | null>;
   muted?: boolean | null;
   page?: number | null;
+}
+
+/** A sound as it is. */
+export interface AudioShape {
+  bitrate_kbps: number;
+  channels: number;
+  codec: AudioCodec;
+  sample_rate: number;
+}
+
+/** The audio an output wants. Every field left out is taken from the source. */
+export interface AudioWant {
+  bitrate_kbps?: number | null;
+  channels?: number | null;
+  codec?: AudioCodec | null;
+  sample_rate?: number | null;
 }
 
 export interface BackendInfo {
@@ -428,6 +447,12 @@ export interface ConfigSetResult {
   unchanged: string[];
 }
 
+/**
+ * How the bytes leave. Decides which codecs are allowed: FLV carries H.264
+ * (and HEVC and AV1 in enhanced RTMP), WebRTC wants VP8, VP9, H.264 or AV1.
+ */
+export type Container = "flv" | "mpeg-ts" | "mp4-fragmented" | "mkv" | "hls" | "ll-hls" | "dash" | "rtp" | "webrtc";
+
 export type ConversionPhase = "running" | "done" | "failed";
 
 /** One conversion, in flight or remembered after it finished. */
@@ -452,6 +477,15 @@ export interface CoreInfo {
   token?: TokenInfo | null;
   ui?: UiDefaults | null;
   version: string;
+}
+
+/** What running one piece of work costs, in units the governor adds up. */
+export interface Cost {
+  cpu_millicores: number;
+  device_millis: number;
+  device_sessions: number;
+  egress_kbps: number;
+  memory_mib: number;
 }
 
 export interface CreateFromRequest {
@@ -483,12 +517,42 @@ export interface Destination {
   id: string;
   kbps: number;
   label: string;
+  plan?: DestinationPlan | null;
   platform: string;
   reconnects: number;
+  refused?: DestinationRefusal | null;
+  rendition?: RenditionChoice | null;
   since_ms: number;
   state: DestinationState;
   stream: string;
   uri_host: string;
+}
+
+/** Copied as it arrives, or converted. */
+export type DestinationMode = "copy" | "transcode";
+
+/** The plan's answer for one destination. */
+export interface DestinationPlan {
+  audio?: AudioShape | null;
+  encoder?: string | null;
+  encoder_reason?: string | null;
+  mode: DestinationMode;
+  nodes: string[];
+  reason: string;
+  stream: string;
+  video?: VideoShape | null;
+}
+
+/**
+ * Why a destination that asked for a rendition is not sending, and what
+ * would. `error` on the destination carries the same sentence.
+ */
+export interface DestinationRefusal {
+  advice?: RenditionAdvice[];
+  code: string;
+  have?: Cost | null;
+  message: string;
+  need?: Cost | null;
 }
 
 /** Where a destination has got to. */
@@ -669,6 +733,12 @@ export interface Found {
   api: number;
   name: string;
   role: string;
+}
+
+/** A frame rate as a fraction, so 29.97 is exact. */
+export interface Fps {
+  den: number;
+  num: number;
 }
 
 /** The rectangle an item is fitted into. */
@@ -896,6 +966,11 @@ export type KeyMode = "query" | "stream";
  */
 export interface KeyRevealed {
   secret: string;
+}
+
+/** A custom ladder. */
+export interface LadderRef {
+  ladder: RenditionRequest[];
 }
 
 /** A scene's geometry, for copying onto another one. */
@@ -1304,6 +1379,11 @@ export interface PluginUpdated {
   to: string;
 }
 
+/** A preset named by id. */
+export interface PresetRef {
+  preset: string;
+}
+
 /** What `preview.close` answers with. */
 export interface PreviewClosed {
   closed: boolean;
@@ -1385,6 +1465,33 @@ export interface RenameSceneRequest {
   color?: string | null;
   name?: string | null;
   scene: string;
+}
+
+/** One thing a refused rendition could be instead, as a button. */
+export interface RenditionAdvice {
+  request: RenditionRequest;
+  text: string;
+}
+
+/**
+ * What an output asks for: a whole request, or a preset by id.
+ *
+ * A request's `id` is replaced by the output's own id (a ladder's rungs get
+ * `<output>-<rung>`), so a client may send any slug there.
+ */
+export type RenditionChoice = PresetRef | LadderRef | RenditionRequest;
+
+/**
+ * What one output wants. A field left out means "whatever the source has",
+ * so an empty request is a plain copy.
+ */
+export interface RenditionRequest {
+  audio?: AudioWant | null;
+  container?: Container;
+  id?: string;
+  no_audio?: boolean;
+  no_video?: boolean;
+  video?: VideoWant | null;
 }
 
 /** `scene.item.reorder`. */
@@ -1523,6 +1630,7 @@ export interface SetDestinationRequest {
   id: string;
   key?: string | null;
   label?: string | null;
+  rendition?: RenditionChoice | null;
   server?: string | null;
   stream?: string | null;
 }
@@ -1849,6 +1957,29 @@ export interface Validation {
 export interface Vec2 {
   x?: number;
   y?: number;
+}
+
+export type VideoCodec = "h264" | "h265" | "av1" | "vp8" | "vp9" | "mpeg2" | "prores" | "other";
+
+/** A picture as it is: codec, size, rate, bitrate. */
+export interface VideoShape {
+  bitrate_kbps: number;
+  codec: VideoCodec;
+  fps: Fps;
+  height: number;
+  keyframe_ms: number;
+  width: number;
+}
+
+/** The video an output wants. Every field left out is taken from the source. */
+export interface VideoWant {
+  bitrate_kbps?: number | null;
+  bitrate_tolerance?: number | null;
+  codec?: VideoCodec | null;
+  fps?: Fps | null;
+  height?: number | null;
+  keyframe_ms?: number | null;
+  width?: number | null;
 }
 
 export interface ProgramTookEvent {
