@@ -293,7 +293,7 @@ fn channels_for(
         ports,
         plugins.clone(),
         mixer.clone(),
-        scenes.clone(),
+        std::sync::Arc::new(crate::channels::target::Local { mixer: mixer.clone(), scenes: scenes.clone() }),
         methods::plugins::secrets(),
     )
 }

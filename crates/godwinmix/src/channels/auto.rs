@@ -10,8 +10,6 @@
 //! programme never sees it go.
 
 use godwinmix_core::config::SourceConfig;
-use godwinmix_core::mixer::{Command, RuntimeConfigs};
-use serde_json::Value;
 use tracing::{info, warn};
 
 use super::keys::slug;
@@ -21,45 +19,26 @@ use super::{Channels, Live, Record};
 const SOURCE_TYPE: &str = "ingest/rtmp";
 
 impl Channels {
-    fn configs(&self) -> Option<RuntimeConfigs> {
-        let (tx, rx) = tokio::sync::oneshot::channel();
-        self.mixer.send(Command::Configs(tx)).ok()?;
-        rx.blocking_recv().ok()
-    }
-
-    fn on_programme(&self) -> Option<String> {
-        let (tx, rx) = tokio::sync::oneshot::channel();
-        self.mixer.send(Command::Status(tx)).ok()?;
-        rx.blocking_recv().ok()?.program
-    }
-
     /// Does anything still want this source: a scene that places it, or the
     /// programme showing it bare?
     pub(super) fn held(&self, source: &str) -> bool {
-        if self.on_programme().as_deref() == Some(source) {
-            return true;
-        }
-        let doc = self.scenes.document();
-        let tree: Value = serde_json::from_str(&doc.to_json()).unwrap_or(Value::Null);
-        places(&tree, source)
+        self.target.holds(source)
     }
 
     /// Make a live stream a source, or find the one it already has.
     pub(super) fn adopt(&self, record: &Record, stream: &str, relay: &str) {
         let id = slug(&format!("{}-{}", record.app, stream));
-        let exists = self.configs().is_some_and(|c| c.sources.iter().any(|s| s.id == id));
+        let exists = self.target.has_source(&id).unwrap_or(false);
         if !exists {
             let mut cfg = SourceConfig::bare(&id, "");
             cfg.type_id = Some(SOURCE_TYPE.into());
             cfg.name = Some(format!("{} {stream}", record.name));
             cfg.params.insert("relay".into(), toml::Value::String(relay.to_string()));
             cfg.params.insert("stream".into(), toml::Value::String(format!("{}/{stream}", record.app)));
-            let (ack, told) = tokio::sync::oneshot::channel();
-            let sent = self.mixer.send(Command::AddSource(Box::new(cfg), Some(ack)));
-            match sent.ok().and_then(|_| told.blocking_recv().ok()) {
-                Some(Ok(())) => info!(source = %id, "a channel's stream became a source"),
-                other => {
-                    warn!(source = %id, ?other, "the mixer would not take a channel's stream as a source");
+            match self.target.add_source(cfg) {
+                Ok(()) => info!(source = %id, "a channel's stream became a source"),
+                Err(why) => {
+                    warn!(source = %id, %why, "the mixer would not take a channel's stream as a source");
                     return;
                 }
             }
@@ -92,11 +71,8 @@ impl Channels {
         if !ours || self.held(id) {
             return false;
         }
-        let (ack, told) = tokio::sync::oneshot::channel();
-        if self.mixer.send(Command::RemoveSource(id.to_string(), Some(ack))).is_ok() {
-            let _ = told.blocking_recv();
-            info!(source = %id, "a channel's stream left and its source went with it");
-        }
+        self.target.remove_source(id);
+        info!(source = %id, "a channel's stream left and its source went with it");
         for r in self.records.lock().iter_mut() {
             r.auto_sources.retain(|s| s != id);
         }
@@ -137,29 +113,5 @@ impl Channels {
                 declared_fps: None,
             });
         }
-    }
-}
-
-/// Is there a `{"source": id}` anywhere in the scene tree?
-fn places(tree: &Value, id: &str) -> bool {
-    match tree {
-        Value::Object(map) => {
-            map.get("source").and_then(Value::as_str) == Some(id) || map.values().any(|v| places(v, id))
-        }
-        Value::Array(items) => items.iter().any(|v| places(v, id)),
-        _ => false,
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use serde_json::json;
-
-    #[test]
-    fn a_source_is_found_however_deep_a_scene_places_it() {
-        let tree = json!({"scenes": [{"items": [{"children": [{"source": "church-main"}]}]}]});
-        assert!(places(&tree, "church-main"));
-        assert!(!places(&tree, "church-cam2"));
     }
 }
