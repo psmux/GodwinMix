@@ -11,13 +11,12 @@ This page takes about five minutes.
 
 ## Before you start
 
-The plugin is first party. If it is not installed, the Add a source picker
-shows an Install button on the UDP tile; press it. From a checkout it is
-`gmx plugin add ./plugins/udp`, which builds it too.
+The `udp` plugin ships with GodwinMix. Its tile appears under Streams and
+feeds, and its output in Add an output, once it is installed on the mixer.
 
 ## Receive a multicast feed
 
-1. Press **Add a source**, open **Streams and feeds**, and choose **UDP**.
+1. Press **Add a source**, open **Streams and feeds**, and choose **Udp**.
 2. Put the group in **Address** (`239.1.1.1`) and its port in **Port**
    (`5000`). Or paste the whole address into **Full address**, as VLC or the
    IRD's own settings write it: `udp://@239.1.1.1:5000`.
@@ -34,10 +33,9 @@ number and name. That line is how you find the program you want:
 program 1 (News) of 3: 1 (News), 2 (Sport), 3 (Film)
 ```
 
-To take Sport instead, open the source, set **Program** to `2`, and apply. The
-source reopens with the new program; the other two are dropped before the
-mixer sees them, so a 40 Mbit/s multiplex costs the decoder one program's
-worth, not three.
+To take Sport, set **Program** to `2` when you add the source. The other two
+programs are dropped before the mixer sees them, so a 40 Mbit/s multiplex
+costs the decoder one program's worth, not three.
 
 ### Things a real feed does, and what happens
 
@@ -48,15 +46,16 @@ worth, not three.
 | RTP around the TS (SMPTE 2022-2) | nothing; `rtp://` and bare TS are told apart by their first byte, so the scheme you type does not matter |
 | A packet lost on the network | a moment of damage in the picture, counted in the status. Never a stall: UDP has no retransmission, so nothing waits |
 | More than half a percent lost in a second | the source goes to degraded and an alert says how much |
-| The sender stops | the status says how long ago; the picture holds the last frame |
-| The sender starts again | the picture comes back by itself. Nothing to press |
+| The sender stops | the status says how long ago, and the mixer marks the source stalled. The port stays open |
+| The sender starts again | the source goes live again by itself, measured after a five second gap. Nothing to press |
 
 ### On a machine with more than one network
 
 Multicast is joined on one interface. Without a choice it is the one the
 default route uses, which on a machine with a separate media network is often
 the wrong one. Open **Advanced** and put the interface's name in **Network
-interface**: `en1` on a Mac, `eth1` or `enp3s0` on Linux.
+interface**: `en1` on a Mac, `eth1` or `enp3s0` on Linux. One of its addresses,
+such as `10.0.0.5`, works too.
 
 ### Only from one sender
 
@@ -76,12 +75,12 @@ the program they belong to.
 
 Leave **Address** at `0.0.0.0` and set the port. The sender points at this
 machine's address and that port. Two sources cannot share one unicast port;
-the second one says the port is taken, and by what.
+the second is refused, and says the port is taken.
 
 ## Send the programme
 
-1. Open **Outputs**, press **Add destination**, and choose **UDP or
-   multicast**.
+1. Open the command palette with the **⌘K** button at the top right, choose
+   **Add an output**, and choose **UDP or multicast**.
 2. Type where it goes: `udp://239.1.1.1:5000` for a group, or
    `udp://192.168.1.50:5000` for one receiver. Write `rtp://` instead for a
    receiver that wants RTP.
@@ -97,8 +96,8 @@ Under **Advanced**:
 | Setting | When to change it |
 |---|---|
 | TTL (8) | 1 keeps multicast on the local segment. Raise it only for receivers across a router that forwards multicast |
-| Network interface | on a machine with a separate media network |
-| Constant bitrate | for a modulator or a hardware decoder that needs a constant rate. Set it at least 10% above the programme's video and audio bitrate together. The stream is padded with null packets and sent evenly |
+| Network interface | on a machine with a separate media network, by name or by its address |
+| Constant bitrate | for a modulator or a hardware decoder that needs a constant rate. Set it at least 10% above the programme's video and audio bitrate together. The stream is padded with null packets, and the sending is capped a little above the rate so a frame leaves spread out rather than in one burst |
 | TS packets per datagram (7) | only when a receiver asks for fewer |
 | DSCP | when the network prioritises media by DiffServ class; 34 is common for video |
 
