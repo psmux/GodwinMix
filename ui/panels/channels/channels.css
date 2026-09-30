@@ -99,6 +99,7 @@
 .chn-connectbox[hidden] { display: none; }
 .chn-cbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
 .chn-cname { display: inline-flex; align-items: center; gap: 8px; }
+.chn-cname .chn-kicker { white-space: nowrap; }
 .chn-streamin { width: 150px; font-size: 13px !important; padding: 5px 8px !important; }
 .chn-cnote { font-size: 12px; }
 .chn-ckeys { display: flex; flex-direction: column; gap: 10px; }
@@ -261,8 +262,8 @@
 .chn-seg button + button { border-left: var(--border) solid var(--line); }
 .chn-seg button.on { background: var(--select-fill); color: var(--text); font-weight: 600; }
 .chn-once { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; font-size: 12.5px;
-  background: color-mix(in srgb, var(--warn) 11%, transparent); border: var(--border) solid color-mix(in srgb, var(--warn) 40%, transparent); }
-.chn-once svg { color: var(--warn); flex: none; }
+  background: var(--select-fill); border: var(--border) solid color-mix(in srgb, var(--accent) 35%, var(--line)); }
+.chn-once svg { color: var(--accent); flex: none; }
 .chn-qr { display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; font-size: 12px; }
 .chn-qrpic { width: 100%; background: #fff; padding: 10px; border-radius: 12px; box-shadow: var(--shadow); }
 .chn-qrpic svg { display: block; width: 100%; height: auto; }
