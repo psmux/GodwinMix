@@ -78,7 +78,7 @@ has switched on. The hub carries what FLV carries.
 | WHIP push | WebRTC | H.264 copy | Opus, from the programme's AAC | `whip/output` (plugin `whip`) | settings tests only |
 | NDI | NDI | raw | raw | `ndi/output` (plugin `ndi`) | needs the NDI runtime |
 | File | MP4 (fragmented), MKV | copy | copy | `record/output` (built in), `file-record/output` (plugin) | `crates/godwinmix-core/tests/recording*.rs`, `plugins/file-record/tests/records.rs` |
-| WHEP playback, served from the control port | WebRTC | | | `POST /whep/program` answers 501 "not wired yet" | |
+| WHEP playback, served from the control port (`/whep/<output>`) | WebRTC | copy of the programme or a rendition: H.264, and H.265, AV1, VP8, VP9 from a rendition | Opus, encoded once for every viewer | `whep/output` (built in) | `whep/tests.rs` against a real `webrtcbin` receiver; by hand with `whepsrc` and headless Chrome against the release core |
 | RTSP server, for decoders, NVRs and players that pull | RTP | | | nothing | |
 | RIST | RTP MPEG-TS | | | nothing | |
 | Icecast or SHOUTcast (audio only) | MP3, Ogg | | | nothing | |
