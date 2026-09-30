@@ -766,6 +766,7 @@ mod tests {
         reachable.extend(closure_of("client/transport-legacy.js"));
         reachable.extend(closure_of("client/schema-form.js"));
         reachable.extend(closure_of("shell/palette.js"));
+        reachable.extend(closure_of("shell/settings-dialog.js"));
         reachable.extend(closure_of("shell/dock-menu.js"));
         reachable.extend(closure_of("shell/picker.js"));
         reachable.extend(closure_of("panels/sources/chooser.js"));
@@ -785,7 +786,6 @@ mod tests {
         // dialogs after that.
         reachable.extend(closure_of("shell/menus.js"));
         reachable.extend(closure_of("shell/project-open.js"));
-        reachable.extend(closure_of("shell/settings-dialog.js"));
         reachable.extend(closure_of("panels/outputs/record-start.js"));
         // Renditions: each is fetched by an `import()` the first time it is
         // wanted, from the destination form, the Outputs panel or its rows.
