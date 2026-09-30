@@ -28,11 +28,11 @@ export const ICONS = {
 export const SOURCE_KINDS = [
   {
     id: "file",
-    provides: ["file/source"],
+    provides: ["file/source", "image/source"],
     title: "Video file",
     group: "Files and pages",
     icon: "file",
-    description: "A clip on this machine. Scrubs and loops.",
+    description: "A clip or a picture on this machine. Clips scrub and loop; pictures hold.",
     plugin: "built in",
     schema: {
       type: "object",
@@ -242,7 +242,7 @@ export const CATEGORIES = [
     icon: "file",
     media: true,
     kinds: ["file"],
-    provides: ["file/source"],
+    provides: ["file/source", "image/source"],
   },
   { id: "web", title: "Web pages", icon: "page", kinds: ["page"], provides: ["browser/source", "layered/source"] },
   {

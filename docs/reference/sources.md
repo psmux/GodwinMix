@@ -14,9 +14,11 @@ from the URL, so there is nothing to configure beyond the address:
 | `rtmp://host/live/key`, `rtmps://…` | RTMP, demuxed explicitly so the client can be chosen |
 | `https://host/stream.m3u8` | HLS |
 | `https://host/manifest.mpd` | DASH |
-| `rtsp://…`, `srt://…`, `udp://…`, `rtp://…` | continuous stream |
+| `rtsp://…`, `srt://…`, `rist://…`, `udp://…`, `rtp://…` | continuous stream |
 | `web+https://host/page`, `web://host/page` | the page rendered by a real Chromium, with its audio, see the browser sidecar |
 | `exec:<command line>` | whatever the process writes to stdout, including `tools/browser-source.sh` |
+| a path or URL ending `.png`, `.jpg`, `.jpeg`, `.bmp`, `.webp`, `.tif` | a still picture, held on screen (`image/source`) |
+| a numbered pattern, `/slides/f%04d.png` | the pictures played in order at `params.fps` (25), looping (`image/source`) |
 | a path, `file://…`, `https://host/clip.mp4` | file |
 
 The distinction that matters is continuous versus finite rather than the
