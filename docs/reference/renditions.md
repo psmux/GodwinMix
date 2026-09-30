@@ -6,9 +6,10 @@ output asks for one with a `RenditionRequest`; the planner in
 `crates/godwinmix-render` turns every request in a show into the smallest
 graph that serves them all.
 
-Nothing in the core calls the planner yet. Outputs still build their own
-encoders; wiring the plan into the core, and a page that shows it, is the
-next piece of work.
+The core plans every programme output that asks for a rendition and builds
+the plan in GStreamer (below, "In the core"). An output that asks for none
+reads the programme encoder exactly as before and costs nothing more.
+Channel destinations are planned by the same planner on the channel side.
 
 The shared types live in `crates/godwinmix-protocol/src/rendition/`. The
 planner, its errors and the plan it returns live in `godwinmix-render`.
@@ -218,6 +219,170 @@ calibration, scaled by pixel rate from 1080p30: x264 1500 millicores, x265
 taller than 4096; decode 250 to 500 millicores by codec. `software()` gives
 x264, x265, SVT-AV1, VP8 and VP9 with AAC and Opus; `with_hardware`,
 `with_room` and `without` shape it for a test.
+
+## On the wire
+
+### `output.add` and `output.set`
+
+Both take `rendition`, one of:
+
+| Shape | Means |
+|---|---|
+| `{"preset": "youtube-720p30"}` | a preset from `rendition.presets` |
+| `{"ladder": [RenditionRequest, ...]}` | a custom ABR ladder, top rung first, for an `hls/output` |
+| a `RenditionRequest` | one rendition, as the table above |
+| absent | the programme encoder, as every output always was |
+
+`output.set` with `"rendition": null` puts an output back on the programme
+encoder; leaving it out keeps what the output has. The `copy` preset means
+the same as absent for a programme output.
+
+A request's `id` is replaced by the output's id. A ladder's rungs are
+`<output>-<rung id>`, the rung id being the request's own `id` when it is a
+slug and its height (`480p`) otherwise, so `hls` with `abr-ladder-4` plans
+`hls-1080p`, `hls-720p`, `hls-480p` and `hls-360p`. `output.get` and
+`output.list` carry `rendition` back as it was sent, and `shed` while the
+governor has the output's rendition stopped.
+
+A plan the planner cannot make is refused with `-32602` and the planner's
+`data` (the error table above). A plan the governor will not admit is
+refused with `-32003` and:
+
+```json
+{
+  "need": {"cpu_millicores": 2700, "device_millis": 0, "device_sessions": 0, "memory_mib": 32, "egress_kbps": 0},
+  "have": {"cpu_millicores": 100, "device_millis": 0, "device_sessions": 0, "memory_mib": 30000, "egress_kbps": 4294967295},
+  "advice": [{"text": "720p30 H.264 on h264-videotoolbox fits", "request": {"id": "yt", "container": "flv", "video": {"codec": "h264", "width": 1280, "height": 720, "fps": {"num": 30, "den": 1}}}}]
+}
+```
+
+Each `advice.request` can be sent as the output's `rendition` as it is.
+Nothing is started by a refused call: the whole change is planned and
+admitted before any element is touched.
+
+### `rendition.presets {}`
+
+`{presets: [{id, title, group, request, ladder?, cost?, available, why?}]}`.
+Every built in preset, priced on this machine: `cost` is the whole preset
+(every rung, the scaling and the sound) as the governor would count it. One
+this machine cannot make has `available: false` and `why`.
+
+| Id | Group | What |
+|---|---|---|
+| `youtube-1080p30` | platform | FLV, H.264 1920x1080 30 fps 6000 kbit/s, AAC 128 kbit/s |
+| `youtube-720p30` | platform | the same at 1280x720, 3000 kbit/s |
+| `facebook-720p30` | platform | 1280x720 30 fps, 4000 kbit/s |
+| `twitch-1080p60` | platform | 1920x1080 60 fps, 6000 kbit/s |
+| `twitch-720p30` | platform | 1280x720 30 fps, 3000 kbit/s |
+| `audio-only-aac` | audio | no picture, AAC 128 kbit/s |
+| `abr-ladder-4` | ladder | HLS: 1080p 5000, 720p 2800, 480p 1400, 360p 800 kbit/s |
+| `abr-ladder-3` | ladder | HLS: 720p, 480p, 360p |
+| `copy` | copy | no conversion |
+
+Every platform and ladder preset asks for a keyframe every 2000 ms.
+
+### `rendition.plan {scope?}`
+
+`scope` is `programme` (the default) or `channel:<id>`. The answer:
+
+```json
+{"nodes": [{"id": "encode:programme:h264:1280x720p30:3000k:g2000", "kind": "encode",
+            "serves": ["yt", "fb"], "encoder": "h264-videotoolbox",
+            "reason": {"code": "hardware", "text": "h264-videotoolbox is a hardware H.264 encoder on videotoolbox"},
+            "cost": {"cpu_millicores": 49, "device_millis": 85, "device_sessions": 1, "memory_mib": 18, "egress_kbps": 0}}],
+ "totals": {"cpu_millicores": 310, "devices": {"videotoolbox": {"millis": 85, "sessions": 1}}, "egress_kbps": 6512}}
+```
+
+`serves` names outputs, each once, however many rungs of one ladder a node
+works for. `encoder` is the catalogue id. `shed` is on a node the governor
+has stopped, with why.
+
+### `governor.status {}`
+
+`{calibrated_at?, fingerprint?, calibrating, cpu: {cores, used_millicores,
+room_millicores}, devices: [{id, kind, used_millis, room_millis,
+sessions_used, sessions_max?}], egress_kbps, shed: [{what, why}]}`.
+`calibrated_at` is Unix seconds and absent before the first calibration.
+`room_millicores` is what could be admitted now, after the reserve.
+
+### `governor.calibrate {confirm?}`
+
+Admin scope. Measures this machine again, in the background, and answers
+`{started}` at once; `governor.status` says `calibrating` until it is done.
+While anything is on air it is refused with `-32001`, `data.on_air`, and a
+`retry` action whose `value` is `{"confirm": true}`: calibrating takes every
+core for a few seconds and can cost what is on air frames.
+
+### Events
+
+| Event | Payload | When |
+|---|---|---|
+| `event/rendition.plan` | `{scope, plan}` | an output with a rendition is added, changed or removed, or the governor stops or brings back an encoder |
+| `event/governor.shed` | `{what, why}` | something was stopped to keep what is on air whole |
+
+Each shed also raises an `event/alert` at warning with the same sentence,
+and coming back raises one at info.
+
+## In the core
+
+`crates/godwinmix-core/src/render/` builds the plan off the raw programme
+tees. The programme is a raw source (`encoded: false`), so every rendition
+is an encode.
+
+| Node | Elements |
+|---|---|
+| `source` | none in system memory: the raw programme tee is the outlet. On a GPU canvas, one download and convert, shared by every rendition |
+| `scale` | `videoscale`, `videorate` (`skip-to-first`), a caps filter at the size and rate |
+| `encode` | `videoconvert`, the catalogue entry's encoder with its properties and keyframe rule, its parser with SPS and PPS before every keyframe |
+| `audio-convert` | `audioconvert`, `audioresample`, a caps filter |
+| `audio-encode` | `audioconvert`, `audiorate`, the first installed catalogue encoder for the codec, its parser |
+| `mux` | none: the output's own feed and muxer are the mux |
+
+Every node starts with a leaky one second queue, so a node that falls
+behind drops its own frames and never holds the tee above it, and ends in a
+tee (its outlet) that lives as long as the node's id is in the plan. The
+body under the outlet is what a replan restarts and what the governor sheds;
+consumers stay linked to the outlet through both. The encoder property
+table and keyframe rule are the catalogue's, applied by the same code as the
+programme encoder, with the video held back by the programme's A/V offset.
+
+Keyframes: every encode of the programme is asked for a keyframe on the first
+frame at or past each multiple of the plan's interval of running time, by a
+probe on its sink pad that pushes one force key unit event. The encoder's
+own interval is set to twice the plan's, a ceiling it never reaches. Two
+rungs started at different moments put their keyframes on the same frames.
+
+Before any new or changed node starts, the governor is asked: an encode by
+its shape (`admit_encode`, which can pick a slower software preset that
+fits), anything else by the cost the plan gave it. A single rendition is its
+output's rung 0 and is never shed; a ladder's lower rungs are shed first.
+Once a tick the mixer acts on the governor's `Drop` steps and, when nothing
+has been over the line for ten seconds, admits and restarts what it shed.
+A faster preset step is logged and not applied while running.
+
+Everything runs on the mixer thread, as `OutputSlot` does; the only work on
+a streaming thread is the keyframe probe.
+
+### For a consumer of a rung (HLS)
+
+`Tap` is one rung: `request`, `rung` (0 is the top), `video` and `audio`
+shapes, `keyframe_ms`, and the `video_tee` and `audio_tee` it leaves by.
+`OutputCtx::taps` hands an output's kind every rung when it builds, top
+first; the generic feed already reads rung 0. `Mixer::rendition_taps(id)`
+gives the same list. `Tap::feed(name, queue_secs)` puts a leaky queue and a
+`proxysink` on a rung's tees in the programme pipeline and returns them as a
+`Feed`, which `Feed::detach` takes out again.
+
+## The governor in the station
+
+The binary starts one `Station` with the core: it loads this machine's
+calibration from `<runtime dir>/governor/` when there is one for its
+fingerprint, starts the load sampler, and when there is none measures in
+the background once nothing is on air. `[hardware] encode` narrows the
+encoders the planner and the calibration see, exactly as it narrows the
+programme encoder: `encode = "software"` is a machine with no GPU encoder.
+`[governor] reserve_cores` is the Advanced override that keeps cores free.
+The calibration candidates are `godwinmix_core::render::candidates`.
 
 ## How fast
 

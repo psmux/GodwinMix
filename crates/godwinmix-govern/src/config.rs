@@ -1,10 +1,11 @@
 //! The governor's settings. There is nothing a person has to set: every
 //! field has a default that means "work it out" (Decision 2).
 
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 /// `[governor]` in the station's config.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct GovernorConfig {
     /// Advanced. Cores to keep free for something else on this machine, in

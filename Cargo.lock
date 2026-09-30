@@ -1517,6 +1517,7 @@ dependencies = [
  "gstreamer",
  "libc",
  "parking_lot",
+ "schemars",
  "serde",
  "serde_json",
  "tracing",

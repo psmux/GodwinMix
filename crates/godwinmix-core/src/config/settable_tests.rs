@@ -48,6 +48,7 @@ fn another(key: &keys::Key, default: &Value, kind: &str) -> Value {
             let d = d.as_i64().unwrap_or(0);
             json!(if key.max.is_none_or(|m| d + 2 <= m) { d + 2 } else { d - 1 })
         }
+        ("number", d) => json!(d.as_f64().unwrap_or(0.0) + 2.0),
         ("array", _) => json!(["x"]),
         ("object", _) => json!({ "A": "b" }),
         _ if key.key.ends_with(".action") => json!("hold"),

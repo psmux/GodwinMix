@@ -24,6 +24,9 @@ calibrate = ["dep:gstreamer"]
 godwinmix-protocol = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
+# `[governor]` is drawn in the page's Mixer settings from the config schema.
+# Already in the tree through the protocol crate.
+schemars = { workspace = true }
 tracing = { workspace = true }
 parking_lot = { workspace = true }
 libc = { workspace = true }

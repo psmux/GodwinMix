@@ -5,9 +5,10 @@ encoder sessions and load, memory, uplink. Everything that costs one of
 those asks the governor before it starts. Why it works this way is in
 [resource-governor.md](../explanation/resource-governor.md).
 
-Nothing in the mixer calls it yet. The station and the rendition planner
-wire it in the next phase; there is no RPC method, no event and no panel for
-it today.
+The station starts one with the core and the rendition graph asks it
+before every encoder it starts; `governor.status`, `governor.calibrate` and
+`event/governor.shed` are its surface on the wire, documented in
+[renditions.md](renditions.md). Previews and thumbnails do not ask it yet.
 
 ## Features
 
