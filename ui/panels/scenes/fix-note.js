@@ -41,6 +41,13 @@ export const openFix = lazyAction(() => import("./fix.js").then((m) => m.openFix
  * sentence. `ids` empty hides it.
  */
 export function fillNote(note, client, ids, opts, after) {
+  // Built again only when the list changes: the Preview pane redraws on every
+  // status, and a button swapped out between press and release is a click
+  // that never lands.
+  const key = ids.map((id) => `${id}=${nameOf(client, id)}`).join("|") + after;
+  note.fixOpts = opts;
+  if (note.fixKey === key) return;
+  note.fixKey = key;
   note.hidden = !ids.length;
   note.replaceChildren();
   if (!ids.length) return;
@@ -51,7 +58,7 @@ export function fillNote(note, client, ids, opts, after) {
       title: `See why and fix it: ${ids.map((id) => nameOf(client, id)).join(", ")}`,
       onclick: (e) => {
         e.stopPropagation();
-        openFix(opts());
+        openFix(note.fixOpts());
       },
       ondblclick: (e) => e.stopPropagation(),
     })

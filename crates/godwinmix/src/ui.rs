@@ -209,6 +209,7 @@ const DEV_ASSETS: &[(&str, &str)] = &[
     ("test/error-actions.js", include_str!("../../../ui/test/error-actions.js")),
     ("test/source-chooser.js", include_str!("../../../ui/test/source-chooser.js")),
     ("test/studio.js", include_str!("../../../ui/test/studio.js")),
+    ("test/scene-fix.js", include_str!("../../../ui/test/scene-fix.js")),
     ("test/monitor-resize.js", include_str!("../../../ui/test/monitor-resize.js")),
     ("test/dock.js", include_str!("../../../ui/test/dock.js")),
     ("test/welcome.js", include_str!("../../../ui/test/welcome.js")),
