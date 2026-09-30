@@ -25,6 +25,7 @@ pub mod mcp;
 pub mod nodes;
 pub mod mcp_http;
 pub mod observe;
+pub mod station;
 pub mod ui;
 
 use anyhow::{Context, Result};

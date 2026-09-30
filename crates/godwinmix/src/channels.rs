@@ -31,7 +31,7 @@ mod destinations;
 mod edit;
 mod events;
 mod handover;
-mod keys;
+pub(crate) mod keys;
 mod live;
 mod net;
 mod ports;
