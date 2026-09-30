@@ -15,7 +15,6 @@ use anyhow::{Context, Result};
 use godwinmix_protocol::rendition::{AudioShape, Fps, VideoShape};
 use godwinmix_render::NodeKind;
 use gstreamer as gst;
-use gstreamer::prelude::*;
 
 /// How much a node's head queue holds before it drops the oldest.
 const HEAD_SECS: f64 = 1.0;
@@ -144,11 +143,4 @@ fn parser(name: Option<&str>, element: &str) -> Result<Vec<gst::Element>> {
     let el = make(name, element)?;
     crate::probe::set_int(&el, "config-interval", -1);
     Ok(vec![el])
-}
-
-/// A node's outlet: the tee its consumers hang off. Outlives the body.
-pub fn outlet(name: &str) -> Result<gst::Element> {
-    let tee = make("tee", &format!("{name}-tee"))?;
-    tee.set_property("allow-not-linked", true);
-    Ok(tee)
 }

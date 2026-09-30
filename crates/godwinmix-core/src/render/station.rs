@@ -6,18 +6,14 @@
 use super::candidates;
 use crate::catalogue::Catalogue;
 use crate::config::Accel;
-use godwinmix_govern::calibrate::{calibrate, fingerprint_for, Options};
+use godwinmix_govern::calibrate::fingerprint_for;
 use godwinmix_govern::store::{decide, Decision, Store};
 use godwinmix_govern::{Governor, GovernorConfig, Profile};
 use godwinmix_protocol::rendition::{AudioCodec, EncoderSlot};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
 use tracing::{info, warn};
-
-/// How often a calibration waiting for the air to clear looks again.
-const WAIT_STEP: Duration = Duration::from_secs(5);
 
 struct Inner {
     governor: Governor,
@@ -140,44 +136,6 @@ impl Station {
     fn calibrate_when_clear(&self) -> bool {
         self.spawn(true)
     }
-
-    fn spawn(&self, wait: bool) -> bool {
-        if self.inner.store.is_none() || self.inner.calibrating.swap(true, Ordering::SeqCst) {
-            return false;
-        }
-        let me = self.clone();
-        let started = std::thread::Builder::new()
-            .name("governor-calibrate".into())
-            .spawn(move || {
-                while wait && me.on_air() {
-                    std::thread::sleep(WAIT_STEP);
-                }
-                me.measure();
-                me.inner.calibrating.store(false, Ordering::SeqCst);
-            });
-        if started.is_err() {
-            self.inner.calibrating.store(false, Ordering::SeqCst);
-        }
-        started.is_ok()
-    }
-
-    /// Blocking: a few seconds of every encoder this machine has.
-    fn measure(&self) {
-        let cat = crate::catalogue::global();
-        let cands = candidates::candidates(&cat, self.inner.pin);
-        let audio = candidates::audio(&cat);
-        if cands.is_empty() {
-            warn!("no video encoder from the catalogue is installed; nothing to calibrate");
-            return;
-        }
-        info!(encoders = cands.len(), "calibrating this machine's encoders");
-        let cal = calibrate(&cands, &audio, &Options::default());
-        if let Some(dir) = &self.inner.store {
-            if let Err(e) = Store::new(dir).save(&cal) {
-                warn!(?e, "the calibration could not be kept; it will be taken again next start");
-            }
-        }
-        info!(took_ms = cal.took_ms, measured = cal.encoders.len(), "calibration done");
-        self.inner.governor.set_profile(Profile::from_calibration(cal));
-    }
 }
+
+mod measure;

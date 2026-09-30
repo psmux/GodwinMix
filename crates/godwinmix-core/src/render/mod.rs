@@ -47,6 +47,8 @@
 //!   an encoder up when the machine runs short.
 
 mod admit;
+mod apply;
+mod book;
 pub mod candidates;
 mod elements;
 mod graph;
@@ -59,6 +61,7 @@ pub mod station;
 pub mod status;
 mod tap;
 mod view;
+mod wiring;
 
 pub use graph::Programme;
 pub use refusal::Refusal;
