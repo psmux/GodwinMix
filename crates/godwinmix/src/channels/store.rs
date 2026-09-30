@@ -85,6 +85,10 @@ pub struct DestinationRecord {
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 struct File {
+    /// The default channel was made once. Kept after it is removed, so a
+    /// person who deleted it does not find it back at the next start.
+    #[serde(default, skip_serializing_if = "is_false")]
+    default_made: bool,
     /// What RTMPS answers with, without the certificate or its key: those
     /// are sealed in the secret store.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -93,11 +97,17 @@ struct File {
     channels: Vec<Record>,
 }
 
+fn is_false(b: &bool) -> bool {
+    !*b
+}
+
 /// Everything the channels file keeps.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Stored {
     pub channels: Vec<Record>,
     pub certificate: Option<CertificateInfo>,
+    /// See `File::default_made`.
+    pub default_made: bool,
 }
 
 /// The channels file's path, given the runtime store's.
@@ -118,7 +128,7 @@ pub fn load(path: &Path) -> Result<Stored> {
     }
     let text = std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
     let file: File = toml::from_str(&text).with_context(|| format!("reading {}", path.display()))?;
-    Ok(Stored { channels: file.channels, certificate: file.certificate })
+    Ok(Stored { channels: file.channels, certificate: file.certificate, default_made: file.default_made })
 }
 
 /// Write them, through a temporary file and a rename.
@@ -126,7 +136,11 @@ pub fn save(path: &Path, stored: &Stored) -> Result<()> {
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir).with_context(|| format!("making {}", dir.display()))?;
     }
-    let file = File { channels: stored.channels.clone(), certificate: stored.certificate.clone() };
+    let file = File {
+        channels: stored.channels.clone(),
+        certificate: stored.certificate.clone(),
+        default_made: stored.default_made,
+    };
     let body = toml::to_string_pretty(&file)
         .context("the channels would not serialise")?;
     let text = format!(
@@ -176,7 +190,7 @@ mod tests {
             extra: BTreeMap::new(),
         };
         record.extra.insert("later".into(), toml::Value::Array(vec![]));
-        let stored = Stored { channels: vec![record], certificate: None };
+        let stored = Stored { channels: vec![record], certificate: None, default_made: true };
         save(&path, &stored).unwrap();
         let text = std::fs::read_to_string(&path).unwrap();
         assert!(!text.contains("secret ="), "a key's secret is never written here: {text}");

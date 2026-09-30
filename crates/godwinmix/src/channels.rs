@@ -26,6 +26,7 @@
 //! touches a pipeline except through the mixer's command queue.
 
 mod auto;
+mod default;
 mod destinations;
 mod edit;
 mod events;
@@ -92,6 +93,9 @@ pub struct Channels {
     handed: Mutex<Option<Value>>,
     /// The renditions' watch thread is running.
     watching: AtomicBool,
+    /// The default channel was made once, or never will be: this mixer had
+    /// channels of its own before it existed. See `default.rs`.
+    default_made: AtomicBool,
     /// Itself, for the watch thread.
     me: OnceLock<Weak<Channels>>,
     plugins: Arc<Supervisor>,
@@ -125,6 +129,9 @@ impl Channels {
                 (store::Stored::default(), None)
             }
         };
+        // A mixer that already had channels when the default arrived is past
+        // needing one.
+        let made = stored.default_made || !stored.channels.is_empty();
         let channels = Arc::new(Channels {
             store,
             records: Mutex::new(stored.channels),
@@ -137,6 +144,7 @@ impl Channels {
             transcode: transcode::Transcode::new(data_dir),
             handed: Mutex::new(None),
             watching: AtomicBool::new(false),
+            default_made: AtomicBool::new(made),
             me: OnceLock::new(),
             ports,
             plugins,
@@ -145,6 +153,7 @@ impl Channels {
             secrets,
         });
         let _ = channels.me.set(Arc::downgrade(&channels));
+        channels.make_default(godwinmix_core::plugin::loader::get(PLUGIN).is_some());
         channels.hand_over(false);
         events::start(&channels);
         channels
@@ -162,7 +171,11 @@ impl Channels {
 
     fn persist(&self) -> anyhow::Result<()> {
         let Some(path) = &self.store else { return Ok(()) };
-        let stored = store::Stored { channels: self.records.lock().clone(), certificate: self.certificate.lock().clone() };
+        let stored = store::Stored {
+            channels: self.records.lock().clone(),
+            certificate: self.certificate.lock().clone(),
+            default_made: self.default_made.load(Ordering::Relaxed),
+        };
         store::save(path, &stored)
     }
 
