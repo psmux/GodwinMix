@@ -11,7 +11,7 @@
 //! | `GET /mjpeg/item/{id}` | one scene item as a projector; 501 until the scene server lands |
 //! | `GET /pcm/{target}` | WebSocket, F32LE 48 kHz stereo, 10 ms a frame |
 //! | `GET /opus/{target}` | WebSocket, Opus 48 kHz, 20 ms a frame, 64 kbit/s |
-//! | `POST /whep/{target}` | an SDP answer, where `whepserversink` is installed |
+//! | `POST /whep/{target}` | an SDP answer from a `whep/output`; see `whep.rs` |
 //!
 //! # Tokens
 //!
@@ -40,7 +40,7 @@ use futures_util::stream::StreamExt;
 use futures_util::SinkExt;
 use godwinmix_core::multiview::{MultiviewRequest, MultiviewSubscription};
 use godwinmix_core::preview::audio::{AudioRequest, Codec, SampleFormat};
-use godwinmix_core::preview::{mjpeg, whep};
+use godwinmix_core::preview::mjpeg;
 use godwinmix_core::snapshot::{self, Pick};
 use serde_json::json;
 use std::collections::HashMap;
@@ -62,7 +62,7 @@ pub fn router(ctx: Ctx) -> Router<Ctx> {
         .route("/mjpeg/{target}", get(mjpeg_stream))
         .route("/pcm/{target}", get(pcm_stream))
         .route("/opus/{target}", get(opus_stream))
-        .route("/whep/{target}", post(whep_offer).get(whep_not_a_get))
+        .route("/whep/{target}", post(super::whep::offer).get(whep_not_a_get))
         .with_state(ctx)
 }
 
@@ -392,37 +392,6 @@ async fn pump_audio(
 }
 
 // --- WHEP -------------------------------------------------------------------
-
-async fn whep_offer(
-    State(ctx): State<Ctx>,
-    Path(target): Path<String>,
-    req: Request,
-) -> Response {
-    if let Err(r) = authorise(&ctx, req.method(), req.headers(), req.uri()) {
-        return *r;
-    }
-    if !whep::available() {
-        return (
-            StatusCode::NOT_IMPLEMENTED,
-            axum::Json(json!({ "error": whep::missing_message() })),
-        )
-            .into_response();
-    }
-    let target = whep::Target::parse(&target);
-    // The element is here but the session path is not wired yet. Say which of
-    // the two it is, because they need different things from the reader.
-    (
-        StatusCode::NOT_IMPLEMENTED,
-        axum::Json(json!({
-            "error": format!(
-                "whepserversink is installed on this core but the WHEP session path for '{}' \
-                 is not wired yet. Use /mjpeg/program with /pcm/program until it is.",
-                target.label()
-            ),
-        })),
-    )
-        .into_response()
-}
 
 /// A browser that opens `/whep/program` in the address bar gets told what to
 /// do rather than a bare 405.

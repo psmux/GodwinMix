@@ -34,10 +34,7 @@ fn programme(id: &str) -> Option<(gst::Pipeline, Box<dyn Output>)> {
     let cfg = OutputConfig::bare(id, "");
     let mut params = crate::config::Params::new();
     params.insert("stun".into(), toml::Value::String(String::new()));
-    let mut out = match crate::plugin::output::by_type("whep/output") {
-        Some(p) => (p.make)(&cfg).ok()?,
-        None => return None,
-    };
+    let mut out = (crate::plugin::output::by_type("whep/output")?.make)(&cfg).ok()?;
     let hello = Hello {
         instance: id.into(),
         canvas: crate::caps::CanvasCaps::new(&crate::config::Canvas::default()),
