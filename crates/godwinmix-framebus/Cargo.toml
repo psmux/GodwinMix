@@ -18,14 +18,20 @@ description = "Decode once, read everywhere: a shared memory ring of decoded vid
 gstreamer = { workspace = true, optional = true }
 gstreamer-base = { version = "0.24", optional = true }
 gstreamer-video = { workspace = true, optional = true }
+# The element subclass macros name `glib` by path.
+glib = { workspace = true, optional = true }
 
 [target.'cfg(unix)'.dependencies]
 libc = { workspace = true }
 
+[dev-dependencies]
+# appsink, to pull what gmxbussrc hands out in the element tests and the bench.
+gstreamer-app = { workspace = true }
+
 [features]
 default = ["gst"]
 # `Publisher::push_buffer`, and the `gmxbussink` and `gmxbussrc` elements.
-gst = ["dep:gstreamer", "dep:gstreamer-base", "dep:gstreamer-video"]
+gst = ["dep:gstreamer", "dep:gstreamer-base", "dep:gstreamer-video", "dep:glib"]
 
 [[example]]
 name = "framebus-bench"

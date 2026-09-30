@@ -75,6 +75,8 @@ impl Ring {
             (*h).n_slots = n_slots as u32;
             (*h).leases_per_reader = leases.max(1) as u32;
             (*h).owner_pid = std::process::id();
+            (*h).fps_n = layout.fps_n;
+            (*h).fps_d = layout.fps_d;
         }
         Ok(Ring { region })
     }

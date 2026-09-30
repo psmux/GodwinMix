@@ -1,0 +1,149 @@
+//! `gmxbussink`: the owner end as an element. It publishes on the first caps
+//! it is given, changes format when the caps do, and never blocks a render
+//! on a reader.
+
+use gstreamer as gst;
+use gstreamer_base as gst_base;
+
+glib::wrapper! {
+    pub struct BusSink(ObjectSubclass<imp::BusSink>)
+        @extends gst_base::BaseSink, gst::Element, gst::Object;
+}
+
+mod imp {
+    use std::sync::{LazyLock, Mutex};
+
+    use glib::prelude::*;
+    use glib::subclass::prelude::*;
+    use gst::subclass::prelude::*;
+    use gst_base::subclass::prelude::*;
+    use gstreamer as gst;
+    use gstreamer_base as gst_base;
+    use gstreamer_video as gst_video;
+
+    use crate::gst::{layout_of, template_caps};
+    use crate::{BusName, Publisher, PublisherOptions, Registry};
+
+    #[derive(Default)]
+    pub struct BusSink {
+        settings: Mutex<Settings>,
+        state: Mutex<Option<(Publisher, gst_video::VideoInfo)>>,
+    }
+
+    struct Settings {
+        name: String,
+        dir: String,
+        max_readers: u32,
+        leases: u32,
+    }
+
+    impl Default for Settings {
+        fn default() -> Self {
+            let d = PublisherOptions::default();
+            Settings { name: String::new(), dir: String::new(), max_readers: d.max_readers as u32, leases: d.leases_per_reader as u32 }
+        }
+    }
+
+    #[glib::object_subclass]
+    impl ObjectSubclass for BusSink {
+        const NAME: &'static str = "GmxBusSink";
+        type Type = super::BusSink;
+        type ParentType = gst_base::BaseSink;
+    }
+
+    impl ObjectImpl for BusSink {
+        fn properties() -> &'static [glib::ParamSpec] {
+            static P: LazyLock<Vec<glib::ParamSpec>> = LazyLock::new(|| {
+                vec![
+                    glib::ParamSpecString::builder("bus-name").nick("Bus name").blurb("camera:<id> or channel:<app>/<stream>").build(),
+                    glib::ParamSpecString::builder("bus-dir").nick("Bus directory").blurb("The registry directory; empty for GODWINMIX_BUS_DIR or the default").build(),
+                    glib::ParamSpecUInt::builder("max-readers").minimum(1).maximum(32).default_value(8).build(),
+                    glib::ParamSpecUInt::builder("leases").nick("Frames per reader").minimum(1).maximum(8).default_value(3).build(),
+                ]
+            });
+            P.as_ref()
+        }
+
+        fn set_property(&self, _id: usize, value: &glib::Value, pspec: &glib::ParamSpec) {
+            let mut s = self.settings.lock().unwrap();
+            match pspec.name() {
+                "bus-name" => s.name = value.get::<Option<String>>().unwrap().unwrap_or_default(),
+                "bus-dir" => s.dir = value.get::<Option<String>>().unwrap().unwrap_or_default(),
+                "max-readers" => s.max_readers = value.get().unwrap(),
+                "leases" => s.leases = value.get().unwrap(),
+                _ => unreachable!(),
+            }
+        }
+
+        fn property(&self, _id: usize, pspec: &glib::ParamSpec) -> glib::Value {
+            let s = self.settings.lock().unwrap();
+            match pspec.name() {
+                "bus-name" => s.name.to_value(),
+                "bus-dir" => s.dir.to_value(),
+                "max-readers" => s.max_readers.to_value(),
+                "leases" => s.leases.to_value(),
+                _ => unreachable!(),
+            }
+        }
+    }
+
+    impl GstObjectImpl for BusSink {}
+
+    impl ElementImpl for BusSink {
+        fn metadata() -> Option<&'static gst::subclass::ElementMetadata> {
+            static M: LazyLock<gst::subclass::ElementMetadata> = LazyLock::new(|| {
+                gst::subclass::ElementMetadata::new(
+                    "GodwinMix frame bus sink",
+                    "Sink/Video",
+                    "Publishes decoded frames on the frame bus for other pipelines and processes",
+                    "GodwinMix",
+                )
+            });
+            Some(&M)
+        }
+
+        fn pad_templates() -> &'static [gst::PadTemplate] {
+            static T: LazyLock<Vec<gst::PadTemplate>> = LazyLock::new(|| {
+                vec![gst::PadTemplate::new("sink", gst::PadDirection::Sink, gst::PadPresence::Always, &template_caps()).unwrap()]
+            });
+            T.as_ref()
+        }
+    }
+
+    impl BaseSinkImpl for BusSink {
+        fn set_caps(&self, caps: &gst::Caps) -> Result<(), gst::LoggableError> {
+            let info = gst_video::VideoInfo::from_caps(caps).map_err(|_| gst::loggable_error!(gst::CAT_RUST, "caps without a video format"))?;
+            let layout = layout_of(&info).map_err(|e| gst::loggable_error!(gst::CAT_RUST, "{e}"))?;
+            let mut state = self.state.lock().unwrap();
+            if let Some((p, old)) = state.as_mut() {
+                p.set_layout(layout).map_err(|e| gst::loggable_error!(gst::CAT_RUST, "{e}"))?;
+                *old = info;
+                return Ok(());
+            }
+            let s = self.settings.lock().unwrap();
+            let name: BusName = s.name.parse().map_err(|e| gst::loggable_error!(gst::CAT_RUST, "{e}"))?;
+            let reg = if s.dir.is_empty() { Registry::from_env() } else { Registry::new(&s.dir) };
+            let opts = PublisherOptions { max_readers: s.max_readers as usize, leases_per_reader: s.leases as usize, checksum: false };
+            let p = reg
+                .and_then(|reg| Publisher::create(&reg, &name, layout, opts))
+                .map_err(|e| gst::loggable_error!(gst::CAT_RUST, "{e}"))?;
+            *state = Some((p, info));
+            Ok(())
+        }
+
+        fn render(&self, buffer: &gst::Buffer) -> Result<gst::FlowSuccess, gst::FlowError> {
+            let mut state = self.state.lock().unwrap();
+            let Some((p, info)) = state.as_mut() else { return Err(gst::FlowError::NotNegotiated) };
+            p.push_buffer(buffer, info).map_err(|e| {
+                gst::element_imp_error!(self, gst::StreamError::Format, ["{e}"]);
+                gst::FlowError::Error
+            })?;
+            Ok(gst::FlowSuccess::Ok)
+        }
+
+        fn stop(&self) -> Result<(), gst::ErrorMessage> {
+            self.state.lock().unwrap().take();
+            Ok(())
+        }
+    }
+}
