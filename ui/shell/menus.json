@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "about": "The menu bar, once, for the page and for the desktop app's native menu. Each item names a command id from ui/shell/commands.js; `arg` is passed to it. `check` names a state the page shows as a tick. `native: false` keeps an item out of the native menu.",
+  "about": "The menu bar, once, for the page and for the desktop app's native menu. Each item names a command id from ui/shell/commands.js; `arg` is passed to it. `check` names a state the page shows as a tick. `plugins: true` stands for the plugin panels, which only the page knows, so the native menu skips it.",
   "menus": [
     {
       "id": "file",
