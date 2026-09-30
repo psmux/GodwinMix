@@ -45,16 +45,22 @@ On an Apple M4 Pro, macOS, GStreamer 1.28.7, release build:
 | What | Result |
 |---|---|
 | 1080p30 H.264 at 8.8 Mbit/s from ffmpeg (`-f mpegts udp://239.1.1.1:19471?pkt_size=1316`), 60 s, received by the core's source and a second copy of the plugin on the same group | 48,417 datagrams, 0 packets lost; 1.6% of one core and 16 MB for each receiver |
-| The same file sent raw by `tests/lossy_send.py` with 1% of datagrams dropped, 30 s | 252 datagrams dropped, 1,701 TS packets counted lost (the rest were null packets); the source stayed live, its picture never idle more than 150 ms; 2.3% of one core |
+| The same file sent raw by the `lossy_send` example with 1% of datagrams dropped, 30 s | 252 datagrams dropped, 1,701 TS packets counted lost (the rest were null packets); the source stayed live, its picture never idle more than 150 ms; 2.3% of one core |
 | The same inside RTP, 1% dropped | 297 datagrams dropped, 297 RTP datagrams counted lost; live throughout |
 | The sender stopped for five seconds and started again | the core marked the source stalled, then live again by itself |
 | `udp/output` from the core to ffmpeg, 10 s | 263 frames, no timestamp gaps, no decode errors after the first keyframe |
 | `udp/output` fed a known encode, received by ffmpeg | every decoded frame identical to the encoder's own (framemd5), 150 of 150 |
 | `udp/output` at a constant 8000 kbit/s | 8.03 Mbit/s over ten seconds, 1316 byte datagrams, 19.9% null packets |
 
-`tests/drive.py` stands in for the core and prints the plugin's own counters,
-CPU and memory while it runs; `tests/lossy_send.py` is the lossy sender. Both
-are standard library Python.
+The `drive` example stands in for the core and prints the plugin's own
+counters, CPU and memory while it runs; the `lossy_send` example is the lossy
+sender. Both are Rust, in `examples/`, and their own tests run with
+`cargo test -p gmx-udp`:
+
+```sh
+cargo run -p gmx-udp --example lossy_send -- clip.ts 239.1.1.1 19471 --loss 1 --seconds 30
+cargo run -p gmx-udp --example drive -- --uri udp://@239.1.1.1:19471 --seconds 60
+```
 
 ## Tests
 

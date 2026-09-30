@@ -14,9 +14,13 @@ import { stylesheet } from "./shared.js";
 
 const LOOPBACK = /^(localhost|127\.|\[::1\])/;
 
-/** The master playlist's address for an output, on the page's own port. */
-export function hlsUrl(id, base) {
-  return new URL(`/hls/${encodeURIComponent(id)}/master.m3u8`, base).href;
+/**
+ * The link for viewers: the output's own `playback.master_url_path`, which
+ * carries its viewer key, on `base`. Null until the output has made one.
+ */
+export function hlsUrl(output, base) {
+  const path = output && output.playback && output.playback.master_url_path;
+  return path ? new URL(path, base).href : null;
 }
 
 /** True when a plain <video> element here plays HLS by itself. */
@@ -56,23 +60,34 @@ export function hlsCard(client, output) {
     qr,
     el("div.rnd-hlsmain", {}, [el("span.rnd-kicker", { text: "Link for viewers" }), el("div.rnd-urlrow", {}, [link, copyBtn]), waiting, el("div.rnd-urlrow", {}, [watch]), player]),
   ]);
-  let url = hlsUrl(output.id, (client.transport && client.transport.base) || location.origin);
+  // The page's own address plays the preview: the network address is for a
+  // phone, and a core bound to loopback does not answer on it.
+  const own = (client.transport && client.transport.base) || location.origin;
+  let base = own;
+  let current = output;
+  let url = null;
+  const local = () => hlsUrl(current, own);
   const draw = () => {
-    link.textContent = url;
-    const q = qrPath(url);
+    url = hlsUrl(current, base);
+    link.textContent = url || "The link appears once the output has started.";
+    copyBtn.disabled = !url;
+    const q = url && qrPath(url);
     qr.innerHTML = q ? `<svg viewBox="0 0 ${q.size} ${q.size}" shape-rendering="crispEdges" role="img" aria-label="QR code of the link"><rect width="${q.size}" height="${q.size}" fill="#fff"/><path d="${q.d}" fill="#000"/></svg>` : "";
   };
   draw();
-  reachableBase(client).then((b) => { url = hlsUrl(output.id, b); draw(); });
-  copyBtn.onclick = () => copy(copyBtn, url);
-  watch.onclick = () => togglePlayer(player, watch, url);
+  reachableBase(client).then((b) => { base = b; draw(); });
+  copyBtn.onclick = () => url && copy(copyBtn, url);
+  watch.onclick = () => url && togglePlayer(player, watch, local());
   return {
     node,
     update(next) {
-      const live = next.state === "live";
+      const before = local();
+      current = next;
+      draw();
+      const live = next.state === "live" && !!url;
       waiting.hidden = live;
       watch.disabled = !live;
-      if (!live && !player.hidden) togglePlayer(player, watch, url);
+      if ((!live || local() !== before) && !player.hidden) togglePlayer(player, watch, before);
     },
   };
 }

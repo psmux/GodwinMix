@@ -25,3 +25,13 @@ serde_json = { workspace = true }
 # getifaddrs and setsockopt, for the interface multicast leaves by. See src/iface.rs.
 [target.'cfg(unix)'.dependencies]
 libc = { workspace = true }
+
+# The stand in core and the lossy sender, for measuring by hand. Their own
+# tests run with the rest, so `cargo test -p gmx-udp` keeps them working.
+[[example]]
+name = "drive"
+test = true
+
+[[example]]
+name = "lossy_send"
+test = true

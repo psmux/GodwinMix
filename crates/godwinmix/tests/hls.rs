@@ -142,7 +142,9 @@ async fn a_viewer_key_plays_ll_hls_and_nothing_else_gets_in() {
     assert_eq!(blocked.status(), 200);
     let waited = started.elapsed();
     let after = blocked.text().await.unwrap();
-    assert!(after.contains(&format!("\"{m}.{p}.m4s?")), "the part it waited for is listed: {after}");
+    // Listed as a part, not only hinted again.
+    let listed = after.lines().any(|l| l.starts_with("#EXT-X-PART:") && l.contains(&format!("URI=\"{m}.{p}.m4s?")));
+    assert!(listed, "the part it waited for is listed: {after}");
     assert!(waited < Duration::from_millis(1500), "held {waited:?} for one part");
 
     // Too far ahead is a 400 that says why.

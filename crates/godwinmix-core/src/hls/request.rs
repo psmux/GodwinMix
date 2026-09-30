@@ -1,119 +1,120 @@
-//! What an `hls/output` is asked to serve: the programme as it is, a named
-//! ladder, or a ladder given rung by rung as rendition requests.
+//! What an `hls/output` asks the rendition planner for: the programme as it
+//! is, a named ladder, or a ladder given rung by rung.
+//!
+//! The output makes no encoder of its own. Whatever it asked for becomes a
+//! `RenditionChoice` the mixer plans with every other output, so its rungs
+//! share encoders with them, go to a hardware encoder when the governor
+//! says so, and are counted. Each rung's keyframe interval is set to the
+//! segment length, so every segment starts on a keyframe of every rung.
 
-use super::ladder::{self, Rung};
-use crate::config::Params;
+use super::HlsParams;
+use crate::config::OutputConfig;
 use anyhow::{Context, Result};
-use godwinmix_protocol::rendition::{RenditionRequest, VideoCodec};
+use godwinmix_protocol::rendition::{Container, LadderRef, PresetRef, RenditionChoice, RenditionRequest, VideoCodec};
+use godwinmix_render::presets;
 
-/// The ladder an output's params ask for: `rendition = { preset =
-/// "abr-ladder-4" }`, `rendition = { ladder = [RenditionRequest, ...] }`, or
-/// `ladder = "abr-ladder-4"` for short. None serves the programme as it is.
-pub fn ladder_of(params: &Params) -> Result<Option<Vec<Rung>>> {
-    let rendition = params.get("rendition");
-    if let Some(list) = rendition.and_then(|r| r.get("ladder")) {
-        return custom_ladder(list).map(Some);
+/// The provide id of the HLS output.
+pub const TYPE: &str = "hls/output";
+
+/// Whether `cfg` is an HLS output.
+pub fn is_hls(cfg: &OutputConfig) -> bool {
+    cfg.type_id.as_deref() == Some(TYPE)
+}
+
+/// The rendition an HLS output asks the planner for. `rendition` beside the
+/// output's params, or in them (`rendition = { preset = "abr-ladder-4" }`,
+/// `rendition = { ladder = [...] }`), or `ladder = "abr-ladder-4"` in them
+/// for short. None serves the programme as it is.
+pub fn choice(cfg: &OutputConfig) -> Result<Option<RenditionChoice>> {
+    let params = cfg.effective_params();
+    let asked = match &cfg.rendition {
+        Some(c) => Some(c.clone()),
+        None => from_params(&params)?,
+    };
+    let Some(asked) = asked else { return Ok(None) };
+    let segment_ms = HlsParams::from_params(&params)?.segment_ms;
+    let rungs = match asked {
+        RenditionChoice::Preset(p) => match preset_rungs(&p.preset)? {
+            Some(r) => r,
+            None => return Ok(None),
+        },
+        RenditionChoice::Ladder(l) => l.ladder,
+        RenditionChoice::Request(r) if r == RenditionRequest::default() => anyhow::bail!(
+            "hls/output rendition says nothing it wants. A ladder whose rungs do not read as \
+             renditions lands here too: check each rung's fields (fps is {{ num = 30, den = 1 }})."
+        ),
+        RenditionChoice::Request(r) => vec![r],
+    };
+    anyhow::ensure!(
+        !rungs.is_empty(),
+        "hls/output rendition.ladder is empty. Give it at least one rung, or leave it out to serve the programme as it is."
+    );
+    let rungs = rungs.into_iter().map(|r| rung(r, segment_ms)).collect::<Result<Vec<_>>>()?;
+    Ok(Some(RenditionChoice::Ladder(LadderRef { ladder: rungs })))
+}
+
+fn from_params(params: &crate::config::Params) -> Result<Option<RenditionChoice>> {
+    if let Some(r) = params.get("rendition") {
+        let c: RenditionChoice = r.clone().try_into().context(
+            "hls/output rendition must be { preset = \"abr-ladder-4\" }, or { ladder = [...] } with one rendition per rung",
+        )?;
+        return Ok(Some(c));
     }
-    let named = params
+    Ok(params
         .get("ladder")
         .and_then(|v| v.as_str())
-        .or_else(|| rendition.and_then(|r| r.get("preset")).and_then(|v| v.as_str()));
-    let Some(name) = named.filter(|n| *n != "copy") else { return Ok(None) };
-    ladder::preset(name).map(Some).with_context(|| {
+        .map(|name| RenditionChoice::Preset(PresetRef { preset: name.to_string() })))
+}
+
+/// A preset's rungs. None for `copy`, which is the programme as it is.
+fn preset_rungs(name: &str) -> Result<Option<Vec<RenditionRequest>>> {
+    let found = presets::preset(name).with_context(|| {
         format!(
             "hls/output has no ladder called `{name}`. It has abr-ladder-4 (1080p, 720p, 480p, \
              360p) and abr-ladder-3 (720p, 480p, 360p), or a ladder of your own as rendition.ladder; \
              leave it out to serve the programme as it is."
         )
-    })
+    })?;
+    if found.id == "copy" {
+        return Ok(None);
+    }
+    Ok(Some(found.ladder.unwrap_or_else(|| vec![found.request])))
 }
 
-/// A ladder given rung by rung, as the page's custom ladder sends it.
-fn custom_ladder(list: &toml::Value) -> Result<Vec<Rung>> {
-    let requests: Vec<RenditionRequest> = list.clone().try_into().context(
-        "hls/output rendition.ladder must be a list of renditions, each with an id and video.height",
-    )?;
-    anyhow::ensure!(
-        !requests.is_empty(),
-        "hls/output rendition.ladder is empty. Give it at least one rung, or leave it out to serve the programme as it is."
-    );
-    requests.iter().map(rung_of).collect()
-}
-
-fn rung_of(r: &RenditionRequest) -> Result<Rung> {
+/// One rung, checked, with its keyframes on every segment boundary.
+fn rung(mut r: RenditionRequest, segment_ms: u32) -> Result<RenditionRequest> {
+    if r.id.is_empty() {
+        r.id = r.video.as_ref().and_then(|v| v.height).map_or_else(|| "programme".into(), |h| format!("{h}p"));
+    }
     let slug = !r.id.is_empty() && r.id.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-');
     anyhow::ensure!(slug, "rung id `{}` must be a short slug of small letters, numbers and dashes, like 720p", r.id);
     anyhow::ensure!(r.id != "audio", "`audio` is the name of the sound every rung shares. Call the rung by its size, like 720p.");
-    let v = r.video.as_ref().with_context(|| format!("rung {} says nothing about its video. Give it video.height at least.", r.id))?;
-    if let Some(c) = v.codec.filter(|c| *c != VideoCodec::H264) {
-        anyhow::bail!(
-            "rung {} asks for {c:?}; a ladder the HLS output makes itself is H.264 for now. Ask for h264, or leave the codec out.",
-            r.id
-        );
+    anyhow::ensure!(
+        !r.no_video,
+        "rung {} has no picture. An HLS ladder is pictures in several sizes; for sound alone use an audio output.",
+        r.id
+    );
+    let v = r.video.get_or_insert_with(Default::default);
+    if let Some(c) = v.codec.filter(|c| !matches!(c, VideoCodec::H264 | VideoCodec::H265 | VideoCodec::Av1)) {
+        anyhow::bail!("rung {} asks for {c:?}, which HLS does not carry. Ask for h264, h265 or av1.", r.id);
     }
-    let height = v.height.with_context(|| format!("rung {} needs video.height", r.id))?;
-    anyhow::ensure!((144..=2160).contains(&height), "rung {} is {height} lines high; a ladder takes 144 to 2160", r.id);
-    let width = v.width.unwrap_or(height * 16 / 9);
-    let kbps = v.bitrate_kbps.unwrap_or(match height {
-        h if h >= 1080 => 6000,
-        h if h >= 720 => 3000,
-        h if h >= 480 => 1500,
-        _ => 800,
-    });
-    Ok(Rung::new(&r.id, (width + 1) & !1, (height + 1) & !1, kbps))
+    if let Some(h) = v.height {
+        anyhow::ensure!((144..=2160).contains(&h), "rung {} is {h} lines high; a ladder takes 144 to 2160", r.id);
+    }
+    v.keyframe_ms = Some(segment_ms);
+    r.container = Container::Hls;
+    Ok(r)
+}
+
+/// The rung's name in URLs, from the planner's request id: `<output>-720p`
+/// is `720p`. A single rendition is named after its height.
+pub fn rung_slug(output: &str, request: &str, height: Option<u32>) -> String {
+    match request.strip_prefix(output).and_then(|r| r.strip_prefix('-')) {
+        Some(rest) if !rest.is_empty() => rest.to_string(),
+        _ => height.map_or_else(|| "programme".to_string(), |h| format!("{h}p")),
+    }
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn params(text: &str) -> Params {
-        toml::from_str(text).unwrap()
-    }
-
-    #[test]
-    fn nothing_asked_is_the_programme_as_it_is() {
-        assert_eq!(ladder_of(&Params::new()).unwrap(), None);
-        assert_eq!(ladder_of(&params("rendition = { preset = \"copy\" }")).unwrap(), None);
-    }
-
-    #[test]
-    fn a_preset_by_either_name() {
-        let four = ladder_of(&params("rendition = { preset = \"abr-ladder-4\" }")).unwrap().unwrap();
-        assert_eq!(four.iter().map(|r| r.id.as_str()).collect::<Vec<_>>(), ["1080p", "720p", "480p", "360p"]);
-        assert_eq!(ladder_of(&params("ladder = \"abr-ladder-3\"")).unwrap().unwrap().len(), 3);
-        let e = ladder_of(&params("ladder = \"abr-ladder-9\"")).unwrap_err().to_string();
-        assert!(e.contains("abr-ladder-4"), "{e}");
-    }
-
-    #[test]
-    fn a_custom_ladder_of_rendition_requests() {
-        let text = r#"
-            [[rendition.ladder]]
-            id = "540p"
-            container = "hls"
-            video = { codec = "h264", height = 540, bitrate_kbps = 2000, keyframe_ms = 2000 }
-            audio = { codec = "aac", bitrate_kbps = 128 }
-            [[rendition.ladder]]
-            id = "240p"
-            container = "hls"
-            video = { height = 240 }
-        "#;
-        let rungs = ladder_of(&params(text)).unwrap().unwrap();
-        assert_eq!(rungs[0], Rung::new("540p", 960, 540, 2000));
-        assert_eq!(rungs[1], Rung::new("240p", 426, 240, 800));
-    }
-
-    #[test]
-    fn a_custom_rung_is_refused_with_the_reason() {
-        let bad = |video: &str, id: &str| {
-            let text = format!("[[rendition.ladder]]\nid = \"{id}\"\ncontainer = \"hls\"\nvideo = {video}\n");
-            ladder_of(&params(&text)).unwrap_err().to_string()
-        };
-        assert!(bad("{ codec = \"h265\", height = 720 }", "720p").contains("H.264"));
-        assert!(bad("{ height = 99 }", "tiny").contains("144 to 2160"));
-        assert!(bad("{ width = 640 }", "w").contains("video.height"));
-        assert!(bad("{ height = 720 }", "Big Rung").contains("slug"));
-        assert!(bad("{ height = 720 }", "audio").contains("shares"));
-    }
-}
+#[path = "request_tests.rs"]
+mod tests;
