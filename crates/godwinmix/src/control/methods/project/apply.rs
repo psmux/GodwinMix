@@ -15,7 +15,7 @@ use godwinmix_core::mixer::Command;
 use godwinmix_core::scene::document::Collection;
 use godwinmix_core::scene::server::find::free_scene_name;
 use godwinmix_protocol::error::RpcError;
-use serde_json::{json, Value};
+use serde_json::json;
 
 /// Check the settings the plan writes, writing nothing. A value this mixer
 /// would refuse refuses the whole file, before anything has moved.
@@ -71,11 +71,7 @@ async fn write_settings(call: &Call, plan: &Plan, report: &mut Report) -> Result
         report.waiting.push("this mixer has no config file, so the project's settings were not written".into());
         return Ok(());
     }
-    let answer = invoke(call, "config.set", json!({"values": plan.settings})).await?;
-    for key in answer["needs_restart"].as_array().into_iter().flatten().filter_map(Value::as_str) {
-        report.needs_restart.push(format!("{key} is written to the config file and takes effect when the mixer restarts"));
-    }
-    Ok(())
+    invoke(call, "config.set", json!({"values": plan.settings})).await.map(|_| ())
 }
 
 /// Replace: the file's collection becomes this one, keeping the canvas the

@@ -7,6 +7,7 @@ use super::bundle::{Bundle, MediaEntry};
 use super::{entries, ids, media, settings, Change, Report};
 use crate::channels::project::{self as channel_file, Incoming};
 use crate::control::call::Call;
+use godwinmix_core::config::keys::{self, Applies};
 use godwinmix_core::config::{OutputConfig, SourceConfig};
 use godwinmix_core::scene::document::Collection;
 use godwinmix_protocol::error::RpcError;
@@ -46,6 +47,11 @@ fn plan_settings(call: &Call, bundle: &Bundle, replace: bool, machine: bool, rep
     for (key, value, now) in settings::changes(&call.app.config_path, &wanted, replace) {
         let from = now.map(|v| v.to_string()).unwrap_or_else(|| "its default".into());
         report.changes.push(Change::new("setting", &key, "set").note(&format!("{from} to {value}")));
+        // Named from the keys this import writes, not from whatever else in
+        // the file is pending: that was somebody else's change.
+        if keys::find(&key).is_some_and(|k| k.applies == Applies::Restart) {
+            report.needs_restart.push(format!("{key} is written to the config file and takes effect when the mixer restarts"));
+        }
         out.insert(key, value);
     }
     out
@@ -58,10 +64,14 @@ fn plan_scenes(
     renamed: &std::collections::BTreeMap<String, String>,
     report: &mut Report,
 ) -> Result<Option<Collection>, RpcError> {
-    if bundle.scenes.is_null() {
-        return Ok(None);
-    }
-    let mut value = bundle.scenes.clone();
+    let here = call.app.scenes.document();
+    let mut value = match (&bundle.scenes, replace) {
+        (Value::Null, false) => return Ok(None),
+        // A file with no scenes, replacing: an empty collection, which is
+        // what New project sends.
+        (Value::Null, true) => empty_collection(&here),
+        (scenes, _) => scenes.clone(),
+    };
     ids::rename_sources(&mut value, renamed);
     if !replace {
         for part in ["scenes", "transitions"] {
@@ -78,7 +88,6 @@ fn plan_scenes(
         .with("field", "file")
         .with("reason", "damaged")
     })?;
-    let here = call.app.scenes.document();
     for scene in &incoming.scenes {
         let clash = here.scenes.iter().any(|s| s.name == scene.name);
         let action = match (replace, clash) {
@@ -154,4 +163,14 @@ fn plan_media(call: &Call, bundle: &Bundle, report: &mut Report) -> Vec<MediaEnt
         report.changes.push(change);
     }
     out
+}
+
+/// This mixer's collection with nothing in it.
+fn empty_collection(here: &Collection) -> Value {
+    let mut empty = here.clone();
+    empty.scenes.clear();
+    empty.transitions.clear();
+    empty.assets.clear();
+    empty.sources.clear();
+    serde_json::to_value(empty).unwrap_or(Value::Null)
 }
