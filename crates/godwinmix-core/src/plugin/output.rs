@@ -80,6 +80,7 @@ static REGISTRY: &[OutputProvide] = &[
     super::outputs::srt::PROVIDE,
     super::outputs::record::PROVIDE,
     crate::hls::output::PROVIDE,
+    crate::whep::output::PROVIDE,
 ];
 
 pub fn registry() -> &'static [OutputProvide] {
