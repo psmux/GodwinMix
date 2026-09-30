@@ -28,7 +28,7 @@ ignored, so an address copied from an ffmpeg command line works as it is.
 | `port` | integer 1 to 65535 | `5000` | the UDP port |
 | `uri` | string | empty | a whole address from the table above; wins over `address` and `port` |
 | `program` | integer 0 to 65535 | `0` | the program number to take out of a multiplex. 0 is the first the PAT lists |
-| `interface` | string | empty | the interface to join multicast on, by name. Empty is the default route's (Advanced) |
+| `interface` | string | empty | the interface to join multicast on, by name or by one of its IPv4 addresses. Empty is the default route's (Advanced) |
 | `source_address` | string | empty | accept the group only from this sender (IGMPv3). Refused on a unicast address (Advanced) |
 | `pids` | string or array | empty | elementary stream PIDs to keep, `"256, 0x101"`. The PMT is rewritten to list only these (Advanced) |
 | `receive_buffer_kb` | integer 64 to 262144 | `4096` | the socket's kernel receive buffer. The system may cap it (Advanced) |
@@ -120,8 +120,8 @@ plugin, and `tests/drive.py` in the plugin prints both.
 |---|---|---|---|
 | `uri` | string | required | where to send, from the table above. A source address or port 0 is refused |
 | `ttl` | integer 1 to 255 | `8` | multicast TTL, and the unicast TTL too (Advanced) |
-| `interface` | string | empty | the interface multicast leaves by, by name (Advanced) |
-| `cbr_kbps` | integer 0 to 1000000 | `0` | 0 sends what the programme makes. Anything else pads with null packets to that rate and paces the sending to it (Advanced) |
+| `interface` | string | empty | the interface multicast leaves by, by name or by one of its IPv4 addresses (Advanced) |
+| `cbr_kbps` | integer 0 to 1000000 | `0` | 0 sends what the programme makes. Anything else pads with null packets to that rate and caps the sending a hair above it (Advanced) |
 | `packets_per_datagram` | integer 1 to 7 | `7` | TS packets per datagram; 7 is 1316 bytes (Advanced) |
 | `dscp` | integer -1 to 63 | `-1` | the DiffServ code point; -1 leaves the system default (Advanced) |
 
@@ -149,17 +149,32 @@ fails. UDP has no answer from the far end, so `ok` means sent, not received.
 
 ## Platforms
 
-| | macOS | Linux | Windows |
+| | macOS (tested here) | Linux | Windows |
 |---|---|---|---|
-| `udp/source`, unicast | tested | not tested here | not tested here |
-| `udp/source`, multicast on the default interface | tested, two receivers on one group | not tested here | not tested here |
-| `udp/source`, `interface` | not tested (one interface on the test machine) | not tested | not tested |
+| `udp/source`, unicast | yes | not tested | not tested |
+| `udp/source`, multicast, default interface | yes, and two receivers of one group | not tested | not tested |
+| `udp/source`, `interface` by name | yes, joined on `lo0`; an unknown name is refused | not tested; GLib turns an unknown name into the default route | not tested |
 | `udp/source`, source specific | not tested | not tested | not tested |
-| `udp/output` | tested | not tested here | refused: the core hands a sidecar output its programme on a FIFO, and Windows has none |
+| `udp/output`, unicast and multicast | yes | not tested | refused by the core: a sidecar output gets the programme on a FIFO, and Windows has none |
+| `udp/output`, `interface` | yes, out of `lo0` | not tested | not applicable |
 
-Interface selection is GLib's `g_socket_join_multicast_group` with an
-interface name, which `udpsrc` and `udpsink` call for us. On Linux the name
-becomes an interface index (`ip_mreqn`); on macOS and Windows GLib looks up the
-interface's IPv4 address for `ip_mreq`. None of it is platform specific in
-this plugin, so nothing is `cfg` gated; where GLib cannot honour a name the
-join fails and health says so.
+The interface is the one place the plugin differs by platform, and it is
+`cfg` gated in `plugins/udp/src/iface.rs`:
+
+* Receiving uses `udpsrc`'s `multicast-iface`, which GLib turns into the join
+  on that interface. An IPv4 address is turned into the interface's name
+  first, because `udpsrc` wants a name.
+* Sending cannot use `udpsink`'s `multicast-iface`: in GStreamer 1.28.7 it is
+  used to join a group and never to choose where packets leave, so with it set
+  to `lo0` nothing left by the loopback. On Unix the plugin sets
+  `IP_MULTICAST_IF` itself, on the socket `udpsink` opened, with the
+  interface's IPv4 address from `getifaddrs`, before the first packet. On
+  Windows there is no FIFO for an output, so the question does not arise yet;
+  when it does, the same option is `setsockopt` on a `SOCKET` and needs the
+  Windows socket API.
+
+Constant bitrate: at 8000 kbit/s the output measured 8.03 Mbit/s over ten
+seconds, 1316 byte datagrams, 19.9% null packets. The rate is capped, not
+clocked: in 100 ms windows it ran from 4.7 to 11 Mbit/s, because the
+programme arrives a frame at a time. A modulator with a buffer takes that; one
+that needs packets spaced to the microsecond is not served yet.

@@ -16,6 +16,7 @@ makes the same argument about the UI).
 | [camera](../../plugins/camera/README.md) | `camera/source`, `camera/devices`, tool `list_cameras` | Linux, macOS, Windows | `unixfd`, else container | conformant; verified on macOS |
 | [audio-device](../../plugins/audio-device/README.md) | `audio-device/source`, `audio-device/devices`, tool `list_audio_inputs` | Linux, macOS, Windows | container | conformant; verified on macOS |
 | [screen](../../plugins/screen/README.md) | `screen/source`, `screen/devices`, tool `list_screens` | Linux, macOS, Windows | `unixfd`, else container | conformant; verified on macOS. The Wayland portal handshake is not implemented |
+| [udp](../../plugins/udp/README.md) | `udp/source`, `udp/output` | Linux, macOS, Windows (source only) | container; the output reads a FIFO | tested on macOS: a 60 s multicast soak, 1% loss, two receivers, output checked frame for frame. See [the reference](udp.md) |
 | [file-record](../../plugins/file-record/README.md) | `file-record/output`, tool `list_recordings` | Linux, macOS | container, on a FIFO | conformant; a ten second recording verified on macOS. Not Windows |
 
 "Conformant" means `gmx plugin test ./plugins/<name>` passes every check it
