@@ -41,7 +41,7 @@ Words used below:
 | IP camera MJPEG over HTTP or HTTPS, with its login | `multipart/x-mixed-replace` | MJPEG, copy | none | `ipcam/source` (plugin `ipcam`) | `plugins/ipcam/src/tests.rs` against a camera served by the test; by hand through the release core |
 | IP camera snapshot URL, polled 1 to 30 times a second | JPEG | MJPEG, copy | none | `ipcam/source` (plugin `ipcam`) | `plugins/ipcam/src/tests.rs`, behind a basic login |
 | ONVIF discovery of cameras on the LAN | WS-Discovery, SOAP | each profile's RTSP stream, opened by `hls/source` | as the camera sends | `ipcam/discover` (plugin `ipcam`) | `plugins/ipcam/src/onvif/tests.rs` against a simulated device checking the WS-Security digest; no real camera here |
-| Internet radio (Icecast, SHOUTcast) | MP3, AAC, Ogg over HTTP | none | MP3, AAC, Vorbis, Opus | `file/source`, finite rather than live | not tested |
+| Internet radio (Icecast, SHOUTcast), or any audio stream over HTTP | MP3, AAC, Ogg, with ICY titles | none | MP3, AAC, Vorbis, Opus, copy | `icecast/source` (plugin `icecast`), live, the song title in health | `plugins/icecast/src/tests.rs` against a station run by the test |
 | SDI or HDMI capture card (Blackmagic DeckLink) | raw | | | nothing | |
 
 ### Devices on this machine
@@ -81,7 +81,7 @@ has switched on. The hub carries what FLV carries.
 | WHEP playback, served from the control port (`/whep/<output>`) | WebRTC | copy of the programme or a rendition: H.264, and H.265, AV1, VP8, VP9 from a rendition | Opus, encoded once for every viewer | `whep/output` (built in) | `whep/tests.rs` against a real `webrtcbin` receiver; by hand with `whepsrc` and headless Chrome against the release core |
 | RTSP server, for decoders, NVRs and players that pull, on a port chosen when added | RTP over UDP or TCP | H.264, H.265 copy | AAC, MP3, Opus copy | `rtsp/output` (plugin `rtsp`) | `plugins/rtsp/src/tests.rs`: ffmpeg over TCP and UDP, frame hashes equal to the encoder's; by hand against the release core |
 | RIST (Simple Profile) | RTP MPEG-TS | copy (H.264, HEVC, AV1) | copy | `rist/output` (built in) | `plugin/outputs/rist_tests.rs`: a real `ristsrc` receiver decodes 60 frames and its RTCP marks the output connected |
-| Icecast or SHOUTcast (audio only) | MP3, Ogg | | | nothing | |
+| Icecast 2 or SHOUTcast 2 (sound only) | MP3, Ogg | none | MP3, Vorbis or Opus, encoded once | `icecast/output` (plugin `icecast`) | `plugins/icecast/src/tests.rs`: an Icecast server run by the test checks the login and decodes 3 s or more of what it got |
 | SDI out | | | | nothing | |
 
 ### Preview and monitoring doors (control port, only while a client holds them)

@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Internet radio",
+  "description": "A radio station, or any audio stream served over HTTP, played live.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["uri"],
+  "properties": {
+    "uri": {
+      "title": "Stream address",
+      "description": "The station's stream, not its web page: usually it ends in .mp3, .aac, .ogg or a mount name, and opens in VLC.",
+      "type": "string",
+      "default": "",
+      "examples": ["http://radio.example.com:8000/live.mp3"]
+    }
+  }
+}

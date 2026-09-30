@@ -28,6 +28,8 @@ until then.
 | `rtsp/output` | output | `rtsp` | serve the programme over RTSP for players, decoders and NVRs that pull | yes, Linux and macOS |
 | `ipcam/source` | source | `ipcam` | an IP camera's MJPEG stream or snapshot picture over HTTP | yes |
 | `ipcam/discover` | device | `ipcam` | ONVIF cameras on the LAN, each profile as an RTSP `hls/source` | yes |
+| `icecast/output` | output | `icecast` | the programme's sound to an Icecast or SHOUTcast 2 mount | yes, Linux and macOS |
+| `icecast/source` | source | `icecast` | an internet radio station or any audio stream over HTTP, live | yes |
 
 ### What "needs the core" means, precisely
 
@@ -256,6 +258,33 @@ Annotations: `readOnlyHint = true`, `destructiveHint = false`,
 Where the runtime is absent the tool is an error naming the download page, and
 `discover` answers with an empty list rather than an error, because a machine
 with no NDI on it is not broken.
+
+## `icecast/output` and `icecast/source`
+
+`icecast/output` sends the programme's sound to an Icecast 2 or SHOUTcast 2
+server (the Icecast HTTP source protocol). The sound is decoded and encoded
+once; the picture is dropped at the demuxer.
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `uri` | string | empty | `icecast://<user>:<password>@<host>:<port>/<mount>`; fills every field below |
+| `host` | string | required | the server |
+| `port` | integer 1 to 65535 | `8000` | |
+| `mount` | string | `live.mp3` | what listeners open after the port |
+| `user` | string | `source` | |
+| `password` | string, `format: secret` | required | the source password |
+| `format` | `mp3`, `vorbis`, `opus` | `mp3` | Ogg for the last two |
+| `bitrate_kbps` | integer 32 to 320 | `128` | |
+| `name` | string | `GodwinMix` | the station name players show |
+| `public` | boolean | `false` | list the mount in the server's directory |
+
+Song title updates are not sent. Health says how much has been sent, or why
+the server refused.
+
+`icecast/source` plays an audio stream over HTTP or HTTPS (`uri`) as a live
+source: `souphttpsrc` in ICY mode, `icydemux`, `parsebin`, and the sound as it
+came (MP3, AAC, Vorbis, Opus) to the core in Matroska. Health carries the last
+song title the station sent; `stats` answers `{address, title}`.
 
 ## `ipcam/source` and `ipcam/discover`
 

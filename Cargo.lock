@@ -1276,6 +1276,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "gmx-icecast"
+version = "0.2.0"
+dependencies = [
+ "base64",
+ "gmx-netkit",
+ "godwinmix-capture-common",
+ "godwinmix-sdk",
+ "gstreamer",
+ "gstreamer-app",
+ "serde_json",
+]
+
+[[package]]
 name = "gmx-ingest"
 version = "0.2.0"
 dependencies = [

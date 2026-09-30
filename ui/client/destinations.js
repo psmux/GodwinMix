@@ -152,6 +152,27 @@ export const OUTPUT_KINDS = [
     build: (v) => ({ id: v.id, type: "rtsp/output", uri: "", port: v.port ?? 8554, path: v.path || "live", bind: v.bind || "0.0.0.0" }),
   },
   {
+    id: "icecast",
+    provides: ["icecast/output"],
+    title: "Icecast radio",
+    group: "Streams and servers",
+    icon: "output",
+    description: "The programme's sound only, as internet radio, for listeners in the car or on a weak signal.",
+    plugin: "icecast",
+    schema: {
+      type: "object",
+      required: ["id", "uri"],
+      properties: {
+        id: { type: "string", title: "Name", examples: ["radio"], description: "A short id. It appears in alerts and in the outputs list." },
+        uri: { type: "string", title: "Server address", examples: ["icecast://source:password@radio.example.com:8000/live.mp3"], description: "The whole address your streaming host gave you, with the source password and the mount." },
+        format: { type: "string", title: "Format", enum: ["mp3", "vorbis", "opus"], "x-gmx-labels": ["MP3", "Ogg Vorbis", "Ogg Opus"], default: "mp3", description: "MP3 plays everywhere." },
+        bitrate_kbps: { type: "integer", title: "Bitrate", default: 128, minimum: 32, maximum: 320, "x-gmx-unit": "kbit", "x-gmx-group": "Advanced" },
+        name: { type: "string", title: "Station name", default: "GodwinMix", "x-gmx-group": "Advanced", description: "What listeners see in their player." },
+      },
+    },
+    build: (v) => ({ id: v.id, type: "icecast/output", uri: v.uri, format: v.format || "mp3", bitrate_kbps: v.bitrate_kbps ?? 128, name: v.name || "GodwinMix" }),
+  },
+  {
     id: "whep",
     provides: ["whep/output"],
     title: "WebRTC viewers (WHEP)",
