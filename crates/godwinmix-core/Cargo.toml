@@ -28,6 +28,11 @@ gstreamer-pbutils = { workspace = true, features = ["v1_20"] }
 gstreamer-controller = { workspace = true }
 # The net clock: a time provider on the core, a client clock on a node.
 gstreamer-net = { workspace = true }
+# WHEP playback: `webrtcbin`'s session description and its SDP. Already in
+# the tree through the ingest plugin's WHIP; the libraries are part of
+# gst-plugins-bad, which the core needs anyway. See `whep/`.
+gstreamer-webrtc = "0.24"
+gstreamer-sdp = "0.24"
 glib = { workspace = true }
 # HLS segments, shared by reference with every viewer. See `hls/`.
 bytes = { workspace = true }
