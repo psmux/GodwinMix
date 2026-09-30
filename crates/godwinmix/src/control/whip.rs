@@ -24,14 +24,21 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::post;
 use axum::Router;
 
-use crate::channels::Whip;
+use crate::channels::{Channels, Whip};
 use crate::control::Ctx;
+use std::sync::Arc;
 
 pub fn router(ctx: Ctx) -> Router<Ctx> {
+    router_for(ctx.app.channels.clone())
+}
+
+/// The same routes over any channel registry: a single process core's, or a
+/// station's, which serves WHIP for every show.
+pub fn router_for<S: Clone + Send + Sync + 'static>(channels: Arc<Channels>) -> Router<S> {
     Router::new()
         .route("/whip/{channel}/{stream}", post(offer))
         .route("/whip/{channel}/{stream}/{session}", axum::routing::delete(end).patch(no_trickle))
-        .with_state(ctx)
+        .with_state(channels)
 }
 
 /// The key: a bearer token, or `?psk=`, `?key=` or `?token=`.
@@ -47,7 +54,7 @@ fn key_of(headers: &HeaderMap, query: &HashMap<String, String>) -> String {
 }
 
 async fn offer(
-    State(ctx): State<Ctx>,
+    State(channels): State<Arc<Channels>>,
     Path((channel, stream)): Path<(String, String)>,
     Query(query): Query<HashMap<String, String>>,
     extensions: axum::http::Extensions,
@@ -61,7 +68,6 @@ async fn offer(
     }
     let key = key_of(&headers, &query);
     let peer = extensions.get::<ConnectInfo<SocketAddr>>().map(|p| p.0.to_string()).unwrap_or_else(|| "unknown".into());
-    let channels = ctx.app.channels.clone();
     let (app, name) = (channel.clone(), stream.clone());
     let answer = tokio::task::spawn_blocking(move || channels.whip_offer(&app, &name, &key, &body, &peer)).await;
     match answer {
@@ -76,8 +82,7 @@ async fn offer(
     }
 }
 
-async fn end(State(ctx): State<Ctx>, Path((_, _, session)): Path<(String, String, String)>) -> Response {
-    let channels = ctx.app.channels.clone();
+async fn end(State(channels): State<Arc<Channels>>, Path((_, _, session)): Path<(String, String, String)>) -> Response {
     match tokio::task::spawn_blocking(move || channels.whip_end(&session)).await {
         Ok(true) => StatusCode::OK.into_response(),
         _ => (StatusCode::NOT_FOUND, "no WHIP session by that name; it may have ended already.").into_response(),

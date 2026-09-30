@@ -228,6 +228,11 @@ fn the_table_matches_the_scopes_in_the_protocol_document() {
     assert_eq!(scope("config.set"), Scope::Admin);
     assert_eq!(scope("config.reset"), Scope::Admin);
     assert_eq!(scope("config.schema"), Scope::Read);
+    // Shows: seeing them is a read, changing which exist is the machine's.
+    assert_eq!(scope("show.list"), Scope::Read);
+    for name in ["show.add", "show.rename", "show.remove", "show.start", "show.stop"] {
+        assert_eq!(scope(name), Scope::Admin, "{name}");
+    }
 
     let destructive: Vec<&str> =
         reg.iter().filter(|m| m.destructive).map(|m| m.name).collect();
@@ -261,14 +266,18 @@ fn the_table_matches_the_scopes_in_the_protocol_document() {
             "scene.item.filter.remove",
             "scene.item.remove",
             "scene.remove",
+            // A show removed takes its folder with it: its scenes, its
+            // sources and its settings.
+            "show.remove",
             "source.remove",
         ],
         "the destructive set is the one 03 section 6 marks, plus filter.remove (taking a \
          filter out changes the picture and cannot be undone by repeating it), \
          plugin.update (it replaces a running plugin, and rolls back rather than undoes), \
          preset.apply (it rewrites the operator's configuration file), core.restart \
-         (the programme goes off air until the mixer is back) and the two scene \
-         removals (a deleted composition does not come back)"
+         (the programme goes off air until the mixer is back), the two scene \
+         removals (a deleted composition does not come back) and show.remove (a show's \
+         folder goes with it)"
     );
 }
 

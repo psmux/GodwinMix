@@ -570,6 +570,21 @@ pub struct MixerHandle {
 }
 
 impl MixerHandle {
+    /// A handle with no mixer behind it: its commands arrive on the receiver
+    /// handed back, and its events reach whoever subscribes. For a process
+    /// that serves clients and channels but mixes nothing, which is what a
+    /// station running shows as processes of their own is.
+    pub fn detached() -> (MixerHandle, mpsc::Receiver<Command>) {
+        let (tx, rx) = mpsc::channel(COMMAND_QUEUE);
+        let handle = MixerHandle {
+            tx,
+            events: EventBus::new(256),
+            coalesced: Arc::new(Coalesced::default()),
+            running: Arc::new(Running::default()),
+        };
+        (handle, rx)
+    }
+
     /// Queue a command. Never blocks: this is called from GStreamer clock
     /// callbacks and from the bus thread as well as from the control plane,
     /// and none of those may wait on the mixer thread.

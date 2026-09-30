@@ -1617,6 +1617,13 @@
               "null"
             ]
           },
+          "relay": {
+            "description": "Where a mixer on this machine reads it: the listener's own port on\nloopback. Any show adds it as a source with `source.add {type:\n\"ingest/rtmp\", relay, stream: \"<app>/<name>\"}`, and every show that\ndoes reads the one stream the station received.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "since_ms": {
             "description": "When it last went live, in milliseconds since 1970.",
             "format": "uint64",
@@ -6949,6 +6956,185 @@
           "why"
         ],
         "type": "object"
+      },
+      "Show": {
+        "description": "One show, as `show.list` and `event/show.changed` carry it.",
+        "properties": {
+          "cpu_millicores": {
+            "description": "Its process's CPU, in thousandths of one core, measured between two\nreads of `show.list`. Zero on the first read and while it is stopped.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "error": {
+            "description": "Why it is not running, when it is not and a person did not ask.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "description": "A slug: `main`, `second-room`.",
+            "type": "string"
+          },
+          "memory_mib": {
+            "default": 0,
+            "description": "Its process's resident memory, in MiB.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "on_air": {
+            "description": "The scene, or the source, on its programme. None while it shows the\nslate or is not running.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "programme_kbps": {
+            "description": "What its outputs are sending, summed, in kilobits a second.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "restarts": {
+            "default": 0,
+            "description": "How many times the station has started it again after it died.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "state": {
+            "$ref": "#/components/schemas/ShowState"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "state",
+          "programme_kbps",
+          "cpu_millicores"
+        ],
+        "type": "object"
+      },
+      "ShowAddRequest": {
+        "description": "`show.add`.",
+        "properties": {
+          "from": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ShowFrom"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "`\"empty\"` (the default), the id of a show to copy, or\n`{project: <file>}`. A copy takes the show's settings, sources and\nscenes, and leaves its outputs behind so nothing goes out twice."
+          },
+          "name": {
+            "description": "What a person calls it. The id is made from it.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "ShowFrom": {
+        "anyOf": [
+          {
+            "description": "`\"empty\"`, or the id of a show to copy.",
+            "type": "string"
+          },
+          {
+            "description": "A file `project.export` wrote, opened into the new show.",
+            "properties": {
+              "project": true
+            },
+            "required": [
+              "project"
+            ],
+            "type": "object"
+          }
+        ],
+        "description": "What a new show starts from."
+      },
+      "ShowList": {
+        "description": "`show.list`.",
+        "properties": {
+          "current": {
+            "description": "The show a client reaches when it names none: the first one, which is\nthe one the station was started with.",
+            "type": "string"
+          },
+          "shows": {
+            "items": {
+              "$ref": "#/components/schemas/Show"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "shows",
+          "current"
+        ],
+        "type": "object"
+      },
+      "ShowRemoved": {
+        "description": "`show.remove`.",
+        "properties": {
+          "removed": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "removed"
+        ],
+        "type": "object"
+      },
+      "ShowRenameRequest": {
+        "description": "`show.rename`.",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "type": "object"
+      },
+      "ShowState": {
+        "description": "Where a show is in its life.",
+        "oneOf": [
+          {
+            "const": "starting",
+            "description": "Its process is starting and has not said it is ready yet.",
+            "type": "string"
+          },
+          {
+            "const": "running",
+            "description": "Up, and answering on its own socket.",
+            "type": "string"
+          },
+          {
+            "const": "stopped",
+            "description": "Stopped by a person. Its config is kept and `show.start` brings it back.",
+            "type": "string"
+          },
+          {
+            "const": "failed",
+            "description": "It kept dying and the station stopped restarting it. `error` says why.",
+            "type": "string"
+          }
+        ]
       },
       "SnapshotRequest": {
         "description": "`snapshot.get` on `/rpc` and through MCP. The REST route serves the same\nbytes raw, because an `<img>` tag cannot read base64 out of JSON.",
@@ -13109,6 +13295,266 @@
         "x-destructive": false,
         "x-idempotent": true,
         "x-scope": "operate"
+      }
+    },
+    "/api/v1/shows": {
+      "get": {
+        "description": "JSON-RPC method `show.list`. Needs the `read` scope.",
+        "operationId": "show.list",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShowList"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Every show on this machine: its name, whether it is running, what is on air, what its outputs send and what its process costs. `current` is the show a client reaches when it names none.",
+        "tags": [
+          "show"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      },
+      "post": {
+        "description": "JSON-RPC method `show.add`. Needs the `admin` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "show.add",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShowAddRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Show"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Make another show and start it: empty, a copy of a show (without its outputs, so nothing goes out twice), or from a project file.",
+        "tags": [
+          "show"
+        ],
+        "x-destructive": false,
+        "x-idempotent": false,
+        "x-scope": "admin"
+      }
+    },
+    "/api/v1/shows/{id}": {
+      "delete": {
+        "description": "JSON-RPC method `show.remove`. Needs the `admin` scope. Destructive: accepts `dry_run: true`, and on a token whose policy is `confirm = required` it is refused once with -32020 and a confirm token. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "show.remove",
+        "parameters": [
+          {
+            "description": "The id, as listed by the matching list call.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IdRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShowRemoved"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Stop a show and remove it with its folder. Refused for the last show and for main, the show the station was started with.",
+        "tags": [
+          "show"
+        ],
+        "x-destructive": true,
+        "x-idempotent": true,
+        "x-scope": "admin"
+      }
+    },
+    "/api/v1/shows/{id}/rename": {
+      "post": {
+        "description": "JSON-RPC method `show.rename`. Needs the `admin` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "show.rename",
+        "parameters": [
+          {
+            "description": "The id, as listed by the matching list call.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShowRenameRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Show"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Give a show another name. Its id stays.",
+        "tags": [
+          "show"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "admin"
+      }
+    },
+    "/api/v1/shows/{id}/start": {
+      "post": {
+        "description": "JSON-RPC method `show.start`. Needs the `admin` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "show.start",
+        "parameters": [
+          {
+            "description": "The id, as listed by the matching list call.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IdRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Show"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Start a stopped or failed show.",
+        "tags": [
+          "show"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "admin"
+      }
+    },
+    "/api/v1/shows/{id}/stop": {
+      "post": {
+        "description": "JSON-RPC method `show.stop`. Needs the `admin` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "show.stop",
+        "parameters": [
+          {
+            "description": "The id, as listed by the matching list call.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IdRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Show"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Stop a show. It keeps its config, and stays stopped when the station starts again, until show.start.",
+        "tags": [
+          "show"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "admin"
       }
     },
     "/api/v1/snapshot/{id}": {
