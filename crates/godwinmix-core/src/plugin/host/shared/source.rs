@@ -63,11 +63,13 @@ impl SharedSource {
     fn report(&self) -> Value {
         let shared = self.owner.as_ref().map(|o| o.shared.clone());
         let pid = shared.as_ref().and_then(|s| s.feed.lock().as_ref().and_then(|f| f.pid()));
+        let publish = shared.as_ref().and_then(|s| s.feed.lock().as_ref().map(|f| f.through.report()));
         let mut out = json!({
             "bus": self.name.to_string(),
             "dir": self.dir.display().to_string(),
             "owner": self.is_owner(),
             "plugin_pid": pid,
+            "publish_ms": publish,
             "takeovers": shared.as_ref().map_or(0, |s| s.takeovers.load(Relaxed)),
             "last_start_ms": shared.as_ref().map_or(0, |s| s.last_start_ms.load(Relaxed)),
         });

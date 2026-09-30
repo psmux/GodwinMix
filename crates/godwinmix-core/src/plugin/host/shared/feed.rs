@@ -17,6 +17,9 @@ use godwinmix_protocol::plugin::wire::InstanceState;
 use gstreamer as gst;
 use gstreamer::prelude::*;
 use std::path::PathBuf;
+use super::reader::Samples;
+use parking_lot::Mutex;
+use std::collections::VecDeque;
 use std::sync::atomic::{AtomicU64, Ordering::Relaxed};
 use std::sync::Arc;
 
@@ -43,6 +46,8 @@ pub struct Feed {
     sidecar: SidecarSource,
     pipeline: gst::Pipeline,
     published: Arc<AtomicU64>,
+    /// From a frame reaching this process from the plugin to its publish.
+    pub through: Arc<Samples>,
     started_ns: u64,
     /// Held for as long as the feed lives, and dropped after everything else.
     _claim: Claim,
@@ -63,14 +68,24 @@ impl Feed {
         })?;
         let ends = sidecar.start(&plan.build.canvas, false)?;
         let published = Arc::new(AtomicU64::new(0));
+        let through = Arc::new(Samples::default());
         tap(&ends, plan, &published)?;
+        time_through(&ends, plan, &through)?;
         let pipeline = ends.pipeline.clone();
         if let Err(e) = pipeline.set_state(gst::State::Playing) {
             let _ = pipeline.set_state(gst::State::Null);
             let _ = sidecar.stop();
             return Err(anyhow::anyhow!("the feed for {} would not play: {e}", plan.name));
         }
-        Ok(Feed { id: plan.build.id.clone(), sidecar, pipeline, published, started_ns: monotonic_ns(), _claim: claim })
+        Ok(Feed {
+            id: plan.build.id.clone(),
+            sidecar,
+            pipeline,
+            published,
+            through,
+            started_ns: monotonic_ns(),
+            _claim: claim,
+        })
     }
 
     /// Why this feed should be given up, if it should. Polled by the owner
@@ -113,6 +128,7 @@ impl Feed {
 
 impl Drop for Feed {
     fn drop(&mut self) {
+        tracing::info!(source = %self.id, publish_ms = %self.through.report(), "closing the shared device");
         let _ = self.pipeline.set_state(gst::State::Null);
         let _ = self.sidecar.stop();
     }
@@ -128,6 +144,13 @@ fn tap(ends: &MediaEnds, plan: &Plan, published: &Arc<AtomicU64>) -> Result<()> 
             ends.vtee.release_request_pad(&peer);
         }
         pipeline.remove_many([&queue, &ends.video]).context("taking the programme branch off")?;
+    }
+    // The normaliser's `videorate` fills gaps by holding each frame until the
+    // next one arrives, a frame of delay. Every reader runs its own normaliser
+    // for its own canvas and fills its own gaps, so here it only drops, which
+    // holds nothing, and the bus adds no frame of delay to anyone.
+    if let Some(rate) = pipeline.by_name(&format!("{id}-vrate")) {
+        rate.set_property("drop-only", true);
     }
     let sink = crate::gstutil::make("gmxbussink", &format!("{id}-bus-sink"))?;
     sink.set_property("bus-name", plan.name.to_string());
@@ -146,5 +169,42 @@ fn tap(ends: &MediaEnds, plan: &Plan, published: &Arc<AtomicU64>) -> Result<()> 
         published.store(monotonic_ns(), Relaxed);
         gst::PadProbeReturn::Ok
     });
+    Ok(())
+}
+
+/// Time each frame from the normaliser's entry to the bus sink, matched by
+/// its timestamp. Both probes are on the one streaming thread, so the lock is
+/// never contended; `try_lock` keeps it that way if that ever changes.
+fn time_through(ends: &MediaEnds, plan: &Plan, through: &Arc<Samples>) -> Result<()> {
+    let id = &plan.build.id;
+    let pipeline = &ends.pipeline;
+    let entry = pipeline.by_name(&format!("{id}-vrate")).context("the feed has no normaliser")?;
+    let sink = pipeline.by_name(&format!("{id}-bus-sink")).context("the feed has no bus sink")?;
+    let seen: Arc<Mutex<VecDeque<(u64, u64)>>> = Arc::default();
+    let into = seen.clone();
+    entry.static_pad("sink").context("videorate has no sink pad")?.add_probe(
+        gst::PadProbeType::BUFFER,
+        move |_, info| {
+            if let (Some(pts), Some(mut held)) = (info.buffer().and_then(|b| b.pts()), into.try_lock()) {
+                if held.len() >= 16 {
+                    held.pop_front();
+                }
+                held.push_back((pts.nseconds(), monotonic_ns()));
+            }
+            gst::PadProbeReturn::Ok
+        },
+    );
+    let through = through.clone();
+    sink.static_pad("sink").context("gmxbussink has no sink pad")?.add_probe(
+        gst::PadProbeType::BUFFER,
+        move |_, info| {
+            if let (Some(pts), Some(held)) = (info.buffer().and_then(|b| b.pts()), seen.try_lock()) {
+                if let Some((_, at)) = held.iter().find(|(p, _)| *p == pts.nseconds()) {
+                    through.add_ns(monotonic_ns().saturating_sub(*at));
+                }
+            }
+            gst::PadProbeReturn::Ok
+        },
+    );
     Ok(())
 }
