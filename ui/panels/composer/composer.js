@@ -9,6 +9,7 @@
 // who runs a whole service from the tiles never fetches it, which is why the
 // page stays inside its budget with a designer in it.
 
+import { withShow } from "../../client/transport-rpc.js";
 import { el, clear, on } from "../../shell/dom.js";
 import { modal } from "../../shell/modal.js";
 import { toast, errorToast } from "../../shell/toast.js";
@@ -327,7 +328,7 @@ export class Composer {
     const transport = this.client.transport || {};
     const url = new URL(path, transport.base || location.origin);
     if (transport.token) url.searchParams.set("token", transport.token);
-    return url.toString();
+    return withShow(url).toString();
   }
 
   // ---------------------------------------------------------------- finish

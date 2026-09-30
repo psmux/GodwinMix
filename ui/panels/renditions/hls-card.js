@@ -7,6 +7,7 @@
 // Android and recent Chrome play HLS in a plain <video>; anything else gets
 // "Open in a player" and a sentence saying why.
 
+import { withShow } from "../../client/transport-rpc.js";
 import { el } from "../../shell/dom.js";
 import { qrPath } from "../channels/qr.js";
 import { copy } from "../channels/keyed.js";
@@ -20,7 +21,8 @@ const LOOPBACK = /^(localhost|127\.|\[::1\])/;
  */
 export function hlsUrl(output, base) {
   const path = output && output.playback && output.playback.master_url_path;
-  return path ? new URL(path, base).href : null;
+  // A show other than the first is reached with its `?show=`, as the page is.
+  return path ? withShow(new URL(path, base)).href : null;
 }
 
 /** True when a plain <video> element here plays HLS by itself. */
