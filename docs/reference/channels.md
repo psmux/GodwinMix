@@ -212,7 +212,8 @@ names no channel, 1401 for a key, 1403 for a channel that is off or does not
 take SRT or for `m=request`, 1404 for no such channel, 1409 for a stream name
 already live. Each refusal is also `event/channel.refused`, as for RTMP.
 
-The stream has to be MPEG-TS with H.264 video and AAC audio. It is demuxed
+The stream has to be MPEG-TS with H.264 or HEVC video and AAC audio (HEVC goes
+on the hub as enhanced RTMP HEVC). It is demuxed
 and parsed, never decoded, into the same hub RTMP feeds.
 
 ### WHIP on the control port
@@ -434,9 +435,9 @@ programme's outputs use:
 * Every node costs a ticket from the resource governor before it starts, and
   holds it while it runs.
 
-A destination sends H.264 and AAC: RTMP here is classic RTMP, and SRT is
+A destination sends H.264 or HEVC and AAC: HEVC as enhanced RTMP, and SRT as
 MPEG-TS made from the same tags. A rendition that asks for another codec is
-refused with that reason. A stream that is not H.264 and AAC can be copied
+refused with that reason. A stream that is not H.264 or HEVC with AAC can be copied
 but not converted.
 
 `rendition` in the record is what was asked. While the stream is live, `plan`
