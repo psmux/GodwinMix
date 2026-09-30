@@ -35,6 +35,10 @@ function markIn(panel, id, holder, before) {
     hidden: true,
     type: "button",
     "data-nodrag": "",
+    // The press stops here. A tile's sweep, the dock's panel drag and the
+    // grid's focus grab all listen for it further up, and one that captures
+    // the pointer sends the click to itself instead of to this button.
+    onpointerdown: (event) => event.stopPropagation(),
     onclick: (event) => {
       event.stopPropagation();
       openFix({ client: panel.client, scenes: panel.scenes, scene: id });

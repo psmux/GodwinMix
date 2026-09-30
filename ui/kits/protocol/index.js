@@ -135,7 +135,15 @@ export class SceneClient {
       return out;
     }
     if (this.onEcho) this.onEcho(patch, out);
-    if (out.applied) this.changed();
+    if (out.applied) {
+      // The counts on the tabs came from `scene.list` and a patch does not
+      // touch them, so an Undo that put three items back left the tab
+      // reading the count from before. Counted again from the mirror.
+      for (const s of this.summaries) {
+        if (this.mirror.record(s.id)) s.items = this.mirror.descendants(s.id).length;
+      }
+      this.changed();
+    }
     return out;
   }
 
