@@ -39,9 +39,13 @@ pub async fn run(call: &Call, plan: Plan, replace: bool, report: &mut Report) ->
         }
     }
     for source in plan.sources.add {
-        let id = source.id.clone();
+        let again = Box::new(source.clone());
         if let Err(e) = call.app.mixer.request(|ack| Command::AddSource(Box::new(source), Some(ack))).await {
-            report.failed.push(format!("source {id} did not start: {e}"));
+            report.failed.push(format!("source {} did not start: {e}", again.id));
+            // Sent again with nobody waiting, which is how the mixer keeps a
+            // source that failed as wanted: its scenes still name it, and it
+            // starts once what it needs is here.
+            let _ = call.app.mixer.send(Command::AddSource(again, None));
         }
     }
     for output in plan.outputs.add {

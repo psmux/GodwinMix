@@ -24,7 +24,14 @@ pub struct Plan {
 }
 
 pub async fn build(call: &Call, bundle: &Bundle, replace: bool, machine: bool, report: &mut Report) -> Result<Plan, RpcError> {
-    let here = call.app.mixer.configs().await.map_err(|e| call.mixer_error(e))?;
+    let mut here = call.app.mixer.configs().await.map_err(|e| call.mixer_error(e))?;
+    // Wanted but not started counts as here: its id is taken, and a replace
+    // takes it out like any other.
+    for u in std::mem::take(&mut here.unstarted) {
+        if !here.sources.iter().any(|s| s.id == u.config.id) {
+            here.sources.push(u.config);
+        }
+    }
     let settings = plan_settings(call, bundle, replace, machine, report);
     let sources = entries::plan("source", &bundle.sources, &here.sources, |s| &s.id, |s, id| s.id = id, replace, report)?;
     let outputs = entries::plan("output", &bundle.outputs, &here.outputs, |o| &o.id, |o, id| o.id = id, replace, report)?;
