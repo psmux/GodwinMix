@@ -316,7 +316,9 @@ impl MediaLibrary {
     }
 }
 
-fn is_media(path: &Path) -> bool {
+/// Whether a file has an extension this library lists. Public for the project
+/// export, which lists clips by name and size without opening them.
+pub fn is_media(path: &Path) -> bool {
     path.extension()
         .and_then(|e| e.to_str())
         .map(|e| EXTENSIONS.contains(&e.to_lowercase().as_str()))
