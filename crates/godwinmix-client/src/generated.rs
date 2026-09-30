@@ -453,7 +453,41 @@ pub struct CellAssignment {
     pub y: i32,
 }
 
-/// A named place encoders publish to, on the mixer's own RTMP port.
+/// `channel.certificate.generate`: a self signed certificate.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct CertificateGenerateRequest {
+    /// Host names and addresses it is for. Defaults to this machine's
+    /// address, `localhost` and `127.0.0.1`.
+    pub names: Vec<String>,
+}
+
+/// The certificate RTMPS answers with. The private key never leaves the core.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct CertificateInfo {
+    /// When it was set, RFC 3339 in UTC.
+    pub created: String,
+    /// SHA-256 of the certificate, as colon separated hex, to compare with
+    /// what an encoder shows.
+    pub fingerprint: String,
+    /// The names it was made for, for a self signed one.
+    pub names: Vec<String>,
+    /// `uploaded`, or `self_signed` for one the mixer made.
+    pub source: String,
+}
+
+/// `channel.certificate.set`: a certificate and its private key, as PEM.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct CertificateSetRequest {
+    /// The certificate, and any chain after it, as PEM.
+    pub cert: String,
+    /// Its private key, as PEM.
+    pub key: String,
+}
+
+/// A named place encoders publish to, over every protocol it has switched on.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Channel {
@@ -473,7 +507,12 @@ pub struct Channel {
     pub keys: Vec<ChannelKey>,
     /// What a person calls it.
     pub name: String,
+    /// The protocols it takes publishers over, besides RTMPS.
+    pub protocols: Vec<ChannelProtocol>,
     pub publish: ChannelPublish,
+    /// RTMPS, on a port of its own, when a person has turned it on.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rtmps: Option<Rtmps>,
     /// Live streams, and streams that left while a scene still holds their
     /// source.
     pub streams: Vec<ChannelStream>,
@@ -491,6 +530,9 @@ pub struct ChannelAddRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub key_mode: Option<KeyMode>,
     pub name: String,
+    /// Defaults to RTMP alone.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub protocols: Option<Vec<ChannelProtocol>>,
 }
 
 /// What `channel.add` answers: the channel and its first key.
@@ -542,14 +584,30 @@ pub struct ChannelKeyRevealRequest {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ChannelList {
+    /// The certificate RTMPS answers with, when there is one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub certificate: Option<CertificateInfo>,
     pub channels: Vec<Channel>,
+    /// The addresses an encoder can reach this machine at, first one first.
+    pub hosts: Vec<String>,
+    /// Every listener a channel needs, open or not, and why: the ports this
+    /// mixer has open for ingest, and the channels each is open for.
+    pub listeners: Vec<Listener>,
     pub rtmp: RtmpInfo,
 }
+
+/// A way a publisher reaches a channel. RTMPS is `Rtmps`, set apart
+/// because it has a port of its own.
+pub type ChannelProtocol = String;
+/// The values api_level 1 knows for [`ChannelProtocol`].
+pub const CHANNEL_PROTOCOL_VALUES: &[&str] = &["rtmp", "srt", "whip"];
 
 /// Where an encoder is pointed.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ChannelPublish {
+    /// The same for every protocol the channel has on, RTMP first.
+    pub addresses: Vec<PublishAddress>,
     /// `<server>/main?psk=<key>`, with `<key>` left for the person to fill.
     pub example: String,
     /// `rtmp://<first address>:<port>/<app>`.
@@ -578,6 +636,12 @@ pub struct ChannelSetRequest {
     pub key_mode: Option<KeyMode>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
+    /// Which protocols it takes, as a whole list: `["rtmp", "srt"]`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub protocols: Option<Vec<ChannelProtocol>>,
+    /// RTMPS on or off, and its port.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rtmps: Option<Rtmps>,
 }
 
 /// One stream on a channel.
@@ -595,6 +659,9 @@ pub struct ChannelStream {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub key: Option<String>,
     pub name: String,
+    /// How it arrived: `rtmp`, `rtmps`, `srt` or `whip`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub protocol: Option<String>,
     /// When it last went live, in milliseconds since 1970.
     pub since_ms: u64,
     /// The mixer source it feeds, when it feeds one.
@@ -1555,6 +1622,31 @@ pub struct Limits {
     pub max_upload_bytes: i64,
 }
 
+/// One listener a channel needs, and whether it is open now.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Listener {
+    /// The channels it is open for. Empty when nothing needs it.
+    pub because: Vec<String>,
+    /// The last port of a range, for WebRTC media.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_port: Option<u16>,
+    /// Bound to 127.0.0.1 only, so nothing off this machine reaches it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub loopback: Option<bool>,
+    pub open: bool,
+    pub port: u16,
+    /// Why it is not open although a channel wants it, and what to do.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub problem: Option<String>,
+    /// `rtmp`, `rtmps`, `srt`, `whip`, `webrtc` (the media ports WHIP
+    /// sessions use) or `relay` (the RTMP port on the loopback alone, for the
+    /// mixer's own sources, while no channel has RTMP on).
+    pub protocol: String,
+    /// `tcp` or `udp`.
+    pub transport: String,
+}
+
 /// `log.gst`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -2231,6 +2323,18 @@ pub struct ProgramState {
     pub scene: Option<String>,
 }
 
+/// Where an encoder is pointed for one protocol.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PublishAddress {
+    /// The whole address with `<key>` where the key goes.
+    pub example: String,
+    /// `rtmp`, `rtmps`, `srt` or `whip`.
+    pub protocol: String,
+    /// The address without the key: `srt://10.0.0.5:9000`.
+    pub server: String,
+}
+
 /// One scene or one item.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -2365,6 +2469,15 @@ pub struct RtmpInfo {
     pub problem: Option<String>,
     /// `rtmp://<address>:<port>` for each address this machine has.
     pub urls: Vec<String>,
+}
+
+/// RTMPS for one channel: off, or on at a port.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Rtmps {
+    pub enabled: bool,
+    /// The port it listens on while enabled. 443 is offered first.
+    pub port: u16,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -3242,11 +3355,13 @@ pub struct MethodInfo {
     pub rest: Option<(&'static str, &'static str)>,
 }
 
-pub const METHODS: [MethodInfo; 144] = [
+pub const METHODS: [MethodInfo; 146] = [
     MethodInfo { name: "adbreak.end", summary: "Cut a running ad short, or disarm one that is scheduled.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/end")) },
     MethodInfo { name: "adbreak.start", summary: "Interrupt the programme with a clip, then rejoin live when it ends.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/start")) },
     MethodInfo { name: "agent.state", summary: "The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/agent/state")) },
     MethodInfo { name: "channel.add", summary: "Make a channel and its first key, which is in this answer. channel.key.reveal reads it again later.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/channels")) },
+    MethodInfo { name: "channel.certificate.generate", summary: "Make a self signed certificate for RTMPS, for this machine's addresses unless names are given. Encoders must be told to accept it; one from a certificate authority needs no such step.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/channels/certificate/generate")) },
+    MethodInfo { name: "channel.certificate.set", summary: "Give RTMPS a certificate: the PEM of the certificate (and its chain) and of its private key, as a certificate authority issued them. Checked before it is kept; the key is sealed and never read back.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/channels/certificate/set")) },
     MethodInfo { name: "channel.destination.add", summary: "Send a channel's stream on to YouTube, Facebook, Twitch, an RTMP server or an SRT receiver as it arrives. Nothing is decoded or encoded. The key is write only.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/channels/{id}/destination/add")) },
     MethodInfo { name: "channel.destination.remove", summary: "Stop sending a channel's stream to one destination and forget it. The publisher and the other destinations are not touched.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/channels/{id}/destination/remove")) },
     MethodInfo { name: "channel.destination.set", summary: "Change one of a channel's destinations, naming only what moves: a new key, another server, which stream it sends, on or off. A key left out is kept.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/channels/{id}/destination")) },
@@ -3254,9 +3369,9 @@ pub const METHODS: [MethodInfo; 144] = [
     MethodInfo { name: "channel.key.add", summary: "Make another key for a channel, to give to one more person or encoder. The key is in this answer, and channel.key.reveal reads it again later.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/channels/{id}/key/add")) },
     MethodInfo { name: "channel.key.remove", summary: "Take one key back. A publisher on air with it is cut off and the next one is turned away; the other keys are untouched.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/channels/{id}/key/remove")) },
     MethodInfo { name: "channel.key.reveal", summary: "Read one key of a channel back, to give it to an encoder again. Admin only; a list shows only the last four characters. Each read is logged with who asked, never with the key.", scope: "admin", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/channels/{id}/key/reveal")) },
-    MethodInfo { name: "channel.list", summary: "Every RTMP channel with its keys (as hints), the address to publish to, and what is live on it, beside the port they all share.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/channels")) },
+    MethodInfo { name: "channel.list", summary: "Every channel with its keys (as hints), the address to publish to over each protocol it has on, and what is live on it; and which ingest ports are open and for which channels.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/channels")) },
     MethodInfo { name: "channel.remove", summary: "Remove a channel and forget its keys. Sources it made that no scene holds go with it.", scope: "admin", mutating: true, destructive: true, rest: Some(("DELETE", "/api/v1/channels/{id}")) },
-    MethodInfo { name: "channel.set", summary: "Rename a channel, switch it on or off, or change its application name, whether its streams become sources, or how its key is given. Only what is named moves.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/channels/{id}/set")) },
+    MethodInfo { name: "channel.set", summary: "Rename a channel, switch it on or off, or change its application name, whether its streams become sources, how its key is given, which protocols it takes (rtmp, srt, whip) or RTMPS and its port. A port opens when the first channel needs it and closes when the last one stops. Only what is named moves.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/channels/{id}/set")) },
     MethodInfo { name: "codec.list", summary: "Every codec and element in the catalogue, which of them this machine actually has, and what it would pick.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/codecs")) },
     MethodInfo { name: "config.get", summary: "The mixer's settings: each key's value in the config file, its default, when a change to it takes effect, and which keys are waiting for a restart. Secrets say only whether one is set.", scope: "admin", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/config")) },
     MethodInfo { name: "config.reset", summary: "Put settings back to their defaults by taking them out of the config file. Answers like config.set.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/config/reset")) },
@@ -3638,6 +3753,16 @@ impl Client {
         self.call("channel.add", params).await
     }
 
+    /// Make a self signed certificate for RTMPS, for this machine's addresses unless names are given. Encoders must be told to accept it; one from a certificate authority needs no such step.
+    pub async fn channel_certificate_generate(&self, params: &CertificateGenerateRequest) -> Result<CertificateInfo> {
+        self.call("channel.certificate.generate", params).await
+    }
+
+    /// Give RTMPS a certificate: the PEM of the certificate (and its chain) and of its private key, as a certificate authority issued them. Checked before it is kept; the key is sealed and never read back.
+    pub async fn channel_certificate_set(&self, params: &CertificateSetRequest) -> Result<CertificateInfo> {
+        self.call("channel.certificate.set", params).await
+    }
+
     /// Send a channel's stream on to YouTube, Facebook, Twitch, an RTMP server or an SRT receiver as it arrives. Nothing is decoded or encoded. The key is write only.
     pub async fn channel_destination_add(&self, params: &AddDestinationRequest) -> Result<BTreeMap<String, Value>> {
         self.call("channel.destination.add", params).await
@@ -3673,7 +3798,7 @@ impl Client {
         self.call("channel.key.reveal", params).await
     }
 
-    /// Every RTMP channel with its keys (as hints), the address to publish to, and what is live on it, beside the port they all share.
+    /// Every channel with its keys (as hints), the address to publish to over each protocol it has on, and what is live on it; and which ingest ports are open and for which channels.
     pub async fn channel_list(&self) -> Result<ChannelList> {
         self.call("channel.list", &serde_json::json!({})).await
     }
@@ -3683,7 +3808,7 @@ impl Client {
         self.call("channel.remove", params).await
     }
 
-    /// Rename a channel, switch it on or off, or change its application name, whether its streams become sources, or how its key is given. Only what is named moves.
+    /// Rename a channel, switch it on or off, or change its application name, whether its streams become sources, how its key is given, which protocols it takes (rtmp, srt, whip) or RTMPS and its port. A port opens when the first channel needs it and closes when the last one stops. Only what is named moves.
     pub async fn channel_set(&self, params: &ChannelSetRequest) -> Result<Channel> {
         self.call("channel.set", params).await
     }

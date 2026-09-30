@@ -40,3 +40,26 @@ bytes = "1.9"
 rml_amf0 = "0.3.0"
 rustls = { workspace = true }
 webpki-roots = "1"
+
+# SRT on one port for every channel (src/srt.rs). libsrt is loaded at run
+# time, not linked, so building this plugin needs no SRT headers; libloading
+# is already in the tree under wasmtime. src/srt.rs says why GStreamer's own
+# srtsrc cannot tell two callers on one port apart.
+libloading = "0.8"
+
+# WHIP on the control port (src/whip.rs): webrtcbin needs its session
+# descriptions as the typed GstWebRTCSessionDescription, which only these
+# bindings make. They link libgstwebrtc and libgstsdp, which come with
+# GStreamer's bad and base plugin sets. Behind the `webrtc` feature so a build
+# for RTMP and SRT alone can leave them out: `--no-default-features`.
+gstreamer-webrtc = { version = "0.24", optional = true }
+gstreamer-sdp = { version = "0.24", optional = true }
+
+[features]
+default = ["webrtc"]
+webrtc = ["dep:gstreamer-webrtc", "dep:gstreamer-sdp"]
+
+[dev-dependencies]
+# A self signed certificate for the RTMPS test; already in the tree under the
+# core's node certificate authority.
+rcgen = { workspace = true }

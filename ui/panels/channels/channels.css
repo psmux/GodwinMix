@@ -15,6 +15,8 @@
 .chn-top h2 { font-size: 17px; font-weight: 650; display: flex; align-items: center; gap: 8px; }
 .chn-count:not(:empty) { font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 999px; background: var(--raise); color: var(--dim); }
 .chn-lede { color: var(--dim); font-size: 12px; margin-top: 2px !important; }
+.chn-ports { color: var(--dim); font-family: var(--num); font-size: 11px; margin-top: 3px !important; }
+.chn-ports.bad { color: var(--warn); }
 .chn-add { padding: 8px 14px; font-weight: 600; border-radius: 8px; }
 .chn-list { display: flex; flex-direction: column; gap: 14px; }
 
@@ -347,3 +349,16 @@
 @media (prefers-reduced-motion: reduce) {
   [class*="chn-"], [class*="chn-"]::before, [class*="chn-"]::after, .chn-art * { animation: none !important; transition: none !important; }
 }
+
+/* Ways in: the protocols a channel takes, and RTMPS with its certificate. */
+.chn-ways button { font-family: inherit; font-weight: 600; letter-spacing: .02em; }
+.chn-badge.via { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); }
+.chn-waysin .chn-group { gap: 10px; }
+.chn-rtmps { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; padding: 10px 12px; border-radius: 10px; border: var(--border) dashed var(--line); }
+.chn-rtmps[hidden] { display: none; }
+.chn-portline { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 12.5px; }
+.chn-port { width: 90px; }
+.chn-cert { display: flex; flex-direction: column; gap: 6px; }
+.chn-certline { font-size: 12px; font-family: var(--num); margin: 0; }
+.chn-certline.bad { color: var(--warn); font-family: inherit; }
+.chn-certbtns { display: flex; gap: 8px; flex-wrap: wrap; }

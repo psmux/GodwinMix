@@ -1,5 +1,6 @@
-// The Channels panel: every RTMP channel as a card, what is publishing to it
-// and where it is being sent on to.
+// The Channels panel: every channel as a card, what is publishing to it (by
+// RTMP, RTMPS, SRT or WHIP) and where it is being sent on to, and one small
+// line saying which ingest ports are open and for which channels.
 //
 // Loaded the first time its tab is shown (entry.js is the part the page
 // loads). While it is on screen it asks the core for `channel.*` events, and
@@ -11,10 +12,11 @@ import { el, clear } from "../../shell/dom.js";
 import { toast } from "../../shell/toast.js";
 import { leaves } from "../../shell/dock-model.js";
 import { Channels, isLive } from "./model.js";
-import { keyed } from "./keyed.js";
+import { keyed, write } from "./keyed.js";
 import { channelCard } from "./card.js";
 import { emptyArt } from "./art.js";
 import { installCard } from "./install.js";
+import { openPorts, portProblems } from "./ways.js";
 
 import { addChannel } from "./create.js";
 
@@ -46,9 +48,14 @@ export class ChannelsView {
     this.cards = new Map();
     this.list = el("div.chn-list");
     this.count = el("span.chn-count");
-    const add = (this.addButton = el("button.btn.primary.chn-add", { text: "Add RTMP Channel", onclick: () => this.add() }));
+    const add = (this.addButton = el("button.btn.primary.chn-add", { text: "Add Channel", onclick: () => this.add() }));
+    this.ports = el("p.chn-ports", { role: "status" });
     this.head = el("header.chn-top", {}, [
-      el("div.grow", {}, [el("h2", {}, ["RTMP channels ", this.count]), el("p.chn-lede", { text: "Encoders publish to the mixer. Each channel can go on air and on to the platforms." })]),
+      el("div.grow", {}, [
+        el("h2", {}, ["Channels ", this.count]),
+        el("p.chn-lede", { text: "Encoders publish to the mixer by RTMP, SRT or WHIP. Each channel can go on air and on to the platforms." }),
+        this.ports,
+      ]),
       add,
     ]);
     this.root = el("div.chn", {}, [this.head, this.list]);
@@ -126,6 +133,9 @@ export class ChannelsView {
     }
     this.head.hidden = false;
     this.addButton.hidden = false;
+    const problems = portProblems(this.model.listeners);
+    write(this.ports, "textContent", [openPorts(this.model.listeners), ...problems].join(" "));
+    this.ports.classList.toggle("bad", problems.length > 0);
     if (!this.cards.size) clear(this.list);
     keyed(this.list, this.cards, channels, (c) => c.id, (c) => channelCard(this, c), (c) => (c.enabled ? "on" : "off"));
     this.clock(channels.some(isLive));

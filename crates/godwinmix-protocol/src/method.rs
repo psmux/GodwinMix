@@ -242,6 +242,8 @@ const COLLECTIONS: &[&str] =
 /// invent one. Listed rather than guessed, so the rule stays one rule and this
 /// is the exception it names.
 const COLLECTION_LEVEL: &[&str] = &[
+    // One certificate for the whole mixer, not one per channel.
+    "channel.certificate",
     "scene.transaction",
     "scene.history",
     "scene.edit",

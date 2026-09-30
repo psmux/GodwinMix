@@ -80,10 +80,12 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/channels/keys.js", include_str!("../../../ui/panels/channels/keys.js")),
     ("panels/channels/model.js", include_str!("../../../ui/panels/channels/model.js")),
     ("panels/channels/panel.js", include_str!("../../../ui/panels/channels/panel.js")),
+    ("panels/channels/protocols.js", include_str!("../../../ui/panels/channels/protocols.js")),
     ("panels/channels/qr-grid.js", include_str!("../../../ui/panels/channels/qr-grid.js")),
     ("panels/channels/qr.js", include_str!("../../../ui/panels/channels/qr.js")),
     ("panels/channels/reveal.js", include_str!("../../../ui/panels/channels/reveal.js")),
     ("panels/channels/streams.js", include_str!("../../../ui/panels/channels/streams.js")),
+    ("panels/channels/ways.js", include_str!("../../../ui/panels/channels/ways.js")),
     ("panels/composer/canvas.js", include_str!("../../../ui/panels/composer/canvas.js")),
     ("panels/composer/catalogue.js", include_str!("../../../ui/panels/composer/catalogue.js")),
     ("panels/composer/composer.css", include_str!("../../../ui/panels/composer/composer.css")),
@@ -192,6 +194,7 @@ const DEV_ASSETS: &[(&str, &str)] = &[
     // as a page to look at: /test/channels.html?scene=cards&theme=light.
     ("test/channels.js", include_str!("../../../ui/test/channels.js")),
     ("test/channels-stub.js", include_str!("../../../ui/test/channels-stub.js")),
+    ("test/channels-ways.js", include_str!("../../../ui/test/channels-ways.js")),
     ("test/channels-preview.js", include_str!("../../../ui/test/channels-preview.js")),
     ("test/channels.html", include_str!("../../../ui/test/channels.html")),
     // The designer kits' behaviour, as the reference implementation answered

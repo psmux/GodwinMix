@@ -1,7 +1,7 @@
 # Send a channel on to YouTube, Facebook or Twitch
 
 A channel is a place an encoder publishes to on the mixer (see
-[take streams from several encoders](rtmp-channels.md)). Its stream can be
+[take streams from several encoders](channels.md)). Its stream can be
 passed straight on to one platform or several at once, as it arrives, without
 going through the mixer's programme. Nothing is decoded or encoded on the way,
 so each destination costs a copy of the bytes and not much else.

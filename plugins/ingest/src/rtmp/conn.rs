@@ -11,6 +11,7 @@ use rml_rtmp::sessions::{
     ServerSession, ServerSessionConfig, ServerSessionEvent, ServerSessionResult,
 };
 
+use super::io::Io;
 use super::{Gate, Inlet};
 use crate::codec;
 use crate::media_tag::{MediaTag, TagKind};
@@ -18,11 +19,20 @@ use crate::media_tag::{MediaTag, TagKind};
 /// The version byte every RTMP handshake starts with.
 const RTMP_VERSION: u8 = 3;
 
-/// Serve one accepted client until it goes.
-pub fn serve(stream: TcpStream, gate: Arc<dyn Gate>, stop: &AtomicBool) {
+/// Serve one accepted client until it goes, over TLS when `tls` is set.
+pub fn serve(stream: TcpStream, tls: Option<Arc<rustls::ServerConfig>>, gate: Arc<dyn Gate>, stop: &AtomicBool) {
     let peer = stream.peer_addr().ok();
+    let socket = match stream.try_clone() {
+        Ok(s) => s,
+        Err(e) => return gate.note(format!("an RTMP connection could not be kept: {e}")),
+    };
+    let io = match Io::over(stream, tls.as_ref()) {
+        Ok(io) => io,
+        Err(e) => return gate.note(e),
+    };
     let mut conn = Connection {
-        stream,
+        io,
+        socket,
         peer: peer.map(|a| a.to_string()).unwrap_or_else(|| "unknown".into()),
         loopback: peer.is_some_and(|a| a.ip().is_loopback()),
         gate,
@@ -36,7 +46,9 @@ pub fn serve(stream: TcpStream, gate: Arc<dyn Gate>, stop: &AtomicBool) {
 }
 
 struct Connection {
-    stream: TcpStream,
+    io: Io,
+    /// The socket under `io`, for a kick and the relay.
+    socket: TcpStream,
     peer: String,
     loopback: bool,
     gate: Arc<dyn Gate>,
@@ -56,17 +68,17 @@ impl Connection {
                 return Ok(());
             }
             let read = self
-                .stream
+                .io
                 .read(&mut buffer)
                 .map_err(|e| format!("reading from the publisher failed: {e}"))?;
             if read == 0 {
                 return Ok(());
             }
             let bytes = &buffer[..read];
-            if std::mem::take(&mut first) && bytes[0] != RTMP_VERSION && self.loopback {
+            if std::mem::take(&mut first) && bytes[0] != RTMP_VERSION && self.loopback && self.io.is_plain() {
                 // Not RTMP, from this machine: a reader asking the hub for a
                 // stream. It gets the socket and this thread becomes its writer.
-                let client = self.stream.try_clone().map_err(|e| e.to_string())?;
+                let client = self.socket.try_clone().map_err(|e| e.to_string())?;
                 self.gate.relay(client, bytes);
                 return Ok(());
             }
@@ -178,7 +190,7 @@ impl Connection {
 
     /// A way to end this connection from another thread.
     fn kick(&self) -> super::Kick {
-        let socket = self.stream.try_clone().ok();
+        let socket = self.socket.try_clone().ok();
         Arc::new(move || {
             if let Some(s) = &socket {
                 let _ = s.shutdown(std::net::Shutdown::Both);
@@ -196,7 +208,7 @@ impl Connection {
     }
 
     fn write(&mut self, bytes: &[u8]) -> Result<(), String> {
-        self.stream
+        self.io
             .write_all(bytes)
             .map_err(|e| format!("writing to the publisher failed: {e}"))
     }

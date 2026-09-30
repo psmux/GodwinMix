@@ -6,6 +6,7 @@
 import { el, svg } from "../../shell/dom.js";
 import { write, copy } from "./keyed.js";
 import { badges, resolution, fmtFps, fmtKbps, fmtUptime, keyLabel, startedAt, streamKbps } from "./model.js";
+import { NAMES } from "./ways.js";
 
 const CLOCK = "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 7v5l3 2";
 const NS = "http://www.w3.org/2000/svg";
@@ -56,10 +57,12 @@ export function streamRow(view, getChannel, urlOf) {
     res.hidden = !res.textContent;
     write(fps, "textContent", s.video && s.video.fps ? fmtFps(s.video.fps) : "");
     fps.hidden = !fps.textContent;
-    const words = badges(s).join("|");
+    // How it arrived comes first, when the core says: SRT, WHIP, RTMPS.
+    const list = [...(s.protocol && s.protocol !== "rtmp" ? [NAMES[s.protocol] || s.protocol] : []), ...badges(s)];
+    const words = list.join("|");
     if (chips.dataset.words !== words) {
       chips.dataset.words = words;
-      chips.replaceChildren(...badges(s).map((b) => el("span.chn-badge", { text: b })));
+      chips.replaceChildren(...list.map((b, i) => el("span.chn-badge" + (i === 0 && s.protocol && s.protocol !== "rtmp" ? ".via" : ""), { text: b })));
     }
     spark.draw(view.model.samples(channel.id, s.name));
     write(rate, "textContent", live ? fmtKbps(streamKbps(s)) : "");

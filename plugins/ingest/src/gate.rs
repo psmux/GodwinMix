@@ -9,23 +9,29 @@
 //! | `channel.stream` with `state: "idle"` | it left |
 //! | `channel.refused` | a publisher was turned away, with the reason it was given |
 //!
-//! With no channels at all the listener is the open door `ingest/discover`
-//! always was, and each publisher is announced as `ingest.publisher` for the
-//! supervisor to add as a source.
+//! Every protocol comes through here: RTMP and RTMPS from their listeners,
+//! SRT from `src/srt/`, WHIP from `src/whip/`. The table is asked with the
+//! protocol, so a channel with SRT switched off turns an SRT caller away with
+//! a sentence saying how to switch it on.
+//!
+//! With no channels at all, and only when a person asked for it with
+//! `open_door`, the RTMP port is the open door `ingest/discover` used to be,
+//! and each publisher is announced as `ingest.publisher`.
 
 use std::net::TcpStream;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, OnceLock, RwLock};
+use std::sync::{Arc, OnceLock, RwLock};
 
 use godwinmix_sdk::plugin::Reporter;
 use serde_json::{json, Value};
 
-use crate::channels::{split_query, Table};
+use crate::channels::{split_query, Admit, Protocol, Table};
 use crate::hub::Hub;
 use crate::rtmp::{self, Gate, Inlet, Kick};
 
 mod inlet;
+mod on_air;
 use inlet::{Channelled, Parts, Stream};
+pub use on_air::OnAir;
 
 pub struct ChannelGate {
     pub hub: Hub,
@@ -39,47 +45,73 @@ pub struct ChannelGate {
     pub on_air: Arc<OnAir>,
 }
 
-/// Every publisher let in on a channel, with the key that let it in and a
-/// way to cut it off.
-#[derive(Default)]
-pub struct OnAir {
-    next: AtomicU64,
-    list: Mutex<Vec<(u64, String, String, Kick)>>,
-}
-
-impl OnAir {
-    pub(super) fn add(&self, channel: &str, key: &str, kick: Kick) -> u64 {
-        let id = self.next.fetch_add(1, Ordering::Relaxed);
-        self.lock().push((id, channel.to_string(), key.to_string(), kick));
-        id
-    }
-
-    pub(super) fn remove(&self, id: u64) {
-        self.lock().retain(|(i, ..)| *i != id);
-    }
-
-    fn lock(&self) -> std::sync::MutexGuard<'_, Vec<(u64, String, String, Kick)>> {
-        self.list.lock().unwrap_or_else(|e| e.into_inner())
-    }
-}
-
 impl ChannelGate {
     /// After the table changed: cut off whoever it no longer lets in. A key
-    /// taken back, a channel switched off or removed, ends that publisher now
-    /// rather than at its next reconnect.
+    /// taken back, a channel switched off or removed, or its protocol switched
+    /// off, ends that publisher now rather than at its next reconnect.
     pub fn enforce(&self) {
-        let table = self.table.read().unwrap_or_else(|e| e.into_inner());
-        let out: Vec<Kick> = self
-            .on_air
-            .lock()
-            .iter()
-            .filter(|(_, channel, key, _)| !table.still_admits(channel, key))
-            .map(|(.., kick)| kick.clone())
-            .collect();
-        drop(table);
+        let out = {
+            let table = self.table.read().unwrap_or_else(|e| e.into_inner());
+            self.on_air.not_admitted_by(&table)
+        };
         for kick in out {
             kick();
         }
+    }
+
+    /// A publisher asking for `app` and `stream` over `via`: let in, with its
+    /// tags on their way to the hub, or refused with the sentence it is told.
+    pub fn admit_on(
+        &self,
+        via: Protocol,
+        app_raw: &str,
+        stream_raw: &str,
+        peer: &str,
+        kick: Kick,
+    ) -> Result<Box<dyn Inlet>, String> {
+        let decided = {
+            let table = self.table.read().unwrap_or_else(|e| e.into_inner());
+            (!table.is_open()).then(|| table.admit_via(via, app_raw, stream_raw))
+        };
+        match decided {
+            None if via == Protocol::Rtmp => self.open_door(app_raw, stream_raw, peer),
+            None => {
+                let why = "this mixer has no channels yet. Make one on its Channels page.".to_string();
+                Err(self.refuse(app_raw, "", peer, why))
+            }
+            Some(Err(r)) => Err(self.refuse(&r.channel, &r.stream, peer, r.why)),
+            Some(Ok(admit)) => self.let_in(via, admit, peer, kick),
+        }
+    }
+
+    /// Turn a publisher away that the caller decided on itself, the same way
+    /// as any other refusal: a log line and `channel.refused`.
+    pub fn turn_away(&self, channel: &str, stream: &str, peer: &str, why: String) -> String {
+        self.refuse(channel, stream, peer, why)
+    }
+
+    /// A publisher the table let in: a session in the hub, the core told, and
+    /// a place on the list of who is on air.
+    pub fn let_in(&self, via: Protocol, admit: Admit, peer: &str, kick: Kick) -> Result<Box<dyn Inlet>, String> {
+        let publication = self
+            .hub
+            .publish_via(&admit.app, &admit.stream, peer, Some(admit.key.clone()), via.name())
+            .map_err(|why| self.refuse(&admit.channel, &admit.stream, peer, why))?;
+        if let Some(r) = &self.reporter {
+            let how = via.name();
+            r.info(format!("{}/{} from {peer} is live over {how} on key {}", admit.app, admit.stream, admit.key));
+        }
+        let parts = self.clone_parts();
+        parts.live(&admit.channel, &publication);
+        let stream = Stream { publication: Some(publication), open: None, gate: parts };
+        let ticket = self.on_air.add(&admit.channel, &admit.key, via, kick);
+        Ok(Box::new(Channelled {
+            channel: admit.channel,
+            app: admit.app,
+            name: admit.stream,
+            stream,
+            on_air: (self.on_air.clone(), ticket),
+        }))
     }
 
     fn event(&self, name: &str, params: Value) {
@@ -97,10 +129,7 @@ impl ChannelGate {
             let name = if stream.is_empty() { "<key>" } else { stream };
             r.warn(format!("refused {peer} on {channel}/{name}: {why}"));
         }
-        self.event(
-            "channel.refused",
-            json!({"id": channel, "stream": stream, "from": peer, "why": why}),
-        );
+        self.event("channel.refused", json!({"id": channel, "stream": stream, "from": peer, "why": why}));
         why
     }
 
@@ -111,10 +140,7 @@ impl ChannelGate {
         if !filter.accepts(app, stream) {
             return Err(self.refuse(app, stream, peer, filter.refusal(app, stream)));
         }
-        let publication = self
-            .hub
-            .publish(app, stream, peer, None)
-            .map_err(|why| self.refuse(app, stream, peer, why))?;
+        let publication = self.hub.publish(app, stream, peer, None).map_err(|why| self.refuse(app, stream, peer, why))?;
         let who = rtmp::Publisher { app: app.into(), key: stream.into(), peer: peer.into() };
         if let Some(r) = &self.reporter {
             r.info(format!("{app}/{stream} from {peer} started publishing"));
@@ -138,39 +164,30 @@ impl ChannelGate {
     }
 }
 
+/// The gate as one RTMP listener sees it: the shared port, or RTMPS on a port
+/// of its own, deciding by the protocol it was bound for.
+pub struct Via(pub Arc<ChannelGate>, pub Protocol);
+
+impl Gate for Via {
+    fn admit(&self, app_raw: &str, stream_raw: &str, peer: &str, kick: Kick) -> Result<Box<dyn Inlet>, String> {
+        self.0.admit_on(self.1, app_raw, stream_raw, peer, kick)
+    }
+
+    fn relay(&self, client: TcpStream, first: &[u8]) {
+        // Only the plain port carries the hub to the mixer's own sources.
+        if self.1 == Protocol::Rtmp {
+            self.0.relay(client, first);
+        }
+    }
+
+    fn note(&self, message: String) {
+        self.0.note(message);
+    }
+}
+
 impl Gate for ChannelGate {
     fn admit(&self, app_raw: &str, stream_raw: &str, peer: &str, kick: Kick) -> Result<Box<dyn Inlet>, String> {
-        let decided = {
-            let table = self.table.read().unwrap_or_else(|e| e.into_inner());
-            if table.is_open() {
-                None
-            } else {
-                Some(table.admit(app_raw, stream_raw))
-            }
-        };
-        let admit = match decided {
-            None => return self.open_door(app_raw, stream_raw, peer),
-            Some(Err(r)) => return Err(self.refuse(&r.channel, &r.stream, peer, r.why)),
-            Some(Ok(admit)) => admit,
-        };
-        let publication = self
-            .hub
-            .publish(&admit.app, &admit.stream, peer, Some(admit.key.clone()))
-            .map_err(|why| self.refuse(&admit.channel, &admit.stream, peer, why))?;
-        if let Some(r) = &self.reporter {
-            r.info(format!("{}/{} from {peer} is live on key {}", admit.app, admit.stream, admit.key));
-        }
-        let parts = self.clone_parts();
-        parts.live(&admit.channel, &publication);
-        let stream = Stream { publication: Some(publication), open: None, gate: parts };
-        let ticket = self.on_air.add(&admit.channel, &admit.key, kick);
-        Ok(Box::new(Channelled {
-            channel: admit.channel,
-            app: admit.app,
-            name: admit.stream,
-            stream,
-            on_air: (self.on_air.clone(), ticket),
-        }))
+        self.admit_on(Protocol::Rtmp, app_raw, stream_raw, peer, kick)
     }
 
     fn relay(&self, client: TcpStream, first: &[u8]) {

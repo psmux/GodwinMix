@@ -44,6 +44,9 @@ use std::sync::Arc;
 use crate::media_tag::MediaTag;
 
 mod conn;
+mod io;
+
+pub use io::server_config;
 
 /// Where one publisher's tags go. Dropping it means the publisher has left.
 pub trait Inlet: Send {
@@ -157,6 +160,16 @@ impl Server {
     /// Bind and start accepting. `port` may be 0, in which case the operating
     /// system picks one and [`Server::port`] says which.
     pub fn bind(bind: &str, port: u16, gate: Arc<dyn Gate>) -> Result<Server, String> {
+        Server::bind_tls(bind, port, gate, None)
+    }
+
+    /// The same, with every connection in TLS first: RTMPS.
+    pub fn bind_tls(
+        bind: &str,
+        port: u16,
+        gate: Arc<dyn Gate>,
+        tls: Option<Arc<rustls::ServerConfig>>,
+    ) -> Result<Server, String> {
         let listener = TcpListener::bind((bind, port)).map_err(|e| {
             format!(
                 "could not listen for RTMP on {bind}:{port}: {e}. Another process has the \
@@ -169,7 +182,7 @@ impl Server {
             .map(|a| a.port())
             .map_err(|e| format!("the listener has no address: {e}"))?;
         let stop = Arc::new(AtomicBool::new(false));
-        let thread = spawn_accept(listener, gate, Arc::clone(&stop));
+        let thread = spawn_accept(listener, gate, tls, Arc::clone(&stop));
         Ok(Server { port, stop, thread: Some(thread) })
     }
 
@@ -193,6 +206,7 @@ impl Drop for Server {
 fn spawn_accept(
     listener: TcpListener,
     gate: Arc<dyn Gate>,
+    tls: Option<Arc<rustls::ServerConfig>>,
     stop: Arc<AtomicBool>,
 ) -> std::thread::JoinHandle<()> {
     std::thread::Builder::new()
@@ -205,9 +219,10 @@ fn spawn_accept(
                 let Ok(stream) = incoming else { continue };
                 let gate = Arc::clone(&gate);
                 let stop = Arc::clone(&stop);
+                let tls = tls.clone();
                 let _ = std::thread::Builder::new()
                     .name("gmx-rtmp-conn".into())
-                    .spawn(move || conn::serve(stream, gate, &stop));
+                    .spawn(move || conn::serve(stream, tls, gate, &stop));
             }
         })
         .expect("could not start the RTMP accept thread")

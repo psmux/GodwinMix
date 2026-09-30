@@ -1,4 +1,5 @@
-//! RTMP channels: list, get, add, set, remove, and a channel's keys.
+//! Channels: list, get, add, set, remove, a channel's keys, and the
+//! certificate RTMPS answers with.
 //!
 //! The work is in `crate::channels`. Each handler runs it on the blocking
 //! pool, because it writes a file, seals a key and tells the RTMP listener,
@@ -18,8 +19,9 @@ pub fn register(reg: &mut Registry<Call>) {
         MethodDef::new(
             "channel.list",
             Scope::Read,
-            "Every RTMP channel with its keys (as hints), the address to publish to, and \
-             what is live on it, beside the port they all share.",
+            "Every channel with its keys (as hints), the address to publish to over each \
+             protocol it has on, and what is live on it; and which ingest ports are open \
+             and for which channels.",
             handler(|call: Call, _| async move { run(&call, |c| Ok(c.list())).await }),
         )
         .params(no_params)
@@ -27,9 +29,10 @@ pub fn register(reg: &mut Registry<Call>) {
         .tool(
             "list_channels",
             Tier::Search,
-            "The RTMP channels encoders publish to on this mixer, and each live stream on \
-             them with its codec, size, frame rate, bit rate and the mixer source it feeds. \
-             Keys are never shown, only their last four characters.",
+            "The channels encoders publish to on this mixer (by RTMP, RTMPS, SRT or WHIP), \
+             each live stream on them with its protocol, codec, size, frame rate, bit rate \
+             and the mixer source it feeds, and which ports are open and why. Keys are \
+             never shown, only their last four characters.",
         ),
     );
     reg.register(
@@ -54,8 +57,9 @@ pub fn register(reg: &mut Registry<Call>) {
             "channel.set",
             Scope::Admin,
             "Rename a channel, switch it on or off, or change its application name, \
-             whether its streams become sources, or how its key is given. Only what is \
-             named moves.",
+             whether its streams become sources, how its key is given, which protocols it \
+             takes (rtmp, srt, whip) or RTMPS and its port. A port opens when the first \
+             channel needs it and closes when the last one stops. Only what is named moves.",
             handler(set),
         )
         .params(schema_of::<ChannelSetRequest>)
@@ -109,6 +113,42 @@ pub fn register(reg: &mut Registry<Call>) {
         .params(schema_of::<ChannelKeyRevealRequest>)
         .result(schema_of::<KeyRevealed>)
         .mutating(false),
+    );
+}
+
+/// The certificate RTMPS answers with, for every channel that turns it on.
+pub fn register_certificate(reg: &mut Registry<Call>) {
+    reg.register(
+        MethodDef::new(
+            "channel.certificate.set",
+            Scope::Admin,
+            "Give RTMPS a certificate: the PEM of the certificate (and its chain) and of its \
+             private key, as a certificate authority issued them. Checked before it is kept; \
+             the key is sealed and never read back.",
+            handler(|call: Call, params| async move {
+                let req: CertificateSetRequest = call.params(&params)?;
+                run(&call, move |c| c.certificate_set(req)).await
+            }),
+        )
+        .params(schema_of::<CertificateSetRequest>)
+        .result(schema_of::<CertificateInfo>)
+        .not_idempotent(),
+    );
+    reg.register(
+        MethodDef::new(
+            "channel.certificate.generate",
+            Scope::Admin,
+            "Make a self signed certificate for RTMPS, for this machine's addresses unless \
+             names are given. Encoders must be told to accept it; one from a certificate \
+             authority needs no such step.",
+            handler(|call: Call, params| async move {
+                let req: CertificateGenerateRequest = call.params(&params)?;
+                run(&call, move |c| c.certificate_generate(req)).await
+            }),
+        )
+        .params(schema_of::<CertificateGenerateRequest>)
+        .result(schema_of::<CertificateInfo>)
+        .not_idempotent(),
     );
 }
 
