@@ -266,6 +266,7 @@ pub struct AddOutputRequest {
     /// request or `{"preset": "youtube-720p30"}` (`rendition.presets` lists
     /// them). Absent means the programme encoder, at no extra cost.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(schema_with = "rendition_schema")]
     pub rendition: Option<crate::rendition::RenditionChoice>,
     /// Passed through to the output config untouched.
     #[serde(flatten, default, skip_serializing_if = "Map::is_empty")]
@@ -312,10 +313,21 @@ pub struct SetOutputRequest {
     /// A new rendition, as `output.add` takes it. `null` puts the output
     /// back on the programme's own encode; left out keeps what it has.
     #[serde(default, deserialize_with = "present", skip_serializing_if = "Option::is_none")]
+    #[schemars(schema_with = "rendition_schema")]
     pub rendition: Option<Option<crate::rendition::RenditionChoice>>,
     /// Merged over the params the output already has.
     #[serde(flatten, default, skip_serializing_if = "Map::is_empty")]
     pub params: Map<String, Value>,
+}
+
+/// `rendition` on the output methods, written short. The whole shape is
+/// `RenditionChoice` in `rendition.presets` and the reference; spelled out
+/// here it made `add_output` the largest tool an agent is handed.
+fn rendition_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
+    schemars::json_schema!({
+        "type": ["object", "null"],
+        "description": "{\"preset\": id} from rendition.presets, {\"ladder\": [request, ...]} for HLS, or one RenditionRequest"
+    })
 }
 
 /// A field that was sent, even as `null`, is `Some`; one left out is `None`.
