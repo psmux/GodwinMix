@@ -107,17 +107,22 @@ pub fn build(
     let src = crate::gstutil::make("gmxbussrc", &format!("{}-src-bus", ctx.id))?;
     src.set_property("bus-name", name.to_string());
     src.set_property("bus-dir", dir.display().to_string());
-    probe(&src, watch.clone())?;
     let ingest = Ingest::default().with([src.clone()]).livesync(false);
-    assemble(ctx, thumb, ingest, |w: &Wiring| {
+    let ends = assemble(ctx, thumb, ingest, |w: &Wiring| {
         src.link(&w.norm.video_entry()).context("linking the frame bus to the normaliser")?;
         w.has_video.store(true, std::sync::atomic::Ordering::Relaxed);
         Ok(KindParts::default())
-    })
+    })?;
+    probe(&ends.video, watch.clone())?;
+    Ok(ends)
 }
 
-fn probe(src: &gst::Element, watch: Arc<Watch>) -> Result<()> {
-    let pad = src.static_pad("src").context("gmxbussrc has no src pad")?;
+/// Measured where the frame leaves this source for the programme, so the
+/// latency is everything the bus adds: the owner's publish, the hop, and this
+/// side's normaliser, which a source opening the device itself would not run
+/// twice.
+fn probe(proxy: &gst::Element, watch: Arc<Watch>) -> Result<()> {
+    let pad = proxy.static_pad("sink").context("the programme end has no sink pad")?;
     let caps = gst::Caps::new_empty_simple(godwinmix_framebus::gst::CAPTURED_CAPS);
     pad.add_probe(gst::PadProbeType::BUFFER, move |_, info| {
         if let Some(buffer) = info.buffer() {
