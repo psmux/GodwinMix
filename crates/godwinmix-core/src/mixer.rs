@@ -397,6 +397,7 @@ fn needs_superimposed(page: Option<f64>, media: &[Option<f64>]) -> bool {
 use crate::plugin::branch::{BranchCtx, ProgrammeBranch, VideoPads};
 
 pub mod group;
+mod generation;
 mod lifecycle;
 mod offload;
 mod rendered;
@@ -467,9 +468,15 @@ pub enum Command {
     /// failed if it did. Never sent by the API.
     OutputReconnected(OutputId, Option<String>),
     RestartSource(SourceId),
-    /// A restart in place has finished on its own thread, with why it failed
-    /// if it did. Sent by the worker `RestartSource` starts; never by the API.
-    SourceRestarted(SourceId, Option<String>),
+    /// A restart the supervisor armed for one instance of a source, named by
+    /// its generation. Dropped if that instance has gone by the time it
+    /// arrives, so a retry armed for a removed source cannot land on a new
+    /// one under the same id. Never sent by the API. See `mixer::generation`.
+    RetrySource(SourceId, u64),
+    /// A restart in place has finished on its own thread, with the generation
+    /// it was started for and why it failed if it did. Sent by the worker
+    /// `RestartSource` starts; never by the API.
+    SourceRestarted(SourceId, u64, Option<String>),
     /// A removed source's pipeline has finished stopping on its own thread,
     /// so an add under the same id may go ahead. Never sent by the API.
     SourceStopped(SourceId),
@@ -769,6 +776,10 @@ struct SourceSlot {
     /// Shared with the thread a restart or a stop runs on, so neither holds
     /// the mixer thread. See `mixer::lifecycle`.
     input: Arc<InputPipeline>,
+    /// Which instance of this id this is. Ids are reused, so work that was
+    /// started for one instance checks this when it comes back. See
+    /// `mixer::generation`.
+    generation: u64,
     /// This source's side of the proxy boundary: the proxysrcs, the queues,
     /// the fader, the meter, the mute and the two mixer pads. See
     /// `ProgrammeBranch`.
@@ -1051,6 +1062,8 @@ pub struct Mixer {
     pending_ad_end: Option<gst::SingleShotClockId>,
     output_attempts: HashMap<OutputId, u32>,
     source_attempts: HashMap<SourceId, u32>,
+    /// The generation the next source added gets. See `mixer::generation`.
+    next_generation: u64,
     /// See `REMOVED_KEPT`.
     removed: Vec<SourceConfig>,
     /// See `unstarted.rs`.
@@ -1689,6 +1702,7 @@ impl Mixer {
             pending_ad_end: None,
             output_attempts: HashMap::new(),
             source_attempts: HashMap::new(),
+            next_generation: 1,
             removed: Vec::new(),
             unstarted: Default::default(),
             handle: handle.clone(),
@@ -1970,8 +1984,10 @@ impl Mixer {
         // cleaned up by the ordinary removal path rather than leaking pads and
         // a live pipeline. A leaked failed ad blocked every later break and
         // kept posting its errors.
+        let generation = self.new_generation();
         self.sources.push(SourceSlot {
             input: Arc::new(input),
+            generation,
             branch,
             stalled_ticks: 0,
             first_reported: false,
@@ -3634,6 +3650,7 @@ impl Mixer {
             Command::RemoveOutput(..) => "output.remove",
             Command::OutputReconnected(..) => "output.reconnected",
             Command::RestartSource(_) => "source.restart",
+            Command::RetrySource(..) => "source.retry",
             Command::SourceRestarted(..) => "source.restarted",
             Command::SourceStopped(_) => "source.stopped",
             Command::SetAudio { .. } => "source.audio.set",
@@ -3736,17 +3753,11 @@ impl Mixer {
                 reply(ack, &r);
                 r?;
             }
-            Command::RestartSource(id) => {
-                // Which way a source comes back is its own declaration, not a
-                // flag on the core's struct. A kind without `restart-in-place`
-                // is built again from nothing.
-                if self.sources.iter().any(|s| s.input.id == id && !s.input.restarts_in_place()) {
-                    self.rebuild_source(&id);
-                } else {
-                    self.restart_in_place(&id);
-                }
+            Command::RestartSource(id) => self.restart_source(&id),
+            Command::RetrySource(id, generation) => self.retry_source(&id, generation),
+            Command::SourceRestarted(id, generation, failed) => {
+                self.restarted(&id, generation, failed)
             }
-            Command::SourceRestarted(id, failed) => self.restarted(&id, failed),
             Command::SourceStopped(_) => self.release_stopped(),
             Command::OutputReconnected(id, failed) => self.output_reconnected(&id, failed),
             Command::SetAudio { source, gain, muted, page, media, reply } => {
@@ -4091,6 +4102,10 @@ impl Mixer {
         let Some(slot) = self.sources.iter().find(|s| s.input.id == id) else {
             return;
         };
+        // The retry goes to this instance and no other: a source removed and
+        // added again under the same id before the delay runs out is a
+        // different source, and must not be taken down for the old one.
+        let generation = slot.generation;
         // The restart already running is the answer to this stall; a second
         // one queued behind it would only take the pipeline down again.
         if slot.input.restarting() {
@@ -4127,7 +4142,7 @@ impl Mixer {
                 let again = id.clone();
                 self.rt.spawn(async move {
                     tokio::time::sleep(wait).await;
-                    let _ = handle.send(Command::RestartSource(again));
+                    let _ = handle.send(Command::RetrySource(again, generation));
                 });
                 return;
             }
@@ -4150,7 +4165,7 @@ impl Mixer {
         debug!(source = %id, ?delay, "scheduling source restart");
         self.rt.spawn(async move {
             tokio::time::sleep(delay).await;
-            let _ = handle.send(Command::RestartSource(id));
+            let _ = handle.send(Command::RetrySource(id, generation));
         });
     }
 
