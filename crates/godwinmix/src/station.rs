@@ -18,3 +18,21 @@
 
 pub mod link;
 pub mod registry;
+mod ask;
+mod channel_calls;
+pub mod child;
+mod files;
+mod host;
+mod list;
+pub mod methods;
+mod programme;
+mod project;
+pub mod relay;
+mod run;
+mod server;
+pub mod show;
+mod shows_api;
+pub mod state;
+pub mod supervise;
+
+pub use run::{run, Options};

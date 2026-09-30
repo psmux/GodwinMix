@@ -83,17 +83,17 @@ where
         .map_err(|e| RpcError::internal(format!("the destination edit stopped: {e}")))?
 }
 
-fn add(store: &dyn ChannelStore, req: &AddDestinationRequest) -> Result<Value, RpcError> {
+pub(crate) fn add(store: &dyn ChannelStore, req: &AddDestinationRequest) -> Result<Value, RpcError> {
     store.edit_destinations(&req.id, &mut |list| rules::add(list, req).map(|_| ()))
 }
 
-fn set(store: &dyn ChannelStore, req: &SetDestinationRequest) -> Result<Value, RpcError> {
+pub(crate) fn set(store: &dyn ChannelStore, req: &SetDestinationRequest) -> Result<Value, RpcError> {
     store.edit_destinations(&req.id, &mut |list| rules::set(list, req))
 }
 
 /// With `dry_run` the edit runs on a copy, so the store sees nothing change
 /// and the answer says what would have gone.
-fn remove(
+pub(crate) fn remove(
     store: &dyn ChannelStore,
     req: &RemoveDestinationRequest,
     dry_run: Option<&Call>,

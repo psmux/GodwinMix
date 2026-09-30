@@ -1,0 +1,125 @@
+//! Starting the station, and stopping it with every show.
+
+use super::host::Linked;
+use super::registry::Registry;
+use super::state::{Launch, Station};
+use super::{link, programme, server, supervise};
+use anyhow::{Context, Result};
+use godwinmix_core::config::Config;
+use godwinmix_core::mixer::MixerHandle;
+use godwinmix_core::observe as core_observe;
+use godwinmix_core::plugin;
+use std::path::PathBuf;
+use std::sync::atomic::Ordering;
+use std::sync::Arc;
+use tracing::{info, warn};
+
+pub struct Options {
+    /// The config in force: the first show's, run in place.
+    pub config: PathBuf,
+    pub bind: Option<String>,
+    pub rehearsal: bool,
+    pub codecs: Option<PathBuf>,
+    /// Flags every show is started with as well.
+    pub common: Vec<String>,
+}
+
+pub async fn run(opts: Options) -> Result<()> {
+    let cfg = Config::load(&opts.config).with_context(|| format!("could not load {}", opts.config.display()))?;
+    let bind = opts.bind.clone().unwrap_or_else(|| cfg.control.bind.clone());
+    let tokens = Arc::new(cfg.tokens(opts.rehearsal));
+    crate::ui::configure(cfg.control.ui_dir.as_deref(), cfg.control.plugins_dir.as_deref());
+    let _ = godwinmix_core::catalogue::init(Some(&cfg), opts.codecs.as_deref());
+    let runtime = core_observe::runtime_dir(&opts.config);
+    load_plugins(&cfg, &tokens, &runtime);
+
+    let (events, commands) = MixerHandle::detached();
+    tokio::spawn(drain(commands));
+    let render = godwinmix_core::render::Station::start(
+        cfg.governor.clone(),
+        &godwinmix_core::catalogue::global(),
+        cfg.hardware.encode,
+        &runtime,
+    );
+    let exe = std::env::current_exe().context("finding this program, to start the shows with")?;
+    let launch = Launch { exe, common: opts.common.clone() };
+    let st = Station::new(Registry::open(&opts.config)?, events.clone(), tokens, render.clone(), launch);
+    let addr = link::listen(Arc::new(Linked(st.clone()))).await.context("opening the show link")?;
+    let _ = st.link.set(addr);
+
+    let ingest = open_channels(&st, &cfg, &opts.config, events);
+    render.begin();
+    let starting: Vec<String> = st.registry.lock().records.iter().filter(|r| !r.stopped).map(|r| r.id.clone()).collect();
+    for id in &starting {
+        supervise::start(&st, id);
+    }
+
+    let listener = tokio::net::TcpListener::bind(&bind).await.with_context(|| format!("binding the control port {bind}"))?;
+    info!(%bind, shows = starting.len(), "station listening");
+    eprintln!("GodwinMix is running. Open http://{}/ in a browser.", bind.replacen("0.0.0.0:", "127.0.0.1:", 1));
+    let app = server::router(st.clone()).into_make_service_with_connect_info::<std::net::SocketAddr>();
+    let serving = tokio::spawn(async move { axum::serve(listener, app).await });
+
+    tokio::select! {
+        _ = tokio::signal::ctrl_c() => {}
+        _ = st.quit.notified() => {}
+    }
+    info!("station shutting down; stopping every show");
+    st.stopping.store(true, Ordering::SeqCst);
+    let ids = st.registry.lock().ids();
+    futures_util::future::join_all(ids.iter().map(|id| supervise::stop(&st, id))).await;
+    let _ = tokio::task::spawn_blocking(move || ingest.shutdown()).await;
+    serving.abort();
+    Ok(())
+}
+
+/// The plugins, so the ingest plugin can be started. Only the ingest plugin
+/// runs here; every other one runs in the shows, as it did before.
+fn load_plugins(cfg: &Config, tokens: &Arc<godwinmix_protocol::scope::Tokens>, runtime: &std::path::Path) {
+    if let Some(dir) = cfg.control.plugins_dir.as_deref() {
+        plugin::loader::set_dir(PathBuf::from(dir));
+    }
+    for installed in plugin::loader::load_all(&cfg.plugins) {
+        if let Some(problem) = &installed.problem {
+            warn!(plugin = installed.name(), "{problem}");
+        }
+    }
+    let minting = tokens.clone();
+    plugin::loader::set_token_minter(Box::new(move |plugin, instance| minting.mint_for_plugin(plugin, instance, None)));
+    plugin::loader::set_runtime_dir(runtime.join("station"));
+}
+
+/// The channels and the ingest plugin that serves them, once for the machine.
+fn open_channels(st: &Arc<Station>, cfg: &Config, config: &std::path::Path, events: MixerHandle) -> Arc<plugin::supervisor::Supervisor> {
+    let supervisor = plugin::supervisor::Supervisor::new(godwinmix_core::caps::CanvasCaps::new(&cfg.canvas), cfg.plugins.settings.clone());
+    let target = Arc::new(programme::FirstShow { station: Arc::downgrade(st), runtime: tokio::runtime::Handle::current() });
+    let channels = crate::channels::Channels::open(
+        Some(Config::runtime_store_path(config)),
+        crate::channels::Ports::from_config(cfg),
+        supervisor.clone(),
+        events,
+        target,
+        crate::control::methods::plugins::secrets(),
+    );
+    channels.use_governor(st.render.governor().clone());
+    let _ = st.channels.set(channels);
+    let starting = supervisor.clone();
+    std::thread::spawn(move || {
+        if plugin::loader::get(crate::channels::PLUGIN).is_none() {
+            return info!("the ingest plugin is not installed; channels take no publishers until it is");
+        }
+        if let Err(e) = starting.start(crate::channels::PROVIDE) {
+            warn!(error = %format!("{e:#}"), "the ingest plugin would not start");
+        }
+    });
+    supervisor.spawn_pump();
+    supervisor
+}
+
+/// The channels send the mixer nothing under a station (their target is the
+/// first show), so whatever arrives here is logged and dropped.
+async fn drain(mut commands: tokio::sync::mpsc::Receiver<godwinmix_core::mixer::Command>) {
+    while commands.recv().await.is_some() {
+        tracing::debug!("the station has no mixer; a command for one was dropped");
+    }
+}
