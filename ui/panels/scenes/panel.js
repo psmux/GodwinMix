@@ -234,6 +234,7 @@ class ScenesPanel extends HTMLElement {
       /* the choice lasts the session */
     }
     this.render();
+    this.tunePictures();
   }
 
   /**

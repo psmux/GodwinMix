@@ -45,11 +45,19 @@ export class ScenePictures {
   /** Ask for the mosaic or give it back, and show or hide the pictures. */
   tune() {
     const on = this.wanted();
-    if (on && !this.want) {
-      const cols = this.client.state.multiview.cols || 1;
-      this.want = this.client.want("multiview", { fps: RATE, width: sheetWidthFor(CELL, cols) });
-      this.off = this.client.sheet.observe((bitmap, layout) => this.frame(bitmap, layout));
-    } else if (!on && this.want) {
+    if (on) {
+      // Cells as wide as the pictures they fill: a tab's thumbnail, or a
+      // tile's face, so tiles are not a blur and tabs cost what a tab needs.
+      const face = this.panel.grid.hidden ? 0 : (this.panel.grid.querySelector(".tile .kindbox") || {}).clientWidth || 0;
+      const width = sheetWidthFor(Math.max(CELL, Math.min(face, 320)), this.client.state.multiview.cols || 1);
+      if (!this.want) {
+        this.want = this.client.want("multiview", { fps: RATE, width });
+        this.off = this.client.sheet.observe((bitmap, layout) => this.frame(bitmap, layout));
+      } else if (width !== this.width) {
+        this.want.update({ fps: RATE, width });
+      }
+      this.width = width;
+    } else if (this.want) {
       this.stop();
     }
     this.panel.classList.toggle("scene-pictures", on);
