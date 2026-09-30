@@ -1,10 +1,10 @@
-// Settings: the store every panel reads. The dialog that changes it is
-// settings-dialog.js, fetched when it is opened.
+// Settings: the store, the global modal, and the drawer beside the tray.
 //
 // Two tabs, simple first. Nothing a volunteer does not need is on the first
 // tab. The drawer is a different thing: it is the selected item's own form,
 // rendered from its schema, in the `sidebar` slot, so a plugin can add a
 // section to its own item's drawer and to nothing else.
+
 
 const KEY = "gmx.settings";
 
@@ -76,9 +76,11 @@ export function proposeGalleryMode() {
   return "live";
 }
 
-// ---------------------------------------------------------------- the modal
-
-/** The dialog, in settings-dialog.js, fetched the first time it is opened. */
-export function openSettings(client, opts = {}) {
-  return import("./settings-dialog.js").then((m) => m.openSettings(client, opts));
+/**
+ * The Settings dialog. Its code (every field, both tabs) loads the first
+ * time it opens, so the page a volunteer opens does not carry it.
+ */
+export async function openSettings(client, opts = {}) {
+  const { openSettingsDialog } = await import("./settings-dialog.js");
+  return openSettingsDialog(client, opts);
 }

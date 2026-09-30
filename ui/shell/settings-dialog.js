@@ -1,6 +1,5 @@
-// Settings for this page: the dialog. The store it reads and writes is
-// settings.js, which every panel needs from the first paint; this is only
-// wanted when somebody opens it, so it arrives then.
+// The Settings dialog, loaded the first time it opens. The store it reads
+// and writes stays in settings.js, which every page loads.
 
 import { el, clear, on } from "./dom.js";
 import { modal } from "./modal.js";
@@ -8,10 +7,12 @@ import { allThemes, applyTheme, current as currentTheme } from "./theme.js";
 import { DEFAULT_MAP, loadMap } from "./keymap.js";
 import * as layout from "./layout.js";
 import { list as panelList } from "./registry.js";
-import { settings, setSetting, GALLERY_MODES } from "./settings.js";
+import { toast } from "./toast.js";
+import { settings, setSetting, onSettingsChanged, GALLERY_MODES, proposeGalleryMode } from "./settings.js";
 
+// ---------------------------------------------------------------- the modal
 
-export function openSettings(client, opts = {}) {
+export function openSettingsDialog(client, opts = {}) {
   const s = settings();
   const simple = el("div.form");
   const advanced = el("div.form");

@@ -36,7 +36,7 @@ class HeaderPanel extends HTMLElement {
     this.ad = el("span.pill.live", { text: "AD BREAK", hidden: true });
 
     this.append(
-      el("strong", { text: "GodwinMix" }),
+      el("strong.wordmark", { "aria-label": "GodwinMix" }, [el("span.wm-godwin", { text: "Godwin" }), el("span.wm-mix", { text: "Mix" })]),
       // File, Edit, View and the rest, before the live controls so they keep
       // their size; one button in their place on a phone.
       menubar(this.client),
