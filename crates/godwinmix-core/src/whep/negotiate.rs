@@ -3,7 +3,6 @@
 
 use super::params::WhepParams;
 use super::sdp;
-use super::session::Branch;
 use super::Refusal;
 use crate::gstutil::make;
 use gstreamer as gst;
@@ -13,6 +12,15 @@ use std::time::{Duration, Instant};
 
 /// How long an answer waits for ICE to gather its candidates.
 const GATHER: Duration = Duration::from_secs(3);
+
+/// One tee to one offer section: what it carries and as which payload type.
+pub struct Branch<'a> {
+    pub tee: &'a gst::Element,
+    pub media: &'static str,
+    pub payloader: &'static str,
+    pub encoding: &'static str,
+    pub pt: u8,
+}
 
 pub fn webrtcbin(name: &str, params: &WhepParams) -> Result<gst::Element, Refusal> {
     let bin = make("webrtcbin", name).map_err(|e| Refusal::unavailable(format!("{e:#}")))?;
@@ -54,7 +62,11 @@ pub fn prefer(bin: &gst::Element, index: usize, offer: &str, b: &Branch<'_>) {
         .field("encoding-name", b.encoding)
         .field("payload", i32::from(b.pt))
         .field("clock-rate", rate);
-    for (k, v) in fmtp.split(';').filter_map(|kv| kv.trim().split_once('=')) {
+    // The profile is left to the stream: a payloader held to the offer's
+    // profile refuses a programme encoded in another one, and the answer
+    // then says what is actually sent.
+    let fields = fmtp.split(';').filter_map(|kv| kv.trim().split_once('='));
+    for (k, v) in fields.filter(|(k, _)| *k != "profile-level-id") {
         caps = caps.field(k, v);
     }
     transceiver.set_property("codec-preferences", caps.build());

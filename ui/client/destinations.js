@@ -110,6 +110,25 @@ export const OUTPUT_KINDS = [
       cbr_kbps: v.cbr_kbps ?? 0,
     }),
   },
+  {
+    id: "whep",
+    provides: ["whep/output"],
+    title: "WebRTC viewers (WHEP)",
+    group: "Streams and servers",
+    icon: "output",
+    description: "Watch the programme in a browser or any WHEP player, under half a second behind, from this mixer's own address. No port of its own.",
+    plugin: "built in",
+    schema: {
+      type: "object",
+      required: ["id"],
+      properties: {
+        id: { type: "string", title: "Name", examples: ["monitor"], description: "A short id. Viewers open /whep/<this name>." },
+        max_viewers: { type: "integer", title: "Most viewers", default: 10, minimum: 1, maximum: 500, description: "Each viewer is one more encrypted copy of the same encode. For a wide audience use HLS." },
+        stun: { type: "string", title: "STUN server", default: "", examples: ["stun://stun.l.google.com:19302"], "x-gmx-group": "Advanced", description: "Empty for viewers on this network only. A STUN server lets viewers across the internet find this mixer." },
+      },
+    },
+    build: (v) => ({ id: v.id, type: "whep/output", uri: "", max_viewers: v.max_viewers ?? 10, stun: v.stun ?? "" }),
+  },
 ];
 
 /**
