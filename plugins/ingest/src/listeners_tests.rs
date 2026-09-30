@@ -72,14 +72,14 @@ fn nothing_is_open_until_a_channel_asks_and_it_closes_when_the_last_one_goes() {
 
 #[test]
 fn a_channel_without_rtmp_keeps_the_port_on_the_loopback_for_the_mixers_own_sources() {
-    let (rtmp, srt) = (free_tcp(), free_udp());
-    let mut l = listeners(rtmp, srt);
+    let srt = free_udp();
+    let mut l = listeners(0, srt);
     l.apply(&table(json!([{"id": "a", "keys": [], "protocols": ["whip"]}])));
     let rows = l.rows();
     assert_eq!(row(&rows, "rtmp")["open"], false);
     assert_eq!(row(&rows, "relay")["open"], true);
     assert_eq!(row(&rows, "relay")["loopback"], true);
-    assert!(tcp_open(rtmp), "the hub is still reachable from this machine");
+    assert!(tcp_open(l.rtmp_port()), "the hub is still reachable from this machine");
 }
 
 #[test]

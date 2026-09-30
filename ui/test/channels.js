@@ -245,7 +245,7 @@ async function connectTests(test, eq, ok, stub, card) {
   const name = box().querySelector(".chn-streamin");
   name.value = "main_720p";
   name.dispatchEvent(new Event("input"));
-  await press(box().querySelector(".chn-seg"), "192.168.1.20");
+  await press(box().querySelector(".chn-seg:not(.chn-ways)"), "192.168.1.20");
   await press(box(), "Copy", 2);
   test("the stream name and the address follow into every field, and Copy asks nothing again", () => {
     eq(values()[1], `main_720p?psk=${secret}`);

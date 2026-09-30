@@ -194,6 +194,7 @@ const DEV_ASSETS: &[(&str, &str)] = &[
     // as a page to look at: /test/channels.html?scene=cards&theme=light.
     ("test/channels.js", include_str!("../../../ui/test/channels.js")),
     ("test/channels-stub.js", include_str!("../../../ui/test/channels-stub.js")),
+    ("test/channels-ways.js", include_str!("../../../ui/test/channels-ways.js")),
     ("test/channels-preview.js", include_str!("../../../ui/test/channels-preview.js")),
     ("test/channels.html", include_str!("../../../ui/test/channels.html")),
     // The designer kits' behaviour, as the reference implementation answered

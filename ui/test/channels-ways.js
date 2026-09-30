@@ -18,9 +18,9 @@ export async function waysTests(test, eq, ok, stub, card, view) {
   });
 
   test("SRT is a server, a stream id and the key as the passphrase", () => {
-    const f = ways.waysFields("srt", c, "KEY", "srt://10.0.0.5:9000", "cam2");
+    const f = ways.waysFields("srt", c, "KEY", "srt://192.168.1.20:9000", "cam2");
     eq(f.rows.map((r) => r[0]), ["Server", "Stream ID", "Passphrase", "Full URL"]);
-    eq(f.url, "srt://10.0.0.5:9000?streamid=sun/cam2&passphrase=KEY");
+    eq(f.url, "srt://192.168.1.20:9000?streamid=sun/cam2&passphrase=KEY");
     const byName = ways.waysFields("srt", { ...c, key_mode: "stream" }, "KEY", "srt://h:9000");
     eq(byName.url, "srt://h:9000?streamid=sun/KEY", "the key is the stream name, and no passphrase");
   });
@@ -73,6 +73,8 @@ export async function waysTests(test, eq, ok, stub, card, view) {
   });
 
   const box = () => card().querySelector(".chn-connectbox");
+  // The section keeps the address and the stream name chosen in the tests
+  // before this one: 192.168.1.20 and main_720p.
   const values = () => [...box().querySelectorAll(".chn-ckey .chn-obsval code")].map((x) => x.textContent);
   card().querySelector(".chn-connect").click();
   await wait();
@@ -84,8 +86,8 @@ export async function waysTests(test, eq, ok, stub, card, view) {
   [...picker.querySelectorAll("button")].find((b) => b.textContent === "SRT").click();
   await wait();
   test("SRT shows its own server, stream id and passphrase, the key hidden", () => {
-    eq(values()[0], "srt://10.0.0.5:9000");
-    eq(values()[1], "sunday-service/main");
+    eq(values()[0], "srt://192.168.1.20:9000");
+    eq(values()[1], "sunday-service/main_720p");
     ok(values()[2].startsWith("•"), values()[2]);
   });
   [...box().querySelectorAll("button")].find((b) => b.textContent.includes("Show")).click();
@@ -93,12 +95,12 @@ export async function waysTests(test, eq, ok, stub, card, view) {
   test("Show puts the key in as the passphrase and in the full URL", () => {
     const secret = stub.secrets.get("key-1");
     eq(values()[2], secret);
-    eq(values()[3], `srt://10.0.0.5:9000?streamid=sunday-service/main&passphrase=${secret}`);
+    eq(values()[3], `srt://192.168.1.20:9000?streamid=sunday-service/main_720p&passphrase=${secret}`);
   });
   [...picker.querySelectorAll("button")].find((b) => b.textContent === "WHIP").click();
   await wait();
   test("WHIP shows the URL on the page's port and the bearer token", () => {
-    eq(values()[0], "http://10.0.0.5:8080/whip/sunday-service/main");
+    eq(values()[0], "http://192.168.1.20:8080/whip/sunday-service/main_720p");
     eq(values()[1], stub.secrets.get("key-1"));
   });
   card().querySelector(".chn-connect").click();
