@@ -38,6 +38,7 @@ fn recording_files_decode_and_restarts_preserve_existing_footage() {
                         pipeline: &pipeline,
                         params: &params,
                         cfg: &cfg,
+                        taps: &[],
                     },
                     &pipeline.by_name("video").unwrap(),
                     &pipeline.by_name("audio").unwrap(),

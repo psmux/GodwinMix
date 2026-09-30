@@ -25,6 +25,10 @@ pub struct OutputCtx<'a> {
     pub pipeline: &'a gst::Pipeline,
     pub params: &'a Params,
     pub cfg: &'a OutputConfig,
+    /// The rungs of this output's rendition, top first, when it asked for
+    /// one; empty when it reads the programme encoder. `video` and `audio`
+    /// below already carry rung 0. See `render/mod.rs`.
+    pub taps: &'a [crate::render::Tap],
 }
 
 pub trait Output: Send {

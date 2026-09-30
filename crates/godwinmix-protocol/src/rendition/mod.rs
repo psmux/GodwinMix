@@ -6,8 +6,10 @@
 //! can be built, tested and replaced without the others.
 
 mod shape;
+mod wire;
 
 pub use shape::*;
+pub use wire::*;
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
