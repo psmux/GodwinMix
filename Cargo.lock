@@ -1462,6 +1462,7 @@ name = "godwinmix-core"
 version = "0.2.0"
 dependencies = [
  "anyhow",
+ "bytes",
  "futures-util",
  "getrandom 0.3.4",
  "glib",

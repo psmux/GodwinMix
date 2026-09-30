@@ -38,11 +38,12 @@ fn secs(ns: u64) -> f64 {
 }
 
 /// `EXT-X-TARGETDURATION`: the configured length rounded up, or the longest
-/// segment rounded to the nearest second if one ran over (RFC 8216 4.3.3.1).
+/// segment there has been rounded to the nearest second if one ran over
+/// (RFC 8216 4.3.3.1). A source whose keyframes wander makes it grow once
+/// and then stay.
 fn target_duration(view: &View, p: &HlsParams) -> u64 {
     let configured = u64::from(p.segment_ms).div_ceil(1000);
-    let longest = view.segments.iter().filter(|s| s.complete).map(|s| secs(s.duration_ns).round() as u64);
-    longest.max().unwrap_or(0).max(configured)
+    (secs(view.longest_ns).round() as u64).max(configured)
 }
 
 /// `PART-TARGET` in seconds: the configured part, or the longest part seen
@@ -74,7 +75,7 @@ pub fn media(view: &View, p: &HlsParams, reports: &[Report]) -> String {
     }
     // Parts are listed for the last three target durations, which is what
     // 8216bis asks for and what a player joining at the live edge needs.
-    let keep = (3 * target * 1000).div_ceil(u64::from(p.segment_ms)) as usize + 1;
+    let keep = (3 * target * 1000).div_ceil(u64::from(p.segment_ms)) as usize;
     let parts_from = listed.len().saturating_sub(keep);
     let mut init = None;
     for (i, s) in listed.iter().enumerate() {

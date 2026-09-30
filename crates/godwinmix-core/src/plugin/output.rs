@@ -71,7 +71,12 @@ pub struct OutputProvide {
     pub make: fn(&OutputConfig) -> Result<Box<dyn Output>>,
 }
 
-static REGISTRY: &[OutputProvide] = &[super::outputs::rtmp::PROVIDE, super::outputs::srt::PROVIDE, super::outputs::record::PROVIDE];
+static REGISTRY: &[OutputProvide] = &[
+    super::outputs::rtmp::PROVIDE,
+    super::outputs::srt::PROVIDE,
+    super::outputs::record::PROVIDE,
+    crate::hls::output::PROVIDE,
+];
 
 pub fn registry() -> &'static [OutputProvide] {
     REGISTRY
