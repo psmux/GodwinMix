@@ -463,6 +463,9 @@ pub enum Command {
     /// and the swap happens here so nothing can land between the two halves.
     SetOutput(Box<OutputConfig>, Option<Ack>),
     RemoveOutput(OutputId, Option<Ack>),
+    /// An output's reconnect has finished on its own thread, with why it
+    /// failed if it did. Never sent by the API.
+    OutputReconnected(OutputId, Option<String>),
     RestartSource(SourceId),
     /// A restart in place has finished on its own thread, with why it failed
     /// if it did. Sent by the worker `RestartSource` starts; never by the API.
@@ -3601,6 +3604,7 @@ impl Mixer {
             Command::AddOutput(..) => "output.add",
             Command::SetOutput(..) => "output.set",
             Command::RemoveOutput(..) => "output.remove",
+            Command::OutputReconnected(..) => "output.reconnected",
             Command::RestartSource(_) => "source.restart",
             Command::SourceRestarted(..) => "source.restarted",
             Command::SourceStopped(_) => "source.stopped",
@@ -3712,6 +3716,7 @@ impl Mixer {
             }
             Command::SourceRestarted(id, failed) => self.restarted(&id, failed),
             Command::SourceStopped(_) => self.release_stopped(),
+            Command::OutputReconnected(id, failed) => self.output_reconnected(&id, failed),
             Command::SetAudio { source, gain, muted, page, media, reply } => {
                 let _ = reply.send(self.set_audio(&source, gain, muted, page, &media));
             }
@@ -4001,22 +4006,28 @@ impl Mixer {
         }
     }
 
+    /// Rebuild an output's pipeline on a thread of its own; see
+    /// `mixer::lifecycle`. What happened comes back as `OutputReconnected`.
     fn reconnect_output(&mut self, id: &OutputId) {
         let Some(out) = self.outputs.iter().find(|o| o.id() == id).cloned() else {
             return;
         };
-        match out.reconnect() {
-            Ok(()) => {
-                // Deliberately not resetting the backoff here. Building a
-                // pipeline succeeding is not the same as the far end accepting
-                // us; the counter is cleared in `tick` once data actually
-                // flows, so a destination that keeps refusing us backs off.
-            }
-            Err(e) => {
-                error!(output = %id, ?e, "reconnect failed, will retry");
-                out.mark_failed();
-                self.arm_output_reconnect(id.clone());
-            }
+        self.reconnect_off_thread(out);
+    }
+
+    /// A reconnect has come back from its thread.
+    fn output_reconnected(&mut self, id: &OutputId, failed: Option<String>) {
+        let Some(out) = self.outputs.iter().find(|o| o.id() == id).cloned() else {
+            return;
+        };
+        // On success the backoff is deliberately not reset. Building a
+        // pipeline succeeding is not the same as the far end accepting us; the
+        // counter is cleared in `tick` once data actually flows, so a
+        // destination that keeps refusing us backs off.
+        if let Some(e) = failed {
+            error!(output = %id, e, "reconnect failed, will retry");
+            out.mark_failed();
+            self.arm_output_reconnect(id.clone());
         }
         self.emit_output_state(&out);
     }
@@ -5041,6 +5052,7 @@ mod tests {
     mod restart;
     mod preview_churn;
     mod slow_restart;
+    mod slow_output;
     use crate::plugin::branch::meter_name;
     use super::*;
 

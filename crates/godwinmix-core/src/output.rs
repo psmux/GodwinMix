@@ -45,6 +45,10 @@ mod boundary;
 
 const RELINK_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 
+/// How long a detach, which runs on the mixer thread, waits for a reconnect
+/// already running on another. Short: the detach goes ahead either way.
+const DETACH_WAIT: std::time::Duration = std::time::Duration::from_millis(250);
+
 /// The currently running output pipeline and the pieces of it we keep hold of.
 struct Live {
     pipeline: gst::Pipeline,
@@ -86,6 +90,9 @@ pub struct OutputSlot {
     /// bus errors in quick succession, and without this each one would arm its
     /// own reconnect, producing a storm rather than a retry.
     reconnect_armed: AtomicBool,
+    /// One reconnect at a time, off the mixer thread, and a detach wins over
+    /// it. See `input::lifecycle`.
+    turn: crate::input::lifecycle::Lifecycle,
     /// The destination itself: the muxer, the sink and the honest answer to
     /// whether the far end has accepted us. Everything above this line is the
     /// same for RTMP, SRT and whatever comes next.
@@ -172,6 +179,7 @@ impl OutputSlot {
             failed: AtomicBool::new(false),
             overfull_ticks: AtomicU32::new(0),
             reconnect_armed: AtomicBool::new(false),
+            turn: Default::default(),
             kind: Mutex::new(kind),
             manifest: ready.manifest,
             capabilities: ready.capabilities,
@@ -325,8 +333,37 @@ impl OutputSlot {
             .is_ok()
     }
 
+    /// Claim the one reconnect this output may have running. The mixer runs
+    /// `reconnect` on a thread of its own after a true, and only then.
+    pub fn claim_reconnect(&self) -> bool {
+        self.turn.claim_restart()
+    }
+
+    /// A claimed reconnect that never ran. Lets the next one in.
+    pub fn reconnect_abandoned(&self) {
+        self.turn.end_restart();
+    }
+
     /// Rebuild the output pipeline. The program pipeline is untouched.
+    ///
+    /// Run off the mixer thread: taking the old pipeline to NULL waits for its
+    /// sink, and a sink waiting on a server that never answers can take its
+    /// time about it.
     pub fn reconnect(&self) -> Result<()> {
+        let r = self.reconnect_in_turn();
+        self.turn.end_restart();
+        r
+    }
+
+    fn reconnect_in_turn(&self) -> Result<()> {
+        let Some(_turn) = self.turn.enter(&self.cfg.id, "reconnect") else {
+            self.reconnect_armed.store(false, Ordering::SeqCst);
+            anyhow::bail!("{} is still inside an earlier reconnect; this one was skipped", self.cfg.id);
+        };
+        if self.turn.stopped() {
+            self.reconnect_armed.store(false, Ordering::SeqCst);
+            return Ok(());
+        }
         let n = self.reconnects.fetch_add(1, Ordering::SeqCst) + 1;
         info!(output = %self.cfg.id, attempt = n, "reconnecting output");
         self.overfull_ticks.store(0, Ordering::Relaxed);
@@ -334,6 +371,17 @@ impl OutputSlot {
         // Released whether or not it worked: a failed spin-up re-arms through
         // the normal error path with the next backoff step.
         self.reconnect_armed.store(false, Ordering::SeqCst);
+        if self.turn.stopped() {
+            // Overtaken by a detach while it ran: what it built has nothing
+            // to feed it and goes straight back down.
+            warn!(output = %self.cfg.id, "removed while reconnecting; taking the new connection down again");
+            self.shutdown();
+            let _ = self.vproxy.lock().set_state(gst::State::Null);
+            let _ = self.aproxy.lock().set_state(gst::State::Null);
+            let _ = self.program.remove(&*self.vproxy.lock());
+            let _ = self.program.remove(&*self.aproxy.lock());
+            return Ok(());
+        }
         result?;
         self.failed.store(false, Ordering::Relaxed);
         Ok(())
@@ -367,7 +415,12 @@ impl OutputSlot {
     /// `rtmp2sink`'s `stats.out-chunk-size`, which no other sink has; an output
     /// that cannot answer that question can still answer this one.
     pub fn refresh_connected(&self) {
-        let now = self.pipeline.lock().is_some() && self.kind.lock().connected();
+        // Not asked while a reconnect on another thread holds the kind, which
+        // it does for as long as the old pipeline takes to reach NULL: this
+        // runs on the mixer thread, and the answer then is "not yet" anyway.
+        let Some(kind) = self.kind.try_lock() else { return };
+        let now = self.pipeline.lock().is_some() && kind.connected();
+        drop(kind);
         if now != self.connected.swap(now, Ordering::Relaxed) {
             if now {
                 info!(output = %self.cfg.id, kind = %self.manifest.provide_id(), "output connection established");
@@ -441,7 +494,9 @@ impl OutputSlot {
             shed: None,
             // Per kind data, for an output built by a plugin rather than by
             // the core. Nothing the core builds itself has any.
-            extra: self.kind.lock().status(),
+            // Skipped for a turn while a reconnect holds the kind; see
+            // `refresh_connected`.
+            extra: self.kind.try_lock().map(|k| k.status()).unwrap_or_default(),
         }
     }
 
@@ -450,6 +505,9 @@ impl OutputSlot {
     }
 
     pub fn shutdown(&self) {
+        // Said first, so a reconnect running on another thread takes down
+        // whatever it builds rather than leaving it up behind this.
+        self.turn.mark_stopped();
         if let Some(live) = self.pipeline.lock().take() {
             drop(live.watch);
             self.kind.lock().shutdown(live.pipeline);
@@ -462,6 +520,10 @@ impl OutputSlot {
     /// queues and proxy sinks back out and releases the tee pads, so an output
     /// removed at runtime leaves nothing behind.
     pub fn detach(&self, program: &gst::Pipeline) {
+        // A reconnect that has not started yet will not; one that is running
+        // gets a moment to finish, and is overtaken if it does not.
+        self.turn.mark_stopped();
+        let _turn = self.turn.enter_within(&self.cfg.id, "detach", DETACH_WAIT);
         self.shutdown();
         for (el, pad) in [
             (&self.feed_video, "feed video"),
