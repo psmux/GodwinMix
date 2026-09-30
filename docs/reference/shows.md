@@ -146,12 +146,21 @@ client's call or any media.
 | `governor.admit` | show to station | a claim: `{what, cost, kind, device?, encode?: {slot, shape}}` | `{answer: "granted", ticket, cost, preset}` or `{answer: "refused", need, have, text, short, fits}` |
 | `governor.release` | show to station | `{ticket}` | none |
 | `show.on_air` | show to station | `{on}` | none |
+| `show.load` | show to station, once a second while it holds a ticket | `{millicores}`, its own CPU | none |
+| `governor.shed` | station to show, once a second while the machine is over its line and the show holds something to give up | `{steps}`, the station's shed plan cut down to this show's tickets | none |
 
 The secret is new for every start, handed to the show in
 `GODWINMIX_STATION_SECRET` and removed from its environment before it starts
 anything. A show with tokens accepts it as an admin token (id `station`), so
 the station can ask it for its status and add a channel's stream to it; a
 show with no tokens stays open, as a single process core does.
+
+The station decides for the whole machine: what is free, and when it is
+over its line, what to give up first, in the order the governor always used,
+whichever show holds it. A show acts on the steps it is sent as a single
+process acted on its own. What a show reports of its own CPU counts as the
+station's own work, so a ticket is not counted twice, once as promised and
+again as another program's load.
 
 When the link closes the station drops every ticket it held for that show, so
 a show that died gives its share of the machine back at once. A show that
