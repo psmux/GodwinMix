@@ -56,12 +56,13 @@ mod refusal;
 mod renditions;
 mod shed;
 pub mod station;
+pub mod status;
 mod tap;
 mod view;
 
 pub use graph::Programme;
 pub use refusal::Refusal;
-pub use renditions::{Renditions, PROGRAMME};
+pub use renditions::{Renditions, RenditionsHandle, PROGRAMME};
 pub use shed::{Tick, RESTORE_AFTER};
 pub use station::Station;
 pub use tap::{Feed, Tap};

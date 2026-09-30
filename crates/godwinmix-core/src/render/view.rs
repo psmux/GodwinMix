@@ -29,11 +29,21 @@ fn code_slug(code: ReasonCode) -> String {
         .unwrap_or_default()
 }
 
-fn node_view(n: &Node, shed: &BTreeMap<String, (String, Instant)>) -> PlanNode {
+/// Request id to the output that made it.
+pub type Owners = std::collections::HashMap<String, String>;
+
+fn node_view(n: &Node, shed: &BTreeMap<String, (String, Instant)>, owners: &Owners) -> PlanNode {
+    let mut serves: Vec<String> = Vec::new();
+    for r in &n.serves {
+        let owner = owners.get(r).cloned().unwrap_or_else(|| r.clone());
+        if !serves.contains(&owner) {
+            serves.push(owner);
+        }
+    }
     PlanNode {
         id: n.id.clone(),
         kind: kind_slug(&n.kind).into(),
-        serves: n.serves.clone(),
+        serves,
         encoder: match &n.kind {
             NodeKind::Encode { encoder, .. } => Some(encoder.id.clone()),
             _ => None,
@@ -44,13 +54,13 @@ fn node_view(n: &Node, shed: &BTreeMap<String, (String, Instant)>) -> PlanNode {
     }
 }
 
-pub fn of(plan: &Plan, shed: &BTreeMap<String, (String, Instant)>) -> PlanView {
+pub fn of(plan: &Plan, shed: &BTreeMap<String, (String, Instant)>, owners: &Owners) -> PlanView {
     let mut devices = BTreeMap::new();
     for (device, cost) in plan.cost.iter().filter(|(d, _)| d.as_str() != godwinmix_render::CPU) {
         devices.insert(device.clone(), DeviceTotal { millis: cost.device_millis, sessions: cost.device_sessions });
     }
     PlanView {
-        nodes: plan.nodes.iter().map(|n| node_view(n, shed)).collect(),
+        nodes: plan.nodes.iter().map(|n| node_view(n, shed, owners)).collect(),
         totals: PlanTotals {
             cpu_millicores: plan.total.cpu_millicores,
             devices,

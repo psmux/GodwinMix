@@ -19,7 +19,17 @@ use super::{Cost, RenditionRequest};
 pub enum RenditionChoice {
     /// `{"preset": "youtube-1080p30"}`.
     Preset(PresetRef),
+    /// `{"ladder": [...]}`: a custom ABR ladder, top rung first, for an
+    /// `hls/output`. Each rung's `id` names it (`<output>-<id>`).
+    Ladder(LadderRef),
     Request(RenditionRequest),
+}
+
+/// A custom ladder.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct LadderRef {
+    pub ladder: Vec<RenditionRequest>,
 }
 
 /// A preset named by id.
@@ -43,6 +53,10 @@ pub struct RenditionPreset {
     /// Every rung, top first, for a ladder preset.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ladder: Option<Vec<RenditionRequest>>,
+    /// What the whole preset would cost here (every rung, the scaling and
+    /// the sound), as the governor prices it on this machine.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cost: Option<Cost>,
     /// Whether this machine can make it.
     #[serde(default = "yes")]
     pub available: bool,
@@ -86,7 +100,8 @@ pub struct PlanNode {
     /// `source`, `copy`, `decode`, `scale`, `encode`, `audio-convert`,
     /// `audio-encode`, `mux`.
     pub kind: String,
-    /// The request ids (output ids, or `<output>-<rung>`) it works for.
+    /// The outputs it works for, each once (for a channel's plan, the
+    /// destination ids), however many rungs of one ladder it serves.
     pub serves: Vec<String>,
     /// The catalogue id of the encoder, on an encode node.
     #[serde(default, skip_serializing_if = "Option::is_none")]

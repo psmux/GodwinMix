@@ -10,7 +10,7 @@ use super::model::GovernorModel;
 use super::refusal::Refusal;
 use super::{view, Station, Tap};
 use godwinmix_govern::Ticket;
-use godwinmix_protocol::rendition::{PlanView, RenditionChoice, RenditionRequest, StreamInfo};
+use godwinmix_protocol::rendition::{PlanView, RenditionChoice, RenditionRequest, ShedNote, StreamInfo};
 use godwinmix_render::{diff, plan, presets, Plan};
 use parking_lot::RwLock;
 use std::collections::{BTreeMap, HashMap};
@@ -31,7 +31,18 @@ pub struct Renditions {
     /// Node id to why the governor stopped it, and when.
     pub(super) shed: BTreeMap<String, (String, std::time::Instant)>,
     pub(super) shared: Arc<RwLock<PlanView>>,
+    notes: Arc<RwLock<Vec<ShedNote>>>,
     pub(super) rungs: Rungs,
+}
+
+/// What the control plane reads, from any thread, without asking the mixer.
+#[derive(Clone)]
+pub struct RenditionsHandle {
+    pub station: Station,
+    /// The programme as the planner sees it, for pricing presets.
+    pub source: StreamInfo,
+    pub plan: Arc<RwLock<PlanView>>,
+    pub shed: Arc<RwLock<Vec<ShedNote>>>,
 }
 
 impl Renditions {
@@ -45,6 +56,7 @@ impl Renditions {
             tickets: HashMap::new(),
             shed: BTreeMap::new(),
             shared: Arc::new(RwLock::new(PlanView::default())),
+            notes: Arc::new(RwLock::new(Vec::new())),
             rungs: Rungs::new(),
         }
     }
@@ -61,6 +73,15 @@ impl Renditions {
     /// What `rendition.plan` reads, from any thread.
     pub fn shared_view(&self) -> Arc<RwLock<PlanView>> {
         self.shared.clone()
+    }
+
+    pub fn handle(&self) -> RenditionsHandle {
+        RenditionsHandle {
+            station: self.station.clone(),
+            source: self.source.clone(),
+            plan: self.shared.clone(),
+            shed: self.notes.clone(),
+        }
     }
 
     /// Plan `output` in with everything else and start what it needs.
@@ -166,7 +187,20 @@ impl Renditions {
     }
 
     pub(super) fn publish(&self) {
-        *self.shared.write() = view::of(&self.plan, &self.shed);
+        let owners: view::Owners = self
+            .outputs
+            .iter()
+            .flat_map(|(o, rs)| rs.iter().map(move |r| (r.id.clone(), o.clone())))
+            .collect();
+        *self.shared.write() = view::of(&self.plan, &self.shed, &owners);
+        *self.notes.write() = self
+            .shed
+            .iter()
+            .filter_map(|(id, (why, _))| {
+                let node = self.plan.node(id)?;
+                Some(ShedNote { what: super::admit::describe(node), why: why.clone() })
+            })
+            .collect();
     }
 
     /// The rungs of one output, top first.

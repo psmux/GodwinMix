@@ -31,6 +31,7 @@ mod outputs;
 mod preview;
 pub(crate) mod plugins;
 pub mod presets;
+pub mod renditions;
 mod program;
 pub(crate) mod scenes;
 mod sources;
@@ -76,6 +77,7 @@ pub fn registry() -> Registry<Call> {
     channels::register_certificate(&mut reg);
     nodes::register(&mut reg);
     presets::register(&mut reg);
+    renditions::register(&mut reg);
     config::register(&mut reg);
     crate::observe::register(&mut reg);
     // Other modules add their own here. One line each, and they land on

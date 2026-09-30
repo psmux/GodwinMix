@@ -48,6 +48,7 @@ fn single(id: &str, title: &str, r: RenditionRequest) -> RenditionPreset {
         group: "platform".into(),
         request: r,
         ladder: None,
+        cost: None,
         available: true,
         why: None,
     }
@@ -64,6 +65,7 @@ fn ladder(id: &str, title: &str, rungs: &[(u32, u32, u32)]) -> RenditionPreset {
         group: "ladder".into(),
         request: rungs[0].clone(),
         ladder: Some(rungs),
+        cost: None,
         available: true,
         why: None,
     }
@@ -109,7 +111,7 @@ pub fn preset(id: &str) -> Option<RenditionPreset> {
 pub fn choice_label(choice: &RenditionChoice) -> String {
     match choice {
         RenditionChoice::Preset(p) => p.preset.clone(),
-        RenditionChoice::Request(_) => "custom".into(),
+        RenditionChoice::Request(_) | RenditionChoice::Ladder(_) => "custom".into(),
     }
 }
 
@@ -125,6 +127,7 @@ pub fn expand(
             id: output.into(),
             ..r.clone()
         }],
+        RenditionChoice::Ladder(l) => ladder_rungs(output, &l.ladder)?,
         RenditionChoice::Preset(p) => {
             let Some(found) = preset(&p.preset) else {
                 let ids: Vec<String> = builtin().into_iter().map(|p| p.id).collect();
@@ -155,6 +158,32 @@ pub fn expand(
     Ok(Some(rungs))
 }
 
+/// A custom ladder's rungs, each named `<output>-<its id>`, or after its
+/// height (`<output>-480p`) when it has no id or shares one.
+fn ladder_rungs(output: &str, rungs: &[RenditionRequest]) -> Result<Vec<RenditionRequest>, String> {
+    if rungs.is_empty() {
+        return Err("A ladder needs at least one rung. Add one, or pick a single format.".into());
+    }
+    let mut out: Vec<RenditionRequest> = Vec::with_capacity(rungs.len());
+    for (i, r) in rungs.iter().enumerate() {
+        let height = r.video.as_ref().and_then(|v| v.height);
+        let own = Some(r.id.as_str())
+            .filter(|s| !s.is_empty() && s.chars().all(|c| c.is_ascii_alphanumeric() || c == '-'));
+        let mut name = own
+            .map(str::to_string)
+            .or(height.map(|h| format!("{h}p")))
+            .unwrap_or(format!("rung{}", i + 1));
+        if out.iter().any(|o| o.id == format!("{output}-{name}")) {
+            name = format!("rung{}", i + 1);
+        }
+        out.push(RenditionRequest {
+            id: format!("{output}-{name}"),
+            ..r.clone()
+        });
+    }
+    Ok(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -177,6 +206,18 @@ mod tests {
         assert_eq!(reqs.len(), 1);
         assert_eq!(reqs[0].id, "yt");
         assert_eq!(expand("yt", &by("copy")).unwrap(), None);
+    }
+
+    #[test]
+    fn a_custom_ladder_names_each_rung_and_reads_from_json() {
+        let c: RenditionChoice = serde_json::from_str(
+            r#"{"ladder":[{"id":"","container":"hls","video":{"height":720}},{"id":"","container":"hls","video":{"height":360}}]}"#,
+        )
+        .unwrap();
+        let ids: Vec<String> = expand("hls", &c).unwrap().unwrap().into_iter().map(|r| r.id).collect();
+        assert_eq!(ids, ["hls-720p", "hls-360p"]);
+        let empty = RenditionChoice::Ladder(godwinmix_protocol::rendition::LadderRef { ladder: vec![] });
+        assert!(expand("hls", &empty).is_err());
     }
 
     #[test]

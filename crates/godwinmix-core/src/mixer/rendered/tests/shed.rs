@@ -27,7 +27,10 @@ async fn a_lower_rung_is_shed_when_the_machine_runs_short_and_comes_back() {
     assert!(steady.shed.is_none(), "a single rendition is its output's top rung and is never shed");
     let plan = mix.renditions().shared_view().read().clone();
     let shed: Vec<_> = plan.nodes.iter().filter(|n| n.shed.is_some()).collect();
-    assert!(!shed.is_empty() && shed.iter().all(|n| !n.serves.contains(&"hls-720p".to_string())), "the top rung stays: {shed:?}");
+    assert!(!shed.is_empty() && shed.iter().all(|n| !n.id.contains("x720p")), "the top rung stays: {shed:?}");
+    assert!(shed.iter().all(|n| n.serves == ["hls"]), "serves names the output: {shed:?}");
+    let notes = mix.renditions().handle().shed.read().clone();
+    assert!(!notes.is_empty() && notes[0].what.contains("360p"), "{notes:?}");
 
     // Room again; nothing comes back before the hold is over.
     governor.load_cell().store(&Load { samples: 6, ..Load::default() });
