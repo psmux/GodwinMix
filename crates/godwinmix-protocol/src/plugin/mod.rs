@@ -10,6 +10,7 @@
 //!
 //! ```text
 //!   manifest.rs    gmx-plugin.toml: types, parser, validator with key paths
+//!   share.rs       `share`: what a source opens, so it is decoded once
 //!   wire.rs        the handshake and every method body that crosses the pipe
 //!   skill.rs       SKILL.md frontmatter, and the check the harness makes
 //!   transcript.rs  the recorded transcript `gmx plugin test --offline` replays
@@ -20,9 +21,11 @@
 //! runs on a machine with no GStreamer.
 
 pub mod manifest;
+pub mod share;
 pub mod skill;
 pub mod transcript;
 pub mod wire;
 
 pub use manifest::{Manifest, ManifestError, Problem, Provide};
+pub use share::Share;
 pub use wire::{Canvas, Frame, Transport};

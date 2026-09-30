@@ -31,6 +31,7 @@ use std::time::Instant;
 
 /// Everything a kind needs to build itself. Held by the kind between
 /// `initialize` and `start`.
+#[derive(Clone)]
 pub struct BuildCtx {
     pub id: SourceId,
     pub cfg: SourceConfig,
