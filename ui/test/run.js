@@ -719,6 +719,22 @@ test("an output's row stands through a status, so a button held for a moment is 
   panel.remove();
 });
 
+test("a destination waiting for its key offers the key and no reconnect", () => {
+  // The core never dials a placeholder address, so a Reconnect there could
+  // only ever answer that there is nothing to reconnect to.
+  const state = { outputs: [{ id: "youtube", state: "connecting", reconnects: 0, queue_secs: 0, has_key: false, uri_host: "rtmp://a.rtmp.youtube.com/…" }] };
+  const panel = document.createElement("gmx-outputs");
+  panel.setClient({ state, onRender: () => () => {}, call: async () => ({}) });
+  document.body.appendChild(panel);
+  const buttons = () => [...panel.querySelectorAll(".output-row button")].map((b) => b.textContent);
+  ok(buttons().includes("Add key"), buttons().join(", "));
+  ok(!buttons().includes("Reconnect"), "a keyless destination offered Reconnect");
+  state.outputs = [Object.assign({}, state.outputs[0], { has_key: true, state: "live" })];
+  panel.render(state);
+  ok(buttons().includes("Reconnect"), "the key is in and Reconnect did not come back");
+  panel.remove();
+});
+
 test("the outputs panel reads the numbers back while there is a row to put them in", () => {
   // Nothing pushes a recording's megabytes or a link's buffer: a status is
   // sent when something changes and both of those change when nothing does.

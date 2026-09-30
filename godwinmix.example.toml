@@ -406,6 +406,9 @@ policy = "own"
 # a short network hiccup invisible to the viewer.
 queue_secs = 5.0
 
+# YouTube and Facebook are here without a key. An address that still says
+# YOUR-STREAM-KEY is never dialled: the output waits, the Outputs panel shows
+# it as needing a stream key, and Add key there is all it takes to go live.
 [[outputs]]
 id = "youtube"
 type = "rtmp/output"

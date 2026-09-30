@@ -114,7 +114,9 @@ class HeaderPanel extends HTMLElement {
     const outputs = s.outputs || [];
     const streams = outputs.filter(o => o.type !== "record/output");
     const live = streams.filter(o => o.state === "live").length;
-    this.destinations.textContent = !streams.length ? "No destinations" : live ? `${live} destination${live === 1 ? "" : "s"} live` : "Destinations connecting";
+    // One still waiting for its key is not connecting and never will be.
+    const dialling = streams.some(o => o.has_key !== false);
+    this.destinations.textContent = !streams.length ? "No destinations" : live ? `${live} destination${live === 1 ? "" : "s"} live` : dialling ? "Destinations connecting" : "Destinations need a key";
     this.destinations.classList.toggle("live", live > 0);
     this.recording.hidden = !outputs.some(o => o.type === "record/output" && o.state === "live");
     this.ad.hidden = !(s.ad && s.ad.on_air);
