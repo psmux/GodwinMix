@@ -497,6 +497,23 @@ fn travel(pad: &gst::Pad, x: &Crossing, from: &PadState, to: &PadState) -> Vec<C
     out
 }
 
+/// Every pad eased from where it is to where a scene wants it, over one
+/// window on the compositor's timeline: a layout change with a duration.
+///
+/// The same curves `move` makes, so the picture moves in its own time. A
+/// thread writing properties by the wall clock moved them in the clock's
+/// time instead, and when the compositor ran late and caught up with a burst
+/// of frames every frame of the burst had the same geometry: on a loaded
+/// machine the move arrived as a jump.
+pub fn glide(ramps: &[super::slots::Ramp], start: gst::ClockTime, duration: gst::ClockTime) -> Vec<Curve> {
+    let x = Crossing { out: Vec::new(), incoming: Vec::new(), audio: Vec::new(), cover: None, start, duration };
+    ramps
+        .iter()
+        .filter(|r| r.from != r.to)
+        .flat_map(|r| travel(&r.pad, &x, &r.from, &r.to))
+        .collect()
+}
+
 /// Sample a shape over the window.
 fn sample(x: &Crossing, f: impl Fn(f64) -> f64) -> Vec<(gst::ClockTime, f64)> {
     let ms = x.duration.mseconds().max(1);
