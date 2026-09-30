@@ -40,8 +40,8 @@ fn open(dir: &Path, stored: bool) -> Arc<Channels> {
         stored.then(|| Config::runtime_store_path(&path)),
         Ports::default(),
         Supervisor::new(caps.clone(), Default::default()),
-        handle,
-        SceneServer::in_memory(caps),
+        handle.clone(),
+        Arc::new(super::target::Local { mixer: handle, scenes: SceneServer::in_memory(caps) }),
         secrets,
     )
 }
