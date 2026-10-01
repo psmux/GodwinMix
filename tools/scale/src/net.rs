@@ -16,10 +16,12 @@ pub fn parse(uri: &str) -> Result<SocketAddrV4, String> {
     Ok(SocketAddrV4::new(host, port))
 }
 
-/// The i-th address after `base`: the next group for multicast, the next port for unicast.
-pub fn nth(base: SocketAddrV4, i: u32) -> SocketAddrV4 {
+/// The i-th address after `base`: the next group for multicast (and the next
+/// port too with `port_step`), the next port for unicast.
+pub fn nth(base: SocketAddrV4, i: u32, port_step: bool) -> SocketAddrV4 {
     if base.ip().is_multicast() {
-        SocketAddrV4::new(Ipv4Addr::from(u32::from(*base.ip()) + i), base.port())
+        let port = if port_step { base.port() + i as u16 } else { base.port() };
+        SocketAddrV4::new(Ipv4Addr::from(u32::from(*base.ip()) + i), port)
     } else {
         SocketAddrV4::new(*base.ip(), base.port() + i as u16)
     }
@@ -108,7 +110,8 @@ mod tests {
         assert_eq!(parse("udp://@:20001?pkt_size=1316").unwrap(), "0.0.0.0:20001".parse().unwrap());
         assert_eq!(parse("127.0.0.1:30000").unwrap(), "127.0.0.1:30000".parse().unwrap());
         assert!(parse("udp://nowhere").is_err());
-        assert_eq!(nth("239.1.0.255:5000".parse().unwrap(), 2), "239.1.1.1:5000".parse().unwrap());
-        assert_eq!(nth("127.0.0.1:30000".parse().unwrap(), 7), "127.0.0.1:30007".parse().unwrap());
+        assert_eq!(nth("239.1.0.255:5000".parse().unwrap(), 2, false), "239.1.1.1:5000".parse().unwrap());
+        assert_eq!(nth("127.0.0.1:30000".parse().unwrap(), 7, false), "127.0.0.1:30007".parse().unwrap());
+        assert_eq!(nth("239.1.1.1:5000".parse().unwrap(), 3, true), "239.1.1.4:5003".parse().unwrap());
     }
 }

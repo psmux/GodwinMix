@@ -54,7 +54,7 @@ fn feeds_arrive_over_loopback_paced_and_whole() {
     let probe = std::net::UdpSocket::bind(base).unwrap();
     let port = probe.local_addr().unwrap().port();
     drop(probe);
-    let socks: Vec<_> = (0..2).map(|i| net::receiver(net::nth(format!("127.0.0.1:{port}").parse().unwrap(), i), "127.0.0.1".parse().unwrap(), 1 << 20).unwrap()).collect();
+    let socks: Vec<_> = (0..2).map(|i| net::receiver(net::nth(format!("127.0.0.1:{port}").parse().unwrap(), i, false), "127.0.0.1".parse().unwrap(), 1 << 20).unwrap()).collect();
     let feeds = vec![feed(&clip, &format!("127.0.0.1:{port}"), 0.0), feed(&clip, &format!("127.0.0.1:{}", port + 1), 5.0)];
     let totals = Totals::default();
     let start = Instant::now();

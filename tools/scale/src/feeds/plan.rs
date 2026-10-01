@@ -46,11 +46,11 @@ pub struct Row {
 
 /// Feed `i` sends clip `i % clips` to the i-th address after `to`, and
 /// starts at a different place in it than its neighbours.
-pub fn build(clips: &[Arc<Clip>], count: usize, to: SocketAddrV4, base: Impair, special: &[(usize, usize, Impair)]) -> Plan {
+pub fn build(clips: &[Arc<Clip>], count: usize, (to, port_step): (SocketAddrV4, bool), base: Impair, special: &[(usize, usize, Impair)]) -> Plan {
     let mut plan = Plan { feeds: Vec::new(), rows: Vec::new() };
     for i in 0..count {
         let clip = Arc::clone(&clips[i % clips.len()]);
-        let at = net::nth(to, i as u32);
+        let at = net::nth(to, i as u32, port_step);
         let imp = special.iter().rev().find(|(a, b, _)| (*a..=*b).contains(&i)).map_or(base, |s| s.2);
         let start = (i * 7919) % clip.datagrams();
         let program = clip.programs.get((i / clips.len()) % clip.programs.len().max(1)).copied().unwrap_or(1);
@@ -67,7 +67,7 @@ pub fn build(clips: &[Arc<Clip>], count: usize, to: SocketAddrV4, base: Impair, 
 pub fn csv(rows: &[Row], out: SocketAddrV4, format: &str) -> String {
     let mut s = String::from("name,input,program,output,format\n");
     for (i, r) in rows.iter().enumerate() {
-        let _ = writeln!(s, "{},{},{},udp://{},{}", r.name, r.input, r.program, net::nth(out, i as u32), format);
+        let _ = writeln!(s, "{},{},{},udp://{},{}", r.name, r.input, r.program, net::nth(out, i as u32, false), format);
     }
     s
 }
@@ -89,7 +89,7 @@ mod tests {
     fn spreads_feeds_over_addresses_and_writes_the_list() {
         let clip = Arc::new(Clip::from_bytes("a.ts".into(), synthetic(700, 2700)).unwrap());
         let special = [(1, 1, Impair { loss: 2.0, jitter_ms: 0.0 })];
-        let p = build(&[clip], 3, "239.77.0.1:5000".parse().unwrap(), Impair::default(), &special);
+        let p = build(&[clip], 3, ("239.77.0.1:5000".parse().unwrap(), false), Impair::default(), &special);
         assert_eq!(p.feeds[2].to, "239.77.0.3:5000".parse().unwrap());
         assert_eq!((p.feeds[0].loss, p.feeds[1].loss), (0.0, 2.0));
         assert_ne!(p.feeds[0].start, p.feeds[1].start);
@@ -97,7 +97,7 @@ mod tests {
         let lines: Vec<&str> = text.lines().collect();
         assert_eq!(lines[0], "name,input,program,output,format");
         assert_eq!(lines[2], "feed-002,udp://@239.77.0.2:5000,1,udp://127.0.0.1:30001,copy");
-        let uni = build(&p.feeds.iter().map(|f| f.clip.clone()).take(1).collect::<Vec<_>>(), 2, "127.0.0.1:20000".parse().unwrap(), Impair::default(), &[]);
+        let uni = build(&p.feeds.iter().map(|f| f.clip.clone()).take(1).collect::<Vec<_>>(), 2, ("127.0.0.1:20000".parse().unwrap(), false), Impair::default(), &[]);
         assert_eq!(uni.rows[1].input, "udp://@:20001");
     }
 }
