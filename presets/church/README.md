@@ -26,4 +26,4 @@ A machine that can reach the internet, and your YouTube and Facebook stream keys
 
 **The slides tile is black.** It is looking for `media/slides.mp4`. Drop a file onto the page and pick it on the `slides` source.
 
-**The service is over and the stream is still running.** Press the red button again, then stop the destination in the Destinations panel.
+**The service is over and the stream is still running.** Press the red button again, then stop the destination in the Outputs panel.

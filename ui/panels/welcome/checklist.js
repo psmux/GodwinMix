@@ -188,7 +188,7 @@ function keyRow(client, output, note, changed) {
       ? `${title}: key saved`
       : `${title}: still needs a stream key`;
     view.line.textContent = done
-      ? "It reconnects on its own. The Destinations panel says when it is up."
+      ? "It reconnects on its own. The Outputs panel says when it is up."
       : "The mixer still reads that address as a placeholder. Try the whole address instead.";
     if (!done) view.el.appendChild(form);
     save.disabled = false;
