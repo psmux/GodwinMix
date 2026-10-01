@@ -2833,6 +2833,7 @@ Subscribe with `core.subscribe`. Patterns match the part after `event/`, so `pro
 | `event/governor.shed` |  |  | The machine ran short while on air and the governor stopped something to keep what is on air whole: what it was and why. It is brought back by itself when there is room again. |
 | `event/show.changed` |  |  | A show was added, renamed, started, stopped, died or came back. Sent by the station to every client, whichever show it is looking at. |
 | `event/show.removed` |  |  | A show was removed. Its process was stopped first. |
+| `event/health` |  |  | This show's health changed: its state (ok, warning, alarm, off) or the kinds of its alarms, never a number alone. From a show that composites; the station sends it on to every client as show.health with the show's id. docs/reference/show-health.md says what each alarm watches. |
 
 ## The routes this replaces
 

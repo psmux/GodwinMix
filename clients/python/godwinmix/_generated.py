@@ -140,6 +140,15 @@ class AddSourceRequest(TypedDict, total=False):
 class AgentStateRequest(TypedDict, total=False):
     response_format: ResponseFormat
 
+class Alarm(TypedDict, total=False):
+    """One condition that holds now."""
+
+    detail: str
+    # One sentence for a person: what was measured, and against what.
+    kind: AlarmKind
+    since_ms: int
+    # Unix milliseconds when the condition began. For black, freeze and silence that is when the picture or sound first measured so, not when the alarm's duration ran out.
+
 class ApplyGraphicRequest(TypedDict, total=False):
     """`scene.apply_graphic`."""
 
@@ -981,6 +990,18 @@ class HeaderChange(TypedDict, total=False):
 
     after: Header
     before: Header
+
+class Health(TypedDict, total=False):
+    """A show's health."""
+
+    alarms: List[Alarm]
+    # Every alarm that holds now, oldest first.
+    state: HealthState
+
+class HealthEvent(TypedDict, total=False):
+    """`event/health`, from a show that composites, about itself. The station sends it on to clients as `event/show.health` with the show's id."""
+
+    health: Health
 
 class HistoryRequest(TypedDict, total=False):
     """`program.history`."""
@@ -2504,6 +2525,9 @@ ActionKind = Literal['set-config', 'install-plugin', 'enable-plugin', 'open', 'r
 # `ext.agent`. `true` takes the default thresholds; an object moves them.
 AgentExt = Union[bool, Dict[str, Any]]
 
+# What an alarm is about.
+AlarmKind = Literal['no-input', 'stall', 'black', 'freeze', 'silence', 'cc-errors', 'loss', 'output-failed', 'governor-refused', 'shed']
+
 # The nine alignment keywords, used to place content inside its frame.
 Align = Literal['top-left', 'top-center', 'top-right', 'center-left', 'center', 'center-right', 'bottom-left', 'bottom-center', 'bottom-right']
 
@@ -2540,6 +2564,9 @@ Fit = Literal['none', 'contain', 'cover', 'stretch', 'fit-width', 'fit-height', 
 
 # Content on the wire. The same four shapes as the tree, except that a group names no children: they are records whose parent is the group.
 FlatContent = Dict[str, Any]
+
+# The one word a monitoring wall colours a row by.
+HealthState = Literal['ok', 'warning', 'alarm', 'off']
 
 # A UUID in the hyphenated form. Minted ids are version 7 (time ordered); ids derived from a layout are version 8.
 Id = str
@@ -2786,6 +2813,7 @@ EVENT_NAMES = (
     "governor.shed",
     "show.changed",
     "show.removed",
+    "health",
 )
 
 EXT_KEYS = {
