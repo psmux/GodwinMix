@@ -51,8 +51,11 @@ async fn an_agent_adds_twenty_feeds_in_two_calls_and_reads_them_in_one() {
     assert!(hot.contains(&"add_shows".to_string()), "add_shows is hot: {hot:?}");
 
     // An agent that does not trust the hot list looks; this is what it pays.
+    let before_search = agent.read_bytes;
     let found = agent.tool("search_tools", json!({ "query": "add many shows from a list of feeds" })).await;
     assert!(found.to_string().contains("add_shows"), "{found}");
+    let search_bytes = agent.read_bytes - before_search;
+    let before_work = agent.read_bytes;
 
     let t = Instant::now();
     let shows = headend(20);
@@ -82,11 +85,13 @@ async fn an_agent_adds_twenty_feeds_in_two_calls_and_reads_them_in_one() {
         tokio::time::sleep(Duration::from_millis(500)).await;
     };
     let one_read = stats.to_string().len();
+    let work_bytes = agent.read_bytes - before_work;
 
     eprintln!(
         "agent headend run: tools/list {list_bytes} B for {} hot tools; 20 shows added in {add_ms} ms \
          (dry run, list, apply); {reads} show_stats read(s) until all 20 had a health, one read of 20 \
-         is {one_read} B; total {} tool calls, {} B sent, {} B read, {} ms wall",
+         is {one_read} B; the search cost {search_bytes} B and the work itself (dry run, list, apply, \
+         stats) {work_bytes} B read; total {} tool calls, {} B sent, {} B read, {} ms wall",
         hot.len(),
         agent.tool_calls,
         agent.sent_bytes,
