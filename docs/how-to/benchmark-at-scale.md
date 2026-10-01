@@ -50,8 +50,8 @@ every wait in the script gives up with a message instead of hanging.
 `core.api`. On a station without it, auto falls back to `--mode legacy`. With
 `--mode direct` on a station that has `show.add` but no `show.add_many`, each
 row goes through `show.add` with the same body; if the station makes a
-compositing show and ignores the input, the add stops and says to run with
-`--legacy`.
+compositing show and ignores the input, the add stops, says to use
+`--mode legacy`, and the run ends there with nothing measured.
 
 ## The feeds
 
