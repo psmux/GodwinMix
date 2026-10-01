@@ -117,6 +117,23 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/routing/model.js", include_str!("../../../ui/panels/routing/model.js")),
     ("panels/routing/routing.css", include_str!("../../../ui/panels/routing/routing.css")),
     ("panels/routing/view.js", include_str!("../../../ui/panels/routing/view.js")),
+    ("panels/wall/act.js", include_str!("../../../ui/panels/wall/act.js")),
+    ("panels/wall/bulk-parse.js", include_str!("../../../ui/panels/wall/bulk-parse.js")),
+    ("panels/wall/bulk-table.js", include_str!("../../../ui/panels/wall/bulk-table.js")),
+    ("panels/wall/bulk.js", include_str!("../../../ui/panels/wall/bulk.js")),
+    ("panels/wall/cells.js", include_str!("../../../ui/panels/wall/cells.js")),
+    ("panels/wall/data.js", include_str!("../../../ui/panels/wall/data.js")),
+    ("panels/wall/detail-outputs.js", include_str!("../../../ui/panels/wall/detail-outputs.js")),
+    ("panels/wall/detail.js", include_str!("../../../ui/panels/wall/detail.js")),
+    ("panels/wall/dialogs.css", include_str!("../../../ui/panels/wall/dialogs.css")),
+    ("panels/wall/model.js", include_str!("../../../ui/panels/wall/model.js")),
+    ("panels/wall/rows.js", include_str!("../../../ui/panels/wall/rows.js")),
+    ("panels/wall/sheet.js", include_str!("../../../ui/panels/wall/sheet.js")),
+    ("panels/wall/thumbs.js", include_str!("../../../ui/panels/wall/thumbs.js")),
+    ("panels/wall/top.js", include_str!("../../../ui/panels/wall/top.js")),
+    ("panels/wall/view.js", include_str!("../../../ui/panels/wall/view.js")),
+    ("panels/wall/virtual.js", include_str!("../../../ui/panels/wall/virtual.js")),
+    ("panels/wall/wall.css", include_str!("../../../ui/panels/wall/wall.css")),
     ("panels/renditions/custom.js", include_str!("../../../ui/panels/renditions/custom.js")),
     ("panels/renditions/format-step.js", include_str!("../../../ui/panels/renditions/format-step.js")),
     ("panels/renditions/hls-add.js", include_str!("../../../ui/panels/renditions/hls-add.js")),
@@ -267,6 +284,15 @@ const DEV_ASSETS: &[(&str, &str)] = &[
     ("test/shows-stub.js", include_str!("../../../ui/test/shows-stub.js")),
     ("test/shows-preview.js", include_str!("../../../ui/test/shows-preview.js")),
     ("test/shows.html", include_str!("../../../ui/test/shows.html")),
+    // The monitoring wall, bulk add and a show's detail against a stub of
+    // the wave 4 contract: /test/wall.html?scene=rows.
+    ("test/wall-act.js", include_str!("../../../ui/test/wall-act.js")),
+    ("test/wall-dialogs.js", include_str!("../../../ui/test/wall-dialogs.js")),
+    ("test/wall-help.js", include_str!("../../../ui/test/wall-help.js")),
+    ("test/wall-preview.js", include_str!("../../../ui/test/wall-preview.js")),
+    ("test/wall-stub.js", include_str!("../../../ui/test/wall-stub.js")),
+    ("test/wall.html", include_str!("../../../ui/test/wall.html")),
+    ("test/wall.js", include_str!("../../../ui/test/wall.js")),
     // The designer kits' behaviour, as the reference implementation answered
     // it. The TypeScript and Python suites read the same file from the
     // repository; the browser reads it from here, because the page has no file
@@ -818,6 +844,10 @@ mod tests {
         reachable.extend(closure_of("shell/show-file.js"));
         // View > Routing, and what its cells open.
         reachable.extend(closure_of("panels/routing/view.js"));
+        // View > Monitoring wall, and what it opens: Add shows and a show's detail.
+        reachable.extend(closure_of("panels/wall/view.js"));
+        reachable.extend(closure_of("panels/wall/bulk.js"));
+        reachable.extend(closure_of("panels/wall/detail.js"));
         reachable.extend(closure_of("panels/outputs/record-start.js"));
         // Renditions: each is fetched by an `import()` the first time it is
         // wanted, from the destination form, the Outputs panel or its rows.
@@ -904,6 +934,14 @@ mod tests {
             ("panels/routing/view.js", "View > Routing"),
             ("panels/routing/data.js", "View > Routing"),
             ("panels/routing/model.js", "View > Routing"),
+            ("panels/wall/view.js", "View > Monitoring wall"),
+            ("panels/wall/data.js", "View > Monitoring wall"),
+            ("panels/wall/rows.js", "View > Monitoring wall"),
+            ("panels/wall/virtual.js", "View > Monitoring wall"),
+            ("panels/wall/bulk.js", "Add shows, or File > New shows"),
+            ("panels/wall/bulk-parse.js", "Add shows, or File > New shows"),
+            ("panels/wall/detail.js", "a direct show opened on the wall"),
+            ("panels/wall/detail-outputs.js", "a direct show opened on the wall"),
             ("shell/project-open.js", "Open project"),
             ("shell/settings-dialog.js", "Settings for this page"),
             ("panels/outputs/record-start.js", "Record pressed"),
