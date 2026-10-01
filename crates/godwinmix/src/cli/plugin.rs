@@ -266,10 +266,9 @@ async fn wait_for(api: &Api, started: Value, what: &str) -> Result<Value> {
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(600);
     loop {
         tokio::time::sleep(std::time::Duration::from_millis(wait)).await;
-        // `task.get` is a singleton route with no `{id}` in its path, so the
-        // id travels as a query parameter rather than as a path segment.
-        let task: Value =
-            api.get("task.get", None, &[("task_id", task_id.clone())]).await?;
+        // `task.get` is `GET /api/v1/tasks/{id}`: the id is the path and
+        // nothing else, so this sends what a plain REST client sends.
+        let task: Value = api.get("task.get", Some(&task_id), &[]).await?;
         match task["state"].as_str().unwrap_or("running") {
             "completed" => return Ok(task["result"].clone()),
             "failed" => anyhow::bail!(

@@ -319,13 +319,13 @@ struct Dirs {
 static DIRS: OnceLock<Dirs> = OnceLock::new();
 
 /// Called once at startup with the `[control]` section. Safe to skip: the
-/// defaults are the embedded page and `~/.godwinmix/plugins`.
+/// defaults are the embedded page and the loader's plugins folder.
 pub fn configure(ui_dir: Option<&str>, plugins_dir: Option<&str>) {
     let _ = DIRS.set(Dirs {
         ui: ui_dir.filter(|s| !s.trim().is_empty()).map(PathBuf::from),
         plugins: plugins_dir
             .filter(|s| !s.trim().is_empty())
-            .map(PathBuf::from)
+            .map(godwinmix_host::home::expand)
             .unwrap_or_else(default_plugins_dir),
     });
 }
