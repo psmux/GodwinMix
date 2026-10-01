@@ -1,7 +1,12 @@
 # Put it behind a reverse proxy with TLS
 
-The mixer speaks plain HTTP on one port and does not terminate TLS. Bind it to
-loopback, put a proxy in front, and the proxy does the certificate.
+The mixer answers HTTPS itself on its control port, with a certificate it
+makes or one you give it ([serve the control port over
+HTTPS](serve-https.md)). That is enough on a LAN. A proxy is still the answer
+for a public name with a certificate that renews itself, or for a machine that
+already runs Caddy or nginx. Bind the mixer to loopback, put the proxy in
+front, and the proxy does the certificate. You can then turn the mixer's own
+HTTPS off with `[control.tls] enabled = false`.
 
 Two things a proxy has to get right here, and both of them are things a default
 configuration gets wrong:

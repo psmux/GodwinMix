@@ -610,6 +610,8 @@ class CoreInfo(TypedDict, total=False):
     # Whether `core.restart` brings this core back, so a page can decide between a Restart button and a sentence.
     supervised: bool
     # True when the core was started with `--supervised` (or `GODWINMIX_SUPERVISED=1`): a service manager, a container runtime or the desktop app starts it again after it exits.
+    tls: Union[TlsInfo, None]
+    # HTTPS on the control port, when it is on. Absent when `[control.tls]` is off or the certificate could not be loaded.
     token: Union[TokenInfo, None]
     # Present when the request carried a token the core recognises.
     ui: Union[UiDefaults, None]
@@ -2617,6 +2619,18 @@ class ThumbnailRequest(TypedDict, total=False):
 
     width: Optional[int]
     # Pixels across, 16 to 320, made even. 320 when left out.
+
+class TlsInfo(TypedDict, total=False):
+    """`core.info.tls`: what the control port answers HTTPS with. Enough for a page to say "open this address, accept the certificate warning once, and check the fingerprint is this one"."""
+
+    fingerprint: str
+    # SHA-256 of the certificate, upper case hex in colon separated pairs, the way a browser's certificate viewer shows it.
+    names: List[str]
+    # The host names and addresses a self signed certificate was made for. Empty for an operator's own certificate.
+    source: str
+    # Where the certificate came from: `self_signed` (made by this mixer) or `files` (the operator's own, from `[control.tls] cert` and `key`).
+    urls: List[str]
+    # `https://` addresses this mixer can be opened at, the LAN one first.
 
 class TokenInfo(TypedDict, total=False):
     """What the calling token is allowed to do, echoed back so a surface can grey out what it cannot reach instead of discovering it at the first refusal."""

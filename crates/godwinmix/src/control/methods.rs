@@ -116,6 +116,7 @@ fn register_core(reg: &mut Registry<Call>) {
                     ui: presets::ui_defaults(),
                     supervised: lifecycle::supervised(),
                     restart: lifecycle::restart_info(),
+                    tls: crate::tls::info(),
                 })
             }),
         )
