@@ -99,7 +99,7 @@ async fn ended() {
 /// runs here; every other one runs in the shows, as it did before.
 fn load_plugins(cfg: &Config, tokens: &Arc<godwinmix_protocol::scope::Tokens>, runtime: &std::path::Path) {
     if let Some(dir) = cfg.control.plugins_dir.as_deref() {
-        plugin::loader::set_dir(PathBuf::from(dir));
+        plugin::loader::set_dir(godwinmix_host::home::expand(dir));
     }
     for installed in plugin::loader::load_all(&cfg.plugins) {
         if let Some(problem) = &installed.problem {

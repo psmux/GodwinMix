@@ -76,10 +76,12 @@ export function alarms(show, acked, now) {
 /** The compositing switch, with what it means in its title. */
 export function mixSwitch(show) {
   const on = mixed(show);
+  const busy = !!show.switching;
+  const title = busy ? "Switching: the outputs are moving over. This takes up to half a minute."
+    : on ? "Mixed: scenes, transitions and a programme encode. Click to send the input straight to the outputs." : "Direct: the input goes straight to the outputs. Click to mix it with scenes and transitions.";
   return el("button.wl-switch", {
-    type: "button", role: "switch", "aria-checked": String(on), "data-act": "mix", "data-id": show.id, tabindex: "-1",
-    title: on ? "Mixed: scenes, transitions and a programme encode. Click to send the input straight to the outputs." : "Direct: the input goes straight to the outputs. Click to mix it with scenes and transitions.",
-  }, [el("span.wl-knob"), el("span.wl-swword", { text: on ? "Mixed" : "Direct" })]);
+    type: "button", role: "switch", "aria-checked": String(on), "aria-busy": String(busy), "data-act": "mix", "data-id": show.id, tabindex: "-1", title,
+  }, [el("span.wl-knob"), el("span.wl-swword", { text: busy ? "Switching" : on ? "Mixed" : "Direct" })]);
 }
 
 /** The input's numbers: transport and shape on one line, health on the next. */

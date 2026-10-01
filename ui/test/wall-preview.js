@@ -2,7 +2,8 @@
 // one state per address, for looking at and for screenshots:
 // /test/wall.html?scene=rows&theme=dark
 //
-// Scenes: rows, tiles, grouped, bulk, bulk-dry, detail, empty. Nothing here
+// Scenes: rows, tiles, grouped, bulk, bulk-dry, detail, empty, switching
+// (a row whose switch of compositing is still running). Nothing here
 // talks to a core.
 
 import { wallStub } from "./wall-stub.js";
@@ -24,7 +25,7 @@ function bar() {
 async function main() {
   bar();
   try { localStorage.removeItem("gmx.wall"); } catch { /* fine */ }
-  const stub = wallStub({ n: scene === "empty" ? 0 : Number(q.get("n") || 200) });
+  const stub = wallStub({ n: scene === "empty" ? 0 : Number(q.get("n") || 200), switchMs: scene === "switching" ? 2e9 : 400 });
   const { toggleWall } = await import("../panels/wall/view.js");
   const view = toggleWall(stub);
   await until(() => view.root.querySelector(".wl-row, .wl-tile, .wl-empty:not([hidden])"));
@@ -33,6 +34,10 @@ async function main() {
   await wait(1300);
   if (q.get("cursor")) { view.cursor = q.get("cursor"); view.draw(); }
   if (scene.startsWith("bulk")) await bulk(stub);
+  if (scene === "switching") {
+    view.root.querySelectorAll("[data-act=mix]")[2].click();
+    await wait(400);
+  }
   if (scene === "detail") {
     const { showDetail } = await import("../panels/wall/detail.js");
     showDetail(stub, stub.shows[Number(q.get("i") || 1)], { data: view.data });

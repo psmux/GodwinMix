@@ -245,16 +245,10 @@ pub struct Store {
     pub marketplaces: Vec<Added>,
 }
 
-/// `~/.godwinmix` unless something says otherwise.
+/// `~/.godwinmix` unless `GODWINMIX_HOME` says otherwise. The answer is
+/// [`crate::home::dir`]'s; this name stays for the callers that had it.
 pub fn home_dir() -> PathBuf {
-    if let Ok(explicit) = std::env::var("GODWINMIX_HOME") {
-        return PathBuf::from(explicit);
-    }
-    std::env::var_os("HOME")
-        .or_else(|| std::env::var_os("USERPROFILE"))
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join(".godwinmix")
+    crate::home::dir()
 }
 
 /// Where the list of added marketplaces lives.

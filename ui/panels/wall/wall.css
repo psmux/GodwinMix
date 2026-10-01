@@ -23,7 +23,7 @@
 .wl-empty { padding: 48px 16px; color: var(--dim); text-align: center; }
 
 /* The table. One grid for the header and every row. */
-.wall { --cols: 76px minmax(150px, 1.15fr) minmax(150px, 1.3fr) 128px minmax(210px, 2.2fr) 84px minmax(150px, 1.4fr) 96px; }
+.wall { --cols: 76px minmax(150px, 1.15fr) minmax(150px, 1.3fr) 128px minmax(210px, 2.2fr) 84px minmax(150px, 1.4fr) 108px; }
 .wl-headwrap { position: sticky; top: 0; z-index: 2; background: var(--panel); }
 .wl-head { display: grid; grid-template-columns: var(--cols); border-bottom: var(--border) solid var(--line); min-width: 1000px; }
 .wl-hcell { padding: 0 8px; }
@@ -86,6 +86,8 @@
 .wl-switch[aria-checked="true"] .wl-knob { background: var(--accent); }
 .wl-switch[aria-checked="true"] .wl-knob::after { transform: translateX(12px); background: var(--on-accent); }
 .wl-switch:hover, .wl-switch:focus-visible { color: var(--text); outline: none; }
+.wl-switch[aria-busy="true"] { cursor: progress; color: var(--text); }
+.wl-switch[aria-busy="true"] .wl-knob { opacity: .55; }
 
 /* Tiles. */
 .wl-tiles { display: grid; gap: 12px; padding: 6px 12px; }

@@ -79,7 +79,7 @@ pub enum Preset {
         name: String,
         #[arg(short, long, default_value = "godwinmix.toml")]
         config: PathBuf,
-        /// Where to write it [default: ~/.godwinmix/presets/<name>].
+        /// Where to write it [default: presets/<name> under GODWINMIX_HOME, which is ~/.godwinmix].
         #[arg(long)]
         out: Option<PathBuf>,
         #[arg(long)]
