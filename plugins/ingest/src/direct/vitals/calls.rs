@@ -1,6 +1,5 @@
-//! The two places the direct host hands the vitals something: the direct
-//! table each time it arrives, and the `direct.thumbnail` call the station
-//! makes from its control port.
+//! The `direct.thumbnail` call the station makes from its control port,
+//! which the direct host hands here.
 
 use serde_json::{json, Value};
 
@@ -27,19 +26,6 @@ pub fn base64(bytes: &[u8]) -> String {
 }
 
 impl Vitals {
-    /// Watch every row of the direct table, and nothing else. `app` names
-    /// the hub app a show's input is published under, which is the host's
-    /// choice; the stream is always `main`.
-    pub fn apply_table(&self, rows: &[Value], app: impl Fn(&str) -> String) {
-        let mut ids = Vec::new();
-        for row in rows {
-            let Some(id) = row["id"].as_str() else { continue };
-            self.watch(id, &app(id), "main", &row["monitor"]);
-            ids.push(id);
-        }
-        self.keep(&ids);
-    }
-
     /// `direct.thumbnail {show, width?}`: `{jpeg, width, height, at_ms}` with the
     /// JPEG in base64, or `{pending: true}` while the first keyframe is on
     /// its way, or `{status: 404, why}` for a show this host does not run.

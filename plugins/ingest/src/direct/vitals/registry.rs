@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
-use godwinmix_protocol::health::{Health, Thresholds};
+use godwinmix_protocol::health::Thresholds;
 use gstreamer as gst;
 use serde_json::Value;
 
@@ -112,14 +112,8 @@ impl Vitals {
         Ok(thumb)
     }
 
-    /// The show's health as last judged.
-    pub fn health(&self, id: &str) -> Option<Health> {
-        let show = self.show(id)?;
-        let h = lock(&show.reported).clone();
-        h
-    }
-
     /// Jobs a newer one replaced before a worker got to them, and jobs done.
+    #[cfg(test)]
     pub fn counts(&self) -> (u64, u64) {
         let q = &self.pool.queue;
         (q.replaced.load(Ordering::Relaxed), q.done.load(Ordering::Relaxed))
