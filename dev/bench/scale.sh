@@ -65,6 +65,8 @@ if [[ -z "$MACHINE" ]]; then
     [[ -z "$MACHINE" ]] && MACHINE="$(uname -m)"
 fi
 [[ "$MODE" == feeds ]] && WARM="$MEASURE"
+# Other work on the machine skews every number, so the report says how busy it was.
+LOAD="$( (sysctl -n vm.loadavg 2>/dev/null || cut -d" " -f1-3 /proc/loadavg) | tr -d "{}" | xargs)"
 RUN="${TMPDIR:-/tmp}/gmx-scale-$STAMP"
 TOOL="$REPO/tools/scale/target/release/gmx-scale"
 BIN="$REPO/target/release/godwinmix"
@@ -182,8 +184,8 @@ report() {
     commit="$(cd "$REPO" && git rev-parse --short HEAD 2>/dev/null || echo unknown)"
     version="$("$BIN" --version 2>/dev/null || echo unknown)"
     [[ -z "$TITLE" ]] && TITLE="$FEEDS feeds, $MODE, $TRANSPORT, $FORMAT"
-    printf '{"title":"%s","version":"%s","commit":"%s","date":"%s","mode":"%s","feeds":%s,"seconds":%s,"clips":"hd1080.ts, hd720.ts, sd.ts, mpts.ts","command":"dev/bench/scale.sh %s","note":"%s"}\n' \
-        "$TITLE" "$version" "$commit" "$(date '+%Y-%m-%d %H:%M %Z')" "$MODE ($TRANSPORT)" "$FEEDS" "$MEASURE" "$ARGS" "$NOTE" > "$RUN/run.json"
+    printf '{"title":"%s","version":"%s","commit":"%s","date":"%s","mode":"%s","feeds":%s,"seconds":%s,"clips":"hd1080.ts, hd720.ts, sd.ts, mpts.ts","command":"dev/bench/scale.sh %s","note":"%s","load":"%s"}\n' \
+        "$TITLE" "$version" "$commit" "$(date '+%Y-%m-%d %H:%M %Z')" "$MODE ($TRANSPORT)" "$FEEDS" "$MEASURE" "$ARGS" "$NOTE" "$LOAD" > "$RUN/run.json"
     file="$REPO/dev/bench/results/scale-$MACHINE-$STAMP-$MODE.md"
     "$TOOL" report --dir "$RUN" --out "$file" || die "the report could not be written"
     log "wrote $file"

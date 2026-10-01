@@ -46,6 +46,7 @@ fn render(run: &Value, feeds: &[Value; 2], add: &Value, sample: &Value, check: &
     let _ = writeln!(s, "| Commit | {} |", run["commit"].as_str().unwrap_or("not recorded"));
     let _ = writeln!(s, "| Date | {} |", run["date"].as_str().unwrap_or("not recorded"));
     let _ = writeln!(s, "| Mode | {} |", run["mode"].as_str().unwrap_or("not recorded"));
+    let _ = writeln!(s, "| Load average before the run | {} |", run["load"].as_str().unwrap_or("not recorded"));
     let _ = writeln!(s, "| Feeds | {} of {}, {} s measured |", run["feeds"], run["clips"].as_str().unwrap_or("?"), run["seconds"]);
     let _ = writeln!(s, "| Command | `{}` |\n", run["command"].as_str().unwrap_or("not recorded"));
     if let Some(note) = run["note"].as_str().filter(|n| !n.is_empty()) {
@@ -58,9 +59,10 @@ fn render(run: &Value, feeds: &[Value; 2], add: &Value, sample: &Value, check: &
         let _ = writeln!(s, "Percent of one core, sampled once a second. `total` is the station and everything under it.\n");
         s.push_str(&tables::roles(&sample["roles"]));
     }
-    if !check["streams"].is_null() {
+    let streams = if check.is_null() { &check_in["streams"] } else { &check["streams"] };
+    if !streams.is_null() {
         let _ = writeln!(s, "\n## The worst streams received\n");
-        s.push_str(&tables::worst(&check["streams"], 10));
+        s.push_str(&tables::worst(streams, 10));
     }
     if let Some(refused) = add["refused"].as_array().filter(|r| !r.is_empty()) {
         let _ = writeln!(s, "\n## Refused when adding\n");
