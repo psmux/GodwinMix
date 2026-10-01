@@ -96,7 +96,12 @@ pub fn body(
         NodeKind::AudioEncode { shape, .. } => {
             let (enc, parse) = audio_encoder(cat, shape, name)?;
             elements.push(make("audioconvert", &format!("{name}-conv"))?);
-            elements.push(make("audiorate", &format!("{name}-rate"))?);
+            // From its first buffer: a rung built hours into a programme
+            // must not fill those hours with silence. See the programme
+            // encoder's own `aenc-rate` in `mixer.rs`.
+            let rate = make("audiorate", &format!("{name}-rate"))?;
+            crate::probe::set_bool(&rate, "skip-to-first", true);
+            elements.push(rate);
             elements.push(enc.clone());
             elements.extend(parse);
             encoder = Some(enc);
