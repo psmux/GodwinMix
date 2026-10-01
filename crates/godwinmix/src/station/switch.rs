@@ -171,6 +171,12 @@ pub async fn off(st: &Arc<Station>, id: &str) -> Result<SwitchReport, RpcError> 
         s.source_for = None;
     }
     let back: Vec<String> = moving(st, id).iter().map(|d| d.id.clone()).collect();
+    let host = st.direct.plugins().is_some_and(|p| p.is_running(crate::channels::PLUGIN));
+    if !host {
+        st.announce(id);
+        let note = "The ingest plugin, which sends the outputs of a show without compositing, is not running, so they wait for it.";
+        return Ok(report(false, back, None, note.into()));
+    }
     let gap_ms = wait_live(stopped, || async { st.direct.seen.lock().get(id).is_some_and(|s| s.all_live(&back)) }).await;
     st.announce(id);
     Ok(report(false, back, gap_ms, String::new()))
