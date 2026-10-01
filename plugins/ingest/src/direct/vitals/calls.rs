@@ -40,7 +40,7 @@ impl Vitals {
         self.keep(&ids);
     }
 
-    /// `direct.thumbnail {show}`: `{jpeg, width, height, at_ms}` with the
+    /// `direct.thumbnail {show, width?}`: `{jpeg, width, height, at_ms}` with the
     /// JPEG in base64, or `{pending: true}` while the first keyframe is on
     /// its way, or `{status: 404, why}` for a show this host does not run.
     /// `None` for any other call, which is somebody else's.
@@ -49,7 +49,8 @@ impl Vitals {
             return None;
         }
         let show = params["show"].as_str().unwrap_or_default();
-        Some(match self.thumbnail(show) {
+        let width = params["width"].as_u64().map(|w| w as u32);
+        Some(match self.thumbnail(show, width) {
             Ok(Some(t)) => json!({"jpeg": base64(&t.jpeg), "width": t.width, "height": t.height, "at_ms": t.at_ms}),
             Ok(None) => json!({"pending": true}),
             Err(why) => json!({"status": 404, "why": why}),

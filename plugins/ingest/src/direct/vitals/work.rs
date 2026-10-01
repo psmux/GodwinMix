@@ -86,9 +86,13 @@ fn picture(chains: &mut Chains, show: &Show, caps: &gst::Caps, buffer: gst::Buff
         return;
     }
     let (Some(scaled_caps), Some(buffer)) = (sample.caps().map(|c| c.to_owned()), sample.buffer_owned()) else { return };
-    let Some(enc) = chains.get(&gst::Caps::new_empty_simple("jpeg")) else { return };
+    // The asked width, and the height that keeps the picture's shape.
+    let (w, h) = measure::size(&scaled_caps);
+    let wide = show.jpeg_width.load(Ordering::Relaxed);
+    let high = (u64::from(h) * u64::from(wide) / u64::from(w.max(1))).max(2) as u32 & !1;
+    let Some(enc) = chains.get(&gst::Caps::new_empty_simple(format!("jpeg/{wide}x{high}"))) else { return };
     if let Some(out) = enc.run(&scaled_caps, vec![buffer]).pop() {
-        let (width, height) = measure::size(&scaled_caps);
+        let (width, height) = out.caps().map(measure::size).unwrap_or_default();
         let bytes = out.buffer().and_then(|b| b.map_readable().ok().map(|m| Arc::<[u8]>::from(m.as_slice())));
         if let Some(jpeg) = bytes {
             *lock(&show.thumb) = Some(Thumb { jpeg, width, height, at_ms: now });

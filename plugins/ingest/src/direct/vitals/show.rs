@@ -5,7 +5,7 @@
 //! (which judges once a second). Every lock here is held for a few field
 //! writes and never across a decode.
 
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use godwinmix_protocol::health::{Health, Thresholds};
@@ -29,8 +29,14 @@ pub struct Show {
     /// The last picture's luma, for the next freeze comparison.
     pub luma: Mutex<Option<Luma>>,
     pub thumb: Mutex<Option<Thumb>>,
-    /// The black, freeze and silence checks: decode keyframes and some sound.
+    /// The black, freeze and silence checks are on (`monitor.alarms`).
     pub alarms: AtomicBool,
+    /// Of those, the ones that need a picture (black, freeze) and the one
+    /// that needs sound (silence), as their thresholds leave them.
+    pub picture_checks: AtomicBool,
+    pub sound_checks: AtomicBool,
+    /// The width the last thumbnail request asked for.
+    pub jpeg_width: AtomicU32,
     /// The station says someone is looking (`monitor.pictures`).
     pub pictures: AtomicBool,
     /// Unix ms until which a thumbnail request keeps pictures on.
@@ -53,6 +59,9 @@ impl Show {
             luma: Mutex::new(None),
             thumb: Mutex::new(None),
             alarms: AtomicBool::new(true),
+            picture_checks: AtomicBool::new(true),
+            sound_checks: AtomicBool::new(true),
+            jpeg_width: AtomicU32::new(super::measure::THUMB_WIDTH as u32),
             pictures: AtomicBool::new(false),
             asked_until: AtomicU64::new(0),
             last_packet: AtomicU64::new(0),
@@ -67,12 +76,20 @@ impl Show {
 
     /// Whether the next keyframe should be decoded at all.
     pub fn wants_pictures(&self, now: u64) -> bool {
-        self.alarms.load(Ordering::Relaxed) || self.wants_jpeg(now)
+        self.picture_checks.load(Ordering::Relaxed) || self.wants_jpeg(now)
     }
 
     /// Whether some sound should be decoded: only for the silence check.
     pub fn wants_sound(&self) -> bool {
-        self.alarms.load(Ordering::Relaxed)
+        self.sound_checks.load(Ordering::Relaxed)
+    }
+
+    /// Switch the checks on or off as a table row's `monitor` says.
+    pub fn set_checks(&self, alarms: bool, limits: &Thresholds) {
+        self.alarms.store(alarms, Ordering::Relaxed);
+        let picture = limits.black_secs > 0.0 || limits.freeze_secs > 0.0;
+        self.picture_checks.store(alarms && picture, Ordering::Relaxed);
+        self.sound_checks.store(alarms && limits.silence_secs > 0.0, Ordering::Relaxed);
     }
 
     /// A new picture: judged, and kept for the next comparison.
