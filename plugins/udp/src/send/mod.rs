@@ -139,3 +139,7 @@ mod tests;
 #[cfg(test)]
 #[path = "interleave_tests.rs"]
 mod interleave_tests;
+
+#[cfg(test)]
+#[path = "receiver_tests.rs"]
+mod receiver_tests;
