@@ -1,0 +1,35 @@
+/* The publisher, alone at /join/ and inside the mixer's page. Theme values
+   only, so it follows whichever theme the page has. */
+
+.pub { gap: var(--gap); min-width: 0; }
+.pub-error:empty { display: none; }
+.pub-error { color: var(--bad); }
+.pub-picture { position: relative; aspect-ratio: 16 / 9; background: #000; border-radius: var(--radius-sm); overflow: hidden; }
+.pub-preview { width: 100%; height: 100%; object-fit: contain; display: block; transform: scaleX(-1); }
+.pub-nopicture { position: absolute; inset: 0; display: grid; place-items: center; }
+.pub-nopicture[hidden] { display: none; }
+.pub-meter { height: 6px; background: var(--panel2); border-radius: 3px; overflow: hidden; }
+.pub-level { height: 100%; width: 0; background: var(--ok); }
+.pub-level.hot { background: var(--live); }
+.pub-field select { flex: 1; min-width: 0; }
+.pub-label { width: 84px; flex: none; }
+.pub-buttons { flex-wrap: wrap; }
+.pub-stats { min-height: 1.4em; }
+
+/* /join/ on its own. */
+body.join-page { overflow: auto; }
+.join-main { max-width: 560px; margin: 0 auto; }
+.join-title { font-size: var(--fs-lg); margin: 4px 0; }
+
+/* The publisher inside the mixer's page: a card that floats over the
+   workspace and stays while the operator works. */
+.pub-dock {
+  position: fixed; right: 16px; bottom: 16px; z-index: 45; width: 340px; max-width: calc(100vw - 32px);
+  background: var(--panel); border: var(--border) solid var(--line); border-radius: var(--radius);
+  box-shadow: var(--shadow); display: flex; flex-direction: column; max-height: calc(100vh - var(--header-h) - 32px);
+}
+.pub-dock-head { padding: 6px var(--pad); border-bottom: var(--border) solid var(--line-soft); cursor: default; }
+.pub-dock-body { padding: var(--pad); overflow: auto; }
+.pub-dock-note:empty { display: none; }
+.pub-dock.min .pub-dock-body { display: none; }
+.pub-dock.min .pub-dock-head { border-bottom: 0; }

@@ -46,6 +46,19 @@ const ASSETS: &[(&str, &str)] = &[
     ("client/transport-legacy.js", include_str!("../../../ui/client/transport-legacy.js")),
     ("client/transport-rpc.js", include_str!("../../../ui/client/transport-rpc.js")),
     ("index.html", include_str!("../../../ui/index.html")),
+    // The publisher: a browser's camera and microphone over WHIP. Alone at
+    // /join/, and inside the page when Sources opens this browser's camera.
+    ("join/index.html", include_str!("../../../ui/join/index.html")),
+    ("join/join.css", include_str!("../../../ui/join/join.css")),
+    ("join/page.js", include_str!("../../../ui/join/page.js")),
+    ("join/publisher.js", include_str!("../../../ui/join/publisher.js")),
+    ("join/form.js", include_str!("../../../ui/join/form.js")),
+    ("join/devices.js", include_str!("../../../ui/join/devices.js")),
+    ("join/session.js", include_str!("../../../ui/join/session.js")),
+    ("join/tracks.js", include_str!("../../../ui/join/tracks.js")),
+    ("join/whip.js", include_str!("../../../ui/join/whip.js")),
+    ("join/meter.js", include_str!("../../../ui/join/meter.js")),
+    ("join/stats.js", include_str!("../../../ui/join/stats.js")),
     ("kits/canvas/draw.js", include_str!("../../../ui/kits/canvas/draw.js")),
     ("kits/canvas/geometry.js", include_str!("../../../ui/kits/canvas/geometry.js")),
     ("kits/canvas/gizmos.js", include_str!("../../../ui/kits/canvas/gizmos.js")),
@@ -158,6 +171,9 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/scenes/pictures.css", include_str!("../../../ui/panels/scenes/pictures.css")),
     ("panels/scenes/draw.js", include_str!("../../../ui/panels/scenes/draw.js")),
     ("panels/scenes/panel.js", include_str!("../../../ui/panels/scenes/panel.js")),
+    ("panels/sources/browser-channel.js", include_str!("../../../ui/panels/sources/browser-channel.js")),
+    ("panels/sources/browser-device.js", include_str!("../../../ui/panels/sources/browser-device.js")),
+    ("panels/sources/browser-entry.js", include_str!("../../../ui/panels/sources/browser-entry.js")),
     ("panels/sources/first-air.js", include_str!("../../../ui/panels/sources/first-air.js")),
     ("panels/sources/local.js", include_str!("../../../ui/panels/sources/local.js")),
     ("panels/sources/chooser-loader.js", include_str!("../../../ui/panels/sources/chooser-loader.js")),
@@ -295,6 +311,10 @@ const DEV_ASSETS: &[(&str, &str)] = &[
     ("test/wall-stub.js", include_str!("../../../ui/test/wall-stub.js")),
     ("test/wall.html", include_str!("../../../ui/test/wall.html")),
     ("test/wall.js", include_str!("../../../ui/test/wall.js")),
+    // This browser's camera: the publisher's parts and the browser channel,
+    // against stubs. No camera and no socket.
+    ("test/browser-devices.js", include_str!("../../../ui/test/browser-devices.js")),
+    ("test/browser-channel.js", include_str!("../../../ui/test/browser-channel.js")),
     // The designer kits' behaviour, as the reference implementation answered
     // it. The TypeScript and Python suites read the same file from the
     // repository; the browser reads it from here, because the page has no file
@@ -358,6 +378,9 @@ where
     let mut router = Router::new()
         .route("/", get(|| async { asset("index.html") }))
         .route("/legacy", get(|| async { html(LEGACY) }))
+        // The publisher page, by the directory URL a person types or is sent.
+        .route("/join", get(|| async { asset("join/index.html") }))
+        .route("/join/", get(|| async { asset("join/index.html") }))
         .route("/plugins/index.json", get(plugin_index))
         .route("/plugins/{name}/ui/{*path}", get(plugin_file))
         // A preset's own theme, read out of the preset it was applied from, so
@@ -867,6 +890,11 @@ mod tests {
         // Not imported by this page at all: it is what a sandboxed panel's own
         // HTML imports, inside the iframe, to talk the same protocol back.
         reachable.extend(closure_of("client/sandbox-client.js"));
+        // The publisher: /join/ loads page.js itself, and the Sources panel
+        // and the picker fetch browser-device.js when this browser's camera
+        // is asked for.
+        reachable.extend(closure_of("join/page.js"));
+        reachable.extend(closure_of("panels/sources/browser-device.js"));
         for (path, _) in ASSETS {
             if path.ends_with(".css") || path.ends_with(".html") || path.ends_with(".json") {
                 continue;
@@ -948,6 +976,8 @@ mod tests {
             ("shell/project-open.js", "Open project"),
             ("shell/settings-dialog.js", "Settings for this page"),
             ("panels/outputs/record-start.js", "Record pressed"),
+            ("panels/sources/browser-device.js", "this browser's camera opened"),
+            ("join/publisher.js", "this browser's camera opened, or /join/"),
         ] {
             assert!(known(path).is_some(), "{path} is not served at all");
             assert!(!eager.contains(path), "{path} is fetched at load, but only {who} needs it");

@@ -4,6 +4,11 @@ You have a USB camera, or the one built into the laptop, and you want it on the
 programme. Ten minutes, including the part where the operating system asks
 whether you meant it.
 
+The camera here is one plugged into the machine the mixer runs on. For the
+camera on the computer where the mixer's page is open, which may be another
+laptop, see [Use this browser's camera and
+microphone](use-this-browsers-camera.md).
+
 ## Before you start
 
 The camera has to work outside the mixer first. Open Photo Booth, Cheese, or
@@ -188,6 +193,8 @@ In that order. Removing the plugin does not stop a source that is using it.
 
 ## Next
 
+* [Use this browser's camera and microphone](use-this-browsers-camera.md), for
+  the camera on the laptop showing the mixer's page, with no plugin.
 * [Capture the screen](capture-the-screen.md), for lyrics and slides.
 * [Record to a file](record-to-a-file.md).
 * [The first party plugins](../reference/plugins.md).

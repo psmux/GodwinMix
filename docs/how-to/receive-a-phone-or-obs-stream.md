@@ -143,6 +143,11 @@ They publish to `http://<the mixer's address>:8889/whip`. It needs
 `whipserversrc`, which arrived in the GStreamer 1.28 rs webrtc set; on an older
 build the source refuses to start with a message naming the package.
 
+For the camera on the computer where the mixer's page is open, there is a
+button for it: [Use this browser's camera and
+microphone](use-this-browsers-camera.md). It publishes into a channel by WHIP,
+on the mixer's own port.
+
 ## What is not here yet
 
 **An RTSP server.** Pulling *from* an RTSP camera works today with a bare
@@ -165,6 +170,7 @@ list.
 
 ## Where to go next
 
+* [Use this browser's camera and microphone](use-this-browsers-camera.md)
 * [Receive and send SRT](srt.md)
 * [Send the programme to a WHIP endpoint](send-to-whip.md)
 * [The network plugins, every setting](../reference/plugins-network.md)
