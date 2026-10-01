@@ -120,12 +120,20 @@ goes nowhere: no output of a direct show could carry it.
 | `GET /pcm/{target}`, `/opus/{target}` | WebSocket audio | `crates/godwinmix/tests/preview.rs` |
 | local preview socket | raw frames over `unixfd` | `preview/local.rs` |
 
-### From a channel, with no show at all (plugin `ingest`)
+### From a channel or a direct show, with no compositor (plugin `ingest`)
+
+A channel destination and a direct show's output take the same addresses.
+Everything but RTMP is MPEG-TS from the plugin's own muxer, `tsmux/`
+(`docs/reference/direct-shows.md` has the stream types).
 
 | Transport | Video | Audio | How | Tested |
 |---|---|---|---|---|
-| RTMP, RTMPS | copy, whatever came in (enhanced RTMP bytes included) | copy | `restream/rtmp_out.rs` | `plugins/ingest/src/restream/tests.rs` |
-| SRT | H.264 or HEVC copy, the parser picked by the stream's caps; AV1 not yet (flvdemux does not read it) | AAC copy | `restream/srt_out.rs`, `restream/ts_video.rs` | `plugins/ingest/src/restream/ts_video.rs` decodes HEVC out of the MPEG-TS |
+| RTMP, RTMPS | copy, whatever came in (enhanced RTMP bytes included) | AAC copy; AC-3, E-AC-3 and MPEG audio are not sent, the picture goes alone | `restream/rtmp_out.rs` | `plugins/ingest/src/restream/tests.rs` |
+| SRT, caller or listener | H.264 or HEVC copy; AV1 not yet (MPEG-TS has no mapping the muxer writes) | AAC, AC-3, E-AC-3, MP2, MP3 copy | `restream/srt_out.rs` over `tsmux/` | `direct/tests_carriage.rs`: an `srtsrc` listener's recording decodes |
+| UDP, unicast or multicast, `ttl` and `interface` | H.264 or HEVC copy | as SRT | `restream/udp_out.rs` over `tsmux/` | `direct/tests.rs`: decoded from the socket; 50 multicast outputs measured in `docs/explanation/direct-host.md` |
+| RTP, payload type 33 | as UDP | as SRT | `restream/udp_out.rs` | `direct/tests_carriage.rs`: sequence numbers unbroken, the payload decodes |
+| RIST (Simple Profile), sending | as UDP | as SRT | `restream/rist_out.rs`, `ristsink` | `direct/tests_carriage.rs` against `ristsrc` |
+| A file, MPEG-TS | as UDP | as SRT | `restream/file_out.rs` | `direct/tests.rs`: a 3 s recording decodes; `tsmux/tests.rs`: AC-3 and MP2 decode |
 | SRT to a player that calls in (`m=request`), on the channel's own SRT port | H.264 or HEVC copy | AAC copy | `srt/play.rs` | `plugins/ingest/src/srt/tests.rs`: `srtsrc` on the publisher's port decodes the stream |
 | RTMP or SRT with a rendition | H.264 or HEVC in (AV1 in is decoded but its size is not read, so it is not planned yet); H.264, HEVC or AV1 out, HEVC and AV1 as enhanced RTMP | AAC | `transcode/` | `plugins/ingest/src/transcode/tests.rs` and `tests_hevc.rs`: HEVC to H.264 and H.264 to HEVC with real encoders |
 
