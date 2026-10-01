@@ -31,27 +31,27 @@ export function outputsSection(client, show, stats, reread) {
       errorToast(e, what);
     }
   };
-  const formatFor = async (current, title) => {
+  const formatFor = async (current, title, editing) => {
     const { formatStep } = await import("../renditions/format-step.js");
     const step = formatStep(client, { current, shape: inputShape(stats()), platformTitle: title });
-    const save = el("button.btn.primary", { type: "button", text: current === undefined ? "Add output" : "Save format" });
+    const save = el("button.btn.primary", { type: "button", text: editing ? "Save format" : "Add output" });
     const cancel = el("button.btn", { type: "button", text: "Cancel", onclick: () => slot.replaceChildren() });
     return { step, save, cancel };
   };
 
   async function change(o) {
-    const f = await formatFor(o.rendition || undefined, outName(o));
+    const f = await formatFor(o.rendition || undefined, outName(o), true);
     f.save.onclick = () => {
       const v = f.step.value();
       slot.replaceChildren();
       if (v !== undefined || o.rendition) call("show.output.set", { id: o.id, rendition: v === undefined ? o.rendition : v }, `${outName(o)} keeps its format`);
     };
-    slot.replaceChildren(el("div.wl-dbox", {}, [el("h4", { text: `What ${outName(o)} is sent as` }), f.step.node, el("div.wl-dbtns", {}, [f.cancel, f.save])]));
+    slot.replaceChildren(el("div.wl-dbox", {}, [f.step.node, el("div.wl-dbtns", {}, [f.cancel, f.save])]));
   }
 
   async function add() {
     const uri = el("input", { type: "text", placeholder: "udp://10.0.0.50:6000, srt://host:port, rtmp://host/app/key", "aria-label": "Where to send it", spellcheck: "false" });
-    const f = await formatFor(undefined, "");
+    const f = await formatFor(undefined, "", false);
     f.save.onclick = () => {
       if (!uri.value.trim()) return uri.focus();
       const v = f.step.value();
@@ -73,9 +73,11 @@ export function outputsSection(client, show, stats, reread) {
         el("span.wl-dot"),
         el("span.wl-doutname", {}, [el("strong", { text: outName(o) }), el("span.wl-sub", { text: o.uri || "platform" })]),
         el("span.wl-doutfmt", { text: `${outFormat(o, st)}${st && st.kbps ? ` · ${kbps(st.kbps)}` : ""} · ${o.enabled === false ? "off" : state}` }),
-        el("button.btn", { type: "button", text: "Format", onclick: () => change(o) }),
-        el("button.btn", { type: "button", text: o.enabled === false ? "Turn on" : "Turn off", onclick: () => call("show.output.set", { id: o.id, enabled: o.enabled === false }, `${outName(o)} did not change`) }),
-        el("button.btn.icon", { type: "button", text: "×", title: `Remove ${outName(o)}`, "aria-label": `Remove ${outName(o)}`, onclick: () => call("show.output.remove", { id: o.id }, `${outName(o)} was not removed`) }),
+        el("span.wl-doutbtns", {}, [
+          el("button.btn", { type: "button", text: "Format", onclick: () => change(o) }),
+          el("button.btn", { type: "button", text: o.enabled === false ? "Turn on" : "Turn off", onclick: () => call("show.output.set", { id: o.id, enabled: o.enabled === false }, `${outName(o)} did not change`) }),
+          el("button.btn.icon", { type: "button", text: "×", title: `Remove ${outName(o)}`, "aria-label": `Remove ${outName(o)}`, onclick: () => call("show.output.remove", { id: o.id }, `${outName(o)} was not removed`) }),
+        ]),
       ]);
     }));
     if (!outs.length) list.append(el("p.wl-calm", { text: "No outputs yet. The input is read but sent nowhere." }));

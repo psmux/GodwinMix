@@ -44,7 +44,7 @@ function stats(show, i, t) {
     id: show.id,
     health: show.health,
     input: off ? { kbps: 0 } : { kbps: k, fps: i % 7 === 0 ? 50 : 25, width: tall ? 1920 : 1280, height: tall ? 1080 : 720, video_codec: CODEC[i % 5], audio_codec: i % 4 ? "aac" : "mp2", audio_channels: 2, cc_errors: show.health.alarms.some((a) => a.kind === "cc-errors") ? 14 : 0, packets_lost: show.health.alarms.some((a) => a.kind === "loss") ? 37 : 0, keyframe_ms: 1000, last_frame_ms: 40 },
-    outputs: show.outputs.map((o) => ({ id: o.id, state: o.state, kbps: o.state === "live" ? (o.rendition ? 3000 : k) : 0, reconnects: o.state === "reconnecting" ? 4 : 0, rendition_text: o.rendition ? "720p30 · 3 Mb/s" : "Copy", encoder: o.rendition ? "h264-videotoolbox" : null, cpu_millicores: o.rendition ? 90 : 4 })),
+    outputs: show.outputs.map((o) => ({ id: o.id, state: o.state, kbps: o.state === "live" ? (o.rendition ? 3000 : k) : 0, reconnects: o.state === "reconnecting" ? 4 : 0, rendition_text: o.rendition ? "720p30" : "Copy", encoder: o.rendition ? "h264-videotoolbox" : null, cpu_millicores: o.rendition ? 90 : 4 })),
   };
 }
 
