@@ -33,8 +33,12 @@ From left to right:
   packets and continuity errors under it in red when there are any.
 * The outputs, one small chip each: a dot for its state, where it goes, and
   whether it is a copy of the input or a new format, with its own bitrate.
-* Load: what this show's encodes cost the machine. A show that only copies
-  says copy only.
+* Load: what the show costs the machine, as a share of one core or a
+  number of cores. For a show that mixes it is the show's own process,
+  compositing and the programme encode together, and it says mixing until
+  the first reading arrives. For a direct show it is the encodes of the
+  outputs given a format. A direct show whose outputs all copy says copy
+  only.
 * Alarms, each with how long it has been going: black, frozen, silent,
   stalled, no input, loss, CC errors, an output that failed, or a format the
   governor refused.
@@ -43,7 +47,12 @@ From left to right:
 
 The line at the top counts every show on the station, not only the ones on
 screen: how many, how many are live, how many are in alarm, the total in and
-out, and the CPU and GPU the governor sees.
+out, and the CPU and GPU the governor sees. The CPU counts the station's
+own process, every show process and the ingest plugin, which runs every
+direct show; it is read when the wall asks, every three seconds. On
+Windows another process's CPU cannot be read, so there the figure is the
+station's own process, what the governor has admitted, and what shows
+holding a rendition report of themselves.
 
 On a phone a row is the picture, the name, the bitrate and the alarms. The
 tiles show more of each show.

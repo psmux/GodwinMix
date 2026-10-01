@@ -58,7 +58,7 @@ export function row(show, ctx) {
     cell(inputCell(show, st)),
     cell(rateCell(st, ctx.data.history.get(show.id))),
     cell(outputs(show, st), ".outs"),
-    cell(loadCell(st)),
+    cell(loadCell(show, st)),
     cell(alarms(show, ctx.acked, ctx.now), ".al"),
     cell(mixSwitch(show)),
   ]);
