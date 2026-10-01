@@ -150,8 +150,9 @@ it in `show.list` and `show.stats`.
 
 What the show said stops counting the moment its link closes. A show whose
 process died, was killed or lost its link reads as `alarm` with one `stall`
-alarm, `since_ms` the moment the link closed, until a new process says hello;
-a show the station gave up on (`failed`) reads the same way. A show a person
+alarm, `since_ms` the moment the link closed, until a new process has linked
+and sent the first health it judged, about a second after it starts. A show
+the station gave up on (`failed`) reads the same way. A show a person
 stopped reads `off`, and so does one that was started on purpose and has not
 linked yet.
 

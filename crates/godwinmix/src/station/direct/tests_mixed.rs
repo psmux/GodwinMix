@@ -85,18 +85,15 @@ async fn a_mixed_show_s_health_crosses_the_link_and_a_lost_link_reads_as_a_stall
     supervised(&st, 8);
     assert_eq!(st.direct.health_of(&st, "mixed").alarms[0].kind, AlarmKind::Stall, "still down while it starts again");
     assert!(host.hello(&hello(8)));
+    assert_eq!(st.direct.health_of(&st, "mixed").alarms[0].kind, AlarmKind::Stall, "linked, but it has not looked yet");
+    host.health("mixed", Health::default());
     assert_eq!(st.direct.health_of(&st, "mixed").state, HealthState::Ok);
 
     // The first word on the show, then black, then the stall, then ok again;
     // the second black changed only its detail and sent nothing.
     let sent = heard_health(&mut heard);
-    let want = vec![
-        (HealthState::Ok, vec![]),
-        (HealthState::Alarm, vec![AlarmKind::Black]),
-        (HealthState::Alarm, vec![AlarmKind::Stall]),
-        (HealthState::Ok, vec![]),
-    ];
-    assert_eq!(sent, want);
+    let (ok, alarm) = (HealthState::Ok, HealthState::Alarm);
+    assert_eq!(sent, vec![(ok, vec![]), (alarm, vec![AlarmKind::Black]), (alarm, vec![AlarmKind::Stall]), (ok, vec![])]);
 }
 
 #[tokio::test]

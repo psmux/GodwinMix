@@ -94,7 +94,7 @@ fn process_health(state: Option<ShowState>, lost_ms: Option<u64>) -> Option<Heal
         )),
         (_, Some(lost)) => Some(stall(
             lost,
-            "the show's process ended or lost its link to the station, so nothing is on its programme; the station is starting it again",
+            "the show's process ended or lost its link to the station; it stays in alarm until a process of the show is running and has looked at its programme again",
         )),
         (Some(ShowState::Running), None) => None,
     }

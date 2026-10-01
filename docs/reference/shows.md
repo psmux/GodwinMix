@@ -353,9 +353,9 @@ whenever its state or set of alarm kinds changes. The station adds the
 alarms of the show's input, when it has one, and serves the result the same
 way as a direct show's. When the show's process dies, is killed or loses its
 link, what it last said is dropped: it reads `alarm` with one `stall` alarm
-from the moment the link closed until a new process says hello, and the same
-once the station has given up on it (`failed`). The thresholds and what each
-check costs are in [show health](show-health.md).
+from the moment the link closed until a new process has linked and sent its
+first health, and the same once the station has given up on it (`failed`).
+The thresholds and what each check costs are in [show health](show-health.md).
 
 ## Events
 
