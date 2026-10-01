@@ -54,7 +54,7 @@ export async function detailTests(test, eq, ok) {
 
   button(box, "Turn off").click();
   await until(() => sent(stub, "show.output.set").length);
-  test("an output turns off with show.output.set", () => eq(sent(stub, "show.output.set")[0].params, { show: show.id, id: "udp-out", enabled: false }));
+  test("an output turns off with show.output.set", () => eq(sent(stub, "show.output.set")[0].params, { id: show.id, output: "udp-out", enabled: false }));
 
   button(box, "Add output").click();
   await until(() => box.querySelector(".wl-dbox .rnd-card"));
@@ -62,7 +62,7 @@ export async function detailTests(test, eq, ok) {
   box.querySelector('.wl-dbox input[type=text]').value = "srt://cdn.example:7000";
   button(box.querySelector(".wl-dbox"), "Add output").click();
   await until(() => sent(stub, "show.output.add").length);
-  test("Add output sends the address and the format chosen, copy by default", () => eq(sent(stub, "show.output.add")[0].params, { show: show.id, uri: "srt://cdn.example:7000", rendition: null }));
+  test("Add output sends the address and the format chosen, copy by default", () => eq(sent(stub, "show.output.add")[0].params, { id: show.id, uri: "srt://cdn.example:7000", rendition: null }));
 
   box.querySelector('[aria-label="Black after, in seconds"]').value = "3";
   button(box, "Save alarms").click();
