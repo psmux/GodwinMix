@@ -103,8 +103,11 @@ impl Plan for Srt {
         Ok(loss)
     }
 
+    /// The address with any passphrase in its query hidden.
     fn address(&self) -> String {
-        self.uri.clone()
+        let Some((base, query)) = self.uri.split_once('?') else { return self.uri.clone() };
+        let hide = |kv: &str| if kv.starts_with("passphrase=") { "passphrase=***".to_string() } else { kv.to_string() };
+        format!("{base}?{}", query.split('&').map(hide).collect::<Vec<_>>().join("&"))
     }
 
     fn program(&self) -> Option<u16> {
