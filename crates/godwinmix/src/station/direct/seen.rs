@@ -89,6 +89,26 @@ impl Seen {
         }
     }
 
+    /// Take the rate the stats measure once the input has run a few
+    /// seconds. `direct.input` carries the hub's first reading, of part of
+    /// a second (none, or 8 for a 30 fps feed), and is not sent again for a
+    /// rate. A fifth off or more is taken; a wobble is not. True when taken.
+    pub fn settle_fps(&mut self) -> bool {
+        let measured = self.input_stats.as_ref().map(|s| s.fps).filter(|f| *f > 0.0);
+        let Some((input, fps)) = self.input.as_mut().zip(measured) else { return false };
+        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0);
+        if input["state"] != "live" || now.saturating_sub(input["since_ms"].as_u64().unwrap_or(now)) < 3000 {
+            return false;
+        }
+        let video = &mut input["video"];
+        let kept = video["fps"].as_f64().unwrap_or(0.0);
+        if !video.is_object() || (kept - fps).abs() < fps / 5.0 {
+            return false;
+        }
+        video["fps"] = serde_json::json!(fps);
+        true
+    }
+
     /// Whether every output in `ids` is live.
     pub fn all_live(&self, ids: &[String]) -> bool {
         ids.iter().all(|id| self.outputs.get(id).is_some_and(|(l, _)| l.state == DestinationState::Live))
@@ -112,5 +132,19 @@ mod tests {
         assert_eq!(seen.input_stats.as_ref().map(|i| i.kbps), Some(5000));
         assert!(seen.all_live(&["yt".into()]));
         assert_eq!(seen.output("yt", false).state, DestinationState::Off);
+    }
+
+    #[test]
+    fn a_first_reading_of_the_rate_gives_way_to_the_measured_one_and_a_wobble_does_not() {
+        let input = Some(json!({"state": "live", "since_ms": 1000, "video": {"codec": "h264", "fps": 8.0}}));
+        let mut seen = Seen { input, ..Seen::default() };
+        assert!(!seen.settle_fps(), "nothing measured yet");
+        seen.take_stats(&json!({"id": "a", "input": {"fps": 29.97}}));
+        assert!(seen.settle_fps());
+        assert_eq!(seen.input.as_ref().unwrap()["video"]["fps"], 29.97);
+        seen.take_stats(&json!({"id": "a", "input": {"fps": 30.02}}));
+        assert!(!seen.settle_fps(), "a wobble is not a new rate");
+        seen.input = Some(json!({"state": "live", "since_ms": u64::MAX, "video": {"fps": 0}}));
+        assert!(!seen.settle_fps(), "an input live for less than a few seconds is left alone");
     }
 }

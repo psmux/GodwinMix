@@ -2329,6 +2329,17 @@
             "description": "A platform id from the table: youtube, facebook, twitch, custom, srt.",
             "type": "string"
           },
+          "playback": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Playback"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Where a player opens it, for an output this machine serves as HLS."
+          },
           "reconnects": {
             "description": "Connections lost and made again since it was switched on.",
             "format": "uint32",
@@ -3634,6 +3645,54 @@
           "undo",
           "redo"
         ],
+        "type": "object"
+      },
+      "HlsOutputParams": {
+        "additionalProperties": false,
+        "description": "An `hls://` output's params, as an `hls/output` takes them.",
+        "properties": {
+          "low_latency": {
+            "description": "true: parts of 333 ms.",
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "part_ms": {
+            "description": "LL-HLS part, 0 for none.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "segment_ms": {
+            "description": "500 to 10000, default 2000.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "viewer_key": {
+            "description": "16 characters or more.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "window": {
+            "description": "Seconds kept, default 30.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
         "type": "object"
       },
       "Id": {
@@ -5764,6 +5823,31 @@
         ],
         "type": "object"
       },
+      "Playback": {
+        "description": "The links of an output served as HLS from the control port, each with\nthe output's viewer key on it.",
+        "properties": {
+          "dash_url_path": {
+            "description": "The same segments as a DASH MPD.",
+            "type": "string"
+          },
+          "master_url_path": {
+            "description": "`/hls/viewers/master.m3u8?show=bbc-one&key=...`.",
+            "type": "string"
+          },
+          "viewers": {
+            "description": "Players that fetched something in the last two windows.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "master_url_path",
+          "dash_url_path",
+          "viewers"
+        ],
+        "type": "object"
+      },
       "PluginDescription": {
         "description": "The whole of one plugin, for an agent about to use it.",
         "properties": {
@@ -7647,6 +7731,9 @@
               "null"
             ]
           },
+          "params": {
+            "$ref": "#/components/schemas/HlsOutputParams"
+          },
           "platform": {
             "type": [
               "string",
@@ -7722,6 +7809,10 @@
             "description": "The output's id.",
             "type": "string"
           },
+          "params": {
+            "$ref": "#/components/schemas/HlsOutputParams",
+            "description": "Replaces them all."
+          },
           "rendition": {
             "anyOf": [
               {
@@ -7776,6 +7867,10 @@
               "null"
             ]
           },
+          "params": {
+            "$ref": "#/components/schemas/HlsOutputParams",
+            "description": "For an `hls://` output only."
+          },
           "platform": {
             "description": "youtube, facebook, twitch, custom or srt. Left out: custom, which\ntakes a whole address in `uri`.",
             "type": [
@@ -7795,7 +7890,7 @@
             "description": "Left out: a copy of the input's own bytes, repackaged. Otherwise a\nrendition request or `{\"preset\": \"youtube-720p30\"}`, planned and\nadmitted by the governor."
           },
           "uri": {
-            "description": "The whole address: `srt://10.0.0.9:9000`, `rtmp://host/app/key`,\n`udp://239.2.2.2:5000`. For a platform, its ingest server when it is\nnot the platform's own.",
+            "description": "The whole address: `srt://10.0.0.9:9000`, `rtmp://host/app/key`,\n`udp://239.2.2.2:5000`, `hls://viewers`. For a platform, its ingest\nserver when it is not the platform's own.",
             "type": [
               "string",
               "null"
@@ -14825,7 +14920,7 @@
             "$ref": "#/components/responses/Error"
           }
         },
-        "summary": "Send a show without compositing to another place: an address (SRT, RTMP, UDP, RTP or RIST), or a platform and its key. Left without a rendition it copies the input's bytes; with one it is planned and admitted by the governor. The key is write only.",
+        "summary": "Send a show without compositing to another place: an address (SRT, RTMP, UDP, RTP or RIST), a platform and its key, or hls://<name> to serve it as HLS from this port. Left without a rendition it copies the input's bytes; with one it is planned and admitted by the governor. The key is write only.",
         "tags": [
           "show"
         ],

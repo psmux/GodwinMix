@@ -57,8 +57,12 @@ pub(super) fn wants(stored: &[StoredDestination]) -> Vec<Want> {
         .collect()
 }
 
-/// RTMP carries FLV and SRT carries MPEG-TS, whatever a request says.
+/// RTMP carries FLV and SRT carries MPEG-TS, whatever a request says. A
+/// direct show's HLS output may keep HEVC and AV1.
 fn container_for(d: &StoredDestination) -> Container {
+    if d.platform == "hls" {
+        return Container::Hls;
+    }
     let srt = godwinmix_protocol::destination::platform(&d.platform).map(|p| p.carriage == Carriage::Srt);
     match srt.unwrap_or_else(|| d.url().starts_with("srt://")) {
         true => Container::MpegTs,

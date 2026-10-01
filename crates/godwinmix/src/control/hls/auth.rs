@@ -1,7 +1,7 @@
 //! Who may read an HLS output, and who a request is for counting viewers.
 
-use super::refuse;
-use crate::control::{presented_token, Ctx};
+use super::{refuse, Door};
+use crate::control::presented_token;
 use axum::extract::{ConnectInfo, Request};
 use axum::http::{header, StatusCode};
 use axum::response::Response;
@@ -54,16 +54,18 @@ pub fn value<'a>(pairs: &[(&'a str, &'a str)], key: &str) -> Option<&'a str> {
     pairs.iter().find(|(k, _)| *k == key).map(|(_, v)| *v)
 }
 
-/// Let `req` read `stream`, or say why not.
-pub fn admit(ctx: &Ctx, stream: &Stream, req: &Request) -> Result<Viewer, Box<Response>> {
+/// Let `req` read `stream`, or say why not. `show` is carried with the
+/// key, so on a station every URI a playlist hands out reaches the same
+/// show's output.
+pub fn admit(door: &impl Door, stream: &Stream, req: &Request) -> Result<Viewer, Box<Response>> {
     let pairs = pairs(req);
     let key = value(&pairs, "key");
     if !key.is_some_and(|k| stream.admits(k)) {
-        check_token(ctx, stream, req, key.is_some())?;
+        check_token(door, stream, req, key.is_some())?;
     }
     let query = pairs
         .iter()
-        .filter(|(k, _)| matches!(*k, "key" | "token" | "v"))
+        .filter(|(k, _)| matches!(*k, "show" | "key" | "token" | "v"))
         .map(|(k, v)| format!("{k}={v}"))
         .collect::<Vec<_>>()
         .join("&");
@@ -79,10 +81,10 @@ pub fn admit(ctx: &Ctx, stream: &Stream, req: &Request) -> Result<Viewer, Box<Re
     Ok(Viewer { query, who, has_id: id.is_some() })
 }
 
-fn check_token(ctx: &Ctx, stream: &Stream, req: &Request, had_key: bool) -> Result<(), Box<Response>> {
+fn check_token(door: &impl Door, stream: &Stream, req: &Request, had_key: bool) -> Result<(), Box<Response>> {
     let presented = presented_token(req.method(), req.headers(), req.uri());
     let link = stream.master_url_path();
-    let token = ctx.app.tokens.authenticate(presented.as_deref()).map_err(|reason| {
+    let token = door.tokens().authenticate(presented.as_deref()).map_err(|reason| {
         let message = if had_key {
             format!(
                 "That viewer key is not this output's. Open the link the output shows ({link} with its key), \

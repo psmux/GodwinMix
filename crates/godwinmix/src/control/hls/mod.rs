@@ -19,6 +19,14 @@
 //! a link. Whatever came in the query is written onto every URI a playlist
 //! hands out, so a player that cannot send a header keeps presenting it.
 //!
+//! # Who answers
+//!
+//! The routes are the same wherever they are served, and a [`Door`] says
+//! where the outputs are and whose tokens let a request in. A core's door is
+//! its [`Ctx`]: the engine's own registry of `hls/output`s. A station's is
+//! `station::direct::hls`, which serves the HLS outputs of shows without
+//! compositing under the same paths with `?show=<id>`.
+//!
 //! # Waiting
 //!
 //! A blocking playlist reload, and a request for the part the playlist
@@ -27,31 +35,61 @@
 //! packager never waits for anybody.
 
 mod auth;
-mod files;
-mod playlists;
+pub mod files;
+pub mod playlists;
 
 use crate::control::Ctx;
 use axum::body::{Body, Bytes};
+use axum::extract::Request;
 use axum::http::{header, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::Router;
+use godwinmix_core::hls::{stream, Stream};
+use godwinmix_protocol::scope::Tokens;
 use serde_json::{json, Value};
+use std::sync::Arc;
 
-pub fn router(ctx: Ctx) -> Router<Ctx> {
+/// Where `/hls/*` finds an output, and whose tokens open it.
+pub trait Door: Clone + Send + Sync + 'static {
+    fn tokens(&self) -> &Tokens;
+    /// The output `req` names, or a 404 that names the ones there are.
+    fn find(&self, output: &str, req: &Request) -> Result<Arc<Stream>, Box<Response>>;
+}
+
+impl Door for Ctx {
+    fn tokens(&self) -> &Tokens {
+        &self.app.tokens
+    }
+
+    fn find(&self, id: &str, _: &Request) -> Result<Arc<Stream>, Box<Response>> {
+        stream::get(id).ok_or_else(|| {
+            let have = stream::ids();
+            let message = if have.is_empty() {
+                format!("There is no HLS output `{id}`, and none running. Add one with output.add {{type: \"hls/output\"}}.")
+            } else {
+                format!("There is no HLS output `{id}`. This core serves {}.", have.join(", "))
+            };
+            Box::new(refuse(StatusCode::NOT_FOUND, message, json!({ "output": id, "outputs": have })))
+        })
+    }
+}
+
+/// The four routes, answered through `door`.
+pub fn router<D: Door>(door: D) -> Router<D> {
     Router::new()
-        .route("/hls/{output}/master.m3u8", get(playlists::master))
-        .route("/hls/{output}/manifest.mpd", get(playlists::dash))
-        .route("/hls/{output}/{rung}/index.m3u8", get(playlists::media))
-        .route("/hls/{output}/{rung}/{file}", get(files::file))
-        .with_state(ctx)
+        .route("/hls/{output}/master.m3u8", get(playlists::master::<D>))
+        .route("/hls/{output}/manifest.mpd", get(playlists::dash::<D>))
+        .route("/hls/{output}/{rung}/index.m3u8", get(playlists::media::<D>))
+        .route("/hls/{output}/{rung}/{file}", get(files::file::<D>))
+        .with_state(door)
 }
 
 const PLAYLIST: &str = "application/vnd.apple.mpegurl";
 
 /// A refusal a player logs and a person can read: a status, and a JSON body
 /// with the message and what to do next.
-fn refuse(code: StatusCode, message: String, data: Value) -> Response {
+pub fn refuse(code: StatusCode, message: String, data: Value) -> Response {
     let mut r = (code, axum::Json(json!({ "error": message, "data": data }))).into_response();
     r.headers_mut().insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
     r

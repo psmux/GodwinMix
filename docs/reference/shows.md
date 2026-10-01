@@ -78,7 +78,7 @@ with a `channel:<id>` scope.
 | `error` | why it is not running, when a person did not ask for that |
 | `compositing` | `true` for a show with scenes and a programme in a process of its own; `false` for a show without compositing (below) |
 | `input` | what the show takes in, `{uri, program?, params?, backup?}`. Absent for a show that has none. An SRT passphrase reads `__secret__` here (see [Input passphrases](#input-passphrases)) |
-| `outputs` | a show without compositing's outputs, each as a channel destination is shown: `id`, `platform`, `label`, `uri_host`, `has_key`, `enabled`, `state`, `kbps`, `reconnects`, `error`, and `rendition`, `plan` or `refused` when it converts. Absent for a show that composites |
+| `outputs` | a show without compositing's outputs, each as a channel destination is shown: `id`, `platform`, `label`, `uri_host`, `has_key`, `enabled`, `state`, `kbps`, `reconnects`, `error`, `rendition`, `plan` or `refused` when it converts, and `playback` (`master_url_path`, `dash_url_path`, `viewers`) on an HLS output. Absent for a show that composites |
 | `health` | `{state, alarms}`, see [Health](#health) |
 
 For a show without compositing, `state` is `running` unless it was stopped,
@@ -235,10 +235,13 @@ or so, rather than answer with the whole machine free.
 Admin, destructive. `show.remove` for each id; an id that cannot go (`main`,
 the last show, one not there) is in `refused` with why, and the rest go.
 
-### `show.output.add {id, output?, platform?, label?, uri?, key?, enabled?, rendition?}`
+### `show.output.add {id, output?, platform?, label?, uri?, key?, enabled?, rendition?, params?}`
 
 Admin, on a show without compositing. `uri` is the whole address: `srt://`,
-`rtmp://`, `udp://` (unicast or multicast), `rtp://` or `rist://`. A platform
+`rtmp://`, `udp://` (unicast or multicast), `rtp://` or `rist://`, or
+`hls://<name>` for HLS the station serves from its own port; `params` is for
+that one only (`segment_ms`, `part_ms`, `low_latency`, `window`,
+`viewer_key`, as in [the HLS output reference](hls-output.md)). A platform
 (`youtube`, `facebook`, `twitch`) takes `key`, which is write only. `output`
 is the new output's id, made from the label or the platform when left out.
 No `rendition` copies the input's own bytes into the output's container; a
@@ -246,10 +249,11 @@ rendition request or `{"preset": "youtube-720p30"}` is planned with the
 channels' planner and refused at once when it cannot be served. Answers the
 show. `show` is taken as another name for `id`.
 
-### `show.output.set {id, output, label?, uri?, key?, enabled?, rendition?}`
+### `show.output.set {id, output, label?, uri?, key?, enabled?, rendition?, params?}`
 
 Admin. Names only what moves; a key left out is kept, and `rendition: null`
-goes back to a copy. A UDP, RTP or RIST output keeps its scheme.
+goes back to a copy. A UDP, RTP, RIST or HLS output keeps its scheme. An HLS
+output's `params`, when given, replace all of them.
 
 ### `show.output.remove {id, output}`
 

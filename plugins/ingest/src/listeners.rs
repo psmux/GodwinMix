@@ -41,6 +41,8 @@ pub struct Listeners {
     tls: Option<Tls>,
     wants: Wants,
     problems: BTreeMap<String, String>,
+    /// Direct shows read through the relay by the station (`direct::readers`).
+    pub readers: Vec<String>,
 }
 
 impl Listeners {
@@ -55,12 +57,14 @@ impl Listeners {
             tls: None,
             wants: Wants::default(),
             problems: BTreeMap::new(),
+            readers: Vec::new(),
         }
     }
 
     /// Open what `table` needs and close what it does not.
     pub fn apply(&mut self, table: &Table) {
         self.wants = Wants::of(table, self.settings.open_door);
+        self.wants.relay.extend(self.readers.iter().map(|id| format!("direct.{id}")));
         self.problems.clear();
         self.apply_rtmp();
         self.apply_srt();

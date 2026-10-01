@@ -584,6 +584,7 @@ export interface Destination {
   label: string;
   plan?: DestinationPlan | null;
   platform: string;
+  playback?: Playback | null;
   reconnects: number;
   refused?: DestinationRefusal | null;
   rendition?: RenditionChoice | null;
@@ -950,6 +951,15 @@ export interface HistoryStep {
   patch: Patch;
   redo: number;
   undo: number;
+}
+
+/** An `hls://` output's params, as an `hls/output` takes them. */
+export interface HlsOutputParams {
+  low_latency?: boolean | null;
+  part_ms?: number | null;
+  segment_ms?: number | null;
+  viewer_key?: string | null;
+  window?: number | null;
 }
 
 /** A UUID in the hyphenated form. Minted ids are version 7 (time ordered); ids derived from a layout are version 8. */
@@ -1525,6 +1535,16 @@ export interface PlanView {
   totals: PlanTotals;
 }
 
+/**
+ * The links of an output served as HLS from the control port, each with
+ * the output's viewer key on it.
+ */
+export interface Playback {
+  dash_url_path: string;
+  master_url_path: string;
+  viewers: number;
+}
+
 /** The whole of one plugin, for an agent about to use it. */
 export interface PluginDescription {
   description: string;
@@ -2042,6 +2062,7 @@ export interface ShowOutputAddRequest {
   key?: string | null;
   label?: string | null;
   output?: string | null;
+  params?: HlsOutputParams;
   platform?: string | null;
   rendition?: RenditionChoice | null;
   uri?: string | null;
@@ -2060,6 +2081,7 @@ export interface ShowOutputSetRequest {
   key?: string | null;
   label?: string | null;
   output: string;
+  params?: HlsOutputParams;
   rendition?: RenditionChoice | null;
   uri?: string | null;
 }
@@ -2073,6 +2095,7 @@ export interface ShowOutputSpec {
   id?: string | null;
   key?: string | null;
   label?: string | null;
+  params?: HlsOutputParams;
   platform?: string | null;
   rendition?: RenditionChoice | null;
   uri?: string | null;
@@ -3117,7 +3140,7 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "show.add", summary: "Make another show and start it: empty, a copy of a show (without its outputs, so nothing goes out twice), or from a project file.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/shows" } },
   { name: "show.add_many", summary: "Make many shows in one call, such as every channel of a headend. The whole batch is checked first. With dry_run (the default) nothing is made: the answer says what would be, what its renditions would cost and whether the governor would admit them. Without it, every show that fits is made and the rest are refused with why; a show is made whole or not at all.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/shows/add_many" } },
   { name: "show.list", summary: "Every show on this machine: its name, whether it is running, what is on air, what its outputs send and what its process costs. `current` is the show a client reaches when it names none.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/shows" } },
-  { name: "show.output.add", summary: "Send a show without compositing to another place: an address (SRT, RTMP, UDP, RTP or RIST), or a platform and its key. Left without a rendition it copies the input's bytes; with one it is planned and admitted by the governor. The key is write only.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/shows/{id}/output/add" } },
+  { name: "show.output.add", summary: "Send a show without compositing to another place: an address (SRT, RTMP, UDP, RTP or RIST), a platform and its key, or hls://<name> to serve it as HLS from this port. Left without a rendition it copies the input's bytes; with one it is planned and admitted by the governor. The key is write only.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/shows/{id}/output/add" } },
   { name: "show.output.remove", summary: "Stop one output of a show without compositing and forget it, key and all.", scope: "admin", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/shows/{id}/output/remove" } },
   { name: "show.output.set", summary: "Change one output of a show without compositing, naming only what moves: another address, a new key, on or off, copy or a rendition.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/shows/{id}/output" } },
   { name: "show.remove", summary: "Stop a show and remove it with its folder. Refused for the last show and for main, the show the station was started with.", scope: "admin", mutating: true, destructive: true, rest: { method: "DELETE", path: "/api/v1/shows/{id}" } },
@@ -3911,7 +3934,7 @@ export class GeneratedMethods {
     return this._call("show.list", {}) as Promise<ShowList>;
   }
 
-  /** Send a show without compositing to another place: an address (SRT, RTMP, UDP, RTP or RIST), or a platform and its key. Left without a rendition it copies the input's bytes; with one it is planned and admitted by the governor. The key is write only. */
+  /** Send a show without compositing to another place: an address (SRT, RTMP, UDP, RTP or RIST), a platform and its key, or hls://<name> to serve it as HLS from this port. Left without a rendition it copies the input's bytes; with one it is planned and admitted by the governor. The key is write only. */
   showOutputAdd(params: ShowOutputAddRequest): Promise<Show> {
     return this._call("show.output.add", params as unknown as Record<string, unknown>) as Promise<Show>;
   }

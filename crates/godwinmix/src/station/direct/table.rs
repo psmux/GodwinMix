@@ -22,6 +22,7 @@ pub fn start(st: Weak<Station>, wake: Receiver<()>) {
             let asked = st.direct.asked();
             let table = st.direct.table(&st);
             st.direct.send(table);
+            st.direct.hls.apply(&st);
             st.direct.done(asked);
         }
     });

@@ -86,7 +86,17 @@ impl Meter {
                 self.video_bytes += len;
                 self.frames += 1;
             }
-            TagKind::Audio => self.audio_bytes += len,
+            TagKind::Audio => {
+                self.audio_bytes += len;
+                // AC-3, E-AC-3 and MPEG audio come with no sequence header:
+                // the first frame says what they are.
+                let headerless = tag.payload.first().is_some_and(|b| b >> 4 != 10);
+                if headerless && self.audio.as_ref().is_none_or(|a| a.codec == "aac") {
+                    let read = codec::read_audio(tag);
+                    news = self.audio.as_ref() != Some(&read);
+                    self.audio = Some(read);
+                }
+            }
             TagKind::Script => news = self.declare(tag),
         }
         let elapsed = now.duration_since(self.window_start);

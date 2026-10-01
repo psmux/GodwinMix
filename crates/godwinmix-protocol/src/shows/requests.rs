@@ -21,8 +21,8 @@ pub struct ShowOutputSpec {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,
     /// The whole address: `srt://10.0.0.9:9000`, `rtmp://host/app/key`,
-    /// `udp://239.2.2.2:5000`. For a platform, its ingest server when it is
-    /// not the platform's own.
+    /// `udp://239.2.2.2:5000`, `hls://viewers`. For a platform, its ingest
+    /// server when it is not the platform's own.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub uri: Option<String>,
     /// A platform's stream key. Write only: no method reads it back.
@@ -36,6 +36,31 @@ pub struct ShowOutputSpec {
     /// admitted by the governor.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rendition: Option<RenditionChoice>,
+    /// For an `hls://` output only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "HlsOutputParams")]
+    pub params: Option<HlsOutputParams>,
+}
+
+/// An `hls://` output's params, as an `hls/output` takes them.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct HlsOutputParams {
+    /// 500 to 10000, default 2000.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub segment_ms: Option<u32>,
+    /// LL-HLS part, 0 for none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub part_ms: Option<u32>,
+    /// true: parts of 333 ms.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub low_latency: Option<bool>,
+    /// Seconds kept, default 30.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub window: Option<u32>,
+    /// 16 characters or more.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub viewer_key: Option<String>,
 }
 
 /// `show.output.add`.
@@ -60,6 +85,9 @@ pub struct ShowOutputAddRequest {
     pub enabled: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rendition: Option<RenditionChoice>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "HlsOutputParams")]
+    pub params: Option<HlsOutputParams>,
 }
 
 impl ShowOutputAddRequest {
@@ -73,6 +101,7 @@ impl ShowOutputAddRequest {
             key: self.key.clone(),
             enabled: self.enabled,
             rendition: self.rendition.clone(),
+            params: self.params.clone(),
         }
     }
 }
@@ -99,6 +128,10 @@ pub struct ShowOutputSetRequest {
     #[serde(default, deserialize_with = "present", skip_serializing_if = "Option::is_none")]
     #[schemars(with = "Option<RenditionChoice>")]
     pub rendition: Option<Option<RenditionChoice>>,
+    /// Replaces them all.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "HlsOutputParams")]
+    pub params: Option<HlsOutputParams>,
 }
 
 fn present<'de, D: Deserializer<'de>>(d: D) -> Result<Option<Option<RenditionChoice>>, D::Error> {

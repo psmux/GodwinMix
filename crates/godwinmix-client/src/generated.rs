@@ -1053,6 +1053,9 @@ pub struct Destination {
     pub plan: Option<DestinationPlan>,
     /// A platform id from the table: youtube, facebook, twitch, custom, srt.
     pub platform: String,
+    /// Where a player opens it, for an output this machine serves as HLS.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub playback: Option<Playback>,
     /// Connections lost and made again since it was switched on.
     pub reconnects: u32,
     /// Why it is not sending what it asked for, and what would fit.
@@ -1652,6 +1655,27 @@ pub struct HistoryStep {
     pub redo: i64,
     /// How many steps are still on each stack, so a UI greys out a button.
     pub undo: i64,
+}
+
+/// An `hls://` output's params, as an `hls/output` takes them.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct HlsOutputParams {
+    /// true: parts of 333 ms.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub low_latency: Option<bool>,
+    /// LL-HLS part, 0 for none.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub part_ms: Option<u32>,
+    /// 500 to 10000, default 2000.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub segment_ms: Option<u32>,
+    /// 16 characters or more.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub viewer_key: Option<String>,
+    /// Seconds kept, default 30.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub window: Option<u32>,
 }
 
 /// A UUID in the hyphenated form. Minted ids are version 7 (time ordered); ids derived from a layout are version 8.
@@ -2656,6 +2680,19 @@ pub struct PlanView {
     pub totals: PlanTotals,
 }
 
+/// The links of an output served as HLS from the control port, each with
+/// the output's viewer key on it.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Playback {
+    /// The same segments as a DASH MPD.
+    pub dash_url_path: String,
+    /// `/hls/viewers/master.m3u8?show=bbc-one&key=...`.
+    pub master_url_path: String,
+    /// Players that fetched something in the last two windows.
+    pub viewers: u32,
+}
+
 /// The whole of one plugin, for an agent about to use it.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -3553,6 +3590,8 @@ pub struct ShowOutputAddRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub output: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub params: Option<HlsOutputParams>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub platform: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rendition: Option<RenditionChoice>,
@@ -3584,6 +3623,9 @@ pub struct ShowOutputSetRequest {
     pub label: Option<String>,
     /// The output's id.
     pub output: String,
+    /// Replaces them all.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub params: Option<HlsOutputParams>,
     /// Left out keeps what it has; `null` or `{"preset": "copy"}` goes back
     /// to a copy.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -3608,6 +3650,9 @@ pub struct ShowOutputSpec {
     pub key: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,
+    /// For an `hls://` output only.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub params: Option<HlsOutputParams>,
     /// youtube, facebook, twitch, custom or srt. Left out: custom, which
     /// takes a whole address in `uri`.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -3618,8 +3663,8 @@ pub struct ShowOutputSpec {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rendition: Option<RenditionChoice>,
     /// The whole address: `srt://10.0.0.9:9000`, `rtmp://host/app/key`,
-    /// `udp://239.2.2.2:5000`. For a platform, its ingest server when it is
-    /// not the platform's own.
+    /// `udp://239.2.2.2:5000`, `hls://viewers`. For a platform, its ingest
+    /// server when it is not the platform's own.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub uri: Option<String>,
 }
@@ -4664,7 +4709,7 @@ pub const METHODS: [MethodInfo; 170] = [
     MethodInfo { name: "show.add", summary: "Make another show and start it: empty, a copy of a show (without its outputs, so nothing goes out twice), or from a project file.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/shows")) },
     MethodInfo { name: "show.add_many", summary: "Make many shows in one call, such as every channel of a headend. The whole batch is checked first. With dry_run (the default) nothing is made: the answer says what would be, what its renditions would cost and whether the governor would admit them. Without it, every show that fits is made and the rest are refused with why; a show is made whole or not at all.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/shows/add_many")) },
     MethodInfo { name: "show.list", summary: "Every show on this machine: its name, whether it is running, what is on air, what its outputs send and what its process costs. `current` is the show a client reaches when it names none.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/shows")) },
-    MethodInfo { name: "show.output.add", summary: "Send a show without compositing to another place: an address (SRT, RTMP, UDP, RTP or RIST), or a platform and its key. Left without a rendition it copies the input's bytes; with one it is planned and admitted by the governor. The key is write only.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/shows/{id}/output/add")) },
+    MethodInfo { name: "show.output.add", summary: "Send a show without compositing to another place: an address (SRT, RTMP, UDP, RTP or RIST), a platform and its key, or hls://<name> to serve it as HLS from this port. Left without a rendition it copies the input's bytes; with one it is planned and admitted by the governor. The key is write only.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/shows/{id}/output/add")) },
     MethodInfo { name: "show.output.remove", summary: "Stop one output of a show without compositing and forget it, key and all.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/shows/{id}/output/remove")) },
     MethodInfo { name: "show.output.set", summary: "Change one output of a show without compositing, naming only what moves: another address, a new key, on or off, copy or a rendition.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/shows/{id}/output")) },
     MethodInfo { name: "show.remove", summary: "Stop a show and remove it with its folder. Refused for the last show and for main, the show the station was started with.", scope: "admin", mutating: true, destructive: true, rest: Some(("DELETE", "/api/v1/shows/{id}")) },
@@ -5677,7 +5722,7 @@ impl Client {
         self.call("show.list", &serde_json::json!({})).await
     }
 
-    /// Send a show without compositing to another place: an address (SRT, RTMP, UDP, RTP or RIST), or a platform and its key. Left without a rendition it copies the input's bytes; with one it is planned and admitted by the governor. The key is write only.
+    /// Send a show without compositing to another place: an address (SRT, RTMP, UDP, RTP or RIST), a platform and its key, or hls://<name> to serve it as HLS from this port. Left without a rendition it copies the input's bytes; with one it is planned and admitted by the governor. The key is write only.
     pub async fn show_output_add(&self, params: &ShowOutputAddRequest) -> Result<Show> {
         self.call("show.output.add", params).await
     }
