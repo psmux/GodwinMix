@@ -162,6 +162,67 @@ top of `crates/godwinmix-core/src/hls/mod.rs` say what the pad must carry.
 `godwinmix_core::hls::stream::egress_kbps()` is the sum over every HLS
 output, the number the governor's uplink budget counts.
 
+## From a show without compositing
+
+A direct show has no programme encode and no show process, so its HLS output
+is an output of the show and the station packages it. It is added with
+`show.output.add` (or in `show.add`'s `outputs`), not `output.add`:
+
+```json
+{"id": "bbc-one", "uri": "hls://viewers", "params": {"segment_ms": 2000, "window": 30}}
+```
+
+| | A show that composites | A show without compositing |
+|---|---|---|
+| Added with | `output.add {type: "hls/output"}` | `show.output.add {uri: "hls://<name>"}` |
+| Its id | the output's `id` | the name in `hls://<name>`, or `output` |
+| `params` | the table above | the same names, defaults and limits |
+| Rungs | `programme`, or one per ladder rung, and `audio` | `main` and `audio` |
+| `rendition` | none, a preset or a ladder | none (a copy), or one rendition; a ladder is refused with `data.ladder: true` |
+| Served by | the show, relayed by the station | the station itself |
+| Link | `playback.master_url_path` in `output.list` | `playback.master_url_path` on the output in `show.list` |
+
+The routes are the ones above with `show=<id>` in the query, which every URI
+a playlist hands out carries on:
+
+```
+/hls/viewers/master.m3u8?show=bbc-one&key=...
+```
+
+With no rendition the input's own H.264, HEVC or AV1 and AAC are packaged as
+they arrive. Nothing is decoded, and every segment starts on one of the
+input's own keyframes, so a feed with a keyframe every second and
+`segment_ms = 2000` gets two second segments; a longer GOP gives longer
+segments. With a rendition the output reads the pair the plan made, admitted
+by the governor like any other.
+
+HLS here carries AAC sound and nothing else. An input whose sound is MPEG
+audio (layer II or MP3), AC-3 or E-AC-3 is refused rather than packaged into
+segments no player plays:
+
+* `show.output.add` refuses a copy when the input is already live with such
+  sound, with `data.audio_codec` and `data.rendition: {"audio": {"codec":
+  "aac"}}`, the rendition to add instead.
+* An output added before the input was heard goes to `state: "failed"`, and
+  its `error` names the codec and the `show.output.set` call that fixes it.
+
+`{"audio": {"codec": "aac"}}` decodes the sound once, encodes it as AAC and
+still copies the picture. MPEG audio and AC-3 are decoded by the codec
+catalogue's `mpeg-audio-decode` (`mpg123audiodec`) and `ac3-decode`
+(`avdec_ac3`); E-AC-3 has no decoder in the catalogue yet and is refused by
+the planner.
+
+The packager reads the show's stream from the ingest plugin's relay on
+loopback, the same `GMXHUB` door a source process reads a channel through
+(`plugins-network.md`), so the relay is opened for a show with an HLS output
+even when no channel has opened it.
+
+The output's `state` is `waiting` until the input is live, `connecting`
+until every rung has a whole segment, then `live`; `kbps` is what is packaged.
+The egress of these outputs is not yet counted in
+`godwinmix_core::hls::stream::egress_kbps()`, so the governor's uplink budget
+does not see it.
+
 ## Not here yet
 
 Low latency DASH (chunked transfer of the part being written) is not served;

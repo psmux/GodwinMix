@@ -69,6 +69,41 @@ curl -s -H "authorization: Bearer $GODWINMIX_TOKEN" \
 
 Put the address people reach the mixer on in front of it.
 
+## From a show without compositing
+
+A show that copies a feed straight to its outputs serves HLS too, from the
+station's port. Give it an output whose address is `hls://` and a name:
+
+```sh
+curl -X POST http://127.0.0.1:8080/api/v1/shows/bbc-one/output/add \
+  -H "authorization: Bearer $GODWINMIX_TOKEN" -H 'content-type: application/json' \
+  -d '{"uri":"hls://viewers","params":{"segment_ms":2000}}'
+```
+
+The feed's own H.264 or HEVC and AAC are packaged as they arrive, with
+nothing decoded, and every segment starts on one of the feed's keyframes.
+The link is on the output in `show.list`, with the show in it:
+
+```sh
+curl -s -H "authorization: Bearer $GODWINMIX_TOKEN" http://127.0.0.1:8080/api/v1/shows \
+  | jq -r '.shows[] | select(.id=="bbc-one") | .outputs[] | select(.id=="viewers") | .playback.master_url_path'
+# /hls/viewers/master.m3u8?show=bbc-one&key=...
+```
+
+A broadcast feed often carries its sound as MPEG audio (MP2) or AC-3, which
+HLS players do not take. Such an output is refused, or goes to `failed`, with
+an error naming the codec. Ask for AAC and the sound is converted while the
+picture is still copied:
+
+```sh
+curl -X POST http://127.0.0.1:8080/api/v1/shows/bbc-one/output \
+  -H "authorization: Bearer $GODWINMIX_TOKEN" -H 'content-type: application/json' \
+  -d '{"output":"viewers","rendition":{"audio":{"codec":"aac"}}}'
+```
+
+One rendition is the most such an output carries; a ladder of sizes needs
+the show to composite. `docs/reference/hls-output.md` has the rest.
+
 ## Play it
 
 Any HLS player opens the link: Safari, VLC, a smart TV, `ffplay`, or hls.js
