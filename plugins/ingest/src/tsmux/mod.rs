@@ -13,6 +13,7 @@
 //! hundreds of copies. The clock rides on the video PID, 0.7 s behind the
 //! decode time, as ffmpeg's muxer puts it.
 
+mod clock;
 mod es;
 mod packet;
 mod psi;
@@ -42,6 +43,8 @@ pub struct Muxer {
     /// The stream types the last PMT carried, and its version.
     announced: (Option<u8>, Option<u8>),
     version: u8,
+    /// Decode times kept going forward: video, audio.
+    clocks: [clock::Forward; 2],
 }
 
 impl Muxer {
@@ -104,8 +107,8 @@ impl Muxer {
         let Some((skip, cts)) = crate::eflv::frame(&tag.payload) else { return };
         let au = config.annex_b(tag.payload.get(skip..).unwrap_or(&[]), tag.keyframe);
         self.tables(ms, tag.keyframe, out);
-        let dts = (u64::from(ms) * 90 + BASE) % WRAP;
-        let pts = (dts as i64 + i64::from(cts) * 90).rem_euclid(WRAP as i64) as u64;
+        let dts = self.clocks[0].next((u64::from(ms) * 90 + BASE) % WRAP);
+        let pts = (dts as i64 + i64::from(cts.max(0)) * 90).rem_euclid(WRAP as i64) as u64;
         let mut pes = packet::pes(0xe0, pts, (pts != dts).then_some(dts), au.len());
         pes.extend_from_slice(&au);
         let first = First { pcr: Some((dts + WRAP - PCR_LEAD) % WRAP), random_access: tag.keyframe };
@@ -122,7 +125,7 @@ impl Muxer {
             // Nothing before the first picture: a receiver starts there.
             return;
         }
-        let pts = (u64::from(ms) * 90 + BASE) % WRAP;
+        let pts = self.clocks[1].next((u64::from(ms) * 90 + BASE) % WRAP);
         let mut pes = packet::pes(0xc0, pts, None, frame.len() + 7);
         pes.extend_from_slice(&config.adts(frame.len()));
         pes.extend_from_slice(frame);
