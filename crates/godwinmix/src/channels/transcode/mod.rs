@@ -28,6 +28,7 @@ mod machine;
 mod model;
 mod outcome;
 mod plan;
+mod price;
 mod refuse;
 mod shed;
 mod source;
@@ -47,6 +48,7 @@ use parking_lot::Mutex;
 use serde_json::{json, Value};
 
 pub use machine::Machine;
+pub use price::assumed_input;
 use outcome::Outcome;
 use state::State;
 

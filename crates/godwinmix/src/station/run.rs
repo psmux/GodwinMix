@@ -49,7 +49,7 @@ pub async fn run(opts: Options) -> Result<()> {
 
     let ingest = open_channels(&st, &cfg, &opts.config, events);
     render.begin();
-    let starting: Vec<String> = st.registry.lock().records.iter().filter(|r| !r.stopped).map(|r| r.id.clone()).collect();
+    let starting: Vec<String> = st.registry.lock().records.iter().filter(|r| !r.stopped && r.compositing).map(|r| r.id.clone()).collect();
     for id in &starting {
         supervise::start(&st, id);
     }
@@ -103,6 +103,7 @@ fn open_channels(st: &Arc<Station>, cfg: &Config, config: &std::path::Path, even
     );
     channels.use_governor(st.render.governor().clone());
     let _ = st.channels.set(channels);
+    super::direct::Direct::attach(st, supervisor.clone());
     let starting = supervisor.clone();
     std::thread::spawn(move || {
         if plugin::loader::get(crate::channels::PLUGIN).is_none() {

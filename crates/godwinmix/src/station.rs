@@ -20,6 +20,7 @@ pub mod link;
 pub mod registry;
 mod ask;
 mod channel_calls;
+pub mod direct;
 pub mod child;
 mod files;
 mod host;
@@ -32,6 +33,10 @@ mod run;
 mod server;
 pub mod show;
 mod shows_api;
+mod shows_bulk;
+mod shows_direct;
+mod shows_set;
+mod switch;
 pub mod state;
 pub mod supervise;
 

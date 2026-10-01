@@ -7,7 +7,7 @@
 //! stops each restream) and sends `event/channel.changed`. The rules of what
 //! an edit may say are pure functions in `rules.rs`.
 
-mod rules;
+pub(crate) mod rules;
 mod store;
 
 use godwinmix_protocol::destination::{

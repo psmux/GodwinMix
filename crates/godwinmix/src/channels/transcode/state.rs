@@ -45,7 +45,7 @@ impl State {
 }
 
 /// The destinations of a channel that asked for a rendition and are on.
-fn wants(stored: &[StoredDestination]) -> Vec<Want> {
+pub(super) fn wants(stored: &[StoredDestination]) -> Vec<Want> {
     stored
         .iter()
         .filter(|d| d.enabled)

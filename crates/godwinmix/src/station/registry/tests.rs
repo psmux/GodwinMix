@@ -28,7 +28,7 @@ fn a_second_show_is_written_down_and_read_back_with_its_own_folder() {
     let id = reg.free_id("Second room");
     assert_eq!(id, "second-room");
     let folder = reg.folder_for(&id);
-    reg.records.push(Record { id: id.clone(), name: "Second room".into(), config: Some(folder.join("godwinmix.toml")), stopped: false });
+    reg.records.push(Record::new(&id, "Second room", Some(folder.join("godwinmix.toml"))));
     reg.save().unwrap();
     let again = Registry::open(&config).unwrap();
     assert_eq!(again.ids(), vec!["main", "second-room"]);
