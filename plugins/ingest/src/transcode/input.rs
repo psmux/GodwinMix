@@ -126,6 +126,12 @@ pub(crate) fn buffer(tag: &MediaTag, base: u32) -> Option<gst::Buffer> {
         TagKind::Video => crate::eflv::frame(&tag.payload)?,
         _ => (2, 0),
     };
+    framed(tag, base, skip, cts)
+}
+
+/// One buffer of the body past `skip` bytes, at its time less `base`, its
+/// picture `cts` milliseconds after its decode.
+pub(crate) fn framed(tag: &MediaTag, base: u32, skip: usize, cts: i32) -> Option<gst::Buffer> {
     // A tag from before the session's first is from before the decoder's
     // zero, and is not wanted.
     let dts = i64::from(tag.timestamp_ms) - i64::from(base);
