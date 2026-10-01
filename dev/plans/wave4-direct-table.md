@@ -51,6 +51,11 @@ TOML has no null, so a field that does not apply is left out, never null.
   channel destination row (`destination_table` in channels/destinations.rs),
   so the restream code runs it unchanged: `id`, `platform`, `url` (the whole
   address, key and all), `stream` (always `"main"`, the input's one stream).
+  `platform` is a channel platform (`youtube`, `facebook`, `twitch`,
+  `custom` for RTMP, `srt`) or, for outputs a channel never has, the
+  scheme itself: `udp`, `rtp` or `rist`, with the whole address in `url`
+  (`udp://239.2.2.2:5000`, unicast or multicast). Dispatch on `platform`,
+  or on the scheme of `url`; they agree.
   An output that copies has nothing else. One that converts has
   `rendition = true`, and `video` and `audio` from the plan when the input is
   live, exactly as a channel destination's row does; `rendition = true` with
