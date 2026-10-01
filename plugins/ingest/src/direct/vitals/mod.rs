@@ -29,6 +29,7 @@ mod measure;
 mod picture;
 mod show;
 mod tap;
+mod ticker;
 mod work;
 mod registry;
 
