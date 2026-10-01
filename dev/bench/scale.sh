@@ -108,6 +108,8 @@ trap cleanup EXIT
 build() {
     log "building the station, the udp plugin and gmx-scale (release)"
     (cd "$REPO" && cargo build --release -p godwinmix -p gmx-udp) || die "the station did not build"
+    # Staged beside its manifest, so plugin.add takes this build and not an older one.
+    sh "$REPO/plugins/ingest/build" >/dev/null || die "the ingest plugin did not build"
     cargo build --release --manifest-path "$REPO/tools/scale/Cargo.toml" || die "gmx-scale did not build"
 }
 
@@ -152,9 +154,13 @@ feeds_alone() {
 }
 
 start_station() {
-    awk '/^\[\[sources\]\]/{exit} {print}' "$REPO/godwinmix.example.toml" | sed "s/^bind = .*/bind = \"$ADDR\"/" > "$RUN/station.toml"
+    # The plugins directory and the secret store are this run's own, so
+    # nothing is installed into, or read from, the person's ~/.godwinmix.
+    awk '/^\[\[sources\]\]/{exit} {print}' "$REPO/godwinmix.example.toml" \
+        | sed "s/^bind = .*/bind = \"$ADDR\"/; s|^# plugins_dir = .*|plugins_dir = \"$RUN/plugins\"|" > "$RUN/station.toml"
+    grep -q "^plugins_dir = \"$RUN/plugins\"" "$RUN/station.toml" || die "could not point plugins_dir at $RUN/plugins in the station's config"
     log "starting the station on $ADDR from a copy of godwinmix.example.toml with its sources and outputs left out"
-    tmux new-session -d -s gmx-scale-station "GODWINMIX_PLUGINS_DIR='$RUN/plugins' exec '$BIN' --config '$RUN/station.toml' > '$RUN/station.log' 2>&1"
+    tmux new-session -d -s gmx-scale-station "GODWINMIX_HOME='$RUN/home' exec '$BIN' --config '$RUN/station.toml' > '$RUN/station.log' 2>&1"
     wait_for 60 "the station to answer on $ADDR" curl -sf -m 2 "http://$ADDR/api/v1/shows"
     STATION_PID="$(pane_pid gmx-scale-station)"
     # The default channel opens RTMP on 1935, which another mixer on this machine may want.
@@ -165,6 +171,12 @@ start_station() {
     if [[ "$MODE" == auto ]]; then
         if grep -q '"show.add_many"' "$RUN/api.json"; then MODE=direct; else MODE=legacy; fi
         log "this station $( [[ $MODE == direct ]] && echo has || echo has no ) show.add_many, so the mode is $MODE"
+    fi
+    if [[ "$MODE" == direct ]]; then
+        # Direct shows run in the ingest plugin, which the station starts the
+        # moment it is installed.
+        api POST /api/v1/plugins "{\"source\": \"$REPO/plugins/ingest\"}" > /dev/null
+        wait_for 600 "the ingest plugin to install" sh -c "curl -s -m 5 http://$ADDR/api/v1/plugins | grep -q '\"name\":\"ingest\"'"
     fi
 }
 
