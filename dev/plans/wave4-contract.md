@@ -76,7 +76,13 @@ itself. Every one of these is an MCP tool (see Agents).
                   | "loss" | "output-failed" | "governor-refused" | "shed",
             since_ms, detail }
     InputStats { kbps, fps, width, height, video_codec, audio_codec, audio_channels,
-                 cc_errors, packets_lost, keyframe_ms, last_frame_ms }
+                 cc_errors, packets_lost, keyframe_ms, last_frame_ms,
+                 state: "connecting" | "live" | "retrying",   (directin: added)
+                 error?: string,                             why it is retrying
+                 program?: u16,                              the TS program being taken
+                 programs?: [{number, name, provider, streams}] }   every program in an
+                                                             MPEG-TS feed, names from the SDT,
+                                                             so a person can choose one
     OutputStats { id, state, kbps, reconnects, rendition_text, encoder?, cpu_millicores }
 
 Pictures and black, freeze and silence detection cost a decode, so they run
