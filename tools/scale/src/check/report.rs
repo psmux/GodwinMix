@@ -12,8 +12,12 @@ fn round(v: f64, places: i32) -> f64 {
 /// One stream. Its rate is over the time it was arriving, not the whole window,
 /// so a feed that started late is not counted slow.
 pub fn one(name: &str, s: &Stream, seconds: f64) -> Value {
-    let (gop_ms, gops_dropped) = s.gops();
+    let (gop_ms, by_pts) = s.gops();
     let span = s.first_ms.map_or(seconds * 1000.0, |f| s.last_ms - f).max(1.0) / 1000.0;
+    // A stream that runs slow shows fewer keyframes than its time allows even
+    // when each one is a GOP after the last by its own clock.
+    let by_time = if gop_ms > 0.0 { ((span * 1000.0 / gop_ms).floor() as u64).saturating_sub(s.keyframes + 1) } else { 0 };
+    let gops_dropped = by_pts.max(by_time);
     json!({
         "stream": name,
         "kbps": round(s.bytes as f64 * 8.0 / span / 1000.0, 0),
@@ -61,9 +65,9 @@ pub fn json(names: &[String], streams: &[Stream], seconds: f64) -> Value {
 pub fn print(out: &Value, quiet: bool) {
     let cols = ["kbps", "packets", "cc_errors", "packets_lost", "pcr_jumps", "pcr_gap_max_ms", "pcr_jitter_ms", "keyframes", "gop_ms", "gops_dropped", "silence_max_ms"];
     if !quiet {
-        println!("{:<22} {}", "stream", cols.iter().map(|c| format!("{c:>14}")).collect::<String>());
+        println!("{:<22} {}", "stream", cols.iter().map(|c| format!(" {c:>14}")).collect::<String>());
         for s in out["streams"].as_array().into_iter().flatten() {
-            let row: String = cols.iter().map(|c| format!("{:>14}", s[*c])).collect();
+            let row: String = cols.iter().map(|c| format!(" {:>14}", s[*c].to_string())).collect();
             println!("{:<22} {row}", s["stream"].as_str().unwrap_or(""));
         }
     }

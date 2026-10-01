@@ -7,7 +7,9 @@ use std::collections::{BTreeMap, HashMap};
 
 /// The station, its shows, the direct host, and plugins by binary name.
 pub fn classify(tree: &[Proc], root: u32, direct: &str) -> Vec<(String, Proc)> {
+    // A command in brackets is a process that has exited and not been reaped yet.
     tree.iter()
+        .filter(|p| !p.command.starts_with('('))
         .map(|p| {
             let role = if p.pid == root {
                 "station".to_string()
