@@ -102,7 +102,13 @@ curl -X POST http://127.0.0.1:8080/api/v1/shows/bbc-one/output \
 ```
 
 One rendition is the most such an output carries; a ladder of sizes needs
-the show to composite. `docs/reference/hls-output.md` has the rest.
+the show to composite.
+
+The packaging runs in a process of its own beside the station, started
+while such an output is on. If it stops, the output shows `reconnecting`
+in `show.list` with the reason, and comes back on the same link once the
+station has started it again, usually within a few seconds; the rest of the
+station carries on. `docs/reference/hls-output.md` has the rest.
 
 ## Play it
 
