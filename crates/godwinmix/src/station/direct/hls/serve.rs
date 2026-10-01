@@ -8,10 +8,10 @@
 //! when it is left out, and is carried onto every URI a playlist hands out.
 
 use crate::control::hls::{auth, refuse, Door};
-use crate::station::packager::wire::SHOW_HEADER;
+use crate::station::packager::wire::{PEER_HEADER, SHOW_HEADER};
 use crate::station::relay::{http, show_in};
 use crate::station::state::Station;
-use axum::extract::{Request, State};
+use axum::extract::{ConnectInfo, Request, State};
 use axum::http::{header, HeaderValue, StatusCode};
 use axum::response::Response;
 use axum::routing::get;
@@ -87,6 +87,11 @@ async fn any(State(st): State<Arc<Station>>, req: Request) -> Response {
     }
     if let Ok(v) = HeaderValue::from_str(&show) {
         parts.headers.insert(SHOW_HEADER, v);
+    }
+    parts.headers.remove(PEER_HEADER);
+    let peer = parts.extensions.get::<ConnectInfo<std::net::SocketAddr>>().map(|c| c.0.to_string());
+    if let Some(v) = peer.and_then(|p| HeaderValue::from_str(&p).ok()) {
+        parts.headers.insert(PEER_HEADER, v);
     }
     match http::pass(&st.http, &url, Request::from_parts(parts, body)).await {
         Ok(answer) => answer,

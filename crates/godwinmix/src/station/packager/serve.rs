@@ -3,16 +3,18 @@
 //! outputs over and reads them back on.
 
 use super::outputs::Outputs;
-use super::wire::{Want, OUTPUTS, SHOW_HEADER};
+use super::wire::{Want, OUTPUTS, PEER_HEADER, SHOW_HEADER};
 use crate::control::hls::{refuse, Door};
-use axum::extract::{Request, State};
+use axum::extract::{ConnectInfo, Request, State};
 use axum::http::{HeaderMap, StatusCode};
+use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::{Json, Router};
 use godwinmix_core::hls::Stream;
 use godwinmix_protocol::scope::{constant_time_eq, Token, Tokens};
 use serde_json::json;
+use std::net::SocketAddr;
 use std::sync::Arc;
 
 #[derive(Clone)]
@@ -51,7 +53,18 @@ impl Door for PackagerDoor {
 
 pub fn router(door: PackagerDoor) -> Router {
     let outputs = Router::new().route(OUTPUTS, get(reports).put(take)).with_state(door.clone());
-    crate::control::hls::router(door.clone()).with_state(door).merge(outputs)
+    crate::control::hls::router(door.clone()).with_state(door).merge(outputs).layer(middleware::from_fn(peer))
+}
+
+/// A request the station forwarded comes from the station's loopback
+/// socket; the player's own address, which the viewer count goes by, is in
+/// [`PEER_HEADER`].
+async fn peer(mut req: Request, next: Next) -> Response {
+    let named = req.headers().get(PEER_HEADER).and_then(|v| v.to_str().ok()?.parse::<SocketAddr>().ok());
+    if let Some(addr) = named {
+        req.extensions_mut().insert(ConnectInfo(addr));
+    }
+    next.run(req).await
 }
 
 fn not_the_station() -> Response {
