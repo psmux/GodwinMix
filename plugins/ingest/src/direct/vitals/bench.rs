@@ -1,5 +1,5 @@
 //! What the vitals cost, measured: `cargo test -p gmx-ingest --release
-//! vitals::bench -- --ignored --nocapture`.
+//! direct::vitals::bench -- --ignored --nocapture`.
 //!
 //! Ten seconds of 1080p30 H.264 (a moving zone plate, fine detail everywhere,
 //! a keyframe a second, 6 Mbit/s) and AAC are
