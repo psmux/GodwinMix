@@ -9,11 +9,13 @@ fn round(v: f64, places: i32) -> f64 {
     (v * f).round() / f
 }
 
-/// One stream. Its rate is over the time it was arriving, not the whole window,
-/// so a feed that started late is not counted slow.
+/// One stream. Its rate is over the whole window, and a stream that stops or
+/// starts late has the time it was missing counted as silence, so a stream
+/// that dies part way through cannot look healthy.
 pub fn one(name: &str, s: &Stream, seconds: f64) -> Value {
     let (gop_ms, by_pts) = s.gops();
-    let span = s.first_ms.map_or(seconds * 1000.0, |f| s.last_ms - f).max(1.0) / 1000.0;
+    let span = seconds.max(0.001);
+    let edges = s.first_ms.map_or(seconds * 1000.0, |f| f.max(seconds * 1000.0 - s.last_ms));
     // A stream that runs slow shows fewer keyframes than its time allows even
     // when each one is a GOP after the last by its own clock.
     let by_time = if gop_ms > 0.0 { ((span * 1000.0 / gop_ms).floor() as u64).saturating_sub(s.keyframes + 1) } else { 0 };
@@ -31,7 +33,8 @@ pub fn one(name: &str, s: &Stream, seconds: f64) -> Value {
         "keyframes": s.keyframes,
         "gop_ms": round(gop_ms, 0),
         "gops_dropped": gops_dropped,
-        "silence_max_ms": round(s.silence_max_ms, 0),
+        "silence_max_ms": round(s.silence_max_ms.max(edges), 0),
+        "received_seconds": round(s.first_ms.map_or(0.0, |f| s.last_ms - f) / 1000.0, 1),
         "received": s.datagrams > 0,
     })
 }
@@ -58,6 +61,7 @@ pub fn json(names: &[String], streams: &[Stream], seconds: f64) -> Value {
         "gops_dropped": count("gops_dropped"),
         "streams_with_gops_dropped": each.iter().filter(|v| v["gops_dropped"].as_u64().unwrap_or(0) > 0).count(),
         "silence_max_ms": max("silence_max_ms"),
+        "streams_silent_over_1s": each.iter().filter(|v| v["silence_max_ms"].as_f64().unwrap_or(0.0) >= 1000.0).count(),
     });
     json!({ "total": total, "streams": each })
 }

@@ -139,7 +139,7 @@ media() {
 # Part one: the feeds alone, checked at the generator.
 feeds_alone() {
     log "part one: $FEEDS feeds for $WARM s, checked straight off the generator"
-    tmux new-session -d -s gmx-scale-check "exec '$TOOL' check --from $IN --count $FEEDS --seconds $((WARM + 3)) --skip 3 --quiet --json '$RUN/check-in.json' > '$RUN/check-in.log' 2>&1"
+    tmux new-session -d -s gmx-scale-check "exec '$TOOL' check --from $IN --count $FEEDS --seconds $WARM --skip 3 --quiet --json '$RUN/check-in.json' > '$RUN/check-in.log' 2>&1"
     sleep 1
     "$TOOL" feeds "${CLIPS[@]}" --count "$FEEDS" --to "$IN" --seconds "$WARM" --out "$OUT" --format "$FORMAT" \
         --csv "$RUN/feeds.csv" --json "$RUN/feeds.json" 2> "$RUN/feeds.log" > /dev/null || die "the feeds did not run: $(tail -3 "$RUN/feeds.log")"
