@@ -25,19 +25,22 @@ fn now_ms() -> u64 {
 const HAND_WAIT: Duration = Duration::from_secs(5);
 
 impl Direct {
-    /// The show said what its vitals judged.
+    /// The show said what its vitals judged. The first word from a process
+    /// that came back is what ends the alarm its going raised: until it has
+    /// looked at its programme, nobody knows the programme is back.
     pub fn take_show_health(&self, st: &Station, id: &str, health: Health) {
-        self.seen.lock().entry(id.to_string()).or_default().show_health = Some(health);
+        {
+            let mut seen = self.seen.lock();
+            let s = seen.entry(id.to_string()).or_default();
+            s.show_health = Some(health);
+            s.lost_ms = None;
+        }
         self.announce_health(st, id);
     }
 
-    /// The show linked: whatever it said before, and the link it lost, are
-    /// past.
+    /// The show linked: whatever the process before it said is past.
     pub fn linked(&self, id: &str) {
-        let mut seen = self.seen.lock();
-        let s = seen.entry(id.to_string()).or_default();
-        s.show_health = None;
-        s.lost_ms = None;
+        self.seen.lock().entry(id.to_string()).or_default().show_health = None;
     }
 
     /// Its link closed or its process failed. Kept from the first time, so
