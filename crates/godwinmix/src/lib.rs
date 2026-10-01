@@ -26,6 +26,7 @@ pub mod nodes;
 pub mod mcp_http;
 pub mod observe;
 pub mod station;
+pub mod tls;
 pub mod ui;
 
 use anyhow::{Context, Result};
@@ -1063,10 +1064,16 @@ pub async fn run() -> Result<()> {
             "log": godwinmix_core::observe::session::session().path(),
         })
     });
+    // HTTPS on the control port, made or loaded once here. A show under a
+    // station answers only on loopback through the station, so it has none.
+    let tls = match linked.is_none() {
+        true => tls::start(&cfg_for_control, &bind, &config_path, &handle),
+        false => None,
+    };
     let server = tokio::spawn(async move {
         let served = match linked {
             Some((_link, listener)) => control::serve_on(listener, state).await,
-            None => control::serve(&bind, state).await,
+            None => control::serve(&bind, state, tls).await,
         };
         if let Err(e) = served {
             error!(?e, "control server stopped");

@@ -33,7 +33,7 @@ mod events;
 mod handover;
 pub(crate) mod keys;
 mod live;
-mod net;
+pub(crate) mod net;
 mod ports;
 pub mod project;
 mod reveal;

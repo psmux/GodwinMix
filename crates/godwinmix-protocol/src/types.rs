@@ -503,6 +503,30 @@ pub struct CoreInfo {
     /// between a Restart button and a sentence.
     #[serde(default)]
     pub restart: RestartInfo,
+    /// HTTPS on the control port, when it is on. Absent when `[control.tls]`
+    /// is off or the certificate could not be loaded.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tls: Option<TlsInfo>,
+}
+
+/// `core.info.tls`: what the control port answers HTTPS with.
+///
+/// Enough for a page to say "open this address, accept the certificate
+/// warning once, and check the fingerprint is this one".
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct TlsInfo {
+    /// Where the certificate came from: `self_signed` (made by this mixer) or
+    /// `files` (the operator's own, from `[control.tls] cert` and `key`).
+    pub source: String,
+    /// SHA-256 of the certificate, upper case hex in colon separated pairs,
+    /// the way a browser's certificate viewer shows it.
+    pub fingerprint: String,
+    /// The host names and addresses a self signed certificate was made for.
+    /// Empty for an operator's own certificate.
+    #[serde(default)]
+    pub names: Vec<String>,
+    /// `https://` addresses this mixer can be opened at, the LAN one first.
+    pub urls: Vec<String>,
 }
 
 /// How a core that exits gets started again.

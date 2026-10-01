@@ -2106,6 +2106,17 @@
           "description": "True when the core was started with `--supervised` (or\n`GODWINMIX_SUPERVISED=1`): a service manager, a container runtime or\nthe desktop app starts it again after it exits.",
           "type": "boolean"
         },
+        "tls": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TlsInfo"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "HTTPS on the control port, when it is on. Absent when `[control.tls]`\nis off or the certificate could not be loaded."
+        },
         "token": {
           "anyOf": [
             {
@@ -9326,6 +9337,40 @@
           ]
         }
       },
+      "type": "object"
+    },
+    "TlsInfo": {
+      "description": "`core.info.tls`: what the control port answers HTTPS with.\n\nEnough for a page to say \"open this address, accept the certificate\nwarning once, and check the fingerprint is this one\".",
+      "properties": {
+        "fingerprint": {
+          "description": "SHA-256 of the certificate, upper case hex in colon separated pairs,\nthe way a browser's certificate viewer shows it.",
+          "type": "string"
+        },
+        "names": {
+          "default": [],
+          "description": "The host names and addresses a self signed certificate was made for.\nEmpty for an operator's own certificate.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "source": {
+          "description": "Where the certificate came from: `self_signed` (made by this mixer) or\n`files` (the operator's own, from `[control.tls] cert` and `key`).",
+          "type": "string"
+        },
+        "urls": {
+          "description": "`https://` addresses this mixer can be opened at, the LAN one first.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "source",
+        "fingerprint",
+        "urls"
+      ],
       "type": "object"
     },
     "TokenInfo": {
