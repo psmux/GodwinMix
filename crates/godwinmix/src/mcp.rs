@@ -530,15 +530,21 @@ fn refusal(status: StatusCode, text: &str) -> String {
     }
 }
 
+/// Past this many bytes an answer is sent compact. Indenting `show_stats`
+/// for 200 shows roughly doubles what the model is charged to read, and
+/// nobody reads an answer that size by eye.
+const PRETTY_UP_TO: usize = 2_048;
+
 /// An empty string is a poor thing to hand a language model, so it becomes a
-/// small JSON object; a JSON body is reformatted so it reads well; anything
-/// else passes through.
+/// small JSON object; a small JSON body is reformatted so it reads well, and
+/// a large one is sent compact; anything else passes through.
 fn render_body(text: &str) -> String {
     let trimmed = text.trim();
     if trimmed.is_empty() {
         return "{\"ok\": true}".to_string();
     }
     match serde_json::from_str::<Value>(trimmed) {
+        Ok(v) if trimmed.len() > PRETTY_UP_TO => v.to_string(),
         Ok(v) => serde_json::to_string_pretty(&v).unwrap_or_else(|_| trimmed.to_string()),
         Err(_) => trimmed.to_string(),
     }
@@ -951,5 +957,8 @@ input = "input.json"
         assert_eq!(render_body(""), "{\"ok\": true}");
         assert_eq!(render_body("{\"a\":1}"), "{\n  \"a\": 1\n}");
         assert_eq!(render_body("not json"), "not json");
+        // A large answer is not indented: the model pays for every space.
+        let big = serde_json::to_string(&json!({ "shows": vec![json!({"id": "x"}); 400] })).unwrap();
+        assert_eq!(render_body(&big), big);
     }
 }
