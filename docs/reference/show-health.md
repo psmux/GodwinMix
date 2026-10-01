@@ -38,7 +38,7 @@ never for a number alone. The numbers themselves are read with `show.stats`.
 | Kind | Raised when | Who measures it |
 |---|---|---|
 | `no-input` | nothing is publishing the show's input | direct host |
-| `stall` | the input is up but no packet came for `stall_secs`. Hides black, freeze and silence while it holds | direct host |
+| `stall` | the input is up but no packet came for `stall_secs`. Hides black, freeze and silence while it holds. For a show that composites, also: its process died or lost its link to the station | direct host; the station for a show process that went |
 | `black` | at least `black_ratio` of the picture's pixels have a luma at or under `black_luma`, for `black_secs`. Hides freeze | both |
 | `freeze` | the mean luma difference between two looks stays under `freeze_diff` for `freeze_secs` | both |
 | `silence` | the sound's peak stays under `silence_db` for `silence_secs` | both |
@@ -85,6 +85,17 @@ the station calls with the settings it keeps for the show:
 looks. The same fields can start in the show's config as `[vitals]`
 (`docs/reference/configuration.md`).
 
+A person sets them from the wall with `show.set {id, alarms: {enabled,
+black_ms, freeze_ms, silence_ms, silence_dbfs}}` (`docs/reference/shows.md`).
+The station keeps that object with the show and calls `vitals.set` with it
+each time the show's process says hello on the link, so a show started again
+gets the same settings, and again whenever `show.set` changes them while it
+runs. The station translates on the way: `enabled` becomes `alarms` (off when
+left out), each `*_ms` becomes the matching `*_secs`, and `silence_dbfs`
+becomes `silence_db`. A field the wall never set is left out, so the vitals'
+default holds for it. A show with no `alarms` set is not called at all and
+keeps its own `[vitals]`.
+
 ## How a direct show is measured
 
 The vitals read the show's input from the hub like any other reader, and
@@ -128,8 +139,22 @@ own queue.
   freeze are judged only while the mosaic is up anyway.
 * Outputs come from the status once a second: `failed` and `shed`.
 
-The show sends `event/health {health}` about itself; the station knows which
-show it came from and sends it on as `event/show.health {id, health}`.
+The show sends `event/health {health}` to its own clients, and the same
+health to its station on the link (`show.health {health}`, a line beside
+`show.on_air` and `show.load`), once when it links and then whenever the
+state or the set of alarm kinds changes. The station keeps the last one per
+show and adds the alarms of the show's input when it has one (the direct host
+reads that input, so `no-input`, `stall`, `cc-errors` and `loss` come from
+there). It sends the result on as `event/show.health {id, health}` and serves
+it in `show.list` and `show.stats`.
+
+What the show said stops counting the moment its link closes. A show whose
+process died, was killed or lost its link reads as `alarm` with one `stall`
+alarm, `since_ms` the moment the link closed, until a new process has linked
+and sent the first health it judged, about a second after it starts. A show
+the station gave up on (`failed`) reads the same way. A show a person
+stopped reads `off`, and so does one that was started on purpose and has not
+linked yet.
 
 ## Thumbnails
 

@@ -14,6 +14,7 @@ struct Book {
     hellos: Mutex<Vec<String>>,
     gone: Mutex<Vec<String>>,
     on_air: Mutex<Vec<(String, bool)>>,
+    health: Mutex<Vec<(String, godwinmix_protocol::health::Health)>>,
 }
 
 struct TestHost {
@@ -30,6 +31,9 @@ impl Host for TestHost {
         self.book.on_air.lock().push((show.into(), on));
     }
     fn load(&self, _show: &str, _millicores: u32) {}
+    fn health(&self, show: &str, health: godwinmix_protocol::health::Health) {
+        self.book.health.lock().push((show.into(), health));
+    }
     fn gone(&self, show: &str, _pid: u32) {
         self.book.gone.lock().push(show.into());
     }
@@ -76,6 +80,14 @@ async fn two_shows_ask_one_governor_and_a_show_that_goes_gives_its_share_back() 
 
         a.on_air(true);
         until("on air to arrive", || book.on_air.lock().len() == 1);
+        let black = godwinmix_protocol::health::Health::from_alarms(vec![godwinmix_protocol::health::Alarm {
+            kind: godwinmix_protocol::health::AlarmKind::Black,
+            since_ms: 7,
+            detail: "black".into(),
+        }]);
+        a.health(&black);
+        until("the health to arrive", || book.health.lock().len() == 1);
+        assert_eq!(book.health.lock()[0], ("a".to_string(), black));
 
         // Show a dies with its ticket still held: the link closes and the
         // station gives the share back without being told.

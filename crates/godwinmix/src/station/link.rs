@@ -11,6 +11,7 @@
 //!   governor.release  {ticket}                    a node stopped
 //!   show.on_air       {on}                        something started or stopped going out
 //!   show.load         {millicores}                its own CPU, each second it holds a ticket
+//!   show.health       {health}                    its programme's health, when its state or alarm kinds move
 //!   governor.shed     {steps}                     station to show: what to give up now
 //! ```
 //!

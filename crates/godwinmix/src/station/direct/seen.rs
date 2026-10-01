@@ -24,6 +24,13 @@ pub struct Seen {
     /// When each alarm that holds now was first seen, unix ms. Kept until
     /// the alarm clears, so its age reads true.
     pub alarm_since: BTreeMap<AlarmKind, u64>,
+    /// A show that composites: what it last said of its own programme over
+    /// the link. Dropped when the link closes, so a dead show never reads
+    /// as the last health it sent.
+    pub show_health: Option<Health>,
+    /// A show that composites: when its link closed or its process failed,
+    /// unix milliseconds, until it says hello again or is started afresh.
+    pub lost_ms: Option<u64>,
 }
 
 impl Seen {

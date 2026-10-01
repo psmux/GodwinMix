@@ -129,6 +129,7 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/wall/model.js", include_str!("../../../ui/panels/wall/model.js")),
     ("panels/wall/rows.js", include_str!("../../../ui/panels/wall/rows.js")),
     ("panels/wall/sheet.js", include_str!("../../../ui/panels/wall/sheet.js")),
+    ("panels/wall/task.js", include_str!("../../../ui/panels/wall/task.js")),
     ("panels/wall/thumbs.js", include_str!("../../../ui/panels/wall/thumbs.js")),
     ("panels/wall/top.js", include_str!("../../../ui/panels/wall/top.js")),
     ("panels/wall/view.js", include_str!("../../../ui/panels/wall/view.js")),
@@ -289,6 +290,7 @@ const DEV_ASSETS: &[(&str, &str)] = &[
     ("test/wall-act.js", include_str!("../../../ui/test/wall-act.js")),
     ("test/wall-dialogs.js", include_str!("../../../ui/test/wall-dialogs.js")),
     ("test/wall-help.js", include_str!("../../../ui/test/wall-help.js")),
+    ("test/wall-picture.js", include_str!("../../../ui/test/wall-picture.js")),
     ("test/wall-preview.js", include_str!("../../../ui/test/wall-preview.js")),
     ("test/wall-stub.js", include_str!("../../../ui/test/wall-stub.js")),
     ("test/wall.html", include_str!("../../../ui/test/wall.html")),
@@ -319,13 +321,13 @@ struct Dirs {
 static DIRS: OnceLock<Dirs> = OnceLock::new();
 
 /// Called once at startup with the `[control]` section. Safe to skip: the
-/// defaults are the embedded page and `~/.godwinmix/plugins`.
+/// defaults are the embedded page and the loader's plugins folder.
 pub fn configure(ui_dir: Option<&str>, plugins_dir: Option<&str>) {
     let _ = DIRS.set(Dirs {
         ui: ui_dir.filter(|s| !s.trim().is_empty()).map(PathBuf::from),
         plugins: plugins_dir
             .filter(|s| !s.trim().is_empty())
-            .map(PathBuf::from)
+            .map(godwinmix_host::home::expand)
             .unwrap_or_else(default_plugins_dir),
     });
 }
@@ -936,6 +938,7 @@ mod tests {
             ("panels/routing/model.js", "View > Routing"),
             ("panels/wall/view.js", "View > Monitoring wall"),
             ("panels/wall/data.js", "View > Monitoring wall"),
+            ("panels/wall/task.js", "View > Monitoring wall"),
             ("panels/wall/rows.js", "View > Monitoring wall"),
             ("panels/wall/virtual.js", "View > Monitoring wall"),
             ("panels/wall/bulk.js", "Add shows, or File > New shows"),

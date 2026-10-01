@@ -3,6 +3,8 @@
 // others; governor.status every few seconds for the header. Nothing runs
 // while the tab is hidden, and nothing at all once the wall closes.
 
+import { setShow } from "./task.js";
+
 const STATS_MS = 1000;
 const GOVERNOR_MS = 3000;
 const HISTORY = 40;
@@ -122,20 +124,8 @@ export class WallData {
     return this.shows.find((s) => s.id === id);
   }
 
-  /** show.set, with the row changed at once and put back if refused. */
-  async set(id, patch) {
-    const show = this.find(id);
-    const before = show && { ...show };
-    if (show) Object.assign(show, patch);
-    this.changed();
-    try {
-      const got = await this.client.call("show.set", { id, ...patch });
-      if (show && got && got.id === id) Object.assign(show, got);
-      return got;
-    } catch (e) {
-      if (show) Object.assign(show, before);
-      this.changed();
-      throw e;
-    }
+  /** show.set, with the row changed at once and put back if refused. See task.js. */
+  set(id, patch, started) {
+    return setShow(this, id, patch, started);
   }
 }

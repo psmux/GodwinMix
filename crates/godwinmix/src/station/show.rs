@@ -100,5 +100,9 @@ pub fn link(bound: SocketAddr, render: &godwinmix_core::render::Station, quit: A
     if render.on_air() {
         link.on_air(true);
     }
+    // The vitals judge once a second; what moved goes to the station, which
+    // sends it on to every client as `event/show.health`.
+    let told = link.clone();
+    godwinmix_core::vitals::process().watch(move |health| told.health(health));
     Ok(link)
 }

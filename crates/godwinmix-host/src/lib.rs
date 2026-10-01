@@ -34,6 +34,7 @@
 pub mod budget;
 pub mod channel;
 pub mod handshake;
+pub mod home;
 pub mod launch;
 pub mod lifecycle;
 pub mod marketplace;

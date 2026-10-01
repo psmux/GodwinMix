@@ -35,10 +35,7 @@ pub struct Saved {
 
 /// Where a saved preset goes when nothing says otherwise.
 pub fn default_dir(name: &str) -> PathBuf {
-    match super::manifest::home_dir() {
-        Some(home) => home.join(".godwinmix").join("presets").join(name),
-        None => PathBuf::from("presets").join(name),
-    }
+    godwinmix_host::home::presets_dir().join(name)
 }
 
 /// Write a preset directory from a working configuration.

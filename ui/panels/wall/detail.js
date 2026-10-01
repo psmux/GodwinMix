@@ -8,6 +8,7 @@ import { sheet } from "./sheet.js";
 import { modal } from "../../shell/modal.js";
 import { errorToast, toast } from "../../shell/toast.js";
 import { outputsSection } from "./detail-outputs.js";
+import { followTask } from "./task.js";
 import { ALARMS, age, format, healthOf, kbps, mixed, transport } from "./model.js";
 
 const MIX_ON = "Mixed: this show runs as a mixer of its own, with scenes, transitions and one programme encode that every output takes.";
@@ -22,9 +23,9 @@ export function showDetail(client, show, opts = {}) {
   sheet("dialogs");
   let current = show;
   let stats = (opts.data && opts.data.stats.get(show.id)) || null;
-  const send = async (patch, what, said) => {
+  const send = async (patch, what, said, started) => {
     try {
-      const got = opts.data ? await opts.data.set(current.id, patch) : await client.call("show.set", { id: current.id, ...patch });
+      const got = opts.data ? await opts.data.set(current.id, patch, started) : await followTask(client, await client.call("show.set", { id: current.id, ...patch }));
       if (got && got.id) current = { ...current, ...got };
       if (said) toast({ text: said });
       return true;
@@ -70,9 +71,14 @@ function mixing(show, send) {
   const sw = el("button.wl-switch.big", { type: "button", role: "switch", "aria-checked": String(mixed(show)), "aria-label": "Mixing" }, [el("span.wl-knob"), el("span.wl-swword", { text: mixed(show) ? "Mixed" : "Direct" })]);
   const said = el("p.wl-sub.wl-wrap", { text: mixed(show) ? MIX_ON : MIX_OFF });
   sw.onclick = async () => {
+    if (sw.getAttribute("aria-busy") === "true") return;
     const on = sw.getAttribute("aria-checked") !== "true";
+    sw.setAttribute("aria-busy", "true");
+    sw.lastChild.textContent = "Switching";
+    said.textContent = `Moving the outputs over to ${on ? "the mixed show" : "the direct host"}. This takes up to half a minute.`;
     const ok = await send({ compositing: on }, `${show.name} stays ${on ? "direct" : "mixed"}`, on ? `${show.name} is mixed now.` : `${show.name} is direct now.`);
     const now = ok ? on : !on;
+    sw.setAttribute("aria-busy", "false");
     sw.setAttribute("aria-checked", String(now));
     sw.lastChild.textContent = now ? "Mixed" : "Direct";
     said.textContent = now ? MIX_ON : MIX_OFF;

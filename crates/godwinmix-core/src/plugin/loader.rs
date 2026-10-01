@@ -38,18 +38,10 @@ use std::sync::OnceLock;
 use tracing::{info, warn};
 
 /// Where plugins live when nothing says otherwise.
+/// `GODWINMIX_PLUGINS_DIR`, else `plugins` under `GODWINMIX_HOME`, else
+/// `~/.godwinmix/plugins`: see `godwinmix_host::home`.
 pub fn default_dir() -> PathBuf {
-    if let Ok(explicit) = std::env::var("GODWINMIX_PLUGINS_DIR") {
-        return PathBuf::from(explicit);
-    }
-    home().join(".godwinmix").join("plugins")
-}
-
-fn home() -> PathBuf {
-    std::env::var_os("HOME")
-        .or_else(|| std::env::var_os("USERPROFILE"))
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("."))
+    godwinmix_host::home::plugins_dir()
 }
 
 /// One installed plugin, with everything it registered.
