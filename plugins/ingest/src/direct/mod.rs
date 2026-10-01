@@ -115,3 +115,6 @@ pub const REOPEN_MAX: Duration = Duration::from_secs(10);
 
 // The inputs (`input/`, the "directin" work) are declared here when they land:
 // pub mod input;
+
+mod decode;
+pub mod tap;
