@@ -9,6 +9,7 @@ mod isolation;
 mod project;
 mod support;
 mod switch;
+mod wall;
 
 use serde_json::json;
 use std::time::{Duration, Instant};

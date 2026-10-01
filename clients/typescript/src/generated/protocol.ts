@@ -114,14 +114,28 @@ export interface AgentStateRequest {
   response_format?: ResponseFormat;
 }
 
+/** One condition that holds now. */
 export interface Alarm {
-  detail?: string;
+  detail: string;
   kind: AlarmKind;
   since_ms: number;
 }
 
 /** What an alarm is about. */
 export type AlarmKind = "no-input" | "stall" | "black" | "freeze" | "silence" | "cc-errors" | "loss" | "output-failed" | "governor-refused" | "shed";
+
+/**
+ * A show's alarms, as a person sets them from the page. Left out fields
+ * keep the measuring side's defaults; a duration of 0 switches that check
+ * off.
+ */
+export interface AlarmSettings {
+  black_ms?: number | null;
+  enabled?: boolean | null;
+  freeze_ms?: number | null;
+  silence_dbfs?: number | null;
+  silence_ms?: number | null;
+}
 
 /** The nine alignment keywords, used to place content inside its frame. */
 export type Align = "top-left" | "top-center" | "top-right" | "center-left" | "center" | "center-right" | "bottom-left" | "bottom-center" | "bottom-right";
@@ -856,6 +870,7 @@ export interface GovernorStatus {
   devices: DeviceUse[];
   egress_kbps: number;
   fingerprint?: string | null;
+  ingress_kbps?: number;
   shed: ShedNote[];
 }
 
@@ -907,12 +922,13 @@ export interface HeaderChange {
   before: Header;
 }
 
+/** A show's health. */
 export interface Health {
-  alarms?: Alarm[];
+  alarms: Alarm[];
   state: HealthState;
 }
 
-/** How a show is, in one word. */
+/** The one word a monitoring wall colours a row by. */
 export type HealthState = "ok" | "warning" | "alarm" | "off";
 
 /** `program.history`. */
@@ -1940,6 +1956,7 @@ export interface ShedNote {
 
 /** One show, as `show.list` and `event/show.changed` carry it. */
 export interface Show {
+  alarms?: AlarmSettings | null;
   compositing?: boolean;
   cpu_millicores: number;
   error?: string | null;
@@ -2089,6 +2106,7 @@ export interface ShowRenameRequest {
 
 /** `show.set`. Names only what moves. */
 export interface ShowSetRequest {
+  alarms?: AlarmSettings | null;
   compositing?: boolean | null;
   id: string;
   input?: InputSpec | null;
@@ -2097,6 +2115,7 @@ export interface ShowSetRequest {
 
 /** `show.set`'s answer: the show, and what a switch of compositing did. */
 export interface ShowSetResult {
+  alarms?: AlarmSettings | null;
   compositing?: boolean;
   cpu_millicores: number;
   error?: string | null;

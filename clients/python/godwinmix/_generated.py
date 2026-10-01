@@ -141,11 +141,24 @@ class AgentStateRequest(TypedDict, total=False):
     response_format: ResponseFormat
 
 class Alarm(TypedDict, total=False):
+    """One condition that holds now."""
+
     detail: str
-    # What a person reads.
+    # One sentence for a person: what was measured, and against what.
     kind: AlarmKind
     since_ms: int
-    # When it began, in unix milliseconds.
+    # Unix milliseconds when the condition began. For black, freeze and silence that is when the picture or sound first measured so, not when the alarm's duration ran out.
+
+class AlarmSettings(TypedDict, total=False):
+    """A show's alarms, as a person sets them from the page. Left out fields keep the measuring side's defaults; a duration of 0 switches that check off."""
+
+    black_ms: Optional[int]
+    enabled: Optional[bool]
+    # Whether black, freeze and silence are watched at all. Left out: on for a show without compositing, off for one that composites.
+    freeze_ms: Optional[int]
+    silence_dbfs: Optional[float]
+    # The peak level under which sound counts as quiet.
+    silence_ms: Optional[int]
 
 class ApplyGraphicRequest(TypedDict, total=False):
     """`scene.apply_graphic`."""
@@ -965,6 +978,8 @@ class GovernorStatus(TypedDict, total=False):
     egress_kbps: int
     fingerprint: Optional[str]
     # The key the calibration is stored under.
+    ingress_kbps: int
+    # What arrives: every channel stream and every direct show's input, as last counted. Zero on a core with no station.
     shed: List[ShedNote]
 
 class GraphicListing(TypedDict, total=False):
@@ -1009,7 +1024,10 @@ class HeaderChange(TypedDict, total=False):
     before: Header
 
 class Health(TypedDict, total=False):
+    """A show's health."""
+
     alarms: List[Alarm]
+    # Every alarm that holds now, oldest first.
     state: HealthState
 
 class HistoryRequest(TypedDict, total=False):
@@ -2140,6 +2158,8 @@ class ShedNote(TypedDict, total=False):
 class Show(TypedDict, total=False):
     """One show, as `show.list` and `event/show.changed` carry it."""
 
+    alarms: Union[AlarmSettings, None]
+    # The alarms a person set for it, when they set any.
     compositing: bool
     # true: scenes, transitions and a programme encode, in a process of its own. false: one input straight to its outputs, in the shared direct host, with no compositor.
     cpu_millicores: int
@@ -2308,6 +2328,8 @@ class ShowRenameRequest(TypedDict, total=False):
 class ShowSetRequest(TypedDict, total=False):
     """`show.set`. Names only what moves."""
 
+    alarms: Union[AlarmSettings, None]
+    # Alarm settings; the fields named move, the rest stay.
     compositing: Optional[bool]
     # true starts a show process whose one source is the input and moves the outputs to it; false goes back to a show without compositing, when it has one source and no scenes in use.
     id: str
@@ -2317,6 +2339,8 @@ class ShowSetRequest(TypedDict, total=False):
 class ShowSetResult(TypedDict, total=False):
     """`show.set`'s answer: the show, and what a switch of compositing did."""
 
+    alarms: Union[AlarmSettings, None]
+    # The alarms a person set for it, when they set any.
     compositing: bool
     # true: scenes, transitions and a programme encode, in a process of its own. false: one input straight to its outputs, in the shared direct host, with no compositor.
     cpu_millicores: int
@@ -2802,8 +2826,8 @@ Fit = Literal['none', 'contain', 'cover', 'stretch', 'fit-width', 'fit-height', 
 # Content on the wire. The same four shapes as the tree, except that a group names no children: they are records whose parent is the group.
 FlatContent = Dict[str, Any]
 
-# How a show is, in one word.
-HealthState = Union[Literal['ok', 'warning', 'alarm'], Literal['off']]
+# The one word a monitoring wall colours a row by.
+HealthState = Literal['ok', 'warning', 'alarm', 'off']
 
 # A UUID in the hyphenated form. Minted ids are version 7 (time ordered); ids derived from a layout are version 8.
 Id = str
@@ -5087,6 +5111,7 @@ class GeneratedMethods:
         self,
         id: str,
         *,
+        alarms: Optional[Union[AlarmSettings, None]] = None,
         compositing: Optional[bool] = None,
         input: Optional[Union[InputSpec, None]] = None,
         name: Optional[str] = None,
@@ -5094,6 +5119,8 @@ class GeneratedMethods:
         """Change a show's name, its input, or whether it composites. Turning compositing on starts a show process whose one source is the input and moves the outputs to it; turning it off hands them back to the direct host, when the show has one source and no scenes in use. The answer says how long the outputs were off."""
         params: Dict[str, Any] = {}
         params["id"] = id
+        if alarms is not None:
+            params["alarms"] = alarms
         if compositing is not None:
             params["compositing"] = compositing
         if input is not None:
