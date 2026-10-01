@@ -79,13 +79,17 @@ impl Show {
         }
         let publication = Arc::new(Mutex::new(publication.ok()));
         let stop = StopSignal::default();
-        match input::open(&row.input, ctx) {
+        let opened = match &row.refused {
+            Some(why) => Err(why.clone()),
+            None => input::open(&row.input, ctx).map_err(|e| e.message),
+        };
+        match opened {
             Ok(input) => {
                 let sink = Box::new(ToHub { publication: publication.clone(), seen: seen.clone() });
                 let halt = stop.clone();
                 let _ = std::thread::Builder::new().name(format!("gmx-in-{}", row.id)).spawn(move || input.run(sink, halt));
             }
-            Err(e) => lock(&seen).refused = Some(e.message),
+            Err(why) => lock(&seen).refused = Some(why),
         }
         let outputs = row.outputs.iter().map(|w| start_output(w, &row, hub, renditions)).collect();
         Show { row, seen, outputs, publication, stop }
