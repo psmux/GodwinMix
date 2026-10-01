@@ -55,6 +55,7 @@ const ASSETS: &[(&str, &str)] = &[
     ("join/form.js", include_str!("../../../ui/join/form.js")),
     ("join/devices.js", include_str!("../../../ui/join/devices.js")),
     ("join/session.js", include_str!("../../../ui/join/session.js")),
+    ("join/tracks.js", include_str!("../../../ui/join/tracks.js")),
     ("join/whip.js", include_str!("../../../ui/join/whip.js")),
     ("join/meter.js", include_str!("../../../ui/join/meter.js")),
     ("join/stats.js", include_str!("../../../ui/join/stats.js")),
@@ -310,6 +311,10 @@ const DEV_ASSETS: &[(&str, &str)] = &[
     ("test/wall-stub.js", include_str!("../../../ui/test/wall-stub.js")),
     ("test/wall.html", include_str!("../../../ui/test/wall.html")),
     ("test/wall.js", include_str!("../../../ui/test/wall.js")),
+    // This browser's camera: the publisher's parts and the browser channel,
+    // against stubs. No camera and no socket.
+    ("test/browser-devices.js", include_str!("../../../ui/test/browser-devices.js")),
+    ("test/browser-channel.js", include_str!("../../../ui/test/browser-channel.js")),
     // The designer kits' behaviour, as the reference implementation answered
     // it. The TypeScript and Python suites read the same file from the
     // repository; the browser reads it from here, because the page has no file

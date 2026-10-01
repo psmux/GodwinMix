@@ -80,3 +80,16 @@ export function paintMutes(r, tracks) {
   r.cameraMute.setAttribute("aria-pressed", v && !v.enabled ? "true" : "false");
   r.micMute.setAttribute("aria-pressed", a && !a.enabled ? "true" : "false");
 }
+
+/** Until the mixer serves https itself, the reverse proxy page is the way. */
+const HTTPS_HELP = "https://github.com/psmux/GodwinMix/blob/main/docs/how-to/reverse-proxy.md";
+
+/** A page that cannot have a camera: the reason, and every control off. */
+export function blocked(r, text) {
+  r.error.textContent = text;
+  if (window.isSecureContext === false) {
+    r.error.append(" ", el("a", { href: HTTPS_HELP, target: "_blank", rel: "noopener", text: "How to put the mixer behind https." }));
+  }
+  for (const b of [r.go, r.cameraMute, r.micMute, r.camera, r.mic, r.processing]) b.disabled = true;
+  return { state: () => "blocked", active: () => false, stop() {}, setVisible() {}, destroy: () => r.root.remove() };
+}
