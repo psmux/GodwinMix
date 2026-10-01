@@ -60,7 +60,12 @@ measure and report the gap.
         Validated whole first; with dry_run answers what it would do and whether the
         governor would admit every rendition. Applies all that fit; never half a show.
     show.set {id, name?, compositing?, input?}
-    show.output.add {show, ...ShowOutput} / show.output.set / show.output.remove      for direct shows
+    show.output.add {id, output?, ...ShowOutput} / show.output.set {id, output, ...}
+    show.output.remove {id, output}                                                   for direct shows
+        `id` is the show and `output` the output's own id, as channel.destination.* name
+        the channel and the destination, so the REST rule puts them at
+        /api/v1/shows/{id}/output/... like every other sub resource. `show` is taken
+        as another name for `id`.
     show.remove_many {ids}
     show.stats {ids?, fields?} -> {shows: [{id, health, input: InputStats, outputs: [OutputStats]}]}
         One read for many shows, cheap enough to call every second for 200.
@@ -114,6 +119,25 @@ show.add_many with dry_run, read the cost, apply, watch show.stats.
   input, program, outputs), preview with the dry run, apply.
 * The show tabs from wave 3 stay for switching into a mixed show; the wall
   is where many shows are watched.
+
+What the wall reads that the shapes above do not yet name. The wall is
+built against these; whoever lands the method moves this text up into its
+section, or changes the shape here and the wall follows.
+
+* A show's picture: `GET /api/v1/shows/{id}/thumbnail.jpg?width=160`, with
+  the token as `/api/v1/snapshot` takes it. A 404 or 409 while there is no
+  picture; the wall draws a placeholder. Fetched only for rows on screen,
+  every two seconds, only while the wall is open and the tab visible.
+* Totals for the header: `governor.status` answers `ingress_kbps` beside
+  its `egress_kbps`. Without it the wall sums the rows it has read and says
+  so.
+* Alarm thresholds: `show.set {id, alarms: {enabled, black_ms, freeze_ms,
+  silence_ms, silence_dbfs}}`, and the same object on Show as `alarms`.
+* `show.list` answers `{shows: [Show], current}` as in wave 3, each Show
+  carrying `compositing`, `input`, `outputs` and `health` as above.
+  `show.stats {ids}` is asked once a second for the rows on screen only.
+* `event/show.changed {show}`, `event/show.removed {id}` and
+  `event/show.health {id, health}` keep the list current between reads.
 
 ## Performance to report
 
