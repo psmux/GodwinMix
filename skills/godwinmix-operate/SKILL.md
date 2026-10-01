@@ -1,6 +1,6 @@
 ---
 name: godwinmix-operate
-description: Run a live show on a GodwinMix mixer. Use when asked to switch cameras, put something on air, watch a stream for faults, start or stop an output, roll an ad break, or check what is live. Covers the agent surface: agent_state, take, revert, telemetry, snapshots and the safety rules that will refuse you.
+description: Run live shows on a GodwinMix mixer. Use when asked to switch cameras, put something on air, watch a stream for faults, start or stop an output, roll an ad break, check what is live, or add and watch many channels at once (a headend's channel list, one show per feed, copied or transcoded). Covers the agent surface: agent_state, take, revert, add_shows, show_stats, telemetry, snapshots and the safety rules that will refuse you.
 ---
 
 # Operating a GodwinMix mixer
@@ -26,6 +26,70 @@ frozen feed and sometimes a locked off shot.
 
 `agent_state {"response_format": "detailed"}` adds the audio peak per source
 and the last five takes. Ask for it when something is wrong, not every time.
+
+## Shows
+
+A machine runs shows. A show is one encoder: either a live mix, which is
+everything below this section, or a show with compositing off, which takes one
+input straight to its outputs and copies or transcodes it. `list_shows` says
+what there is. Tools that work inside one show (`take`, `agent_state`,
+`add_source` and the rest) take `show: "<id>"` and use the first show when it
+is left out.
+
+## Many shows: a headend
+
+"I have 200 channels from a headend, add them and run them" is four calls,
+whatever the number of channels.
+
+1. Read the list you were given. One show per feed: a name, an input address
+   (`udp://@239.1.1.1:5000`, `srt://`, `rtmp://`, `rtsp://`, an HLS URL,
+   `rist://`, `file://`, or `channel:<app>/<stream>`), the MPEG-TS `program`
+   when one feed carries several, and where each one goes.
+2. Price it without changing anything:
+
+   ```
+   add_shows {"dry_run": true, "shows": [
+     {"name": "BBC One", "compositing": false,
+      "input": {"uri": "udp://@239.1.1.1:5000", "program": 101},
+      "outputs": [{"uri": "srt://10.0.0.9:9001"}]},
+     ...]}
+   ```
+
+   Read `plan.fits`, `plan.cost` and `refused`. A refused entry carries its
+   `index`, `why` and `data`; fix that entry or leave it out. `fits: false`
+   means the re-encodes asked for are more than this machine has: ask for
+   fewer, or a cheaper preset.
+3. Send the same call with `"dry_run": false`. Everything that fits is added
+   whole; nothing is half made.
+4. Watch them all with one read:
+
+   ```
+   show_stats {}
+   ```
+
+   Each show has `health.state` (`ok`, `warning`, `alarm`, `off`) and its
+   alarms (`no-input`, `stall`, `black`, `freeze`, `silence`, `cc-errors`,
+   `loss`, `output-failed`, `governor-refused`, `shed`), the input's kbps,
+   fps, size and codecs, and each output's state and kbps. Pass `ids` to read
+   a few. Over `/rpc`, `event/show.health` tells you when a state or an alarm
+   changes, so you only read numbers when something moved.
+
+An output with no `rendition` copies the input's own bytes, which costs
+almost nothing; 200 copies fit on a small machine. An output with
+`rendition: {"preset": "<id>"}` (ids from `rendition_presets`) re-encodes and
+is priced against the governor. Copy unless you were asked for a format.
+
+Measured on a real station with `gmx mcp` over stdio, twenty UDP feeds:
+COST_LINE
+
+To change one output's format afterwards, `set_show_output` with the show,
+the output and a `rendition`; `null` goes back to copying. To give one show
+scenes, graphics and takes, `set_show {"id": "<id>", "compositing": true}`;
+its outputs keep sending across the switch. `false` takes it back, and is
+refused while the show holds more than one source or a scene.
+
+`remove_shows`, `start_show`, `stop_show`, `add_show_output` and
+`governor_status` are behind `search_tools`.
 
 ## Put something on air
 
