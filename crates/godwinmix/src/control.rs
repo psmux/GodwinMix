@@ -1564,6 +1564,7 @@ pub async fn serve_on(listener: tokio::net::TcpListener, state: AppState) -> Res
     let snapshots =
         Tracker::new(state.snapshot.clone(), state.multiview.clone(), state.mixer.clone());
     spawn_background(state.clone());
+    godwinmix_core::vitals::spawn(state.mixer.clone(), snapshots.clone());
     let observe = crate::observe::router(observe_state(&state));
     // Connect info so the snapshot rate limit can tell one client from
     // another. Nothing else uses it, and a request without it still works.
