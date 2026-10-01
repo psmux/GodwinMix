@@ -93,3 +93,8 @@ examples/*/target/
 # Third party scripts for the development pages, fetched by
 # dev/fetch-test-vendor.sh and never shipped.
 ui/test/vendor/
+
+# The station's list of shows and each show's own folder, written beside the
+# config it was started with. The running station's, not source.
+/shows.json
+/shows/
