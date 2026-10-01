@@ -120,10 +120,13 @@ impl Station {
         Some(show)
     }
 
-    /// `event/show.changed` for one show, to every client.
+    /// `event/show.changed` for one show, to every client, and
+    /// `event/show.health` when the change moved its health (a show process
+    /// that failed, or one that stopped).
     pub fn announce(&self, id: &str) {
         if let Some(show) = self.view(id) {
             self.events.emit(Event::ShowChanged { show: Box::new(show) });
         }
+        self.direct.announce_health(self, id);
     }
 }

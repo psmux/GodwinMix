@@ -55,6 +55,9 @@ impl Direct {
 
     /// Send `event/show.health` when the show's health moved.
     pub fn announce_health(&self, st: &Station, id: &str) {
+        if st.registry.lock().get(id).is_none() {
+            return;
+        }
         let now = self.health_of(st, id);
         let moved = {
             let mut seen = self.seen.lock();
