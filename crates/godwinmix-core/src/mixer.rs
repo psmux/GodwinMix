@@ -1026,6 +1026,8 @@ pub struct Mixer {
     local_previews: HashMap<String, (crate::preview::local::LocalPreview, u32)>,
     /// What the control plane holds to ask for the two above.
     preview: crate::preview::PreviewHandle,
+    /// The programme thumbnail branch, on the raw tee only while asked for.
+    thumb_branch: crate::preview::thumb::Branch,
     /// Where preview sockets live, from `persist_runtime_to`'s neighbour.
     runtime_dir: Option<std::path::PathBuf>,
     program_source: Option<SourceId>,
@@ -1658,6 +1660,17 @@ impl Mixer {
         });
         // --- end of the encoder lifecycle block -----------------------------
 
+        // One small picture a second for a monitoring wall, off the raw tee,
+        // asleep until somebody asks. See `preview/thumb.rs`.
+        let thumb_branch = crate::preview::thumb::Branch::build(
+            &program,
+            &vraw_tee,
+            download_bridge(&sel.graphics, "pgm-t")?,
+            (canvas.width, canvas.height),
+            &preview.thumb(),
+        )
+        .context("building the programme thumbnail branch")?;
+
         // Where the compositor has got to, so a transition can be written in
         // the picture's timeline rather than the clock's. Two relaxed atomic
         // stores per frame on a thread that is already carrying the programme,
@@ -1704,6 +1717,7 @@ impl Mixer {
             #[cfg(unix)]
             local_previews: HashMap::new(),
             preview,
+            thumb_branch,
             runtime_dir: None,
             program_source: None,
             ad: None,
@@ -4759,6 +4773,12 @@ impl Mixer {
             }
             P::CloseLocal { target } => self.close_local_preview(&target),
             P::Scene { cells } => self.set_preview_cells(cells),
+            P::Thumb(true) => {
+                if let Err(e) = self.thumb_branch.attach() {
+                    warn!(?e, "the programme thumbnail branch could not be attached");
+                }
+            }
+            P::Thumb(false) => self.thumb_branch.detach(),
         }
     }
 
@@ -4896,6 +4916,7 @@ impl Mixer {
         }
         self.drop_mosaic();
         self.detach_programme_return();
+        self.thumb_branch.detach();
         self.pool.teardown();
         self.audio_taps.clear();
         #[cfg(unix)]

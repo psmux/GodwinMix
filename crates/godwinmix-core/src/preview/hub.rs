@@ -13,6 +13,7 @@
 //! count reaches zero.
 
 use super::audio::{AudioRequest, Frame};
+use super::thumb::{ProgrammeThumb, Thumb};
 use super::{ClientGuard, StreamClients};
 use std::sync::Arc;
 use tokio::sync::{broadcast, oneshot};
@@ -35,6 +36,10 @@ pub enum PreviewDemand {
     /// subscribes with `ext.preview`; the mixer holds it whether or not a
     /// preview exists, so arming one before anybody is watching costs a `Vec`.
     Scene { cells: Vec<crate::multiview::preview::Cell> },
+    /// Put the programme thumbnail branch on the raw tee, or take it off.
+    /// Sent by [`super::thumb::ProgrammeThumb`] on the first ask after a
+    /// quiet spell and when asks stop.
+    Thumb(bool),
 }
 
 impl std::fmt::Debug for PreviewDemand {
@@ -47,6 +52,7 @@ impl std::fmt::Debug for PreviewDemand {
             Self::OpenLocal { target, .. } => write!(f, "OpenLocal({target})"),
             Self::CloseLocal { target } => write!(f, "CloseLocal({target})"),
             Self::Scene { cells } => write!(f, "Scene({} items)", cells.len()),
+            Self::Thumb(on) => write!(f, "Thumb({on})"),
         }
     }
 }
@@ -59,17 +65,35 @@ type DemandSink = Arc<dyn Fn(PreviewDemand) + Send + Sync>;
 pub struct PreviewHandle {
     clients: Arc<StreamClients>,
     demand: Option<DemandSink>,
+    thumb: Arc<ProgrammeThumb>,
 }
 
 impl PreviewHandle {
     pub fn new(clients: Arc<StreamClients>, demand: DemandSink) -> Self {
-        Self { clients, demand: Some(demand) }
+        Self { clients, demand: Some(demand), thumb: ProgrammeThumb::new() }
     }
 
     /// A handle attached to nothing: it counts clients and refuses to open
     /// anything. For tests and for a core with no mixer thread.
     pub fn detached() -> Self {
-        Self { clients: StreamClients::new(), demand: None }
+        Self { clients: StreamClients::new(), demand: None, thumb: ProgrammeThumb::new() }
+    }
+
+    /// What the programme thumbnail branch keeps its frames in. The mixer
+    /// hands it to the branch it builds; a test reads its counters.
+    pub fn thumb(&self) -> Arc<ProgrammeThumb> {
+        self.thumb.clone()
+    }
+
+    /// The programme as a small picture, `width` pixels across (16 to 320),
+    /// keeping pictures coming for the next ten seconds. `Ok(None)` while the
+    /// first frame is on its way. See `thumb.rs`.
+    pub async fn programme_thumbnail(&self, width: u32) -> Result<Option<Thumb>, String> {
+        let Some(sink) = self.demand.clone() else {
+            return Err("this core has no mixer, so there is no programme to take a picture of".into());
+        };
+        self.thumb.want(Arc::new(move |on| sink(PreviewDemand::Thumb(on))));
+        Ok(self.thumb.picture(width).await)
     }
 
     pub fn clients(&self) -> Arc<StreamClients> {

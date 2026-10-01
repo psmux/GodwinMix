@@ -12,8 +12,10 @@ use godwinmix_core::mixer::Command;
 use serde_json::{json, Value};
 
 pub(crate) mod missing;
+mod thumbnail;
 
 pub fn register(reg: &mut Registry<Call>) {
+    thumbnail::register(reg);
     reg.register(
         MethodDef::new(
             "program.get",
