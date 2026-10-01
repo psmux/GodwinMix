@@ -70,6 +70,22 @@ TOML has no null, so a field that does not apply is left out, never null.
 * `monitor.alarms`: run the black, freeze and silence checks (keyframes
   only for video, audio at a low rate). `monitor.pictures`: someone is
   looking, make thumbnails. Both off: demux only, decode nothing.
+  `monitor.thresholds`, present only when a person set any, is a partial
+  `godwinmix_protocol::health::Thresholds` (`black_secs`, `freeze_secs`,
+  `silence_secs`, `silence_db`); the rest keep their defaults. The station
+  sends `pictures = false` always: a `direct.thumbnail` call keeps pictures
+  on for a while by itself, which is the vitals' rule.
+
+## What the station calls
+
+`direct.thumbnail`, as a `tool.call` on the `discover` provide (the way
+`whip.offer` reaches the plugin), when a page asks for
+`GET /api/v1/shows/{id}/thumbnail.jpg`:
+
+    arguments = { show = "bbc-one", width = 160 }
+    answer    = { jpeg = "<base64>", width, height, at_ms }
+              | { pending = true }                 # no keyframe decoded yet
+              | { status = 404, why = "..." }      # the host does not run it
 
 ## What the host says back
 
