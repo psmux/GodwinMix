@@ -3633,6 +3633,18 @@
       ],
       "type": "object"
     },
+    "HealthEvent": {
+      "description": "`event/health`, from a show that composites, about itself. The station\nsends it on to clients as `event/show.health` with the show's id.",
+      "properties": {
+        "health": {
+          "$ref": "#/$defs/Health"
+        }
+      },
+      "required": [
+        "health"
+      ],
+      "type": "object"
+    },
     "HealthState": {
       "description": "The one word a monitoring wall colours a row by.",
       "oneOf": [
@@ -9584,6 +9596,86 @@
         }
       },
       "type": "object"
+    },
+    "VitalsConfig": {
+      "description": "`[vitals]`, and what `vitals.set` changes: the thresholds, and whether\nto keep a mosaic up for the picture alarms while nobody is looking.",
+      "properties": {
+        "alarms": {
+          "default": false,
+          "type": "boolean"
+        },
+        "black_luma": {
+          "default": 38,
+          "description": "An 8 bit luma at or under which a pixel counts as black. 38 is ten\npercent of the way from video black (16) to white (235), the figure\nffmpeg's blackdetect uses.",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "black_ratio": {
+          "default": 0.98,
+          "description": "The share of pixels that must be black for the picture to be.",
+          "format": "double",
+          "type": "number"
+        },
+        "black_secs": {
+          "default": 4.0,
+          "description": "Seconds a picture must stay black before `black` is raised. 0: off.",
+          "format": "double",
+          "type": "number"
+        },
+        "cc_errors": {
+          "default": 5,
+          "description": "Continuity errors within `window_secs` that raise `cc-errors`. 0: off.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "freeze_diff": {
+          "default": 0.002,
+          "description": "The mean luma difference between two samples, 0 to 1, under which the\npicture counts as unchanged.",
+          "format": "double",
+          "type": "number"
+        },
+        "freeze_secs": {
+          "default": 10.0,
+          "description": "Seconds a picture must stay unchanged before `freeze` is raised. 0: off.",
+          "format": "double",
+          "type": "number"
+        },
+        "loss": {
+          "default": 20,
+          "description": "Packets lost within `window_secs` that raise `loss`. 0: off.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "silence_db": {
+          "default": -60.0,
+          "description": "The peak level in dBFS under which the sound counts as quiet.",
+          "format": "double",
+          "type": "number"
+        },
+        "silence_secs": {
+          "default": 10.0,
+          "description": "Seconds the sound must stay quiet before `silence` is raised. 0: off.",
+          "format": "double",
+          "type": "number"
+        },
+        "stall_secs": {
+          "default": 3.0,
+          "description": "Seconds without a single packet of input before `stall` is raised.",
+          "format": "double",
+          "type": "number"
+        },
+        "window_secs": {
+          "default": 10.0,
+          "description": "The window the two counters are judged over.",
+          "format": "double",
+          "type": "number"
+        }
+      },
+      "type": "object"
     }
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -10320,6 +10412,17 @@
       },
       "since": "1",
       "summary": "A show's health changed state, or an alarm began or ended. Never sent for a number alone: read those with show.stats."
+    },
+    {
+      "ext": null,
+      "legacy": null,
+      "name": "event/health",
+      "pattern": "health",
+      "payload": {
+        "$ref": "#/$defs/HealthEvent"
+      },
+      "since": "1",
+      "summary": "This show's health changed: its state (ok, warning, alarm, off) or the kinds of its alarms, never a number alone. From a show that composites; the station sends it on to every client as show.health with the show's id. docs/reference/show-health.md says what each alarm watches."
     }
   ],
   "ext": [
@@ -14244,6 +14347,46 @@
       "scope": "operate",
       "since": "1",
       "summary": "Call one of a plugin's tools, in MCP's shape. The name is `<plugin>/<tool>`, or the bare tool name when only one plugin has it."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mutating": false,
+      "name": "vitals.get",
+      "params": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      },
+      "rest": {
+        "method": "GET",
+        "path": "/api/v1/vitals"
+      },
+      "result": {
+        "type": "object"
+      },
+      "scope": "read",
+      "since": "1",
+      "summary": "This show's health (its state and alarms, null in the first second) and the thresholds they are judged by."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mutating": true,
+      "name": "vitals.set",
+      "params": {
+        "$ref": "#/$defs/VitalsConfig"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/vitals/set"
+      },
+      "result": {
+        "type": "object"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "Change the alarm thresholds, or whether a mosaic is kept up for the black and freeze checks while nobody is looking. Fields left out keep their defaults; a duration of 0 switches that check off. Applies within a second."
     }
   ],
   "transports": [
