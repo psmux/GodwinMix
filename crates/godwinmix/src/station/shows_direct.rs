@@ -1,6 +1,5 @@
 //! Shows without compositing, and the wave 4 properties of every show:
-//! checking what a new show asks for, making it whole, its outputs, and
-//! `show.stats`.
+//! checking what a new show asks for, making it whole, and its outputs.
 
 use super::direct::{self, outputs};
 use super::registry::{Record, Registry};
@@ -105,6 +104,15 @@ pub fn make_direct(st: &Station, p: Prepared) -> Result<String, RpcError> {
     Ok(p.id)
 }
 
+/// `show.add` of one show without compositing: refused when the planner
+/// cannot serve one of its renditions, made otherwise.
+pub fn priced_direct(st: &Station, p: Prepared) -> Result<String, RpcError> {
+    if let Err(no) = st.direct.price(&p.outputs) {
+        return Err(RpcError::invalid_params(no.message.clone()).with("refusal", serde_json::to_value(&no).unwrap_or_default()));
+    }
+    make_direct(st, p)
+}
+
 /// The show a `show.output.*` call names, which must run without
 /// compositing.
 fn direct_show(st: &Station, id: &str) -> Result<Record, RpcError> {
@@ -135,33 +143,4 @@ pub fn edit_outputs(st: &Arc<Station>, id: &str, edit: impl FnOnce(&mut Vec<Stor
     st.announce(id);
     let show = st.view(id).ok_or_else(|| RpcError::internal(format!("show {id} went while it was being changed")))?;
     Ok(serde_json::to_value(show).unwrap_or_default())
-}
-
-/// `show.stats`: every show asked for, from what the station holds.
-pub fn stats(st: &Station, req: ShowStatsRequest) -> Result<Value, RpcError> {
-    let all = st.registry.lock().ids();
-    let ids = match req.ids {
-        Some(ids) => {
-            if let Some(missing) = ids.iter().find(|id| !all.contains(id)) {
-                return Err(RpcError::not_found("show", missing, &all));
-            }
-            ids
-        }
-        None => all,
-    };
-    let wants = |f: &str| req.fields.as_ref().is_none_or(|fs| fs.iter().any(|x| x == f));
-    let shows = ids
-        .iter()
-        .map(|id| {
-            let mut s = st.direct.stats_of(st, id);
-            if !wants("input") {
-                s.input = None;
-            }
-            if !wants("outputs") {
-                s.outputs.clear();
-            }
-            s
-        })
-        .collect();
-    Ok(serde_json::to_value(ShowStatsList { shows }).unwrap_or_default())
 }

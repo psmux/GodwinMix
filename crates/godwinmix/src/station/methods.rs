@@ -40,7 +40,7 @@ pub async fn call(st: &Arc<Station>, token: &Token, method: &str, params: Value)
         return Err(RpcError::scope(method, def.scope.as_str(), &token.scope_names()));
     }
     match method {
-        m if m.starts_with("show.") => super::shows_api::call(st, m, params).await,
+        m if m.starts_with("show.") => super::shows_call::call(st, m, params).await,
         m if m.starts_with("channel.") => super::channel_calls::call(st, token, m, params).await,
         "governor.status" => Ok(serde_json::to_value(status::governor_status(&st.render, &[])).unwrap_or_default()),
         "governor.calibrate" => calibrate(st, &params),

@@ -6,7 +6,7 @@ use super::{files, supervise};
 use godwinmix_protocol::error::RpcError;
 use godwinmix_protocol::shows::{Show, ShowAddRequest, ShowFrom, ShowRemoved, ShowRenameRequest};
 use godwinmix_protocol::types::Event;
-use serde_json::{json, Value};
+use serde_json::Value;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -41,10 +41,7 @@ fn shown(st: &Station, id: &str) -> Result<Value, RpcError> {
 pub async fn add(st: &Arc<Station>, req: ShowAddRequest) -> Result<Value, RpcError> {
     let prepared = super::shows_direct::prepare(&st.registry.lock(), &req, &[])?;
     if !prepared.compositing {
-        if let Err(no) = st.direct.price(&prepared.outputs) {
-            return Err(RpcError::invalid_params(no.message.clone()).with("refusal", serde_json::to_value(&no).unwrap_or_default()));
-        }
-        let id = super::shows_direct::make_direct(st, prepared)?;
+        let id = super::shows_direct::priced_direct(st, prepared)?;
         return shown(st, &id);
     }
     let name = named(&req.name)?;
@@ -149,27 +146,4 @@ pub async fn stop(st: &Arc<Station>, id: &str) -> Result<Value, RpcError> {
     st.direct.hand_over();
     st.announce(id);
     shown(st, id)
-}
-
-fn parse<T: serde::de::DeserializeOwned>(method: &str, params: Value) -> Result<T, RpcError> {
-    serde_json::from_value(params).map_err(|e| RpcError::invalid_params(format!("{method}: {e}")))
-}
-
-/// The station's answer to `show.*`, by name.
-pub async fn call(st: &Arc<Station>, method: &str, params: Value) -> Result<Value, RpcError> {
-    let id = || params.get("id").and_then(Value::as_str).map(str::to_string).ok_or_else(|| RpcError::invalid_params("name the show with id").with("field", "id"));
-    match method {
-        "show.list" => Ok(serde_json::to_value(st.list().await).unwrap_or_default()),
-        "show.add" => add(st, parse(method, params.clone())?).await,
-        "show.rename" => rename(st, parse(method, params.clone())?),
-        "show.remove" => remove(st, &id()?).await,
-        "show.start" => start(st, &id()?).await,
-        "show.stop" => stop(st, &id()?).await,
-        "show.set" => super::shows_set::set(st, parse(method, params)?).await,
-        "show.add_many" => super::shows_bulk::add_many(st, parse(method, params)?).await,
-        "show.remove_many" => super::shows_bulk::remove_many(st, parse(method, params)?).await,
-        "show.stats" => super::shows_direct::stats(st, parse(method, params)?),
-        m if m.starts_with("show.output.") => super::shows_set::output(st, m, params),
-        other => Err(RpcError::not_found("method", other, &[]).with("hint", json!("show.list, show.add, show.add_many, show.set, show.rename, show.remove, show.remove_many, show.start, show.stop, show.stats, show.output.add, show.output.set, show.output.remove"))),
-    }
 }
