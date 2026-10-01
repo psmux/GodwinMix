@@ -222,6 +222,12 @@ that passed and fits is made, whole, and the host is handed its table once.
 output that breaks a rule is refused whole, with `data.output_index` naming
 the output. A show that would take the machine past what it has free is
 refused with `data.alarm: "governor-refused"`, `data.need` and `data.have`.
+`have` is what the governor has free now: the CPU, memory and uplink, and the
+room on the machine's encoding device (the one with the most room when it has
+several), so a rendition the planner puts on a hardware encoder is judged
+against that device rather than refused for want of one. A station asked in
+its first second waits for its first reading of the machine's load, a second
+or so, rather than answer with the whole machine free.
 `fits` is true only when nothing was refused.
 
 ### `show.remove_many {ids}`

@@ -26,7 +26,12 @@ The shapes are in `crates/godwinmix-protocol/src/health.rs`.
 
 `since_ms` is unix milliseconds when the condition began, not when its
 duration ran out: a picture that went black at 12:00:00 with a four second
-threshold raises its alarm at 12:00:04 carrying 12:00:00. Alarms come oldest
+threshold raises its alarm at 12:00:04 carrying 12:00:00. It stays the same
+on every read and every event until the alarm clears; the station keeps the
+first start it saw for each kind, so an alarm it adds itself (`no-input` when
+nothing has arrived, `output-failed`, `governor-refused`) and a window alarm
+whose window slides (`cc-errors`, `loss`) both show their true age. An alarm
+that clears and comes back has a new start. Alarms come oldest
 first. `detail` is one sentence for a person, and its numbers move without an
 event being sent.
 
