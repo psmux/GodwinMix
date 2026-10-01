@@ -25,6 +25,7 @@ pub mod bridged;
 pub mod filter;
 pub mod output;
 pub mod process;
+mod repeats;
 pub mod service;
 #[cfg(unix)]
 pub mod shared;
