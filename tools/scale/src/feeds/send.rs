@@ -6,7 +6,7 @@
 use super::clip::{Clip, PER_DATAGRAM};
 use crate::ts::{self, pes, PACKET};
 use std::net::{SocketAddrV4, UdpSocket};
-use std::sync::atomic::{AtomicU64, Ordering::Relaxed};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering::Relaxed};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -21,6 +21,10 @@ pub struct Feed {
     pub start: usize,
     pub seed: u64,
 }
+
+/// Set by SIGINT or SIGTERM: every thread finishes its tick and stops, so the
+/// summary is still written.
+pub static STOP: AtomicBool = AtomicBool::new(false);
 
 #[derive(Default)]
 pub struct Totals {
@@ -131,7 +135,7 @@ pub fn run(feeds: Vec<Feed>, sock: UdpSocket, start: Instant, until: Instant, ti
     let settle = start + Duration::from_secs(1);
     loop {
         let now_at = Instant::now();
-        if now_at >= until {
+        if now_at >= until || STOP.load(Relaxed) {
             return;
         }
         let now = (now_at - start).as_nanos() as u64;

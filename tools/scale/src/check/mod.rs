@@ -21,7 +21,9 @@ continuity errors, PCR jumps and spacing, PCR jitter, keyframes and GOPs lost.
   --from ADDR        udp://127.0.0.1:30000 by default
   --count N          how many streams (200)
   --seconds S        how long to listen (60)
+  --port-step        multicast: the next port as well as the next group per stream
   --iface IP         the interface to join multicast on (127.0.0.1)
+  --threads N        receiving threads, each with its share of the sockets (4)
   --skip S           seconds at the start not counted, while outputs settle (0)
   --json FILE        write every stream and the total there as JSON
   --quiet            print the total only, not a line per stream
@@ -34,17 +36,28 @@ pub fn main(a: Args) -> Result<(), String> {
     let from = net::parse(a.str("from").unwrap_or("udp://127.0.0.1:30000"))?;
     let count = a.num("count", 200u32)?;
     let iface = a.str("iface").unwrap_or("127.0.0.1").parse().map_err(|_| "--iface takes an IPv4 address".to_string())?;
-    let socks = (0..count).map(|i| net::receiver(net::nth(from, i), iface, 4 << 20)).collect::<Result<Vec<_>, _>>()?;
+    let socks = (0..count).map(|i| net::receiver(net::nth(from, i, a.flag("port-step")), iface, 4 << 20)).collect::<Result<Vec<_>, _>>()?;
     let seconds = a.num("seconds", 60.0f64)?;
     let skip = Duration::from_secs_f64(a.num("skip", 0.0f64)?);
-    let streams = listen(&socks, Duration::from_secs_f64(seconds), skip);
-    let names: Vec<String> = (0..count).map(|i| net::nth(from, i).to_string()).collect();
-    let out = report::json(&names, &streams, seconds - skip.as_secs_f64());
+    let threads = a.num("threads", 4usize)?.clamp(1, socks.len().max(1));
+    let streams = listen_on(&socks, threads, Duration::from_secs_f64(seconds), skip);
+    let names: Vec<String> = (0..count).map(|i| net::nth(from, i, a.flag("port-step")).to_string()).collect();
+    let mut out = report::json(&names, &streams, seconds - skip.as_secs_f64());
+    out["total"]["checker_cpu_percent"] = serde_json::json!((crate::procs::own_cpu_seconds() / seconds * 1000.0).round() / 10.0);
     report::print(&out, a.flag("quiet"));
     if let Some(path) = a.str("json") {
         std::fs::write(path, format!("{out}\n")).map_err(|e| format!("could not write {path}: {e}"))?;
     }
     Ok(())
+}
+
+/// Splits the sockets over `threads` threads, each listening to its share.
+fn listen_on(socks: &[UdpSocket], threads: usize, length: Duration, skip: Duration) -> Vec<Stream> {
+    let per = socks.len().div_ceil(threads).max(1);
+    std::thread::scope(|s| {
+        let parts: Vec<_> = socks.chunks(per).map(|c| s.spawn(move || listen(c, length, skip))).collect();
+        parts.into_iter().flat_map(|h| h.join().unwrap_or_default()).collect()
+    })
 }
 
 /// Polls every socket until `length` is up, reading each dry when it wakes.
