@@ -5,8 +5,8 @@
 //! |---|---|---|
 //! | `udp://`, `rtp://` | `ts_in` | MPEG-TS, bare or in RTP, unicast or multicast, one program |
 //! | `srt://` | `ts_in` | SRT caller, or listener for `srt://@:port` |
-//! | `rist://` | `ts_in` | RIST Simple Profile, listening |
-//! | `rtsp://` | `pull` | a camera or an encoder, over TCP or UDP |
+//! | `rist://` | `rist` | RIST Simple Profile, listening |
+//! | `rtsp://` | `rtsp` | a camera or an encoder, over TCP or UDP |
 //! | `http(s)://` | `pull` | HLS or DASH |
 //! | `rtmp://` | `pull` | someone else's RTMP server, played |
 //! | `file://` | `pull` | a TS or MP4 file, looped at its own pace |
@@ -23,6 +23,8 @@ mod meter;
 mod outlet;
 mod pads;
 mod pull;
+mod rist;
+mod rtsp;
 mod runner;
 pub mod spec;
 pub mod stats;
@@ -54,8 +56,8 @@ fn one(spec: &InputSpec, ctx: &Context) -> Result<Box<dyn Input>, InputError> {
     Ok(match spec.kind()? {
         Kind::Udp => Box::new(Gst(ts_in::Udp::new(spec)?)),
         Kind::Srt => Box::new(Gst(ts_in::Srt::new(spec))),
-        Kind::Rist => Box::new(Gst(ts_in::Rist::new(spec)?)),
-        Kind::Rtsp => Box::new(Gst(pull::Rtsp::new(spec)?)),
+        Kind::Rist => Box::new(Gst(rist::Rist::new(spec)?)),
+        Kind::Rtsp => Box::new(Gst(rtsp::Rtsp::new(spec)?)),
         Kind::Http => Box::new(Gst(pull::Uri::new(spec, true))),
         Kind::Rtmp => Box::new(Gst(pull::Uri::new(spec, false))),
         Kind::File => Box::new(Gst(pull::File::new(spec)?)),
