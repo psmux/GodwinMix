@@ -33,15 +33,15 @@ async fn a_direct_show_is_kept_with_its_outputs_sealed_and_comes_back_after_a_re
     assert_eq!(show["health"]["state"], "alarm", "no host runs here, so its input is missing: {show}");
     assert!(!added.to_string().contains("sekret"), "a key never comes back: {added}");
 
-    let more = call(&mut ws, 2, "show.output.add", json!({"show": "bbc-one", "id": "spare", "uri": "rtmp://h/app/k2"})).await;
+    let more = call(&mut ws, 2, "show.output.add", json!({"id": "bbc-one", "output": "spare", "uri": "rtmp://h/app/k2"})).await;
     assert_eq!(ok(&more)["outputs"].as_array().map(Vec::len), Some(4));
     let off = call(&mut ws, 3, "show.output.set", json!({"show": "bbc-one", "output": "srt", "enabled": false})).await;
     let srt = ok(&off)["outputs"].as_array().unwrap().iter().find(|o| o["id"] == "srt").cloned().unwrap();
     assert_eq!(srt["enabled"], false, "{srt}");
-    let gone = call(&mut ws, 4, "show.output.remove", json!({"show": "bbc-one", "output": "mc"})).await;
+    let gone = call(&mut ws, 4, "show.output.remove", json!({"id": "bbc-one", "output": "mc"})).await;
     assert_eq!(ok(&gone)["outputs"].as_array().map(Vec::len), Some(3));
 
-    let on_main = call(&mut ws, 5, "show.output.add", json!({"show": "main", "uri": "srt://h:1"})).await;
+    let on_main = call(&mut ws, 5, "show.output.add", json!({"id": "main", "uri": "srt://h:1"})).await;
     assert_eq!(on_main["error"]["data"]["compositing"], true, "{on_main}");
     let mut inside = rpc(&st, "?show=bbc-one").await;
     let asked = call(&mut inside, 6, "scene.list", json!({})).await;

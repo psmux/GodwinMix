@@ -96,11 +96,11 @@ fn rename(list: &mut [StoredDestination], from: &str, to: &str) -> Result<String
 pub fn set(list: &mut [StoredDestination], req: &ShowOutputSetRequest) -> Result<(), RpcError> {
     let ids: Vec<String> = list.iter().map(|d| d.id.clone()).collect();
     let Some(d) = list.iter_mut().find(|d| d.id == req.output) else {
-        return Err(RpcError::not_found("output", &req.output, &ids).with("show", req.show.clone()));
+        return Err(RpcError::not_found("output", &req.output, &ids).with("show", req.id.clone()));
     };
     if !PLAIN.contains(&d.platform.as_str()) {
         let asked = SetDestinationRequest {
-            id: req.show.clone(),
+            id: req.id.clone(),
             destination: req.output.clone(),
             label: req.label.clone(),
             server: req.uri.clone(),
@@ -109,7 +109,7 @@ pub fn set(list: &mut [StoredDestination], req: &ShowOutputSetRequest) -> Result
             enabled: req.enabled,
             rendition: req.rendition.clone(),
         };
-        return rules::set(std::slice::from_mut(d), &asked).map_err(|e| e.with("show", req.show.clone()));
+        return rules::set(std::slice::from_mut(d), &asked).map_err(|e| e.with("show", req.id.clone()));
     }
     let mut wanted = d.clone();
     if let Some(label) = &req.label {

@@ -37,15 +37,15 @@ fn a_platform_needs_its_key_and_a_plain_output_keeps_its_scheme() {
     assert_eq!(wrong.data["field"], "uri");
     add(&mut list, "feed", &spec(json!({"uri": "rtp://239.3.3.3:5004"}))).unwrap();
     let req = |v| serde_json::from_value::<ShowOutputSetRequest>(v).unwrap();
-    set(&mut list, &req(json!({"show": "feed", "output": "rtp", "enabled": false}))).unwrap();
+    set(&mut list, &req(json!({"id": "feed", "output": "rtp", "enabled": false}))).unwrap();
     assert!(!list[0].enabled);
-    let moved = set(&mut list, &req(json!({"show": "feed", "output": "rtp", "uri": "udp://h:1"}))).unwrap_err();
+    let moved = set(&mut list, &req(json!({"id": "feed", "output": "rtp", "uri": "udp://h:1"}))).unwrap_err();
     assert_eq!(moved.data["field"], "uri");
-    let missing = set(&mut list, &req(json!({"show": "feed", "output": "nope"}))).unwrap_err();
+    let missing = set(&mut list, &req(json!({"id": "feed", "output": "nope"}))).unwrap_err();
     assert_eq!(missing.data["kind"], "output");
-    set(&mut list, &req(json!({"show": "feed", "output": "rtp", "rendition": {"preset": "youtube-720p30"}}))).unwrap();
+    set(&mut list, &req(json!({"id": "feed", "output": "rtp", "rendition": {"preset": "youtube-720p30"}}))).unwrap();
     assert!(list[0].rendition.is_some());
-    set(&mut list, &req(json!({"show": "feed", "output": "rtp", "rendition": null}))).unwrap();
+    set(&mut list, &req(json!({"id": "feed", "output": "rtp", "rendition": null}))).unwrap();
     assert!(list[0].rendition.is_none(), "null goes back to a copy");
 }
 
@@ -58,9 +58,7 @@ fn an_input_is_an_address_this_machine_can_open_or_a_channels_stream() {
         let e = check_input(&input(no)).unwrap_err();
         assert_eq!(e.data["field"], "input.uri", "{no}");
     }
-    let mut chained = input("udp://@239.1.1.1:5000");
-    let mut backup = input("srt://h:1");
-    backup.backup = Some(Box::new(input("srt://h:2")));
-    chained.backup = Some(Box::new(backup));
-    assert!(check_input(&chained).is_err(), "a backup has no backup of its own");
+    let mut with_backup = input("udp://@239.1.1.1:5000");
+    with_backup.backup = Some(godwinmix_protocol::shows::BackupInput { uri: "nonsense".into(), program: None, params: None });
+    assert_eq!(check_input(&with_backup).unwrap_err().data["field"], "input.backup.uri");
 }

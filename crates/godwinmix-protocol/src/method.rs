@@ -260,6 +260,10 @@ const COLLECTION_LEVEL: &[&str] = &[
     "scene.apply_graphic",
     "scene.validate",
     "scene.export",
+    // Many shows at once, or every one: no member to name.
+    "show.add_many",
+    "show.remove_many",
+    "show.stats",
 ];
 
 /// True when a method is about the collection rather than one of its members.

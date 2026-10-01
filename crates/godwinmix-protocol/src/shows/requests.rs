@@ -41,16 +41,48 @@ pub struct ShowOutputSpec {
 /// `show.output.add`.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
 pub struct ShowOutputAddRequest {
-    /// The show.
-    pub show: String,
-    #[serde(flatten)]
-    pub output: ShowOutputSpec,
+    /// The show. `show` is taken as another name for it.
+    #[serde(alias = "show")]
+    pub id: String,
+    /// The new output's own id, a slug. Made from the label when left out.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub platform: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub uri: Option<String>,
+    /// Write only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub enabled: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rendition: Option<RenditionChoice>,
+}
+
+impl ShowOutputAddRequest {
+    /// The output it asks for, as `show.add` takes one.
+    pub fn spec(&self) -> ShowOutputSpec {
+        ShowOutputSpec {
+            id: self.output.clone(),
+            platform: self.platform.clone(),
+            label: self.label.clone(),
+            uri: self.uri.clone(),
+            key: self.key.clone(),
+            enabled: self.enabled,
+            rendition: self.rendition.clone(),
+        }
+    }
 }
 
 /// `show.output.set`. Names only what moves.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
 pub struct ShowOutputSetRequest {
-    pub show: String,
+    /// The show. `show` is taken as another name for it.
+    #[serde(alias = "show")]
+    pub id: String,
     /// The output's id.
     pub output: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -76,7 +108,9 @@ fn present<'de, D: Deserializer<'de>>(d: D) -> Result<Option<Option<RenditionCho
 /// `show.output.remove`.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct ShowOutputRemoveRequest {
-    pub show: String,
+    /// The show. `show` is taken as another name for it.
+    #[serde(alias = "show")]
+    pub id: String,
     pub output: String,
 }
 
