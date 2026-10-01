@@ -24,10 +24,9 @@ const GRACE_MS = 5000;
 
 export class Session {
   /**
-   * @param {{url: string, key: string, tracks?: {video?: MediaStreamTrack, audio?: MediaStreamTrack},
-   *          onChange?: (s: {state: string, error: string, retryIn: number}) => void,
-   *          connect?: Function, end?: Function}} opts
-   * `connect` and `end` are the WHIP calls, swappable so the tests need no network.
+   * `opts`: `{url, key, tracks?, onChange?, connect?, end?}`. `onChange` hears
+   * `{state, error, retryIn}`; `connect` and `end` are the WHIP calls,
+   * swappable so the tests need no network.
    */
   constructor(opts) {
     this.opts = opts;
@@ -128,11 +127,7 @@ export class Session {
     const live = this.live;
     this.live = null;
     if (!live) return;
-    try {
-      live.pc.close();
-    } catch {
-      /* already closed */
-    }
+    live.pc.close();
     this.end(live.location);
   }
 
@@ -146,7 +141,7 @@ export class Session {
     if (this.opts.onChange) this.opts.onChange({ state, error: this.error, retryIn: this.retryIn });
   }
 
-  /** The live peer connection, for the stats line. */
+  /** The live peer connection, which the stats line reads. */
   get pc() {
     return this.live ? this.live.pc : null;
   }

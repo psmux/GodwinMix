@@ -23,7 +23,7 @@ if (root) {
   if (!link.url || !link.key) {
     root.textContent = "This link has no address or no key in it, so there is nowhere to publish. Ask whoever sent it for the whole link.";
   } else {
-    const where = `to ${new URL(link.url, location.href).pathname.replace(/^\/whip\//, "")}`;
+    const where = `Publishing to ${new URL(link.url, location.href).pathname.replace(/^\/whip\//, "")}`;
     const pub = mountPublisher(root, { url: link.url, key: link.key, labels: { where } });
     addEventListener("beforeunload", (e) => {
       if (pub.active()) e.preventDefault();

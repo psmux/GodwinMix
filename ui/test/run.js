@@ -13,6 +13,7 @@ import { renditionTests } from "./renditions.js";
 import { menubarTests } from "./menubar.js";
 import { showTests } from "./shows.js";
 import { wallTests } from "./wall.js";
+import { browserDeviceTests } from "./browser-devices.js";
 // The test runner: forty lines, no dependencies, no toolchain. Open the page,
 // read the console, or read the list. Everything testable without a mixer is
 // here, including the legacy adapter against a stubbed server.
@@ -2695,6 +2696,12 @@ legacySuite()
   .catch((e) => {
     failed += 1;
     line("fail", "the wall suite threw: " + e.message);
+    console.error(e);
+  })
+  .then(() => browserDeviceTests(test, eq, ok))
+  .catch((e) => {
+    failed += 1;
+    line("fail", "the browser devices suite threw: " + e.message);
     console.error(e);
   })
   .then(outputNumbersSuite)

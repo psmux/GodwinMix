@@ -5,8 +5,9 @@
 // The caller says where to publish (`url`), with what (`key`), and what to
 // call things (`labels`); the mixer's page and /join/ both mount this.
 
-import { buildForm, fillSelect, paintState, paintMutes } from "./form.js";
-import { secureProblem, remembered, remember, listDevices, openTrack, mediaErrorText } from "./devices.js";
+import { buildForm, paintState, paintMutes, blocked } from "./form.js";
+import { secureProblem, remembered, remember } from "./devices.js";
+import { openKind, refreshDevices } from "./tracks.js";
 import { Session } from "./session.js";
 import { LevelMeter } from "./meter.js";
 import { StatsLine } from "./stats.js";
@@ -25,12 +26,6 @@ export function mountPublisher(host, opts) {
   return new Publisher(r, opts).controller();
 }
 
-function blocked(r, text) {
-  r.error.textContent = text;
-  for (const b of [r.go, r.cameraMute, r.micMute, r.camera, r.mic, r.processing]) b.disabled = true;
-  return { state: () => "blocked", active: () => false, stop() {}, setVisible() {}, destroy: () => r.root.remove() };
-}
-
 class Publisher {
   constructor(r, opts) {
     this.r = r;
@@ -43,7 +38,7 @@ class Publisher {
     this.stats = new StatsLine(r.stats, () => this.session && this.session.pc);
     this.session = null;
     this.wire();
-    this.open().then(() => this.refreshDevices());
+    this.open().then(() => refreshDevices(this));
   }
 
   controller() {
@@ -64,39 +59,20 @@ class Publisher {
     r.processing.onchange = () => this.switchTo("audio", r.mic.value);
     r.cameraMute.onclick = () => this.toggle("video");
     r.micMute.onclick = () => this.toggle("audio");
-    this.onDevices = () => this.refreshDevices();
+    this.onDevices = () => refreshDevices(this);
     this.onHidden = () => this.applyVisibility();
     navigator.mediaDevices.addEventListener("devicechange", this.onDevices);
     document.addEventListener("visibilitychange", this.onHidden);
   }
 
   async open() {
-    await this.openKind("video", this.wanted.camera, false);
-    await this.openKind("audio", this.wanted.mic, false);
+    await openKind(this, "video", this.wanted.camera, false);
+    await openKind(this, "audio", this.wanted.mic, false);
   }
 
-  /** Open one device. A person's own pick is `exact`; a remembered one is a hint. */
-  async openKind(kind, deviceId, exact) {
-    const what = kind === "video" ? "camera" : "microphone";
-    let track = null;
-    try {
-      track = await openTrack(kind, deviceId, { exact, processing: this.r.processing.checked });
-      this.r.error.textContent = "";
-    } catch (e) {
-      this.r.error.textContent = mediaErrorText(e, what);
-    }
-    const old = this.tracks[kind];
-    if (old && track) track.enabled = old.enabled;
-    if (old) old.stop();
-    this.tracks[kind] = track;
-    if (track) track.onended = () => (this.r.error.textContent = `The ${what} stopped. Pick it again, or another one.`);
-    if (this.session) await this.session.setTrack(kind, track).catch(() => {});
-    this.paintTracks();
-  }
-
-  async switchTo(kind, deviceId) {
+  switchTo(kind, deviceId) {
     remember(kind === "video" ? "camera" : "mic", deviceId);
-    await this.openKind(kind, deviceId, true);
+    return openKind(this, kind, deviceId, true);
   }
 
   toggle(kind) {
@@ -104,17 +80,6 @@ class Publisher {
     if (!t) return;
     t.enabled = !t.enabled;
     this.paintTracks();
-  }
-
-  async refreshDevices() {
-    try {
-      const { cameras, mics } = await listDevices();
-      const current = (kind) => this.tracks[kind]?.getSettings?.().deviceId || (kind === "video" && !this.tracks.video ? "off" : "");
-      fillSelect(this.r.camera, cameras, current("video"), "No camera");
-      fillSelect(this.r.mic, mics, current("audio"), "");
-    } catch (e) {
-      this.r.error.textContent = mediaErrorText(e, "list of devices");
-    }
   }
 
   paintTracks() {
