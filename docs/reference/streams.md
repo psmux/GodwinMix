@@ -272,7 +272,7 @@ anything.
 
 | Metric | Type | Labels | Meaning |
 |---|---|---|---|
-| `gmx_stream_clients` | gauge | `kind` | Clients on each stream. `mjpeg`, `pcm`, `opus`, `whep`, `unixfd`, `preview` |
+| `gmx_stream_clients` | gauge | `kind` | Clients on each stream. `mjpeg`, `pcm`, `opus`, `whep`, `unixfd`, `preview`, and `thumbnail`, which is 1 while the programme thumbnail branch runs for `program.thumbnail` |
 | `gmx_multiview_subscribers` | gauge | | Clients holding the mosaic up, including every MJPEG stream |
 | `gmx_multiview_fps` | gauge | | The mosaic's measured rate, zero when there is none |
 | `gmx_encoder_running` | gauge | | 1 while the programme encode chain is attached |

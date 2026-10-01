@@ -2344,6 +2344,11 @@ export type TelemetryExt = boolean | {
   hz?: number | null;
 };
 
+/** `program.thumbnail`. */
+export interface ThumbnailRequest {
+  width?: number | null;
+}
+
 /**
  * What the calling token is allowed to do, echoed back so a surface can grey
  * out what it cannot reach instead of discovering it at the first refusal.
@@ -2660,6 +2665,7 @@ export interface MethodParams {
   "program.history": HistoryRequest;
   "program.revert": Record<string, never>;
   "program.take": TakeRequest;
+  "program.thumbnail": ThumbnailRequest;
   "project.export": ExportRequest;
   "project.import": ImportRequest;
   "rendition.plan": PlanRequest;
@@ -2833,6 +2839,7 @@ export interface MethodResults {
   "program.history": TakeRecord[];
   "program.revert": ProgramState;
   "program.take": ProgramState;
+  "program.thumbnail": Record<string, unknown>;
   "project.export": Record<string, unknown>;
   "project.import": Report;
   "rendition.plan": PlanView;
@@ -3053,6 +3060,7 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "program.history", summary: "The last hundred takes, newest first, with the token that asked for each.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/program/history" } },
   { name: "program.revert", summary: "Take back to the shot before this one.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/program/revert" } },
   { name: "program.take", summary: "Put a scene or a source on programme. The cut is instant and the outgoing stream is not disturbed.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/program/take" } },
+  { name: "program.thumbnail", summary: "What is on air as a small JPEG in base64, {jpeg, width, height, at_ms}, or {pending: true} while the first picture is on its way. An ask keeps one picture a second coming for ten seconds; nothing runs between asks.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/program/thumbnail" } },
   { name: "project.export", summary: "This mixer as one project file: settings, sources, outputs and renditions, channels, scenes, the page's layout, and its clips by name and size. Keys only with include_secrets.", scope: "admin", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/project/export" } },
   { name: "project.import", summary: "Open a project file: answers with what it would change (dry_run is true unless false is sent), then replaces this mixer's setup or merges beside it. Says which settings wait for a restart.", scope: "admin", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/project/import" } },
   { name: "rendition.plan", summary: "What the planner built for every output that asked for a rendition: each node, what it serves, which encoder and why, and the totals.", scope: "read", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/rendition/plan" } },
@@ -3616,6 +3624,11 @@ export class GeneratedMethods {
   /** Put a scene or a source on programme. The cut is instant and the outgoing stream is not disturbed. */
   programTake(params: TakeRequest = {}): Promise<ProgramState> {
     return this._call("program.take", params as unknown as Record<string, unknown>) as Promise<ProgramState>;
+  }
+
+  /** What is on air as a small JPEG in base64, {jpeg, width, height, at_ms}, or {pending: true} while the first picture is on its way. An ask keeps one picture a second coming for ten seconds; nothing runs between asks. */
+  programThumbnail(params: ThumbnailRequest = {}): Promise<Record<string, unknown>> {
+    return this._call("program.thumbnail", params as unknown as Record<string, unknown>) as Promise<Record<string, unknown>>;
   }
 
   /** This mixer as one project file: settings, sources, outputs and renditions, channels, scenes, the page's layout, and its clips by name and size. Keys only with include_secrets. */
