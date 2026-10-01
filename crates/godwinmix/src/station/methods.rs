@@ -28,6 +28,12 @@ pub fn answers(method: &str, params: &Value) -> bool {
         || method == "governor.calibrate"
         || (method == "rendition.plan"
             && params.get("scope").and_then(Value::as_str).is_some_and(|s| s.starts_with("channel:")))
+        || (matches!(method, "task.get" | "task.cancel") && task_id(params).is_some_and(super::switch::task::is_station_task))
+}
+
+/// The task a `task.get` names: `task_id`, or `id` from a REST path.
+fn task_id(params: &Value) -> Option<&str> {
+    params.get("task_id").or_else(|| params.get("id")).and_then(Value::as_str)
 }
 
 /// Answer one of the station's methods for `token`.
@@ -46,6 +52,11 @@ pub async fn call(st: &Arc<Station>, token: &Token, method: &str, params: Value)
         }
         "governor.calibrate" => calibrate(st, &params),
         "rendition.plan" => plan(st, &params),
+        "task.get" | "task.cancel" => {
+            let req: crate::control::methods::task_request::TaskRequest = serde_json::from_value(params)
+                .map_err(|e| RpcError::invalid_params(format!("{method} could not read its params: {e}")))?;
+            super::switch::task::call(st, method, &req.task_id)
+        }
         other => Err(no_such_method(other)),
     }
 }
@@ -109,6 +120,9 @@ mod tests {
         assert!(!answers("rendition.plan", &json!({})));
         assert!(!answers("program.take", &json!({})));
         assert!(!answers("core.subscribe", &json!({})));
+        assert!(answers("task.get", &json!({"id": "show-set-3"})), "a switch is the station's task");
+        assert!(answers("task.get", &json!({"task_id": "show-set-3"})));
+        assert!(!answers("task.get", &json!({"id": "plugin-add-1"})), "a show's task goes to the show");
     }
 
     #[test]

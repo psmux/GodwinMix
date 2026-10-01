@@ -10,7 +10,11 @@ use godwinmix_protocol::error::RpcError;
 use godwinmix_protocol::shows::SwitchReport;
 use serde_json::{json, Value};
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
+
+/// How long the checks before a switch off may take, inside the five second
+/// budget every call has.
+const CHECK: Duration = Duration::from_secs(4);
 
 /// What stops a show going back to no compositing, if anything.
 async fn blocker(st: &Arc<Station>, id: &str, known: &[String]) -> Result<Vec<String>, RpcError> {
@@ -40,8 +44,14 @@ async fn blocker(st: &Arc<Station>, id: &str, known: &[String]) -> Result<Vec<St
     Ok(ids)
 }
 
-/// Compositing to direct.
-pub async fn off(st: &Arc<Station>, id: &str) -> Result<SwitchReport, RpcError> {
+/// Whether `id` may go back to no compositing, asked of the show before
+/// anything moves, so a refusal comes back on the call with its `data`
+/// rather than as a failed task. Answers the outputs that will move.
+///
+/// The show is asked three things; a show that does not answer all of them
+/// within [`CHECK`] is refused, so the call still answers inside five
+/// seconds.
+pub async fn check(st: &Arc<Station>, id: &str) -> Result<Vec<String>, RpcError> {
     let r = st.registry.lock().get(id).cloned().ok_or_else(|| RpcError::not_found("show", id, &[]))?;
     if id == MAIN {
         return Err(refuse(id, "main is the show the station was started with and always composites. Add a show for the feed instead.".into()));
@@ -55,7 +65,18 @@ pub async fn off(st: &Arc<Station>, id: &str) -> Result<SwitchReport, RpcError> 
         return Err(refuse(id, why));
     }
     let known: Vec<String> = r.outputs.iter().map(|o| o.id.clone()).collect();
-    let ids = blocker(st, id, &known).await?;
+    match tokio::time::timeout(CHECK, blocker(st, id, &known)).await {
+        Ok(answer) => answer,
+        Err(_) => {
+            let why = format!("show {id} did not say what it has on air within {} seconds, so nothing was switched. Try again.", CHECK.as_secs());
+            Err(refuse(id, why).with("retry_after_ms", 1000))
+        }
+    }
+}
+
+/// Compositing to direct, once [`check`] has passed: `ids` is what it
+/// answered.
+pub async fn off(st: &Arc<Station>, id: &str, ids: Vec<String>) -> Result<SwitchReport, RpcError> {
     let stopped = Instant::now();
     for o in &ids {
         let _ = st.ask_show(id, "output.remove", json!({"id": o}), ASK).await;

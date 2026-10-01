@@ -21,8 +21,10 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 mod off;
+pub mod task;
 
-pub use off::off;
+pub use off::{check as check_off, off};
+pub use task::Switches;
 
 pub(super) const ASK: Duration = Duration::from_secs(5);
 /// How long the outputs get to come back before the answer goes anyway.
