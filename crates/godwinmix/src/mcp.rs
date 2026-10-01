@@ -565,11 +565,14 @@ fn initialize_result(params: &Value, profile: Profile) -> Value {
         },
         "serverInfo": { "name": SERVER_NAME, "version": env!("CARGO_PKG_VERSION") },
         "instructions": format!(
-            "GodwinMix is a live video mixer: several sources come in, one is on programme at \
-             a time, and the programme goes out to RTMP destinations without interruption. \
-             Start with `agent_state` to learn the source ids and how much each picture is \
-             moving, then `take` to switch what is on air. `snapshot` shows you the pictures \
-             when a number is not enough. You are on the {} tool profile; anything not in \
+            "GodwinMix runs shows. A show is one encoder: either a live mix (several sources, \
+             one on programme at a time, sent out without interruption) or, with compositing \
+             off, one input straight to its outputs, copied or transcoded. `list_shows` says \
+             what this machine runs; `add_shows` makes many in one call (dry_run first) and \
+             `show_stats` watches them all in one read. In a mix, start with `agent_state` to \
+             learn the source ids and how much each picture is moving, then `take` to switch \
+             what is on air; tools that work inside one show take `show: <id>` and default to \
+             the first. `snapshot` shows you a picture when a number is not enough. You are on the {} tool profile; anything not in \
              your list is reachable through `search_tools` and can be called by name. Every \
              tool talks to the running mixer over its HTTP API, so refusals come back \
              verbatim with the mixer's own reason and the next step to take. Mutating tools \
