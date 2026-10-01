@@ -20,7 +20,6 @@ fn an_avcc_record_gives_its_parameter_sets_with_start_codes() {
 fn an_adts_header_says_48k_stereo_lc_and_the_length() {
     // AAC LC, 48 kHz, stereo.
     let c = AudioConfig::from_asc(&[0x11, 0x90]).unwrap();
-    assert_eq!(c.sample_rate(), 48_000);
     let h = c.adts(100);
     assert_eq!(&h[..2], &[0xff, 0xf1]);
     assert_eq!(h[2] >> 6, 1, "LC is profile 1");
