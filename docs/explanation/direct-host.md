@@ -85,9 +85,9 @@ starts while at least one such output is on. The packager, the rings that
 hold the segments, the playlists, LL-HLS and DASH exist once, in the engine
 and the control port's `/hls` routes, and that binary links both, so nothing
 is written twice. Packaging means a GStreamer pipeline per output, `appsrc`
-into `cmafmux`, and a pipeline can crash its process. In the host that would take every channel and every
-direct show's outputs with it; in the station it would take the control
-port. In the packager it costs the HLS outputs a few seconds: they say
+into `cmafmux`, and a pipeline can crash its process. In the host that
+would take every channel and every direct show's outputs with it; in the
+station it would take the control port. In the packager it costs the HLS outputs a few seconds: they say
 `reconnecting`, with why, the station starts the packager again (after 1 s,
 then 2, 4 and up to 30 s if it keeps stopping, and `failed` after five stops
 in a row), hands it the outputs again, and each output comes back on the
