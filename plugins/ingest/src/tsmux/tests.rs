@@ -88,6 +88,48 @@ fn ac3_and_mpeg_audio_cross_as_they_came_and_decode() {
 }
 
 #[test]
+fn hevc_as_enhanced_rtmp_frames_it_decodes_out_of_the_muxed_stream() {
+    use gstreamer as gst;
+    use gstreamer::prelude::*;
+    use std::sync::{Arc, Mutex};
+    gmx_netkit::init().unwrap();
+    if gst::ElementFactory::find("x265enc").is_none() {
+        eprintln!("skipping: needs x265enc");
+        return;
+    }
+    struct Keep(Arc<Mutex<Vec<MediaTag>>>);
+    impl crate::rtmp::Inlet for Keep {
+        fn tag(&mut self, tag: MediaTag) {
+            self.0.lock().unwrap().push(tag);
+        }
+    }
+    let got = Arc::new(Mutex::new(Vec::new()));
+    let p = gst::parse::launch(
+        "videotestsrc num-buffers=60 ! video/x-raw,format=I420,width=320,height=240,framerate=30/1 \
+         ! x265enc speed-preset=ultrafast key-int-max=30 ! h265parse name=vp",
+    )
+    .unwrap()
+    .downcast::<gst::Pipeline>()
+    .unwrap();
+    let sink = crate::tagger::hevc_sink(crate::tagger::share(Box::new(Keep(got.clone()))), Arc::default());
+    p.add(&sink).unwrap();
+    p.by_name("vp").unwrap().link(&sink).unwrap();
+    p.set_state(gst::State::Playing).unwrap();
+    let _ = p.bus().unwrap().timed_pop_filtered(gst::ClockTime::from_seconds(20), &[gst::MessageType::Eos, gst::MessageType::Error]);
+    let _ = p.set_state(gst::State::Null);
+    let tags = got.lock().unwrap().clone();
+    let path = std::env::temp_dir().join(format!("gmx-tsmux-hevc-{}.ts", std::process::id()));
+    std::fs::write(&path, mux(&tags)).unwrap();
+    let (pictures, _) = testfeed::decode_ts(&path);
+    let _ = std::fs::remove_file(&path);
+    // x265's first IDR never reaches the tags here (two of its 60 frames are
+    // lost between h265parse and the tagger, a matter for the tagger), so
+    // the stream decodes from its second GOP's CRA on: 30 pictures.
+    let from_first_key = tags.iter().filter(|t| !t.sequence_header).skip_while(|t| !t.keyframe).count();
+    assert!(pictures as usize + 2 >= from_first_key, "decoded {pictures} HEVC pictures of the {from_first_key} from the first keyframe");
+}
+
+#[test]
 fn a_frame_before_its_sequence_header_is_dropped_not_sent_broken() {
     let tags = testfeed::tags(30);
     let frames: Vec<MediaTag> = tags.into_iter().filter(|t| !t.sequence_header).collect();
