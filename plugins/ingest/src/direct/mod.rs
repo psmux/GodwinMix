@@ -3,10 +3,10 @@
 //! ```text
 //!   table (configure) ──► Host::apply ──► one Show per row
 //!
-//!   input (own thread) ──► Switch ──► hub "direct.<id>/main" ──┬──► output (one thread each) ──► RTMP, SRT, UDP, RIST, file
-//!   backup (only while needed) ─┘   (main or backup, one         ├──► transcode (once per show) ──► renditions hub ──► outputs
-//!                                    unbroken timeline)          ├──► vitals (keyframes only, while asked)
-//!                                                                └──► relay, for a show that composites
+//!   input, with its backup ──► hub "direct.<id>/main" ──┬──► output (one thread each) ──► RTMP, SRT, UDP, RTP, RIST, file
+//!   (its own thread; one                                ├──► transcode (once per show) ──► pairs on the same hub ──► outputs
+//!    unbroken timeline)                                 ├──► vitals (keyframes only, while asked)
+//!                                                       └──► relay, for a show that composites
 //! ```
 //!
 //! A direct show is one input straight to its outputs with no compositor.
