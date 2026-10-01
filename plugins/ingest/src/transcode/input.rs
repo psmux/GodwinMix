@@ -1,11 +1,13 @@
 //! The stream's own tags into the decoders.
 //!
 //! An FLV video body is a short prefix and an access unit (AVC, or HEVC and
-//! AV1 as enhanced RTMP frames them; see `crate::eflv`), and an
-//! audio body two bytes and a raw AAC frame; the sequence headers carry the
-//! configuration a decoder is given as `codec_data` in its caps. So each tag
-//! becomes one buffer with its time on the pipeline's clock (the publisher's
-//! time less the session's first), and nothing is parsed beyond that.
+//! AV1 as enhanced RTMP frames them; see `crate::eflv`), and an AAC body
+//! two bytes and a raw AAC frame; the sequence headers carry the
+//! configuration a decoder is given as `codec_data` in its caps. AC-3,
+//! E-AC-3 and MPEG audio have no header: each frame says what it is, and
+//! its caps are read off it (`direct::vitals::sound`). So each tag becomes
+//! one buffer with its time on the pipeline's clock (the publisher's time
+//! less the session's first), and nothing is parsed beyond that.
 //!
 //! A decoder that has just started waits for a keyframe, and the handle is
 //! taken out of the lock before a push, which may wait for the decoder:
@@ -23,6 +25,8 @@ struct Feed {
     src: Option<AppSrc>,
     need_key: bool,
     header: Option<MediaTag>,
+    /// Sound with no header: the caps its frames gave, last set.
+    framed: Option<gst::Caps>,
 }
 
 #[derive(Default)]
@@ -50,7 +54,9 @@ pub(crate) fn caps_for(header: &MediaTag) -> Option<gst::Caps> {
         (TagKind::Video, Some(cc)) if &cc == crate::eflv::AV1 => {
             gst::Caps::builder("video/x-av1").field("stream-format", "obu-stream").field("alignment", "tu").field("codec_data", config)
         }
-        (TagKind::Audio, _) => gst::Caps::builder("audio/mpeg").field("mpegversion", 4i32).field("stream-format", "raw").field("codec_data", config),
+        (TagKind::Audio, _) if header.payload.first().is_some_and(|b| b >> 4 == 10) => {
+            gst::Caps::builder("audio/mpeg").field("mpegversion", 4i32).field("stream-format", "raw").field("codec_data", config)
+        }
         _ => return None,
     };
     Some(caps.build())
@@ -75,6 +81,7 @@ impl Input {
         }
         f.src = src;
         f.need_key = true;
+        f.framed = None;
     }
 
     /// Forget the configuration: a new session brings its own.
@@ -87,7 +94,7 @@ impl Input {
     /// One tag of the stream, with the session's first time `base`.
     pub fn push(&self, tag: &MediaTag, base: u32) {
         let Some(feed) = self.feed(tag.kind) else { return };
-        let src = {
+        let (src, skip) = {
             let mut f = lock(feed);
             if tag.sequence_header {
                 f.header = Some(tag.clone());
@@ -96,19 +103,35 @@ impl Input {
                 }
                 return;
             }
+            let framed = headerless(tag).then(|| crate::direct::vitals::sound::coded(tag, None)).flatten();
+            if let (Some(s), Some(c)) = (&f.src, &framed) {
+                if f.framed.as_ref() != Some(&c.caps) {
+                    s.set_caps(Some(&c.caps));
+                    f.framed = Some(c.caps.clone());
+                }
+            }
             let starts = tag.kind == TagKind::Audio || tag.keyframe;
-            if f.src.is_none() || f.header.is_none() || (f.need_key && !starts) {
+            if f.src.is_none() || (f.header.is_none() && framed.is_none()) || (f.need_key && !starts) {
                 return;
             }
             f.need_key = false;
-            f.src.clone()
+            (f.src.clone(), framed.map(|c| c.skip))
         };
-        if let (Some(src), Some(buffer)) = (src, buffer(tag, base)) {
+        let buffer = match skip {
+            Some(skip) => framed(tag, base, skip, 0),
+            None => buffer(tag, base),
+        };
+        if let (Some(src), Some(buffer)) = (src, buffer) {
             // Flushing means the decoder is being taken down; the tag is not
             // wanted, and that is all.
             let _ = src.push_buffer(buffer);
         }
     }
+}
+
+/// Sound that is not AAC, which carries no sequence header.
+fn headerless(tag: &MediaTag) -> bool {
+    tag.kind == TagKind::Audio && tag.payload.first().is_some_and(|b| b >> 4 != 10)
 }
 
 /// A tag's body past its prefix, shared with every other reader of the tag

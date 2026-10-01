@@ -493,6 +493,32 @@ verified = []
 comment = "Decode only, for a build without gst-libav."
 
 [[audio]]
+id = "mpeg-audio-decode"
+codec = "mp3"
+accel = "software"
+rank = 50
+decoder = "mpg123audiodec"
+parser = "mpegaudioparse"
+requires = []
+license = "LGPL-2.1-or-later"
+container = ["mpegts"]
+verified = []
+comment = "Decode only: MPEG audio layers I, II and III, which broadcast feeds carry as MP2. A direct show's output that converts such a feed's sound to AAC decodes it here."
+
+[[audio]]
+id = "ac3-decode"
+codec = "ac3"
+accel = "software"
+rank = 50
+decoder = "avdec_ac3"
+parser = "ac3parse"
+requires = []
+license = "LGPL-2.1-or-later"
+container = ["mpegts"]
+verified = []
+comment = "Decode only: AC-3 from a broadcast feed, for an output that converts its sound to AAC."
+
+[[audio]]
 id = "opus-software"
 codec = "opus"
 accel = "software"

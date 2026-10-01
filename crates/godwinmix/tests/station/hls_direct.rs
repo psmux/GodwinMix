@@ -40,7 +40,10 @@ async fn until(ws: &mut Ws, show: &str, out: &str, state: &str, limit: Duration)
         if o["state"] == state {
             return o;
         }
-        assert!(Instant::now() < until, "{out} never became {state}: {o}");
+        if Instant::now() > until {
+            let stats = call(ws, 99, "show.stats", json!({"ids": [show]})).await;
+            panic!("{out} never became {state}: {o}\n{stats}");
+        }
         tokio::time::sleep(Duration::from_millis(500)).await;
     }
 }
@@ -123,5 +126,45 @@ async fn a_direct_show_serves_its_feed_as_hls_from_the_station_copied_not_decode
     let stats = call(&mut ws, 50, "show.stats", json!({"ids": ["feed"]})).await;
     assert_eq!(stats["result"]["shows"][0]["outputs"][0]["state"], "live", "{stats}");
     assert_eq!(stats["result"]["shows"][0]["work"], "copy", "{stats}");
+    pipeline.set_state(gstreamer::State::Null).unwrap();
+}
+
+/// MPEG audio layer II, as many broadcast feeds carry: copied, it would make
+/// HLS no player plays, so the output says so and names the rendition that
+/// fixes it. Given that rendition, the picture is still copied and the
+/// sound comes out as AAC.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn mp2_sound_is_refused_with_the_next_step_and_served_once_a_rendition_makes_aac() {
+    let (dir, port) = folder("hls-direct-mp2");
+    let source = staged_ingest(&dir);
+    let st = start(dir.clone(), port, &[]).await;
+    let mut ws = rpc(&st, "").await;
+    let _ = call(&mut ws, 1, "channel.remove", json!({"id": "live"})).await;
+    let input = free_udp();
+    let pipeline = feed_with(input, "avenc_mp2 ! mpegaudioparse");
+    let added = call(&mut ws, 2, "show.add", json!({"name": "Feed", "compositing": false, "input": {"uri": format!("udp://127.0.0.1:{input}")},
+        "outputs": [{"uri": "hls://viewers", "params": {"segment_ms": 1000, "window": 6}}]})).await;
+    assert!(added.get("error").is_none(), "{added}");
+    let asked = call(&mut ws, 3, "plugin.add", json!({"source": source.to_string_lossy()})).await;
+    assert!(asked.get("error").is_none(), "{asked}");
+
+    let out = until(&mut ws, "feed", "viewers", "failed", Duration::from_secs(90)).await;
+    let why = out["error"].as_str().unwrap_or_default();
+    assert!(why.contains("mp2") && why.contains("AAC") && why.contains("show.output.set"), "{out}");
+
+    let set = call(&mut ws, 4, "show.output.set", json!({"id": "feed", "output": "viewers", "rendition": {"audio": {"codec": "aac"}}})).await;
+    assert!(set.get("error").is_none(), "{set}");
+    let out = until(&mut ws, "feed", "viewers", "live", Duration::from_secs(90)).await;
+    let master = out["playback"]["master_url_path"].as_str().unwrap().to_string();
+    let (_, text_master) = text(&st, &master).await;
+    assert!(text_master.contains("avc1.") && text_master.contains("mp4a.40"), "{text_master}");
+    let file = dir.join("audio.mp4");
+    fetch_rung(&st, &master, "audio", &file).await;
+    let seen = discover(&file);
+    assert!(seen.contains("AAC") && !seen.contains("rror"), "the sound segment decodes as AAC: {seen}");
+    let file = dir.join("main.mp4");
+    fetch_rung(&st, &master, "main", &file).await;
+    let seen = discover(&file);
+    assert!(seen.contains("H.264") && !seen.contains("rror"), "{seen}");
     pipeline.set_state(gstreamer::State::Null).unwrap();
 }

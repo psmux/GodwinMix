@@ -81,7 +81,9 @@ pub fn audio_codec(name: &str) -> AudioCodec {
     match name.to_ascii_lowercase().as_str() {
         "aac" => AudioCodec::Aac,
         "opus" => AudioCodec::Opus,
-        "mp3" => AudioCodec::Mp3,
+        // Layers I and II are MPEG audio as much as layer III is, and one
+        // decoder takes all three.
+        "mp3" | "mp2" | "mp1" => AudioCodec::Mp3,
         "ac3" | "ac-3" => AudioCodec::Ac3,
         "pcm" => AudioCodec::Pcm,
         _ => AudioCodec::Other,
