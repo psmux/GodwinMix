@@ -19,6 +19,10 @@
 mod channels;
 mod codec;
 mod device;
+// The direct host is wired into the plugin by its own work; until then its
+// inputs are reached from their tests only.
+#[allow(dead_code)]
+mod direct;
 mod flv;
 mod restream;
 mod gate;
