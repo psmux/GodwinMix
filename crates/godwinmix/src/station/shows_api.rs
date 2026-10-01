@@ -39,6 +39,14 @@ fn shown(st: &Station, id: &str) -> Result<Value, RpcError> {
 }
 
 pub async fn add(st: &Arc<Station>, req: ShowAddRequest) -> Result<Value, RpcError> {
+    let prepared = super::shows_direct::prepare(&st.registry.lock(), &req, &[])?;
+    if !prepared.compositing {
+        if let Err(no) = st.direct.price(&prepared.outputs) {
+            return Err(RpcError::invalid_params(no.message.clone()).with("refusal", serde_json::to_value(&no).unwrap_or_default()));
+        }
+        let id = super::shows_direct::make_direct(st, prepared)?;
+        return shown(st, &id);
+    }
     let name = named(&req.name)?;
     let project = match &req.from {
         Some(ShowFrom::Project { project }) => Some(super::project::usable(project)?),
@@ -61,8 +69,13 @@ pub async fn add(st: &Arc<Station>, req: ShowAddRequest) -> Result<Value, RpcErr
         None => files::fresh(&folder),
     };
     let config = made.map_err(|e| RpcError::internal(format!("making the show's folder {}: {e:#}", folder.display())))?;
-    st.registry.lock().records.push(Record { id: id.clone(), name, config: Some(config), stopped: false });
+    let mut record = Record::new(&id, &name, Some(config));
+    record.input = req.input.clone();
+    st.registry.lock().records.push(record);
     saved(st)?;
+    if req.input.is_some() {
+        st.direct.hand_over();
+    }
     supervise::start(st, &id);
     if let Some(project) = project {
         super::project::open(st, &id, project, PROJECT_WAIT).await?;
@@ -93,6 +106,7 @@ pub async fn remove(st: &Arc<Station>, id: &str) -> Result<Value, RpcError> {
         .with("show", id));
     }
     supervise::stop(st, id).await;
+    let direct = st.is_direct(id) || st.registry.lock().get(id).is_some_and(|r| r.input.is_some());
     let folder = {
         let mut reg = st.registry.lock();
         let folder = reg.folder_for(id);
@@ -103,6 +117,11 @@ pub async fn remove(st: &Arc<Station>, id: &str) -> Result<Value, RpcError> {
     saved(st)?;
     if folder.starts_with(st.registry.lock().data_dir().join("shows")) {
         let _ = std::fs::remove_dir_all(&folder);
+    }
+    super::direct::outputs::forget(id);
+    st.direct.forget(id);
+    if direct {
+        st.direct.hand_over();
     }
     st.events.emit(Event::ShowRemoved { id: id.to_string() });
     Ok(serde_json::to_value(ShowRemoved { removed: id.to_string() }).unwrap_or_default())
@@ -115,6 +134,8 @@ pub async fn start(st: &Arc<Station>, id: &str) -> Result<Value, RpcError> {
     }
     saved(st)?;
     supervise::start(st, id);
+    st.direct.hand_over();
+    st.announce(id);
     shown(st, id)
 }
 
@@ -125,6 +146,8 @@ pub async fn stop(st: &Arc<Station>, id: &str) -> Result<Value, RpcError> {
     }
     saved(st)?;
     supervise::stop(st, id).await;
+    st.direct.hand_over();
+    st.announce(id);
     shown(st, id)
 }
 
@@ -142,6 +165,11 @@ pub async fn call(st: &Arc<Station>, method: &str, params: Value) -> Result<Valu
         "show.remove" => remove(st, &id()?).await,
         "show.start" => start(st, &id()?).await,
         "show.stop" => stop(st, &id()?).await,
-        other => Err(RpcError::not_found("method", other, &[]).with("hint", json!("show.list, show.add, show.rename, show.remove, show.start, show.stop"))),
+        "show.set" => super::shows_set::set(st, parse(method, params)?).await,
+        "show.add_many" => super::shows_bulk::add_many(st, parse(method, params)?).await,
+        "show.remove_many" => super::shows_bulk::remove_many(st, parse(method, params)?).await,
+        "show.stats" => super::shows_direct::stats(st, parse(method, params)?),
+        m if m.starts_with("show.output.") => super::shows_set::output(st, m, params),
+        other => Err(RpcError::not_found("method", other, &[]).with("hint", json!("show.list, show.add, show.add_many, show.set, show.rename, show.remove, show.remove_many, show.start, show.stop, show.stats, show.output.add, show.output.set, show.output.remove"))),
     }
 }

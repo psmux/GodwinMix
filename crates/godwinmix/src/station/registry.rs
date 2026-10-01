@@ -7,7 +7,16 @@
 //! beside its config. The list is `<data dir>/shows.json`, written only once
 //! there is something a bare config cannot say (a second show, a renamed or
 //! stopped first one).
+//!
+//! A show without compositing (wave 4) has no folder and no process: its
+//! record carries its input and its outputs, and the direct host runs it.
+//! A list written before wave 4 has neither field, and every show in it
+//! composites, as it did.
 
+mod output;
+
+pub use output::OutputRecord;
+use godwinmix_protocol::shows::InputSpec;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
@@ -25,6 +34,27 @@ pub struct Record {
     /// A person stopped it; the station does not start it.
     #[serde(default)]
     pub stopped: bool,
+    #[serde(default = "yes", skip_serializing_if = "is_true")]
+    pub compositing: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input: Option<InputSpec>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub outputs: Vec<OutputRecord>,
+}
+
+fn yes() -> bool {
+    true
+}
+
+fn is_true(b: &bool) -> bool {
+    *b
+}
+
+impl Record {
+    /// A show that composites, as every show was before wave 4.
+    pub fn new(id: &str, name: &str, config: Option<PathBuf>) -> Record {
+        Record { id: id.into(), name: name.into(), config, stopped: false, compositing: true, input: None, outputs: Vec::new() }
+    }
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -59,7 +89,7 @@ impl Registry {
         };
         let mut reg = Registry { data_dir, main_config, records };
         if !reg.records.iter().any(|r| r.id == MAIN) {
-            reg.records.insert(0, Record { id: MAIN.into(), name: "Main".into(), config: None, stopped: false });
+            reg.records.insert(0, Record::new(MAIN, "Main", None));
         }
         Ok(reg)
     }
@@ -115,8 +145,7 @@ impl Registry {
     /// Write the list, unless it says nothing a bare config does not.
     pub fn save(&self) -> anyhow::Result<()> {
         let path = self.data_dir.join("shows.json");
-        let bare = self.records.len() == 1
-            && self.records[0] == Record { id: MAIN.into(), name: "Main".into(), config: None, stopped: false };
+        let bare = self.records.len() == 1 && self.records[0] == Record::new(MAIN, "Main", None);
         if bare && !path.exists() {
             return Ok(());
         }

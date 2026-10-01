@@ -13,6 +13,18 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+mod props;
+mod requests;
+
+pub use props::*;
+pub use requests::*;
+
+use crate::destination::Destination;
+
+fn yes() -> bool {
+    true
+}
+
 /// Where a show is in its life.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
@@ -51,6 +63,20 @@ pub struct Show {
     /// Why it is not running, when it is not and a person did not ask.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+    /// true: scenes, transitions and a programme encode, in a process of
+    /// its own. false: one input straight to its outputs, in the shared
+    /// direct host, with no compositor.
+    #[serde(default = "yes")]
+    pub compositing: bool,
+    /// What it takes in. A show that composites makes it its one source.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input: Option<InputSpec>,
+    /// The outputs of a show without compositing. A show that composites
+    /// keeps its outputs inside it, under `output.*` with `?show=<id>`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub outputs: Vec<Destination>,
+    #[serde(default)]
+    pub health: Health,
 }
 
 /// `show.list`.
@@ -82,6 +108,21 @@ pub struct ShowAddRequest {
     /// scenes, and leaves its outputs behind so nothing goes out twice.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub from: Option<ShowFrom>,
+    /// Left out: true, a show with scenes and a programme, as before.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub compositing: Option<bool>,
+    /// What it takes in. Needed by a show without compositing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input: Option<InputSpec>,
+    /// Where a show without compositing sends its input.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub outputs: Vec<ShowOutputSpec>,
+}
+
+impl From<ShowAdd> for ShowAddRequest {
+    fn from(a: ShowAdd) -> Self {
+        ShowAddRequest { name: a.name, from: a.from, compositing: a.compositing, input: a.input, outputs: a.outputs }
+    }
 }
 
 /// `show.rename`.
@@ -130,6 +171,15 @@ pub fn events() -> Vec<EventDef> {
             legacy: None,
             payload: schema_of::<ShowRemovedEvent>,
         },
+        EventDef {
+            name: "show.health",
+            since: "1",
+            summary: "A show's health changed state, or an alarm began or ended. Never sent \
+                      for a number alone: read those with show.stats.",
+            ext: None,
+            legacy: None,
+            payload: schema_of::<ShowHealthEvent>,
+        },
     ]
 }
 
@@ -158,7 +208,22 @@ mod tests {
             memory_mib: 0,
             restarts: 0,
             error: None,
+            compositing: true,
+            input: None,
+            outputs: vec![],
+            health: Health::default(),
         };
         assert_eq!(serde_json::to_value(&show).unwrap()["state"], "running");
+    }
+
+    #[test]
+    fn a_show_written_before_wave_four_composites() {
+        let show: Show = serde_json::from_value(json!({
+            "id": "main", "name": "Main", "state": "running", "on_air": null,
+            "programme_kbps": 0, "cpu_millicores": 0
+        }))
+        .unwrap();
+        assert!(show.compositing);
+        assert!(show.input.is_none() && show.outputs.is_empty());
     }
 }

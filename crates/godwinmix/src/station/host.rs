@@ -31,6 +31,8 @@ impl Host for Linked {
         }
         info!(show = %hello.show, addr = %hello.addr, "show is running");
         st.announce(&hello.show);
+        let (fed, id) = (st.clone(), hello.show.clone());
+        tokio::spawn(async move { super::direct::feed_source(&fed, &id).await });
         true
     }
 
@@ -87,20 +89,34 @@ impl Station {
     /// One show as a client sees it, from what the station knows without
     /// asking the show. `show.list` fills in the rest.
     pub fn view(&self, id: &str) -> Option<Show> {
-        let name = self.registry.lock().get(id)?.name.clone();
-        let procs = self.procs.lock();
-        let p = procs.get(id)?;
-        Some(Show {
+        let record = self.registry.lock().get(id)?.clone();
+        let (state, restarts, error) = {
+            let procs = self.procs.lock();
+            let p = procs.get(id)?;
+            (p.state, p.restarts, p.error.clone())
+        };
+        let mut show = Show {
             id: id.to_string(),
-            name,
-            state: p.state,
+            name: record.name.clone(),
+            state,
             on_air: None,
             programme_kbps: 0,
             cpu_millicores: 0,
             memory_mib: 0,
-            restarts: p.restarts,
-            error: p.error.clone(),
-        })
+            restarts,
+            error,
+            compositing: record.compositing,
+            input: record.input.clone(),
+            outputs: Vec::new(),
+            health: self.direct.health_of(self, id),
+        };
+        if !record.compositing {
+            show.state = if record.stopped { ShowState::Stopped } else { ShowState::Running };
+            show.outputs = self.direct.output_views(self, id);
+            show.programme_kbps = show.outputs.iter().map(|o| u64::from(o.live.kbps)).sum();
+            show.on_air = self.direct.seen.lock().get(id).filter(|s| s.input_live()).map(|_| "input".to_string());
+        }
+        Some(show)
     }
 
     /// `event/show.changed` for one show, to every client.
