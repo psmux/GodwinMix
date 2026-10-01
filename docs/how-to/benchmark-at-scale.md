@@ -211,6 +211,13 @@ compared with. On an M4 Pro, with other builds running on the same machine:
   them was 172 ms, nothing was reconnected, and no process was left 15 seconds
   after the station stopped.
 
+* 200 direct shows, one per feed, each copied to a UDP receiver
+  (`scale-m4pro-2026-10-01-1614-direct.md`): clean for the measured minute,
+  every output arriving with no continuity error, no GOP dropped and the
+  longest silence 112 ms. The direct host, one `gmx-ingest` process, took
+  about 5.2 cores and 205 MiB, about 2.6% of one core a show; the station
+  under 1% of one core.
+
 What stopped the outputs had nothing to do with the receivers. The programme
 encoder starts when the first output asks for it, and its `audiorate` filled
 the time from the start of the programme to its first buffer with silence, so
