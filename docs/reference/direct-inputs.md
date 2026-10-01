@@ -44,7 +44,8 @@ the three names `params.transport` with `data.allowed`.
 | `channel:church/main` | a channel's stream, read off the hub with no demux at all | none |
 
 A password in an address never appears in a message or in `error`: it is
-written `user:***@host`.
+written `user:***@host`, and an SRT `passphrase=` in the query is written
+`passphrase=***`.
 
 ## What is carried
 
