@@ -280,6 +280,17 @@ cannot share one. So an output reads the programme from the address in
 the instance's sockets. That makes sidecar outputs Unix only for now; a first
 party output works everywhere.
 
+An output plugin has to keep reading that FIFO. When it stops, the core's
+write into the FIFO stops with it, the output's queue fills, and the overflow
+watchdog asks for a reconnect. The reconnect waits two seconds for the old
+pipeline, and if the write is still stuck it stops the plugin (`stop`, then
+`shutdown`, then the process group), waits up to five seconds more for the
+write to fail, and starts the plugin again with a fresh FIFO: a new process, a
+new `initialize` and a new `start`. A plugin that exits cleanly on `shutdown`
+but leaves a child process holding the FIFO open keeps the old write stuck, so
+take children down with you. A plugin process that died on its own is started
+again the same way on the next reconnect.
+
 Everything an instance is given lives in one directory under the core's runtime
 directory, and that directory is removed when the instance goes. That is what
 makes `plugin.add` then `plugin.remove` leave no sockets behind.
