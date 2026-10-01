@@ -1054,18 +1054,18 @@ class HistoryStep(TypedDict, total=False):
     # How many steps are still on each stack, so a UI greys out a button.
 
 class HlsOutputParams(TypedDict, total=False):
-    """The `params` of a show's `hls://` output: the same names, defaults and limits as an `hls/output`'s (`docs/reference/hls-output.md`)."""
+    """An `hls://` output's params, as an `hls/output` takes them."""
 
     low_latency: Optional[bool]
-    # true gives parts of 333 ms when `part_ms` names no other length.
+    # true: parts of 333 ms.
     part_ms: Optional[int]
-    # LL-HLS part length; 0 is plain HLS. Default 0.
+    # LL-HLS part, 0 for none.
     segment_ms: Optional[int]
-    # Target segment length, 500 to 10000. Segments are cut at the first keyframe at or after it. Default 2000.
+    # 500 to 10000, default 2000.
     viewer_key: Optional[str]
-    # The key a viewer's link carries, at least 16 characters. Left out: derived from the show and the output on this machine.
+    # 16 characters or more.
     window: Optional[int]
-    # Seconds of the past each rung keeps and lists. Default 30.
+    # Seconds kept, default 30.
 
 class IdRequest(TypedDict, total=False):
     """An id on its own: `source.get`, `source.remove`, `output.remove`, `output.reconnect`, `media.remove`."""
@@ -2278,8 +2278,7 @@ class ShowOutputAddRequest(TypedDict, total=False):
     label: Optional[str]
     output: Optional[str]
     # The new output's own id, a slug. Made from the label when left out.
-    params: Union[HlsOutputParams, None]
-    # For an `hls://` output, as in `show.add`'s outputs.
+    params: HlsOutputParams
     platform: Optional[str]
     rendition: Union[RenditionChoice, None]
     uri: Optional[str]
@@ -2302,8 +2301,8 @@ class ShowOutputSetRequest(TypedDict, total=False):
     label: Optional[str]
     output: str
     # The output's id.
-    params: Union[HlsOutputParams, None]
-    # An `hls://` output's params, all of them: a name left out goes back to its default.
+    params: HlsOutputParams
+    # Replaces them all.
     rendition: Union[RenditionChoice, None]
     # Left out keeps what it has; `null` or `{"preset": "copy"}` goes back to a copy.
     uri: Optional[str]
@@ -2318,14 +2317,14 @@ class ShowOutputSpec(TypedDict, total=False):
     key: Optional[str]
     # A platform's stream key. Write only: no method reads it back.
     label: Optional[str]
-    params: Union[HlsOutputParams, None]
-    # For an `hls://` output: segment and part lengths, the window and the viewer key, as an `hls/output` takes them. Refused on any other.
+    params: HlsOutputParams
+    # For an `hls://` output only.
     platform: Optional[str]
     # youtube, facebook, twitch, custom or srt. Left out: custom, which takes a whole address in `uri`.
     rendition: Union[RenditionChoice, None]
     # Left out: a copy of the input's own bytes, repackaged. Otherwise a rendition request or `{"preset": "youtube-720p30"}`, planned and admitted by the governor.
     uri: Optional[str]
-    # The whole address: `srt://10.0.0.9:9000`, `rtmp://host/app/key`, `udp://239.2.2.2:5000`, or `hls://viewers` for HLS served from the station's own port. For a platform, its ingest server when it is not the platform's own.
+    # The whole address: `srt://10.0.0.9:9000`, `rtmp://host/app/key`, `udp://239.2.2.2:5000`, `hls://viewers`. For a platform, its ingest server when it is not the platform's own.
 
 class ShowRefused(TypedDict, total=False):
     """A show of `show.add_many` that was not made, and why."""
@@ -5093,7 +5092,7 @@ class GeneratedMethods:
         key: Optional[str] = None,
         label: Optional[str] = None,
         output: Optional[str] = None,
-        params: Optional[Union[HlsOutputParams, None]] = None,
+        params: Optional[HlsOutputParams] = None,
         platform: Optional[str] = None,
         rendition: Optional[Union[RenditionChoice, None]] = None,
         uri: Optional[str] = None,
@@ -5138,7 +5137,7 @@ class GeneratedMethods:
         enabled: Optional[bool] = None,
         key: Optional[str] = None,
         label: Optional[str] = None,
-        params: Optional[Union[HlsOutputParams, None]] = None,
+        params: Optional[HlsOutputParams] = None,
         rendition: Optional[Union[RenditionChoice, None]] = None,
         uri: Optional[str] = None,
     ) -> Show:

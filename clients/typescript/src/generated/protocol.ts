@@ -953,10 +953,7 @@ export interface HistoryStep {
   undo: number;
 }
 
-/**
- * The `params` of a show's `hls://` output: the same names, defaults and
- * limits as an `hls/output`'s (`docs/reference/hls-output.md`).
- */
+/** An `hls://` output's params, as an `hls/output` takes them. */
 export interface HlsOutputParams {
   low_latency?: boolean | null;
   part_ms?: number | null;
@@ -2065,7 +2062,7 @@ export interface ShowOutputAddRequest {
   key?: string | null;
   label?: string | null;
   output?: string | null;
-  params?: HlsOutputParams | null;
+  params?: HlsOutputParams;
   platform?: string | null;
   rendition?: RenditionChoice | null;
   uri?: string | null;
@@ -2084,7 +2081,7 @@ export interface ShowOutputSetRequest {
   key?: string | null;
   label?: string | null;
   output: string;
-  params?: HlsOutputParams | null;
+  params?: HlsOutputParams;
   rendition?: RenditionChoice | null;
   uri?: string | null;
 }
@@ -2098,7 +2095,7 @@ export interface ShowOutputSpec {
   id?: string | null;
   key?: string | null;
   label?: string | null;
-  params?: HlsOutputParams | null;
+  params?: HlsOutputParams;
   platform?: string | null;
   rendition?: RenditionChoice | null;
   uri?: string | null;
