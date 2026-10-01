@@ -359,6 +359,16 @@ fn no_method(provide: &str, method: &str, has: &str) -> RpcError {
 }
 
 fn main() {
+    let args: Vec<String> = std::env::args().collect();
+    if args.get(1).map(String::as_str) == Some("--direct") {
+        // The direct host alone, for measuring: src/direct/standalone.rs.
+        let Some(path) = args.get(2) else {
+            eprintln!("usage: gmx-ingest --direct <table.json> [--seconds N]");
+            std::process::exit(2);
+        };
+        let seconds = args.iter().position(|a| a == "--seconds").and_then(|i| args.get(i + 1)?.parse().ok());
+        std::process::exit(direct::standalone::run(path, seconds));
+    }
     let env = PluginEnv::from_env();
     if !env.started_by_core() {
         eprintln!(
