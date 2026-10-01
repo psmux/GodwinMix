@@ -1,15 +1,18 @@
-//! `/hls/*` on the station: a direct show's outputs answered here, with the
-//! control port's own handlers, and every other show's relayed to it.
+//! `/hls/*` on the station. A direct show's output is found here and the
+//! player let in or refused here, with the control port's own rules, and
+//! then the request goes to the HLS packager on loopback, which answers it
+//! from its rings. Every other show's is relayed to that show.
 //!
 //! The paths are a show's: `/hls/<output>/master.m3u8?show=<id>&key=...`.
 //! `show` picks the show as it does on every other path, the first show
 //! when it is left out, and is carried onto every URI a playlist hands out.
 
-use crate::control::hls::{files, playlists, refuse, Door};
+use crate::control::hls::{auth, refuse, Door};
+use crate::station::packager::wire::{PEER_HEADER, SHOW_HEADER};
 use crate::station::relay::{http, show_in};
 use crate::station::state::Station;
-use axum::extract::{Path, Request, State};
-use axum::http::StatusCode;
+use axum::extract::{ConnectInfo, Request, State};
+use axum::http::{header, HeaderValue, StatusCode};
 use axum::response::Response;
 use axum::routing::get;
 use axum::Router;
@@ -49,45 +52,58 @@ impl Door for StationDoor {
     }
 }
 
-/// The routes, for the station's router.
+/// The routes, for the station's router. One handler serves all four: what
+/// differs between them is the packager's to answer.
 pub fn router(st: Arc<Station>) -> Router {
     Router::new()
-        .route("/hls/{output}/master.m3u8", get(master))
-        .route("/hls/{output}/manifest.mpd", get(dash))
-        .route("/hls/{output}/{rung}/index.m3u8", get(media))
-        .route("/hls/{output}/{rung}/{file}", get(file))
+        .route("/hls/{output}/master.m3u8", get(any))
+        .route("/hls/{output}/manifest.mpd", get(any))
+        .route("/hls/{output}/{rung}/index.m3u8", get(any))
+        .route("/hls/{output}/{rung}/{file}", get(any))
         .with_state(st)
 }
 
-/// Whether this request is for a direct show, which the station answers.
-fn here(st: &Station, req: &Request) -> bool {
-    st.is_direct(&show_of(st, req))
-}
-
-async fn master(State(st): State<Arc<Station>>, path: Path<String>, req: Request) -> Response {
-    if !here(&st, &req) {
+async fn any(State(st): State<Arc<Station>>, req: Request) -> Response {
+    let show = show_of(&st, &req);
+    if !st.is_direct(&show) {
         return http::forward(st, req).await;
     }
-    playlists::master(State(StationDoor(st)), path, req).await
+    let output = req.uri().path().split('/').nth(2).unwrap_or_default().to_string();
+    let door = StationDoor(st.clone());
+    let stream = match door.find(&output, &req) {
+        Ok(s) => s,
+        Err(r) => return *r,
+    };
+    if let Err(r) = auth::admit(&door, &stream, &req) {
+        return *r;
+    }
+    let Some((addr, secret)) = st.direct.hls.packager() else { return not_up(&st, &show, &output) };
+    let url = format!("http://{addr}{}", req.uri().path_and_query().map(|p| p.as_str()).unwrap_or("/"));
+    let (mut parts, body) = req.into_parts();
+    // The player was let in here; the packager takes the station's word.
+    parts.headers.remove(header::AUTHORIZATION);
+    if let Ok(v) = HeaderValue::from_str(&format!("Bearer {secret}")) {
+        parts.headers.insert(header::AUTHORIZATION, v);
+    }
+    if let Ok(v) = HeaderValue::from_str(&show) {
+        parts.headers.insert(SHOW_HEADER, v);
+    }
+    parts.headers.remove(PEER_HEADER);
+    let peer = parts.extensions.get::<ConnectInfo<std::net::SocketAddr>>().map(|c| c.0.to_string());
+    if let Some(v) = peer.and_then(|p| HeaderValue::from_str(&p).ok()) {
+        parts.headers.insert(PEER_HEADER, v);
+    }
+    match http::pass(&st.http, &url, Request::from_parts(parts, body)).await {
+        Ok(answer) => answer,
+        Err(_) => not_up(&st, &show, &output),
+    }
 }
 
-async fn dash(State(st): State<Arc<Station>>, path: Path<String>, req: Request) -> Response {
-    if !here(&st, &req) {
-        return http::forward(st, req).await;
-    }
-    playlists::dash(State(StationDoor(st)), path, req).await
-}
-
-async fn media(State(st): State<Arc<Station>>, path: Path<(String, String)>, req: Request) -> Response {
-    if !here(&st, &req) {
-        return http::forward(st, req).await;
-    }
-    playlists::media(State(StationDoor(st)), path, req).await
-}
-
-async fn file(State(st): State<Arc<Station>>, path: Path<(String, String, String)>, req: Request) -> Response {
-    if !here(&st, &req) {
-        return http::forward(st, req).await;
-    }
-    files::file(State(StationDoor(st)), path, req).await
+/// A 503 a player retries, while the packager is starting or starting again.
+fn not_up(st: &Station, show: &str, output: &str) -> Response {
+    let why = st.direct.hls.view(show, output).and_then(|(l, _)| l.error).unwrap_or_else(|| "it is starting".into());
+    let message = format!("Show {show}'s HLS packager is not answering now: {why}. Try again in a few seconds; a player does by itself.");
+    let mut r = refuse(StatusCode::SERVICE_UNAVAILABLE, message, json!({ "show": show, "output": output, "retry_after_s": 2 }));
+    r.headers_mut().insert(header::RETRY_AFTER, HeaderValue::from_static("2"));
+    r
 }

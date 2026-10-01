@@ -1,6 +1,6 @@
 //! Which HLS outputs should run, and what each one reads.
 
-use super::packager::Source;
+use crate::station::packager::wire::Source;
 use super::spec;
 use crate::station::direct::outputs;
 use crate::station::state::Station;

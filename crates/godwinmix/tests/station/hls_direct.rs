@@ -12,7 +12,7 @@ use std::path::Path;
 use std::process::Command;
 use std::time::{Duration, Instant};
 
-async fn text(st: &Running, path: &str) -> (u16, String) {
+pub async fn text(st: &Running, path: &str) -> (u16, String) {
     let answer = reqwest::Client::new().get(format!("http://{}{path}", st.url)).timeout(Duration::from_secs(20)).send().await.unwrap();
     (answer.status().as_u16(), answer.text().await.unwrap_or_default())
 }
@@ -25,7 +25,7 @@ async fn bytes(st: &Running, path: &str) -> Vec<u8> {
 
 /// A folder whose ingest plugin binds its relay on a port of its own, so
 /// two of these tests can run at once.
-fn folder_with_relay(name: &str) -> (std::path::PathBuf, u16) {
+pub fn folder_with_relay(name: &str) -> (std::path::PathBuf, u16) {
     let (dir, port) = folder(name);
     let relay = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
     let config = dir.join("godwinmix.toml");
@@ -35,7 +35,7 @@ fn folder_with_relay(name: &str) -> (std::path::PathBuf, u16) {
 }
 
 /// The show's output as `show.list` has it.
-async fn output(ws: &mut Ws, id: u64, show: &str, out: &str) -> Value {
+pub async fn output(ws: &mut Ws, id: u64, show: &str, out: &str) -> Value {
     let list = call(ws, id, "show.list", json!({})).await;
     let shows = list["result"]["shows"].as_array().cloned().unwrap_or_default();
     let s = shows.into_iter().find(|s| s["id"] == show).unwrap_or_default();
@@ -43,7 +43,7 @@ async fn output(ws: &mut Ws, id: u64, show: &str, out: &str) -> Value {
 }
 
 /// Wait until the output is in `state`, and answer it.
-async fn until(ws: &mut Ws, show: &str, out: &str, state: &str, limit: Duration) -> Value {
+pub async fn until(ws: &mut Ws, show: &str, out: &str, state: &str, limit: Duration) -> Value {
     let (until, mut id) = (Instant::now() + limit, 100);
     loop {
         id += 1;
@@ -72,14 +72,14 @@ fn init_of(playlist: &str) -> String {
 }
 
 /// What gst-discoverer-1.0 says of a file, with `-v` for the codecs.
-fn discover(file: &Path) -> String {
+pub fn discover(file: &Path) -> String {
     let out = Command::new("gst-discoverer-1.0").arg("-v").arg(file).output().expect("gst-discoverer-1.0 is installed with GStreamer");
     format!("{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr))
 }
 
 /// The newest whole segment of one rung, with its init segment in front,
 /// written to `file`: a fragmented MP4 a player could play.
-async fn fetch_rung(st: &Running, master: &str, rung: &str, file: &Path) -> (String, u64) {
+pub async fn fetch_rung(st: &Running, master: &str, rung: &str, file: &Path) -> (String, u64) {
     let base = "/hls/viewers/";
     let master_text = text(st, master).await.1;
     let uri = master_text.lines().find(|l| l.starts_with(&format!("{rung}/")) || l.contains(&format!("URI=\"{rung}/"))).unwrap_or_else(|| panic!("no {rung} in {master_text}"));

@@ -72,7 +72,9 @@ impl Station {
             }
         }
         let shows: Vec<(String, u32)> = self.procs.lock().iter().filter_map(|(id, p)| p.pid.map(|pid| (id.clone(), pid))).collect();
-        let plugins: Vec<u32> = godwinmix_core::plugin::loader::stats().into_iter().filter_map(|s| s.pid).collect();
+        // The HLS packager counts with the plugins: a child the station started.
+        let mut plugins: Vec<u32> = godwinmix_core::plugin::loader::stats().into_iter().filter_map(|s| s.pid).collect();
+        plugins.extend(self.direct.hls.pid());
         let pids: Vec<u32> = shows.iter().map(|(_, p)| *p).chain(plugins.iter().copied()).collect();
         let samples = read(&mut held.0, &pids);
         let children = Children {

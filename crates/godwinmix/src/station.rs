@@ -25,6 +25,7 @@ pub mod child;
 mod files;
 mod host;
 mod ingest;
+pub mod packager;
 pub mod list;
 pub mod methods;
 mod programme;
