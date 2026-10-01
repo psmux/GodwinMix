@@ -64,20 +64,26 @@ pub fn live(inlet: Box<dyn Inlet>) -> gst::Pipeline {
 
 /// Decode an MPEG-TS file and count the pictures and the sound frames.
 pub fn decode_ts(path: &std::path::Path) -> (u32, u32) {
-    let line = format!(
-        "filesrc location={} ! tsdemux name=d d. ! queue ! h264parse ! avdec_h264 ! fakesink name=v \
-         d. ! queue ! aacparse ! avdec_aac ! fakesink name=a",
-        path.display()
-    );
+    gmx_netkit::init().unwrap();
+    let line = format!("filesrc location={} ! decodebin name=d", path.display());
     let p = gst::parse::launch(&line).unwrap().downcast::<gst::Pipeline>().unwrap();
     let counts = [Arc::new(Mutex::new(0u32)), Arc::new(Mutex::new(0u32))];
-    for (name, n) in ["v", "a"].iter().zip(counts.iter()) {
-        let n = n.clone();
-        p.by_name(name).unwrap().static_pad("sink").unwrap().add_probe(gst::PadProbeType::BUFFER, move |_, _| {
+    let (weak, c) = (p.downgrade(), counts.clone());
+    // Linked by what each pad carries: the demuxer may offer either first.
+    p.by_name("d").unwrap().connect_pad_added(move |_, pad| {
+        let Some(p) = weak.upgrade() else { return };
+        let caps = pad.current_caps().unwrap_or_else(|| pad.query_caps(None));
+        let video = caps.structure(0).is_some_and(|s| s.name().starts_with("video/"));
+        let sink = gst::ElementFactory::make("fakesink").property("sync", false).build().unwrap();
+        p.add(&sink).unwrap();
+        sink.sync_state_with_parent().unwrap();
+        let n = c[usize::from(!video)].clone();
+        sink.static_pad("sink").unwrap().add_probe(gst::PadProbeType::BUFFER, move |_, _| {
             *n.lock().unwrap() += 1;
             gst::PadProbeReturn::Ok
         });
-    }
+        let _ = pad.link(&sink.static_pad("sink").unwrap());
+    });
     p.set_state(gst::State::Playing).unwrap();
     let _ = p.bus().unwrap().timed_pop_filtered(gst::ClockTime::from_seconds(20), &[gst::MessageType::Eos, gst::MessageType::Error]);
     let _ = p.set_state(gst::State::Null);
