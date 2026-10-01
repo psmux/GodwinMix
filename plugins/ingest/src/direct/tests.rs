@@ -218,6 +218,15 @@ fn a_rendition_is_decoded_once_and_sent_at_the_size_asked_for() {
     let renditions = host.transcoders.renditions();
     let key = crate::transcode::output_key("main", Some(enc), Some("copy:main:audio"));
     wait_for("the converted pair", 20, || renditions.is_live("direct.small", &key));
+    // The decode the rendition already runs hands a picture a second to
+    // whoever asks, at the input's own size.
+    let tapped = Arc::new(Mutex::new(Vec::new()));
+    let p = tapped.clone();
+    let tap: crate::transcode::Tap = Arc::new(move |s: &gst::Sample| {
+        let caps = s.caps().and_then(|c| c.structure(0).map(|st| (st.name().to_string(), st.get::<i32>("width").unwrap_or(0))));
+        p.lock().unwrap().push(caps);
+    });
+    host.transcoders.set_tap("direct.small", "main", Some(tap));
     let listening = listen_udp(socket, 4);
     // A late reader is given the encoder's own sequence header first.
     let late = renditions.subscribe("direct.small", &key);
@@ -232,6 +241,9 @@ fn a_rendition_is_decoded_once_and_sent_at_the_size_asked_for() {
     assert!(pictures >= 60, "decoded {pictures} pictures of the rendition");
     let stats = host.stats(None);
     assert_eq!(stats["shows"][0]["outputs"][0]["encoder"], "x264enc", "{stats}");
+    let seen = tapped.lock().unwrap().clone();
+    assert!((2..=6).contains(&seen.len()), "about one picture a second, not every frame: {seen:?}");
+    assert!(seen.iter().all(|c| c.as_ref().is_some_and(|(name, w)| name == "video/x-raw" && *w == 320)), "{seen:?}");
 }
 
 #[test]

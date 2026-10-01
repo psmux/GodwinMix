@@ -113,6 +113,7 @@ pub struct Context {
 
 /// The input an address means.
 pub fn open(spec: &InputSpec, ctx: &Context) -> Result<Box<dyn Input>, InputError> {
+    gmx_netkit::init().map_err(|e| InputError { message: e, data: serde_json::json!({}) })?;
     if let (Some(name), Some(hub)) = (spec.uri.strip_prefix("channel:"), &ctx.hub) {
         let (app, stream) = name.split_once('/').unwrap_or((name, "main"));
         return Ok(Box::new(Channel { hub: hub.clone(), app: app.into(), stream: stream.into() }));
@@ -169,7 +170,8 @@ impl Input for Udp {
         let weak = p.downgrade();
         p.by_name("d").expect("demux").connect_pad_added(move |_, pad| {
             let Some(p) = weak.upgrade() else { return };
-            let name = pad.current_caps().and_then(|c| c.structure(0).map(|s| s.name().to_string())).unwrap_or_default();
+            let caps = pad.current_caps().unwrap_or_else(|| pad.query_caps(None));
+            let name = caps.structure(0).map(|s| s.name().to_string()).unwrap_or_default();
             let (parser, end) = match name.as_str() {
                 "video/x-h264" => ("h264parse", tagger::video_sink(to.clone(), zero.clone())),
                 "video/x-h265" => ("h265parse", tagger::hevc_sink(to.clone(), zero.clone())),
@@ -177,6 +179,9 @@ impl Input for Udp {
                 _ => return,
             };
             let Ok(parse) = gst::ElementFactory::make(parser).build() else { return };
+            // With no queue, two sinks share the demuxer's thread: one
+            // waiting to preroll would hold the other for ever.
+            end.set_property("async", false);
             let _ = p.add_many([&parse, &end]);
             let _ = parse.link(&end);
             let _ = parse.sync_state_with_parent();
@@ -184,7 +189,13 @@ impl Input for Udp {
             let _ = pad.link(&parse.static_pad("sink").expect("a sink pad"));
         });
         let _ = p.set_state(gst::State::Playing);
+        let bus = p.bus().expect("a bus");
         while !stop.wait(Duration::from_secs(1)) {
+            while let Some(m) = bus.pop_filtered(&[gst::MessageType::Error]) {
+                if let gst::MessageView::Error(e) = m.view() {
+                    eprintln!("stand in input {uri}: {} ({:?})", e.error(), e.debug());
+                }
+            }
             let s = stats::InputStats { state: stats::State::Live, ..Default::default() };
             sink.lock().unwrap_or_else(|e| e.into_inner()).stats(&s);
         }

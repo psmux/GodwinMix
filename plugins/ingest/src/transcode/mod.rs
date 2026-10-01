@@ -35,7 +35,7 @@ use std::sync::{Mutex, MutexGuard};
 
 use crate::hub::Hub;
 use crate::sends::{Feed, Wanted};
-pub use router::Output;
+pub use router::{Output, Tap};
 use session::Session;
 pub use spec::{specs, stream_specs, StreamSpec};
 
@@ -81,6 +81,14 @@ impl Transcoders {
                     running.insert(key, session);
                 }
             }
+        }
+    }
+
+    /// Hand one converted stream's decoded pictures, about one a second, to
+    /// `tap`, or to nobody. A stream not being converted has no pictures.
+    pub fn set_tap(&self, app: &str, stream: &str, tap: Option<router::Tap>) {
+        if let Some(session) = self.lock().get(&(app.to_string(), stream.to_string())) {
+            session.set_tap(tap);
         }
     }
 

@@ -26,4 +26,6 @@ impl Vitals {
     pub fn counters(&self, _id: &str, _cc_errors: u64, _lost: u64) {}
 
     pub fn output(&self, _id: &str, _output: &str, _failed: Option<&str>) {}
+
+    pub fn offer_frame(&self, _id: &str, _sample: &gstreamer::Sample) {}
 }
