@@ -9,7 +9,10 @@ use std::time::{Duration, Instant};
 fn gmx(url: &str, args: &[&str]) -> Output {
     let mut cmd = Command::new(GMX);
     cmd.arg("shows").args(["--url", &format!("http://{url}")]).args(args);
-    cmd.env_remove("GODWINMIX_TOKEN").env("GODWINMIX_HTTP_TIMEOUT_SECS", "30");
+    // Turning compositing on waits up to 30 s for the outputs to be live
+    // again, and nothing is sending to these inputs, so the switch takes
+    // that long here.
+    cmd.env_remove("GODWINMIX_TOKEN").env("GODWINMIX_HTTP_TIMEOUT_SECS", "90");
     cmd.output().expect("gmx runs")
 }
 
