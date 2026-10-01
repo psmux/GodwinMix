@@ -169,7 +169,9 @@ async fn mp2_sound_is_refused_with_the_next_step_and_served_once_a_rendition_mak
 
     let set = call(&mut ws, 4, "show.output.set", json!({"id": "feed", "output": "viewers", "rendition": {"audio": {"codec": "aac"}}})).await;
     assert!(set.get("error").is_none(), "{set}");
-    let out = until(&mut ws, "feed", "viewers", "live", Duration::from_secs(90)).await;
+    // The sound decode and encode are admitted by the governor, which
+    // waits for room when other tests have the machine busy.
+    let out = until(&mut ws, "feed", "viewers", "live", Duration::from_secs(240)).await;
     let master = out["playback"]["master_url_path"].as_str().unwrap().to_string();
     let (_, text_master) = text(&st, &master).await;
     assert!(text_master.contains("avc1.") && text_master.contains("mp4a.40"), "{text_master}");
