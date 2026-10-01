@@ -10,7 +10,8 @@ const WORD = { starting: "starting", stopped: "stopped", failed: "failed" };
 export function showTabs(client) {
   const list = el("div.showtabs", { role: "tablist", "aria-label": "Shows" });
   const add = el("button.shows-add", { type: "button", text: "+", title: "New show", "aria-label": "New show", "data-act": "new" });
-  const row = el("div.shows", { hidden: true }, [list, add]);
+  const wall = el("button.shows-add", { type: "button", text: "▦", title: "Every show at once: the monitoring wall", "aria-label": "Monitoring wall", "data-act": "wall" });
+  const row = el("div.shows", { hidden: true }, [list, add, wall]);
   const view = { client, row, list, shows: [], current: null };
   view.read = () => client.call("show.list", {}).then((a) => {
     view.shows = a.shows || [];
