@@ -155,6 +155,22 @@ stop, as the menu bar is.
 These keys are the tab's, not the page's: `F2` and `Delete` on a tab never
 reach a scene or a source.
 
+### The monitoring wall
+
+View, Monitoring wall, or the grid button after the show tabs. The keys work
+while the wall has focus, which it takes when it opens on a screen wider
+than a phone.
+
+| Key | On the wall |
+|---|---|
+| `Up`, `Down` | move from show to show; in tiles `Left` and `Right` as well |
+| `Home`, `End`, `Page Up`, `Page Down` | the first show, the last, ten at a time |
+| `Enter` | open the show: a mixed one in the mixer, a direct one in its detail |
+| `A` | acknowledge the show's alarms, which stop flashing until each clears |
+| `Escape` | close the wall, after clearing the filter if it has focus |
+
+See [watch many shows at once](../how-to/monitor-many-shows.md).
+
 ### What a number counts in the web UI
 
 A slot is a scene tile, counted down the scenes panel in the order it shows

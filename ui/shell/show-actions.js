@@ -24,6 +24,7 @@ export function handle(view, e) {
   const tab = e.target.closest(".showtab");
   const show = tab && view.shows.find((s) => s.id === tab.dataset.show);
   if (e.type === "click" && e.target.closest("[data-act=new]")) return import("./show-file.js").then((m) => m.newShow(view.client));
+  if (e.type === "click" && e.target.closest("[data-act=wall]")) return import("../panels/wall/view.js").then((m) => m.toggleWall(view.client));
   if (!show || e.target.closest("input")) return;
   if (e.type === "click") return clicked(view, show, e);
   if (e.type === "dblclick") return rename(view, show);
