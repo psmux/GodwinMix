@@ -17,11 +17,19 @@ fn cpu_seconds() -> f64 {
     text.trim().split(':').fold(0.0, |acc, part| acc * 60.0 + part.parse::<f64>().unwrap_or(0.0))
 }
 
+/// This process's threads, as `ps -M` lists them (one line each, and a header).
+fn threads() -> usize {
+    let out = Command::new("ps").args(["-M", "-p", &std::process::id().to_string()]).output().unwrap();
+    String::from_utf8_lossy(&out.stdout).lines().count().saturating_sub(1)
+}
+
 /// Carry `spec` for `secs` after a warm up, and answer the CPU it took as a
 /// share of one core, with the last numbers it reported.
 fn measure(spec: Value, secs: u64) -> (f64, InputStats) {
+    let idle = threads();
     let rx = start(spec, &Context::default());
     std::thread::sleep(Duration::from_secs(4));
+    println!("threads: {idle} before, {} while carrying", threads());
     let (before, at) = (cpu_seconds(), Instant::now());
     std::thread::sleep(Duration::from_secs(secs));
     let used = (cpu_seconds() - before) / at.elapsed().as_secs_f64();

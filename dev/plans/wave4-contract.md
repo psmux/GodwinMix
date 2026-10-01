@@ -78,7 +78,10 @@ itself. Every one of these is an MCP tool (see Agents).
     InputStats { kbps, fps, width, height, video_codec, audio_codec, audio_channels,
                  cc_errors, packets_lost, keyframe_ms, last_frame_ms,
                  state: "connecting" | "live" | "retrying",   (directin: added)
-                 error?: string,                             why it is retrying
+                 error?: string,                             why it is retrying, what of the feed is
+                                                             left out, or "on the backup input: <why>"
+                                                             (keyframe_ms is the interval between the
+                                                             last two keyframes, by the stream's clock)
                  program?: u16,                              the TS program being taken
                  programs?: [{number, name, provider, streams}] }   every program in an
                                                              MPEG-TS feed, names from the SDT,
