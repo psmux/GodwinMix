@@ -4,7 +4,7 @@
 
 use crate::station::state::Station;
 use godwinmix_protocol::destination::Destination;
-use godwinmix_protocol::shows::{OutputStats, ShowStats, ShowState};
+use godwinmix_protocol::shows::{OutputStats, ShowState, ShowStats, ShowWork};
 use serde_json::json;
 use std::sync::Arc;
 use std::time::Duration;
@@ -49,8 +49,8 @@ impl super::Direct {
     /// One show's numbers. Cheap: what the host last sent, and the plan.
     pub fn stats_of(&self, st: &Station, id: &str) -> ShowStats {
         let seen = self.seen.lock().get(id).cloned().unwrap_or_default();
-        let records = st.registry.lock().get(id).map(|r| r.outputs.clone()).unwrap_or_default();
-        let outputs = records
+        let (records, compositing) = st.registry.lock().get(id).map(|r| (r.outputs.clone(), r.compositing)).unwrap_or_default();
+        let outputs: Vec<OutputStats> = records
             .iter()
             .filter(|o| o.enabled)
             .map(|o| {
@@ -67,7 +67,15 @@ impl super::Direct {
                 row
             })
             .collect();
-        ShowStats { id: id.to_string(), health: self.health_of(st, id), input: seen.input_stats.clone(), outputs }
+        let encodes = records.iter().any(|o| o.enabled && o.rendition.is_some());
+        let work = match (compositing, encodes) {
+            (true, _) => ShowWork::Mix,
+            (false, true) => ShowWork::Transcode,
+            (false, false) => ShowWork::Copy,
+        };
+        // A show that mixes is a process of its own, read by `show.stats`.
+        let cpu_millicores = (!compositing).then(|| outputs.iter().map(|o| o.cpu_millicores).sum());
+        ShowStats { id: id.to_string(), health: self.health_of(st, id), work, cpu_millicores, input: seen.input_stats.clone(), outputs }
     }
 }
 

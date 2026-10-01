@@ -22,7 +22,7 @@ pub async fn call(st: &Arc<Station>, method: &str, params: Value) -> Result<Valu
         "show.set" => super::shows_set::set(st, parse(method, params)?).await,
         "show.add_many" => super::shows_bulk::add_many(st, parse(method, params)?).await,
         "show.remove_many" => super::shows_bulk::remove_many(st, parse(method, params)?).await,
-        "show.stats" => super::shows_stats::stats(st, parse(method, params)?),
+        "show.stats" => super::shows_stats::stats(st, parse(method, params)?).await,
         m if m.starts_with("show.output.") => super::shows_set::output(st, m, params),
         other => Err(super::methods::no_such_method(other)),
     }
