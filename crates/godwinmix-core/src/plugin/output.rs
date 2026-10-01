@@ -56,9 +56,12 @@ pub trait Output: Send {
     fn status(&self) -> godwinmix_protocol::types::Extra { Default::default() }
 
     /// Retire this pipeline. A recorder may finalise it on its own worker.
+    ///
+    /// Waits a bounded time and no longer: a sink stuck in a write that never
+    /// returns would otherwise hold a reconnect for ever. See
+    /// `output::retire`.
     fn shutdown(&mut self, pipeline: gst::Pipeline) {
-        use gstreamer::prelude::*;
-        let _ = pipeline.set_state(gst::State::Null);
+        crate::output::retire::to_null_within(pipeline, crate::output::retire::RETIRE_WAIT);
     }
 
     fn configure(&mut self, params: &Params) -> Result<Configure>;
