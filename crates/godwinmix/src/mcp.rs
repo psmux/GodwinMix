@@ -695,8 +695,12 @@ mod tests {
             if name == mcp_tools::SEARCH_TOOL {
                 continue;
             }
-            let args = json!({ "id": "cam1", "uri": "rtmp://h/l/k", "url": "https://e.com" });
-            assert!(s.plan(name, &args).is_ok(), "no route for tool {name}");
+            let args = json!({
+                "id": "cam1", "uri": "rtmp://h/l/k", "url": "https://e.com",
+                "shows": [], "output": "out"
+            });
+            let plan = s.plan(name, &args);
+            assert!(plan.is_ok(), "no route for tool {name}: {plan:?}");
         }
         // Names are unique.
         let mut sorted = names.clone();
