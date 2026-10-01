@@ -8799,6 +8799,22 @@
         ],
         "type": "object"
       },
+      "ThumbnailRequest": {
+        "description": "`program.thumbnail`.",
+        "properties": {
+          "width": {
+            "default": null,
+            "description": "Pixels across, 16 to 320, made even. 320 when left out.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
       "TokenInfo": {
         "description": "What the calling token is allowed to do, echoed back so a surface can grey\nout what it cannot reach instead of discovering it at the first refusal.",
         "properties": {
@@ -12507,6 +12523,34 @@
         "x-destructive": false,
         "x-idempotent": true,
         "x-scope": "operate"
+      }
+    },
+    "/api/v1/program/thumbnail": {
+      "get": {
+        "description": "JSON-RPC method `program.thumbnail`. Needs the `read` scope.",
+        "operationId": "program.thumbnail",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "What is on air as a small JPEG in base64, {jpeg, width, height, at_ms}, or {pending: true} while the first picture is on its way. An ask keeps one picture a second coming for ten seconds; nothing runs between asks.",
+        "tags": [
+          "program"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
       }
     },
     "/api/v1/project/export": {

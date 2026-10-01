@@ -478,6 +478,14 @@ pub struct HistoryRequest {
     pub limit: Option<u32>,
 }
 
+/// `program.thumbnail`.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+pub struct ThumbnailRequest {
+    /// Pixels across, 16 to 320, made even. 320 when left out.
+    #[serde(default)]
+    pub width: Option<u32>,
+}
+
 /// One take, as `program.history` reports it.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct TakeRecord {

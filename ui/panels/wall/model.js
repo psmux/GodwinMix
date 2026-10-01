@@ -57,6 +57,8 @@ export const mixed = (show) => !!show && show.compositing !== false;
 export const healthOf = (show) => (show && show.health) || { state: show && show.state === "stopped" ? "off" : "ok", alarms: [] };
 export const rank = (show) => RANK[healthOf(show).state] ?? 1;
 export const isLive = (show) => show.state === "running" || show.state === "live";
+/** Whether a show has a picture to ask for: a show that is stopped, failed or still starting has none. */
+export const pictured = (show) => !show.state || isLive(show);
 /** What a show costs, thousandths of a core: the core's figure for the show, else its outputs' encodes summed. */
 export const load = (stats) => {
   if (stats && stats.cpu_millicores != null) return stats.cpu_millicores;

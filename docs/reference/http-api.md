@@ -26,6 +26,7 @@ these and nothing else. A generated `openapi.json` and a `protocol.md` from
 | `GET /api/agent/state` | the state a language model needs, compact: programme, sources with their state and motion, outputs, a snapshot URL pattern. `?response_format=detailed` adds the audio peak per source, the last five takes and the safety limits in force. See [agent-state.md](agent-state.md) |
 | `POST /api/v1/program/revert` | take back to the shot before this one |
 | `GET /api/v1/program/history` | the last hundred takes, newest first, each with the token that asked |
+| `GET /api/v1/program/thumbnail` | `program.thumbnail`, read scope. `?width=` 16 to 320, made even, 320 when left out. What is on air as `{jpeg, width, height, at_ms}`, the JPEG in base64 and in the canvas's shape, or `{pending: true, retry_after_ms}` while the first picture is on its way. An ask keeps one picture a second coming for ten seconds and builds no mosaic; `gmx_stream_clients{kind="thumbnail"}` is 1 while that runs. A station's wall reads it for each show that composites |
 | `GET /api/v1/tasks` | every background job, newest first |
 | `GET /api/v1/tasks/{id}` | one job: `state`, `progress`, `result`, `error`. See [tasks.md](tasks.md) |
 | `POST /api/v1/tasks/{id}/cancel` | ask one to stop, cooperatively |

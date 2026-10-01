@@ -23,15 +23,20 @@
 //! | `/opus/*` | the same, plus an Opus encoder at 64 kbit/s |
 //! | `/whep/*` | one video encoder and one audio encoder per session, and a programme encoder lease |
 //! | `preview.open` | a `unixfdsink`, which copies no pixels at all |
+//! | `program.thumbnail` | one frame a second scaled to 320 wide, and a small JPEG per ask |
 //!
 //! The picture streams are fed from the mosaic pipeline, never from the
 //! programme one, so a preview client that misbehaves cannot reach air. That
-//! is the same isolation boundary the mosaic has always had.
+//! is the same isolation boundary the mosaic has always had. The programme
+//! thumbnail is the exception: it hangs off the raw programme tee behind a
+//! leaky queue of its own, because building a mosaic for one small picture
+//! costs more than the picture is worth on a station of fifty shows.
 
 pub mod audio;
 pub mod hub;
 pub mod local;
 pub mod mjpeg;
+pub mod thumb;
 pub mod whep;
 
 pub use hub::{AudioStream, LocalStream, PreviewDemand, PreviewHandle};
@@ -44,7 +49,8 @@ use std::sync::Arc;
 /// How many clients each kind of stream has, for `gmx_stream_clients{kind}`.
 ///
 /// Kinds are the words a person would use: `mjpeg`, `pcm`, `opus`, `whep`,
-/// `unixfd`, `preview`.
+/// `unixfd`, `preview`, and `thumbnail`, which is 1 while the programme
+/// thumbnail branch is on however many ask for it.
 #[derive(Default)]
 pub struct StreamClients {
     counts: Mutex<BTreeMap<String, u64>>,
@@ -112,7 +118,7 @@ impl Drop for ClientGuard {
 /// The kinds `/metrics` declares up front, so a scrape of an idle core lists
 /// them all at zero and a dashboard does not break when the first client
 /// arrives.
-pub const STREAM_KINDS: &[&str] = &["mjpeg", "pcm", "opus", "whep", "unixfd", "preview"];
+pub const STREAM_KINDS: &[&str] = &["mjpeg", "pcm", "opus", "whep", "unixfd", "preview", "thumbnail"];
 
 #[cfg(test)]
 mod tests {

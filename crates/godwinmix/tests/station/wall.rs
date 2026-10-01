@@ -102,3 +102,85 @@ async fn the_wall_counts_what_a_show_that_mixes_costs_in_its_load_and_header() {
     assert!(mixes > 0, "a show recording its programme costs something: {s}");
     assert!(used >= mixes * 3 / 4, "the header's CPU, {used} millicores, leaves out the show that mixes at {mixes}: {g}");
 }
+
+/// The width and height a JPEG's frame header says, or None.
+fn jpeg_size(b: &[u8]) -> Option<(u32, u32)> {
+    let mut i = 2;
+    while i + 9 < b.len() {
+        if b[i] != 0xff {
+            return None;
+        }
+        let marker = b[i + 1];
+        let len = u16::from_be_bytes([b[i + 2], b[i + 3]]) as usize;
+        if matches!(marker, 0xc0..=0xc2) {
+            let h = u16::from_be_bytes([b[i + 5], b[i + 6]]) as u32;
+            let w = u16::from_be_bytes([b[i + 7], b[i + 8]]) as u32;
+            return Some((w, h));
+        }
+        i += 2 + len;
+    }
+    None
+}
+
+/// One gauge's value from a show's `/metrics`, read through the station.
+async fn gauge(st: &Running, line: &str) -> Option<f64> {
+    let (_, _, body) = fetch(st, "/metrics?show=main").await;
+    let text = String::from_utf8_lossy(&body).to_string();
+    text.lines().find_map(|l| l.strip_prefix(line).map(|v| v.trim().parse().unwrap_or(-1.0)))
+}
+
+/// A show that composites gets a real picture of its programme on the wall,
+/// at the wall's width, new each time, from `program.thumbnail` rather than a
+/// mosaic, and the branch that makes it goes once nobody asks. Before, the
+/// station asked for the programme cell of the show's mosaic, which built a
+/// mosaic for one small picture and was refused two times in three by the
+/// snapshot rate limit at the wall's two second cadence.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_show_that_mixes_has_a_moving_picture_on_the_wall_only_while_asked() {
+    let (dir, port) = folder("wall-mixed-pic");
+    let st = start(dir, port, &[]).await;
+    let mut main = rpc(&st, "?show=main").await;
+    let added = call(&mut main, 1, "source.add", json!({"id": "ball", "uri": "test://ball"})).await;
+    assert!(added.get("result").is_some(), "{added}");
+    let took = call(&mut main, 2, "program.take", json!({"source": "ball"})).await;
+    assert!(took.get("result").is_some(), "{took}");
+    let off = "gmx_stream_clients{kind=\"thumbnail\"}";
+    assert_eq!(gauge(&st, off).await, Some(0.0), "nothing runs before the wall asks");
+
+    let started = Instant::now();
+    let first = loop {
+        let (status, kind, body) = fetch(&st, "/api/v1/shows/main/thumbnail.jpg?width=160").await;
+        if status == 200 {
+            assert_eq!(kind, "image/jpeg");
+            break body;
+        }
+        assert_eq!(status, 409, "{}", String::from_utf8_lossy(&body));
+        assert!(started.elapsed() < Duration::from_secs(30), "no picture in 30 s: {}", String::from_utf8_lossy(&body));
+        tokio::time::sleep(Duration::from_millis(500)).await;
+    };
+    assert_eq!(&first[..2], &[0xff, 0xd8], "a JPEG");
+    assert_eq!(jpeg_size(&first), Some((160, 90)), "the wall's width, the canvas's shape");
+    assert_eq!(gauge(&st, off).await, Some(1.0), "the branch is on while asked");
+    assert_eq!(gauge(&st, "gmx_multiview_subscribers").await, Some(0.0), "and no mosaic was built for it");
+
+    let changed = Instant::now();
+    loop {
+        tokio::time::sleep(Duration::from_millis(1100)).await;
+        let (status, _, body) = fetch(&st, "/api/v1/shows/main/thumbnail.jpg?width=320").await;
+        if status == 200 {
+            assert_eq!(jpeg_size(&body), Some((320, 180)), "a tile's width");
+        }
+        let (status, _, small) = fetch(&st, "/api/v1/shows/main/thumbnail.jpg?width=160").await;
+        if status == 200 && small != first {
+            break;
+        }
+        assert!(changed.elapsed() < Duration::from_secs(15), "the picture did not change in 15 s");
+    }
+
+    let idle = Instant::now();
+    while gauge(&st, off).await != Some(0.0) {
+        assert!(idle.elapsed() < Duration::from_secs(25), "the thumbnail branch kept running with nobody asking");
+        tokio::time::sleep(Duration::from_millis(500)).await;
+    }
+    assert!(idle.elapsed() >= Duration::from_secs(5), "it went before the ten seconds an ask buys");
+}

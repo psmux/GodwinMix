@@ -22,8 +22,10 @@ laid out the way you left it; that is kept in this browser only.
 
 From left to right:
 
-* The picture, a small frame from the show taken every two seconds. A show
-  gone black says so on the frame.
+* The picture, a small frame from the show taken every two seconds, for a
+  direct show and for one that mixes alike. A show gone black says so on the
+  frame. A show that is stopped, failed or still starting says that where
+  its picture would be, and is not asked for one.
 * The name, with a dot for its health (green fine, amber a warning, red an
   alarm, grey off) and under it whether it is running and which program of
   the feed it takes.
@@ -125,11 +127,14 @@ the shows that left the screen stop being asked for. Two hundred shows on the
 station cost the same as the forty you can see. The page draws only the rows
 on screen and a few either side, so scrolling stays smooth.
 
-A picture costs the station one keyframe decode for that show, about once a
-second, while someone is looking. With the wall closed nothing is decoded
-for pictures. A direct show still decodes keyframes and a little sound for
-its black, freeze and silence alarms when they are switched on, which they
-are by default.
+A picture of a direct show costs the station one keyframe decode for that
+show, about once a second, while someone is looking. A picture of a show
+that mixes costs that show's process one frame a second scaled down from its
+programme, and a small JPEG each time the wall asks; it builds no mosaic.
+Either way the work goes ten seconds after a show was last asked for, so
+with the wall closed nothing is made for pictures. A direct show still
+decodes keyframes and a little sound for its black, freeze and silence
+alarms when they are switched on, which they are by default.
 
 A silence alarm on the show called `main` on a fresh station is real: that
 is the station's own show, which composites, and with no source in it its
