@@ -6,6 +6,8 @@
 mod direct;
 #[cfg(unix)]
 mod isolation;
+#[cfg(unix)]
+mod orphans;
 mod project;
 mod support;
 mod switch;

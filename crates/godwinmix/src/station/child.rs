@@ -66,6 +66,11 @@ pub async fn stop(child: &mut Child) {
         if tokio::time::timeout(STOP_GRACE, child.wait()).await.is_ok() {
             return;
         }
+        // It leads its group, so this reaches the plugins it started that
+        // did not lead groups of their own.
+        unsafe {
+            libc::kill(-(pid as i32), libc::SIGKILL);
+        }
     }
     let _ = child.kill().await;
 }
