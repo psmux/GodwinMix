@@ -72,15 +72,18 @@ back measured between 0 and 0.0001 from one keyframe to the next, and moving
 bars between 0.24 and 0.30.
 
 For a direct show the thresholds travel in the table row's
-`monitor.thresholds` (`docs/reference/direct-shows.md`). For a show that
-composites they are the `[vitals]` section of its config, beside `alarms`:
+`monitor.thresholds` (`docs/reference/direct-shows.md`). A show that
+composites takes them, beside `alarms`, from two methods of its own, which
+the station calls with the settings it keeps for the show:
 
-```toml
-[vitals]
-alarms = true        # keep a mosaic up for black and freeze while nobody looks
-black_secs = 4
-silence_db = -50
-```
+| Method | REST | What it does |
+|---|---|---|
+| `vitals.get {}` | `GET /api/v1/vitals` | `{health, settings}`: the health last judged (null in the first second) and the settings in force |
+| `vitals.set {alarms?, black_secs?, ...}` | `POST /api/v1/vitals/set` | new settings, flat as in the table above; a field left out takes its default. Applies within a second, nothing restarted. Answers as `vitals.get` |
+
+`alarms` there means keeping a mosaic up for black and freeze while nobody
+looks. The same fields can start in the show's config as `[vitals]`
+(`docs/reference/configuration.md`).
 
 ## How a direct show is measured
 

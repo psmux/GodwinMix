@@ -3849,6 +3849,51 @@ pub struct VideoWant {
     pub width: Option<u32>,
 }
 
+/// `[vitals]`, and what `vitals.set` changes: the thresholds, and whether
+/// to keep a mosaic up for the picture alarms while nobody is looking.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct VitalsConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub alarms: Option<bool>,
+    /// An 8 bit luma at or under which a pixel counts as black. 38 is ten
+    /// percent of the way from video black (16) to white (235), the figure
+    /// ffmpeg's blackdetect uses.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub black_luma: Option<u8>,
+    /// The share of pixels that must be black for the picture to be.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub black_ratio: Option<f64>,
+    /// Seconds a picture must stay black before `black` is raised. 0: off.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub black_secs: Option<f64>,
+    /// Continuity errors within `window_secs` that raise `cc-errors`. 0: off.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cc_errors: Option<u64>,
+    /// The mean luma difference between two samples, 0 to 1, under which the
+    /// picture counts as unchanged.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub freeze_diff: Option<f64>,
+    /// Seconds a picture must stay unchanged before `freeze` is raised. 0: off.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub freeze_secs: Option<f64>,
+    /// Packets lost within `window_secs` that raise `loss`. 0: off.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub loss: Option<u64>,
+    /// The peak level in dBFS under which the sound counts as quiet.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub silence_db: Option<f64>,
+    /// Seconds the sound must stay quiet before `silence` is raised. 0: off.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub silence_secs: Option<f64>,
+    /// Seconds without a single packet of input before `stall` is raised.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stall_secs: Option<f64>,
+    /// The window the two counters are judged over.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub window_secs: Option<f64>,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ProgramTookEvent {
@@ -4027,7 +4072,7 @@ pub struct MethodInfo {
     pub rest: Option<(&'static str, &'static str)>,
 }
 
-pub const METHODS: [MethodInfo; 160] = [
+pub const METHODS: [MethodInfo; 162] = [
     MethodInfo { name: "adbreak.end", summary: "Cut a running ad short, or disarm one that is scheduled.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/end")) },
     MethodInfo { name: "adbreak.start", summary: "Interrupt the programme with a clip, then rejoin live when it ends.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/start")) },
     MethodInfo { name: "agent.state", summary: "The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/agent/state")) },
@@ -4188,6 +4233,8 @@ pub const METHODS: [MethodInfo; 160] = [
     MethodInfo { name: "task.get", summary: "How a piece of long running work is getting on, and its answer once it has one.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/task")) },
     MethodInfo { name: "task.list", summary: "Every background job this core knows about, newest first.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/task/list")) },
     MethodInfo { name: "tool.call", summary: "Call one of a plugin's tools, in MCP's shape. The name is `<plugin>/<tool>`, or the bare tool name when only one plugin has it.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/tool/call")) },
+    MethodInfo { name: "vitals.get", summary: "This show's health (its state and alarms, null in the first second) and the thresholds they are judged by.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/vitals")) },
+    MethodInfo { name: "vitals.set", summary: "Change the alarm thresholds, or whether a mosaic is kept up for the black and freeze checks while nobody is looking. Fields left out keep their defaults; a duration of 0 switches that check off. Applies within a second.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/vitals/set")) },
 ];
 
 pub const EVENT_NAMES: [&str; 29] = [
@@ -5257,6 +5304,16 @@ impl Client {
     /// Call one of a plugin's tools, in MCP's shape. The name is `<plugin>/<tool>`, or the bare tool name when only one plugin has it.
     pub async fn tool_call(&self, params: &ToolCallRequest) -> Result<BTreeMap<String, Value>> {
         self.call("tool.call", params).await
+    }
+
+    /// This show's health (its state and alarms, null in the first second) and the thresholds they are judged by.
+    pub async fn vitals_get(&self) -> Result<BTreeMap<String, Value>> {
+        self.call("vitals.get", &serde_json::json!({})).await
+    }
+
+    /// Change the alarm thresholds, or whether a mosaic is kept up for the black and freeze checks while nobody is looking. Fields left out keep their defaults; a duration of 0 switches that check off. Applies within a second.
+    pub async fn vitals_set(&self, params: &VitalsConfig) -> Result<BTreeMap<String, Value>> {
+        self.call("vitals.set", params).await
     }
 
 }

@@ -2430,6 +2430,33 @@ class VideoWant(TypedDict, total=False):
     # Keyframe interval. Renditions in one ladder share it.
     width: Optional[int]
 
+class VitalsConfig(TypedDict, total=False):
+    """`[vitals]`, and what `vitals.set` changes: the thresholds, and whether to keep a mosaic up for the picture alarms while nobody is looking."""
+
+    alarms: bool
+    black_luma: int
+    # An 8 bit luma at or under which a pixel counts as black. 38 is ten percent of the way from video black (16) to white (235), the figure ffmpeg's blackdetect uses.
+    black_ratio: float
+    # The share of pixels that must be black for the picture to be.
+    black_secs: float
+    # Seconds a picture must stay black before `black` is raised. 0: off.
+    cc_errors: int
+    # Continuity errors within `window_secs` that raise `cc-errors`. 0: off.
+    freeze_diff: float
+    # The mean luma difference between two samples, 0 to 1, under which the picture counts as unchanged.
+    freeze_secs: float
+    # Seconds a picture must stay unchanged before `freeze` is raised. 0: off.
+    loss: int
+    # Packets lost within `window_secs` that raise `loss`. 0: off.
+    silence_db: float
+    # The peak level in dBFS under which the sound counts as quiet.
+    silence_secs: float
+    # Seconds the sound must stay quiet before `silence` is raised. 0: off.
+    stall_secs: float
+    # Seconds without a single packet of input before `stall` is raised.
+    window_secs: float
+    # The window the two counters are judged over.
+
 class ProgramTookEvent(TypedDict, total=False):
     at_running_time_ms: int
     duration_ms: int
@@ -2782,6 +2809,8 @@ METHODS = (
     {"name": "task.get", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/task"), "summary": 'How a piece of long running work is getting on, and its answer once it has one.'},
     {"name": "task.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/task/list"), "summary": 'Every background job this core knows about, newest first.'},
     {"name": "tool.call", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/tool/call"), "summary": "Call one of a plugin's tools, in MCP's shape. The name is `<plugin>/<tool>`, or the bare tool name when only one plugin has it."},
+    {"name": "vitals.get", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/vitals"), "summary": "This show's health (its state and alarms, null in the first second) and the thresholds they are judged by."},
+    {"name": "vitals.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/vitals/set"), "summary": 'Change the alarm thresholds, or whether a mosaic is kept up for the black and freeze checks while nobody is looking. Fields left out keep their defaults; a duration of 0 switches that check off. Applies within a second.'},
 )
 
 EVENT_NAMES = (
@@ -4981,3 +5010,54 @@ class GeneratedMethods:
         if arguments is not None:
             params["arguments"] = arguments
         return await self._call("tool.call", params)
+
+    async def vitals_get(
+        self,
+    ) -> Dict[str, Any]:
+        """This show's health (its state and alarms, null in the first second) and the thresholds they are judged by."""
+        params: Dict[str, Any] = {}
+        return await self._call("vitals.get", params)
+
+    async def vitals_set(
+        self,
+        *,
+        alarms: Optional[bool] = None,
+        black_luma: Optional[int] = None,
+        black_ratio: Optional[float] = None,
+        black_secs: Optional[float] = None,
+        cc_errors: Optional[int] = None,
+        freeze_diff: Optional[float] = None,
+        freeze_secs: Optional[float] = None,
+        loss: Optional[int] = None,
+        silence_db: Optional[float] = None,
+        silence_secs: Optional[float] = None,
+        stall_secs: Optional[float] = None,
+        window_secs: Optional[float] = None,
+    ) -> Dict[str, Any]:
+        """Change the alarm thresholds, or whether a mosaic is kept up for the black and freeze checks while nobody is looking. Fields left out keep their defaults; a duration of 0 switches that check off. Applies within a second."""
+        params: Dict[str, Any] = {}
+        if alarms is not None:
+            params["alarms"] = alarms
+        if black_luma is not None:
+            params["black_luma"] = black_luma
+        if black_ratio is not None:
+            params["black_ratio"] = black_ratio
+        if black_secs is not None:
+            params["black_secs"] = black_secs
+        if cc_errors is not None:
+            params["cc_errors"] = cc_errors
+        if freeze_diff is not None:
+            params["freeze_diff"] = freeze_diff
+        if freeze_secs is not None:
+            params["freeze_secs"] = freeze_secs
+        if loss is not None:
+            params["loss"] = loss
+        if silence_db is not None:
+            params["silence_db"] = silence_db
+        if silence_secs is not None:
+            params["silence_secs"] = silence_secs
+        if stall_secs is not None:
+            params["stall_secs"] = stall_secs
+        if window_secs is not None:
+            params["window_secs"] = window_secs
+        return await self._call("vitals.set", params)

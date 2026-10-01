@@ -38,6 +38,7 @@ pub mod project;
 pub(crate) mod scenes;
 mod sources;
 mod tasks;
+mod vitals;
 
 /// Wrap an async function as a handler, so a registration reads as one thing.
 pub(crate) fn handler<F, Fut>(f: F) -> Handler<Call>
@@ -83,6 +84,7 @@ pub fn registry() -> Registry<Call> {
     renditions::register(&mut reg);
     shows::register(&mut reg);
     config::register(&mut reg);
+    vitals::register(&mut reg);
     crate::observe::register(&mut reg);
     // Other modules add their own here. One line each, and they land on
     // /rpc, /api/v1, protocol.json and the tool list together. See
