@@ -1252,6 +1252,7 @@ dependencies = [
  "godwinmix-capture-common",
  "godwinmix-sdk",
  "gstreamer",
+ "gstreamer-video",
  "serde_json",
 ]
 
