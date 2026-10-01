@@ -6,11 +6,16 @@ use serde_json::json;
 
 use super::*;
 
-/// H.264 and AAC from gst-launch, the video on `vpid` and the audio on
-/// `apid`, in program `program`.
+/// H.264 and AAC from gst-launch over UDP, the video on `vpid` and the
+/// audio on `apid`, in program `program`.
 fn sender(port: u16, vpid: u16, apid: u16, program: u16) -> Sender {
+    sender_to(&format!("udpsink host=127.0.0.1 port={port} sync=false"), vpid, apid, program)
+}
+
+/// The same into `sink`, a gst-launch fragment.
+fn sender_to(sink: &str, vpid: u16, apid: u16, program: u16) -> Sender {
     gst(&format!(
-        "mpegtsmux name=m alignment=7 prog-map=program_map,sink_{vpid}={program},sink_{apid}={program} ! udpsink host=127.0.0.1 port={port} sync=false \
+        "mpegtsmux name=m alignment=7 prog-map=program_map,sink_{vpid}={program},sink_{apid}={program} ! {sink} \
          videotestsrc is-live=true ! video/x-raw,width=320,height=240,framerate=25/1 ! x264enc tune=zerolatency \
          speed-preset=ultrafast key-int-max=25 ! h264parse ! queue ! m.sink_{vpid} \
          audiotestsrc is-live=true ! audioconvert ! avenc_aac ! aacparse ! queue ! m.sink_{apid}"
@@ -64,6 +69,23 @@ fn a_restarted_gst_sender_is_followed_with_new_pids_or_the_same_ones() {
     drop(tx);
     let _tx = sender(port, 300, 301, 7);
     follows(&rx, "new PIDs and a new program", 12);
+    assert!(eventually(3, || rx.got.last().programs.iter().map(|p| p.number).eq([7])), "the programs read again: {:?}", rx.got.last());
+}
+
+#[test]
+fn an_srt_caller_that_calls_again_with_new_pids_is_followed() {
+    let _one = one_at_a_time();
+    if !which("gst-launch-1.0") {
+        return;
+    }
+    let rx = start(json!({"uri": "srt://@:19934", "params": {"latency_ms": 120}}), &Context::default());
+    std::thread::sleep(Duration::from_millis(300));
+    let to = "srtsink uri=srt://127.0.0.1:19934?mode=caller wait-for-connection=false";
+    let tx = sender_to(to, 65, 66, 1);
+    assert!(eventually(15, || rx.got.keyframes() >= 3), "the first caller: {:?}", rx.got.last());
+    drop(tx);
+    let _tx = sender_to(to, 300, 301, 7);
+    follows(&rx, "a new caller with new PIDs", 15);
 }
 
 #[test]
