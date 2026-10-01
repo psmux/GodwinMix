@@ -9,7 +9,8 @@
 //!
 //! Every request carries `Authorization: Bearer <secret>`, the secret the
 //! station gave the process in [`SECRET_ENV`] when it started it, and a
-//! request for `/hls` names its show in [`SHOW_HEADER`].
+//! request for `/hls` names its show in [`SHOW_HEADER`] and the player's
+//! address in [`PEER_HEADER`], which the viewer count is kept by.
 
 use godwinmix_core::hls::HlsParams;
 use godwinmix_protocol::destination::DestinationLive;
@@ -20,6 +21,8 @@ use std::net::SocketAddr;
 pub const SECRET_ENV: &str = "GODWINMIX_PACKAGER_SECRET";
 /// The show a forwarded `/hls` request is for.
 pub const SHOW_HEADER: &str = "x-godwinmix-show";
+/// The address the player reached the station from.
+pub const PEER_HEADER: &str = "x-godwinmix-peer";
 /// What the packager writes on its stdout once it listens, before the
 /// address.
 pub const LISTENING: &str = "GODWINMIX-PACKAGER";
