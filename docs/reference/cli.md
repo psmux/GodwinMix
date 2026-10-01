@@ -189,6 +189,36 @@ given. The dry run answers how many would be added, each refusal by the line
 it came from, and the cost against the governor. Shows that fit are added
 whole; one that does not is named and the rest go ahead.
 
+Three copies on a station whose inputs nothing is sending to yet:
+
+```text
+$ gmx shows add --from feeds.csv --dry-run
+would add 3 of 3 shows
+cost 0.0 cores, 0 MiB, 0 kbps out, fits on this machine
+nothing was changed. Run it again without --dry-run to add them.
+$ gmx shows add --from feeds.csv
+added 3 of 3 shows
+cost 0.0 cores, 0 MiB, 0 kbps out, fits on this machine
+$ gmx shows list
+SHOW                   KIND    STATE     ON AIR              OUT KBPS    CPU  MEMORY
+main                   mix     running   -                          0     1%  157MiB
+bbc-one                direct  running   -                          0     0%    0MiB
+bbc-two                direct  running   -                          0     0%    0MiB
+itv                    direct  running   -                          0     0%    0MiB
+$ gmx shows stats
+4 shows: 1 ok, 0 warning, 3 alarm, 0 off
+SHOW                   HEALTH  IN KBPS   FPS      SIZE CODECS         CC OUTPUTS OUT KBPS  ALARMS
+bbc-one                alarm         -     -         - -/-             -     0/1        0  no-input 0s
+bbc-two                alarm         -     -         - -/-             -     0/1        0  no-input 0s
+itv                    alarm         -     -         - -/-             -     0/1        0  no-input 0s
+main                   ok            -     -         - -/-             -     0/0        0
+```
+
+A copy costs the governor nothing, so the cost line reads zero until a row
+asks for a format. `KIND` is `direct` for a show without compositing and
+`mix` for one with it. `OUTPUTS` is how many of a show's outputs are live out
+of how many it has.
+
 ## Plugins
 
 `gmx plugin new` and `gmx plugin test` need no running mixer. Everything else
