@@ -137,4 +137,19 @@ async fn a_slow_switch_answers_at_once_and_finishes_as_a_task() {
     assert!(done["switch"]["gap_ms"].is_null(), "nothing came live: {done}");
     assert!(!done["switch"]["note"].as_str().unwrap_or_default().is_empty(), "the note says why: {done}");
     eprintln!("slow switch finished after {:?}", asked.elapsed());
+
+    // `gmx shows set` follows the task and prints the usual answer. No
+    // direct host runs here, so the way back does not wait for the output.
+    let gmx = env!("CARGO_BIN_EXE_gmx");
+    let url = format!("http://{}", st.url);
+    let out = tokio::task::spawn_blocking(move || {
+        Command::new(gmx).args(["shows", "--url", &url, "set", "quiet", "--compositing", "off"]).env_remove("GODWINMIX_TOKEN").output().unwrap()
+    });
+    let out = tokio::time::timeout(Duration::from_secs(90), out).await.expect("gmx shows set within 90 s").unwrap();
+    let printed = String::from_utf8_lossy(&out.stdout).to_string();
+    assert!(out.status.success(), "{printed}{}", String::from_utf8_lossy(&out.stderr));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("switching compositing off"), "{}", String::from_utf8_lossy(&out.stderr));
+    let shown: Value = serde_json::from_str(&printed).unwrap_or_else(|e| panic!("{e}: {printed}"));
+    assert_eq!(shown["compositing"], false, "{shown}");
+    assert_eq!(shown["switch"]["outputs"], json!(["out"]), "{shown}");
 }
