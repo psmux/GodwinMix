@@ -39,8 +39,8 @@ pub fn tap_pictures(tee: &gst::Element, node: String, route: Arc<dyn Route>) {
             return gst::PadProbeReturn::Ok;
         }
         *last = Some(std::time::Instant::now());
-        if let (Some(gst::PadProbeData::Buffer(buffer)), Some(caps)) = (info.data.as_ref(), pad.current_caps()) {
-            let sample = gst::Sample::builder().buffer(&buffer).caps(&caps).build();
+        if let (Some(gst::PadProbeData::Buffer(buffer)), Some(caps)) = (&info.data, pad.current_caps()) {
+            let sample = gst::Sample::builder().buffer(buffer).caps(&caps).build();
             route.frame(&node, &sample);
         }
         gst::PadProbeReturn::Ok

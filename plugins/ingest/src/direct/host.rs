@@ -115,7 +115,7 @@ impl Host {
         let rows: Vec<Value> = shows
             .values()
             .filter(|s| ids.is_none_or(|ids| ids.contains(&s.row.id)))
-            .map(|s| events::show_stats(self, s))
+            .map(|s| super::stats::show_stats(self, s))
             .collect();
         json!({"shows": rows})
     }
