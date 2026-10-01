@@ -314,10 +314,14 @@ reads back what the show holds.
 Read, with the token as a header or `?token=`. The show's picture as a JPEG,
 32 to 1280 pixels wide. For a show without compositing it comes from the
 direct host, which decodes keyframes only, about one a second, and only for a
-show someone asked a picture of lately; for a show that composites it is its
-programme snapshot. `409` with `data.retry_after_ms` while there is no picture
-yet (the host has decoded no keyframe, the ingest plugin is not running, the
-show is not running); `404` for a show that is not there.
+show someone asked a picture of lately. For a show that composites the station
+calls the show's `program.thumbnail`, which scales its programme to 320 wide
+once a second for ten seconds after an ask, and builds no mosaic; the picture
+is up to 320 wide whatever the request asks. `409` with `data.retry_after_ms`
+while there is no picture yet (the host has decoded no keyframe, the ingest
+plugin is not running, the show is still starting or has not sent its first
+frame), and `409` with `data.state` and the call that starts it for a show
+that is stopped or failed; `404` for a show that is not there.
 
 ### `governor.status`
 

@@ -122,6 +122,7 @@ gmx_stream_clients{kind="mjpeg"} 0
 gmx_stream_clients{kind="opus"} 0
 gmx_stream_clients{kind="pcm"} 0
 gmx_stream_clients{kind="preview"} 0
+gmx_stream_clients{kind="thumbnail"} 0
 gmx_stream_clients{kind="unixfd"} 0
 gmx_stream_clients{kind="whep"} 0
 gmx_encoder_running 0
