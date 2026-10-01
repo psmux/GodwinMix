@@ -43,7 +43,23 @@ pub fn events() -> Vec<EventDef> {
     all.extend(stream_events());
     all.extend(crate::rendition::events());
     all.extend(crate::shows::events());
+    all.push(health_event());
     all
+}
+
+/// `event/health`: a show that composites says its own health changed.
+fn health_event() -> EventDef {
+    EventDef {
+        name: "health",
+        since: "1",
+        summary: "This show's health changed: its state (ok, warning, alarm, off) or the \
+                  kinds of its alarms, never a number alone. From a show that composites; \
+                  the station sends it on to every client as show.health with the show's \
+                  id. docs/reference/show-health.md says what each alarm watches.",
+        ext: None,
+        legacy: None,
+        payload: schema_of::<crate::health::HealthEvent>,
+    }
 }
 
 /// The events every subscriber gets: what changed, and the bookkeeping that

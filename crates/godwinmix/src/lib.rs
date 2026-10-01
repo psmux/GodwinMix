@@ -721,6 +721,7 @@ pub async fn run() -> Result<()> {
     first_run(&config_path)?;
     let cfg = Config::load(&config_path)
         .with_context(|| format!("could not load {}", config_path.display()))?;
+    godwinmix_core::vitals::configure(&cfg.extra);
     let bind = args.bind.unwrap_or_else(|| cfg.control.bind.clone());
     control::methods::lifecycle::set_supervised(args.supervised);
     if args.supervised {
