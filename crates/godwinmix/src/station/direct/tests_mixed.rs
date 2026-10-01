@@ -115,12 +115,36 @@ async fn a_show_stopped_on_purpose_reads_as_off_without_an_alarm_on_the_way() {
 }
 
 #[test]
+fn a_passphrase_a_list_kept_in_the_clear_is_sealed_at_start_and_never_listed() {
+    let (st, _heard) = station("sealed");
+    let secret = "a-passphrase-from-before";
+    let uri = format!("srt://feed:9000?passphrase={secret}&latency=200");
+    // Its own id: the secret store is this machine's.
+    let id = format!("test-sealed-{}", std::process::id());
+    let mut record = Record::new(&id, "Sealed", None);
+    record.input = Some(godwinmix_protocol::shows::InputSpec { uri: uri.clone(), program: None, params: None, backup: None });
+    st.registry.lock().records.push(record);
+    st.procs.lock().entry(id.clone()).or_default();
+    st.registry.lock().save().unwrap();
+    super::inputs::seal_written(&st);
+    let on_disk = std::fs::read_dir(st.registry.lock().data_dir()).unwrap().flatten().filter(|e| e.path().is_file());
+    for file in on_disk {
+        let text = std::fs::read_to_string(file.path()).unwrap_or_default();
+        assert!(!text.contains(secret), "{} holds it: {text}", file.path().display());
+    }
+    let listed = serde_json::to_string(&st.view(&id).unwrap()).unwrap();
+    assert!(!listed.contains(secret) && listed.contains("passphrase=__secret__"), "{listed}");
+    let kept = st.registry.lock().get(&id).unwrap().input.clone().unwrap();
+    assert_eq!(super::inputs::unsealed(&id, kept).uri, uri, "the host still opens it");
+    super::inputs::forget(&id);
+}
+
+#[test]
 fn the_wall_s_alarm_settings_become_what_vitals_set_takes() {
     let set = AlarmSettings { enabled: Some(true), black_ms: Some(2500), freeze_ms: None, silence_ms: Some(0), silence_dbfs: Some(-50.0) };
     let v = super::vitals_settings(&set);
     assert_eq!(v, json!({"alarms": true, "black_secs": 2.5, "silence_secs": 0.0, "silence_db": -50.0}));
     let parsed: godwinmix_core::vitals::VitalsConfig = serde_json::from_value(v).unwrap();
-    assert!(parsed.alarms);
-    assert_eq!((parsed.thresholds.black_secs, parsed.thresholds.silence_db), (2.5, -50.0));
+    assert_eq!((parsed.alarms, parsed.thresholds.black_secs, parsed.thresholds.silence_db), (true, 2.5, -50.0));
     assert_eq!(super::vitals_settings(&AlarmSettings::default()), json!({"alarms": false}), "off unless asked, for a show that composites");
 }
