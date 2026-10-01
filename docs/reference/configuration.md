@@ -219,6 +219,19 @@ The backoff exists because of two specific nights: 485 rebuilds one night and
 1,174 the next, on a superimposed source that could not recover. The counter is
 cleared the moment the source delivers a frame.
 
+## `[vitals]`
+
+This show's alarms on its own programme: black, freeze, silence, failed and
+shed outputs, sent as `event/health` when they change.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `alarms` | false | keep a mosaic up for the black and freeze checks while nobody is looking, which costs a few percent of one core. Off, they are judged only while the mosaic is up anyway; silence and outputs are judged either way |
+| `black_secs`, `freeze_secs`, `silence_secs` | 4, 10, 10 | seconds before each alarm; 0 switches that check off |
+| `black_luma`, `black_ratio`, `freeze_diff`, `silence_db` | 38, 0.98, 0.002, -60 | what counts as black, still and quiet |
+
+`docs/reference/show-health.md` has every threshold and what each costs.
+
 ## `[[sources]]`
 
 One table per source. Sources added over the API are written to
