@@ -49,7 +49,7 @@ fn render(run: &Value, feeds: &[Value; 2], add: &Value, sample: &Value, check: &
     let _ = writeln!(s, "| Load average before the run | {} |", run["load"].as_str().unwrap_or("not recorded"));
     let _ = writeln!(s, "| Feeds | {} of {}, {} s measured |", run["feeds"], run["clips"].as_str().unwrap_or("?"), run["seconds"]);
     if let Some(n) = run["orphans"].as_u64().filter(|_| !sample.is_null()) {
-        let _ = writeln!(s, "| Processes left after SIGTERM to the station | {n} |");
+        let _ = writeln!(s, "| Processes still running 15 s after SIGTERM to the station | {n} |");
     }
     let _ = writeln!(s, "| Command | `{}` |\n", run["command"].as_str().unwrap_or("not recorded"));
     if let Some(note) = run["note"].as_str().filter(|n| !n.is_empty()) {

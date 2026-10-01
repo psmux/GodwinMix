@@ -190,9 +190,11 @@ stop_station() {
     kill -TERM "$STATION_PID" 2>/dev/null
     local until=$((SECONDS + 20))
     while kill -0 "$STATION_PID" 2>/dev/null && (( SECONDS < until )); do sleep 0.5; done
-    sleep 2
+    # A busy show takes a moment to notice its link has gone; give them 15 s.
+    until=$((SECONDS + 15))
+    while [[ -n "$(leftovers)" ]] && (( SECONDS < until )); do sleep 0.5; done
     ORPHANS="$(leftovers | wc -l | tr -d ' ')"
-    (( ORPHANS > 0 )) && log "$ORPHANS show or plugin processes outlived the station"
+    (( ORPHANS > 0 )) && log "$ORPHANS show or plugin processes were still running 15 s after the station stopped"
     return 0
 }
 
