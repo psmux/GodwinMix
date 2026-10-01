@@ -37,6 +37,8 @@ mod registry;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]
+mod tests_host;
+#[cfg(test)]
 mod bench;
 
 // The direct host owns the one `Vitals` and hands it the table rows, the

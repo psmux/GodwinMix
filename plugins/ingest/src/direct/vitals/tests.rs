@@ -26,7 +26,7 @@ impl Inlet for Push {
 
 /// A live 640x360 H.264 and AAC publisher on `hub` as `news/main`, a
 /// keyframe a second, from a test picture and a test tone.
-fn publish(hub: &Hub, pattern: &str, wave: &str) -> gst::Pipeline {
+pub fn publish(hub: &Hub, pattern: &str, wave: &str) -> gst::Pipeline {
     gmx_netkit::init().unwrap();
     let to = tagger::share(Box::new(Push(hub.publish("news", "main", "127.0.0.1:1", None).unwrap())));
     let zero = Arc::new(tagger::Zero::default());
