@@ -37,7 +37,7 @@ use crate::hub::Hub;
 use crate::sends::{Feed, Wanted};
 pub use router::Output;
 use session::Session;
-pub use spec::{specs, StreamSpec};
+pub use spec::{specs, stream_specs, StreamSpec};
 
 /// The name a pair is published under on the renditions hub.
 pub fn output_key(stream: &str, video: Option<&str>, audio: Option<&str>) -> String {
