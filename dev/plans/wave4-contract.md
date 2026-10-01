@@ -60,7 +60,12 @@ measure and report the gap.
         Validated whole first; with dry_run answers what it would do and whether the
         governor would admit every rendition. Applies all that fit; never half a show.
     show.set {id, name?, compositing?, input?}
-    show.output.add {show, ...ShowOutput} / show.output.set / show.output.remove      for direct shows
+    show.output.add {id, output?, ...ShowOutput} / show.output.set {id, output, ...}
+    show.output.remove {id, output}                                                   for direct shows
+        `id` is the show and `output` the output's own id, as channel.destination.* name
+        the channel and the destination, so the REST rule puts them at
+        /api/v1/shows/{id}/output/... like every other sub resource. `show` is taken
+        as another name for `id`.
     show.remove_many {ids}
     show.stats {ids?, fields?} -> {shows: [{id, health, input: InputStats, outputs: [OutputStats]}]}
         One read for many shows, cheap enough to call every second for 200.
