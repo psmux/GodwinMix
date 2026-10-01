@@ -1,35 +1,21 @@
 //! The two playlist routes.
 
 use super::auth::{self, Viewer};
-use super::{listing, playlist_response, refuse};
-use crate::control::Ctx;
+use super::{listing, playlist_response, refuse, Door};
 use axum::extract::{Path, Request, State};
 use axum::http::{header, HeaderValue, StatusCode};
 use axum::response::Response;
 use godwinmix_core::hls::playlist::with_query;
 use godwinmix_core::hls::ring::Position;
 use godwinmix_core::hls::track::Track;
-use godwinmix_core::hls::{stream, Stream};
+use godwinmix_core::hls::Stream;
 use serde_json::json;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-/// The output under `id`, or a 404 that names the ones there are.
-pub fn find(id: &str) -> Result<Arc<Stream>, Box<Response>> {
-    stream::get(id).ok_or_else(|| {
-        let have = stream::ids();
-        let message = if have.is_empty() {
-            format!("There is no HLS output `{id}`, and none running. Add one with output.add {{type: \"hls/output\"}}.")
-        } else {
-            format!("There is no HLS output `{id}`. This core serves {}.", have.join(", "))
-        };
-        Box::new(refuse(StatusCode::NOT_FOUND, message, json!({ "output": id, "outputs": have })))
-    })
-}
-
-fn open(ctx: &Ctx, id: &str, req: &Request) -> Result<(Arc<Stream>, Viewer), Box<Response>> {
-    let stream = find(id)?;
-    let viewer = auth::admit(ctx, &stream, req)?;
+fn open(door: &impl Door, id: &str, req: &Request) -> Result<(Arc<Stream>, Viewer), Box<Response>> {
+    let stream = door.find(id, req)?;
+    let viewer = auth::admit(door, &stream, req)?;
     Ok((stream, viewer))
 }
 
@@ -44,8 +30,8 @@ fn not_yet(stream: &Stream, what: &str) -> Response {
     r
 }
 
-pub async fn master(State(ctx): State<Ctx>, Path(output): Path<String>, req: Request) -> Response {
-    let (stream, viewer) = match first_look(&ctx, &output, &req) {
+pub async fn master<D: Door>(State(door): State<D>, Path(output): Path<String>, req: Request) -> Response {
+    let (stream, viewer) = match first_look(&door, &output, &req) {
         Ok(v) => v,
         Err(r) => return *r,
     };
@@ -55,8 +41,8 @@ pub async fn master(State(ctx): State<Ctx>, Path(output): Path<String>, req: Req
     playlist_response(with_query(&stream.master(), &viewer.query))
 }
 
-pub async fn dash(State(ctx): State<Ctx>, Path(output): Path<String>, req: Request) -> Response {
-    let (stream, viewer) = match first_look(&ctx, &output, &req) {
+pub async fn dash<D: Door>(State(door): State<D>, Path(output): Path<String>, req: Request) -> Response {
+    let (stream, viewer) = match first_look(&door, &output, &req) {
         Ok(v) => v,
         Err(r) => return *r,
     };
@@ -71,8 +57,8 @@ pub async fn dash(State(ctx): State<Ctx>, Path(output): Path<String>, req: Reque
 }
 
 /// What a player asks for first: let it in and give it a viewer id.
-fn first_look(ctx: &Ctx, output: &str, req: &Request) -> Result<(Arc<Stream>, Viewer), Box<Response>> {
-    let (stream, mut viewer) = open(ctx, output, req)?;
+fn first_look(door: &impl Door, output: &str, req: &Request) -> Result<(Arc<Stream>, Viewer), Box<Response>> {
+    let (stream, mut viewer) = open(door, output, req)?;
     viewer.ensure_id();
     Ok((stream, viewer))
 }
@@ -91,8 +77,8 @@ async fn wait_ready(stream: &Stream) -> Result<(), Box<Response>> {
     Ok(())
 }
 
-pub async fn media(State(ctx): State<Ctx>, Path((output, rung)): Path<(String, String)>, req: Request) -> Response {
-    let (stream, viewer) = match open(&ctx, &output, &req) {
+pub async fn media<D: Door>(State(door): State<D>, Path((output, rung)): Path<(String, String)>, req: Request) -> Response {
+    let (stream, viewer) = match open(&door, &output, &req) {
         Ok(v) => v,
         Err(r) => return *r,
     };

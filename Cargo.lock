@@ -1478,6 +1478,7 @@ dependencies = [
  "godwinmix-render",
  "godwinmix-wasm",
  "gstreamer",
+ "gstreamer-app",
  "libc",
  "parking_lot",
  "reqwest",

@@ -61,6 +61,21 @@ pub struct Destination {
     /// Why it is not sending what it asked for, and what would fit.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub refused: Option<DestinationRefusal>,
+    /// Where a player opens it, for an output this machine serves as HLS.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub playback: Option<Playback>,
+}
+
+/// The links of an output served as HLS from the control port, each with
+/// the output's viewer key on it.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct Playback {
+    /// `/hls/viewers/master.m3u8?show=bbc-one&key=...`.
+    pub master_url_path: String,
+    /// The same segments as a DASH MPD.
+    pub dash_url_path: String,
+    /// Players that fetched something in the last two windows.
+    pub viewers: u32,
 }
 
 /// What a running destination reports. The restreamer fills it in.
@@ -131,6 +146,7 @@ impl StoredDestination {
             rendition: self.rendition.clone(),
             plan: None,
             refused: None,
+            playback: None,
         }
     }
 }
