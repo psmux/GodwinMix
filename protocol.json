@@ -428,6 +428,46 @@
       },
       "type": "object"
     },
+    "Alarm": {
+      "description": "One condition that holds now.",
+      "properties": {
+        "detail": {
+          "description": "One sentence for a person: what was measured, and against what.",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/AlarmKind"
+        },
+        "since_ms": {
+          "description": "Unix milliseconds when the condition began. For black, freeze and\nsilence that is when the picture or sound first measured so, not when\nthe alarm's duration ran out.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "kind",
+        "since_ms",
+        "detail"
+      ],
+      "type": "object"
+    },
+    "AlarmKind": {
+      "description": "What an alarm is about.",
+      "enum": [
+        "no-input",
+        "stall",
+        "black",
+        "freeze",
+        "silence",
+        "cc-errors",
+        "loss",
+        "output-failed",
+        "governor-refused",
+        "shed"
+      ],
+      "type": "string"
+    },
     "Align": {
       "description": "The nine alignment keywords, used to place content inside its frame.",
       "enum": [
@@ -3464,6 +3504,63 @@
         "after"
       ],
       "type": "object"
+    },
+    "Health": {
+      "description": "A show's health.",
+      "properties": {
+        "alarms": {
+          "description": "Every alarm that holds now, oldest first.",
+          "items": {
+            "$ref": "#/$defs/Alarm"
+          },
+          "type": "array"
+        },
+        "state": {
+          "$ref": "#/$defs/HealthState"
+        }
+      },
+      "required": [
+        "state",
+        "alarms"
+      ],
+      "type": "object"
+    },
+    "HealthEvent": {
+      "description": "`event/health`, from a show that composites, about itself. The station\nsends it on to clients as `event/show.health` with the show's id.",
+      "properties": {
+        "health": {
+          "$ref": "#/$defs/Health"
+        }
+      },
+      "required": [
+        "health"
+      ],
+      "type": "object"
+    },
+    "HealthState": {
+      "description": "The one word a monitoring wall colours a row by.",
+      "oneOf": [
+        {
+          "const": "ok",
+          "description": "Running and nothing is wrong.",
+          "type": "string"
+        },
+        {
+          "const": "warning",
+          "description": "Something is degraded but the picture and sound are going out:\ncontinuity errors or packet loss on the input.",
+          "type": "string"
+        },
+        {
+          "const": "alarm",
+          "description": "Something a viewer notices, or nothing is going out: no input, a\nstall, black, a frozen picture, silence, a failed output, a rendition\nthe governor refused or shed.",
+          "type": "string"
+        },
+        {
+          "const": "off",
+          "description": "Not monitored: the show is stopped or has no input to watch.",
+          "type": "string"
+        }
+      ]
     },
     "HistoryRequest": {
       "description": "`program.history`.",
@@ -9248,6 +9345,17 @@
       },
       "since": "1",
       "summary": "A show was removed. Its process was stopped first."
+    },
+    {
+      "ext": null,
+      "legacy": null,
+      "name": "event/health",
+      "pattern": "health",
+      "payload": {
+        "$ref": "#/$defs/HealthEvent"
+      },
+      "since": "1",
+      "summary": "This show's health changed: its state (ok, warning, alarm, off) or the kinds of its alarms, never a number alone. From a show that composites; the station sends it on to every client as show.health with the show's id. docs/reference/show-health.md says what each alarm watches."
     }
   ],
   "ext": [

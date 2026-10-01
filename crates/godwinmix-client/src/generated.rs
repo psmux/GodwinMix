@@ -234,6 +234,24 @@ pub struct AgentStateRequest {
     pub response_format: Option<ResponseFormat>,
 }
 
+/// One condition that holds now.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Alarm {
+    /// One sentence for a person: what was measured, and against what.
+    pub detail: String,
+    pub kind: AlarmKind,
+    /// Unix milliseconds when the condition began. For black, freeze and
+    /// silence that is when the picture or sound first measured so, not when
+    /// the alarm's duration ran out.
+    pub since_ms: u64,
+}
+
+/// What an alarm is about.
+pub type AlarmKind = String;
+/// The values api_level 1 knows for [`AlarmKind`].
+pub const ALARM_KIND_VALUES: &[&str] = &["no-input", "stall", "black", "freeze", "silence", "cc-errors", "loss", "output-failed", "governor-refused", "shed"];
+
 /// The nine alignment keywords, used to place content inside its frame.
 pub type Align = String;
 /// The values api_level 1 knows for [`Align`].
@@ -1538,6 +1556,28 @@ pub struct HeaderChange {
     pub after: Header,
     pub before: Header,
 }
+
+/// A show's health.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Health {
+    /// Every alarm that holds now, oldest first.
+    pub alarms: Vec<Alarm>,
+    pub state: HealthState,
+}
+
+/// `event/health`, from a show that composites, about itself. The station
+/// sends it on to clients as `event/show.health` with the show's id.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct HealthEvent {
+    pub health: Health,
+}
+
+/// The one word a monitoring wall colours a row by.
+pub type HealthState = String;
+/// The values api_level 1 knows for [`HealthState`].
+pub const HEALTH_STATE_VALUES: &[&str] = &["ok", "warning", "alarm", "off"];
 
 /// `program.history`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -4150,7 +4190,7 @@ pub const METHODS: [MethodInfo; 160] = [
     MethodInfo { name: "tool.call", summary: "Call one of a plugin's tools, in MCP's shape. The name is `<plugin>/<tool>`, or the bare tool name when only one plugin has it.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/tool/call")) },
 ];
 
-pub const EVENT_NAMES: [&str; 28] = [
+pub const EVENT_NAMES: [&str; 29] = [
     "snapshot",
     "program.took",
     "scene.patch",
@@ -4179,6 +4219,7 @@ pub const EVENT_NAMES: [&str; 28] = [
     "governor.shed",
     "show.changed",
     "show.removed",
+    "health",
 ];
 
 pub const EXT_KEYS: [&str; 8] = [
@@ -4254,6 +4295,8 @@ pub enum Event {
     ShowChanged(ShowChanged),
     /// A show was removed. Its process was stopped first.
     ShowRemoved(ShowRemovedEvent),
+    /// This show's health changed: its state (ok, warning, alarm, off) or the kinds of its alarms, never a number alone. From a show that composites; the station sends it on to every client as show.health with the show's id. docs/reference/show-health.md says what each alarm watches.
+    Health(HealthEvent),
     /// An event name this api_level does not know, with its params as they came.
     Other { name: String, params: Value },
 }
@@ -4368,6 +4411,10 @@ impl Event {
                 Ok(payload) => Event::ShowRemoved(payload),
                 Err(_) => Event::Other { name: pattern.to_string(), params },
             },
+            "health" => match serde_json::from_value(params.clone()) {
+                Ok(payload) => Event::Health(payload),
+                Err(_) => Event::Other { name: pattern.to_string(), params },
+            },
             _ => Event::Other { name: pattern.to_string(), params },
         }
     }
@@ -4403,6 +4450,7 @@ impl Event {
             Event::GovernorShed(_) => "governor.shed",
             Event::ShowChanged(_) => "show.changed",
             Event::ShowRemoved(_) => "show.removed",
+            Event::Health(_) => "health",
             Event::Other { name, .. } => name,
         }
     }

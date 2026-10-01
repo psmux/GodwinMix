@@ -114,6 +114,16 @@ export interface AgentStateRequest {
   response_format?: ResponseFormat;
 }
 
+/** One condition that holds now. */
+export interface Alarm {
+  detail: string;
+  kind: AlarmKind;
+  since_ms: number;
+}
+
+/** What an alarm is about. */
+export type AlarmKind = "no-input" | "stall" | "black" | "freeze" | "silence" | "cc-errors" | "loss" | "output-failed" | "governor-refused" | "shed";
+
 /** The nine alignment keywords, used to place content inside its frame. */
 export type Align = "top-left" | "top-center" | "top-right" | "center-left" | "center" | "center-right" | "bottom-left" | "bottom-center" | "bottom-right";
 
@@ -882,6 +892,23 @@ export interface HeaderChange {
   after: Header;
   before: Header;
 }
+
+/** A show's health. */
+export interface Health {
+  alarms: Alarm[];
+  state: HealthState;
+}
+
+/**
+ * `event/health`, from a show that composites, about itself. The station
+ * sends it on to clients as `event/show.health` with the show's id.
+ */
+export interface HealthEvent {
+  health: Health;
+}
+
+/** The one word a monitoring wall colours a row by. */
+export type HealthState = "ok" | "warning" | "alarm" | "off";
 
 /** `program.history`. */
 export interface HistoryRequest {
@@ -2662,6 +2689,7 @@ export interface EventPayloads {
   "governor.shed": ShedNote;
   "show.changed": ShowChanged;
   "show.removed": ShowRemovedEvent;
+  "health": HealthEvent;
 }
 
 export type EventName = keyof EventPayloads;
@@ -2880,6 +2908,7 @@ export const EVENT_NAMES: readonly EventName[] = [
   "governor.shed",
   "show.changed",
   "show.removed",
+  "health",
 ];
 
 /**
