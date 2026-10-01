@@ -15,19 +15,9 @@ use godwinmix_protocol::method::{any_object, schema_of, MethodDef, Registry, Tie
 use godwinmix_protocol::scope::Scope;
 use crate::control::call::Call;
 use godwinmix_core::tasks::{TaskView, Tasks};
-use schemars::JsonSchema;
-use serde::{Deserialize, Serialize};
+pub use super::task_request::TaskRequest;
 use serde_json::Value;
 use std::sync::Arc;
-
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-pub struct TaskRequest {
-    /// The id a long running method answered with. Spelled `id` on the REST
-    /// route, where it is in the path, and `task_id` everywhere else, which
-    /// is what 03 section 6 calls it.
-    #[serde(alias = "id")]
-    pub task_id: String,
-}
 
 pub fn register(reg: &mut Registry<Call>) {
     reg.register(

@@ -240,15 +240,9 @@ pub fn search_paths() -> Vec<PathBuf> {
             }
         }
     }
-    if let Some(home) = home_dir() {
-        dirs.push(home.join(".godwinmix").join("presets"));
-    }
+    dirs.push(godwinmix_host::home::presets_dir());
     dirs.dedup();
     dirs
-}
-
-pub fn home_dir() -> Option<PathBuf> {
-    std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")).map(PathBuf::from)
 }
 
 /// Load a preset from a directory on disk.

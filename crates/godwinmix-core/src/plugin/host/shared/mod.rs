@@ -74,7 +74,7 @@ pub fn enabled() -> bool {
 pub fn bus_dir() -> PathBuf {
     match std::env::var_os(godwinmix_framebus::registry::DIR_ENV).filter(|d| !d.is_empty()) {
         Some(dir) => PathBuf::from(dir),
-        None => godwinmix_host::marketplace::home_dir().join("bus"),
+        None => godwinmix_host::home::dir().join("bus"),
     }
 }
 
