@@ -50,12 +50,10 @@ fn a_lost_datagram_is_a_continuity_error() {
 #[test]
 fn feeds_arrive_over_loopback_paced_and_whole() {
     let clip = Arc::new(Clip::from_bytes("t.ts".into(), synthetic(7000, 2700)).unwrap());
-    let base: std::net::SocketAddrV4 = "127.0.0.1:0".parse().unwrap();
-    let probe = std::net::UdpSocket::bind(base).unwrap();
-    let port = probe.local_addr().unwrap().port();
-    drop(probe);
-    let socks: Vec<_> = (0..2).map(|i| net::receiver(net::nth(format!("127.0.0.1:{port}").parse().unwrap(), i, false), "127.0.0.1".parse().unwrap(), 1 << 20).unwrap()).collect();
-    let feeds = vec![feed(&clip, &format!("127.0.0.1:{port}"), 0.0), feed(&clip, &format!("127.0.0.1:{}", port + 1), 5.0)];
+    // Each receiver on a port the system picks, so a busy port never fails the test.
+    let socks: Vec<_> = (0..2).map(|_| net::receiver("127.0.0.1:0".parse().unwrap(), "127.0.0.1".parse().unwrap(), 1 << 20).unwrap()).collect();
+    let at = |i: usize| socks[i].local_addr().unwrap().to_string();
+    let feeds = vec![feed(&clip, &at(0), 0.0), feed(&clip, &at(1), 5.0)];
     let totals = Totals::default();
     let start = Instant::now();
     let sender = net::sender("127.0.0.1".parse().unwrap(), 1).unwrap();
