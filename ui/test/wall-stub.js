@@ -112,9 +112,10 @@ export function methods(stub) {
       changed(s);
       return s;
     },
-    "show.output.add": (p) => { const s = find(p.show); const o = { id: p.id || `out-${s.outputs.length + 1}`, uri: p.uri, platform: p.platform, enabled: true, rendition: p.rendition ?? null, state: "connecting" }; s.outputs.push(o); changed(s); return o; },
-    "show.output.set": (p) => { const s = find(p.show); const o = s.outputs.find((x) => x.id === p.id); Object.assign(o, p); delete o.show; changed(s); return o; },
-    "show.output.remove": (p) => { const s = find(p.show); s.outputs = s.outputs.filter((x) => x.id !== p.id); changed(s); return { removed: p.id }; },
+    // `id` is the show and `output` the output, as channel.destination.* name them; `show` is another name for `id`.
+    "show.output.add": (p) => { const s = find(p.id || p.show); const o = { id: p.output || `out-${s.outputs.length + 1}`, uri: p.uri, platform: p.platform, enabled: true, rendition: p.rendition ?? null, state: "connecting" }; s.outputs.push(o); changed(s); return o; },
+    "show.output.set": (p) => { const s = find(p.id || p.show); const o = s.outputs.find((x) => x.id === p.output); for (const k of ["uri", "enabled", "rendition"]) if (k in p) o[k] = p[k]; changed(s); return o; },
+    "show.output.remove": (p) => { const s = find(p.id || p.show); s.outputs = s.outputs.filter((x) => x.id !== p.output); changed(s); return { removed: p.output }; },
     "show.add_many": (p) => addMany(stub, p),
   };
 }

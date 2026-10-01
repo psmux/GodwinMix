@@ -29,7 +29,7 @@ export function showWall(client) {
 const BAND = 34;
 
 export function openWall(client) {
-  sheet("wall");
+  const styled = sheet("wall");
   const back = document.activeElement;
   const opts = prefs();
   const view = { client, opts, acked: new Set(), cursor: null, items: [], cols: 1 };
@@ -58,6 +58,7 @@ export function openWall(client) {
     root, scroll, data, thumbs, list, top,
     narrow: () => scroll.clientWidth < 760,
     draw() {
+      if (!view.styled) return;
       const tiles = opts.mode === "tiles";
       const narrow = view.narrow();
       root.classList.toggle("narrow", narrow);
@@ -75,6 +76,7 @@ export function openWall(client) {
     },
     /** Which shows are in view, for stats and pictures. Not the margin. */
     fetch() {
+      if (!view.styled) return;
       const [a, b] = list.inView();
       const ids = [];
       for (let i = a; i <= b; i++) {
@@ -110,6 +112,7 @@ export function openWall(client) {
   const resize = new ResizeObserver(() => later());
   resize.observe(scroll);
   data.start();
+  styled.then(() => { view.styled = true; later(); });
   if (window.innerWidth >= 760) scroll.focus();
   return view;
 }

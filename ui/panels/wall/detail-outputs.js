@@ -25,7 +25,7 @@ export function outputsSection(client, show, stats, reread) {
   const slot = el("div.wl-dform");
   const call = async (method, params, what) => {
     try {
-      await client.call(method, { show: show().id, ...params });
+      await client.call(method, { id: show().id, ...params });
       await reread();
     } catch (e) {
       errorToast(e, what);
@@ -44,7 +44,7 @@ export function outputsSection(client, show, stats, reread) {
     f.save.onclick = () => {
       const v = f.step.value();
       slot.replaceChildren();
-      if (v !== undefined || o.rendition) call("show.output.set", { id: o.id, rendition: v === undefined ? o.rendition : v }, `${outName(o)} keeps its format`);
+      if (v !== undefined || o.rendition) call("show.output.set", { output: o.id, rendition: v === undefined ? o.rendition : v }, `${outName(o)} keeps its format`);
     };
     slot.replaceChildren(el("div.wl-dbox", {}, [f.step.node, el("div.wl-dbtns", {}, [f.cancel, f.save])]));
   }
@@ -75,8 +75,8 @@ export function outputsSection(client, show, stats, reread) {
         el("span.wl-doutfmt", { text: `${outFormat(o, st)}${st && st.kbps ? ` · ${kbps(st.kbps)}` : ""} · ${o.enabled === false ? "off" : state}` }),
         el("span.wl-doutbtns", {}, [
           el("button.btn", { type: "button", text: "Format", onclick: () => change(o) }),
-          el("button.btn", { type: "button", text: o.enabled === false ? "Turn on" : "Turn off", onclick: () => call("show.output.set", { id: o.id, enabled: o.enabled === false }, `${outName(o)} did not change`) }),
-          el("button.btn.icon", { type: "button", text: "×", title: `Remove ${outName(o)}`, "aria-label": `Remove ${outName(o)}`, onclick: () => call("show.output.remove", { id: o.id }, `${outName(o)} was not removed`) }),
+          el("button.btn", { type: "button", text: o.enabled === false ? "Turn on" : "Turn off", onclick: () => call("show.output.set", { output: o.id, enabled: o.enabled === false }, `${outName(o)} did not change`) }),
+          el("button.btn.icon", { type: "button", text: "×", title: `Remove ${outName(o)}`, "aria-label": `Remove ${outName(o)}`, onclick: () => call("show.output.remove", { output: o.id }, `${outName(o)} was not removed`) }),
         ]),
       ]);
     }));
