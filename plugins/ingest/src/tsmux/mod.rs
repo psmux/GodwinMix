@@ -112,13 +112,13 @@ impl Muxer {
     fn video_frame(&mut self, tag: &MediaTag, ms: u32, out: &mut Vec<u8>) {
         let Some(config) = self.video.as_ref() else { return };
         let Some((skip, cts)) = crate::eflv::frame(&tag.payload) else { return };
-        let au = config.annex_b(tag.payload.get(skip..).unwrap_or(&[]), tag.keyframe);
-        self.tables(ms, tag.keyframe, out);
+        let (au, key) = config.annex_b(tag.payload.get(skip..).unwrap_or(&[]), tag.keyframe);
+        self.tables(ms, key, out);
         let dts = self.clocks[0].next((u64::from(ms) * 90 + BASE) % WRAP);
         let pts = (dts as i64 + i64::from(cts.max(0)) * 90).rem_euclid(WRAP as i64) as u64;
         let mut pes = packet::pes(0xe0, pts, (pts != dts).then_some(dts), au.len());
         pes.extend_from_slice(&au);
-        let first = First { pcr: Some((dts + WRAP - PCR_LEAD) % WRAP), random_access: tag.keyframe };
+        let first = First { pcr: Some((dts + WRAP - PCR_LEAD) % WRAP), random_access: key };
         packet::write(out, psi::VIDEO_PID, &mut self.cc[2], first, false, &pes);
     }
 

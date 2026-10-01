@@ -54,26 +54,42 @@ impl VideoConfig {
     }
 
     /// One access unit in Annex B: a delimiter, the parameter sets when it
-    /// is a keyframe, and its NAL units each behind a start code.
-    pub fn annex_b(&self, frame: &[u8], keyframe: bool) -> Vec<u8> {
-        let mut out = Vec::with_capacity(frame.len() + 16 + if keyframe { self.parameter_sets.len() } else { 0 });
+    /// starts a GOP, and its NAL units each behind a start code. Whether it
+    /// starts one is read from its NAL types (an IDR for H.264, any IRAP for
+    /// HEVC), not taken from the tag, so a frame flagged wrongly upstream
+    /// still gets its parameter sets. Answers the unit and that.
+    pub fn annex_b(&self, frame: &[u8], keyframe: bool) -> (Vec<u8>, bool) {
+        let nals = self.nals(frame);
+        let key = keyframe || nals.iter().any(|n| self.is_random_access(n[0]));
+        let mut out = Vec::with_capacity(frame.len() + 16 + if key { self.parameter_sets.len() } else { 0 });
         out.extend_from_slice(if self.hevc { &[0, 0, 0, 1, 0x46, 0x01, 0x50] } else { &[0, 0, 0, 1, 0x09, 0xf0] });
-        if keyframe {
+        if key {
             out.extend_from_slice(&self.parameter_sets);
         }
-        let mut at = 0;
+        for nal in nals {
+            out.extend_from_slice(&[0, 0, 0, 1]);
+            out.extend_from_slice(nal);
+        }
+        (out, key)
+    }
+
+    /// The frame's NAL units, less any delimiter it carried.
+    fn nals<'a>(&self, frame: &'a [u8]) -> Vec<&'a [u8]> {
+        let (mut at, mut out) = (0, Vec::new());
         while at + self.length_size <= frame.len() {
             let len = frame[at..at + self.length_size].iter().fold(0usize, |n, b| (n << 8) | usize::from(*b));
             at += self.length_size;
             let Some(nal) = frame.get(at..at + len) else { break };
             at += len;
-            if nal.is_empty() || self.is_delimiter(nal[0]) {
-                continue;
+            if !nal.is_empty() && !self.is_delimiter(nal[0]) {
+                out.push(nal);
             }
-            out.extend_from_slice(&[0, 0, 0, 1]);
-            out.extend_from_slice(nal);
         }
         out
+    }
+
+    fn is_random_access(&self, first: u8) -> bool {
+        if self.hevc { (16..=21).contains(&((first >> 1) & 0x3f)) } else { first & 0x1f == 5 }
     }
 
     fn is_delimiter(&self, first: u8) -> bool {

@@ -9,7 +9,8 @@ fn an_avcc_record_gives_its_parameter_sets_with_start_codes() {
     assert_eq!(c.length_size, 4);
     assert_eq!(c.parameter_sets, [0, 0, 0, 1, 0x67, 0xaa, 0, 0, 0, 1, 0x68, 0xbb]);
     let frame = [0, 0, 0, 2, 0x09, 0x10, 0, 0, 0, 3, 0x65, 1, 2];
-    let au = c.annex_b(&frame, true);
+    let (au, key) = c.annex_b(&frame, false);
+    assert!(key, "an IDR slice starts a GOP whatever the tag said");
     assert_eq!(&au[..6], &[0, 0, 0, 1, 0x09, 0xf0], "our own delimiter, the frame's dropped");
     assert_eq!(&au[6..18], &c.parameter_sets[..]);
     assert_eq!(&au[18..], &[0, 0, 0, 1, 0x65, 1, 2]);
