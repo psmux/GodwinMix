@@ -284,6 +284,9 @@ const DEV_ASSETS: &[(&str, &str)] = &[
     ("test/shows.html", include_str!("../../../ui/test/shows.html")),
     // The monitoring wall, bulk add and a show's detail against a stub of
     // the wave 4 contract: /test/wall.html?scene=rows.
+    ("test/wall-act.js", include_str!("../../../ui/test/wall-act.js")),
+    ("test/wall-dialogs.js", include_str!("../../../ui/test/wall-dialogs.js")),
+    ("test/wall-help.js", include_str!("../../../ui/test/wall-help.js")),
     ("test/wall-preview.js", include_str!("../../../ui/test/wall-preview.js")),
     ("test/wall-stub.js", include_str!("../../../ui/test/wall-stub.js")),
     ("test/wall.html", include_str!("../../../ui/test/wall.html")),
