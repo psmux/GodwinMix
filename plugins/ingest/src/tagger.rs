@@ -47,10 +47,19 @@ pub const HEVC_CAPS: &str = "video/x-h265,stream-format=hvc1,alignment=au";
 #[derive(Default)]
 pub struct Zero(Mutex<Option<gst::ClockTime>>);
 
+/// A running time this far before the start is a new clock, not a frame
+/// that came early; it becomes the start, and the reader of the tags lays
+/// the new timeline after the old one.
+const RESTARTED: gst::ClockTime = gst::ClockTime::from_seconds(3);
+
 impl Zero {
     pub fn ms(&self, at: gst::ClockTime) -> u32 {
         let mut zero = self.0.lock().unwrap_or_else(|e| e.into_inner());
         let base = *zero.get_or_insert(at);
+        if at + RESTARTED < base {
+            *zero = Some(at);
+            return 0;
+        }
         (at.saturating_sub(base).mseconds() & 0xffff_ffff) as u32
     }
 }
@@ -192,5 +201,7 @@ mod tests {
         assert_eq!(zero.ms(gst::ClockTime::from_mseconds(5_000)), 0);
         assert_eq!(zero.ms(gst::ClockTime::from_mseconds(5_040)), 40);
         assert_eq!(zero.ms(gst::ClockTime::from_mseconds(4_990)), 0, "never before the start");
+        assert_eq!(zero.ms(gst::ClockTime::from_mseconds(1_000)), 0, "a new clock starts again");
+        assert_eq!(zero.ms(gst::ClockTime::from_mseconds(1_040)), 40);
     }
 }
