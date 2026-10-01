@@ -14167,7 +14167,7 @@
       },
       "rest": {
         "method": "POST",
-        "path": "/api/v1/task/cancel"
+        "path": "/api/v1/tasks/{id}/cancel"
       },
       "result": {
         "type": "object"
@@ -14193,7 +14193,7 @@
       },
       "rest": {
         "method": "GET",
-        "path": "/api/v1/task"
+        "path": "/api/v1/tasks/{id}"
       },
       "result": {
         "$ref": "#/$defs/TaskView"
@@ -14214,7 +14214,7 @@
       },
       "rest": {
         "method": "GET",
-        "path": "/api/v1/task/list"
+        "path": "/api/v1/tasks"
       },
       "result": {
         "items": {

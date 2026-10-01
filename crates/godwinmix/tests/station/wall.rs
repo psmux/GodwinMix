@@ -30,6 +30,14 @@ async fn the_wall_gets_pictures_totals_and_alarm_settings_from_the_station() {
     let (status, _, _) = fetch(&st, "/api/v1/shows/nope/thumbnail.jpg").await;
     assert_eq!(status, 404);
 
+    // A task is read where plugin.add's answer says: the path reaches the
+    // show, which says it has no such task, rather than no such route.
+    let (status, _, body) = fetch(&st, "/api/v1/tasks/nope").await;
+    assert_eq!(status, 404, "{}", String::from_utf8_lossy(&body));
+    assert!(String::from_utf8_lossy(&body).contains("task"), "{}", String::from_utf8_lossy(&body));
+    let (status, _, _) = fetch(&st, "/api/v1/tasks").await;
+    assert_eq!(status, 200);
+
     let gov = call(&mut ws, 2, "governor.status", json!({})).await;
     assert!(gov["result"]["ingress_kbps"].is_u64(), "{gov}");
 

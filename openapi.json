@@ -15499,10 +15499,52 @@
         "x-scope": "operate"
       }
     },
-    "/api/v1/task": {
+    "/api/v1/tasks": {
+      "get": {
+        "description": "JSON-RPC method `task.list`. Needs the `read` scope.",
+        "operationId": "task.list",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TaskView"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Every background job this core knows about, newest first.",
+        "tags": [
+          "task"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
+    "/api/v1/tasks/{id}": {
       "get": {
         "description": "JSON-RPC method `task.get`. Needs the `read` scope.",
         "operationId": "task.get",
+        "parameters": [
+          {
+            "description": "The id, as listed by the matching list call.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -15527,10 +15569,21 @@
         "x-scope": "read"
       }
     },
-    "/api/v1/task/cancel": {
+    "/api/v1/tasks/{id}/cancel": {
       "post": {
         "description": "JSON-RPC method `task.cancel`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
         "operationId": "task.cancel",
+        "parameters": [
+          {
+            "description": "The id, as listed by the matching list call.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -15563,37 +15616,6 @@
         "x-destructive": false,
         "x-idempotent": true,
         "x-scope": "operate"
-      }
-    },
-    "/api/v1/task/list": {
-      "get": {
-        "description": "JSON-RPC method `task.list`. Needs the `read` scope.",
-        "operationId": "task.list",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/TaskView"
-                  },
-                  "type": "array"
-                }
-              }
-            },
-            "description": "the full resulting object, so no follow up read is needed"
-          },
-          "default": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "summary": "Every background job this core knows about, newest first.",
-        "tags": [
-          "task"
-        ],
-        "x-destructive": false,
-        "x-idempotent": true,
-        "x-scope": "read"
       }
     },
     "/api/v1/tool/call": {
