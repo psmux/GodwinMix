@@ -85,32 +85,43 @@ fn text_of(plan: &godwinmix_protocol::destination::DestinationPlan) -> String {
 /// host says where the input is in the hub, make it the show's source and
 /// put it on programme. Done once per hub path.
 pub async fn feed_source(st: &Arc<Station>, id: &str) {
-    let wanted = {
-        let reg = st.registry.lock();
-        let Some(r) = reg.get(id).filter(|r| r.compositing && r.input.is_some()) else { return };
-        let seen = st.direct.seen.lock();
-        let Some((relay, stream)) = seen.get(id).and_then(|s| s.relay()) else { return };
-        if seen.get(id).and_then(|s| s.source_for.as_deref()) == Some(stream.as_str()) {
-            return;
-        }
-        (r.name.clone(), relay, stream)
-    };
     if st.state_of(id) != Some(ShowState::Running) {
         return;
     }
+    // Claimed before asking, so the show coming up and the switch, which
+    // both call this, add the source once between them.
+    let wanted = {
+        let reg = st.registry.lock();
+        let Some(r) = reg.get(id).filter(|r| r.compositing && r.input.is_some()) else { return };
+        let mut seen = st.direct.seen.lock();
+        let Some(s) = seen.get_mut(id) else { return };
+        let Some((relay, stream)) = s.relay() else { return };
+        if s.source_for.as_deref() == Some(stream.as_str()) {
+            return;
+        }
+        s.source_for = Some(stream.clone());
+        (r.name.clone(), relay, stream)
+    };
     let (name, relay, stream) = wanted;
     let wait = Duration::from_secs(5);
     let params = json!({
         "id": INPUT_SOURCE, "name": format!("{name} input"), "type": "ingest/rtmp",
         "uri": format!("channel:{stream}"), "relay": relay, "stream": stream,
     });
-    match st.ask_show(id, "source.add", params, wait).await {
-        Ok(_) => info!(show = id, %stream, "the show's input became its source"),
-        Err(e) if e.message.contains("already") => {}
-        Err(e) => return warn!(show = id, error = %e.message, "the show would not take its input as a source"),
-    }
-    let _ = st.ask_show(id, "program.take", json!({"source": INPUT_SOURCE}), wait).await;
-    if let Some(s) = st.direct.seen.lock().get_mut(id) {
-        s.source_for = Some(stream);
+    // A show started again keeps its sources, and a second add would make
+    // `input-2` beside it rather than fail.
+    let listed = st.ask_show(id, "source.list", json!({}), wait).await.unwrap_or_default();
+    let has = listed.as_array().is_some_and(|rows| rows.iter().any(|s| s["id"] == INPUT_SOURCE));
+    if !has {
+        match st.ask_show(id, "source.add", params, wait).await {
+            Ok(_) => info!(show = id, %stream, "the show's input became its source"),
+            Err(e) => {
+                if let Some(s) = st.direct.seen.lock().get_mut(id) {
+                    s.source_for = None;
+                }
+                return warn!(show = id, error = %e.message, "the show would not take its input as a source");
+            }
+        }
+        let _ = st.ask_show(id, "program.take", json!({"source": INPUT_SOURCE}), wait).await;
     }
 }
