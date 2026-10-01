@@ -182,12 +182,19 @@ What crosses between them is small on purpose:
 * The link: one loopback connection per show, over which the show's governor
   asks the station's (`governor.admit`), so the machine has one budget. When
   a show dies its link closes and its tickets go back.
-* Media never crosses the station, with one exception. A channel's stream
-  is read by each show from the ingest plugin's own loopback port. Sharing
-  one decoded camera between shows is the frame bus's work, which lands
-  separately. The exception is HLS from a show without compositing: that
-  show has no process, so the station reads its stream off the same port and
-  packages it (`station/direct/hls/`), copying, never decoding.
+* Media never crosses the station. A channel's stream is read by each show
+  from the ingest plugin's own loopback port. Sharing one decoded camera
+  between shows is the frame bus's work, which lands separately. HLS from a
+  show without compositing is packaged by the HLS packager, the same binary
+  run with `--hls-packager` as a child of the station (`station/packager/`),
+  started only while such an output is on. It reads the show's stream off
+  the same port and copies it into segments, never decoding. The station
+  keeps the viewer keys, finds the output and lets the player in, then
+  forwards the request on loopback to the packager, which answers from its
+  rings (`station/direct/hls/`). A crash in GStreamer there ends that
+  process: its outputs say `reconnecting` until the station has started it
+  again, and the control port, the channels and every other output carry
+  on.
 
 The pieces are small modules: `registry.rs` (which shows exist and where
 their files are), `supervise/` (starting, restarting, the backoff and the

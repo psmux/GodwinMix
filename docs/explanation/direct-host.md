@@ -75,18 +75,33 @@ scale per size, one encoder per rendition, however many outputs share them.
 
 The renditions are published on the same hub as the input (`Transcoders::
 sharing`), under `direct.<id>/main|<video node>|<audio node>`. That puts
-every rendition where the relay can hand it to another process. The station,
-which serves HLS from the control port, reads the one an HLS output asks for,
-or the show's own stream, with nothing decoded a second time.
+every rendition where the relay can hand it to another process. The HLS
+packager reads the one an HLS output asks for, or the show's own stream, with
+nothing decoded a second time.
 
-That is why a direct show's HLS is packaged in the station and not here. The
-packager, the rings that hold the segments, the playlists, LL-HLS, DASH and
-the viewer keys exist once, in the engine and the control port's `/hls`
-routes, and the station links both. Packaging in the host would mean writing
-all of that again inside a plugin, or writing segments to disk for the
-station to serve. Each HLS output is one thread and one small pipeline in the
-station, `appsrc` into `cmafmux`; one that fails says so on its own output and
-nothing else stops.
+A direct show's HLS is packaged in a process of its own, the HLS packager: the station's binary run with
+`--hls-packager`, which the station starts while at least one such output is
+on. The packager, the rings that hold the segments, the playlists, LL-HLS
+and DASH exist once, in the engine and the control port's `/hls` routes, and
+that binary links both, so nothing is written twice. Packaging means a
+GStreamer pipeline per output, `appsrc` into `cmafmux`, and a pipeline can
+crash its process. In the host that would take every channel and every
+direct show's outputs with it; in the station it would take the control
+port. In the packager it costs the HLS outputs a few seconds: they say
+`reconnecting`, with why, the station starts the packager again (after 1 s,
+then 2, 4 and up to 30 s if it keeps stopping, and `failed` after five stops
+in a row), hands it the outputs again, and each output comes back on the
+same link. The viewer keys are the station's, so they do not change when
+the packager does.
+
+The station still answers `/hls/<output>/...?show=<id>` on its own port. It
+finds the output, checks the viewer key or the token, and forwards the
+request to the packager on loopback with a secret the packager was started
+with; the packager answers from its rings, holding a blocking LL-HLS reload
+as the control port does. Inside the packager each output is one thread and
+one small pipeline; one that fails says so on its own output and nothing
+else stops. `crates/godwinmix/tests/station/hls_isolation.rs` kills the
+packager outright beside a second direct show and checks all of this.
 
 A show whose renditions already decode the input hands one decoded picture a
 second from that decode to the vitals (`transcode::Tap`), so the vitals do

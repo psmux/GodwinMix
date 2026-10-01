@@ -78,7 +78,7 @@ goes is the scheme of `url`; `platform` agrees with it.
 | `rtp://host:port` | the same in RTP, payload type 33, one sequence number per datagram | as `udp://` |
 | `rist://host:port` | MPEG-TS in RTP through `ristsink`, with retransmission; the port must be even | `buffer` in ms (default 1000) |
 | `file:///path/name.ts` | MPEG-TS written to the file; a name already there gets the time added | none |
-| `hls://name` | nothing: the station packages it and serves it at `/hls/<id>/` with `?show=` | none; `params` are the station's |
+| `hls://name` | nothing: the station's HLS packager packages it and the station serves it at `/hls/<id>/` with `?show=` | none; `params` are the station's |
 
 SRT, UDP, RTP, RIST and files are muxed by the plugin's own MPEG-TS muxer
 (`plugins/ingest/src/tsmux/`), nothing decoded. A channel destination takes
@@ -104,9 +104,10 @@ nothing.
 
 An `hls` row starts no sender in the host. It is in the table so that its
 rendition, when it has one, is built, and so that the relay's loopback port
-is open while the show runs: the station reads `direct.<id>/main`, or the
-pair, through it with `GMXHUB` and packages it with the engine's HLS
-packager (`docs/reference/hls-output.md`).
+is open while the show runs: the station's HLS packager, a child process
+of the station, reads `direct.<id>/main`, or the pair, through it with
+`GMXHUB` and packages it with the engine's HLS packager
+(`docs/reference/hls-output.md`).
 
 ## Events
 
