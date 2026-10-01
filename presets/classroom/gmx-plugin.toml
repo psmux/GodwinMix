@@ -42,4 +42,4 @@ text = "Press Teacher to put a picture on air, then Split to show the screen bes
 
 [[provides.preset.next]]
 action = "note"
-text = "The recording and the stream both go to this machine. Destinations, then Edit, sends either one elsewhere."
+text = "The recording and the stream both go to this machine. Outputs, then Edit, sends either one elsewhere."
