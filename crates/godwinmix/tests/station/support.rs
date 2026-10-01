@@ -61,6 +61,8 @@ pub async fn start(dir: PathBuf, port: u16, extra: &[&str]) -> Running {
     let mut cmd = Command::new(BIN);
     cmd.arg("--config").arg(dir.join("godwinmix.toml")).args(extra).args(["--log-format", "json"]);
     cmd.env("GODWINMIX_RUNTIME_DIR", dir.join("runtime")).env_remove("GODWINMIX_TOKEN");
+    // Its own secret store, so an output key a test seals stays in its folder.
+    cmd.env("GODWINMIX_HOME", dir.join("home"));
     cmd.stdout(Stdio::null()).stderr(Stdio::from(std::fs::File::create(dir.join("log.jsonl")).unwrap()));
     #[cfg(unix)]
     std::os::unix::process::CommandExt::process_group(&mut cmd, 0);
