@@ -22,9 +22,9 @@ fn received(c: &Value) -> String {
         return "not checked".into();
     }
     format!(
-        "{} of {} streams arrived, {} Mbit/s; {} CC errors ({} packets lost), {} PCR jumps, PCR jitter up to {} ms; {} keyframes, {} GOPs dropped in {} streams; longest silence {} ms. The checker used {}% of one core",
+        "{} of {} streams arrived, {} Mbit/s; {} CC errors ({} packets lost), {} PCR jumps, PCR jitter up to {} ms; {} keyframes, {} GOPs dropped in {} streams; longest silence {} ms, {} streams silent for a second or more. The checker used {}% of one core",
         t["streams"].as_u64().unwrap_or(0) - t["silent_streams"].as_u64().unwrap_or(0),
-        t["streams"], t["mbps"], t["cc_errors"], t["packets_lost"], t["pcr_jumps"], t["pcr_jitter_max_ms"], t["keyframes"], t["gops_dropped"], t["streams_with_gops_dropped"], t["silence_max_ms"], t["checker_cpu_percent"]
+        t["streams"], t["mbps"], t["cc_errors"], t["packets_lost"], t["pcr_jumps"], t["pcr_jitter_max_ms"], t["keyframes"], t["gops_dropped"], t["streams_with_gops_dropped"], t["silence_max_ms"], t["streams_silent_over_1s"], t["checker_cpu_percent"]
     )
 }
 
