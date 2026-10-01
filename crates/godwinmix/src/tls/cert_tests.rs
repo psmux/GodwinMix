@@ -67,6 +67,9 @@ fn a_missing_file_or_half_a_pair_says_what_to_do() {
     let half = ControlTls { enabled: true, cert: Some("a.crt".into()), key: None };
     let why = obtain(&half, &dir, &store, &dir.join("c.crt"), &[]).unwrap_err().to_string();
     assert!(why.contains("only one of cert and key"), "{why}");
+    let cleared = ControlTls { enabled: true, cert: Some(String::new()), key: Some(" ".into()) };
+    let made = obtain(&cleared, &dir, &store, &dir.join("c.crt"), &names(&["localhost"])).unwrap();
+    assert_eq!(made.source, Source::SelfSigned, "empty paths are unset");
     let _ = std::fs::remove_dir_all(&dir);
 }
 

@@ -48,6 +48,9 @@ pub async fn run(opts: Options) -> Result<()> {
     let addr = link::listen(Arc::new(Linked(st.clone()))).await.context("opening the show link")?;
     let _ = st.link.set(addr);
 
+    // Before any show starts, so each one is told what the port answers
+    // HTTPS with (`child::command`).
+    let tls = crate::tls::start(&cfg, &bind, &opts.config, &events);
     let ingest = open_channels(&st, &cfg, &opts.config, events);
     render.begin();
     let starting: Vec<String> = st.registry.lock().records.iter().filter(|r| !r.stopped && r.compositing).map(|r| r.id.clone()).collect();
@@ -58,8 +61,11 @@ pub async fn run(opts: Options) -> Result<()> {
     let listener = tokio::net::TcpListener::bind(&bind).await.with_context(|| format!("binding the control port {bind}"))?;
     info!(%bind, shows = starting.len(), "station listening");
     eprintln!("GodwinMix is running. Open http://{}/ in a browser.", bind.replacen("0.0.0.0:", "127.0.0.1:", 1));
-    let app = server::router(st.clone()).into_make_service_with_connect_info::<std::net::SocketAddr>();
-    let serving = tokio::spawn(async move { axum::serve(listener, app).await });
+    if let Some(tls) = &tls {
+        crate::tls::announce(&tls.info);
+    }
+    let app = server::router(st.clone());
+    let serving = tokio::spawn(crate::tls::serve(listener, app, tls.map(|t| t.acceptor)));
 
     tokio::select! {
         _ = tokio::signal::ctrl_c() => {}

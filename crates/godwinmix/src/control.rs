@@ -1582,19 +1582,8 @@ pub async fn serve_with(
     let observe = crate::observe::router(observe_state(&state));
     // Connect info so the snapshot rate limit can tell one client from
     // another. Nothing else uses it, and a request without it still works.
-    let app = router(state, snapshots)
-        .merge(observe)
-        .into_make_service_with_connect_info::<std::net::SocketAddr>();
-    match tls {
-        None => axum::serve(listener, app).await?,
-        Some(acceptor) => {
-            use axum::serve::ListenerExt;
-            // `tap_io` only so axum hands the peer address on as connect
-            // info for a listener that is not its own TcpListener.
-            let sniffing = crate::tls::Sniffing::new(listener, acceptor)?.tap_io(|_| {});
-            axum::serve(sniffing, app).await?
-        }
-    }
+    let app = router(state, snapshots).merge(observe);
+    crate::tls::serve(listener, app, tls).await?;
     Ok(())
 }
 

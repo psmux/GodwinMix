@@ -58,7 +58,9 @@ pub struct Loaded {
 /// config file's own). `public` is where a made certificate is written for
 /// people to download. `names` is what a made one has to cover.
 pub fn obtain(tls: &ControlTls, base: &Path, store: &Secrets, public: &Path, names: &[String]) -> Result<Loaded> {
-    match (&tls.cert, &tls.key) {
+    // An empty string is unset, the way `config.set` clears a path.
+    let given = |path: &Option<String>| path.as_deref().map(str::trim).filter(|p| !p.is_empty());
+    match (given(&tls.cert), given(&tls.key)) {
         (Some(cert), Some(key)) => from_files(&resolve(base, cert), &resolve(base, key)),
         (Some(_), None) | (None, Some(_)) => Err(anyhow!(
             "[control.tls] sets only one of cert and key. Set both to use your own certificate, \
