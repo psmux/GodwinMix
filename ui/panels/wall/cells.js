@@ -38,8 +38,10 @@ export function outFormat(o, st) {
   return v.height ? `${v.height}p${v.bitrate_kbps ? ` ${kbps(v.bitrate_kbps)}` : ""}` : "Re-encode";
 }
 
+const PLATFORMS = { youtube: "YouTube", facebook: "Facebook", twitch: "Twitch", linkedin: "LinkedIn", kick: "Kick", x: "X" };
+
 export function outName(o) {
-  if (o.platform) return o.platform;
+  if (o.platform) return PLATFORMS[o.platform] || o.platform.charAt(0).toUpperCase() + o.platform.slice(1);
   const u = String(o.uri || "");
   const m = /^[a-z]+:\/\/@?([^/?]+)/i.exec(u);
   return m ? m[1] : o.id;
