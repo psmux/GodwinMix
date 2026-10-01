@@ -8075,6 +8075,15 @@
       "ShowStats": {
         "description": "One show's numbers, as `show.stats` answers them.",
         "properties": {
+          "cpu_millicores": {
+            "description": "What the show costs the machine, thousandths of a core: for a show\nthat mixes, its process as last measured; for a direct show, its\noutputs' encodes summed. Left out while nothing has measured it.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
           "health": {
             "$ref": "#/components/schemas/Health"
           },
@@ -8098,6 +8107,11 @@
               "$ref": "#/components/schemas/OutputStats"
             },
             "type": "array"
+          },
+          "work": {
+            "$ref": "#/components/schemas/ShowWork",
+            "default": "copy",
+            "description": "`mix`, `transcode` or `copy`."
           }
         },
         "required": [
@@ -8146,6 +8160,26 @@
           }
         },
         "type": "object"
+      },
+      "ShowWork": {
+        "description": "What a show does to make its outputs, which is what its load pays for.",
+        "oneOf": [
+          {
+            "const": "mix",
+            "description": "It composites and encodes a programme of its own: a show that mixes.",
+            "type": "string"
+          },
+          {
+            "const": "transcode",
+            "description": "A direct show with an output given a rendition, which is encoded.",
+            "type": "string"
+          },
+          {
+            "const": "copy",
+            "description": "A direct show whose outputs all copy the input.",
+            "type": "string"
+          }
+        ]
       },
       "SnapshotRequest": {
         "description": "`snapshot.get` on `/rpc` and through MCP. The REST route serves the same\nbytes raw, because an `<img>` tag cannot read base64 out of JSON.",
