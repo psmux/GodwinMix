@@ -60,3 +60,30 @@ fn rist_reaches_a_rist_receiver() {
     let _ = std::fs::remove_file(&path);
     assert!(pictures >= 60, "decoded {pictures} pictures that came over RIST");
 }
+
+#[test]
+fn srt_reaches_an_srt_listener_through_the_same_muxer() {
+    gmx_netkit::init().unwrap();
+    if gst::ElementFactory::find("srtsrc").is_none() {
+        eprintln!("skipping: needs srtsrc");
+        return;
+    }
+    let hub = Hub::new();
+    let (encoder, _) = channel(&hub);
+    let (host, _) = host(&hub);
+    let port = UdpSocket::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    let path = std::env::temp_dir().join(format!("gmx-direct-srt-{}.ts", std::process::id()));
+    let line = format!("srtsrc uri=srt://127.0.0.1:{port}?mode=listener ! filesink location={}", path.display());
+    let receiver = gst::parse::launch(&line).unwrap();
+    receiver.set_state(gst::State::Playing).unwrap();
+    let url = format!("srt://127.0.0.1:{port}?mode=caller");
+    host.apply(&json!({"direct": [row("srt", json!([{"id": "srt", "platform": "srt", "url": url, "stream": "main"}]))]}));
+    std::thread::sleep(Duration::from_secs(4));
+    host.apply(&json!({"direct": []}));
+    let _ = encoder.set_state(gst::State::Null);
+    std::thread::sleep(Duration::from_secs(1));
+    let _ = receiver.set_state(gst::State::Null);
+    let (pictures, sound) = testfeed::decode_ts(&path);
+    let _ = std::fs::remove_file(&path);
+    assert!(pictures >= 60 && sound >= 60, "decoded {pictures} pictures and {sound} sound frames that came over SRT");
+}

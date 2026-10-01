@@ -1,5 +1,5 @@
 //! An MPEG-TS muxer for the hub's tags: one program, H.264 or HEVC video,
-//! AAC sound, remuxed and never decoded.
+//! AAC, AC-3, E-AC-3 or MPEG audio sound, remuxed and never decoded.
 //!
 //! ```text
 //!   MediaTag ──► es (Annex B, ADTS) ──► packet::pes ──► packet::write ──► 188 byte packets
@@ -13,6 +13,7 @@
 //! hundreds of copies. The clock rides on the video PID, 0.7 s behind the
 //! decode time, as ffmpeg's muxer puts it.
 
+mod audio;
 mod clock;
 mod es;
 mod packet;
@@ -34,7 +35,7 @@ const WRAP: u64 = 1 << 33;
 #[derive(Default)]
 pub struct Muxer {
     video: Option<es::VideoConfig>,
-    audio: Option<es::AudioConfig>,
+    audio: Option<audio::Sound>,
     /// Continuity counters: PAT, PMT, video, audio.
     cc: [Counter; 4],
     /// When the tables last went out, and whether they have changed since.
@@ -79,10 +80,16 @@ impl Muxer {
 
     fn audio_header(&mut self, body: &[u8]) {
         if body.first().is_some_and(|b| b >> 4 == 10) {
-            let config = body.get(2..).and_then(es::AudioConfig::from_asc);
-            self.psi_dirty |= self.audio.is_none() && config.is_some();
-            self.audio = config.or(self.audio);
+            if let Some(config) = body.get(2..).and_then(es::AudioConfig::from_asc) {
+                self.set_sound(audio::Sound::Aac(config));
+            }
         }
+    }
+
+    fn set_sound(&mut self, sound: audio::Sound) {
+        let was = self.audio.map(|s| s.stream_type());
+        self.psi_dirty |= was != Some(sound.stream_type());
+        self.audio = Some(sound);
     }
 
     fn tables(&mut self, ms: u32, force: bool, out: &mut Vec<u8>) {
@@ -91,7 +98,7 @@ impl Muxer {
             return;
         }
         let video = self.video.as_ref().map(es::VideoConfig::stream_type);
-        let audio = self.audio.map(|_| 0x0f);
+        let audio = self.audio.map(|s| s.stream_type());
         if self.psi_at.is_some() && self.announced != (video, audio) {
             self.version = (self.version + 1) & 0x1f;
         }
@@ -116,8 +123,14 @@ impl Muxer {
     }
 
     fn audio_frame(&mut self, tag: &MediaTag, ms: u32, out: &mut Vec<u8>) {
-        let Some(config) = self.audio else { return };
-        let Some(frame) = tag.payload.get(2..) else { return };
+        let at = match audio::Sound::of_frame(&tag.payload) {
+            Some((sound, at)) => {
+                self.set_sound(sound);
+                at
+            }
+            None => 2,
+        };
+        let Some(sound) = self.audio else { return };
         let alone = self.video.is_none();
         if alone {
             self.tables(ms, false, out);
@@ -126,9 +139,10 @@ impl Muxer {
             return;
         }
         let pts = self.clocks[1].next((u64::from(ms) * 90 + BASE) % WRAP);
-        let mut pes = packet::pes(0xc0, pts, None, frame.len() + 7);
-        pes.extend_from_slice(&config.adts(frame.len()));
-        pes.extend_from_slice(frame);
+        let mut unit = Vec::with_capacity(tag.payload.len() + 7);
+        sound.unit(&tag.payload, at, &mut unit);
+        let mut pes = packet::pes(sound.stream_id(), pts, None, unit.len());
+        pes.extend_from_slice(&unit);
         let first = First { pcr: alone.then_some((pts + WRAP - PCR_LEAD) % WRAP), random_access: alone };
         packet::write(out, psi::AUDIO_PID, &mut self.cc[3], first, false, &pes);
     }
