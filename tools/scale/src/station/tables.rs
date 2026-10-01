@@ -67,7 +67,10 @@ pub fn headline(feeds: &[Value; 2], add: &Value, sample: &Value, check: &Value, 
     }
     if !st["method"].is_null() && st["reads"].as_u64().unwrap_or(0) > 0 {
         rows.push((format!("`{}`, once a second", st["method"].as_str().unwrap_or("")), format!("{} reads, {} ms on average, {} ms at most, {} shows", st["reads"], st["read_ms_avg"], st["read_ms_max"], st["shows"])));
-        rows.push(("Health at the end".into(), format!("shows {}, alarms at peak {}, outputs {}", st["shows_by_state"], st["alarms_peak"], st["outputs_by_state"])));
+        rows.push(("Shows by state at the end".into(), format!("{}", st["shows_by_state"])));
+    }
+    if st["method"] == "show.stats" {
+        rows.push(("Alarms and outputs".into(), format!("alarms at peak {}, outputs at the end {}", st["alarms_peak"], st["outputs_by_state"])));
         rows.push(("Input as the station counted it".into(), format!("{} kbit/s, {} CC errors, {} packets lost", st["input_kbps"], st["input_cc_errors"], st["input_packets_lost"])));
     }
     let mut s = String::from("| Measure | Result |\n|---|---|\n");
