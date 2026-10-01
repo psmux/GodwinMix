@@ -37,6 +37,7 @@ pub fn start(st: &Arc<Station>, id: &str) {
         proc.error = None;
         proc.restarts = 0;
     }
+    st.direct.starting(id);
     st.announce(id);
     tokio::spawn(run(st.clone(), id.to_string(), rx));
 }

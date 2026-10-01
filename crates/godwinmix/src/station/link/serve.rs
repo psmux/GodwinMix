@@ -3,6 +3,7 @@
 
 use super::{Hello, Line};
 use godwinmix_govern::{Ask, Governor, Ticket};
+use godwinmix_protocol::health::Health;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -19,6 +20,9 @@ pub trait Host: Send + Sync + 'static {
     fn on_air(&self, show: &str, on: bool);
     /// What the show measures of its own CPU, thousandths of a core.
     fn load(&self, show: &str, millicores: u32);
+    /// What the show judges of its own programme, sent when its state or
+    /// its set of alarm kinds moved.
+    fn health(&self, show: &str, health: Health);
     /// Its link closed: it died, or it is stopping.
     fn gone(&self, show: &str, pid: u32);
     fn governor(&self) -> Governor;
@@ -118,6 +122,13 @@ fn handle(show: &str, line: Line, governor: &Governor, tickets: &mut HashMap<u64
         "show.load" => {
             let m = line.params.get("millicores").and_then(Value::as_u64).unwrap_or(0);
             host.load(show, u32::try_from(m).unwrap_or(u32::MAX));
+            None
+        }
+        "show.health" => {
+            match serde_json::from_value::<Health>(line.params.get("health").cloned().unwrap_or_default()) {
+                Ok(health) => host.health(show, health),
+                Err(e) => debug!(show, error = %e, "a show.health the station could not read; ignored"),
+            }
             None
         }
         "show.on_air" => {
