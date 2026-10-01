@@ -118,8 +118,13 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/routing/routing.css", include_str!("../../../ui/panels/routing/routing.css")),
     ("panels/routing/view.js", include_str!("../../../ui/panels/routing/view.js")),
     ("panels/wall/act.js", include_str!("../../../ui/panels/wall/act.js")),
+    ("panels/wall/bulk-parse.js", include_str!("../../../ui/panels/wall/bulk-parse.js")),
+    ("panels/wall/bulk-table.js", include_str!("../../../ui/panels/wall/bulk-table.js")),
+    ("panels/wall/bulk.js", include_str!("../../../ui/panels/wall/bulk.js")),
     ("panels/wall/cells.js", include_str!("../../../ui/panels/wall/cells.js")),
     ("panels/wall/data.js", include_str!("../../../ui/panels/wall/data.js")),
+    ("panels/wall/detail-outputs.js", include_str!("../../../ui/panels/wall/detail-outputs.js")),
+    ("panels/wall/detail.js", include_str!("../../../ui/panels/wall/detail.js")),
     ("panels/wall/model.js", include_str!("../../../ui/panels/wall/model.js")),
     ("panels/wall/rows.js", include_str!("../../../ui/panels/wall/rows.js")),
     ("panels/wall/thumbs.js", include_str!("../../../ui/panels/wall/thumbs.js")),
@@ -833,16 +838,10 @@ mod tests {
         reachable.extend(closure_of("shell/show-file.js"));
         // View > Routing, and what its cells open.
         reachable.extend(closure_of("panels/routing/view.js"));
-    ("panels/wall/act.js", include_str!("../../../ui/panels/wall/act.js")),
-    ("panels/wall/cells.js", include_str!("../../../ui/panels/wall/cells.js")),
-    ("panels/wall/data.js", include_str!("../../../ui/panels/wall/data.js")),
-    ("panels/wall/model.js", include_str!("../../../ui/panels/wall/model.js")),
-    ("panels/wall/rows.js", include_str!("../../../ui/panels/wall/rows.js")),
-    ("panels/wall/thumbs.js", include_str!("../../../ui/panels/wall/thumbs.js")),
-    ("panels/wall/top.js", include_str!("../../../ui/panels/wall/top.js")),
-    ("panels/wall/view.js", include_str!("../../../ui/panels/wall/view.js")),
-    ("panels/wall/virtual.js", include_str!("../../../ui/panels/wall/virtual.js")),
-    ("panels/wall/wall.css", include_str!("../../../ui/panels/wall/wall.css")),
+        // View > Monitoring wall, and what it opens: Add shows and a show's detail.
+        reachable.extend(closure_of("panels/wall/view.js"));
+        reachable.extend(closure_of("panels/wall/bulk.js"));
+        reachable.extend(closure_of("panels/wall/detail.js"));
         reachable.extend(closure_of("panels/outputs/record-start.js"));
         // Renditions: each is fetched by an `import()` the first time it is
         // wanted, from the destination form, the Outputs panel or its rows.
@@ -927,18 +926,16 @@ mod tests {
             ("shell/show-file.js", "New show or Switch show"),
             ("shell/restart-bar.js", "a setting waiting for a restart"),
             ("panels/routing/view.js", "View > Routing"),
-    ("panels/wall/act.js", include_str!("../../../ui/panels/wall/act.js")),
-    ("panels/wall/cells.js", include_str!("../../../ui/panels/wall/cells.js")),
-    ("panels/wall/data.js", include_str!("../../../ui/panels/wall/data.js")),
-    ("panels/wall/model.js", include_str!("../../../ui/panels/wall/model.js")),
-    ("panels/wall/rows.js", include_str!("../../../ui/panels/wall/rows.js")),
-    ("panels/wall/thumbs.js", include_str!("../../../ui/panels/wall/thumbs.js")),
-    ("panels/wall/top.js", include_str!("../../../ui/panels/wall/top.js")),
-    ("panels/wall/view.js", include_str!("../../../ui/panels/wall/view.js")),
-    ("panels/wall/virtual.js", include_str!("../../../ui/panels/wall/virtual.js")),
-    ("panels/wall/wall.css", include_str!("../../../ui/panels/wall/wall.css")),
             ("panels/routing/data.js", "View > Routing"),
             ("panels/routing/model.js", "View > Routing"),
+            ("panels/wall/view.js", "View > Monitoring wall"),
+            ("panels/wall/data.js", "View > Monitoring wall"),
+            ("panels/wall/rows.js", "View > Monitoring wall"),
+            ("panels/wall/virtual.js", "View > Monitoring wall"),
+            ("panels/wall/bulk.js", "Add shows, or File > New shows"),
+            ("panels/wall/bulk-parse.js", "Add shows, or File > New shows"),
+            ("panels/wall/detail.js", "a direct show opened on the wall"),
+            ("panels/wall/detail-outputs.js", "a direct show opened on the wall"),
             ("shell/project-open.js", "Open project"),
             ("shell/settings-dialog.js", "Settings for this page"),
             ("panels/outputs/record-start.js", "Record pressed"),
