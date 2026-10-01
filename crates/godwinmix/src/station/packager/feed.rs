@@ -4,7 +4,7 @@
 use super::board::Board;
 use super::caps::{self, Read};
 use super::flv::{self, Kind, Tag};
-use super::packager::End;
+use super::output::End;
 use super::session::Session;
 use godwinmix_core::hls::Stream;
 use godwinmix_protocol::destination::DestinationState as S;

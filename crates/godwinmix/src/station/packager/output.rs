@@ -11,14 +11,16 @@
 //!
 //! The thread is the only thing that waits: on its socket, and on a stop
 //! flag between reads. Nothing here runs on a GStreamer streaming thread or
-//! a bus handler, and a packager that fails costs its own output only.
+//! a bus handler. A packager that fails costs its own output only, and one
+//! that takes the whole process down costs the HLS outputs of direct shows
+//! and nothing else: the station starts the process again.
 
 use super::board::Board;
 use super::feed::session;
 use super::flv;
+use super::wire::Source;
 use godwinmix_core::hls::Stream;
 use godwinmix_protocol::destination::DestinationState as S;
-use std::net::SocketAddr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -26,22 +28,13 @@ use std::time::Duration;
 /// How long one read waits before the stop flag is looked at.
 const READ: Duration = Duration::from_secs(1);
 
-/// What one packager reads.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Source {
-    pub relay: SocketAddr,
-    /// `direct.<show>/main`, or a rendition's `direct.<show>/main|<video>|<audio>`.
-    pub path: String,
-}
-
 pub struct Packager {
-    pub source: Option<Source>,
     pub stream: Arc<Stream>,
     pub board: Arc<Board>,
     stop: Arc<AtomicBool>,
 }
 
-pub(super) enum End {
+pub enum End {
     Stopped,
     Lost(String),
     /// What the output cannot carry, in a sentence.
@@ -54,9 +47,9 @@ impl Packager {
     /// Start one. With no source yet it runs nothing, waits, and says why.
     pub fn start(stream: Arc<Stream>, source: Option<Source>, why_not: Option<String>, sound: impl Fn(&str) -> String + Send + 'static) -> Packager {
         let (stop, board) = (Arc::new(AtomicBool::new(false)), Arc::new(Board::default()));
-        let Some(src) = source.clone() else {
+        let Some(src) = source else {
             board.set(S::Waiting, why_not);
-            return Packager { source, stream, board, stop };
+            return Packager { stream, board, stop };
         };
         let (st, b, s) = (stream.clone(), board.clone(), stop.clone());
         let name = format!("gmx-hls-{}", stream.id);
@@ -64,7 +57,7 @@ impl Packager {
         if let Err(e) = ran {
             board.set(S::Failed, Some(format!("no thread for the packager ({e}); remove the output and add it again")));
         }
-        Packager { source, stream, board, stop }
+        Packager { stream, board, stop }
     }
 
     pub fn stop(&self) {
