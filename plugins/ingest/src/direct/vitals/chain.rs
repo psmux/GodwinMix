@@ -34,23 +34,24 @@ fn make(factory: &str) -> Result<gst::Element, String> {
 }
 
 impl Chain {
-    /// `decoder`, then whatever `tail` converts its output into, then a sink.
-    pub fn new(decoder: &str, tail: &[&str], out: gst::Caps) -> Result<Chain, String> {
+    /// `names` in a row (a parser, a decoder, a scaler...), then `out` as a
+    /// caps filter, then a sink.
+    pub fn new(names: &[&str], out: gst::Caps) -> Result<Chain, String> {
         let pipeline = gst::Pipeline::new();
         // Nobody reads this bus: a refused keyframe's error is answered by
         // building the chain again, so its messages are dropped, not kept.
         if let Some(bus) = pipeline.bus() {
             bus.set_flushing(true);
         }
-        let dec = make(decoder)?;
-        if dec.has_property("max-threads") {
-            // One thread: a thread pool per decoder is memory for nothing
-            // when it decodes one picture a second.
-            dec.set_property("max-threads", 1i32);
-        }
-        let mut elements = vec![dec];
-        for f in tail {
-            elements.push(make(f)?);
+        let mut elements = Vec::new();
+        for name in names {
+            let e = make(name)?;
+            if e.has_property("max-threads") {
+                // One thread: a thread pool per decoder is memory for nothing
+                // when it decodes one picture a second.
+                e.set_property("max-threads", 1i32);
+            }
+            elements.push(e);
         }
         let filter = make("capsfilter")?;
         filter.set_property("caps", &out);

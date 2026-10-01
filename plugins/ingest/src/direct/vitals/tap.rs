@@ -19,7 +19,8 @@ use crate::media_tag::{MediaTag, TagKind};
 use crate::transcode::input::{buffer, caps_for};
 
 use super::show::Show;
-use super::work::{Job, Pool};
+use super::pool::Pool;
+use super::work::Job;
 
 /// How often a picture and a burst of sound are taken: about once a second.
 pub const PACE: u64 = 1000;
