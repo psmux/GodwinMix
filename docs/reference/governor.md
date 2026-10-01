@@ -60,6 +60,7 @@ fields are counted.
 | `device_sessions` | sessions | the limit calibration found, less the sessions held; `u32::MAX` when no limit was found |
 | `memory_mib` | MiB | available memory, less a tenth of the total (at least 512 MiB), and never more than the total less that reserve less every ticket's memory |
 | `egress_kbps` | kbit/s | four fifths of `uplink_kbps` less the tickets' egress; `u32::MAX` when the uplink is not known |
+| `ingress_kbps` | kbit/s | what arrives on a station: every channel stream and every direct show's input, as last counted. 0 on a core with no station |
 
 ### Refusals
 
