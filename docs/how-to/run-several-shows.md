@@ -159,8 +159,10 @@ enough for once a second.
 show: the station gives it a folder and a process, makes the input its one
 source, puts it on programme and moves the outputs to it. You can then add a
 lower third or a second source as in any show. The answer says which outputs
-moved and `gap_ms`, how long they were off: in a test the output was off for
-0.7 seconds (the show starting and the RTMP connection being made again).
+moved and `gap_ms`, how long they were off. Measured with a 720p30 UDP feed
+sent on to an RTMP server, seven switches in all: 0.6 to 0.7 seconds turning
+compositing on (the show starting and the RTMP connection being made again)
+and 0.5 to 1.2 seconds turning it off.
 
 `"compositing": false` goes back, when the show has that one source, no
 scene on programme and only outputs it took over. Otherwise it is refused

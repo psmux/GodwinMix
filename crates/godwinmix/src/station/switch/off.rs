@@ -67,7 +67,7 @@ pub async fn off(st: &Arc<Station>, id: &str) -> Result<SwitchReport, RpcError> 
         }
         reg.save().map_err(|e| RpcError::internal(format!("saving the list of shows: {e:#}")))?;
     }
-    handed(st).await;
+    handed(st, id).await;
     supervise::stop(st, id).await;
     if let Some(s) = st.direct.seen.lock().get_mut(id) {
         s.source_for = None;

@@ -37,7 +37,17 @@ pub(super) fn moving(st: &Station, id: &str) -> Vec<StoredDestination> {
     outputs::stored(id, &records).into_iter().filter(|d| d.enabled).collect()
 }
 
-pub(super) async fn handed(st: &Arc<Station>) {
+/// Hand the host its table and wait for it, forgetting what it last said
+/// of the show's outputs, so their gap is timed from what it says next and
+/// not from a report of before the switch.
+pub(super) async fn handed(st: &Arc<Station>, id: &str) {
+    if let Some(s) = st.direct.seen.lock().get_mut(id) {
+        s.outputs.clear();
+    }
+    handed_table(st).await;
+}
+
+async fn handed_table(st: &Arc<Station>) {
     let asked = st.direct.hand_over();
     let waiting = st.clone();
     let _ = tokio::task::spawn_blocking(move || waiting.direct.wait_handed(asked, Duration::from_secs(10))).await;
@@ -63,7 +73,7 @@ pub async fn on(st: &Arc<Station>, id: &str) -> Result<SwitchReport, RpcError> {
         }
         reg.save().map_err(|e| RpcError::internal(format!("saving the list of shows: {e:#}")))?;
     }
-    handed(st).await;
+    handed(st, id).await;
     let stopped = Instant::now();
     supervise::start(st, id);
     st.addr_of(id).await?;

@@ -163,7 +163,14 @@ and the reason in `data` when:
 | it has an output that was added inside it, whose address is write only | `outputs` |
 
 Otherwise its outputs are removed from the show, handed back to the direct
-host and its process is stopped. Its folder stays, so turning compositing on
+host and its process is stopped.
+
+Measured on macOS, Apple silicon, release build, a 720p30 H.264 feed over UDP
+copied to an RTMP server (ffmpeg listening), with the direct host running:
+`gap_ms` was 608, 617, 704 and 692 turning compositing on, and 563, 461 and
+1174 turning it off. It is timed by the station, from the moment the
+outputs were taken away to the moment the side that took them over reported
+every one live. Its folder stays, so turning compositing on
 again finds its config.
 
 ### `show.add_many {shows, dry_run?}`
