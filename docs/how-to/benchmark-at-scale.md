@@ -201,3 +201,20 @@ compared with. On an M4 Pro, with other builds running on the same machine:
   never finished, and the output still said `live`. A show process per feed
   would need about 72 GiB for 200 feeds, which is why wave 4 puts them in one
   direct host.
+* The same eight shows after the fix (`scale-m4pro-2026-10-01-1530-legacy.md`):
+  all eight outputs sent for the whole minute, the longest silence on any of
+  them was 172 ms, nothing was reconnected, and no process was left 15 seconds
+  after the station stopped.
+
+What stopped the outputs had nothing to do with the receivers. The programme
+encoder starts when the first output asks for it, and its `audiorate` filled
+the time from the start of the programme to its first buffer with silence, so
+a show's output got several seconds of audio stamped from zero ahead of video
+stamped from now. The udp plugin's remuxer waits for both streams and held one
+second of each, so it stopped reading the programme for good. The core's write
+into its FIFO then never returned, the forced reconnect waited on that write,
+and the reconnect held the lock the output's state is read through, so the
+state stayed `live`. Each of those is fixed on its own: the audio starts at its
+first buffer, the remuxer holds ten seconds, a reconnect waits a bounded time
+and restarts a plugin that stopped reading, and `live` needs bytes reaching the
+sink in the last three seconds.

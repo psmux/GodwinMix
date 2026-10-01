@@ -91,11 +91,16 @@ Labelled `instance`, which is the output id.
 | `gmx_output_reconnects_total` | counter | Times this output has reconnected. |
 | `gmx_output_queue_secs` | gauge | Seconds of encoded data waiting for it. |
 | `gmx_output_state` | gauge | 0 connecting, 1 live, 2 reconnecting, 3 failed. |
-| `gmx_output_bytes_total` | counter | Bytes written. Declared, not yet filled, for the same reason as `gmx_source_buffers_total`. |
+| `gmx_output_bytes_total` | counter | Bytes that have reached the output's sink, across every reconnect. The same number as `bytes_out` in its status. |
 
 A `gmx_output_queue_secs` that climbs and stays high means the destination
 cannot keep up. It is the earliest warning of an uplink that has gone bad, and
 it moves minutes before the output actually drops.
+
+`live` (1) means two things at once: the destination has accepted the output,
+and bytes have reached its sink in the last three seconds. An output whose
+sink has stopped taking data reads `connecting` or `reconnecting` within three
+seconds, whatever its plugin or its connection says about itself.
 
 ## Control calls
 
