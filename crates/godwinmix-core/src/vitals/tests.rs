@@ -94,3 +94,39 @@ async fn a_programme_with_nothing_on_it_is_silent_until_a_tone_is_taken() {
     s.take("bars").await;
     s.until(&[], Duration::from_secs(15)).await;
 }
+
+/// This process's CPU seconds, from `ps`.
+fn cpu_secs() -> f64 {
+    let out = std::process::Command::new("ps").args(["-o", "time=", "-p", &std::process::id().to_string()]).output().unwrap();
+    let text = String::from_utf8_lossy(&out.stdout);
+    text.trim().split(':').fold(0.0, |acc, part| acc * 60.0 + part.parse::<f64>().unwrap_or(0.0))
+}
+
+/// What keeping the picture alarms on costs a 720p show with nobody looking:
+/// `cargo test -p godwinmix-core --release --lib vitals::tests::cost -- --ignored --nocapture`.
+#[tokio::test(flavor = "multi_thread")]
+#[ignore]
+async fn cost_of_the_picture_alarms_with_nobody_looking() {
+    for alarms in [false, true] {
+        let _ = gst::init();
+        let mut cfg: Config = toml::from_str("").unwrap();
+        (cfg.canvas.width, cfg.canvas.height) = (1280, 720);
+        let (mut mix, handle, cmd_rx, _bus) = Mixer::build(cfg.clone()).unwrap();
+        mix.start().unwrap();
+        for id in ["a", "b", "c"] {
+            mix.add_source(&toml::from_str(&format!("id = \"{id}\"\nuri = \"test://smpte\"\n")).unwrap(), None).unwrap();
+        }
+        let tracker = Tracker::new(cfg.snapshot.clone(), mix.multiview_handle(), handle.clone());
+        let thread = mixer::spawn(mix, cmd_rx, handle.clone());
+        let vitals = tokio::spawn(run(handle.clone(), tracker, VitalsConfig { alarms, ..Default::default() }));
+        tokio::time::sleep(Duration::from_secs(5)).await;
+        let (c0, t0) = (cpu_secs(), Instant::now());
+        tokio::time::sleep(Duration::from_secs(20)).await;
+        let pct = 100.0 * (cpu_secs() - c0) / t0.elapsed().as_secs_f64();
+        eprintln!("BENCH 720p show, three sources, alarms {alarms}: {pct:.1}% of one core");
+        vitals.abort();
+        let _ = handle.send(Command::Shutdown);
+        drop(thread);
+        tokio::time::sleep(Duration::from_secs(2)).await;
+    }
+}
