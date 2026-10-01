@@ -85,9 +85,12 @@ For a show without compositing, `state` is `running` unless it was stopped,
 `on_air` is `"input"` while its input arrives, and `programme_kbps` is what
 its outputs send.
 
-Read scope. Measured when asked, never in the background: the running shows
-are asked for their status at once (a second at most) and the processes are
-read by the plugin host's sampler.
+Read scope. A read asks no show anything. What only a show's process can say
+(`on_air`, `programme_kbps`) and what its process costs are measured once a
+second by a sampler in the station while someone reads `show.list`, and for
+ten seconds after the last read; every read is served from what it last
+measured. The first read waits for one round. With 201 shows a read took
+the times in [Two hundred shows](#two-hundred-shows).
 
 ### `show.add {name, compositing?, input?, outputs?, from?}`
 
@@ -334,7 +337,13 @@ started again, and when it was left failed.
 | status 75 (`core.restart`) | starts it again at once, not counted |
 | anything else (a crash, `SIGKILL`) | starts it again: three times at once, then after 30 seconds doubling, the plugin host's backoff. The seventh death in a row leaves it `failed`, with an alert. A show that ran a minute before dying starts its count again |
 
-A show whose link to the station closes stops: nothing could reach it.
+A show whose link to the station closes stops: nothing could reach it. It
+stops in order if it can, and four seconds later ends itself and its process
+group, so a station killed outright leaves no show behind. The station stops
+every show on `SIGINT`, `SIGTERM` and `SIGHUP` alike, and a show that has not
+stopped ten seconds after it was asked is killed with its process group. In
+the test, with three shows, every show was gone 160 ms after the station was
+sent `SIGKILL`, and 30 ms after `SIGTERM` or `SIGHUP`.
 
 ## The link
 
@@ -387,3 +396,16 @@ about 30 (`scene.add` to `event/scene.patch`, median of 20: 392 and 422).
 Relaying the mosaic and the preview, ten frames a second each, costs the
 station 0.1% of one core. `cargo test -p godwinmix --test station -- --nocapture`
 prints the latency on the machine it runs on.
+
+## Two hundred shows
+
+Measured on macOS, Apple silicon, release build, by the station's own test
+(`cargo test --release -p godwinmix --test station many -- --nocapture`),
+with 200 shows without compositing, one SRT output each, and `main`, no
+ingest plugin running:
+
+| | Time |
+|---|---|
+| `show.add_many` of the 200, applied | 79 ms |
+| `show.list` of 201 shows, through the WebSocket, median of 20 | 2.4 ms |
+| `show.stats` of 201 shows, the same | 1.2 ms |
