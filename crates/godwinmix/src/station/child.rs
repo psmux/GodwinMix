@@ -43,6 +43,10 @@ pub fn command(launch: &Launch, start: &Start) -> Command {
     if let Some(dir) = &launch.calibration {
         cmd.env(godwinmix_core::render::CALIBRATION_ENV, dir);
     }
+    // What the station's port answers HTTPS with, for the show's `core.info`.
+    if let Some(json) = crate::tls::info().and_then(|info| serde_json::to_string(&info).ok()) {
+        cmd.env(crate::tls::INFO_ENV, json);
+    }
     cmd.stdin(Stdio::null()).stdout(Stdio::inherit()).stderr(Stdio::inherit());
     cmd.kill_on_drop(true);
     #[cfg(unix)]

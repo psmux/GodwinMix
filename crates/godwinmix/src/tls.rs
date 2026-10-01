@@ -40,9 +40,37 @@ use tokio_rustls::TlsAcceptor;
 /// What `core.info` says about HTTPS, set once at startup.
 static INFO: OnceLock<TlsInfo> = OnceLock::new();
 
-/// HTTPS on the control port, when it is on and started.
+/// How a station tells each show what its port answers HTTPS with. A show
+/// answers `core.info` but binds only loopback; the port a person opens is
+/// the station's.
+pub const INFO_ENV: &str = "GODWINMIX_CONTROL_TLS";
+
+/// HTTPS on the control port, when it is on and started: this process's own,
+/// or, in a show, the station's.
 pub fn info() -> Option<TlsInfo> {
-    INFO.get().cloned()
+    static FROM_STATION: OnceLock<Option<TlsInfo>> = OnceLock::new();
+    INFO.get().cloned().or_else(|| {
+        FROM_STATION
+            .get_or_init(|| std::env::var(INFO_ENV).ok().and_then(|json| serde_json::from_str(&json).ok()))
+            .clone()
+    })
+}
+
+/// Serve `app` on `listener`, plain HTTP alone or, with `tls`, HTTP and HTTPS
+/// on the same port. Peer addresses reach handlers as `ConnectInfo` either way.
+pub async fn serve(listener: tokio::net::TcpListener, app: axum::Router, tls: Option<TlsAcceptor>) -> std::io::Result<()> {
+    let app = app.into_make_service_with_connect_info::<std::net::SocketAddr>();
+    match tls {
+        None => axum::serve(listener, app).await,
+        Some(acceptor) => {
+            use axum::serve::ListenerExt;
+            // `tap_io` does nothing to the stream. It is there because axum
+            // passes the peer address on as connect info for its own
+            // TcpListener, and for any listener only once wrapped like this.
+            let sniffing = Sniffing::new(listener, acceptor)?.tap_io(|_| {});
+            axum::serve(sniffing, app).await
+        }
+    }
 }
 
 /// What the listener needs and what a client is told.
