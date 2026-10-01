@@ -28,4 +28,9 @@ impl Vitals {
     pub fn output(&self, _id: &str, _output: &str, _failed: Option<&str>) {}
 
     pub fn offer_frame(&self, _id: &str, _sample: &gstreamer::Sample) {}
+
+    /// `direct.thumbnail`; `None` for any other call.
+    pub fn call(&self, name: &str, _params: &Value) -> Option<Value> {
+        (name == "direct.thumbnail").then(|| serde_json::json!({"pending": true}))
+    }
 }

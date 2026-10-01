@@ -43,7 +43,7 @@ impl Host {
         let vitals = Vitals::start(hub.clone(), emit.clone(), 2);
         let ctx = Context { hub: Some(hub.clone()) };
         Arc::new(Host {
-            transcoders: Transcoders::new(hub.clone()),
+            transcoders: Transcoders::sharing(hub.clone()),
             hub,
             vitals,
             shows: Mutex::default(),
@@ -118,6 +118,17 @@ impl Host {
             .map(|s| events::show_stats(self, s))
             .collect();
         json!({"shows": rows})
+    }
+
+    /// The calls the station makes as `tool.call`: `direct.stats {ids?}`,
+    /// and `direct.thumbnail {show, width?}`, which the vitals answer.
+    /// `None` for a name that is not the host's.
+    pub fn call(&self, name: &str, arguments: &Value) -> Option<Value> {
+        if name == "direct.stats" {
+            let ids: Option<Vec<String>> = arguments.get("ids").and_then(|v| serde_json::from_value(v.clone()).ok());
+            return Some(self.stats(ids.as_deref()));
+        }
+        self.vitals.call(name, arguments)
     }
 
     /// The rows running now, for a test.
