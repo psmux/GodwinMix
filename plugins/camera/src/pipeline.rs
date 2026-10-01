@@ -144,6 +144,7 @@ fn attach(pipeline: &gst::Pipeline, source: &gst::Element) -> Result<(), String>
     pipeline
         .add(source)
         .map_err(|e| format!("could not put the camera in the pipeline: {e}"))?;
+    crate::guard::install(source);
     source.link(&head).map_err(|e| {
         format!(
             "the camera and the pipeline would not agree on a format: {e}. Clear the \

@@ -20,6 +20,7 @@
 //! a camera and the sound from a desk, which is what every church does.
 
 mod discover;
+mod guard;
 mod pipeline;
 mod settings;
 mod source;

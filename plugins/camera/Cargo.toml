@@ -18,6 +18,8 @@ repository = "https://github.com/psmux/godwinmix"
 godwinmix-sdk = { path = "../../crates/godwinmix-sdk", version = "0.1.0" }
 godwinmix-capture-common = { path = "../capture-common", version = "0.1.0" }
 gstreamer = { workspace = true }
+# The frame guard reads each frame's video meta (src/guard.rs).
+gstreamer-video = { workspace = true }
 serde_json = { workspace = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]
