@@ -6,6 +6,10 @@
 //! is a name or an address; `ttl` defaults to 16), `udp://10.0.0.9:5000`
 //! for one receiver. A send the kernel has no room for is a lost datagram,
 //! counted, never a wait: UDP has nobody to wait for.
+//!
+//! `rtp://` is the same with a twelve byte RTP header on each datagram
+//! (payload type 33, MPEG-TS, RFC 2250), the 90 kHz clock taken from the
+//! tags, for receivers that count loss by sequence number.
 
 use std::net::{SocketAddr, ToSocketAddrs, UdpSocket};
 
@@ -26,6 +30,8 @@ pub struct UdpLink {
     name: String,
     /// Datagrams the kernel would not take.
     pub lost: u64,
+    /// For `rtp://`: the next sequence number, the clock, the source id.
+    rtp: Option<(u16, u32, u32)>,
 }
 
 /// An address's query, as `key=value` pairs.
@@ -77,13 +83,28 @@ impl UdpLink {
             }
         }
         super::iface::send_buffer(&socket, 4 * 1024 * 1024);
-        Ok(UdpLink { socket, to, muxer: Muxer::new(), buf: Vec::with_capacity(64 * 1024), name: target.name(), lost: 0 })
+        let rtp = target.url.to_ascii_lowercase().starts_with("rtp://").then(|| (0, 0, std::process::id() ^ (to.port() as u32) << 16));
+        Ok(UdpLink { socket, to, muxer: Muxer::new(), buf: Vec::with_capacity(64 * 1024), name: target.name(), lost: 0, rtp })
     }
 
     fn flush(&mut self) -> Result<usize, Failure> {
         let mut sent = 0;
+        let mut datagram = Vec::with_capacity(12 + DATAGRAM);
         for chunk in self.buf.chunks(DATAGRAM) {
-            match self.socket.send_to(chunk, self.to) {
+            let bytes = match self.rtp.as_mut() {
+                None => chunk,
+                Some((seq, clock, ssrc)) => {
+                    datagram.clear();
+                    datagram.extend_from_slice(&[0x80, 33]);
+                    datagram.extend_from_slice(&seq.to_be_bytes());
+                    datagram.extend_from_slice(&clock.to_be_bytes());
+                    datagram.extend_from_slice(&ssrc.to_be_bytes());
+                    datagram.extend_from_slice(chunk);
+                    *seq = seq.wrapping_add(1);
+                    &datagram
+                }
+            };
+            match self.socket.send_to(bytes, self.to) {
                 Ok(n) => sent += n,
                 Err(e) if lost_not_failed(&e) => self.lost += 1,
                 Err(e) => return Err(Failure::Lost(format!("{} stopped taking datagrams: {e}", self.name))),
@@ -104,6 +125,9 @@ fn lost_not_failed(e: &std::io::Error) -> bool {
 impl Link for UdpLink {
     fn send(&mut self, tag: &MediaTag, timestamp_ms: u32) -> Result<usize, Failure> {
         self.muxer.tag(tag, timestamp_ms, &mut self.buf);
+        if let Some((_, clock, _)) = self.rtp.as_mut() {
+            *clock = timestamp_ms.wrapping_mul(90);
+        }
         if self.buf.is_empty() {
             return Ok(0);
         }
