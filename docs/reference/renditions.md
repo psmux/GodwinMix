@@ -314,6 +314,12 @@ room_millicores}, devices: [{id, kind, used_millis, room_millis,
 sessions_used, sessions_max?}], egress_kbps, shed: [{what, why}]}`.
 `calibrated_at` is Unix seconds and absent before the first calibration.
 `room_millicores` is what could be admitted now, after the reserve.
+`used_millicores` is what this mixer's work costs: the larger of what the
+governor has admitted and what it measures. On a station that measure is the
+station's own process plus every show process and plugin process it started,
+the ingest plugin that runs the direct shows among them, read when
+`governor.status` is called (on Windows, where another process's CPU cannot
+be read, only the station's process and what shows holding a ticket report).
 
 ### `governor.calibrate {confirm?}`
 

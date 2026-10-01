@@ -57,7 +57,11 @@ export const mixed = (show) => !!show && show.compositing !== false;
 export const healthOf = (show) => (show && show.health) || { state: show && show.state === "stopped" ? "off" : "ok", alarms: [] };
 export const rank = (show) => RANK[healthOf(show).state] ?? 1;
 export const isLive = (show) => show.state === "running" || show.state === "live";
-export const load = (stats) => ((stats && stats.outputs) || []).reduce((n, o) => n + (o.cpu_millicores || 0), 0);
+/** What a show costs, thousandths of a core: the core's figure for the show, else its outputs' encodes summed. */
+export const load = (stats) => {
+  if (stats && stats.cpu_millicores != null) return stats.cpu_millicores;
+  return ((stats && stats.outputs) || []).reduce((n, o) => n + (o.cpu_millicores || 0), 0);
+};
 export const inKbps = (stats) => (stats && stats.input && stats.input.kbps) || 0;
 
 /** The text a filter looks through: names, addresses and alarm words. */
