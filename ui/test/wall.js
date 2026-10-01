@@ -221,6 +221,23 @@ async function actTests(test, eq, ok) {
   await until(() => !lone.root.querySelector(".wl-empty").hidden && lone.data.loaded);
   test("a station without a show list says so plainly", () => ok(/no list of shows/.test(lone.root.querySelector(".wl-empty").textContent), lone.root.querySelector(".wl-empty").textContent));
   lone.close();
+
+  const older = wallStub({ n: 3 });
+  const inner = older.call;
+  older.call = async (m, p) => {
+    if (m !== "show.stats") return inner(m, p);
+    older.calls.push({ method: m, params: p });
+    throw Object.assign(new Error("there is no method 'show.stats'."), { code: -32004, data: { kind: "method", id: m } });
+  };
+  const wave3 = toggleWall(older);
+  await until(() => wave3.root.querySelector(".wl-row"));
+  const pics = older.thumbAsked.length;
+  await wait(2300);
+  test("a station from before show.stats is asked once, and for no pictures after", () => {
+    eq(sent(older, "show.stats").length, 1);
+    eq(older.thumbAsked.length, pics);
+  });
+  wave3.close();
 }
 
 async function bulkTests(test, eq, ok) {
