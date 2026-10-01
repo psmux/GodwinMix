@@ -24,7 +24,7 @@ pub fn register(reg: &mut Registry<Call>) {
         .result(schema_of::<Vec<OutputStatus>>)
         .tool(
             "list_outputs",
-            Tier::Standard,
+            Tier::Search,
             "The RTMP destinations the programme is being sent to, with each one's id, \
              host, connection state, reconnect count and how many seconds are buffered. A \
              queue that climbs and stays high means the destination cannot keep up. Use it \
@@ -58,7 +58,7 @@ pub fn register(reg: &mut Registry<Call>) {
         .result(schema_of::<OutputStatus>)
         .tool(
             "add_output",
-            Tier::Standard,
+            Tier::Search,
             "Start sending the programme to another RTMP destination, for instance a \
              YouTube or Twitch ingest URL with the stream key on the end. The output \
              encoder is shared, so adding one costs nothing on air. `policy` sets the \

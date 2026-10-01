@@ -41,6 +41,7 @@ pub mod channels;
 pub mod channel_ingest;
 pub mod error;
 pub mod idempotency;
+pub mod mcp_bindings;
 pub mod mcp_tools;
 pub mod method;
 pub mod openapi;

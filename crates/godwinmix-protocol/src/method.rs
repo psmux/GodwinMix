@@ -197,6 +197,20 @@ impl<C> Registry<C> {
         self.methods.get(name)
     }
 
+    /// Give a method that has no tool one. A method that already carries a
+    /// binding keeps it, and a name that is not registered is skipped, so a
+    /// table of bindings can be written ahead of the methods it names. True
+    /// when the binding was taken.
+    pub fn bind(&mut self, name: &str, binding: McpBinding) -> bool {
+        match self.methods.get_mut(name) {
+            Some(def) if def.mcp.is_none() => {
+                def.mcp = Some(binding);
+                true
+            }
+            _ => false,
+        }
+    }
+
     pub fn iter(&self) -> impl Iterator<Item = &MethodDef<C>> {
         self.methods.values()
     }
