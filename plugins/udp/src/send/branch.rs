@@ -24,6 +24,27 @@ fn parser_for(caps: &gst::StructureRef) -> Option<&'static str> {
     })
 }
 
+/// How far one stream may run ahead of the other before the demuxer waits.
+const AHEAD_SECS: u64 = 10;
+
+/// Size a branch queue by time alone, and generously.
+///
+/// `mpegtsmux` writes nothing until every pad has a buffer, so the stream that
+/// is ahead waits in its queue for the one that is behind. When an output is
+/// added in the middle of a GOP the core's video starts at the next keyframe
+/// and its audio starts at once, so the Matroska carries up to a GOP of audio,
+/// two seconds by default and more on a busy machine, before the first video
+/// frame. A queue's default second filled, the demuxer stopped on it, the FIFO
+/// was never read again and the output went silent for good while the core
+/// still called it live. Ten seconds is several GOPs and a few megabytes; a
+/// stream that is behind by more than that has stopped, and the core's
+/// overflow watchdog restarts this plugin when the FIFO stops being read.
+fn hold_a_gop_and_more(queue: &gst::Element) {
+    queue.set_property("max-size-buffers", 0u32);
+    queue.set_property("max-size-bytes", 0u32);
+    queue.set_property("max-size-time", AHEAD_SECS * 1_000_000_000);
+}
+
 /// Build a branch for each stream as the demuxer finds it. The closure only
 /// makes and links elements; it never waits.
 pub fn on_streams(demux: &gst::Element, pipeline: &gst::Pipeline, mux: &gst::Element, reporter: Option<Reporter>) {
@@ -50,6 +71,7 @@ fn link(pipeline: &gst::Pipeline, pad: &gst::Pad, mux: &gst::Element) -> Result<
         return Err(format!("MPEG-TS has no mapping for {}; that stream is left out", s.name()));
     };
     let queue = make("queue", "")?;
+    hold_a_gop_and_more(&queue);
     let parse = make(parser, "")?;
     if parse.find_property("config-interval").is_some() {
         // Parameter sets before every keyframe: a receiver that tunes in late

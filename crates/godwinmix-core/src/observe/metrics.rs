@@ -587,7 +587,7 @@ pub fn observe_status(status: &MixerStatus) {
     for name in ["gmx_source_state", "gmx_source_video_behind_ms", "gmx_source_queue_buffers"] {
         retain_instances(name, &sources);
     }
-    for name in ["gmx_output_state", "gmx_output_queue_secs", "gmx_output_reconnects_total"] {
+    for name in ["gmx_output_state", "gmx_output_queue_secs", "gmx_output_reconnects_total", "gmx_output_bytes_total"] {
         retain_instances(name, &outputs);
     }
     for s in &status.sources {
@@ -602,6 +602,9 @@ pub fn observe_status(status: &MixerStatus) {
         gauge("gmx_output_state", &labels).set(output_state_code(o.state));
         gauge("gmx_output_queue_secs", &labels).set(o.queue_secs);
         counter("gmx_output_reconnects_total", &labels).set(o.reconnects as u64);
+        if let Some(bytes) = o.extra.get("bytes_out").and_then(|v| v.as_u64()) {
+            counter("gmx_output_bytes_total", &labels).set(bytes);
+        }
     }
     let fps = if status.multiview.enabled { status.multiview.fps as f64 } else { 0.0 };
     gauge("gmx_multiview_fps", &[]).set(fps);

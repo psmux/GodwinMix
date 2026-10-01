@@ -33,7 +33,11 @@ use godwinmix_protocol::plugin::wire::{HealthState, InstanceState};
 use gstreamer as gst;
 use gstreamer::prelude::*;
 use serde_json::{json, Value};
-use tracing::debug;
+use tracing::{debug, warn};
+
+/// How long a reconnect waits, after stopping a plugin that stopped reading,
+/// for the old pipeline to let go. `stop` is given two seconds to answer.
+const STOPPED_PLUGIN_WAIT: std::time::Duration = std::time::Duration::from_secs(5);
 
 pub struct SidecarOutput {
     spec: SidecarSpec,
@@ -88,6 +92,32 @@ impl SidecarOutput {
         self.child = Some(child);
         Ok(())
     }
+
+    /// Stop the plugin process and forget its FIFO. It is started again by
+    /// the next `build`.
+    fn stop_child(&mut self, why: &str) {
+        if let Some(mut child) = self.child.take() {
+            child.shutdown(why);
+        }
+        self.media = None;
+        self.started = false;
+    }
+
+    /// A plugin that was stopped, or that died, is started again before the
+    /// programme is handed to it. Its first life's `initialize` said what it
+    /// is; this one only has to agree to the same instance and params.
+    fn start_again_if_gone(&mut self, params: &Params) -> Result<()> {
+        let alive = self.child.as_mut().is_some_and(Sidecar::running);
+        if alive && self.media.is_some() {
+            return Ok(());
+        }
+        if self.child.is_some() {
+            warn!(output = %self.id, "the plugin process is gone; starting it again");
+            self.stop_child("it had already gone");
+        }
+        let instance = self.id.clone();
+        self.handshake(&instance, params)
+    }
 }
 
 /// Make a FIFO, or say plainly that this platform has none.
@@ -132,6 +162,7 @@ impl Output for SidecarOutput {
     ) -> Result<()> {
         let id = ctx.id;
         let gen = ctx.generation;
+        self.start_again_if_gone(ctx.params)?;
         let fifo = self
             .media
             .as_ref()
@@ -172,6 +203,29 @@ impl Output for SidecarOutput {
         )?;
         self.started = true;
         Ok(())
+    }
+
+    /// The plugin reads the programme off a FIFO, and the core's `filesink`
+    /// writes it. When the plugin stops reading, that write never returns,
+    /// and neither does taking the pipeline to NULL. Stopping the plugin
+    /// closes the read end, the write fails, and the old pipeline finishes
+    /// going down on the thread `retire` left it on. The next `build` starts
+    /// the plugin again, on a fresh FIFO.
+    fn shutdown(&mut self, pipeline: gst::Pipeline) {
+        use crate::output::retire;
+        let Err(retiring) = retire::to_null_within(pipeline, retire::RETIRE_WAIT) else {
+            return;
+        };
+        warn!(
+            output = %self.id,
+            "the plugin has stopped reading the programme; stopping it so the old pipeline can go, and starting it again"
+        );
+        self.stop_child("it stopped reading the programme");
+        // Its exit fails the write, and the old pipeline then lets go of the
+        // feed the next one is linked to. Bounded like everything here.
+        if !retiring.wait(STOPPED_PLUGIN_WAIT) {
+            warn!(output = %self.id, pipeline = retiring.name(), "the old pipeline is still going down; the reconnect goes on without it");
+        }
     }
 
     fn connected(&self) -> bool {
