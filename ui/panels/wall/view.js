@@ -4,6 +4,7 @@
 // read with show.stats and asked for pictures (data.js, thumbs.js).
 
 import { el } from "../../shell/dom.js";
+import { sheet } from "./sheet.js";
 import { WallData } from "./data.js";
 import { Thumbs } from "./thumbs.js";
 import { Virtual } from "./virtual.js";
@@ -25,15 +26,10 @@ export function showWall(client) {
   return open || toggleWall(client);
 }
 
-function sheet() {
-  if (document.getElementById("gmx-wall-css")) return;
-  document.head.append(el("link#gmx-wall-css", { rel: "stylesheet", href: new URL("./wall.css", import.meta.url).href }));
-}
-
 const BAND = 34;
 
 export function openWall(client) {
-  sheet();
+  sheet("wall");
   const back = document.activeElement;
   const opts = prefs();
   const view = { client, opts, acked: new Set(), cursor: null, items: [], cols: 1 };
