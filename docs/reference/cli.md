@@ -145,6 +145,50 @@ because the caller is a machine and the saving is a CPU core. Pass `"off"`
 to render the whole page in the browser.
 
 
+## Many shows
+
+`gmx shows` is for a machine running many shows at once, such as one per
+channel of a headend. Like `ctl` it is a thin client of the station's `show.*`
+methods, so the page, an agent over MCP and this command see the same thing.
+`--url`, `--token` and their environment variables work as they do for `ctl`.
+
+| Command | What it does |
+|---|---|
+| `gmx shows list` | every show: state, what is on air, what it sends, CPU and memory |
+| `gmx shows add --from feeds.csv --dry-run` | price the whole list with `show.add_many`, add nothing |
+| `gmx shows add --from feeds.csv` | add a show per feed, in one call; `-` reads standard input |
+| `gmx shows add --from feeds.csv --compositing on` | the same, each show a whole mixer rather than a straight copy |
+| `gmx shows stats` | one line per show, worst first: health, input kbps, fps, size, codecs, continuity errors, outputs sending, alarms with their age |
+| `gmx shows stats --watch --interval 2` | the same table, drawn again in place until Ctrl-C |
+| `gmx shows stats --ids bbc-one,bbc-two` | only those shows |
+| `gmx shows set bbc-one --compositing on` | give one show scenes and a programme encode; `off` takes it back |
+| `gmx shows set bbc-one --name "BBC One HD" --input udp://@239.1.1.9:5000` | rename it, or give it another input |
+
+The feeds list is a CSV whose first line names its columns, or one address
+per line:
+
+```text
+name,input,program,outputs,format
+BBC One,udp://@239.1.1.1:5000,101,srt://10.0.0.9:9001,copy
+BBC Two,udp://@239.1.1.2:5000,102,udp://10.0.0.9:6002;srt://10.0.0.9:9002,youtube-720p30
+```
+
+`program` picks one programme of a multi programme MPEG-TS feed and may be
+left empty. `outputs` (or `output`) takes several addresses separated by
+spaces or semicolons. `format` is `copy`, which sends the input's own bytes
+and is the default, or a rendition preset id from `rendition.presets`, which
+re-encodes every output of that row. Other columns are ignored, so the list
+`gmx-scale feeds` writes is read as it is. Without a header a line is
+`name,input,program,outputs,format` in that order, and a line holding only an
+address gets a name made from it (`udp://@239.1.1.7:5000` is `239-1-1-7-5000`).
+A line the command cannot read is refused with its line number before
+anything is sent.
+
+Each row becomes a show without compositing unless `--compositing on` is
+given. The dry run answers how many would be added, each refusal by the line
+it came from, and the cost against the governor. Shows that fit are added
+whole; one that does not is named and the rest go ahead.
+
 ## Plugins
 
 `gmx plugin new` and `gmx plugin test` need no running mixer. Everything else
