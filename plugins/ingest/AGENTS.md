@@ -11,7 +11,7 @@ and `main` picks the handler from it:
 |---|---|---|
 | `ingest/rtmp` | source | `src/source.rs` over `src/rtmp.rs`, `src/flv.rs` and `src/remux.rs` |
 | `ingest/whip` | source | `src/whip_in.rs` |
-| `ingest/discover` | device | `src/device.rs` over `src/listeners.rs`, `src/rtmp.rs`, `src/srt.rs`, `src/whip.rs`, `src/gate.rs`, `src/channels.rs`, `src/hub.rs`, `src/relay.rs`, `src/rest.rs` |
+| `ingest/discover` | device | `src/device.rs` over `src/listeners.rs`, `src/rtmp.rs`, `src/srt.rs`, `src/whip.rs`, `src/gate.rs`, `src/channels.rs`, `src/hub.rs`, `src/relay.rs`, `src/rest.rs`, and the direct host for shows with compositing off, `src/direct/` (`docs/explanation/direct-host.md`) |
 
 The RTMP half is pure Rust: `rml_rtmp` parses chunks and raises events, this
 plugin owns the sockets, and the published messages become FLV tags with a

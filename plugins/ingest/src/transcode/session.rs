@@ -70,6 +70,11 @@ impl Session {
         s.router.set_outputs(outputs);
     }
 
+    /// Hand the decoded pictures to `tap`, or stop.
+    pub fn set_tap(&self, tap: Option<super::router::Tap>) {
+        self.shared.router.set_tap(tap);
+    }
+
     /// Why a node is not producing, if it is not.
     pub fn failed(&self, node: &str) -> Option<String> {
         lock(&self.shared.failed).get(node).cloned()

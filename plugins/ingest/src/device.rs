@@ -109,6 +109,8 @@ pub struct Discover {
     added: Mutex<Vec<String>>,
     /// The channels' destinations, each a restream reading the hub.
     sends: Sends,
+    /// The shows with compositing off (`src/direct/`), on the same hub.
+    pub direct: Arc<crate::direct::Host>,
 }
 
 impl Discover {
@@ -127,9 +129,10 @@ impl Discover {
             let channels = gate.table.read().map(|t| t.channels.len()).unwrap_or(0);
             r.info(format!("{channels} channel(s); {}", listeners.summary()));
         }
-        let sends = Sends::new(gate.hub.clone(), reporter);
+        let sends = Sends::new(gate.hub.clone(), reporter.clone());
         let whip = crate::whip::Sessions::new(gate.clone(), settings.webrtc_port);
-        Ok(Discover { gate, listeners: Mutex::new(listeners), whip, added: Mutex::new(Vec::new()), sends })
+        let direct = direct_host(&gate, reporter);
+        Ok(Discover { gate, listeners: Mutex::new(listeners), whip, added: Mutex::new(Vec::new()), sends, direct })
     }
 
     /// The RTMP port, bound or to be bound.
@@ -174,12 +177,23 @@ impl Discover {
         self.gate.relay.get().cloned().unwrap_or_default()
     }
 
-    /// What `discover` answers with: one candidate per live stream.
+    /// Run the direct shows the table asks for, and no others.
+    pub fn set_direct(&self, params: &Value) {
+        for why in self.direct.apply(params) {
+            if let Some(r) = &self.gate.reporter {
+                r.warn(why);
+            }
+        }
+    }
+
+    /// What `discover` answers with: one candidate per live channel stream.
+    /// A direct show's input is the station's to make a source of.
     pub fn candidates(&self) -> Vec<Candidate> {
         self.gate
             .hub
             .streams()
             .iter()
+            .filter(|s| !s["app"].as_str().unwrap_or("").starts_with("direct."))
             .map(|s| {
                 let name = format!("{}/{}", s["app"].as_str().unwrap_or(""), s["stream"].as_str().unwrap_or(""));
                 Candidate {
@@ -270,6 +284,19 @@ impl Discover {
         result.is_error = Some(!failed.is_empty());
         result
     }
+}
+
+/// The direct host on the gate's hub, telling the station through the
+/// reporter, and naming the relay the gate binds.
+fn direct_host(gate: &Arc<ChannelGate>, reporter: Option<Reporter>) -> Arc<crate::direct::Host> {
+    let emit: crate::direct::Emit = Arc::new(move |name, params| {
+        if let Some(r) = &reporter {
+            r.event(name, params);
+        }
+    });
+    let g = gate.clone();
+    let relay: crate::direct::Relay = Arc::new(move || g.relay.get().cloned().unwrap_or_default());
+    crate::direct::Host::new(gate.hub.clone(), emit, relay)
 }
 
 fn ok_result(summary: String, structured: Value) -> ToolResult {

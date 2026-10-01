@@ -8,14 +8,11 @@
 //!
 //! One process serves one provide. `GMX_PROVIDE` says which.
 
-mod address;
-mod counters;
-mod iface;
 mod output;
-mod recv;
-mod send;
 mod source;
-mod ts;
+
+// The rest lives in the library (src/lib.rs), so the direct host can share it.
+use gmx_udp::{recv, send};
 
 use godwinmix_sdk::prelude::*;
 
