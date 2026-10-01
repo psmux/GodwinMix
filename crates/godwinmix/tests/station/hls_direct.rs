@@ -23,6 +23,17 @@ async fn bytes(st: &Running, path: &str) -> Vec<u8> {
     answer.bytes().await.unwrap().to_vec()
 }
 
+/// A folder whose ingest plugin binds its relay on a port of its own, so
+/// two of these tests can run at once.
+fn folder_with_relay(name: &str) -> (std::path::PathBuf, u16) {
+    let (dir, port) = folder(name);
+    let relay = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    let config = dir.join("godwinmix.toml");
+    let text = std::fs::read_to_string(&config).unwrap();
+    std::fs::write(&config, format!("{text}\n[plugins.ingest]\nrtmp_port = {relay}\n")).unwrap();
+    (dir, port)
+}
+
 /// The show's output as `show.list` has it.
 async fn output(ws: &mut Ws, id: u64, show: &str, out: &str) -> Value {
     let list = call(ws, id, "show.list", json!({})).await;
@@ -85,7 +96,7 @@ async fn fetch_rung(st: &Running, master: &str, rung: &str, file: &Path) -> (Str
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_direct_show_serves_its_feed_as_hls_from_the_station_copied_not_decoded() {
-    let (dir, port) = folder("hls-direct");
+    let (dir, port) = folder_with_relay("hls-direct");
     let source = staged_ingest(&dir);
     let st = start(dir.clone(), port, &[]).await;
     let mut ws = rpc(&st, "").await;
@@ -135,7 +146,7 @@ async fn a_direct_show_serves_its_feed_as_hls_from_the_station_copied_not_decode
 /// sound comes out as AAC.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn mp2_sound_is_refused_with_the_next_step_and_served_once_a_rendition_makes_aac() {
-    let (dir, port) = folder("hls-direct-mp2");
+    let (dir, port) = folder_with_relay("hls-direct-mp2");
     let source = staged_ingest(&dir);
     let st = start(dir.clone(), port, &[]).await;
     let mut ws = rpc(&st, "").await;
@@ -151,6 +162,10 @@ async fn mp2_sound_is_refused_with_the_next_step_and_served_once_a_rendition_mak
     let out = until(&mut ws, "feed", "viewers", "failed", Duration::from_secs(90)).await;
     let why = out["error"].as_str().unwrap_or_default();
     assert!(why.contains("mp2") && why.contains("AAC") && why.contains("show.output.set"), "{out}");
+    // Now that the input's sound is known, a second copy is refused at once.
+    let again = call(&mut ws, 5, "show.output.add", json!({"id": "feed", "uri": "hls://second"})).await;
+    assert_eq!(again["error"]["data"]["rendition"], json!({"audio": {"codec": "aac"}}), "{again}");
+    assert_eq!(again["error"]["data"]["audio_codec"], "mp2", "{again}");
 
     let set = call(&mut ws, 4, "show.output.set", json!({"id": "feed", "output": "viewers", "rendition": {"audio": {"codec": "aac"}}})).await;
     assert!(set.get("error").is_none(), "{set}");

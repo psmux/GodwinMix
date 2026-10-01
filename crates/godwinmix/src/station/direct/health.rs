@@ -77,7 +77,8 @@ impl Direct {
             if let (_, Some(no)) = self.transcode.view(id, &o.id) {
                 add(AlarmKind::GovernorRefused, format!("{}: {}", o.id, no.message));
             }
-            if seen.output(&o.id, true).state == DestinationState::Failed {
+            let hls = self.hls.view(id, &o.id).map(|(live, _)| live.state);
+            if hls.unwrap_or_else(|| seen.output(&o.id, true).state) == DestinationState::Failed {
                 add(AlarmKind::OutputFailed, format!("{} failed", o.id));
             }
         }

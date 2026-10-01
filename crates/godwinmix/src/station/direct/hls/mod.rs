@@ -25,19 +25,21 @@
 mod board;
 pub mod caps;
 pub mod edit;
+mod feed;
 mod flv;
 mod packager;
 mod serve;
 mod session;
 pub mod spec;
+mod wants;
 
 pub use serve::router;
 
-use super::outputs;
 use crate::station::state::Station;
 use godwinmix_core::hls::Stream;
 use godwinmix_protocol::destination::{DestinationLive, Playback, StoredDestination};
-use packager::{Packager, Source};
+use godwinmix_protocol::error::RpcError;
+use packager::Packager;
 use parking_lot::Mutex;
 use serde_json::json;
 use std::collections::BTreeMap;
@@ -50,19 +52,12 @@ pub struct Packagers {
     running: Mutex<BTreeMap<(String, String), Packager>>,
 }
 
-/// What one output should be doing now.
-struct Want {
-    spec: spec::HlsSpec,
-    source: Option<Source>,
-    why_not: Option<String>,
-}
-
 impl Packagers {
     /// Make the running packagers match the shows: start what is new, stop
     /// what went, and start again what now reads something else. Called on
     /// the table's thread after every table, never on a handler.
     pub fn apply(&self, st: &Station) {
-        let wanted = wants(st);
+        let wanted = wants::wants(st);
         let mut running = self.running.lock();
         running.retain(|k, _| wanted.contains_key(k));
         for ((show, output), want) in wanted {
@@ -112,7 +107,7 @@ impl Packagers {
     }
 }
 
-fn keyed(p: &Packager, want: &Want) -> bool {
+fn keyed(p: &Packager, want: &wants::Want) -> bool {
     want.spec.viewer_key.as_ref().is_none_or(|k| *k == p.stream.viewer_key)
 }
 
@@ -122,6 +117,20 @@ fn new_stream(show: &str, output: &str, spec: &spec::HlsSpec) -> anyhow::Result<
         None => godwinmix_core::hls::key::viewer_key(&format!("{show}/{output}"))?,
     };
     Ok(Arc::new(Stream::new(output, spec.params, &key)))
+}
+
+/// Refuse a new HLS output that would copy sound already known not to be
+/// AAC, and say what to add instead.
+pub fn check_sound(st: &Station, show: &str, added: Option<&StoredDestination>) -> Result<(), RpcError> {
+    let Some(d) = added.filter(|d| d.platform == spec::SCHEME && d.enabled && d.rendition.is_none()) else { return Ok(()) };
+    let codec = st.direct.seen.lock().get(show).and_then(|s| s.input.as_ref()?["audio"]["codec"].as_str().map(str::to_string));
+    let Some(codec) = codec.filter(|c| c != "aac") else { return Ok(()) };
+    let msg = format!(
+        "show {show}'s input sound is {codec}, and HLS carries AAC: a copy would make segments no player can play. \
+         Add the output with rendition: {{\"audio\": {{\"codec\": \"aac\"}}}}, which converts the sound and still copies the picture."
+    );
+    let fix = json!({"audio": {"codec": "aac"}});
+    Err(RpcError::invalid_params(msg).with("field", "rendition").with("output", d.id.as_str()).with("audio_codec", codec).with("rendition", fix))
 }
 
 /// The sentence for sound fragmented MP4 does not carry, naming the call
@@ -135,43 +144,4 @@ fn refusal(show: &str, output: &str) -> impl Fn(&str) -> String + Send + 'static
              rendition: {{\"audio\": {{\"codec\": \"aac\"}}}}}}, and the picture is still copied."
         )
     }
-}
-
-/// Every HLS output that should run, with what it reads.
-fn wants(st: &Station) -> BTreeMap<(String, String), Want> {
-    let records: Vec<_> = st.registry.lock().records.iter().filter(|r| !r.stopped && !r.compositing && r.input.is_some()).cloned().collect();
-    let mut out = BTreeMap::new();
-    for r in records {
-        if !r.outputs.iter().any(|o| o.enabled && o.platform == spec::SCHEME) {
-            continue;
-        }
-        let relay = st.direct.seen.lock().get(&r.id).and_then(|s| s.relay());
-        for d in outputs::stored(&r.id, &r.outputs).into_iter().filter(|d| d.enabled && d.platform == spec::SCHEME) {
-            let (source, why_not) = source_of(st, &r.id, &d, relay.as_ref());
-            out.insert((r.id.clone(), d.id.clone()), Want { spec: spec::read(&d.server), source, why_not });
-        }
-    }
-    out
-}
-
-/// Where one output reads from: the show's stream, or its rendition's
-/// pair once the plan has made one. None, and why, until both are known.
-fn source_of(st: &Station, show: &str, d: &StoredDestination, relay: Option<&(String, String)>) -> (Option<Source>, Option<String>) {
-    let Some((addr, stream)) = relay else { return (None, Some("waiting for the input to go live".into())) };
-    let Ok(relay) = addr.parse() else { return (None, Some(format!("the direct host gave {addr} as its relay, which is not an address"))) };
-    let app = stream.split_once('/').map(|(a, _)| a).unwrap_or(stream);
-    if d.rendition.is_none() {
-        return (Some(Source { relay, path: format!("{app}/main") }), None);
-    }
-    let Some(row) = st.direct.transcode.row(show, d, json!({})) else {
-        let (_, refused) = st.direct.transcode.view(show, &d.id);
-        return (None, Some(refused.map(|r| r.message).unwrap_or_else(|| "the rendition was refused".into())));
-    };
-    let (video, audio) = (row["video"].as_str(), row["audio"].as_str());
-    if video.is_none() && audio.is_none() {
-        return (None, Some("waiting for the rendition to be planned".into()));
-    }
-    let main = row["stream"].as_str().unwrap_or("main");
-    let key = format!("{main}|{}|{}", video.unwrap_or("-"), audio.unwrap_or("-"));
-    (Some(Source { relay, path: format!("{app}/{key}") }), None)
 }
