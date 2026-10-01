@@ -19,6 +19,7 @@ pub fn router(st: Arc<Station>) -> Router {
     let mut router = Router::new()
         .merge(crate::ui::router())
         .route("/rpc", get(rpc_upgrade))
+        .route("/api/v1/shows/{id}/thumbnail.jpg", get(super::thumb::thumbnail))
         .route("/api/v1/{*rest}", any(api))
         .fallback(any(relay))
         .with_state(st);

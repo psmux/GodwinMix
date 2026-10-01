@@ -49,7 +49,7 @@ pub async fn run(opts: Options) -> Result<()> {
 
     let ingest = open_channels(&st, &cfg, &opts.config, events);
     render.begin();
-    let starting: Vec<String> = st.registry.lock().records.iter().filter(|r| !r.stopped).map(|r| r.id.clone()).collect();
+    let starting: Vec<String> = st.registry.lock().records.iter().filter(|r| !r.stopped && r.compositing).map(|r| r.id.clone()).collect();
     for id in &starting {
         supervise::start(&st, id);
     }
@@ -62,6 +62,7 @@ pub async fn run(opts: Options) -> Result<()> {
 
     tokio::select! {
         _ = tokio::signal::ctrl_c() => {}
+        _ = ended() => {}
         _ = st.quit.notified() => {}
     }
     info!("station shutting down; stopping every show");
@@ -71,6 +72,26 @@ pub async fn run(opts: Options) -> Result<()> {
     let _ = tokio::task::spawn_blocking(move || ingest.shutdown()).await;
     serving.abort();
     Ok(())
+}
+
+/// SIGTERM (a service manager) or SIGHUP (the terminal closed): stop every
+/// show as Ctrl-C does, rather than die and leave them running. A station
+/// killed outright closes its link, and each show then ends itself
+/// (`show::orphaned_watchdog`).
+async fn ended() {
+    #[cfg(unix)]
+    {
+        use tokio::signal::unix::{signal, SignalKind};
+        let (Ok(mut term), Ok(mut hup)) = (signal(SignalKind::terminate()), signal(SignalKind::hangup())) else {
+            return std::future::pending().await;
+        };
+        tokio::select! {
+            _ = term.recv() => info!("SIGTERM"),
+            _ = hup.recv() => info!("SIGHUP"),
+        }
+    }
+    #[cfg(not(unix))]
+    std::future::pending::<()>().await
 }
 
 /// The plugins, so the ingest plugin can be started. Only the ingest plugin
@@ -103,6 +124,7 @@ fn open_channels(st: &Arc<Station>, cfg: &Config, config: &std::path::Path, even
     );
     channels.use_governor(st.render.governor().clone());
     let _ = st.channels.set(channels);
+    super::direct::Direct::attach(st, supervisor.clone());
     let starting = supervisor.clone();
     std::thread::spawn(move || {
         if plugin::loader::get(crate::channels::PLUGIN).is_none() {

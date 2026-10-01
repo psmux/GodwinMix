@@ -76,15 +76,32 @@ with a `channel:<id>` scope.
 | `memory_mib` | its process's resident memory |
 | `restarts` | how often the station started it again after it died |
 | `error` | why it is not running, when a person did not ask for that |
+| `compositing` | `true` for a show with scenes and a programme in a process of its own; `false` for a show without compositing (below) |
+| `input` | what the show takes in, `{uri, program?, params?, backup?}`. Absent for a show that has none |
+| `outputs` | a show without compositing's outputs, each as a channel destination is shown: `id`, `platform`, `label`, `uri_host`, `has_key`, `enabled`, `state`, `kbps`, `reconnects`, `error`, and `rendition`, `plan` or `refused` when it converts. Absent for a show that composites |
+| `health` | `{state, alarms}`, see [Health](#health) |
 
-Read scope. Measured when asked, never in the background: the running shows
-are asked for their status at once (a second at most) and the processes are
-read by the plugin host's sampler.
+For a show without compositing, `state` is `running` unless it was stopped,
+`on_air` is `"input"` while its input arrives, and `programme_kbps` is what
+its outputs send.
 
-### `show.add {name, from?}`
+Read scope. A read asks no show anything. What only a show's process can say
+(`on_air`, `programme_kbps`) and what its process costs are measured once a
+second by a sampler in the station while someone reads `show.list`, and for
+ten seconds after the last read; every read is served from what it last
+measured. The first read waits for one round. With 201 shows a read took
+the times in [Two hundred shows](#two-hundred-shows).
+
+### `show.add {name, compositing?, input?, outputs?, from?}`
 
 Admin. Makes a show, starts it and answers with it in `starting`;
-`event/show.changed` says when it is `running`.
+`event/show.changed` says when it is `running`. With `compositing: false` it
+makes a show without compositing instead, which needs `input` and takes
+`outputs` (see [Shows without compositing](#shows-without-compositing)); it
+answers with it `running` at once, since there is no process to start. A
+show that composites refuses `outputs`: add them inside it with `output.add`
+and `?show=<id>`. A show that composites and has an `input` gets it as its one
+source, `input`, put on its programme, once the ingest plugin has it.
 
 | `from` | The new show starts with |
 |---|---|
@@ -109,7 +126,197 @@ instead.
 
 Admin. A stopped show keeps its config and stays stopped across a restart of
 the station until `show.start`. A show that failed starts again with
-`show.start`.
+`show.start`. A show without compositing that is stopped is taken out of the
+direct host's table, so its input is closed and its outputs stop.
+
+### `show.set {id, name?, input?, compositing?}`
+
+Admin. Names only what moves. The name and the input change first, then
+compositing, so one call can give a show an input and turn compositing off.
+The answer is the show with a `switch` beside its fields when compositing
+moved:
+
+| `switch` field | Meaning |
+|---|---|
+| `compositing` | what the show does now |
+| `outputs` | the ids of the outputs that moved |
+| `gap_ms` | from the moment the outputs stopped where they were to the moment every one was live again where they went. Absent when they were not all live within 30 seconds, or there were none |
+| `note` | an output that could not be moved, or why the station did not wait |
+
+`compositing: true` on a show without compositing: the direct host stops its
+outputs and keeps its input open in its hub, the station writes the show a
+folder and starts its process, gives it the input as its one source (read
+from the hub, so the input is opened once) and adds the outputs to it with
+`output.add`. Outputs move break then make, because a platform takes one
+publisher per key.
+
+`compositing: false` on a show that composites, refused with `not_in_state`
+and the reason in `data` when:
+
+| Refused when | `data` |
+|---|---|
+| it is `main` | `show` |
+| it has no input and the call gives none | `field: "input"` |
+| it is not running, so its sources and outputs cannot be read | `show` |
+| it has sources besides `input` | `sources` |
+| a scene is on its programme | `scene` |
+| it has an output that was added inside it, whose address is write only | `outputs` |
+
+Otherwise its outputs are removed from the show, handed back to the direct
+host and its process is stopped.
+
+Measured on macOS, Apple silicon, release build, a 720p30 H.264 feed over UDP
+copied to an RTMP server (ffmpeg listening), with the direct host running:
+`gap_ms` was 608, 617, 704 and 692 turning compositing on, and 563, 461 and
+1174 turning it off. It is timed by the station, from the moment the
+outputs were taken away to the moment the side that took them over reported
+every one live. Its folder stays, so turning compositing on
+again finds its config.
+
+### `show.add_many {shows, dry_run?}`
+
+Admin. `shows` is a list of what `show.add` takes, at most 1000. The batch
+is checked whole first: every show's name, input and outputs by the same
+rules as `show.add`, and every rendition priced by the planner against an
+input shaped like a broadcast HD feed (H.264 1920x1080 30 fps with stereo
+AAC), since an input's real shape is known only once it arrives. The prices
+are added up in order against what the governor says is free now, taking no
+ticket. With `dry_run` (the default) nothing is made; without it every show
+that passed and fits is made, whole, and the host is handed its table once.
+
+```json
+{
+  "dry_run": true,
+  "added": ["bbc-one", "itv"],
+  "refused": [
+    {"index": 2, "name": "Broken", "why": "\"nonsense\" is not an input this machine can open. ...",
+     "data": {"field": "input.uri", "schemes": ["udp", "rtp", "srt", "..."]}}
+  ],
+  "plan": {"cost": {"cpu_millicores": 290, "...": 0}, "have": {"cpu_millicores": 5200, "...": 0},
+           "fits": false, "assumed_input": "H.264 1920x1080 30 fps with stereo AAC"}
+}
+```
+
+`added` is what was made, or on a dry run what would be. A show with one
+output that breaks a rule is refused whole, with `data.output_index` naming
+the output. A show that would take the machine past what it has free is
+refused with `data.alarm: "governor-refused"`, `data.need` and `data.have`.
+`fits` is true only when nothing was refused.
+
+### `show.remove_many {ids}`
+
+Admin, destructive. `show.remove` for each id; an id that cannot go (`main`,
+the last show, one not there) is in `refused` with why, and the rest go.
+
+### `show.output.add {id, output?, platform?, label?, uri?, key?, enabled?, rendition?}`
+
+Admin, on a show without compositing. `uri` is the whole address: `srt://`,
+`rtmp://`, `udp://` (unicast or multicast), `rtp://` or `rist://`. A platform
+(`youtube`, `facebook`, `twitch`) takes `key`, which is write only. `output`
+is the new output's id, made from the label or the platform when left out.
+No `rendition` copies the input's own bytes into the output's container; a
+rendition request or `{"preset": "youtube-720p30"}` is planned with the
+channels' planner and refused at once when it cannot be served. Answers the
+show. `show` is taken as another name for `id`.
+
+### `show.output.set {id, output, label?, uri?, key?, enabled?, rendition?}`
+
+Admin. Names only what moves; a key left out is kept, and `rendition: null`
+goes back to a copy. A UDP, RTP or RIST output keeps its scheme.
+
+### `show.output.remove {id, output}`
+
+Admin, destructive. Stops the output and forgets its address and key.
+
+On a show that composites, the three are refused with `data.compositing:
+true`; its outputs are `output.*` with `?show=<id>`.
+
+### `show.stats {ids?, fields?}`
+
+Read. Health and numbers for many shows in one read, every show when `ids`
+is left out, narrowed by `fields` to any of `health`, `input`, `outputs`:
+
+```json
+{"shows": [{"id": "bbc-one",
+  "health": {"state": "ok", "alarms": []},
+  "input": {"kbps": 6100, "fps": 25.0, "width": 1920, "height": 1080, "video_codec": "h264",
+            "audio_codec": "aac", "audio_channels": 2, "cc_errors": 0, "packets_lost": 0,
+            "keyframe_ms": 1000, "last_frame_ms": 12},
+  "outputs": [{"id": "srt", "state": "live", "kbps": 6050, "reconnects": 0,
+               "rendition_text": "copy", "cpu_millicores": 0}]}]}
+```
+
+It reads what the station already holds (the direct host's last
+`direct.stats`, about once a second, and the plan), so it asks nothing of a
+show or of the host and is cheap to call every second for two hundred shows.
+A field the host has not counted yet is left out. A show that composites has
+its health and, when it has an input, the input's numbers; its outputs are
+read with `output.list` and `?show=<id>`.
+
+### Alarm settings: `show.set {id, alarms}`
+
+`alarms` is `{enabled?, black_ms?, freeze_ms?, silence_ms?, silence_dbfs?}`.
+The fields named move and the rest stay; the show carries the result as
+`alarms`. `enabled` left out is on for a show without compositing and off for
+one that composites. A duration of 0 switches that check off. The direct host
+gets them in its table as thresholds; a field never set keeps the host's
+default (black 4 s, freeze 10 s, silence 10 s under -60 dBFS).
+
+### `GET /api/v1/shows/{id}/thumbnail.jpg?width=160`
+
+Read, with the token as a header or `?token=`. The show's picture as a JPEG,
+32 to 1280 pixels wide. For a show without compositing it comes from the
+direct host, which decodes keyframes only, about one a second, and only for a
+show someone asked a picture of lately; for a show that composites it is its
+programme snapshot. `409` with `data.retry_after_ms` while there is no picture
+yet (the host has decoded no keyframe, the ingest plugin is not running, the
+show is not running); `404` for a show that is not there.
+
+### `governor.status`
+
+As in the [renditions reference](renditions.md), with `ingress_kbps` beside
+`egress_kbps`: every channel stream and every direct show's input, as last
+counted.
+
+## Shows without compositing
+
+A show without compositing is one input sent straight to its outputs, with
+no compositor and no process of its own. Two hundred channels from a headend
+are two hundred of these. The station keeps each one in the list of shows,
+its outputs' addresses and keys sealed in the secret store under
+`show.<id>.output`, and hands the whole table of them to the direct host in
+the ingest plugin, the way it hands the channel table: laid over the plugin's
+settings as `direct` and pushed with `configure`, the whole table every time,
+one table for a run of changes. The host demuxes the input and copies or
+converts it to each output; the shapes between the two are
+`dev/plans/wave4-direct-table.md`.
+
+A show is in the table while it is not stopped and has an input. A show that
+composites and has an input is in it too, with no outputs, so its input is
+opened once and read by the show from the hub.
+
+Every other method with `?show=<id>` of a show without compositing (a scene,
+a source, the programme) is refused at once with `not_in_state` and
+`data.compositing: false`.
+
+## Health
+
+```json
+{"state": "alarm", "alarms": [{"kind": "no-input", "since_ms": 1759312800000, "detail": "nothing has arrived on the input yet"}]}
+```
+
+| `state` | When |
+|---|---|
+| `ok` | running and nothing wrong |
+| `warning` | an alarm that does not stop viewers getting the show: `silence`, `cc-errors`, `loss`, `shed` |
+| `alarm` | one that does: `no-input`, `stall`, `black`, `freeze`, `output-failed`, `governor-refused`; or a show process that failed |
+| `off` | stopped, or a show that composites and is not running |
+
+The direct host says `stall`, `black`, `freeze`, `silence`, `cc-errors` and
+`loss`. The station adds `no-input` while the input has not arrived or the
+ingest plugin is not running, `governor-refused` for an output whose
+rendition the governor would not admit, and `output-failed` for an output the
+host reports failed. `since_ms` is unix milliseconds.
 
 ## Events
 
@@ -120,6 +327,11 @@ its subscription asks for them (`show.*` or `*`).
 |---|---|---|
 | `event/show.changed` | `{show}`, a row of `show.list` without the measured fields | a show was added, renamed, started, stopped, died, came back or failed |
 | `event/show.removed` | `{id}` | a show was removed |
+| `event/show.health` | `{id, health}` | a show's health changed state, or an alarm began or ended. Never for a number alone, nor for an alarm whose detail changed |
+
+A show without compositing is announced with `event/show.changed` when one
+of its outputs changes state, error or reconnect count, and when its input
+arrives, leaves or changes shape.
 
 The station's alerts (`event/alert`) say when a show died and when it will be
 started again, and when it was left failed.
@@ -132,7 +344,13 @@ started again, and when it was left failed.
 | status 75 (`core.restart`) | starts it again at once, not counted |
 | anything else (a crash, `SIGKILL`) | starts it again: three times at once, then after 30 seconds doubling, the plugin host's backoff. The seventh death in a row leaves it `failed`, with an alert. A show that ran a minute before dying starts its count again |
 
-A show whose link to the station closes stops: nothing could reach it.
+A show whose link to the station closes stops: nothing could reach it. It
+stops in order if it can, and four seconds later ends itself and its process
+group, so a station killed outright leaves no show behind. The station stops
+every show on `SIGINT`, `SIGTERM` and `SIGHUP` alike, and a show that has not
+stopped ten seconds after it was asked is killed with its process group. In
+the test, with three shows, every show was gone 160 ms after the station was
+sent `SIGKILL`, and 30 ms after `SIGTERM` or `SIGHUP`.
 
 ## The link
 
@@ -185,3 +403,16 @@ about 30 (`scene.add` to `event/scene.patch`, median of 20: 392 and 422).
 Relaying the mosaic and the preview, ten frames a second each, costs the
 station 0.1% of one core. `cargo test -p godwinmix --test station -- --nocapture`
 prints the latency on the machine it runs on.
+
+## Two hundred shows
+
+Measured on macOS, Apple silicon, release build, by the station's own test
+(`cargo test --release -p godwinmix --test station many -- --nocapture`),
+with 200 shows without compositing, one SRT output each, and `main`, no
+ingest plugin running:
+
+| | Time |
+|---|---|
+| `show.add_many` of the 200, applied | 79 ms |
+| `show.list` of 201 shows, through the WebSocket, median of 20 | 2.4 ms |
+| `show.stats` of 201 shows, the same | 1.2 ms |

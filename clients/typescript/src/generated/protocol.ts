@@ -114,6 +114,29 @@ export interface AgentStateRequest {
   response_format?: ResponseFormat;
 }
 
+/** One condition that holds now. */
+export interface Alarm {
+  detail: string;
+  kind: AlarmKind;
+  since_ms: number;
+}
+
+/** What an alarm is about. */
+export type AlarmKind = "no-input" | "stall" | "black" | "freeze" | "silence" | "cc-errors" | "loss" | "output-failed" | "governor-refused" | "shed";
+
+/**
+ * A show's alarms, as a person sets them from the page. Left out fields
+ * keep the measuring side's defaults; a duration of 0 switches that check
+ * off.
+ */
+export interface AlarmSettings {
+  black_ms?: number | null;
+  enabled?: boolean | null;
+  freeze_ms?: number | null;
+  silence_dbfs?: number | null;
+  silence_ms?: number | null;
+}
+
 /** The nine alignment keywords, used to place content inside its frame. */
 export type Align = "top-left" | "top-center" | "top-right" | "center-left" | "center" | "center-right" | "bottom-left" | "bottom-center" | "bottom-right";
 
@@ -207,6 +230,13 @@ export interface BackendInfo {
   video_encoder: string;
 }
 
+/** An input's backup: an input with no backup of its own. */
+export interface BackupInput {
+  params?: Record<string, unknown> | null;
+  program?: number | null;
+  uri: string;
+}
+
 /** `scene.item.bind`. */
 export interface BindRequest {
   draft?: string | null;
@@ -221,6 +251,14 @@ export type Blend = "normal" | "add" | "screen" | "multiply" | "lighten" | "dark
 
 /** How media crosses between a node and the core. */
 export type BridgeTransport = "rtp" | "srt" | "whip";
+
+/** What a batch costs, priced by the governor without taking anything. */
+export interface BulkPlan {
+  assumed_input: string;
+  cost: Cost;
+  fits: boolean;
+  have: Cost;
+}
 
 /** What an importer is told before it reads the document. */
 export interface Bundle {
@@ -832,6 +870,7 @@ export interface GovernorStatus {
   devices: DeviceUse[];
   egress_kbps: number;
   fingerprint?: string | null;
+  ingress_kbps?: number;
   shed: ShedNote[];
 }
 
@@ -882,6 +921,15 @@ export interface HeaderChange {
   after: Header;
   before: Header;
 }
+
+/** A show's health. */
+export interface Health {
+  alarms: Alarm[];
+  state: HealthState;
+}
+
+/** The one word a monitoring wall colours a row by. */
+export type HealthState = "ok" | "warning" | "alarm" | "off";
 
 /** `program.history`. */
 export interface HistoryRequest {
@@ -944,6 +992,32 @@ export interface ImportedReport {
   missing_plugins?: string[];
   relink?: Relink[];
   scenes: string[];
+}
+
+/**
+ * What a show without compositing takes in. A show that composites makes
+ * its input its one source.
+ */
+export interface InputSpec {
+  backup?: BackupInput | null;
+  params?: Record<string, unknown> | null;
+  program?: number | null;
+  uri: string;
+}
+
+/** What the input is doing, as the host last counted it. */
+export interface InputStats {
+  audio_channels?: number;
+  audio_codec?: string | null;
+  cc_errors?: number;
+  fps?: number;
+  height?: number;
+  kbps?: number;
+  keyframe_ms?: number | null;
+  last_frame_ms?: number | null;
+  packets_lost?: number;
+  video_codec?: string | null;
+  width?: number;
 }
 
 /** One running instance and its cost. */
@@ -1304,6 +1378,17 @@ export interface Ograf {
 }
 
 export type OutputState = "connecting" | "live" | "reconnecting" | "failed";
+
+/** What one output is doing. */
+export interface OutputStats {
+  cpu_millicores?: number;
+  encoder?: string | null;
+  id: string;
+  kbps?: number;
+  reconnects?: number;
+  rendition_text?: string;
+  state?: string;
+}
 
 export interface OutputStatus {
   has_key: boolean;
@@ -1871,21 +1956,52 @@ export interface ShedNote {
 
 /** One show, as `show.list` and `event/show.changed` carry it. */
 export interface Show {
+  alarms?: AlarmSettings | null;
+  compositing?: boolean;
   cpu_millicores: number;
   error?: string | null;
+  health?: Health;
   id: string;
+  input?: InputSpec | null;
   memory_mib?: number;
   name: string;
   on_air?: string | null;
+  outputs?: Destination[];
   programme_kbps: number;
   restarts?: number;
   state: ShowState;
 }
 
+/** One show of `show.add_many`: what `show.add` takes. */
+export interface ShowAdd {
+  compositing?: boolean | null;
+  from?: ShowFrom | null;
+  input?: InputSpec | null;
+  name: string;
+  outputs?: ShowOutputSpec[];
+}
+
+/** `show.add_many`. */
+export interface ShowAddManyRequest {
+  dry_run?: boolean | null;
+  shows: ShowAdd[];
+}
+
+/** `show.add_many`'s answer. */
+export interface ShowAddManyResult {
+  added: string[];
+  dry_run: boolean;
+  plan: BulkPlan;
+  refused: ShowRefused[];
+}
+
 /** `show.add`. */
 export interface ShowAddRequest {
+  compositing?: boolean | null;
   from?: ShowFrom | null;
+  input?: InputSpec | null;
   name: string;
+  outputs?: ShowOutputSpec[];
 }
 
 /** `event/show.changed`. */
@@ -1898,10 +2014,78 @@ export type ShowFrom = string | {
   project: unknown;
 };
 
+/** `event/show.health`. */
+export interface ShowHealthEvent {
+  health: Health;
+  id: string;
+}
+
 /** `show.list`. */
 export interface ShowList {
   current: string;
   shows: Show[];
+}
+
+/** `show.output.add`. */
+export interface ShowOutputAddRequest {
+  enabled?: boolean | null;
+  id: string;
+  key?: string | null;
+  label?: string | null;
+  output?: string | null;
+  platform?: string | null;
+  rendition?: RenditionChoice | null;
+  uri?: string | null;
+}
+
+/** `show.output.remove`. */
+export interface ShowOutputRemoveRequest {
+  id: string;
+  output: string;
+}
+
+/** `show.output.set`. Names only what moves. */
+export interface ShowOutputSetRequest {
+  enabled?: boolean | null;
+  id: string;
+  key?: string | null;
+  label?: string | null;
+  output: string;
+  rendition?: RenditionChoice | null;
+  uri?: string | null;
+}
+
+/**
+ * An output as it is given to a show without compositing: an address, or
+ * a platform and a key.
+ */
+export interface ShowOutputSpec {
+  enabled?: boolean | null;
+  id?: string | null;
+  key?: string | null;
+  label?: string | null;
+  platform?: string | null;
+  rendition?: RenditionChoice | null;
+  uri?: string | null;
+}
+
+/** A show of `show.add_many` that was not made, and why. */
+export interface ShowRefused {
+  data?: unknown;
+  index: number;
+  name: string;
+  why: string;
+}
+
+/** `show.remove_many`. */
+export interface ShowRemoveManyRequest {
+  ids: string[];
+}
+
+/** `show.remove_many`'s answer. */
+export interface ShowRemoveManyResult {
+  refused: ShowRefused[];
+  removed: string[];
 }
 
 /** `show.remove`. */
@@ -1920,8 +2104,55 @@ export interface ShowRenameRequest {
   name: string;
 }
 
+/** `show.set`. Names only what moves. */
+export interface ShowSetRequest {
+  alarms?: AlarmSettings | null;
+  compositing?: boolean | null;
+  id: string;
+  input?: InputSpec | null;
+  name?: string | null;
+}
+
+/** `show.set`'s answer: the show, and what a switch of compositing did. */
+export interface ShowSetResult {
+  alarms?: AlarmSettings | null;
+  compositing?: boolean;
+  cpu_millicores: number;
+  error?: string | null;
+  health?: Health;
+  id: string;
+  input?: InputSpec | null;
+  memory_mib?: number;
+  name: string;
+  on_air?: string | null;
+  outputs?: Destination[];
+  programme_kbps: number;
+  restarts?: number;
+  state: ShowState;
+  switch?: SwitchReport | null;
+}
+
 /** Where a show is in its life. */
 export type ShowState = "starting" | "running" | "stopped" | "failed";
+
+/** One show's numbers, as `show.stats` answers them. */
+export interface ShowStats {
+  health: Health;
+  id: string;
+  input?: InputStats | null;
+  outputs?: OutputStats[];
+}
+
+/** `show.stats`'s answer. */
+export interface ShowStatsList {
+  shows: ShowStats[];
+}
+
+/** `show.stats`. */
+export interface ShowStatsRequest {
+  fields?: string[] | null;
+  ids?: string[] | null;
+}
 
 /** `event/snapshot`: the full state, and where in the stream it sits. */
 export interface Snapshot {
@@ -2042,6 +2273,14 @@ export interface SubscribeResult {
   events: string[];
   ignored_ext: string[];
   seq: number;
+}
+
+/** What a switch of compositing did, in `show.set`'s answer. */
+export interface SwitchReport {
+  compositing: boolean;
+  gap_ms?: number | null;
+  note?: string;
+  outputs: string[];
 }
 
 /** One take, as `program.history` reports it. */
@@ -2442,10 +2681,17 @@ export interface MethodParams {
   "scene.undo": Record<string, never>;
   "scene.validate": ValidateRequest;
   "show.add": ShowAddRequest;
+  "show.add_many": ShowAddManyRequest;
   "show.list": Record<string, never>;
+  "show.output.add": ShowOutputAddRequest;
+  "show.output.remove": ShowOutputRemoveRequest;
+  "show.output.set": ShowOutputSetRequest;
   "show.remove": IdRequest;
+  "show.remove_many": ShowRemoveManyRequest;
   "show.rename": ShowRenameRequest;
+  "show.set": ShowSetRequest;
   "show.start": IdRequest;
+  "show.stats": ShowStatsRequest;
   "show.stop": IdRequest;
   "snapshot.get": SnapshotRequest;
   "source.add": AddSourceRequest;
@@ -2606,10 +2852,17 @@ export interface MethodResults {
   "scene.undo": HistoryStep;
   "scene.validate": Validation;
   "show.add": Show;
+  "show.add_many": ShowAddManyResult;
   "show.list": ShowList;
+  "show.output.add": Show;
+  "show.output.remove": Show;
+  "show.output.set": Show;
   "show.remove": ShowRemoved;
+  "show.remove_many": ShowRemoveManyResult;
   "show.rename": Show;
+  "show.set": ShowSetResult;
   "show.start": Show;
+  "show.stats": ShowStatsList;
   "show.stop": Show;
   "snapshot.get": Record<string, unknown>;
   "source.add": SourceStatus;
@@ -2662,6 +2915,7 @@ export interface EventPayloads {
   "governor.shed": ShedNote;
   "show.changed": ShowChanged;
   "show.removed": ShowRemovedEvent;
+  "show.health": ShowHealthEvent;
 }
 
 export type EventName = keyof EventPayloads;
@@ -2815,10 +3069,17 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "scene.undo", summary: "Undo the last change. A drag marked with scene.history.mark undoes as one step.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/undo" } },
   { name: "scene.validate", summary: "Overlaps, items off the canvas, safe area breaches and missing sources: what to fix before saying a scene is done.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/scenes/validate" } },
   { name: "show.add", summary: "Make another show and start it: empty, a copy of a show (without its outputs, so nothing goes out twice), or from a project file.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/shows" } },
+  { name: "show.add_many", summary: "Make many shows in one call, such as every channel of a headend. The whole batch is checked first. With dry_run (the default) nothing is made: the answer says what would be, what its renditions would cost and whether the governor would admit them. Without it, every show that fits is made and the rest are refused with why; a show is made whole or not at all.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/shows/add_many" } },
   { name: "show.list", summary: "Every show on this machine: its name, whether it is running, what is on air, what its outputs send and what its process costs. `current` is the show a client reaches when it names none.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/shows" } },
+  { name: "show.output.add", summary: "Send a show without compositing to another place: an address (SRT, RTMP, UDP, RTP or RIST), or a platform and its key. Left without a rendition it copies the input's bytes; with one it is planned and admitted by the governor. The key is write only.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/shows/{id}/output/add" } },
+  { name: "show.output.remove", summary: "Stop one output of a show without compositing and forget it, key and all.", scope: "admin", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/shows/{id}/output/remove" } },
+  { name: "show.output.set", summary: "Change one output of a show without compositing, naming only what moves: another address, a new key, on or off, copy or a rendition.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/shows/{id}/output" } },
   { name: "show.remove", summary: "Stop a show and remove it with its folder. Refused for the last show and for main, the show the station was started with.", scope: "admin", mutating: true, destructive: true, rest: { method: "DELETE", path: "/api/v1/shows/{id}" } },
+  { name: "show.remove_many", summary: "Stop and remove many shows. Each id that cannot go (main, or one not there) is refused with why, and the rest go.", scope: "admin", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/shows/remove_many" } },
   { name: "show.rename", summary: "Give a show another name. Its id stays.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/shows/{id}/rename" } },
+  { name: "show.set", summary: "Change a show's name, its input, or whether it composites. Turning compositing on starts a show process whose one source is the input and moves the outputs to it; turning it off hands them back to the direct host, when the show has one source and no scenes in use. The answer says how long the outputs were off.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/shows/{id}/set" } },
   { name: "show.start", summary: "Start a stopped or failed show.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/shows/{id}/start" } },
+  { name: "show.stats", summary: "Health, input numbers and each output's numbers for many shows in one read, from what the station already holds, so it is cheap to call every second for two hundred shows. `fields` narrows it to health, input or outputs.", scope: "read", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/shows/stats" } },
   { name: "show.stop", summary: "Stop a show. It keeps its config, and stays stopped when the station starts again, until show.start.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/shows/{id}/stop" } },
   { name: "snapshot.get", summary: "One JPEG: the whole contact sheet, the programme, or one source cut out of the mosaic.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/snapshot/{id}" } },
   { name: "source.add", summary: "Add a source while the mixer runs. Answers with the id it got and the whole source record.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/sources" } },
@@ -2833,9 +3094,9 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "source.restore", summary: "Put back a source that source.remove took away, as it was: same id, address, settings, fader and mute. The mixer remembers the last sixteen it removed, until it restarts.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/sources/{id}/restore" } },
   { name: "source.seek", summary: "Move a seekable source to a position. Answers with where it actually landed.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/sources/{id}/seek" } },
   { name: "source.set", summary: "Change a running source: its name and colour, its params, or where it runs. The name and colour live on the scene document. Moving a source between the core, a sidecar and a node is `place`; the programme keeps its frame rate across the move and the compositor covers the swap.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/sources/{id}/set" } },
-  { name: "task.cancel", summary: "Ask a piece of long running work to stop. Cooperative: the answer says the request landed, not that the work has stopped yet.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/task/cancel" } },
-  { name: "task.get", summary: "How a piece of long running work is getting on, and its answer once it has one.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/task" } },
-  { name: "task.list", summary: "Every background job this core knows about, newest first.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/task/list" } },
+  { name: "task.cancel", summary: "Ask a piece of long running work to stop. Cooperative: the answer says the request landed, not that the work has stopped yet.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/tasks/{id}/cancel" } },
+  { name: "task.get", summary: "How a piece of long running work is getting on, and its answer once it has one.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/tasks/{id}" } },
+  { name: "task.list", summary: "Every background job this core knows about, newest first.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/tasks" } },
   { name: "tool.call", summary: "Call one of a plugin's tools, in MCP's shape. The name is `<plugin>/<tool>`, or the bare tool name when only one plugin has it.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/tool/call" } },
 ] as const;
 
@@ -2880,6 +3141,7 @@ export const EVENT_NAMES: readonly EventName[] = [
   "governor.shed",
   "show.changed",
   "show.removed",
+  "show.health",
 ];
 
 /**
@@ -3585,9 +3847,29 @@ export class GeneratedMethods {
     return this._call("show.add", params as unknown as Record<string, unknown>) as Promise<Show>;
   }
 
+  /** Make many shows in one call, such as every channel of a headend. The whole batch is checked first. With dry_run (the default) nothing is made: the answer says what would be, what its renditions would cost and whether the governor would admit them. Without it, every show that fits is made and the rest are refused with why; a show is made whole or not at all. */
+  showAddMany(params: ShowAddManyRequest): Promise<ShowAddManyResult> {
+    return this._call("show.add_many", params as unknown as Record<string, unknown>) as Promise<ShowAddManyResult>;
+  }
+
   /** Every show on this machine: its name, whether it is running, what is on air, what its outputs send and what its process costs. `current` is the show a client reaches when it names none. */
   showList(): Promise<ShowList> {
     return this._call("show.list", {}) as Promise<ShowList>;
+  }
+
+  /** Send a show without compositing to another place: an address (SRT, RTMP, UDP, RTP or RIST), or a platform and its key. Left without a rendition it copies the input's bytes; with one it is planned and admitted by the governor. The key is write only. */
+  showOutputAdd(params: ShowOutputAddRequest): Promise<Show> {
+    return this._call("show.output.add", params as unknown as Record<string, unknown>) as Promise<Show>;
+  }
+
+  /** Stop one output of a show without compositing and forget it, key and all. */
+  showOutputRemove(params: ShowOutputRemoveRequest): Promise<Show> {
+    return this._call("show.output.remove", params as unknown as Record<string, unknown>) as Promise<Show>;
+  }
+
+  /** Change one output of a show without compositing, naming only what moves: another address, a new key, on or off, copy or a rendition. */
+  showOutputSet(params: ShowOutputSetRequest): Promise<Show> {
+    return this._call("show.output.set", params as unknown as Record<string, unknown>) as Promise<Show>;
   }
 
   /** Stop a show and remove it with its folder. Refused for the last show and for main, the show the station was started with. */
@@ -3595,14 +3877,29 @@ export class GeneratedMethods {
     return this._call("show.remove", params as unknown as Record<string, unknown>) as Promise<ShowRemoved>;
   }
 
+  /** Stop and remove many shows. Each id that cannot go (main, or one not there) is refused with why, and the rest go. */
+  showRemoveMany(params: ShowRemoveManyRequest): Promise<ShowRemoveManyResult> {
+    return this._call("show.remove_many", params as unknown as Record<string, unknown>) as Promise<ShowRemoveManyResult>;
+  }
+
   /** Give a show another name. Its id stays. */
   showRename(params: ShowRenameRequest): Promise<Show> {
     return this._call("show.rename", params as unknown as Record<string, unknown>) as Promise<Show>;
   }
 
+  /** Change a show's name, its input, or whether it composites. Turning compositing on starts a show process whose one source is the input and moves the outputs to it; turning it off hands them back to the direct host, when the show has one source and no scenes in use. The answer says how long the outputs were off. */
+  showSet(params: ShowSetRequest): Promise<ShowSetResult> {
+    return this._call("show.set", params as unknown as Record<string, unknown>) as Promise<ShowSetResult>;
+  }
+
   /** Start a stopped or failed show. */
   showStart(params: IdRequest): Promise<Show> {
     return this._call("show.start", params as unknown as Record<string, unknown>) as Promise<Show>;
+  }
+
+  /** Health, input numbers and each output's numbers for many shows in one read, from what the station already holds, so it is cheap to call every second for two hundred shows. `fields` narrows it to health, input or outputs. */
+  showStats(params: ShowStatsRequest = {}): Promise<ShowStatsList> {
+    return this._call("show.stats", params as unknown as Record<string, unknown>) as Promise<ShowStatsList>;
   }
 
   /** Stop a show. It keeps its config, and stays stopped when the station starts again, until show.start. */

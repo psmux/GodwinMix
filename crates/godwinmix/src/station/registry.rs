@@ -7,25 +7,22 @@
 //! beside its config. The list is `<data dir>/shows.json`, written only once
 //! there is something a bare config cannot say (a second show, a renamed or
 //! stopped first one).
+//!
+//! A show without compositing (wave 4) has no folder and no process: its
+//! record carries its input and its outputs, and the direct host runs it.
+//! A list written before wave 4 has neither field, and every show in it
+//! composites, as it did.
 
+mod output;
+mod record;
+
+pub use output::OutputRecord;
+pub use record::Record;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
 /// The id the station's own config runs under.
 pub const MAIN: &str = "main";
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct Record {
-    pub id: String,
-    pub name: String,
-    /// Where its config is. None for `main`, which is always the config the
-    /// station was started with, wherever that is today.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub config: Option<PathBuf>,
-    /// A person stopped it; the station does not start it.
-    #[serde(default)]
-    pub stopped: bool,
-}
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 struct File {
@@ -59,7 +56,7 @@ impl Registry {
         };
         let mut reg = Registry { data_dir, main_config, records };
         if !reg.records.iter().any(|r| r.id == MAIN) {
-            reg.records.insert(0, Record { id: MAIN.into(), name: "Main".into(), config: None, stopped: false });
+            reg.records.insert(0, Record::new(MAIN, "Main", None));
         }
         Ok(reg)
     }
@@ -115,8 +112,7 @@ impl Registry {
     /// Write the list, unless it says nothing a bare config does not.
     pub fn save(&self) -> anyhow::Result<()> {
         let path = self.data_dir.join("shows.json");
-        let bare = self.records.len() == 1
-            && self.records[0] == Record { id: MAIN.into(), name: "Main".into(), config: None, stopped: false };
+        let bare = self.records.len() == 1 && self.records[0] == Record::new(MAIN, "Main", None);
         if bare && !path.exists() {
             return Ok(());
         }

@@ -140,6 +140,26 @@ class AddSourceRequest(TypedDict, total=False):
 class AgentStateRequest(TypedDict, total=False):
     response_format: ResponseFormat
 
+class Alarm(TypedDict, total=False):
+    """One condition that holds now."""
+
+    detail: str
+    # One sentence for a person: what was measured, and against what.
+    kind: AlarmKind
+    since_ms: int
+    # Unix milliseconds when the condition began. For black, freeze and silence that is when the picture or sound first measured so, not when the alarm's duration ran out.
+
+class AlarmSettings(TypedDict, total=False):
+    """A show's alarms, as a person sets them from the page. Left out fields keep the measuring side's defaults; a duration of 0 switches that check off."""
+
+    black_ms: Optional[int]
+    enabled: Optional[bool]
+    # Whether black, freeze and silence are watched at all. Left out: on for a show without compositing, off for one that composites.
+    freeze_ms: Optional[int]
+    silence_dbfs: Optional[float]
+    # The peak level under which sound counts as quiet.
+    silence_ms: Optional[int]
+
 class ApplyGraphicRequest(TypedDict, total=False):
     """`scene.apply_graphic`."""
 
@@ -240,6 +260,13 @@ class BackendInfo(TypedDict, total=False):
     video_decoder: str
     video_encoder: str
 
+class BackupInput(TypedDict, total=False):
+    """An input's backup: an input with no backup of its own."""
+
+    params: Optional[Dict[str, Any]]
+    program: Optional[int]
+    uri: str
+
 class BindRequest(TypedDict, total=False):
     """`scene.item.bind`."""
 
@@ -250,6 +277,18 @@ class BindRequest(TypedDict, total=False):
     prop: str
     # A geometry path such as `frame.w` or `position.x`.
     scene: str
+
+class BulkPlan(TypedDict, total=False):
+    """What a batch costs, priced by the governor without taking anything."""
+
+    assumed_input: str
+    # The input every rendition was priced against, because an input's shape is known only once it arrives.
+    cost: Cost
+    # Every rendition of the shows that fit, summed. Copies cost nothing.
+    fits: bool
+    # Whether every show of the batch fits.
+    have: Cost
+    # What the machine has free now.
 
 class Bundle(TypedDict, total=False):
     """What an importer is told before it reads the document."""
@@ -939,6 +978,8 @@ class GovernorStatus(TypedDict, total=False):
     egress_kbps: int
     fingerprint: Optional[str]
     # The key the calibration is stored under.
+    ingress_kbps: int
+    # What arrives: every channel stream and every direct show's input, as last counted. Zero on a core with no station.
     shed: List[ShedNote]
 
 class GraphicListing(TypedDict, total=False):
@@ -981,6 +1022,13 @@ class HeaderChange(TypedDict, total=False):
 
     after: Header
     before: Header
+
+class Health(TypedDict, total=False):
+    """A show's health."""
+
+    alarms: List[Alarm]
+    # Every alarm that holds now, oldest first.
+    state: HealthState
 
 class HistoryRequest(TypedDict, total=False):
     """`program.history`."""
@@ -1057,6 +1105,35 @@ class ImportedReport(TypedDict, total=False):
     # Assets that did not come across, with the items that draw them. Empty when everything landed.
     scenes: List[str]
     # The scenes that were added, by the names they ended up with.
+
+class InputSpec(TypedDict, total=False):
+    """What a show without compositing takes in. A show that composites makes its input its one source."""
+
+    backup: Union[BackupInput, None]
+    # Switched to when the input stalls, and back when it returns.
+    params: Optional[Dict[str, Any]]
+    # Per transport: `interface` for multicast, `latency` for SRT, `passphrase`. Passed to the host as given.
+    program: Optional[int]
+    # The MPEG-TS program of a feed that carries several. Left out: the first.
+    uri: str
+    # `udp://@239.1.1.1:5000`, `srt://...`, `rtmp://host/app/key`, `rtsp://...`, `https://.../x.m3u8`, `file:///clip.ts`, `rist://...`, or a channel's stream, `channel:<app>/<stream>`.
+
+class InputStats(TypedDict, total=False):
+    """What the input is doing, as the host last counted it."""
+
+    audio_channels: int
+    audio_codec: Optional[str]
+    cc_errors: int
+    fps: float
+    height: int
+    kbps: int
+    keyframe_ms: Optional[int]
+    # Between the last two keyframes.
+    last_frame_ms: Optional[int]
+    # Since the last frame arrived.
+    packets_lost: int
+    video_codec: Optional[str]
+    width: int
 
 class InstanceRecord(TypedDict, total=False):
     """One running instance and its cost."""
@@ -1429,6 +1506,19 @@ class Ograf(TypedDict, total=False):
     supportsNonRealTime: bool
     supportsRealTime: bool
     version: Optional[str]
+
+class OutputStats(TypedDict, total=False):
+    """What one output is doing."""
+
+    cpu_millicores: int
+    encoder: Optional[str]
+    id: str
+    kbps: int
+    reconnects: int
+    rendition_text: str
+    # `copy`, or what the plan gave it, such as `h264 1280x720`.
+    state: str
+    # waiting, connecting, live, reconnecting, failed, or off.
 
 class OutputStatus(TypedDict, total=False):
     has_key: bool
@@ -2068,26 +2158,62 @@ class ShedNote(TypedDict, total=False):
 class Show(TypedDict, total=False):
     """One show, as `show.list` and `event/show.changed` carry it."""
 
+    alarms: Union[AlarmSettings, None]
+    # The alarms a person set for it, when they set any.
+    compositing: bool
+    # true: scenes, transitions and a programme encode, in a process of its own. false: one input straight to its outputs, in the shared direct host, with no compositor.
     cpu_millicores: int
     # Its process's CPU, in thousandths of one core, measured between two reads of `show.list`. Zero on the first read and while it is stopped.
     error: Optional[str]
     # Why it is not running, when it is not and a person did not ask.
+    health: Health
     id: str
     # A slug: `main`, `second-room`.
+    input: Union[InputSpec, None]
+    # What it takes in. A show that composites makes it its one source.
     memory_mib: int
     # Its process's resident memory, in MiB.
     name: str
     on_air: Optional[str]
     # The scene, or the source, on its programme. None while it shows the slate or is not running.
+    outputs: List[Destination]
+    # The outputs of a show without compositing. A show that composites keeps its outputs inside it, under `output.*` with `?show=<id>`.
     programme_kbps: int
     # What its outputs are sending, summed, in kilobits a second.
     restarts: int
     # How many times the station has started it again after it died.
     state: ShowState
 
-ShowAddRequest = TypedDict("ShowAddRequest", {
+ShowAdd = TypedDict("ShowAdd", {
+    "compositing": Optional[bool],
     "from": Union[ShowFrom, None],
+    "input": Union[InputSpec, None],
     "name": str,
+    "outputs": List[ShowOutputSpec],
+}, total=False)
+
+class ShowAddManyRequest(TypedDict, total=False):
+    """`show.add_many`."""
+
+    dry_run: Optional[bool]
+    # Left out: true. Says what would be made and what it would cost, and makes nothing.
+    shows: List[ShowAdd]
+
+class ShowAddManyResult(TypedDict, total=False):
+    """`show.add_many`'s answer."""
+
+    added: List[str]
+    # The ids made, or that would be made on a dry run.
+    dry_run: bool
+    plan: BulkPlan
+    refused: List[ShowRefused]
+
+ShowAddRequest = TypedDict("ShowAddRequest", {
+    "compositing": Optional[bool],
+    "from": Union[ShowFrom, None],
+    "input": Union[InputSpec, None],
+    "name": str,
+    "outputs": List[ShowOutputSpec],
 }, total=False)
 
 class ShowChanged(TypedDict, total=False):
@@ -2095,12 +2221,93 @@ class ShowChanged(TypedDict, total=False):
 
     show: Show
 
+class ShowHealthEvent(TypedDict, total=False):
+    """`event/show.health`."""
+
+    health: Health
+    id: str
+
 class ShowList(TypedDict, total=False):
     """`show.list`."""
 
     current: str
     # The show a client reaches when it names none: the first one, which is the one the station was started with.
     shows: List[Show]
+
+class ShowOutputAddRequest(TypedDict, total=False):
+    """`show.output.add`."""
+
+    enabled: Optional[bool]
+    id: str
+    # The show. `show` is taken as another name for it.
+    key: Optional[str]
+    # Write only.
+    label: Optional[str]
+    output: Optional[str]
+    # The new output's own id, a slug. Made from the label when left out.
+    platform: Optional[str]
+    rendition: Union[RenditionChoice, None]
+    uri: Optional[str]
+
+class ShowOutputRemoveRequest(TypedDict, total=False):
+    """`show.output.remove`."""
+
+    id: str
+    # The show. `show` is taken as another name for it.
+    output: str
+
+class ShowOutputSetRequest(TypedDict, total=False):
+    """`show.output.set`. Names only what moves."""
+
+    enabled: Optional[bool]
+    id: str
+    # The show. `show` is taken as another name for it.
+    key: Optional[str]
+    # A new key. Left out keeps the one it has.
+    label: Optional[str]
+    output: str
+    # The output's id.
+    rendition: Union[RenditionChoice, None]
+    # Left out keeps what it has; `null` or `{"preset": "copy"}` goes back to a copy.
+    uri: Optional[str]
+
+class ShowOutputSpec(TypedDict, total=False):
+    """An output as it is given to a show without compositing: an address, or a platform and a key."""
+
+    enabled: Optional[bool]
+    # On by default.
+    id: Optional[str]
+    # A slug, unique within the show. Made from the label when left out.
+    key: Optional[str]
+    # A platform's stream key. Write only: no method reads it back.
+    label: Optional[str]
+    platform: Optional[str]
+    # youtube, facebook, twitch, custom or srt. Left out: custom, which takes a whole address in `uri`.
+    rendition: Union[RenditionChoice, None]
+    # Left out: a copy of the input's own bytes, repackaged. Otherwise a rendition request or `{"preset": "youtube-720p30"}`, planned and admitted by the governor.
+    uri: Optional[str]
+    # The whole address: `srt://10.0.0.9:9000`, `rtmp://host/app/key`, `udp://239.2.2.2:5000`. For a platform, its ingest server when it is not the platform's own.
+
+class ShowRefused(TypedDict, total=False):
+    """A show of `show.add_many` that was not made, and why."""
+
+    data: Any
+    index: int
+    # Its place in `shows`, from 0.
+    name: str
+    why: str
+
+class ShowRemoveManyRequest(TypedDict, total=False):
+    """`show.remove_many`."""
+
+    ids: List[str]
+
+class ShowRemoveManyResult(TypedDict, total=False):
+    """`show.remove_many`'s answer."""
+
+    refused: List[ShowRefused]
+    # Ids that were not removed, each with why.
+    removed: List[str]
 
 class ShowRemoved(TypedDict, total=False):
     """`show.remove`."""
@@ -2117,6 +2324,69 @@ class ShowRenameRequest(TypedDict, total=False):
 
     id: str
     name: str
+
+class ShowSetRequest(TypedDict, total=False):
+    """`show.set`. Names only what moves."""
+
+    alarms: Union[AlarmSettings, None]
+    # Alarm settings; the fields named move, the rest stay.
+    compositing: Optional[bool]
+    # true starts a show process whose one source is the input and moves the outputs to it; false goes back to a show without compositing, when it has one source and no scenes in use.
+    id: str
+    input: Union[InputSpec, None]
+    name: Optional[str]
+
+class ShowSetResult(TypedDict, total=False):
+    """`show.set`'s answer: the show, and what a switch of compositing did."""
+
+    alarms: Union[AlarmSettings, None]
+    # The alarms a person set for it, when they set any.
+    compositing: bool
+    # true: scenes, transitions and a programme encode, in a process of its own. false: one input straight to its outputs, in the shared direct host, with no compositor.
+    cpu_millicores: int
+    # Its process's CPU, in thousandths of one core, measured between two reads of `show.list`. Zero on the first read and while it is stopped.
+    error: Optional[str]
+    # Why it is not running, when it is not and a person did not ask.
+    health: Health
+    id: str
+    # A slug: `main`, `second-room`.
+    input: Union[InputSpec, None]
+    # What it takes in. A show that composites makes it its one source.
+    memory_mib: int
+    # Its process's resident memory, in MiB.
+    name: str
+    on_air: Optional[str]
+    # The scene, or the source, on its programme. None while it shows the slate or is not running.
+    outputs: List[Destination]
+    # The outputs of a show without compositing. A show that composites keeps its outputs inside it, under `output.*` with `?show=<id>`.
+    programme_kbps: int
+    # What its outputs are sending, summed, in kilobits a second.
+    restarts: int
+    # How many times the station has started it again after it died.
+    state: ShowState
+    switch: Union[SwitchReport, None]
+
+class ShowStats(TypedDict, total=False):
+    """One show's numbers, as `show.stats` answers them."""
+
+    health: Health
+    id: str
+    input: Union[InputStats, None]
+    # None for a show with no input, or before the host has counted any.
+    outputs: List[OutputStats]
+
+class ShowStatsList(TypedDict, total=False):
+    """`show.stats`'s answer."""
+
+    shows: List[ShowStats]
+
+class ShowStatsRequest(TypedDict, total=False):
+    """`show.stats`."""
+
+    fields: Optional[List[str]]
+    # Of `health`, `input` and `outputs`. Left out: all three.
+    ids: Optional[List[str]]
+    # Left out: every show.
 
 class Snapshot(TypedDict, total=False):
     """`event/snapshot`: the full state, and where in the stream it sits."""
@@ -2236,6 +2506,18 @@ class SubscribeResult(TypedDict, total=False):
     # `ext` keys this build ignored. Empty on a build that knows them all.
     seq: int
     # The sequence number the snapshot that follows is current as of.
+
+class SwitchReport(TypedDict, total=False):
+    """What a switch of compositing did, in `show.set`'s answer."""
+
+    compositing: bool
+    # What the show does now.
+    gap_ms: Optional[int]
+    # From the moment the outputs stopped where they were to the moment every one of them was live again where they went. None when they were not all live within the wait, or there were none.
+    note: str
+    # What a person should know: an output that was still connecting when the answer was sent, and so on.
+    outputs: List[str]
+    # The outputs that moved.
 
 class TakeRecord(TypedDict, total=False):
     """One take, as `program.history` reports it."""
@@ -2504,6 +2786,9 @@ ActionKind = Literal['set-config', 'install-plugin', 'enable-plugin', 'open', 'r
 # `ext.agent`. `true` takes the default thresholds; an object moves them.
 AgentExt = Union[bool, Dict[str, Any]]
 
+# What an alarm is about.
+AlarmKind = Literal['no-input', 'stall', 'black', 'freeze', 'silence', 'cc-errors', 'loss', 'output-failed', 'governor-refused', 'shed']
+
 # The nine alignment keywords, used to place content inside its frame.
 Align = Literal['top-left', 'top-center', 'top-right', 'center-left', 'center', 'center-right', 'bottom-left', 'bottom-center', 'bottom-right']
 
@@ -2540,6 +2825,9 @@ Fit = Literal['none', 'contain', 'cover', 'stretch', 'fit-width', 'fit-height', 
 
 # Content on the wire. The same four shapes as the tree, except that a group names no children: they are records whose parent is the group.
 FlatContent = Dict[str, Any]
+
+# The one word a monitoring wall colours a row by.
+HealthState = Literal['ok', 'warning', 'alarm', 'off']
 
 # A UUID in the hyphenated form. Minted ids are version 7 (time ordered); ids derived from a layout are version 8.
 Id = str
@@ -2733,10 +3021,17 @@ METHODS = (
     {"name": "scene.undo", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/undo"), "summary": 'Undo the last change. A drag marked with scene.history.mark undoes as one step.'},
     {"name": "scene.validate", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/scenes/validate"), "summary": 'Overlaps, items off the canvas, safe area breaches and missing sources: what to fix before saying a scene is done.'},
     {"name": "show.add", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/shows"), "summary": 'Make another show and start it: empty, a copy of a show (without its outputs, so nothing goes out twice), or from a project file.'},
+    {"name": "show.add_many", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/shows/add_many"), "summary": 'Make many shows in one call, such as every channel of a headend. The whole batch is checked first. With dry_run (the default) nothing is made: the answer says what would be, what its renditions would cost and whether the governor would admit them. Without it, every show that fits is made and the rest are refused with why; a show is made whole or not at all.'},
     {"name": "show.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/shows"), "summary": 'Every show on this machine: its name, whether it is running, what is on air, what its outputs send and what its process costs. `current` is the show a client reaches when it names none.'},
+    {"name": "show.output.add", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/shows/{id}/output/add"), "summary": "Send a show without compositing to another place: an address (SRT, RTMP, UDP, RTP or RIST), or a platform and its key. Left without a rendition it copies the input's bytes; with one it is planned and admitted by the governor. The key is write only."},
+    {"name": "show.output.remove", "scope": "admin", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/shows/{id}/output/remove"), "summary": 'Stop one output of a show without compositing and forget it, key and all.'},
+    {"name": "show.output.set", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/shows/{id}/output"), "summary": 'Change one output of a show without compositing, naming only what moves: another address, a new key, on or off, copy or a rendition.'},
     {"name": "show.remove", "scope": "admin", "mutating": True, "destructive": True, "rest": ("DELETE", "/api/v1/shows/{id}"), "summary": 'Stop a show and remove it with its folder. Refused for the last show and for main, the show the station was started with.'},
+    {"name": "show.remove_many", "scope": "admin", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/shows/remove_many"), "summary": 'Stop and remove many shows. Each id that cannot go (main, or one not there) is refused with why, and the rest go.'},
     {"name": "show.rename", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/shows/{id}/rename"), "summary": 'Give a show another name. Its id stays.'},
+    {"name": "show.set", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/shows/{id}/set"), "summary": "Change a show's name, its input, or whether it composites. Turning compositing on starts a show process whose one source is the input and moves the outputs to it; turning it off hands them back to the direct host, when the show has one source and no scenes in use. The answer says how long the outputs were off."},
     {"name": "show.start", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/shows/{id}/start"), "summary": 'Start a stopped or failed show.'},
+    {"name": "show.stats", "scope": "read", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/shows/stats"), "summary": "Health, input numbers and each output's numbers for many shows in one read, from what the station already holds, so it is cheap to call every second for two hundred shows. `fields` narrows it to health, input or outputs."},
     {"name": "show.stop", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/shows/{id}/stop"), "summary": 'Stop a show. It keeps its config, and stays stopped when the station starts again, until show.start.'},
     {"name": "snapshot.get", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/snapshot/{id}"), "summary": 'One JPEG: the whole contact sheet, the programme, or one source cut out of the mosaic.'},
     {"name": "source.add", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/sources"), "summary": 'Add a source while the mixer runs. Answers with the id it got and the whole source record.'},
@@ -2751,9 +3046,9 @@ METHODS = (
     {"name": "source.restore", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/sources/{id}/restore"), "summary": 'Put back a source that source.remove took away, as it was: same id, address, settings, fader and mute. The mixer remembers the last sixteen it removed, until it restarts.'},
     {"name": "source.seek", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/sources/{id}/seek"), "summary": 'Move a seekable source to a position. Answers with where it actually landed.'},
     {"name": "source.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/sources/{id}/set"), "summary": 'Change a running source: its name and colour, its params, or where it runs. The name and colour live on the scene document. Moving a source between the core, a sidecar and a node is `place`; the programme keeps its frame rate across the move and the compositor covers the swap.'},
-    {"name": "task.cancel", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/task/cancel"), "summary": 'Ask a piece of long running work to stop. Cooperative: the answer says the request landed, not that the work has stopped yet.'},
-    {"name": "task.get", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/task"), "summary": 'How a piece of long running work is getting on, and its answer once it has one.'},
-    {"name": "task.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/task/list"), "summary": 'Every background job this core knows about, newest first.'},
+    {"name": "task.cancel", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/tasks/{id}/cancel"), "summary": 'Ask a piece of long running work to stop. Cooperative: the answer says the request landed, not that the work has stopped yet.'},
+    {"name": "task.get", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/tasks/{id}"), "summary": 'How a piece of long running work is getting on, and its answer once it has one.'},
+    {"name": "task.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/tasks"), "summary": 'Every background job this core knows about, newest first.'},
     {"name": "tool.call", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/tool/call"), "summary": "Call one of a plugin's tools, in MCP's shape. The name is `<plugin>/<tool>`, or the bare tool name when only one plugin has it."},
 )
 
@@ -2786,6 +3081,7 @@ EVENT_NAMES = (
     "governor.shed",
     "show.changed",
     "show.removed",
+    "show.health",
 )
 
 EXT_KEYS = {
@@ -4675,14 +4971,36 @@ class GeneratedMethods:
         self,
         name: str,
         *,
+        compositing: Optional[bool] = None,
         from_: Optional[Union[ShowFrom, None]] = None,
+        input: Optional[Union[InputSpec, None]] = None,
+        outputs: Optional[List[ShowOutputSpec]] = None,
     ) -> Show:
         """Make another show and start it: empty, a copy of a show (without its outputs, so nothing goes out twice), or from a project file."""
         params: Dict[str, Any] = {}
         params["name"] = name
+        if compositing is not None:
+            params["compositing"] = compositing
         if from_ is not None:
             params["from"] = from_
+        if input is not None:
+            params["input"] = input
+        if outputs is not None:
+            params["outputs"] = outputs
         return await self._call("show.add", params)
+
+    async def show_add_many(
+        self,
+        shows: List[ShowAdd],
+        *,
+        dry_run: Optional[bool] = None,
+    ) -> ShowAddManyResult:
+        """Make many shows in one call, such as every channel of a headend. The whole batch is checked first. With dry_run (the default) nothing is made: the answer says what would be, what its renditions would cost and whether the governor would admit them. Without it, every show that fits is made and the rest are refused with why; a show is made whole or not at all."""
+        params: Dict[str, Any] = {}
+        params["shows"] = shows
+        if dry_run is not None:
+            params["dry_run"] = dry_run
+        return await self._call("show.add_many", params)
 
     async def show_list(
         self,
@@ -4690,6 +5008,75 @@ class GeneratedMethods:
         """Every show on this machine: its name, whether it is running, what is on air, what its outputs send and what its process costs. `current` is the show a client reaches when it names none."""
         params: Dict[str, Any] = {}
         return await self._call("show.list", params)
+
+    async def show_output_add(
+        self,
+        id: str,
+        *,
+        enabled: Optional[bool] = None,
+        key: Optional[str] = None,
+        label: Optional[str] = None,
+        output: Optional[str] = None,
+        platform: Optional[str] = None,
+        rendition: Optional[Union[RenditionChoice, None]] = None,
+        uri: Optional[str] = None,
+    ) -> Show:
+        """Send a show without compositing to another place: an address (SRT, RTMP, UDP, RTP or RIST), or a platform and its key. Left without a rendition it copies the input's bytes; with one it is planned and admitted by the governor. The key is write only."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        if enabled is not None:
+            params["enabled"] = enabled
+        if key is not None:
+            params["key"] = key
+        if label is not None:
+            params["label"] = label
+        if output is not None:
+            params["output"] = output
+        if platform is not None:
+            params["platform"] = platform
+        if rendition is not None:
+            params["rendition"] = rendition
+        if uri is not None:
+            params["uri"] = uri
+        return await self._call("show.output.add", params)
+
+    async def show_output_remove(
+        self,
+        id: str,
+        output: str,
+    ) -> Show:
+        """Stop one output of a show without compositing and forget it, key and all."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        params["output"] = output
+        return await self._call("show.output.remove", params)
+
+    async def show_output_set(
+        self,
+        id: str,
+        output: str,
+        *,
+        enabled: Optional[bool] = None,
+        key: Optional[str] = None,
+        label: Optional[str] = None,
+        rendition: Optional[Union[RenditionChoice, None]] = None,
+        uri: Optional[str] = None,
+    ) -> Show:
+        """Change one output of a show without compositing, naming only what moves: another address, a new key, on or off, copy or a rendition."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        params["output"] = output
+        if enabled is not None:
+            params["enabled"] = enabled
+        if key is not None:
+            params["key"] = key
+        if label is not None:
+            params["label"] = label
+        if rendition is not None:
+            params["rendition"] = rendition
+        if uri is not None:
+            params["uri"] = uri
+        return await self._call("show.output.set", params)
 
     async def show_remove(
         self,
@@ -4699,6 +5086,15 @@ class GeneratedMethods:
         params: Dict[str, Any] = {}
         params["id"] = id
         return await self._call("show.remove", params)
+
+    async def show_remove_many(
+        self,
+        ids: List[str],
+    ) -> ShowRemoveManyResult:
+        """Stop and remove many shows. Each id that cannot go (main, or one not there) is refused with why, and the rest go."""
+        params: Dict[str, Any] = {}
+        params["ids"] = ids
+        return await self._call("show.remove_many", params)
 
     async def show_rename(
         self,
@@ -4711,6 +5107,28 @@ class GeneratedMethods:
         params["name"] = name
         return await self._call("show.rename", params)
 
+    async def show_set(
+        self,
+        id: str,
+        *,
+        alarms: Optional[Union[AlarmSettings, None]] = None,
+        compositing: Optional[bool] = None,
+        input: Optional[Union[InputSpec, None]] = None,
+        name: Optional[str] = None,
+    ) -> ShowSetResult:
+        """Change a show's name, its input, or whether it composites. Turning compositing on starts a show process whose one source is the input and moves the outputs to it; turning it off hands them back to the direct host, when the show has one source and no scenes in use. The answer says how long the outputs were off."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        if alarms is not None:
+            params["alarms"] = alarms
+        if compositing is not None:
+            params["compositing"] = compositing
+        if input is not None:
+            params["input"] = input
+        if name is not None:
+            params["name"] = name
+        return await self._call("show.set", params)
+
     async def show_start(
         self,
         id: str,
@@ -4719,6 +5137,20 @@ class GeneratedMethods:
         params: Dict[str, Any] = {}
         params["id"] = id
         return await self._call("show.start", params)
+
+    async def show_stats(
+        self,
+        *,
+        fields: Optional[List[str]] = None,
+        ids: Optional[List[str]] = None,
+    ) -> ShowStatsList:
+        """Health, input numbers and each output's numbers for many shows in one read, from what the station already holds, so it is cheap to call every second for two hundred shows. `fields` narrows it to health, input or outputs."""
+        params: Dict[str, Any] = {}
+        if fields is not None:
+            params["fields"] = fields
+        if ids is not None:
+            params["ids"] = ids
+        return await self._call("show.stats", params)
 
     async def show_stop(
         self,

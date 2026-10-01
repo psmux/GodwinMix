@@ -234,6 +234,45 @@ pub struct AgentStateRequest {
     pub response_format: Option<ResponseFormat>,
 }
 
+/// One condition that holds now.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Alarm {
+    /// One sentence for a person: what was measured, and against what.
+    pub detail: String,
+    pub kind: AlarmKind,
+    /// Unix milliseconds when the condition began. For black, freeze and
+    /// silence that is when the picture or sound first measured so, not when
+    /// the alarm's duration ran out.
+    pub since_ms: u64,
+}
+
+/// What an alarm is about.
+pub type AlarmKind = String;
+/// The values api_level 1 knows for [`AlarmKind`].
+pub const ALARM_KIND_VALUES: &[&str] = &["no-input", "stall", "black", "freeze", "silence", "cc-errors", "loss", "output-failed", "governor-refused", "shed"];
+
+/// A show's alarms, as a person sets them from the page. Left out fields
+/// keep the measuring side's defaults; a duration of 0 switches that check
+/// off.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AlarmSettings {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub black_ms: Option<u64>,
+    /// Whether black, freeze and silence are watched at all. Left out: on
+    /// for a show without compositing, off for one that composites.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enabled: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub freeze_ms: Option<u64>,
+    /// The peak level under which sound counts as quiet.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub silence_dbfs: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub silence_ms: Option<u64>,
+}
+
 /// The nine alignment keywords, used to place content inside its frame.
 pub type Align = String;
 /// The values api_level 1 knows for [`Align`].
@@ -402,6 +441,17 @@ pub struct BackendInfo {
     pub video_encoder: String,
 }
 
+/// An input's backup: an input with no backup of its own.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct BackupInput {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub params: Option<BTreeMap<String, Value>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub program: Option<u16>,
+    pub uri: String,
+}
+
 /// `scene.item.bind`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -426,6 +476,21 @@ pub const BLEND_VALUES: &[&str] = &["normal", "add", "screen", "multiply", "ligh
 pub type BridgeTransport = String;
 /// The values api_level 1 knows for [`BridgeTransport`].
 pub const BRIDGE_TRANSPORT_VALUES: &[&str] = &["rtp", "srt", "whip"];
+
+/// What a batch costs, priced by the governor without taking anything.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct BulkPlan {
+    /// The input every rendition was priced against, because an input's
+    /// shape is known only once it arrives.
+    pub assumed_input: String,
+    /// Every rendition of the shows that fit, summed. Copies cost nothing.
+    pub cost: Cost,
+    /// Whether every show of the batch fits.
+    pub fits: bool,
+    /// What the machine has free now.
+    pub have: Cost,
+}
 
 /// What an importer is told before it reads the document.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -1472,6 +1537,10 @@ pub struct GovernorStatus {
     /// The key the calibration is stored under.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fingerprint: Option<String>,
+    /// What arrives: every channel stream and every direct show's input,
+    /// as last counted. Zero on a core with no station.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ingress_kbps: Option<u32>,
     pub shed: Vec<ShedNote>,
 }
 
@@ -1538,6 +1607,20 @@ pub struct HeaderChange {
     pub after: Header,
     pub before: Header,
 }
+
+/// A show's health.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Health {
+    /// Every alarm that holds now, oldest first.
+    pub alarms: Vec<Alarm>,
+    pub state: HealthState,
+}
+
+/// The one word a monitoring wall colours a row by.
+pub type HealthState = String;
+/// The values api_level 1 knows for [`HealthState`].
+pub const HEALTH_STATE_VALUES: &[&str] = &["ok", "warning", "alarm", "off"];
 
 /// `program.history`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -1661,6 +1744,58 @@ pub struct ImportedReport {
     pub relink: Vec<Relink>,
     /// The scenes that were added, by the names they ended up with.
     pub scenes: Vec<String>,
+}
+
+/// What a show without compositing takes in. A show that composites makes
+/// its input its one source.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct InputSpec {
+    /// Switched to when the input stalls, and back when it returns.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub backup: Option<BackupInput>,
+    /// Per transport: `interface` for multicast, `latency` for SRT,
+    /// `passphrase`. Passed to the host as given.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub params: Option<BTreeMap<String, Value>>,
+    /// The MPEG-TS program of a feed that carries several. Left out: the
+    /// first.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub program: Option<u16>,
+    /// `udp://@239.1.1.1:5000`, `srt://...`, `rtmp://host/app/key`,
+    /// `rtsp://...`, `https://.../x.m3u8`, `file:///clip.ts`, `rist://...`,
+    /// or a channel's stream, `channel:<app>/<stream>`.
+    pub uri: String,
+}
+
+/// What the input is doing, as the host last counted it.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct InputStats {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub audio_channels: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub audio_codec: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cc_errors: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fps: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub height: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub kbps: Option<u32>,
+    /// Between the last two keyframes.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub keyframe_ms: Option<u64>,
+    /// Since the last frame arrived.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_frame_ms: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub packets_lost: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub video_codec: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub width: Option<u32>,
 }
 
 /// One running instance and its cost.
@@ -2258,6 +2393,27 @@ pub struct Ograf {
 pub type OutputState = String;
 /// The values api_level 1 knows for [`OutputState`].
 pub const OUTPUT_STATE_VALUES: &[&str] = &["connecting", "live", "reconnecting", "failed"];
+
+/// What one output is doing.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct OutputStats {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cpu_millicores: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub encoder: Option<String>,
+    pub id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub kbps: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reconnects: Option<u32>,
+    /// `copy`, or what the plan gave it, such as `h264 1280x720`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rendition_text: Option<String>,
+    /// waiting, connecting, live, reconnecting, failed, or off.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub state: Option<String>,
+}
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -3241,14 +3397,27 @@ pub struct ShedNote {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Show {
+    /// The alarms a person set for it, when they set any.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub alarms: Option<AlarmSettings>,
+    /// true: scenes, transitions and a programme encode, in a process of
+    /// its own. false: one input straight to its outputs, in the shared
+    /// direct host, with no compositor.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub compositing: Option<bool>,
     /// Its process's CPU, in thousandths of one core, measured between two
     /// reads of `show.list`. Zero on the first read and while it is stopped.
     pub cpu_millicores: u32,
     /// Why it is not running, when it is not and a person did not ask.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub health: Option<Health>,
     /// A slug: `main`, `second-room`.
     pub id: String,
+    /// What it takes in. A show that composites makes it its one source.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub input: Option<InputSpec>,
     /// Its process's resident memory, in MiB.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub memory_mib: Option<u64>,
@@ -3257,6 +3426,9 @@ pub struct Show {
     /// slate or is not running.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub on_air: Option<String>,
+    /// The outputs of a show without compositing. A show that composites
+    /// keeps its outputs inside it, under `output.*` with `?show=<id>`.
+    pub outputs: Vec<Destination>,
     /// What its outputs are sending, summed, in kilobits a second.
     pub programme_kbps: u64,
     /// How many times the station has started it again after it died.
@@ -3265,17 +3437,62 @@ pub struct Show {
     pub state: ShowState,
 }
 
+/// One show of `show.add_many`: what `show.add` takes.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ShowAdd {
+    /// Left out: true, a show with scenes and a programme, as before.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub compositing: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub from: Option<ShowFrom>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub input: Option<InputSpec>,
+    pub name: String,
+    pub outputs: Vec<ShowOutputSpec>,
+}
+
+/// `show.add_many`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ShowAddManyRequest {
+    /// Left out: true. Says what would be made and what it would cost,
+    /// and makes nothing.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dry_run: Option<bool>,
+    pub shows: Vec<ShowAdd>,
+}
+
+/// `show.add_many`'s answer.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ShowAddManyResult {
+    /// The ids made, or that would be made on a dry run.
+    pub added: Vec<String>,
+    pub dry_run: bool,
+    pub plan: BulkPlan,
+    pub refused: Vec<ShowRefused>,
+}
+
 /// `show.add`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ShowAddRequest {
+    /// Left out: true, a show with scenes and a programme, as before.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub compositing: Option<bool>,
     /// `"empty"` (the default), the id of a show to copy, or
     /// `{project: <file>}`. A copy takes the show's settings, sources and
     /// scenes, and leaves its outputs behind so nothing goes out twice.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub from: Option<ShowFrom>,
+    /// What it takes in. Needed by a show without compositing.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub input: Option<InputSpec>,
     /// What a person calls it. The id is made from it.
     pub name: String,
+    /// Where a show without compositing sends its input.
+    pub outputs: Vec<ShowOutputSpec>,
 }
 
 /// `event/show.changed`.
@@ -3288,6 +3505,14 @@ pub struct ShowChanged {
 /// What a new show starts from.
 pub type ShowFrom = Value;
 
+/// `event/show.health`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ShowHealthEvent {
+    pub health: Health,
+    pub id: String,
+}
+
 /// `show.list`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -3296,6 +3521,121 @@ pub struct ShowList {
     /// the one the station was started with.
     pub current: String,
     pub shows: Vec<Show>,
+}
+
+/// `show.output.add`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ShowOutputAddRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enabled: Option<bool>,
+    /// The show. `show` is taken as another name for it.
+    pub id: String,
+    /// Write only.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub key: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+    /// The new output's own id, a slug. Made from the label when left out.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub output: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub platform: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rendition: Option<RenditionChoice>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub uri: Option<String>,
+}
+
+/// `show.output.remove`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ShowOutputRemoveRequest {
+    /// The show. `show` is taken as another name for it.
+    pub id: String,
+    pub output: String,
+}
+
+/// `show.output.set`. Names only what moves.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ShowOutputSetRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enabled: Option<bool>,
+    /// The show. `show` is taken as another name for it.
+    pub id: String,
+    /// A new key. Left out keeps the one it has.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub key: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+    /// The output's id.
+    pub output: String,
+    /// Left out keeps what it has; `null` or `{"preset": "copy"}` goes back
+    /// to a copy.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rendition: Option<RenditionChoice>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub uri: Option<String>,
+}
+
+/// An output as it is given to a show without compositing: an address, or
+/// a platform and a key.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ShowOutputSpec {
+    /// On by default.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enabled: Option<bool>,
+    /// A slug, unique within the show. Made from the label when left out.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    /// A platform's stream key. Write only: no method reads it back.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub key: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+    /// youtube, facebook, twitch, custom or srt. Left out: custom, which
+    /// takes a whole address in `uri`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub platform: Option<String>,
+    /// Left out: a copy of the input's own bytes, repackaged. Otherwise a
+    /// rendition request or `{"preset": "youtube-720p30"}`, planned and
+    /// admitted by the governor.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rendition: Option<RenditionChoice>,
+    /// The whole address: `srt://10.0.0.9:9000`, `rtmp://host/app/key`,
+    /// `udp://239.2.2.2:5000`. For a platform, its ingest server when it is
+    /// not the platform's own.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub uri: Option<String>,
+}
+
+/// A show of `show.add_many` that was not made, and why.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ShowRefused {
+    pub data: Value,
+    /// Its place in `shows`, from 0.
+    pub index: i64,
+    pub name: String,
+    pub why: String,
+}
+
+/// `show.remove_many`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ShowRemoveManyRequest {
+    pub ids: Vec<String>,
+}
+
+/// `show.remove_many`'s answer.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ShowRemoveManyResult {
+    /// Ids that were not removed, each with why.
+    pub refused: Vec<ShowRefused>,
+    pub removed: Vec<String>,
 }
 
 /// `show.remove`.
@@ -3320,10 +3660,106 @@ pub struct ShowRenameRequest {
     pub name: String,
 }
 
+/// `show.set`. Names only what moves.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ShowSetRequest {
+    /// Alarm settings; the fields named move, the rest stay.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub alarms: Option<AlarmSettings>,
+    /// true starts a show process whose one source is the input and moves
+    /// the outputs to it; false goes back to a show without compositing,
+    /// when it has one source and no scenes in use.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub compositing: Option<bool>,
+    pub id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub input: Option<InputSpec>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+}
+
+/// `show.set`'s answer: the show, and what a switch of compositing did.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ShowSetResult {
+    /// The alarms a person set for it, when they set any.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub alarms: Option<AlarmSettings>,
+    /// true: scenes, transitions and a programme encode, in a process of
+    /// its own. false: one input straight to its outputs, in the shared
+    /// direct host, with no compositor.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub compositing: Option<bool>,
+    /// Its process's CPU, in thousandths of one core, measured between two
+    /// reads of `show.list`. Zero on the first read and while it is stopped.
+    pub cpu_millicores: u32,
+    /// Why it is not running, when it is not and a person did not ask.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub health: Option<Health>,
+    /// A slug: `main`, `second-room`.
+    pub id: String,
+    /// What it takes in. A show that composites makes it its one source.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub input: Option<InputSpec>,
+    /// Its process's resident memory, in MiB.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub memory_mib: Option<u64>,
+    pub name: String,
+    /// The scene, or the source, on its programme. None while it shows the
+    /// slate or is not running.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub on_air: Option<String>,
+    /// The outputs of a show without compositing. A show that composites
+    /// keeps its outputs inside it, under `output.*` with `?show=<id>`.
+    pub outputs: Vec<Destination>,
+    /// What its outputs are sending, summed, in kilobits a second.
+    pub programme_kbps: u64,
+    /// How many times the station has started it again after it died.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub restarts: Option<u32>,
+    pub state: ShowState,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub switch: Option<SwitchReport>,
+}
+
 /// Where a show is in its life.
 pub type ShowState = String;
 /// The values api_level 1 knows for [`ShowState`].
 pub const SHOW_STATE_VALUES: &[&str] = &["starting", "running", "stopped", "failed"];
+
+/// One show's numbers, as `show.stats` answers them.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ShowStats {
+    pub health: Health,
+    pub id: String,
+    /// None for a show with no input, or before the host has counted any.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub input: Option<InputStats>,
+    pub outputs: Vec<OutputStats>,
+}
+
+/// `show.stats`'s answer.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ShowStatsList {
+    pub shows: Vec<ShowStats>,
+}
+
+/// `show.stats`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ShowStatsRequest {
+    /// Of `health`, `input` and `outputs`. Left out: all three.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fields: Option<Vec<String>>,
+    /// Left out: every show.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ids: Option<Vec<String>>,
+}
 
 /// `event/snapshot`: the full state, and where in the stream it sits.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -3531,6 +3967,25 @@ pub struct SubscribeResult {
     pub ignored_ext: Vec<String>,
     /// The sequence number the snapshot that follows is current as of.
     pub seq: u64,
+}
+
+/// What a switch of compositing did, in `show.set`'s answer.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SwitchReport {
+    /// What the show does now.
+    pub compositing: bool,
+    /// From the moment the outputs stopped where they were to the moment
+    /// every one of them was live again where they went. None when they
+    /// were not all live within the wait, or there were none.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gap_ms: Option<u64>,
+    /// What a person should know: an output that was still connecting when
+    /// the answer was sent, and so on.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+    /// The outputs that moved.
+    pub outputs: Vec<String>,
 }
 
 /// One take, as `program.history` reports it.
@@ -3987,7 +4442,7 @@ pub struct MethodInfo {
     pub rest: Option<(&'static str, &'static str)>,
 }
 
-pub const METHODS: [MethodInfo; 160] = [
+pub const METHODS: [MethodInfo; 167] = [
     MethodInfo { name: "adbreak.end", summary: "Cut a running ad short, or disarm one that is scheduled.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/end")) },
     MethodInfo { name: "adbreak.start", summary: "Interrupt the programme with a clip, then rejoin live when it ends.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/start")) },
     MethodInfo { name: "agent.state", summary: "The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/agent/state")) },
@@ -4126,10 +4581,17 @@ pub const METHODS: [MethodInfo; 160] = [
     MethodInfo { name: "scene.undo", summary: "Undo the last change. A drag marked with scene.history.mark undoes as one step.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/undo")) },
     MethodInfo { name: "scene.validate", summary: "Overlaps, items off the canvas, safe area breaches and missing sources: what to fix before saying a scene is done.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/scenes/validate")) },
     MethodInfo { name: "show.add", summary: "Make another show and start it: empty, a copy of a show (without its outputs, so nothing goes out twice), or from a project file.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/shows")) },
+    MethodInfo { name: "show.add_many", summary: "Make many shows in one call, such as every channel of a headend. The whole batch is checked first. With dry_run (the default) nothing is made: the answer says what would be, what its renditions would cost and whether the governor would admit them. Without it, every show that fits is made and the rest are refused with why; a show is made whole or not at all.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/shows/add_many")) },
     MethodInfo { name: "show.list", summary: "Every show on this machine: its name, whether it is running, what is on air, what its outputs send and what its process costs. `current` is the show a client reaches when it names none.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/shows")) },
+    MethodInfo { name: "show.output.add", summary: "Send a show without compositing to another place: an address (SRT, RTMP, UDP, RTP or RIST), or a platform and its key. Left without a rendition it copies the input's bytes; with one it is planned and admitted by the governor. The key is write only.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/shows/{id}/output/add")) },
+    MethodInfo { name: "show.output.remove", summary: "Stop one output of a show without compositing and forget it, key and all.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/shows/{id}/output/remove")) },
+    MethodInfo { name: "show.output.set", summary: "Change one output of a show without compositing, naming only what moves: another address, a new key, on or off, copy or a rendition.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/shows/{id}/output")) },
     MethodInfo { name: "show.remove", summary: "Stop a show and remove it with its folder. Refused for the last show and for main, the show the station was started with.", scope: "admin", mutating: true, destructive: true, rest: Some(("DELETE", "/api/v1/shows/{id}")) },
+    MethodInfo { name: "show.remove_many", summary: "Stop and remove many shows. Each id that cannot go (main, or one not there) is refused with why, and the rest go.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/shows/remove_many")) },
     MethodInfo { name: "show.rename", summary: "Give a show another name. Its id stays.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/shows/{id}/rename")) },
+    MethodInfo { name: "show.set", summary: "Change a show's name, its input, or whether it composites. Turning compositing on starts a show process whose one source is the input and moves the outputs to it; turning it off hands them back to the direct host, when the show has one source and no scenes in use. The answer says how long the outputs were off.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/shows/{id}/set")) },
     MethodInfo { name: "show.start", summary: "Start a stopped or failed show.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/shows/{id}/start")) },
+    MethodInfo { name: "show.stats", summary: "Health, input numbers and each output's numbers for many shows in one read, from what the station already holds, so it is cheap to call every second for two hundred shows. `fields` narrows it to health, input or outputs.", scope: "read", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/shows/stats")) },
     MethodInfo { name: "show.stop", summary: "Stop a show. It keeps its config, and stays stopped when the station starts again, until show.start.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/shows/{id}/stop")) },
     MethodInfo { name: "snapshot.get", summary: "One JPEG: the whole contact sheet, the programme, or one source cut out of the mosaic.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/snapshot/{id}")) },
     MethodInfo { name: "source.add", summary: "Add a source while the mixer runs. Answers with the id it got and the whole source record.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/sources")) },
@@ -4144,13 +4606,13 @@ pub const METHODS: [MethodInfo; 160] = [
     MethodInfo { name: "source.restore", summary: "Put back a source that source.remove took away, as it was: same id, address, settings, fader and mute. The mixer remembers the last sixteen it removed, until it restarts.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/sources/{id}/restore")) },
     MethodInfo { name: "source.seek", summary: "Move a seekable source to a position. Answers with where it actually landed.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/sources/{id}/seek")) },
     MethodInfo { name: "source.set", summary: "Change a running source: its name and colour, its params, or where it runs. The name and colour live on the scene document. Moving a source between the core, a sidecar and a node is `place`; the programme keeps its frame rate across the move and the compositor covers the swap.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/sources/{id}/set")) },
-    MethodInfo { name: "task.cancel", summary: "Ask a piece of long running work to stop. Cooperative: the answer says the request landed, not that the work has stopped yet.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/task/cancel")) },
-    MethodInfo { name: "task.get", summary: "How a piece of long running work is getting on, and its answer once it has one.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/task")) },
-    MethodInfo { name: "task.list", summary: "Every background job this core knows about, newest first.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/task/list")) },
+    MethodInfo { name: "task.cancel", summary: "Ask a piece of long running work to stop. Cooperative: the answer says the request landed, not that the work has stopped yet.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/tasks/{id}/cancel")) },
+    MethodInfo { name: "task.get", summary: "How a piece of long running work is getting on, and its answer once it has one.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/tasks/{id}")) },
+    MethodInfo { name: "task.list", summary: "Every background job this core knows about, newest first.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/tasks")) },
     MethodInfo { name: "tool.call", summary: "Call one of a plugin's tools, in MCP's shape. The name is `<plugin>/<tool>`, or the bare tool name when only one plugin has it.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/tool/call")) },
 ];
 
-pub const EVENT_NAMES: [&str; 28] = [
+pub const EVENT_NAMES: [&str; 29] = [
     "snapshot",
     "program.took",
     "scene.patch",
@@ -4179,6 +4641,7 @@ pub const EVENT_NAMES: [&str; 28] = [
     "governor.shed",
     "show.changed",
     "show.removed",
+    "show.health",
 ];
 
 pub const EXT_KEYS: [&str; 8] = [
@@ -4254,6 +4717,8 @@ pub enum Event {
     ShowChanged(ShowChanged),
     /// A show was removed. Its process was stopped first.
     ShowRemoved(ShowRemovedEvent),
+    /// A show's health changed state, or an alarm began or ended. Never sent for a number alone: read those with show.stats.
+    ShowHealth(ShowHealthEvent),
     /// An event name this api_level does not know, with its params as they came.
     Other { name: String, params: Value },
 }
@@ -4368,6 +4833,10 @@ impl Event {
                 Ok(payload) => Event::ShowRemoved(payload),
                 Err(_) => Event::Other { name: pattern.to_string(), params },
             },
+            "show.health" => match serde_json::from_value(params.clone()) {
+                Ok(payload) => Event::ShowHealth(payload),
+                Err(_) => Event::Other { name: pattern.to_string(), params },
+            },
             _ => Event::Other { name: pattern.to_string(), params },
         }
     }
@@ -4403,6 +4872,7 @@ impl Event {
             Event::GovernorShed(_) => "governor.shed",
             Event::ShowChanged(_) => "show.changed",
             Event::ShowRemoved(_) => "show.removed",
+            Event::ShowHealth(_) => "show.health",
             Event::Other { name, .. } => name,
         }
     }
@@ -5101,9 +5571,29 @@ impl Client {
         self.call("show.add", params).await
     }
 
+    /// Make many shows in one call, such as every channel of a headend. The whole batch is checked first. With dry_run (the default) nothing is made: the answer says what would be, what its renditions would cost and whether the governor would admit them. Without it, every show that fits is made and the rest are refused with why; a show is made whole or not at all.
+    pub async fn show_add_many(&self, params: &ShowAddManyRequest) -> Result<ShowAddManyResult> {
+        self.call("show.add_many", params).await
+    }
+
     /// Every show on this machine: its name, whether it is running, what is on air, what its outputs send and what its process costs. `current` is the show a client reaches when it names none.
     pub async fn show_list(&self) -> Result<ShowList> {
         self.call("show.list", &serde_json::json!({})).await
+    }
+
+    /// Send a show without compositing to another place: an address (SRT, RTMP, UDP, RTP or RIST), or a platform and its key. Left without a rendition it copies the input's bytes; with one it is planned and admitted by the governor. The key is write only.
+    pub async fn show_output_add(&self, params: &ShowOutputAddRequest) -> Result<Show> {
+        self.call("show.output.add", params).await
+    }
+
+    /// Stop one output of a show without compositing and forget it, key and all.
+    pub async fn show_output_remove(&self, params: &ShowOutputRemoveRequest) -> Result<Show> {
+        self.call("show.output.remove", params).await
+    }
+
+    /// Change one output of a show without compositing, naming only what moves: another address, a new key, on or off, copy or a rendition.
+    pub async fn show_output_set(&self, params: &ShowOutputSetRequest) -> Result<Show> {
+        self.call("show.output.set", params).await
     }
 
     /// Stop a show and remove it with its folder. Refused for the last show and for main, the show the station was started with.
@@ -5111,14 +5601,29 @@ impl Client {
         self.call("show.remove", params).await
     }
 
+    /// Stop and remove many shows. Each id that cannot go (main, or one not there) is refused with why, and the rest go.
+    pub async fn show_remove_many(&self, params: &ShowRemoveManyRequest) -> Result<ShowRemoveManyResult> {
+        self.call("show.remove_many", params).await
+    }
+
     /// Give a show another name. Its id stays.
     pub async fn show_rename(&self, params: &ShowRenameRequest) -> Result<Show> {
         self.call("show.rename", params).await
     }
 
+    /// Change a show's name, its input, or whether it composites. Turning compositing on starts a show process whose one source is the input and moves the outputs to it; turning it off hands them back to the direct host, when the show has one source and no scenes in use. The answer says how long the outputs were off.
+    pub async fn show_set(&self, params: &ShowSetRequest) -> Result<ShowSetResult> {
+        self.call("show.set", params).await
+    }
+
     /// Start a stopped or failed show.
     pub async fn show_start(&self, params: &IdRequest) -> Result<Show> {
         self.call("show.start", params).await
+    }
+
+    /// Health, input numbers and each output's numbers for many shows in one read, from what the station already holds, so it is cheap to call every second for two hundred shows. `fields` narrows it to health, input or outputs.
+    pub async fn show_stats(&self, params: &ShowStatsRequest) -> Result<ShowStatsList> {
+        self.call("show.stats", params).await
     }
 
     /// Stop a show. It keeps its config, and stays stopped when the station starts again, until show.start.

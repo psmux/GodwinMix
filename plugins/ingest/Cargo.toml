@@ -15,6 +15,9 @@ path = "src/main.rs"
 [dependencies]
 godwinmix-sdk = { path = "../../crates/godwinmix-sdk" }
 gmx-netkit = { path = "../netkit" }
+# The udp plugin's TS parsing, program choice and loss counting, for a direct
+# show's multicast, SRT and RIST inputs (src/direct/input/). Its library half.
+gmx-udp = { path = "../udp" }
 
 gstreamer = { workspace = true }
 gstreamer-app = { workspace = true }
@@ -55,6 +58,12 @@ libloading = "0.8"
 gstreamer-webrtc = { version = "0.24", optional = true }
 gstreamer-sdp = { version = "0.24", optional = true }
 
+# getifaddrs and setsockopt, for the interface a UDP multicast output leaves
+# by and a send buffer that holds a keyframe (src/restream/iface.rs). Already
+# in the tree under the core and the udp plugin.
+[target.'cfg(unix)'.dependencies]
+libc = { workspace = true }
+
 [features]
 default = ["webrtc"]
 webrtc = ["dep:gstreamer-webrtc", "dep:gstreamer-sdp"]
@@ -63,3 +72,6 @@ webrtc = ["dep:gstreamer-webrtc", "dep:gstreamer-sdp"]
 # A self signed certificate for the RTMPS test; already in the tree under the
 # core's node certificate authority.
 rcgen = { workspace = true }
+# A camera for the direct show's RTSP input test (src/direct/input/tests/),
+# already built for plugins/rtsp, so nothing new is compiled.
+gstreamer-rtsp-server = "0.24"

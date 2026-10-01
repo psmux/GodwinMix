@@ -65,6 +65,34 @@ has switched on. The hub carries what FLV carries.
 | WHIP, on the control port | the control port, and UDP for media | H.264 only (the answer offers nothing else) | Opus, made AAC | `plugins/ingest/src/whip_in.rs` |
 | RTMP, one publisher on its own port | `ingest/rtmp` | H.264 | AAC | `plugins/ingest/src/source_tests.rs` |
 
+### Into a direct show, with no compositor (plugin `ingest`)
+
+A show with compositing off takes one input and copies it to its outputs.
+Nothing is decoded: each input is demuxed and parsed into the hub's tags,
+which carry AC-3, E-AC-3 and MPEG layer II as enhanced RTMP v2 audio bodies
+besides what classic FLV carries. One video and one audio stream are taken
+from a feed. `docs/reference/direct-inputs.md` has the params and the
+numbers each one reports. Every input hands its streams to the same
+parsers, so the codec columns say what those parsers take; the Tested column
+says what each transport was tested with, and where it does not name a
+codec, the test sent H.264 and AAC.
+
+| Transport | Container | Video | Audio | How | Tested |
+|---|---|---|---|---|---|
+| UDP, unicast or multicast on a named interface, source specific where the OS allows, one program of a multiplex chosen by number, programs named from the SDT | MPEG-TS | H.264, HEVC copy | AAC, AC-3, E-AC-3, MP2, MP3 copy | `direct/input/ts_in.rs`, the udp plugin's probe counting continuity errors | `direct/input/tests/ts.rs`: multicast on `lo0`, two programs with names, 2% of datagrams dropped and counted; ffprobe decodes what came out |
+| RTP wrapped TS (SMPTE 2022-2) | MPEG-TS | as UDP | as UDP | `ts_in.rs`, RTP gaps counted | `tests/ts.rs`: HEVC and 5.1 AC-3 from ffmpeg, both decoded back by ffprobe |
+| SRT caller and listener | MPEG-TS | as UDP | as UDP | `ts_in.rs`, SRT's own losses read from `srtsrc` | `tests/ts.rs`: a caller dialling the input, and the input dialling a listener |
+| RIST (Simple Profile), listening | RTP MPEG-TS | as UDP | as UDP | `direct/input/rist.rs` | `tests/ts.rs` against `ristsink` |
+| RTSP pull over TCP or UDP | RTP | H.264, HEVC | AAC, AC-3, MP2 | `direct/input/rtsp.rs`, RTP losses read from the session | `tests/pull.rs` against a `gst-rtsp-server` camera, over TCP and UDP |
+| HLS and DASH pull, paced to the clock | TS or fMP4 | H.264, HEVC | AAC, AC-3 | `direct/input/pull.rs` | `tests/pull.rs` against ffmpeg's HLS and DASH served over HTTP |
+| RTMP, RTMPS pull from another server | FLV | H.264 | AAC, MP3 | `pull.rs` | `tests/pull.rs` against ffmpeg as the server (`-listen 1`) |
+| A file, looped at its own pace | TS, MP4 | H.264, HEVC | AAC, AC-3, MP2 | `pull.rs` | `tests/files.rs`: a 2 s clip played for 5 s, time running on across the loop |
+| A channel's stream (`channel:<app>/<stream>`) | hub tags | as the channel | as the channel | `direct/input/channel.rs` | `tests/files.rs`, across two publishers |
+
+E-AC-3 is read and framed the same way as AC-3, but only its header parsing
+is tested; no test sends an E-AC-3 stream through an input. MPEG-2 video
+goes nowhere: no output of a direct show could carry it.
+
 ## Ways out
 
 ### From the programme (or a rendition of it)
@@ -92,12 +120,20 @@ has switched on. The hub carries what FLV carries.
 | `GET /pcm/{target}`, `/opus/{target}` | WebSocket audio | `crates/godwinmix/tests/preview.rs` |
 | local preview socket | raw frames over `unixfd` | `preview/local.rs` |
 
-### From a channel, with no show at all (plugin `ingest`)
+### From a channel or a direct show, with no compositor (plugin `ingest`)
+
+A channel destination and a direct show's output take the same addresses.
+Everything but RTMP is MPEG-TS from the plugin's own muxer, `tsmux/`
+(`docs/reference/direct-shows.md` has the stream types).
 
 | Transport | Video | Audio | How | Tested |
 |---|---|---|---|---|
-| RTMP, RTMPS | copy, whatever came in (enhanced RTMP bytes included) | copy | `restream/rtmp_out.rs` | `plugins/ingest/src/restream/tests.rs` |
-| SRT | H.264 or HEVC copy, the parser picked by the stream's caps; AV1 not yet (flvdemux does not read it) | AAC copy | `restream/srt_out.rs`, `restream/ts_video.rs` | `plugins/ingest/src/restream/ts_video.rs` decodes HEVC out of the MPEG-TS |
+| RTMP, RTMPS | copy, whatever came in (enhanced RTMP bytes included) | AAC copy; AC-3, E-AC-3 and MPEG audio are not sent, the picture goes alone | `restream/rtmp_out.rs` | `plugins/ingest/src/restream/tests.rs` |
+| SRT, caller or listener | H.264 or HEVC copy; AV1 not yet (MPEG-TS has no mapping the muxer writes) | AAC, AC-3, E-AC-3, MP2, MP3 copy | `restream/srt_out.rs` over `tsmux/` | `direct/tests_carriage.rs`: an `srtsrc` listener's recording decodes |
+| UDP, unicast or multicast, `ttl` and `interface` | H.264 or HEVC copy | as SRT | `restream/udp_out.rs` over `tsmux/` | `direct/tests.rs`: decoded from the socket; 50 multicast outputs measured in `docs/explanation/direct-host.md` |
+| RTP, payload type 33 | as UDP | as SRT | `restream/udp_out.rs` | `direct/tests_carriage.rs`: sequence numbers unbroken, the payload decodes |
+| RIST (Simple Profile), sending | as UDP | as SRT | `restream/rist_out.rs`, `ristsink` | `direct/tests_carriage.rs` against `ristsrc` |
+| A file, MPEG-TS | as UDP | as SRT | `restream/file_out.rs` | `direct/tests.rs`: a 3 s recording decodes; `tsmux/tests.rs`: AC-3 and MP2 decode |
 | SRT to a player that calls in (`m=request`), on the channel's own SRT port | H.264 or HEVC copy | AAC copy | `srt/play.rs` | `plugins/ingest/src/srt/tests.rs`: `srtsrc` on the publisher's port decodes the stream |
 | RTMP or SRT with a rendition | H.264 or HEVC in (AV1 in is decoded but its size is not read, so it is not planned yet); H.264, HEVC or AV1 out, HEVC and AV1 as enhanced RTMP | AAC | `transcode/` | `plugins/ingest/src/transcode/tests.rs` and `tests_hevc.rs`: HEVC to H.264 and H.264 to HEVC with real encoders |
 

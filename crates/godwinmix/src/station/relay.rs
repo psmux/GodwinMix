@@ -51,6 +51,9 @@ impl Station {
         if let Some(addr) = *rx.borrow() {
             return Ok(addr);
         }
+        if self.is_direct(id) {
+            return Err(direct(id));
+        }
         if matches!(state, ShowState::Stopped | ShowState::Failed) {
             return Err(not_running(id, state, self.procs.lock().get(id).and_then(|p| p.error.clone())));
         }
@@ -75,6 +78,16 @@ fn not_running(id: &str, state: ShowState, error: Option<String>) -> RpcError {
         .with("show", id)
         .with("state", serde_json::to_value(state).unwrap_or_default())
         .with_action(action)
+}
+
+fn direct(id: &str) -> RpcError {
+    RpcError::not_in_state(format!(
+        "show {id} runs without compositing, so it has no scenes, sources or programme to ask. \
+         Its outputs are show.output.add, show.output.set and show.output.remove; turn compositing \
+         on with show.set {{id: \"{id}\", compositing: true}} to mix it."
+    ))
+    .with("show", id)
+    .with("compositing", false)
 }
 
 fn starting(id: &str) -> RpcError {

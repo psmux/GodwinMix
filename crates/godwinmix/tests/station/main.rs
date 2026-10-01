@@ -3,10 +3,16 @@
 //! each, and a show killed while another runs, with the governor's book
 //! across the two processes. See `docs/reference/shows.md`.
 
+mod direct;
 #[cfg(unix)]
 mod isolation;
+mod many;
+#[cfg(unix)]
+mod orphans;
 mod project;
 mod support;
+mod switch;
+mod wall;
 
 use serde_json::json;
 use std::time::{Duration, Instant};
