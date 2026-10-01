@@ -6,7 +6,7 @@ import { el } from "../../shell/dom.js";
 import { FIELDS } from "./bulk-parse.js";
 
 const HEAD = { name: "Name", input: "Input", program: "Program", output: "Output", format: "Format" };
-const HINT = { name: "News", input: "udp://@239.1.1.1:5000", program: "1", output: "udp://10.0.0.50:6000", format: "copy" };
+const HINT = { name: "News", input: "udp://@239.1.1.1:5000", program: "first", output: "udp://10.0.0.50:6000", format: "copy" };
 
 /**
  * @param {Array<object>} rows edited in place

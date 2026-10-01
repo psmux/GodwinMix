@@ -4,6 +4,7 @@
 // show.output.*, sent when its Save is pressed.
 
 import { el } from "../../shell/dom.js";
+import { sheet } from "./sheet.js";
 import { modal } from "../../shell/modal.js";
 import { errorToast, toast } from "../../shell/toast.js";
 import { outputsSection } from "./detail-outputs.js";
@@ -12,17 +13,13 @@ import { ALARMS, age, format, healthOf, kbps, mixed, transport } from "./model.j
 const MIX_ON = "Mixed: this show runs as a mixer of its own, with scenes, transitions and one programme encode that every output takes.";
 const MIX_OFF = "Direct: the input goes straight to the outputs with no mixer and no decode, unless an output asks for a new format.";
 
-function sheet() {
-  if (document.getElementById("gmx-wall-css")) return;
-  document.head.append(el("link#gmx-wall-css", { rel: "stylesheet", href: new URL("./wall.css", import.meta.url).href }));
-}
-
 const field = (label, input, hint) => el("label.wl-dfield", {}, [el("span", { text: label }), input, hint ? el("small.wl-sub", { text: hint }) : null]);
 const text = (value, placeholder, label) => el("input", { type: "text", value: value || "", placeholder, "aria-label": label, spellcheck: "false" });
 const num = (value, label, step = 1) => el("input.wl-dnum", { type: "number", value: String(value ?? ""), step: String(step), "aria-label": label });
 
 export function showDetail(client, show, opts = {}) {
-  sheet();
+  sheet("wall");
+  sheet("dialogs");
   let current = show;
   let stats = (opts.data && opts.data.stats.get(show.id)) || null;
   const send = async (patch, what, said) => {

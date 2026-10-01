@@ -4,18 +4,14 @@
 // Add; a row the station refuses says why under itself.
 
 import { el } from "../../shell/dom.js";
+import { sheet } from "./sheet.js";
 import { modal } from "../../shell/modal.js";
 import { errorToast, toast } from "../../shell/toast.js";
 import { TEMPLATE, parse, toShow } from "./bulk-parse.js";
 import { editTable, planBox } from "./bulk-table.js";
 
-function sheet() {
-  if (document.getElementById("gmx-wall-css")) return;
-  document.head.append(el("link#gmx-wall-css", { rel: "stylesheet", href: new URL("./wall.css", import.meta.url).href }));
-}
-
 export function bulkAdd(client, opts = {}) {
-  sheet();
+  sheet("dialogs");
   const rows = [];
   const s = { answer: null, busy: false, table: null, formats: [] };
   const text = el("textarea.wl-paste", { rows: 6, spellcheck: "false", "aria-label": "Feeds, one per line or as CSV", placeholder: "udp://@239.1.1.1:5000\nudp://@239.1.1.2:5000\n\nor CSV: name,input,program,output,format" });
@@ -35,7 +31,7 @@ export function bulkAdd(client, opts = {}) {
       file,
     ]),
   ]);
-  const body = el("div.wl-bulk", {}, [intro, tableSlot, planSlot]);
+  const body = el("div.wl-bulk", {}, [intro, planSlot, tableSlot]);
   const dlg = modal({ title: "Add shows", body, wide: true, footer: [count, el("span.grow"), checkB, addB] });
 
   const changed = () => {
@@ -92,6 +88,8 @@ export function bulkAdd(client, opts = {}) {
     for (const r of answer.refused || []) if (rows[r.index]) rows[r.index].why = r.why;
     s.table.draw();
     planSlot.replaceChildren(planBox(answer, rows.length));
+    // On a phone the answer is below the table; bring it up where it can be read.
+    if (planSlot.scrollIntoView) planSlot.scrollIntoView({ block: "nearest" });
     const n = (answer.added || []).length;
     checkB.disabled = false;
     addB.disabled = !n;
