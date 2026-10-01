@@ -564,11 +564,39 @@ pub struct ControlConfig {
     /// accepted for one release and warns. See `Config::token`.
     #[serde(default)]
     pub token: Option<String>,
+    /// HTTPS on the same port as HTTP. See `[control.tls]`.
+    #[serde(default)]
+    pub tls: ControlTls,
 }
 
 impl Default for ControlConfig {
     fn default() -> Self {
-        Self { bind: "0.0.0.0:8080".into(), ui_dir: None, plugins_dir: None, token: None }
+        Self { bind: "0.0.0.0:8080".into(), ui_dir: None, plugins_dir: None, token: None, tls: ControlTls::default() }
+    }
+}
+
+/// `[control.tls]`: the control port answers HTTPS as well as HTTP.
+///
+/// A browser only lets a page use the camera and microphone over https or at
+/// localhost, so an operator on another machine needs this. Plain HTTP keeps
+/// working on the same port either way.
+#[derive(Debug, Clone, Deserialize, Serialize, schemars::JsonSchema)]
+#[serde(default)]
+pub struct ControlTls {
+    /// Answer HTTPS on the control port. With no `cert` and `key` the mixer
+    /// makes a self signed certificate for this machine on first start, and a
+    /// browser asks once whether to trust it.
+    pub enabled: bool,
+    /// A PEM certificate file to use instead of the one made here: the full
+    /// chain, server certificate first. Needs `key` as well.
+    pub cert: Option<String>,
+    /// The PEM private key that goes with `cert`.
+    pub key: Option<String>,
+}
+
+impl Default for ControlTls {
+    fn default() -> Self {
+        Self { enabled: true, cert: None, key: None }
     }
 }
 

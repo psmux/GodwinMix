@@ -1539,14 +1539,19 @@ fn spawn_operator_watchdog(app: AppState) {
     });
 }
 
-pub async fn serve(bind: &str, state: AppState) -> Result<()> {
+/// Bind and serve. With `tls`, the same port answers HTTPS as well as HTTP
+/// (see `crate::tls`).
+pub async fn serve(bind: &str, state: AppState, tls: Option<crate::tls::Serving>) -> Result<()> {
     let listener = tokio::net::TcpListener::bind(bind).await?;
-    info!(%bind, "control server listening");
+    info!(%bind, https = tls.is_some(), "control server listening");
     // One line for a person, whatever the log format: the JSON record above
     // is for a log collector, and someone who just typed `godwinmix` wants
     // the address to open.
     eprintln!("GodwinMix is running. Open {} in a browser.", page_address(bind));
-    serve_on(listener, state).await
+    if let Some(tls) = &tls {
+        crate::tls::announce(&tls.info);
+    }
+    serve_with(listener, state, tls.map(|t| t.acceptor)).await
 }
 
 /// The address a browser on this machine opens for a bind address. A bind on
@@ -1561,6 +1566,15 @@ fn page_address(bind: &str) -> String {
 /// What a test uses to get a port the operating system picked, so two of them
 /// can run at once and neither has to guess a number that is free.
 pub async fn serve_on(listener: tokio::net::TcpListener, state: AppState) -> Result<()> {
+    serve_with(listener, state, None).await
+}
+
+/// The same, answering HTTPS too when given an acceptor.
+pub async fn serve_with(
+    listener: tokio::net::TcpListener,
+    state: AppState,
+    tls: Option<tokio_rustls::TlsAcceptor>,
+) -> Result<()> {
     let snapshots =
         Tracker::new(state.snapshot.clone(), state.multiview.clone(), state.mixer.clone());
     spawn_background(state.clone());
@@ -1571,7 +1585,16 @@ pub async fn serve_on(listener: tokio::net::TcpListener, state: AppState) -> Res
     let app = router(state, snapshots)
         .merge(observe)
         .into_make_service_with_connect_info::<std::net::SocketAddr>();
-    axum::serve(listener, app).await?;
+    match tls {
+        None => axum::serve(listener, app).await?,
+        Some(acceptor) => {
+            use axum::serve::ListenerExt;
+            // `tap_io` only so axum hands the peer address on as connect
+            // info for a listener that is not its own TcpListener.
+            let sniffing = crate::tls::Sniffing::new(listener, acceptor)?.tap_io(|_| {});
+            axum::serve(sniffing, app).await?
+        }
+    }
     Ok(())
 }
 
