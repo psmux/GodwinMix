@@ -3,7 +3,7 @@
 
 import { el } from "../../shell/dom.js";
 import { alarms, inputCell, loadCell, mixSwitch, outputChip, rateCell } from "./cells.js";
-import { healthOf, mixed } from "./model.js";
+import { healthOf, mixed, pictured } from "./model.js";
 
 export const COLUMNS = [
   ["pic", ""], ["name", "Show"], ["input", "Input"], ["kbps", "Bitrate"],
@@ -44,7 +44,10 @@ function outputs(show, st) {
 }
 
 function frame(show, ctx) {
-  return el("span.wl-frame", { "data-id": show.id }, [ctx.thumbs.img(show.id), healthOf(show).alarms.some((a) => a.kind === "black") ? el("span.wl-black", { text: "black" }) : null]);
+  const black = healthOf(show).alarms.some((a) => a.kind === "black") ? el("span.wl-black", { text: "black" }) : null;
+  // A show that is not running says so where its picture would be.
+  const state = pictured(show) ? null : el("span.wl-picstate", { text: STATE_WORD[show.state] || show.state });
+  return el("span.wl-frame", { "data-id": show.id }, [ctx.thumbs.img(show.id), black, state]);
 }
 
 const cls = (show, ctx) => `${healthOf(show).state}${ctx.cursor === show.id ? ".cursor" : ""}`;

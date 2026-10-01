@@ -9,7 +9,7 @@ import { WallData } from "./data.js";
 import { Thumbs } from "./thumbs.js";
 import { Virtual } from "./virtual.js";
 import { header, row, band, tileLine, lines } from "./rows.js";
-import { rows, summary } from "./model.js";
+import { pictured, rows, summary } from "./model.js";
 import { topBar } from "./top.js";
 import { keyed, press, prefs, savePrefs } from "./act.js";
 
@@ -78,17 +78,21 @@ export function openWall(client) {
     fetch() {
       if (!view.styled) return;
       const [a, b] = list.inView();
-      const ids = [];
+      const shown = [];
       for (let i = a; i <= b; i++) {
         const it = list.items[i];
         if (!it) continue;
-        if (it.kind === "show") ids.push(it.show.id);
-        if (it.kind === "line") ids.push(...it.shows.map((s) => s.id));
+        if (it.kind === "show") shown.push(it.show);
+        if (it.kind === "line") shown.push(...it.shows);
       }
-      data.visible(ids);
+      data.visible(shown.map((s) => s.id));
       thumbs.width = opts.mode === "tiles" ? 320 : 160;
+      // A show that is not running has no picture to ask for, and an old one
+      // would say it is still on; its frame says its state instead.
+      const live = data.noStats ? [] : shown.filter(pictured);
+      thumbs.blank(shown.filter((s) => !pictured(s)).map((s) => s.id));
       // A station without show.stats has no pictures of its shows either.
-      thumbs.visible(data.noStats ? [] : ids);
+      thumbs.visible(live.map((s) => s.id));
     },
     close() {
       data.stop();

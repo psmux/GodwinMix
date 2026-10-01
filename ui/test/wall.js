@@ -121,6 +121,17 @@ async function bigTests(test, eq, ok) {
     ok(!lastAsked().includes(order[0]), "the first is not");
     ok(drawn().includes(order.at(-1)) && !drawn().includes(order[0]), "and the drawn rows moved with it");
   });
+  test("a show that is not running says so where its picture would be and is not asked for one", () => {
+    const off = stub.shows.filter((s) => s.state === "stopped").map((s) => s.id).filter((id) => drawn().includes(id));
+    ok(off.length > 0, "a stopped show is on screen at the bottom");
+    for (const id of off) {
+      const word = view.root.querySelector(`.wl-row[data-id="${id}"] .wl-picstate`);
+      eq(word && word.textContent, "stopped", id);
+      ok(!stub.thumbAsked.includes(id), `${id} was asked for a picture`);
+    }
+    const on = drawn().find((id) => !off.includes(id));
+    ok(!view.root.querySelector(`.wl-row[data-id="${on}"] .wl-picstate`), "a running show has its picture and no word");
+  });
   scroll.scrollTop = 0;
   scroll.dispatchEvent(new Event("scroll"));
   await wait(60);
