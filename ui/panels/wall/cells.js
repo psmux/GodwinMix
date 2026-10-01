@@ -104,9 +104,28 @@ export function rateCell(st, history) {
   ]);
 }
 
-export function loadCell(st) {
+const LOAD_TITLES = {
+  mix: "This show mixes: what its process, compositing and encoding, costs this machine",
+  transcode: "What this show's encodes cost on this machine",
+  copy: "This show copies its input to its outputs and encodes nothing",
+};
+
+/** What the show does: the core's `work`, or worked out for a core from before it. */
+export function workOf(show, st) {
+  if (st && st.work) return st.work;
+  if (mixed(show)) return "mix";
+  return ((st && st.outputs) || []).some((o) => o.encoder) ? "transcode" : "copy";
+}
+
+export function loadText(show, st) {
+  if (!st) return "";
+  const work = workOf(show, st);
+  if (work === "copy") return "copy only";
   const m = load(st);
-  const encodes = ((st && st.outputs) || []).some((o) => o.encoder);
-  const text = !st ? "" : !encodes ? "copy only" : m < 1000 ? `${Math.max(1, Math.round(m / 10))}% core` : `${(m / 1000).toFixed(1)} cores`;
-  return el("span.wl-num.wl-load", { text, title: "What this show's encodes cost on this machine" });
+  if (!m) return work === "mix" ? "mixing" : "encoding";
+  return m < 1000 ? `${Math.max(1, Math.round(m / 10))}% core` : `${(m / 1000).toFixed(1)} cores`;
+}
+
+export function loadCell(show, st) {
+  return el("span.wl-num.wl-load", { text: loadText(show, st), title: st ? LOAD_TITLES[workOf(show, st)] || "" : "" });
 }

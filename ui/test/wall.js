@@ -26,6 +26,24 @@ async function modelTests(test, eq, ok) {
     eq([m.kbps(850), m.kbps(4400), m.kbps(12000), m.kbps(1200000)], ["850 kb/s", "4.4 Mb/s", "12 Mb/s", "1.20 Gb/s"]);
     eq([m.age(0, 45000), m.age(0, 600000), m.age(0, 7500000)], ["45 s", "10 min", "2 h 5 min"]);
   });
+  const c = await import("../panels/wall/cells.js");
+  test("Load says what a show does: a show that mixes never reads copy only", () => {
+    const mix = { id: "main", compositing: true };
+    const direct = { id: "news", compositing: false };
+    const copyOut = { id: "o", encoder: null, cpu_millicores: 0 };
+    eq(c.loadText(mix, { work: "mix", cpu_millicores: 350, outputs: [] }), "35% core");
+    eq(c.loadText(mix, { work: "mix", outputs: [] }), "mixing", "not measured yet");
+    eq(c.loadText(mix, { outputs: [] }), "mixing", "a core from before work: compositing decides");
+    eq(c.loadText(direct, { work: "copy", cpu_millicores: 0, outputs: [copyOut] }), "copy only");
+    eq(c.loadText(direct, { work: "transcode", cpu_millicores: 1250, outputs: [] }), "1.3 cores");
+    eq(c.loadText(direct, { outputs: [{ id: "o", encoder: "x264", cpu_millicores: 90 }] }), "9% core");
+    eq(c.loadText(direct, null), "");
+  });
+  test("the header's CPU is what the station measures of its processes, when it says", () => {
+    const busy = { cores: 10, used_millicores: 20, room_millicores: 6000, measured_millicores: 5200 };
+    eq(m.summary([], new Map(), { cpu: busy }).cpu, 52, "the direct host and the shows counted");
+    eq(m.summary([], new Map(), { cpu: { cores: 10, used_millicores: 2500, room_millicores: 6000 } }).cpu, 25, "a core that does not measure");
+  });
   const shows = headend(80, 1e9);
   const rows = (o) => m.rows(shows, new Map(), o);
   test("shows in alarm come first, then warnings, then the rest by name", () => {

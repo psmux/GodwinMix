@@ -41,6 +41,7 @@ mod shows_set;
 mod shows_stats;
 mod switch;
 mod thumb;
+pub mod usage;
 pub mod state;
 pub mod supervise;
 

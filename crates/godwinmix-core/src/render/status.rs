@@ -76,7 +76,7 @@ pub fn governor_status(station: &Station, shed: &[ShedNote]) -> GovernorStatus {
         calibrated_at: profile.is_calibrated().then_some(cal.taken_unix),
         fingerprint: profile.is_calibrated().then(|| cal.fingerprint.clone()),
         calibrating: station.calibrating(),
-        cpu: CpuUse { cores, used_millicores: used, room_millicores: room.cpu_millicores },
+        cpu: CpuUse { cores, used_millicores: used, room_millicores: room.cpu_millicores, measured_millicores: None },
         devices,
         egress_kbps: if committed.egress_kbps == UNLIMITED { 0 } else { committed.egress_kbps },
         ingress_kbps: 0,

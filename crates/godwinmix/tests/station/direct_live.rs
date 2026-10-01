@@ -84,6 +84,60 @@ async fn output_state(ws: &mut Ws, id: u64) -> Value {
     s["result"]["shows"][0].clone()
 }
 
+/// The ingest plugin's process, the station's child, as `ps` reads it:
+/// its pid and its CPU in thousandths of a core.
+#[cfg(unix)]
+fn ingest_process(station: u32) -> Option<(u32, u64)> {
+    let out = Command::new("pgrep").args(["-P", &station.to_string(), "gmx-ingest"]).output().ok()?;
+    let pid: u32 = String::from_utf8_lossy(&out.stdout).lines().next()?.trim().parse().ok()?;
+    let out = Command::new("ps").args(["-o", "pcpu=", "-p", &pid.to_string()]).output().ok()?;
+    let pcpu: f64 = String::from_utf8_lossy(&out.stdout).trim().parse().ok()?;
+    Some((pid, (pcpu * 10.0).round() as u64))
+}
+
+/// The wall's header CPU counts the direct host. Before, `governor.status`
+/// saw the station's own process and the reports of shows holding a ticket,
+/// and the ingest plugin, where every direct show runs, holds none: 200
+/// direct shows taking five cores read as nothing.
+#[cfg(unix)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn governor_status_counts_the_direct_host_the_station_started() {
+    let (dir, port) = folder("direct-host-cpu");
+    let source = staged_ingest(&dir);
+    let st = start(dir.clone(), port, &[]).await;
+    let mut ws = rpc(&st, "").await;
+    let input = free_udp();
+    // Sixteen copies of one feed give the host work enough to measure.
+    let sinks: Vec<UdpSocket> = (0..16).map(|_| UdpSocket::bind("127.0.0.1:0").unwrap()).collect();
+    let outputs: Vec<Value> = sinks.iter().enumerate().map(|(n, s)| json!({"id": format!("out-{n}"), "uri": format!("udp://127.0.0.1:{}", s.local_addr().unwrap().port())})).collect();
+    let pipeline = feed(input);
+    let added = call(&mut ws, 1, "show.add", json!({"name": "Feed", "compositing": false, "input": {"uri": format!("udp://127.0.0.1:{input}")}, "outputs": outputs})).await;
+    assert!(added.get("error").is_none(), "{added}");
+    let asked = call(&mut ws, 2, "plugin.add", json!({"source": source.to_string_lossy()})).await;
+    assert!(asked.get("error").is_none(), "{asked}");
+    assert!(received(&sinks[0], Duration::from_secs(60), 100_000) >= 100_000, "the feed never reached an output");
+
+    // A first start calibrates in the station's own process, which swamps
+    // everything; its share decays over a few seconds once that is done.
+    let settled = Instant::now() + Duration::from_secs(20);
+    let limit = Instant::now() + Duration::from_secs(120);
+    loop {
+        let g = call(&mut ws, 3, "governor.status", json!({})).await;
+        if g["result"]["calibrating"] == false && Instant::now() > settled {
+            break;
+        }
+        assert!(Instant::now() < limit, "still calibrating: {g}");
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    }
+    let (pid, host) = ingest_process(st.pid()).expect("the station runs gmx-ingest as its child");
+    let g = call(&mut ws, 4, "governor.status", json!({})).await;
+    let used = g["result"]["cpu"]["measured_millicores"].as_u64().unwrap_or(0);
+    eprintln!("gmx-ingest {pid} at {host} millicores, governor.status measured {used}");
+    assert!(host >= 20, "sixteen outputs should cost the host something; ps read {host} millicores");
+    assert!(used >= host * 3 / 4, "governor.status measures {used} millicores, under the direct host's {host}: {g}");
+    pipeline.set_state(gstreamer::State::Null).unwrap();
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_direct_show_carries_a_real_udp_feed_to_a_udp_copy_output_through_the_station() {
     let (dir, port) = folder("direct-live");
@@ -108,6 +162,7 @@ async fn a_direct_show_carries_a_real_udp_feed_to_a_udp_copy_output_through_the_
     assert!(got >= 200_000, "only {got} bytes reached the copy output in 60 s: {stats}; see {}", dir.join("log.jsonl").display());
     assert_eq!(stats["outputs"][0]["state"], "live", "{stats}");
     assert!(stats["input"]["kbps"].as_u64().unwrap_or(0) > 0, "{stats}");
+    assert_eq!(stats["work"], "copy", "{stats}");
 
     drop(ws);
     drop(st);

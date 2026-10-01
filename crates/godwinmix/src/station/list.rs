@@ -71,9 +71,7 @@ impl Station {
             }
         }))
         .await;
-        let pids: Vec<(String, u32)> = self.procs.lock().iter().filter_map(|(id, p)| p.pid.map(|pid| (id.clone(), pid))).collect();
-        let wanted: Vec<u32> = pids.iter().map(|(_, pid)| *pid).collect();
-        let samples = self.sampler.lock().sample(&wanted);
+        let children = self.children_now();
         let mut out = BTreeMap::new();
         for (id, status) in ids.iter().zip(statuses) {
             let mut m = Measured::default();
@@ -81,8 +79,8 @@ impl Station {
                 m.on_air = status.scene.clone().or_else(|| status.program.clone());
                 m.programme_kbps = programme_kbps(&status);
             }
-            if let Some(s) = pids.iter().find(|(p, _)| p == id).and_then(|(_, pid)| samples.get(pid)) {
-                m.cpu_millicores = s.cpu_percent.map(|p| (p * 10.0).round() as u32).unwrap_or(0);
+            if let Some(s) = children.shows.get(id) {
+                m.cpu_millicores = s.cpu_percent.map(super::usage::millicores).unwrap_or(0);
                 m.memory_mib = s.rss_bytes.map(|b| b >> 20).unwrap_or(0);
             }
             out.insert(id.clone(), m);

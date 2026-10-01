@@ -266,6 +266,7 @@ is left out, narrowed by `fields` to any of `health`, `input`, `outputs`:
 ```json
 {"shows": [{"id": "bbc-one",
   "health": {"state": "ok", "alarms": []},
+  "work": "copy", "cpu_millicores": 0,
   "input": {"kbps": 6100, "fps": 25.0, "width": 1920, "height": 1080, "video_codec": "h264",
             "audio_codec": "aac", "audio_channels": 2, "cc_errors": 0, "packets_lost": 0,
             "keyframe_ms": 1000, "last_frame_ms": 12},
@@ -279,6 +280,16 @@ show or of the host and is cheap to call every second for two hundred shows.
 A field the host has not counted yet is left out. A show that composites has
 its health and, when it has an input, the input's numbers; its outputs are
 read with `output.list` and `?show=<id>`.
+
+`work` says what the show does to make its outputs: `mix` for a show that
+composites (it always encodes a programme), `transcode` for a direct show
+with at least one enabled output given a rendition, and `copy` for a direct
+show whose outputs all copy. `cpu_millicores` is what the show costs, in
+thousandths of a core. For a show that mixes it is the show's process, read
+off the process (one `ps`, or `/proc` on Linux, for every show at once, at
+most once a second) and left out on Windows, where it cannot be read, or
+before the first reading. For a direct show it is its outputs'
+`cpu_millicores` summed.
 
 ### Alarm settings: `show.set {id, alarms}`
 
