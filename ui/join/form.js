@@ -91,5 +91,5 @@ export function blocked(r, text) {
     r.error.append(" ", el("a", { href: HTTPS_HELP, target: "_blank", rel: "noopener", text: "How to open the mixer over https." }));
   }
   for (const b of [r.go, r.cameraMute, r.micMute, r.camera, r.mic, r.processing]) b.disabled = true;
-  return { state: () => "blocked", active: () => false, stop() {}, setVisible() {}, destroy: () => r.root.remove() };
+  return { state: () => "blocked", active: () => false, stop() {}, setVisible() {}, use() {}, destroy: () => r.root.remove() };
 }

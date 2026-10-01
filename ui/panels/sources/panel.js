@@ -707,7 +707,7 @@ class SourcesPanel extends HTMLElement {
         run: () => {
           const scene = this.scopedTo();
           return import("./browser-device.js").then((m) =>
-            m.openBrowserDevice(this.client, { onSource: (source) => this.place(scene, source) })
+            m.addBrowserDevice(this.client, { camera: true, onSource: (source) => this.place(scene, source) })
           );
         },
       },

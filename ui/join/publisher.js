@@ -15,7 +15,8 @@ import { StatsLine } from "./stats.js";
 /**
  * @param {HTMLElement} host
  * @param {{url: string, key: string, labels?: object, camera?: boolean,
- *          autostart?: boolean, onState?: (s: object) => void}} opts
+ *          autostart?: boolean, cameraId?: string, micId?: string,
+ *          onState?: (s: object) => void}} opts
  * `camera: false` opens with the camera set to none, for a microphone alone.
  * `autostart` publishes as soon as the devices are open, with no button to
  * press: the mixer's own page uses it, because there the browser is a device
@@ -36,6 +37,8 @@ class Publisher {
     this.tracks = { video: null, audio: null };
     this.wanted = remembered();
     if (opts.camera === false) this.wanted.camera = "off";
+    else if (opts.cameraId) this.wanted.camera = opts.cameraId;
+    if (opts.micId) this.wanted.mic = opts.micId;
     this.shown = true;
     this.meter = new LevelMeter(r.level);
     this.stats = new StatsLine(r.stats, () => this.session && this.session.pc);
@@ -53,6 +56,7 @@ class Publisher {
       active: () => !!this.session && this.session.active,
       stop: () => this.stopPublishing(),
       setVisible: (v) => this.setVisible(v),
+      use: (kind, deviceId) => this.switchTo(kind, deviceId),
       destroy: () => this.destroy(),
     };
   }

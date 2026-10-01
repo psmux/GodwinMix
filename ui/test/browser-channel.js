@@ -2,7 +2,7 @@
 // the add source picker shows for this browser. No core needed.
 
 import { repairFor, streamNameFor, ensureBrowserChannel, sourceIdFor } from "../panels/sources/browser-channel.js";
-import { browserEntries } from "../panels/sources/browser-entry.js";
+import { browserEntries, sameMachine } from "../panels/sources/browser-entry.js";
 
 export async function browserChannelTests(test, eq, ok) {
   test("a channel somebody changed is put back to take this browser, and one that does is left alone", () => {
@@ -52,13 +52,25 @@ export async function browserChannelTests(test, eq, ok) {
   });
 
   test("the add source picker offers this browser under Cameras and under Microphones only", () => {
-    eq(browserEntries({}, "cameras").map((e) => e.name), ["This browser's camera"]);
-    eq(browserEntries({}, "audio").map((e) => e.name), ["This browser's microphone"]);
-    eq(browserEntries({}, "screens"), []);
+    const none = { cameras: [], mics: [] };
+    eq(browserEntries({}, "cameras", {}, none).map((e) => e.name), ["This browser's camera"]);
+    eq(browserEntries({}, "audio", {}, none).map((e) => e.name), ["This browser's microphone"]);
+    eq(browserEntries({}, "screens", {}, none), []);
   });
 
   test("this browser's rows add, as a camera on the mixer does, rather than open something", () => {
     eq(browserEntries({}, "cameras", { onAdded() {} })[0].label, "Add");
     eq(browserEntries({}, "audio", { onExisting() {} })[0].label, "Add");
+  });
+
+  test("once allowed a camera, the picker lists this browser's devices by name, as it does the mixer's", () => {
+    const devices = { cameras: [{ id: "c1", label: "FaceTime HD" }, { id: "c2", label: "Logitech C920" }], mics: [{ id: "m1", label: "MacBook Pro Microphone" }] };
+    eq(browserEntries({}, "cameras", {}, devices).map((e) => e.name), ["FaceTime HD (this browser)", "Logitech C920 (this browser)"]);
+    eq(browserEntries({}, "audio", {}, devices).map((e) => e.name), ["MacBook Pro Microphone (this browser)"]);
+  });
+
+  test("on the mixer's own computer, a browser row warns that the device may be listed twice", () => {
+    ok(sameMachine("localhost") && sameMachine("127.0.0.1"), "localhost is the same machine");
+    ok(!sameMachine("192.168.1.20"), "another address is not");
   });
 }
