@@ -19,6 +19,8 @@
 mod channels;
 mod codec;
 mod device;
+#[allow(dead_code)]
+mod direct;
 mod flv;
 mod restream;
 mod gate;
