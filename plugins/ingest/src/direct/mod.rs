@@ -36,6 +36,7 @@ mod events;
 mod host;
 mod output;
 mod show;
+pub mod standalone;
 mod table;
 
 #[cfg(test)]
