@@ -1,120 +1,89 @@
 //! The direct host: every show with compositing off, in this one process.
 //!
+//! ```text
+//!   table (configure) ──► Host::apply ──► one Show per row
+//!
+//!   input (own thread) ──► Switch ──► hub "direct.<id>/main" ──┬──► output (one thread each) ──► RTMP, SRT, UDP, RIST, file
+//!   backup (only while needed) ─┘   (main or backup, one         ├──► transcode (once per show) ──► renditions hub ──► outputs
+//!                                    unbroken timeline)          ├──► vitals (keyframes only, while asked)
+//!                                                                └──► relay, for a show that composites
+//! ```
+//!
 //! A direct show is one input straight to its outputs with no compositor.
 //! Its input is demuxed into the same `MediaTag`s a channel stream is made
-//! of, published on a hub of its own, and every output reads that hub
-//! through a bounded queue, as a channel destination does. Nothing is
-//! decoded unless an output asks for a rendition (`crate::transcode`, once
-//! per show) or someone asks for a picture (the frame tap).
+//! of and published on the hub, and every output reads the hub through a
+//! bounded queue of its own, as a channel destination does: a slow output
+//! loses GOPs in its own queue and never slows the input or another output.
+//! Nothing is decoded unless an output asks for a rendition (`transcode`,
+//! once per show however many renditions) or the vitals ask for a picture.
 //!
-//! The seam at the top of this file is the one the inputs are built
-//! against (`input/`, owned by its own author): an input hands over tags
-//! and answers with its numbers, and agrees nothing else with the host.
+//! The station hands the table over as `direct` in the settings
+//! (`dev/plans/wave4-direct-table.md`), and hears back through four events:
+//! `direct.input`, `direct.output`, `direct.stats`, and `direct.health`
+//! (which the vitals raise). `docs/explanation/direct-host.md` says why it
+//! is built this way.
 
+// The inputs (the "directin" work) and the vitals (the "vitals" work) are
+// their own modules. Until they merge, a stand in with the same public
+// names lets the host build and its tests run: delete the `#[path]` lines
+// and the two stand in files when they do.
+#[path = "input_standin.rs"]
+pub mod input;
+#[path = "vitals_standin.rs"]
+pub mod vitals;
+
+mod events;
+mod host;
+mod output;
+mod show;
+mod table;
+
+#[cfg(test)]
+mod tests;
+
+pub use events::Emit;
+pub use host::{Host, Relay};
+
+use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
 
-use serde_json::{json, Value};
+use crate::media_tag::MediaTag;
+pub use input::InputStats;
 
-use crate::rtmp::Inlet;
+/// Where an input's tags and numbers go. Called from GStreamer streaming
+/// threads, so nothing in it may wait for long.
+pub trait TagSink: Send {
+    fn tag(&mut self, tag: MediaTag);
+    /// The input's numbers, about once a second.
+    fn stats(&mut self, stats: &InputStats);
+}
 
-// ---------------------------------------------------------------------------
-// The input seam. Change it only with the author of `input/`.
-// ---------------------------------------------------------------------------
+pub type Sink = Box<dyn TagSink>;
 
-/// One running input. It pushes every tag it makes into the `Inlet` it was
-/// opened with, on its own thread (one at most), and never waits on the
-/// host: the inlet hands a tag on and returns. Dropping the input stops it
-/// and lets go of the inlet. An input that ends by itself (a file at its
-/// end, a server that hung up) drops the inlet, which the host takes as the
-/// input having ended, and opens it again on its backoff.
-///
-/// Video tags are FLV bodies as RTMP frames them (H.264 classic, HEVC as
-/// enhanced RTMP), audio is AAC as FLV frames it, and each sequence header
-/// comes before the first frame of its kind (`crate::tagger` does all of
-/// this for a GStreamer parser's output). Timestamps are milliseconds on the
-/// input's own timeline. The host rebases them, so they need not start at
-/// zero, but they must not run backwards within one opening.
+/// Set once to make an input's `run` return. Cheap to clone.
+#[derive(Clone, Default)]
+pub struct StopSignal(Arc<(Mutex<bool>, Condvar)>);
+
+impl StopSignal {
+    pub fn stop(&self) {
+        *self.0 .0.lock().unwrap_or_else(|e| e.into_inner()) = true;
+        self.0 .1.notify_all();
+    }
+
+    pub fn is_stopped(&self) -> bool {
+        *self.0 .0.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// Wait up to `wait`, waking early on a stop. True when stopped.
+    pub fn wait(&self, wait: Duration) -> bool {
+        let guard = self.0 .0.lock().unwrap_or_else(|e| e.into_inner());
+        let (guard, _) = self.0 .1.wait_timeout_while(guard, wait, |stopped| !*stopped).unwrap_or_else(|e| e.into_inner());
+        *guard
+    }
+}
+
+/// One input. `run` blocks its thread until `stop` is set, reconnecting
+/// through loss and failure on its own.
 pub trait Input: Send {
-    /// What only the input can see. The host fills what it can work out
-    /// from the tags themselves (size, frame rate, codecs, bit rate, the age
-    /// of the last frame and keyframe) wherever the input leaves a zero or
-    /// an empty string, so an input may answer `InputStats::default()` with
-    /// only its transport counters set.
-    fn stats(&self) -> InputStats;
+    fn run(self: Box<Self>, out: Sink, stop: StopSignal);
 }
-
-/// Opens an input. `Err` is a sentence for a person, naming what to change.
-pub type Opener = fn(&InputSpec, Box<dyn Inlet>) -> Result<Box<dyn Input>, String>;
-
-/// What a direct show takes, as the contract's `InputSpec`.
-#[derive(Debug, Clone, PartialEq, Default)]
-pub struct InputSpec {
-    /// `udp://@239.1.1.1:5000`, `srt://...`, `rtmp://...`, `rtsp://...`,
-    /// `https://.../x.m3u8`, `file:///clip.ts`, `rist://...`, or
-    /// `channel:<app>/<stream>`.
-    pub uri: String,
-    /// The MPEG-TS program to take from a multi program feed; the first
-    /// when `None`.
-    pub program: Option<u16>,
-    /// Per transport: `interface` for multicast, `latency` for SRT,
-    /// `passphrase`, and so on, as the person gave them. Null when none.
-    pub params: Value,
-    /// Switched to when this one stalls, and back when it returns.
-    pub backup: Option<Box<InputSpec>>,
-}
-
-impl InputSpec {
-    /// Read one from the table. `None` when it has no address.
-    pub fn from_value(v: &Value) -> Option<InputSpec> {
-        let uri = v.get("uri").and_then(Value::as_str).map(str::trim).filter(|u| !u.is_empty())?;
-        Some(InputSpec {
-            uri: uri.to_string(),
-            program: v.get("program").and_then(Value::as_u64).and_then(|p| u16::try_from(p).ok()),
-            params: v.get("params").cloned().filter(Value::is_object).unwrap_or(Value::Null),
-            backup: v.get("backup").and_then(InputSpec::from_value).map(Box::new),
-        })
-    }
-}
-
-/// An input's numbers, in the contract's `InputStats` shape.
-#[derive(Debug, Clone, PartialEq, Default)]
-pub struct InputStats {
-    pub kbps: u32,
-    pub fps: f64,
-    pub width: u32,
-    pub height: u32,
-    pub video_codec: String,
-    pub audio_codec: String,
-    pub audio_channels: u32,
-    /// MPEG-TS continuity counter errors since the input opened.
-    pub cc_errors: u64,
-    /// Packets the transport knows it lost (RTP sequence gaps, SRT drops).
-    pub packets_lost: u64,
-    /// How long ago the last keyframe arrived, in ms.
-    pub keyframe_ms: u64,
-    /// How long ago the last frame of any kind arrived, in ms.
-    pub last_frame_ms: u64,
-}
-
-impl InputStats {
-    /// The wire shape.
-    pub fn to_json(&self) -> Value {
-        json!({
-            "kbps": self.kbps, "fps": self.fps, "width": self.width, "height": self.height,
-            "video_codec": self.video_codec, "audio_codec": self.audio_codec,
-            "audio_channels": self.audio_channels, "cc_errors": self.cc_errors,
-            "packets_lost": self.packets_lost, "keyframe_ms": self.keyframe_ms,
-            "last_frame_ms": self.last_frame_ms,
-        })
-    }
-}
-
-/// The longest the host waits between two attempts to open an input that
-/// would not open or that ended.
-pub const REOPEN_MAX: Duration = Duration::from_secs(10);
-
-// The inputs (`input/`, the "directin" work) are declared here when they land:
-// pub mod input;
-
-mod decode;
-pub mod tap;

@@ -241,6 +241,7 @@ impl Device for Publishers {
         let table = channels::Table::from_params(&ready.params);
         let running = device::Discover::start(&self.settings, table, Some(reporter)).map_err(internal)?;
         running.set_sends(sends::wanted(&ready.params), transcode::specs(&ready.params));
+        running.set_direct(&ready.params);
         self.running = Some(running);
         Ok(InitializeResult::default())
     }
@@ -252,6 +253,7 @@ impl Device for Publishers {
         if let Some(running) = &self.running {
             running.set_table(channels::Table::from_params(&params));
             running.set_sends(sends::wanted(&params), transcode::specs(&params));
+            running.set_direct(&params);
         }
         let wanted = device::Settings::from_params(&params);
         if wanted == self.settings {
@@ -284,6 +286,14 @@ impl Device for Publishers {
         let arguments = params.get("arguments").cloned().unwrap_or(json!({}));
         if let Some(answer) = self.whip_call(name, &arguments) {
             return answer;
+        }
+        if name == "direct.stats" {
+            // The station's to call for show.stats, like whip.offer.
+            let ids: Option<Vec<String>> = arguments.get("ids").and_then(|v| serde_json::from_value(v.clone()).ok());
+            return match self.running.as_ref() {
+                Some(r) => Ok(r.direct.stats(ids.as_deref())),
+                None => Err(RpcError::new(codes::WRONG_STATE, "the channel server is not running, so no direct show is either")),
+            };
         }
         let short = name.rsplit('/').next().unwrap_or(name);
         if !matches!(short, "streams" | "add_publishers") {

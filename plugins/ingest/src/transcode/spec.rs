@@ -60,21 +60,31 @@ pub fn specs(params: &Value) -> Vec<StreamSpec> {
             continue;
         }
         let app = Some(text(c, "app")).filter(|a| !a.is_empty()).unwrap_or_else(|| text(c, "id"));
-        for s in c.get("transcode").and_then(Value::as_array).into_iter().flatten() {
-            let nodes: Vec<NodeSpec> = s
-                .get("nodes")
-                .and_then(Value::as_array)
-                .into_iter()
-                .flatten()
-                .filter_map(|n| {
-                    let (id, kind) = (text(n, "id"), text(n, "kind"));
-                    (!id.is_empty() && !kind.is_empty()).then(|| NodeSpec { id, kind, input: text(n, "input"), raw: n.clone() })
-                })
-                .collect();
-            let stream = text(s, "stream");
-            if !stream.is_empty() && !nodes.is_empty() {
-                out.push(StreamSpec { app: app.clone(), stream, nodes });
-            }
+        out.extend(stream_specs(&app, c.get("transcode")));
+    }
+    out
+}
+
+/// A row's `transcode`, each entry a stream of `app` to convert. The
+/// direct host reads its shows' plans with this: each is a channel row's
+/// `transcode` with the show's own hub name for `app`.
+pub fn stream_specs(app: &str, transcode: Option<&Value>) -> Vec<StreamSpec> {
+    let text = |v: &Value, k: &str| v.get(k).and_then(Value::as_str).unwrap_or_default().to_string();
+    let mut out = Vec::new();
+    for s in transcode.and_then(Value::as_array).into_iter().flatten() {
+        let nodes: Vec<NodeSpec> = s
+            .get("nodes")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(|n| {
+                let (id, kind) = (text(n, "id"), text(n, "kind"));
+                (!id.is_empty() && !kind.is_empty()).then(|| NodeSpec { id, kind, input: text(n, "input"), raw: n.clone() })
+            })
+            .collect();
+        let stream = text(s, "stream");
+        if !stream.is_empty() && !nodes.is_empty() {
+            out.push(StreamSpec { app: app.to_string(), stream, nodes });
         }
     }
     out

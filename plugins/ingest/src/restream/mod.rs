@@ -27,7 +27,7 @@ mod udp_out;
 pub(crate) mod meta;
 pub(crate) mod queue;
 mod rtmp_out;
-mod run;
+pub(crate) mod run;
 mod srt_out;
 pub(crate) mod ts_video;
 mod target;
@@ -96,9 +96,9 @@ where
 }
 
 /// Run a sender on a thread of its own, reading `tags` and reporting on
-/// `board`, until `stop` is set or the tags end. The direct host calls this
-/// with a hub reader as the tags, which makes an output one thread.
-pub(crate) fn spawn_sender(target: Target, tags: Arc<dyn queue::Tags>, board: Arc<board::Board>, stop: Arc<AtomicBool>) {
+/// `board`, until `stop` is set or the tags end. The direct host runs a
+/// `run::Sender` on its output's one thread instead, over a hub reader.
+fn spawn_sender(target: Target, tags: Arc<dyn queue::Tags>, board: Arc<board::Board>, stop: Arc<AtomicBool>) {
     let name = target.id.clone();
     let on_panic = Arc::clone(&board);
     let sender = run::Sender { target, queue: tags, board, stop, pre: run::Preamble::default() };
