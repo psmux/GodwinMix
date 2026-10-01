@@ -19,6 +19,7 @@
 mod channels;
 mod codec;
 mod device;
+mod direct;
 mod flv;
 mod restream;
 mod gate;
@@ -38,10 +39,14 @@ mod remux;
 mod rest;
 mod rtmp;
 mod sends;
+#[cfg(test)]
+mod testfeed;
+mod tsmux;
 mod source;
 mod sps;
 mod hevc;
 mod eflv;
+mod exaudio;
 mod whip_in;
 // Thumbnails and alarms for the direct host's shows. Declared here until the
 // host's own `direct` module exists to hold it.
@@ -240,6 +245,7 @@ impl Device for Publishers {
         let table = channels::Table::from_params(&ready.params);
         let running = device::Discover::start(&self.settings, table, Some(reporter)).map_err(internal)?;
         running.set_sends(sends::wanted(&ready.params), transcode::specs(&ready.params));
+        running.set_direct(&ready.params);
         self.running = Some(running);
         Ok(InitializeResult::default())
     }
@@ -251,6 +257,7 @@ impl Device for Publishers {
         if let Some(running) = &self.running {
             running.set_table(channels::Table::from_params(&params));
             running.set_sends(sends::wanted(&params), transcode::specs(&params));
+            running.set_direct(&params);
         }
         let wanted = device::Settings::from_params(&params);
         if wanted == self.settings {
@@ -283,6 +290,16 @@ impl Device for Publishers {
         let arguments = params.get("arguments").cloned().unwrap_or(json!({}));
         if let Some(answer) = self.whip_call(name, &arguments) {
             return answer;
+        }
+        if name.starts_with("direct.") {
+            // The station's to call, like whip.offer: direct.stats for
+            // show.stats, direct.thumbnail for the wall's pictures.
+            let running = self.running.as_ref().ok_or_else(|| {
+                RpcError::new(codes::WRONG_STATE, "the channel server is not running, so no direct show is either")
+            })?;
+            return running.direct.call(name, &arguments).ok_or_else(|| {
+                RpcError::new(codes::METHOD_NOT_FOUND, format!("the direct host has no call '{name}'. It answers direct.stats and direct.thumbnail."))
+            });
         }
         let short = name.rsplit('/').next().unwrap_or(name);
         if !matches!(short, "streams" | "add_publishers") {
@@ -348,6 +365,16 @@ fn no_method(provide: &str, method: &str, has: &str) -> RpcError {
 }
 
 fn main() {
+    let args: Vec<String> = std::env::args().collect();
+    if args.get(1).map(String::as_str) == Some("--direct") {
+        // The direct host alone, for measuring: src/direct/standalone.rs.
+        let Some(path) = args.get(2) else {
+            eprintln!("usage: gmx-ingest --direct <table.json> [--seconds N]");
+            std::process::exit(2);
+        };
+        let seconds = args.iter().position(|a| a == "--seconds").and_then(|i| args.get(i + 1)?.parse().ok());
+        std::process::exit(direct::standalone::run(path, seconds));
+    }
     let env = PluginEnv::from_env();
     if !env.started_by_core() {
         eprintln!(

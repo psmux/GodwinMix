@@ -10,6 +10,7 @@
 use std::sync::{Arc, Mutex};
 
 use gstreamer as gst;
+use gstreamer::prelude::*;
 use gstreamer_app as gst_app;
 
 use crate::media_tag::{MediaTag, TagKind};
@@ -20,6 +21,30 @@ pub trait Route: Send + Sync {
     fn tag(&self, node: &str, tag: MediaTag);
     /// The publisher's time, in ms, that the pipeline's zero stands for.
     fn base_ms(&self) -> u32;
+    /// A decoded picture out of a decode node, about one a second, for
+    /// whoever asked to see the stream (the direct host's vitals). Nothing
+    /// by default.
+    fn frame(&self, _node: &str, _sample: &gst::Sample) {}
+}
+
+/// Hand a decode node's pictures to `route`, at most one a second: a probe
+/// on the tee the node's readers hang off. It costs a clock read a frame
+/// while nobody is looking, and the route decides whether anybody is.
+pub fn tap_pictures(tee: &gst::Element, node: String, route: Arc<dyn Route>) {
+    let Some(pad) = tee.static_pad("sink") else { return };
+    let last: Mutex<Option<std::time::Instant>> = Mutex::new(None);
+    pad.add_probe(gst::PadProbeType::BUFFER, move |pad, info| {
+        let mut last = last.lock().unwrap_or_else(|e| e.into_inner());
+        if last.is_some_and(|t| t.elapsed() < std::time::Duration::from_secs(1)) {
+            return gst::PadProbeReturn::Ok;
+        }
+        *last = Some(std::time::Instant::now());
+        if let (Some(gst::PadProbeData::Buffer(buffer)), Some(caps)) = (&info.data, pad.current_caps()) {
+            let sample = gst::Sample::builder().buffer(buffer).caps(&caps).build();
+            route.frame(&node, &sample);
+        }
+        gst::PadProbeReturn::Ok
+    });
 }
 
 /// Hand every sample of `sink` on to `route` as the tags of `node`.

@@ -17,7 +17,7 @@ use crate::media_tag::{MediaTag, TagKind};
 
 use super::board::Board;
 use super::link::{self, Failure, Link};
-use super::queue::{starts_gop, Pop, Queue};
+use super::queue::{starts_gop, Pop, Tags};
 use super::target::Target;
 
 /// How often a quiet link reads what the server said.
@@ -27,7 +27,7 @@ const GIVE_UP: u32 = 3;
 
 pub struct Sender {
     pub target: Target,
-    pub queue: Arc<Queue>,
+    pub queue: Arc<dyn Tags>,
     pub board: Arc<Board>,
     pub stop: Arc<AtomicBool>,
     pub pre: Preamble,

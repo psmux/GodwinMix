@@ -26,6 +26,7 @@ export function checked(item) {
   if (item.check === "studio") return !!settings().producer;
   if (item.check === "theme") return currentTheme() === item.arg;
   if (item.check === "routing") return !!document.querySelector(".routing");
+  if (item.check === "wall") return !!document.querySelector(".wall");
   return null;
 }
 
@@ -47,6 +48,8 @@ const ACTIONS = {
   "show.new": (client) => shows().then((m) => m.newShow(client)),
   "show.switch": (client, id) => shows().then((m) => m.switchShow(client, id)),
   "view.routing": (client) => import("../panels/routing/view.js").then((m) => m.toggleRouting(client)),
+  "view.wall": (client) => import("../panels/wall/view.js").then((m) => m.toggleWall(client)),
+  "show.add-many": (client) => import("../panels/wall/bulk.js").then((m) => m.bulkAdd(client)),
   "edit.delete": () => {
     const which = ["tray.delete", "scenes.remove"].find((id) => {
       const cmd = get(id);

@@ -30,6 +30,31 @@ pub struct Dropped {
     pub gops: u64,
 }
 
+/// What a sender reads its tags from: this queue for a channel destination,
+/// a hub reader straight for a direct show's output, which saves a thread
+/// and a queue per output.
+pub trait Tags: Send + Sync {
+    fn pop(&self, wait: Duration) -> Pop;
+    /// No more tags will be read.
+    fn close(&self);
+    /// Throw away what waits, back to the newest keyframe, headers apart.
+    fn skip_to_latest_keyframe(&self);
+}
+
+impl Tags for Queue {
+    fn pop(&self, wait: Duration) -> Pop {
+        Queue::pop(self, wait)
+    }
+
+    fn close(&self) {
+        Queue::close(self)
+    }
+
+    fn skip_to_latest_keyframe(&self) {
+        Queue::skip_to_latest_keyframe(self)
+    }
+}
+
 pub struct Queue {
     inner: Mutex<Inner>,
     ready: Condvar,

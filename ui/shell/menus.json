@@ -26,6 +26,10 @@
           "title": "New show…"
         },
         {
+          "command": "show.add-many",
+          "title": "New shows…"
+        },
+        {
           "command": "show.switch",
           "title": "Switch show…"
         },
@@ -138,6 +142,11 @@
           "command": "view.routing",
           "title": "Routing",
           "check": "routing"
+        },
+        {
+          "command": "view.wall",
+          "title": "Monitoring wall",
+          "check": "wall"
         },
         {
           "command": "view.reset-layout",
