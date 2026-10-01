@@ -52,6 +52,11 @@ pub async fn set(st: &Arc<Station>, req: ShowSetRequest) -> Result<Value, RpcErr
         if req.input.is_some() || req.alarms.is_some() {
             st.direct.hand_over();
         }
+        // A show that composites judges its own programme. One that is not
+        // running yet is handed its alarms when it says hello.
+        if req.alarms.is_some() && was && st.state_of(&req.id) == Some(ShowState::Running) {
+            direct::hand_alarms(st, &req.id).await;
+        }
     }
     let switch = match req.compositing {
         Some(true) if !was => Some(switch::on(st, &req.id).await?),

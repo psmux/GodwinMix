@@ -29,10 +29,13 @@ impl Host for Linked {
             p.error = None;
             p.addr.send_replace(Some(hello.addr));
         }
+        st.direct.linked(&hello.show);
         info!(show = %hello.show, addr = %hello.addr, "show is running");
         st.announce(&hello.show);
         let (fed, id) = (st.clone(), hello.show.clone());
         tokio::spawn(async move { super::direct::feed_source(&fed, &id).await });
+        let (handed, id) = (st.clone(), hello.show.clone());
+        tokio::spawn(async move { super::direct::hand_alarms(&handed, &id).await });
         true
     }
 
@@ -47,6 +50,10 @@ impl Host for Linked {
             !set.is_empty()
         };
         st.render.set_on_air(any);
+    }
+
+    fn health(&self, show: &str, health: godwinmix_protocol::health::Health) {
+        self.0.direct.take_show_health(&self.0, show, health);
     }
 
     fn load(&self, show: &str, millicores: u32) {
@@ -68,10 +75,17 @@ impl Host for Linked {
         };
         st.render.governor().set_elsewhere(sum);
         let mut procs = st.procs.lock();
-        if let Some(p) = procs.get_mut(show).filter(|p| p.pid == Some(pid)) {
+        // Lost unless somebody is stopping it (`supervise::stop` takes its
+        // stop handle first): a show stopped on purpose reads as off, not as
+        // an alarm on its way there.
+        let lost = procs.get_mut(show).filter(|p| p.pid == Some(pid)).is_some_and(|p| {
             p.addr.send_replace(None);
-        }
+            p.stop.is_some()
+        });
         drop(procs);
+        if lost && !st.stopping.load(std::sync::atomic::Ordering::SeqCst) {
+            st.direct.lost(st, show);
+        }
         let any = {
             let mut set = st.on_air.lock();
             set.remove(show);
