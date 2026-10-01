@@ -104,6 +104,13 @@ Under **Advanced**:
 Health for an output can only say bytes are leaving: UDP has no answer from the
 far end. Whether anyone receives them, the receiver has to say.
 
+A receiver that closes, crashes or is restarted changes nothing at this end.
+The output keeps sending, stays `live`, and its reconnect count stays where it
+was; start the receiver again on the same port and it has a picture at the next
+keyframe. If an output does stop sending, it stops saying `live` within three
+seconds, and once its five second queue has been full for three more the core
+starts the udp plugin process again.
+
 ## A word about switches and Wi-Fi
 
 A switch without IGMP snooping sends every multicast group to every port. That

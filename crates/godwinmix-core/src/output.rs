@@ -42,6 +42,8 @@ use tokio::sync::mpsc;
 use tracing::{debug, info, warn};
 
 mod boundary;
+mod flow;
+pub mod retire;
 
 const RELINK_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 
@@ -102,6 +104,8 @@ pub struct OutputSlot {
     capabilities: crate::plugin::CapabilitySet,
     /// The rendition's rungs, when this output asked for one.
     taps: Vec<crate::render::Tap>,
+    /// What reaches the sink, which is what `live` is judged on.
+    flow: flow::Flow,
 }
 
 impl OutputSlot {
@@ -184,6 +188,7 @@ impl OutputSlot {
             manifest: ready.manifest,
             capabilities: ready.capabilities,
             taps,
+            flow: Default::default(),
         });
         // An address still carrying a preset's placeholder is not one anybody
         // can publish to, and dialling it anyway had the example config
@@ -215,7 +220,12 @@ impl OutputSlot {
         //
         // The gap costs nothing: the feed queue upstream keeps accepting the
         // encoder's output throughout.
-        if let Some(old) = self.pipeline.lock().take() {
+        //
+        // Taken out of the lock first. Inside an `if let` the guard lives to
+        // the end of the block, and a retire that waited on a stuck sink then
+        // held the lock that `detach` takes on the mixer thread.
+        let old = self.pipeline.lock().take();
+        if let Some(old) = old {
             drop(old.watch);
             self.kind.lock().shutdown(old.pipeline);
         }
@@ -277,6 +287,7 @@ impl OutputSlot {
             .with_context(|| format!("building the {} half of output {id}", self.manifest.provide_id()))?;
 
         self.connected.store(false, Ordering::Relaxed);
+        self.flow.watch(&pipeline);
 
         let watch = gstutil::watch_bus(&pipeline, BusOwner::Output(id.clone()), self.bus_tx.clone())
             .context("watching output bus")?;
@@ -423,13 +434,24 @@ impl OutputSlot {
     /// Liveness is the implementation's own answer. It used to be a reading of
     /// `rtmp2sink`'s `stats.out-chunk-size`, which no other sink has; an output
     /// that cannot answer that question can still answer this one.
+    ///
+    /// Nor is the kind's answer enough on its own: an output is live only
+    /// while bytes keep reaching its sink. See `flow`.
     pub fn refresh_connected(&self) {
         // Not asked while a reconnect on another thread holds the kind, which
-        // it does for as long as the old pipeline takes to reach NULL: this
-        // runs on the mixer thread, and the answer then is "not yet" anyway.
-        let Some(kind) = self.kind.try_lock() else { return };
-        let now = self.pipeline.lock().is_some() && kind.connected();
-        drop(kind);
+        // it does while it takes the old pipeline down and builds the next.
+        // This runs on the mixer thread, so it does not wait, and the answer
+        // then is "not connected". It used to keep whatever it said last,
+        // which for a reconnect that never finished was `live` for good.
+        let now = match self.kind.try_lock() {
+            Some(kind) => {
+                let up = kind.connected();
+                drop(kind);
+                up && self.pipeline.try_lock().is_some_and(|p| p.is_some())
+                    && self.flow.moving(std::time::Instant::now())
+            }
+            None => false,
+        };
         if now != self.connected.swap(now, Ordering::Relaxed) {
             if now {
                 info!(output = %self.cfg.id, kind = %self.manifest.provide_id(), "output connection established");
@@ -505,8 +527,15 @@ impl OutputSlot {
             // the core. Nothing the core builds itself has any.
             // Skipped for a turn while a reconnect holds the kind; see
             // `refresh_connected`.
-            extra: self.kind.try_lock().map(|k| k.status()).unwrap_or_default(),
+            extra: self.extra(),
         }
+    }
+
+    /// The kind's own fields, and what has reached the sink, `bytes_out`.
+    fn extra(&self) -> godwinmix_protocol::types::Extra {
+        let mut extra = self.kind.try_lock().map(|k| k.status()).unwrap_or_default();
+        extra.insert("bytes_out".into(), self.flow.total().into());
+        extra
     }
 
     pub fn id(&self) -> &OutputId {
@@ -523,7 +552,9 @@ impl OutputSlot {
         // Said first, so a reconnect running on another thread takes down
         // whatever it builds rather than leaving it up behind this.
         self.turn.mark_stopped();
-        if let Some(live) = self.pipeline.lock().take() {
+        // Out of the lock before the kind is asked; see `spin_up`.
+        let live = self.pipeline.lock().take();
+        if let Some(live) = live {
             drop(live.watch);
             self.kind.lock().shutdown(live.pipeline);
         }
