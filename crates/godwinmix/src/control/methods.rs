@@ -37,7 +37,7 @@ pub(crate) mod program;
 pub mod project;
 pub(crate) mod scenes;
 mod sources;
-mod task_request;
+pub mod task_request;
 mod tasks;
 mod vitals;
 
