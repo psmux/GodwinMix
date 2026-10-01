@@ -9,11 +9,14 @@ fn round(v: f64, places: i32) -> f64 {
     (v * f).round() / f
 }
 
+/// One stream. Its rate is over the time it was arriving, not the whole window,
+/// so a feed that started late is not counted slow.
 pub fn one(name: &str, s: &Stream, seconds: f64) -> Value {
     let (gop_ms, gops_dropped) = s.gops();
+    let span = s.first_ms.map_or(seconds * 1000.0, |f| s.last_ms - f).max(1.0) / 1000.0;
     json!({
         "stream": name,
-        "kbps": round(s.bytes as f64 * 8.0 / seconds.max(0.001) / 1000.0, 0),
+        "kbps": round(s.bytes as f64 * 8.0 / span / 1000.0, 0),
         "datagrams": s.datagrams,
         "packets": s.packets,
         "cc_errors": s.cc_errors,
@@ -32,6 +35,7 @@ pub fn one(name: &str, s: &Stream, seconds: f64) -> Value {
 pub fn json(names: &[String], streams: &[Stream], seconds: f64) -> Value {
     let each: Vec<Value> = names.iter().zip(streams).map(|(n, s)| one(n, s, seconds)).collect();
     let sum = |k: &str| each.iter().map(|v| v[k].as_f64().unwrap_or(0.0)).sum::<f64>();
+    let count = |k: &str| each.iter().map(|v| v[k].as_u64().unwrap_or(0)).sum::<u64>();
     let max = |k: &str| each.iter().map(|v| v[k].as_f64().unwrap_or(0.0)).fold(0.0, f64::max);
     let silent = each.iter().filter(|v| v["datagrams"].as_u64() == Some(0)).count();
     let total = json!({
@@ -39,15 +43,15 @@ pub fn json(names: &[String], streams: &[Stream], seconds: f64) -> Value {
         "silent_streams": silent,
         "seconds": round(seconds, 1),
         "mbps": round(sum("kbps") / 1000.0, 1),
-        "datagrams": sum("datagrams"),
-        "packets": sum("packets"),
-        "cc_errors": sum("cc_errors"),
-        "packets_lost": sum("packets_lost"),
-        "pcr_jumps": sum("pcr_jumps"),
+        "datagrams": count("datagrams"),
+        "packets": count("packets"),
+        "cc_errors": count("cc_errors"),
+        "packets_lost": count("packets_lost"),
+        "pcr_jumps": count("pcr_jumps"),
         "pcr_gap_max_ms": max("pcr_gap_max_ms"),
         "pcr_jitter_max_ms": max("pcr_jitter_ms"),
-        "keyframes": sum("keyframes"),
-        "gops_dropped": sum("gops_dropped"),
+        "keyframes": count("keyframes"),
+        "gops_dropped": count("gops_dropped"),
         "streams_with_gops_dropped": each.iter().filter(|v| v["gops_dropped"].as_u64().unwrap_or(0) > 0).count(),
         "silence_max_ms": max("silence_max_ms"),
     });

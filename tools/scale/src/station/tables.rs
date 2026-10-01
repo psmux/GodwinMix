@@ -22,13 +22,20 @@ fn received(c: &Value) -> String {
         return "not checked".into();
     }
     format!(
-        "{} of {} streams arrived, {} Mbit/s; {} CC errors ({} packets lost), {} PCR jumps, PCR jitter up to {} ms; {} keyframes, {} GOPs dropped in {} streams; longest silence {} ms",
+        "{} of {} streams arrived, {} Mbit/s; {} CC errors ({} packets lost), {} PCR jumps, PCR jitter up to {} ms; {} keyframes, {} GOPs dropped in {} streams; longest silence {} ms. The checker used {}% of one core",
         t["streams"].as_u64().unwrap_or(0) - t["silent_streams"].as_u64().unwrap_or(0),
-        t["streams"], t["mbps"], t["cc_errors"], t["packets_lost"], t["pcr_jumps"], t["pcr_jitter_max_ms"], t["keyframes"], t["gops_dropped"], t["streams_with_gops_dropped"], t["silence_max_ms"]
+        t["streams"], t["mbps"], t["cc_errors"], t["packets_lost"], t["pcr_jumps"], t["pcr_jitter_max_ms"], t["keyframes"], t["gops_dropped"], t["streams_with_gops_dropped"], t["silence_max_ms"], t["checker_cpu_percent"]
     )
 }
 
-pub fn headline(feeds: &Value, add: &Value, sample: &Value, check: &Value, check_in: &Value) -> String {
+fn generator(f: &Value) -> String {
+    format!(
+        "{} feeds, {} Mbit/s sent, {}% of one core, {} MiB, {} send errors, latest datagram {} ms late",
+        f["feeds"], f["sent_mbps"], f["cpu_percent_of_one_core"], f["rss_mib"], f["send_errors"], f["late_max_ms"]
+    )
+}
+
+pub fn headline(feeds: &[Value; 2], add: &Value, sample: &Value, check: &Value, check_in: &Value) -> String {
     let r = &sample["roles"];
     let st = &sample["stats"];
     let mut rows: Vec<(String, String)> = Vec::new();
@@ -38,20 +45,26 @@ pub fn headline(feeds: &Value, add: &Value, sample: &Value, check: &Value, check
             rows.push(("Dry run plan".into(), format!("`{}`", add["plan"])));
         }
     }
-    rows.push(("Station".into(), role(&r["station"])));
-    rows.push(("Direct host".into(), role(&r["direct host"])));
-    rows.push(("Show processes".into(), role(&r["shows"])));
-    for (name, v) in r.as_object().into_iter().flatten().filter(|(k, _)| k.starts_with("plugin ")) {
-        rows.push((format!("Plugin `{}`", &name[7..]), role(v)));
+    if !r.is_null() {
+        rows.push(("Station".into(), role(&r["station"])));
+        rows.push(("Direct host".into(), role(&r["direct host"])));
+        rows.push(("Show processes".into(), role(&r["shows"])));
+        for (name, v) in r.as_object().into_iter().flatten().filter(|(k, _)| k.starts_with("plugin ")) {
+            rows.push((format!("Plugin `{}`", &name[7..]), role(v)));
+        }
+        rows.push(("Station and everything under it".into(), role(&r["total"])));
     }
-    rows.push(("Station and everything under it".into(), role(&r["total"])));
-    if !feeds.is_null() {
-        rows.push(("Feeds generator".into(), format!("{} feeds, {} Mbit/s sent, {}% of one core, {} MiB, {} send errors, latest datagram {} ms late", feeds["feeds"], feeds["sent_mbps"], feeds["cpu_percent_of_one_core"], feeds["rss_mib"], feeds["send_errors"], feeds["late_max_ms"])));
+    for (f, label) in feeds.iter().zip(["Feeds generator, alone with the checker", "Feeds generator, during the run"]) {
+        if !f.is_null() {
+            rows.push((label.into(), generator(f)));
+        }
     }
     if !check_in.is_null() {
         rows.push(("Feeds as sent (checked at the generator)".into(), received(check_in)));
     }
-    rows.push(("Outputs received".into(), received(check)));
+    if !check.is_null() {
+        rows.push(("Outputs received".into(), received(check)));
+    }
     if !st["method"].is_null() && st["reads"].as_u64().unwrap_or(0) > 0 {
         rows.push((format!("`{}`, once a second", st["method"].as_str().unwrap_or("")), format!("{} reads, {} ms on average, {} ms at most, {} shows", st["reads"], st["read_ms_avg"], st["read_ms_max"], st["shows"])));
         rows.push(("Health at the end".into(), format!("shows {}, alarms at peak {}, outputs {}", st["shows_by_state"], st["alarms_peak"], st["outputs_by_state"])));

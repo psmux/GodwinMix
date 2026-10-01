@@ -9,7 +9,7 @@ use std::process::Command;
 const HELP: &str = "
 gmx-scale report --dir RUN [--out FILE]
 
-Reads what a run left in RUN (run.json, feeds.json, add.json, sample.json,
+Reads what a run left in RUN (run.json, feeds.json, feeds-run.json, add.json, sample.json,
 check.json, and check-in.json when the feeds were checked straight from the
 generator) and writes one markdown page: the machine, the version, the
 numbers the wave 4 contract asks for, CPU and memory by role, and the worst
@@ -28,7 +28,8 @@ pub fn main(a: Args) -> Result<(), String> {
         std::fs::read_to_string(format!("{dir}/{name}")).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or(Value::Null)
     };
     let run = read("run.json");
-    let page = render(&run, &read("feeds.json"), &read("add.json"), &read("sample.json"), &read("check.json"), &read("check-in.json"));
+    let feeds = [read("feeds.json"), read("feeds-run.json")];
+    let page = render(&run, &feeds, &read("add.json"), &read("sample.json"), &read("check.json"), &read("check-in.json"));
     match a.str("out") {
         Some(path) => std::fs::write(path, page).map_err(|e| format!("could not write {path}: {e}"))?,
         None => print!("{page}"),
@@ -36,7 +37,7 @@ pub fn main(a: Args) -> Result<(), String> {
     Ok(())
 }
 
-fn render(run: &Value, feeds: &Value, add: &Value, sample: &Value, check: &Value, check_in: &Value) -> String {
+fn render(run: &Value, feeds: &[Value; 2], add: &Value, sample: &Value, check: &Value, check_in: &Value) -> String {
     let mut s = String::new();
     let _ = writeln!(s, "# Scale run: {}\n", run["title"].as_str().unwrap_or("headend"));
     let _ = writeln!(s, "| | |\n|---|---|");
@@ -52,9 +53,11 @@ fn render(run: &Value, feeds: &Value, add: &Value, sample: &Value, check: &Value
     }
     let _ = writeln!(s, "## The numbers\n");
     s.push_str(&tables::headline(feeds, add, sample, check, check_in));
-    let _ = writeln!(s, "\n## CPU and memory by role\n");
-    let _ = writeln!(s, "Percent of one core, sampled once a second. `total` is the station and everything under it.\n");
-    s.push_str(&tables::roles(&sample["roles"]));
+    if !sample.is_null() {
+        let _ = writeln!(s, "\n## CPU and memory by role\n");
+        let _ = writeln!(s, "Percent of one core, sampled once a second. `total` is the station and everything under it.\n");
+        s.push_str(&tables::roles(&sample["roles"]));
+    }
     if !check["streams"].is_null() {
         let _ = writeln!(s, "\n## The worst streams received\n");
         s.push_str(&tables::worst(&check["streams"], 10));
