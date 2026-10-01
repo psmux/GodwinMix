@@ -75,10 +75,10 @@ client does not (rule 2).
 The catch: channel WHIP takes H.264 only, because the channel path never
 decodes. The guest page sets `setCodecPreferences` to H.264 first. Chrome,
 Edge and Safari send H.264 on every platform we care about. Firefox does too
-through OpenH264, which it downloads itself. A browser that cannot is refused
-with a message saying which browser to use. A VP8 path through `ingest/whip`
-is the fallback if that refusal turns out to be common, and it costs a decode
-we would pay at the mixer anyway.
+through OpenH264, which it downloads itself. A browser that offers only VP8 is
+accepted too, and its picture is decoded in the ingest plugin and handed on.
+That costs a decode we would pay at the mixer anyway, so it is not a loss for
+a guest, only for a restreamed channel.
 
 Audio is Opus from every browser, and the channel path turns it into AAC
 today (`plugins/ingest/src/whip/session.rs`: `opusdec ! avenc_aac`), because
@@ -188,9 +188,15 @@ guest's name as a lower third, layouts that rearrange as guests come and go
 **Later.** Local recording in the guest's browser, uploaded after the show,
 for a clean copy that never went through their uplink.
 
-## Decisions for Godwin
+## Decisions
 
-* TLS: built in first, or document the proxy and wait?
-* Is H.264 only acceptable for guests, refusing a browser that cannot send
-  it, with VP8 as a later fallback?
-* How many guests at once should a Pi and an old laptop be expected to carry?
+Made on 2026-10-01.
+
+* TLS is built in, with a local certificate first and ACME later.
+* Guests may send VP8 as well as H.264. H.264 stays the preferred codec on the
+  guest page, because it needs no decode in the channel path; VP8 is accepted
+  and decoded so that no browser is turned away.
+* Built with parallel agents, each in its own git worktree, at most two at a
+  time, with the cost stated before each launch.
+* Still open: how many guests a Pi and an old laptop should carry. Wave 0
+  measures it.
