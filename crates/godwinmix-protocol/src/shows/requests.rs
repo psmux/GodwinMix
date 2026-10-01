@@ -21,9 +21,8 @@ pub struct ShowOutputSpec {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,
     /// The whole address: `srt://10.0.0.9:9000`, `rtmp://host/app/key`,
-    /// `udp://239.2.2.2:5000`, or `hls://viewers` for HLS served from the
-    /// station's own port. For a platform, its ingest server when it is not
-    /// the platform's own.
+    /// `udp://239.2.2.2:5000`, `hls://viewers`. For a platform, its ingest
+    /// server when it is not the platform's own.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub uri: Option<String>,
     /// A platform's stream key. Write only: no method reads it back.
@@ -37,32 +36,29 @@ pub struct ShowOutputSpec {
     /// admitted by the governor.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rendition: Option<RenditionChoice>,
-    /// For an `hls://` output: segment and part lengths, the window and the
-    /// viewer key, as an `hls/output` takes them. Refused on any other.
+    /// For an `hls://` output only.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "HlsOutputParams")]
     pub params: Option<HlsOutputParams>,
 }
 
-/// The `params` of a show's `hls://` output: the same names, defaults and
-/// limits as an `hls/output`'s (`docs/reference/hls-output.md`).
+/// An `hls://` output's params, as an `hls/output` takes them.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct HlsOutputParams {
-    /// Target segment length, 500 to 10000. Segments are cut at the first
-    /// keyframe at or after it. Default 2000.
+    /// 500 to 10000, default 2000.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub segment_ms: Option<u32>,
-    /// LL-HLS part length; 0 is plain HLS. Default 0.
+    /// LL-HLS part, 0 for none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub part_ms: Option<u32>,
-    /// true gives parts of 333 ms when `part_ms` names no other length.
+    /// true: parts of 333 ms.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub low_latency: Option<bool>,
-    /// Seconds of the past each rung keeps and lists. Default 30.
+    /// Seconds kept, default 30.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub window: Option<u32>,
-    /// The key a viewer's link carries, at least 16 characters. Left out:
-    /// derived from the show and the output on this machine.
+    /// 16 characters or more.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub viewer_key: Option<String>,
 }
@@ -89,8 +85,8 @@ pub struct ShowOutputAddRequest {
     pub enabled: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rendition: Option<RenditionChoice>,
-    /// For an `hls://` output, as in `show.add`'s outputs.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "HlsOutputParams")]
     pub params: Option<HlsOutputParams>,
 }
 
@@ -132,9 +128,9 @@ pub struct ShowOutputSetRequest {
     #[serde(default, deserialize_with = "present", skip_serializing_if = "Option::is_none")]
     #[schemars(with = "Option<RenditionChoice>")]
     pub rendition: Option<Option<RenditionChoice>>,
-    /// An `hls://` output's params, all of them: a name left out goes back
-    /// to its default.
+    /// Replaces them all.
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(with = "HlsOutputParams")]
     pub params: Option<HlsOutputParams>,
 }
 

@@ -62,3 +62,24 @@ fn an_input_is_an_address_this_machine_can_open_or_a_channels_stream() {
     with_backup.backup = Some(godwinmix_protocol::shows::BackupInput { uri: "nonsense".into(), program: None, params: None });
     assert_eq!(check_input(&with_backup).unwrap_err().data["field"], "input.backup.uri");
 }
+
+#[test]
+fn an_hls_output_is_named_by_its_address_and_keeps_its_params_on_it() {
+    let mut list = Vec::new();
+    let made = add(&mut list, "feed", &spec(json!({"uri": "hls://viewers", "params": {"segment_ms": 1000, "window": 6}}))).unwrap();
+    assert_eq!((made.as_str(), list[0].platform.as_str()), ("viewers", "hls"));
+    assert_eq!(list[0].server, "hls://viewers?segment_ms=1000&window=6");
+    let not_hls = add(&mut list, "feed", &spec(json!({"uri": "udp://h:1", "params": {"window": 6}}))).unwrap_err();
+    assert_eq!(not_hls.data["field"], "params");
+    let ladder = add(&mut list, "feed", &spec(json!({"uri": "hls://abr", "rendition": {"preset": "abr-ladder-4"}}))).unwrap_err();
+    assert_eq!(ladder.data["ladder"], true);
+    let short = add(&mut list, "feed", &spec(json!({"uri": "hls://x", "params": {"segment_ms": 100}}))).unwrap_err();
+    assert_eq!(short.data["field"], "params");
+    let req = |v| serde_json::from_value::<ShowOutputSetRequest>(v).unwrap();
+    set(&mut list, &req(json!({"id": "feed", "output": "viewers", "label": "Lobby"}))).unwrap();
+    assert_eq!(list[0].server, "hls://viewers?segment_ms=1000&window=6", "a label leaves the params be");
+    set(&mut list, &req(json!({"id": "feed", "output": "viewers", "params": {"low_latency": true}}))).unwrap();
+    assert_eq!(list[0].server, "hls://viewers?low_latency=true", "params given replace them all");
+    let moved = set(&mut list, &req(json!({"id": "feed", "output": "viewers", "uri": "udp://h:1"}))).unwrap_err();
+    assert_eq!(moved.data["field"], "uri");
+}
