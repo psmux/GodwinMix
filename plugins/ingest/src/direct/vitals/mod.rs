@@ -29,6 +29,7 @@ mod measure;
 mod picture;
 mod pool;
 mod show;
+mod sound;
 mod tap;
 mod ticker;
 mod work;
@@ -38,6 +39,8 @@ mod registry;
 mod tests;
 #[cfg(test)]
 mod tests_host;
+#[cfg(test)]
+mod tests_codecs;
 #[cfg(test)]
 mod bench;
 

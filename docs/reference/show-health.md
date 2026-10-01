@@ -114,9 +114,12 @@ own queue.
   freeze shorter than that is not seen. A show whose outputs already decode
   the input for a rendition hands one decoded picture a second from that
   decode, and then none of its keyframes are decoded a second time.
-* Sound is three AAC frames in a row, once a second, about 64 ms out of
-  every 1000. The first only primes the decoder; the peak is read from the
-  other two.
+* Sound is three frames in a row, once a second, about 64 ms out of every
+  1000 for AAC and 72 ms for MPEG layer II. The first only primes the
+  decoder; the peak is read from the other two. AAC, MPEG audio (layers I to
+  III, MP3 included), AC-3 and E-AC-3 are measured, each decoded as its own
+  frames say it is. A sound codec this machine has no decoder for is not
+  measured, and its show never raises `silence`.
 * A few worker threads (two by default) shared by every
   show, each with one decoder per codec, used one keyframe at a time and
   flushed between shows. Each show has one waiting picture and one waiting
