@@ -40,6 +40,10 @@ mod remux;
 mod rest;
 mod rtmp;
 mod sends;
+#[cfg(test)]
+mod testfeed;
+#[allow(dead_code)]
+mod tsmux;
 mod source;
 mod sps;
 mod hevc;
