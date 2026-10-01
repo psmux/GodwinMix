@@ -4,7 +4,7 @@
 
 import { errorToast, toast } from "../../shell/toast.js";
 import { alarmKey } from "./cells.js";
-import { healthOf } from "./model.js";
+import { healthOf, mixed } from "./model.js";
 
 const KEY = "gmx.wall";
 
@@ -56,12 +56,12 @@ function clicked(view, e) {
 export async function compositing(view, id) {
   const show = view.data.find(id);
   if (!show) return;
-  const on = !show.compositing;
+  const on = !mixed(show);
   try {
     await view.data.set(id, { compositing: on });
     toast({ text: on ? `${show.name} is mixed now: it has scenes and its own programme encode.` : `${show.name} is direct now: its input goes straight to its outputs.` });
   } catch (e) {
-    errorToast(e, `${show.name} stays ${on ? "direct" : "mixed"}.`);
+    errorToast(e, `${show.name} stays ${on ? "direct" : "mixed"}`);
   }
 }
 
@@ -69,7 +69,7 @@ export async function compositing(view, id) {
 export async function openShow(view, id) {
   const show = view.data.find(id);
   if (!show) return;
-  if (show.compositing) return (await import("../../shell/show-actions.js")).switchTo(id);
+  if (mixed(show)) return (await import("../../shell/show-actions.js")).switchTo(id);
   const { showDetail } = await import("./detail.js");
   showDetail(view.client, show, { data: view.data });
 }

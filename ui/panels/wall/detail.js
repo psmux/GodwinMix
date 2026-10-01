@@ -7,7 +7,7 @@ import { el } from "../../shell/dom.js";
 import { modal } from "../../shell/modal.js";
 import { errorToast, toast } from "../../shell/toast.js";
 import { outputsSection } from "./detail-outputs.js";
-import { ALARMS, age, format, healthOf, kbps, transport } from "./model.js";
+import { ALARMS, age, format, healthOf, kbps, mixed, transport } from "./model.js";
 
 const MIX_ON = "Mixed: this show runs as a mixer of its own, with scenes, transitions and one programme encode that every output takes.";
 const MIX_OFF = "Direct: the input goes straight to the outputs with no mixer and no decode, unless an output asks for a new format.";
@@ -70,8 +70,8 @@ function liveWords(show, st) {
 }
 
 function mixing(show, send) {
-  const sw = el("button.wl-switch.big", { type: "button", role: "switch", "aria-checked": String(!!show.compositing), "aria-label": "Mixing" }, [el("span.wl-knob"), el("span.wl-swword", { text: show.compositing ? "Mixed" : "Direct" })]);
-  const said = el("p.wl-sub.wl-wrap", { text: show.compositing ? MIX_ON : MIX_OFF });
+  const sw = el("button.wl-switch.big", { type: "button", role: "switch", "aria-checked": String(mixed(show)), "aria-label": "Mixing" }, [el("span.wl-knob"), el("span.wl-swword", { text: mixed(show) ? "Mixed" : "Direct" })]);
+  const said = el("p.wl-sub.wl-wrap", { text: mixed(show) ? MIX_ON : MIX_OFF });
   sw.onclick = async () => {
     const on = sw.getAttribute("aria-checked") !== "true";
     const ok = await send({ compositing: on }, `${show.name} stays ${on ? "direct" : "mixed"}`, on ? `${show.name} is mixed now.` : `${show.name} is direct now.`);
