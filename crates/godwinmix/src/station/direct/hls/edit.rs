@@ -2,9 +2,11 @@
 //! [`super::spec`].
 
 use super::spec;
+use crate::station::state::Station;
 use godwinmix_protocol::destination::StoredDestination;
 use godwinmix_protocol::error::RpcError;
 use godwinmix_protocol::shows::{ShowOutputSetRequest, ShowOutputSpec};
+use serde_json::json;
 
 /// An HLS output: `hls://<name>`, served from the station's own port at
 /// `/hls/<id>/master.m3u8?show=<show>`.
@@ -46,4 +48,18 @@ pub fn set(d: &mut StoredDestination, req: &ShowOutputSetRequest) -> Result<(), 
         (None, None) => format!("hls://{name}"),
     };
     Ok(())
+}
+
+/// Refuse a new HLS output that would copy sound already known not to be
+/// AAC, and say what to add instead.
+pub fn check_sound(st: &Station, show: &str, added: Option<&StoredDestination>) -> Result<(), RpcError> {
+    let Some(d) = added.filter(|d| d.platform == spec::SCHEME && d.enabled && d.rendition.is_none()) else { return Ok(()) };
+    let codec = st.direct.seen.lock().get(show).and_then(|s| s.input.as_ref()?["audio"]["codec"].as_str().map(str::to_string));
+    let Some(codec) = codec.filter(|c| c != "aac") else { return Ok(()) };
+    let msg = format!(
+        "show {show}'s input sound is {codec}, and HLS carries AAC: a copy would make segments no player can play. \
+         Add the output with rendition: {{\"audio\": {{\"codec\": \"aac\"}}}}, which converts the sound and still copies the picture."
+    );
+    let fix = json!({"audio": {"codec": "aac"}});
+    Err(RpcError::invalid_params(msg).with("field", "rendition").with("output", d.id.as_str()).with("audio_codec", codec).with("rendition", fix))
 }

@@ -12,6 +12,7 @@
 //! on (`keep.rs`), and is started again when it dies. Meanwhile its outputs
 //! report `reconnecting`, or `failed` once it keeps dying, with why.
 
+mod book;
 mod child;
 pub mod edit;
 mod keep;
@@ -19,15 +20,14 @@ mod serve;
 pub mod spec;
 mod wants;
 
+pub use edit::check_sound;
 pub use serve::router;
 
 use crate::station::packager::wire::{Report, Want};
 use crate::station::state::Station;
 use godwinmix_core::hls::Stream;
-use godwinmix_protocol::destination::{DestinationLive, DestinationState, Playback, StoredDestination};
-use godwinmix_protocol::error::RpcError;
+use godwinmix_protocol::destination::DestinationState;
 use parking_lot::Mutex;
-use serde_json::json;
 use std::collections::BTreeMap;
 use std::net::SocketAddr;
 use std::sync::{Arc, OnceLock};
@@ -125,63 +125,4 @@ impl Packagers {
         book.keeping = true;
         rt.spawn(keep::keep(st.clone()));
     }
-
-    /// The card for one output, for letting a player in.
-    pub fn stream(&self, show: &str, output: &str) -> Option<Arc<Stream>> {
-        self.book.lock().cards.get(&(show.to_string(), output.to_string())).map(|c| c.stream.clone())
-    }
-
-    /// The HLS outputs one show serves now.
-    pub fn ids(&self, show: &str) -> Vec<String> {
-        self.book.lock().cards.keys().filter(|(s, _)| s == show).map(|(_, o)| o.clone()).collect()
-    }
-
-    /// Where the running packager listens, and the secret it takes.
-    pub fn packager(&self) -> Option<(SocketAddr, String)> {
-        self.book.lock().at.clone()
-    }
-
-    /// The packager's process, for what the station's children cost.
-    pub fn pid(&self) -> Option<u32> {
-        self.book.lock().pid
-    }
-
-    /// What one output is doing, and where a player opens it.
-    pub fn view(&self, show: &str, output: &str) -> Option<(DestinationLive, Playback)> {
-        let book = self.book.lock();
-        let key = (show.to_string(), output.to_string());
-        let card = book.cards.get(&key)?;
-        let report = book.reports.get(&key);
-        let live = match (&book.down, report) {
-            (Some((state, why, at)), _) => {
-                DestinationLive { state: *state, since_ms: at.elapsed().as_millis() as u64, reconnects: book.restarts, error: Some(why.clone()), kbps: 0 }
-            }
-            (None, Some(r)) => DestinationLive { reconnects: r.live.reconnects + book.restarts, ..r.live.clone() },
-            (None, None) => {
-                let error = Some("handing the output to the HLS packager".to_string());
-                DestinationLive { state: DestinationState::Waiting, reconnects: book.restarts, error, ..Default::default() }
-            }
-        };
-        let q = format!("show={show}&key={}", card.want.viewer_key);
-        let playback = Playback {
-            master_url_path: format!("/hls/{output}/master.m3u8?{q}"),
-            dash_url_path: format!("/hls/{output}/manifest.mpd?{q}"),
-            viewers: report.map(|r| r.viewers).unwrap_or(0),
-        };
-        Some((live, playback))
-    }
-}
-
-/// Refuse a new HLS output that would copy sound already known not to be
-/// AAC, and say what to add instead.
-pub fn check_sound(st: &Station, show: &str, added: Option<&StoredDestination>) -> Result<(), RpcError> {
-    let Some(d) = added.filter(|d| d.platform == spec::SCHEME && d.enabled && d.rendition.is_none()) else { return Ok(()) };
-    let codec = st.direct.seen.lock().get(show).and_then(|s| s.input.as_ref()?["audio"]["codec"].as_str().map(str::to_string));
-    let Some(codec) = codec.filter(|c| c != "aac") else { return Ok(()) };
-    let msg = format!(
-        "show {show}'s input sound is {codec}, and HLS carries AAC: a copy would make segments no player can play. \
-         Add the output with rendition: {{\"audio\": {{\"codec\": \"aac\"}}}}, which converts the sound and still copies the picture."
-    );
-    let fix = json!({"audio": {"codec": "aac"}});
-    Err(RpcError::invalid_params(msg).with("field", "rendition").with("output", d.id.as_str()).with("audio_codec", codec).with("rendition", fix))
 }
