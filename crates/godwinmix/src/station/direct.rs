@@ -60,7 +60,8 @@ pub struct Direct {
     /// The renditions of direct outputs, planned and admitted like a
     /// channel's, against the station's governor.
     pub(crate) transcode: Transcode,
-    /// The HLS outputs, packaged and served by the station itself.
+    /// The HLS outputs, packaged by the HLS packager process and served
+    /// from the station's port.
     pub(crate) hls: hls::Packagers,
     /// How many times a table was asked for, and how many were handed.
     gens: Mutex<(u64, u64)>,
@@ -85,6 +86,9 @@ impl Direct {
     /// start the two threads.
     pub fn attach(st: &Arc<Station>, plugins: Arc<Supervisor>) {
         st.direct.transcode.use_governor(st.render.governor().clone());
+        if let Ok(rt) = tokio::runtime::Handle::try_current() {
+            st.direct.hls.use_runtime(rt);
+        }
         let _ = st.direct.plugins.set(plugins.clone());
         let (tx, rx) = std::sync::mpsc::channel::<()>();
         *st.direct.wake.lock() = Some(tx);

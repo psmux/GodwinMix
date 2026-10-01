@@ -165,7 +165,8 @@ output, the number the governor's uplink budget counts.
 ## From a show without compositing
 
 A direct show has no programme encode and no show process, so its HLS output
-is an output of the show and the station packages it. It is added with
+is an output of the show, packaged by the station's HLS packager (a child
+process of the station) and served from the station's port. It is added with
 `show.output.add` (or in `show.add`'s `outputs`), not `output.add`:
 
 ```json
@@ -179,7 +180,7 @@ is an output of the show and the station packages it. It is added with
 | `params` | the table above | the same names, defaults and limits |
 | Rungs | `programme`, or one per ladder rung, and `audio` | `main` and `audio` |
 | `rendition` | none, a preset or a ladder | none (a copy), or one rendition; a ladder is refused with `data.ladder: true` |
-| Served by | the show, relayed by the station | the station itself |
+| Served by | the show, relayed by the station | the station's port: the station lets the player in, its HLS packager answers |
 | Link | `playback.master_url_path` in `output.list` | `playback.master_url_path` on the output in `show.list` |
 
 The routes are the ones above with `show=<id>` in the query, which every URI
@@ -212,13 +213,24 @@ catalogue's `mpeg-audio-decode` (`mpg123audiodec`) and `ac3-decode`
 (`avdec_ac3`); E-AC-3 has no decoder in the catalogue yet and is refused by
 the planner.
 
-The packager reads the show's stream from the ingest plugin's relay on
-loopback, the same `GMXHUB` door a source process reads a channel through
+The packager is the station's binary run with `--hls-packager`, a child of
+the station that runs only while at least one such output is on. It reads
+the show's stream from the ingest plugin's relay on loopback, the same
+`GMXHUB` door a source process reads a channel through
 (`plugins-network.md`), so the relay is opened for a show with an HLS output
-even when no channel has opened it.
+even when no channel has opened it. The station checks the viewer key or
+the token itself and forwards what it let in to the packager on loopback.
+Its CPU is counted with the station's other children in `governor.status`.
 
 The output's `state` is `waiting` until the input is live, `connecting`
 until every rung has a whole segment, then `live`; `kbps` is what is packaged.
+When the packager stops (it crashed, or stopped answering for 5 s), every
+such output is `reconnecting`, with an `error` that says so and when the
+station starts it again: after 1 s, doubling to 30 s while it keeps
+stopping. After five stops in a row the outputs say `failed` instead, and
+the station keeps trying. Each restart counts once in `reconnects`. Requests
+meanwhile get a 503 with `Retry-After: 2`. The link stays the same, but the
+segments start again from the first, so a player may have to open it again.
 The egress of these outputs is not yet counted in
 `godwinmix_core::hls::stream::egress_kbps()`, so the governor's uplink budget
 does not see it.

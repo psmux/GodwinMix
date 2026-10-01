@@ -69,7 +69,7 @@ pub fn feed_with(port: u16, sound: &str) -> gstreamer::Pipeline {
 }
 
 /// Bytes that reach `socket` within `wait`, stopping once there are `enough`.
-fn received(socket: &UdpSocket, wait: Duration, enough: usize) -> usize {
+pub fn received(socket: &UdpSocket, wait: Duration, enough: usize) -> usize {
     socket.set_read_timeout(Some(Duration::from_millis(200))).unwrap();
     let (mut n, mut buf, until) = (0, vec![0u8; 65536], Instant::now() + wait);
     while Instant::now() < until && n < enough {

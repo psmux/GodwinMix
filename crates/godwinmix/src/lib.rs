@@ -138,6 +138,11 @@ struct Args {
     #[arg(long, value_name = "ADDR", requires = "show", hide = true)]
     station: Option<std::net::SocketAddr>,
 
+    /// Run as a station's HLS packager. Not for a person to type: the
+    /// station starts it while a show without compositing has HLS on.
+    #[arg(long, hide = true)]
+    hls_packager: bool,
+
     #[command(subcommand)]
     command: Option<Command>,
 }
@@ -706,6 +711,10 @@ pub async fn run() -> Result<()> {
     {
         let _stage = core_observe::introspect::stage("gstreamer init");
         gstreamer::init().context("initialising GStreamer")?;
+    }
+
+    if args.hls_packager {
+        return station::packager::run().await;
     }
 
     if args.test_core {

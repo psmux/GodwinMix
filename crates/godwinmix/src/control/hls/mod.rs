@@ -23,9 +23,11 @@
 //!
 //! The routes are the same wherever they are served, and a [`Door`] says
 //! where the outputs are and whose tokens let a request in. A core's door is
-//! its [`Ctx`]: the engine's own registry of `hls/output`s. A station's is
-//! `station::direct::hls`, which serves the HLS outputs of shows without
-//! compositing under the same paths with `?show=<id>`.
+//! its [`Ctx`]: the engine's own registry of `hls/output`s. A station has
+//! two for the HLS outputs of shows without compositing, served under the
+//! same paths with `?show=<id>`: `station::direct::hls` finds the output
+//! and lets the player in, and the HLS packager process
+//! (`station::packager`) answers from its rings.
 //!
 //! # Waiting
 //!
@@ -34,7 +36,7 @@
 //! future on the server's runtime; it holds no lock and no thread. The
 //! packager never waits for anybody.
 
-mod auth;
+pub mod auth;
 pub mod files;
 pub mod playlists;
 
