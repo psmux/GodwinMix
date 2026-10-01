@@ -74,7 +74,7 @@ impl Loss {
         }
         let Ok(c) = catalog.try_lock() else { return };
         s.program = c.chosen.or(s.program);
-        if c.programs.len() > 1 || s.programs.is_empty() {
+        if !c.programs.is_empty() {
             s.programs = c
                 .programs
                 .iter()

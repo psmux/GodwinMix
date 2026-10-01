@@ -7,6 +7,7 @@
 mod cpu;
 mod files;
 mod pull;
+mod restart;
 mod tools;
 mod ts;
 

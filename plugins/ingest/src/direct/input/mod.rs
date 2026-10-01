@@ -28,6 +28,7 @@ mod rtsp;
 mod runner;
 pub mod spec;
 pub mod stats;
+mod streams;
 mod ts_in;
 
 use super::{Input, Sink, StopSignal};
