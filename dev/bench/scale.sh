@@ -67,7 +67,7 @@ fi
 [[ "$MODE" == feeds ]] && WARM="$MEASURE"
 # Other work on the machine skews every number, so the report says how busy it was.
 LOAD="$( (sysctl -n vm.loadavg 2>/dev/null || cut -d" " -f1-3 /proc/loadavg) | tr -d "{}" | xargs)"
-RUN="${TMPDIR:-/tmp}/gmx-scale-$STAMP"
+RUN="${TMPDIR:-/tmp}"; RUN="${RUN%/}/gmx-scale-$STAMP"
 TOOL="$REPO/tools/scale/target/release/gmx-scale"
 BIN="$REPO/target/release/godwinmix"
 MEDIA="$REPO/dev/bench/media"
@@ -91,8 +91,12 @@ wait_for() {
 pane_pid() { tmux list-panes -t "$1" -F '#{pane_pid}' 2>/dev/null | head -1; }
 api() { curl -s -m 30 -X "$1" "http://$ADDR$2" -H 'content-type: application/json' ${3:+-d "$3"}; }
 
+# Whatever is still running from this run's folder: shows and their plugins.
+leftovers() { pgrep -f "$RUN/(shows|plugins)/" 2>/dev/null; }
+
 cleanup() {
     for s in station feeds check; do tmux kill-session -t "gmx-scale-$s" 2>/dev/null; done
+    leftovers | xargs kill -9 2>/dev/null
     if [[ $KEEP == 1 ]]; then log "the run folder is $RUN"; else rm -rf "$RUN"; fi
 }
 trap cleanup EXIT
@@ -179,13 +183,26 @@ station_run() {
     wait_for 30 "the feeds to stop" test -s "$RUN/feeds-run.json"
 }
 
+# stop_station: SIGTERM, as a service manager would, then count what outlived it.
+stop_station() {
+    ORPHANS=0
+    [[ -n "${STATION_PID:-}" ]] || return 0
+    kill -TERM "$STATION_PID" 2>/dev/null
+    local until=$((SECONDS + 20))
+    while kill -0 "$STATION_PID" 2>/dev/null && (( SECONDS < until )); do sleep 0.5; done
+    sleep 2
+    ORPHANS="$(leftovers | wc -l | tr -d ' ')"
+    (( ORPHANS > 0 )) && log "$ORPHANS show or plugin processes outlived the station"
+    return 0
+}
+
 report() {
     local commit version file
     commit="$(cd "$REPO" && git rev-parse --short HEAD 2>/dev/null || echo unknown)"
     version="$("$BIN" --version 2>/dev/null || echo unknown)"
     [[ -z "$TITLE" ]] && TITLE="$FEEDS feeds, $MODE, $TRANSPORT, $FORMAT"
-    printf '{"title":"%s","version":"%s","commit":"%s","date":"%s","mode":"%s","feeds":%s,"seconds":%s,"clips":"hd1080.ts, hd720.ts, sd.ts, mpts.ts","command":"dev/bench/scale.sh %s","note":"%s","load":"%s"}\n' \
-        "$TITLE" "$version" "$commit" "$(date '+%Y-%m-%d %H:%M %Z')" "$MODE ($TRANSPORT)" "$FEEDS" "$MEASURE" "$ARGS" "$NOTE" "$LOAD" > "$RUN/run.json"
+    printf '{"title":"%s","version":"%s","commit":"%s","date":"%s","mode":"%s","feeds":%s,"seconds":%s,"clips":"hd1080.ts, hd720.ts, sd.ts, mpts.ts","command":"dev/bench/scale.sh %s","note":"%s","load":"%s","orphans":%s}\n' \
+        "$TITLE" "$version" "$commit" "$(date '+%Y-%m-%d %H:%M %Z')" "$MODE ($TRANSPORT)" "$FEEDS" "$MEASURE" "$ARGS" "$NOTE" "$LOAD" "${ORPHANS:-0}" > "$RUN/run.json"
     file="$REPO/dev/bench/results/scale-$MACHINE-$STAMP-$MODE.md"
     "$TOOL" report --dir "$RUN" --out "$file" || die "the report could not be written"
     log "wrote $file"
@@ -195,5 +212,5 @@ report() {
 [[ -x "$TOOL" ]] || die "$TOOL is not built. Run without --no-build."
 media
 feeds_alone
-[[ "$MODE" != feeds ]] && start_station && station_run
+[[ "$MODE" != feeds ]] && start_station && station_run && stop_station
 report
