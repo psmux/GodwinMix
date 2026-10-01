@@ -37,12 +37,14 @@ pub async fn set(st: &Arc<Station>, req: ShowSetRequest) -> Result<Value, RpcErr
         return Err(RpcError::invalid_params(msg).with("field", "input").with("show", req.id.clone()));
     }
     if name.is_some() || req.input.is_some() || req.alarms.is_some() {
+        // Sealed before the list is locked: the secret store writes a file.
+        let input = direct::inputs::seal_some(&req.id, req.input.clone())?;
         if let Some(r) = st.registry.lock().get_mut(&req.id) {
             if let Some(n) = name {
                 r.name = n;
             }
-            if let Some(i) = &req.input {
-                r.input = Some(i.clone());
+            if input.is_some() {
+                r.input = input;
             }
             if let Some(a) = &req.alarms {
                 r.alarms = Some(r.alarms.clone().unwrap_or_default().merged(a));

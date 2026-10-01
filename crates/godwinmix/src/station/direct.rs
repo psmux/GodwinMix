@@ -19,6 +19,7 @@
 
 mod edit;
 mod health;
+pub mod inputs;
 mod intake;
 mod mixed;
 pub mod outputs;

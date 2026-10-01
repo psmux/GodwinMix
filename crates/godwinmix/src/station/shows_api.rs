@@ -67,7 +67,7 @@ pub async fn add(st: &Arc<Station>, req: ShowAddRequest) -> Result<Value, RpcErr
     };
     let config = made.map_err(|e| RpcError::internal(format!("making the show's folder {}: {e:#}", folder.display())))?;
     let mut record = Record::new(&id, &name, Some(config));
-    record.input = req.input.clone();
+    record.input = super::direct::inputs::seal_some(&id, req.input.clone())?;
     st.registry.lock().records.push(record);
     saved(st)?;
     if req.input.is_some() {
@@ -115,7 +115,7 @@ pub async fn remove(st: &Arc<Station>, id: &str) -> Result<Value, RpcError> {
     if folder.starts_with(st.registry.lock().data_dir().join("shows")) {
         let _ = std::fs::remove_dir_all(&folder);
     }
-    super::direct::outputs::forget(id);
+    super::direct::inputs::forget_show(id);
     st.direct.forget(id);
     if direct {
         st.direct.hand_over();
