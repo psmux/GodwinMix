@@ -999,6 +999,11 @@ pub struct Cost {
 #[serde(default)]
 pub struct CpuUse {
     pub cores: u32,
+    /// What a station's processes cost now, read when asked: its own, every
+    /// show process and every plugin it started. Left out by a single
+    /// process core and where another process's CPU cannot be read.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub measured_millicores: Option<u32>,
     pub room_millicores: u32,
     pub used_millicores: u32,
 }

@@ -309,17 +309,19 @@ has stopped, with why.
 
 ### `governor.status {}`
 
-`{calibrated_at?, fingerprint?, calibrating, cpu: {cores, used_millicores,
+`{calibrated_at?, fingerprint?, calibrating, cpu: {cores, used_millicores, measured_millicores?,
 room_millicores}, devices: [{id, kind, used_millis, room_millis,
 sessions_used, sessions_max?}], egress_kbps, shed: [{what, why}]}`.
 `calibrated_at` is Unix seconds and absent before the first calibration.
 `room_millicores` is what could be admitted now, after the reserve.
-`used_millicores` is what this mixer's work costs: the larger of what the
-governor has admitted and what it measures. On a station that measure is the
-station's own process plus every show process and plugin process it started,
-the ingest plugin that runs the direct shows among them, read when
-`governor.status` is called (on Windows, where another process's CPU cannot
-be read, only the station's process and what shows holding a ticket report).
+`used_millicores` is the governor's own count: the larger of what it has
+admitted and what its process measures, with what shows holding a ticket
+report of themselves. A station also answers `measured_millicores`, what its
+processes cost now: its own, every show process and every plugin process it
+started, the ingest plugin that runs the direct shows among them. It is read
+when `governor.status` is called and not otherwise. It is left out by a
+single process core, and on Windows once any show or plugin runs, since
+another process's CPU cannot be read there.
 
 ### `governor.calibrate {confirm?}`
 

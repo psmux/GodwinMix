@@ -131,10 +131,10 @@ async fn governor_status_counts_the_direct_host_the_station_started() {
     }
     let (pid, host) = ingest_process(st.pid()).expect("the station runs gmx-ingest as its child");
     let g = call(&mut ws, 4, "governor.status", json!({})).await;
-    let used = g["result"]["cpu"]["used_millicores"].as_u64().unwrap_or(0);
-    eprintln!("gmx-ingest {pid} at {host} millicores, governor.status used {used}");
+    let used = g["result"]["cpu"]["measured_millicores"].as_u64().unwrap_or(0);
+    eprintln!("gmx-ingest {pid} at {host} millicores, governor.status measured {used}");
     assert!(host >= 20, "sixteen outputs should cost the host something; ps read {host} millicores");
-    assert!(used >= host * 3 / 4, "governor.status says {used} millicores used, under the direct host's {host}: {g}");
+    assert!(used >= host * 3 / 4, "governor.status measures {used} millicores, under the direct host's {host}: {g}");
     pipeline.set_state(gstreamer::State::Null).unwrap();
 }
 

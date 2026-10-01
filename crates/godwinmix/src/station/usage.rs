@@ -36,11 +36,15 @@ pub struct Children {
 }
 
 impl Children {
-    /// Every child's CPU summed, thousandths of a core, or None when this
-    /// machine cannot say (Windows reports memory only).
+    /// Every child's CPU summed, thousandths of a core: zero with no child,
+    /// None when there are children and this machine cannot read any of them
+    /// (Windows reports memory only).
     pub fn millicores(&self) -> Option<u32> {
-        let all = self.shows.values().chain(&self.plugins).filter_map(|s| s.cpu_percent);
-        all.fold(None, |sum, p| Some(sum.unwrap_or(0) + millicores(p)))
+        let mut all = self.shows.values().chain(&self.plugins).peekable();
+        if all.peek().is_none() {
+            return Some(0);
+        }
+        all.filter_map(|s| s.cpu_percent).fold(None, |sum, p| Some(sum.unwrap_or(0) + millicores(p)))
     }
 
     /// One show's CPU, thousandths of a core.
@@ -122,6 +126,7 @@ mod tests {
     fn nothing_measured_is_none_not_zero() {
         let none = Children { shows: [("a".into(), Sample { cpu_percent: None, rss_bytes: Some(1) })].into(), plugins: Vec::new() };
         assert_eq!(none.millicores(), None);
+        assert_eq!(Children::default().millicores(), Some(0), "no child costs nothing");
         let two = Children { shows: [("a".into(), Sample { cpu_percent: Some(12.5), rss_bytes: None })].into(), plugins: vec![Sample { cpu_percent: Some(50.0), rss_bytes: None }] };
         assert_eq!(two.millicores(), Some(625));
         assert_eq!(two.show("a"), Some(125));

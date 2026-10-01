@@ -2195,6 +2195,15 @@
           "minimum": 0,
           "type": "integer"
         },
+        "measured_millicores": {
+          "description": "What a station's processes cost now, read when asked: its own, every\nshow process and every plugin it started. Left out by a single\nprocess core and where another process's CPU cannot be read.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
         "room_millicores": {
           "format": "uint32",
           "minimum": 0,

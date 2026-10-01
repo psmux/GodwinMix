@@ -39,6 +39,11 @@ async function modelTests(test, eq, ok) {
     eq(c.loadText(direct, { outputs: [{ id: "o", encoder: "x264", cpu_millicores: 90 }] }), "9% core");
     eq(c.loadText(direct, null), "");
   });
+  test("the header's CPU is what the station measures of its processes, when it says", () => {
+    const busy = { cores: 10, used_millicores: 20, room_millicores: 6000, measured_millicores: 5200 };
+    eq(m.summary([], new Map(), { cpu: busy }).cpu, 52, "the direct host and the shows counted");
+    eq(m.summary([], new Map(), { cpu: { cores: 10, used_millicores: 2500, room_millicores: 6000 } }).cpu, 25, "a core that does not measure");
+  });
   const shows = headend(80, 1e9);
   const rows = (o) => m.rows(shows, new Map(), o);
   test("shows in alarm come first, then warnings, then the rest by name", () => {
