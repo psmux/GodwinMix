@@ -17,13 +17,17 @@
 //! [`start`] takes any iterator of [`MediaTag`], and a `Receiver<MediaTag>`
 //! is one, so the channel hub's reader plugs straight in.
 
-mod board;
+pub(crate) mod board;
+mod file_out;
+mod iface;
 mod io;
 mod link;
+mod rist_out;
+mod udp_out;
 pub(crate) mod meta;
-mod queue;
+pub(crate) mod queue;
 mod rtmp_out;
-mod run;
+pub(crate) mod run;
 mod srt_out;
 pub(crate) mod ts_video;
 mod target;
@@ -86,14 +90,18 @@ where
         q.close();
     });
 
-    let sender = run::Sender {
-        target,
-        queue: Arc::clone(&queue),
-        board: Arc::clone(&board),
-        stop: Arc::clone(&stop),
-        pre: run::Preamble::default(),
-    };
+    let tags: Arc<dyn queue::Tags> = queue.clone();
+    spawn_sender(target, tags, Arc::clone(&board), Arc::clone(&stop));
+    Handle { stop, queue, board }
+}
+
+/// Run a sender on a thread of its own, reading `tags` and reporting on
+/// `board`, until `stop` is set or the tags end. The direct host runs a
+/// `run::Sender` on its output's one thread instead, over a hub reader.
+fn spawn_sender(target: Target, tags: Arc<dyn queue::Tags>, board: Arc<board::Board>, stop: Arc<AtomicBool>) {
+    let name = target.id.clone();
     let on_panic = Arc::clone(&board);
+    let sender = run::Sender { target, queue: tags, board, stop, pre: run::Preamble::default() };
     let _ = std::thread::Builder::new().name(format!("gmx-restream-{name}")).spawn(move || {
         // A bug in here must not leave the row saying "connecting" forever.
         if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| sender.run())).is_err() {
@@ -102,7 +110,6 @@ where
                                  destination off and on again".into()));
         }
     });
-    Handle { stop, queue, board }
 }
 
 impl Handle {
