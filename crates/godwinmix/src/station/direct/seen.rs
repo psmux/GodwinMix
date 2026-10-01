@@ -89,14 +89,10 @@ impl Seen {
         }
     }
 
-    /// Give the input's picture the frame rate the stats measure, once the
-    /// input has been live a few seconds. `direct.input` is sent when the
-    /// input's shape moves, and its rate is the hub's first reading, often
-    /// of part of a second: none, or 8 for a 30 fps feed. A rate is not a
-    /// move, so without this a rendition would wait for one for ever, or be
-    /// planned against the wrong one. Only a rate a fifth or more away from
-    /// the one kept is taken, so the plan does not follow every wobble.
-    /// Answers whether it took one.
+    /// Take the rate the stats measure once the input has run a few
+    /// seconds. `direct.input` carries the hub's first reading, of part of
+    /// a second (none, or 8 for a 30 fps feed), and is not sent again for a
+    /// rate. A fifth off or more is taken; a wobble is not. True when taken.
     pub fn settle_fps(&mut self) -> bool {
         let measured = self.input_stats.as_ref().map(|s| s.fps).filter(|f| *f > 0.0);
         let Some((input, fps)) = self.input.as_mut().zip(measured) else { return false };
@@ -136,5 +132,19 @@ mod tests {
         assert_eq!(seen.input_stats.as_ref().map(|i| i.kbps), Some(5000));
         assert!(seen.all_live(&["yt".into()]));
         assert_eq!(seen.output("yt", false).state, DestinationState::Off);
+    }
+
+    #[test]
+    fn a_first_reading_of_the_rate_gives_way_to_the_measured_one_and_a_wobble_does_not() {
+        let mut seen = Seen::default();
+        seen.input = Some(json!({"state": "live", "since_ms": 1000, "video": {"codec": "h264", "fps": 8.0}}));
+        assert!(!seen.settle_fps(), "nothing measured yet");
+        seen.take_stats(&json!({"id": "a", "input": {"fps": 29.97}}));
+        assert!(seen.settle_fps());
+        assert_eq!(seen.input.as_ref().unwrap()["video"]["fps"], 29.97);
+        seen.take_stats(&json!({"id": "a", "input": {"fps": 30.02}}));
+        assert!(!seen.settle_fps(), "a wobble is not a new rate");
+        seen.input = Some(json!({"state": "live", "since_ms": u64::MAX, "video": {"fps": 0}}));
+        assert!(!seen.settle_fps(), "an input live for less than a few seconds is left alone");
     }
 }

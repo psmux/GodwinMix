@@ -18,6 +18,8 @@ use std::sync::{Mutex, MutexGuard};
 use gstreamer as gst;
 use gstreamer_app::AppSrc;
 
+pub(crate) use super::caps::caps_for;
+use super::caps::headerless;
 use crate::media_tag::{MediaTag, TagKind};
 
 #[derive(Default)]
@@ -37,29 +39,6 @@ pub struct Input {
 
 fn lock(m: &Mutex<Feed>) -> MutexGuard<'_, Feed> {
     m.lock().unwrap_or_else(|e| e.into_inner())
-}
-
-pub(crate) fn caps_for(header: &MediaTag) -> Option<gst::Caps> {
-    let skip = if header.kind == TagKind::Audio { 2 } else { 5 };
-    let config = gst::Buffer::from_slice(header.payload.get(skip..)?.to_vec());
-    let caps = match (header.kind, crate::eflv::fourcc(&header.payload)) {
-        (TagKind::Video, None) => {
-            gst::Caps::builder("video/x-h264").field("stream-format", "avc").field("alignment", "au").field("codec_data", config)
-        }
-        // Enhanced RTMP: the configuration record is the one the codec's
-        // parser takes as codec_data, hvcC for HEVC and av1C for AV1.
-        (TagKind::Video, Some(cc)) if &cc == crate::eflv::HEVC => {
-            gst::Caps::builder("video/x-h265").field("stream-format", "hvc1").field("alignment", "au").field("codec_data", config)
-        }
-        (TagKind::Video, Some(cc)) if &cc == crate::eflv::AV1 => {
-            gst::Caps::builder("video/x-av1").field("stream-format", "obu-stream").field("alignment", "tu").field("codec_data", config)
-        }
-        (TagKind::Audio, _) if header.payload.first().is_some_and(|b| b >> 4 == 10) => {
-            gst::Caps::builder("audio/mpeg").field("mpegversion", 4i32).field("stream-format", "raw").field("codec_data", config)
-        }
-        _ => return None,
-    };
-    Some(caps.build())
 }
 
 impl Input {
@@ -127,11 +106,6 @@ impl Input {
             let _ = src.push_buffer(buffer);
         }
     }
-}
-
-/// Sound that is not AAC, which carries no sequence header.
-fn headerless(tag: &MediaTag) -> bool {
-    tag.kind == TagKind::Audio && tag.payload.first().is_some_and(|b| b >> 4 != 10)
 }
 
 /// A tag's body past its prefix, shared with every other reader of the tag

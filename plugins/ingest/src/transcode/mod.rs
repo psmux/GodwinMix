@@ -20,6 +20,7 @@
 //! way between the core and this process.
 
 mod build;
+mod caps;
 mod graph;
 pub(crate) mod input;
 mod router;
