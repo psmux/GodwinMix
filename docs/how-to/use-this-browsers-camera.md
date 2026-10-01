@@ -4,59 +4,65 @@ You have the mixer's page open in a browser, and the laptop it runs on has a
 camera and a microphone. This puts them in the mixer as a source, with nothing
 to install on the laptop and no second app. It takes about a minute.
 
-It works today when the page is open on the mixer's own machine, at
-`http://localhost:<port>` or `http://127.0.0.1:<port>`. From another computer
-on the network it needs the page over https, which the mixer does not serve by
-itself yet; see [When the browser says it cannot use a camera](#when-the-browser-says-it-cannot-use-a-camera).
+It works when the page is open on the mixer's own machine, at
+`http://localhost:<port>`, or from any other computer over https, which the
+mixer serves on the same port ([Serve the mixer over https](serve-https.md)).
+At a plain `http://` address from another computer the browser hides the
+camera; see [When the browser says it cannot use a camera](#when-the-browser-says-it-cannot-use-a-camera).
 
-## Before you start
-
-The ingest plugin has to be installed, because the camera reaches the mixer
-the way OBS would, by WHIP into a channel. If you can add a channel on the
-Channels tab, it is there. If not, [Receive a phone or an OBS
-stream](receive-a-phone-or-obs-stream.md#install-the-plugin) installs it.
-
-WebRTC also needs GStreamer's libnice elements on the mixer's machine. Without
-them the publisher stops with a sentence naming the package to install (on
-macOS with Homebrew it is `libnice-gstreamer`).
-
-## Open it
+## Add it
 
 Press **Add a source** (Ctrl+N), then **Cameras**. The first rows are the
-cameras plugged into the mixer; under them is **This browser's camera**. Press
-**Open**.
+cameras plugged into the mixer. Under them are this browser's cameras, each
+named with `(this browser)` after it, and an **Add** button, as the mixer's
+own have. The first time, before the browser has been allowed a camera, there
+is one row instead, **This browser's camera**.
 
-**Microphones and audio** has **This browser's microphone** in the same place.
-It opens the same card with the camera set to No camera. The palette
-(Ctrl+K) has it as well, as Use this browser's camera and microphone.
+Press **Add**. The browser asks once for the camera and the microphone; allow
+both. It starts sending straight away, and as soon as the mixer has the
+source it is put in the scene you were adding to, the same as a camera on the
+mixer. The source is named after the browser and the system,
+`browser-chrome-macos` for example.
 
-A card opens in the bottom right corner of the page. It floats over everything
-else and stays there while you change scenes, open drawers and close dialogs,
-so the camera keeps going while you work. The browser asks once for the
-camera and the microphone; allow both.
+**Microphones and audio** lists this browser's microphones the same way, for
+sound with no picture. The palette (Ctrl+K) has it as well, as Use this
+browser's camera and microphone.
 
-The card has:
+If the mixer does not have the ingest plugin, which is what takes a
+browser's stream in, the first **Add** installs it, and a note says so. That
+can take a minute. WebRTC also needs GStreamer's libnice elements on the
+mixer's machine; without them the bar opens and names the package to install
+(on macOS with Homebrew it is `libnice-gstreamer`).
+
+### The same camera twice
+
+When the page is open on the mixer's own computer, its cameras are the
+mixer's cameras too, and the picker lists each one twice: once as a camera on
+the mixer, once as `(this browser)`. Add only one of them. A camera has one
+picture size for everything that has it open, so when the browser opens it at
+another size the mixer's camera source holds still, and its log says why.
+
+## The bar
+
+A browser's camera belongs to the tab that opened it, so a slim bar stays at
+the bottom right of the page while it is sending, with the state after its
+name: `This browser's camera: live`. Press **_** on it to open it out. Open,
+it has:
 
 * the picture, mirrored, the way a selfie camera shows you
 * a level bar for the microphone
-* **Camera** and **Microphone**, the devices this browser can see. No camera
+* **Camera** and **Microphone**, to switch device while it is live. No camera
   is a choice, for a microphone alone. The browser remembers what you picked,
   for next time
 * **Echo cancellation, noise suppression and automatic gain**, on to start
   with. Switch it off for a music microphone or an instrument, which those
   three would flatten
 * **Turn camera off** and **Mute microphone**
-* **Go live**
+* **Stop**, and **Send to the mixer** to start again after a stop
 
-## Go live
+It opens out by itself when something goes wrong, so the reason is on screen.
 
-Press **Go live**. The line at the top goes from Connecting to Live, usually
-within a second on the same machine. The card says
-`In the mixer as browser-chrome-macos. Put it in a scene from Sources.`, with
-your own browser and system in the name, and the source is in Sources like any
-other. Put it in a scene, or take it.
-
-Under the picture, once a second while the card is open, is what is going
+Under the picture, once a second while the bar is open, is what is going
 out: the bit rate, the picture size and frame rate, and the round trip to the
 mixer. The browser starts small and climbs towards 1280x720 at 30 frames a
 second, about 2.5 Mbps, as it finds the bandwidth. On a slow link it keeps the
@@ -69,10 +75,11 @@ frame rate and gives up resolution, which is right for a person talking.
 * **Turn camera off**: the source shows black. **Mute microphone**: it goes
   silent. Neither one stops the stream, so the source stays where it is in
   every scene.
-* **Fold away** (the `_` at the top) shrinks the card to its title. The
+* **Fold away** (the `_` at the top) shrinks it back to the bar. The
   picture, the level bar and the numbers stop while it is folded, and the
-  camera keeps publishing. Press **Open** again in Add a source, or the
-  palette entry, to bring it back.
+  camera keeps sending.
+* Adding another of this browser's devices from the picker switches the one
+  stream to it, rather than starting a second.
 
 ## When the connection drops
 
@@ -88,14 +95,14 @@ does not take WHIP, or a browser with no H.264.
 
 ## Stop
 
-Press **Stop**, or close the card with **×**. Closing a card that is live asks
+Press **Stop**, or close the bar with **×**. Closing it while it is live asks
 first. Either way the stream ends, and the source leaves Sources unless a
 scene holds it. Closing or reloading the page while it is live makes the
 browser ask too.
 
 ## What it made
 
-The first time, the button makes a channel called **Browser** (`browser`),
+The first time, **Add** makes a channel called **Browser** (`browser`),
 switched on, taking WHIP only, with each live stream made a source by itself.
 It does that through `channel.add`, the same method the Channels tab and any
 other client use, and reads the key back with `channel.key.reveal`. After
@@ -116,27 +123,28 @@ for any WHIP publisher on a channel.
 ## When the browser says it cannot use a camera
 
 A browser gives a page the camera only at `https://` or at `localhost`. Opened
-at `http://192.168.1.20:8080` from another laptop, the card says:
+at `http://192.168.1.20:8080` from another laptop, the bar opens and says:
 
 > This page is open at http://192.168.1.20:8080, which is not a secure
 > address, so the browser will not let it use a camera or a microphone. Open
 > the mixer's page at http://localhost on the mixer's own machine, or over
 > https.
 
-Until the mixer serves https itself, [put it behind a reverse proxy with
-TLS](reverse-proxy.md) and open the page at the proxy's https address.
+Open the same address with `https://` in front instead, and accept the
+certificate warning once; [Serve the mixer over https](serve-https.md) says
+how to check it is the mixer's certificate.
 
-The other things the card can say, and what to do:
+The other things the bar can say, and what to do:
 
 * **The browser was not allowed to use the camera.** It was refused once and
   remembered. Allow it in the site settings, at the left of the address bar.
 * **The camera is in use by another program.** Close Zoom, Teams, Photo Booth
   or whatever else has it, then pick the camera again.
 * **WHIP needs GStreamer's libnice elements.** Install the package it names on
-  the mixer's machine, restart the mixer, and press **Go live** again.
-* **Nothing is listening for channels.** The ingest plugin is not installed or
-  is switched off. The card keeps trying, so it goes live once the plugin is
-  on.
+  the mixer's machine, restart the mixer, and press **Send to the mixer**.
+* **Nothing is listening for channels.** The ingest plugin was removed or
+  switched off after the source was added. The bar keeps trying, so it goes
+  live once the plugin is back.
 
 ## The page on its own
 
@@ -157,4 +165,4 @@ lists what the link takes.
 
 * [Use a webcam](use-a-webcam.md), for a camera plugged into the mixer itself
 * [Take streams from several encoders into one channel](channels.md)
-* [Put it behind a reverse proxy with TLS](reverse-proxy.md)
+* [Serve the mixer over https](serve-https.md)

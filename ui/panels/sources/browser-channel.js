@@ -63,3 +63,26 @@ export function sourceIdFor(channel, stream) {
 export function streamOf(channel, name) {
   return ((channel && channel.streams) || []).find((s) => s.name === name) || null;
 }
+
+/**
+ * Make sure the ingest plugin, which takes a browser's stream in, is on this
+ * mixer and running: install it or switch it on when it is not. `say` is told
+ * what is happening, because an install can take a minute.
+ */
+export async function ensureIngest(client, say = () => {}) {
+  const { listPlugins, pluginState, pluginSourceFor } = await import("../../client/kinds.js");
+  const plugins = await listPlugins(client);
+  const state = pluginState(plugins, "ingest");
+  if (state === "ready") return;
+  if (state === "problem") {
+    const p = plugins.find((x) => x.name === "ingest");
+    throw new Error(`The ingest plugin, which takes this browser's stream in, is installed but did not start: ${p.problem}. Open Plugins to see why.`);
+  }
+  if (state === "disabled") {
+    say("Switching on the ingest plugin, which takes this browser's stream in.");
+    await client.call("plugin.enable", { name: "ingest" });
+    return;
+  }
+  say("Installing the ingest plugin, which takes this browser's stream in. This can take a minute.");
+  await client.call("plugin.add", { source: await pluginSourceFor(client, "ingest") });
+}
