@@ -42,7 +42,11 @@ gmx plugin test plugins/ingest --offline     # replay tests/transcript.jsonl
    which decodes a channel stream only while a destination has asked for a
    rendition the stream is not, once per stream however many destinations
    convert it, and builds exactly the nodes the core's plan hands over in the
-   channel table. A destination with no rendition never goes near it.
+   channel table. A destination with no rendition never goes near it. The
+   other is `src/direct/vitals/`, which decodes keyframes alone, at most one
+   a second per show, and three sound frames a second, through two shared
+   worker threads, and only while a show's alarms are on or somebody is
+   looking at it (`docs/reference/show-health.md`).
 3. **A connection thread must not block on anything but its own socket.** The
    `Gate` and each `Inlet` are called from it. Handing a tag on is what it
    does; waiting on a lock somebody else holds for long is not. No lock is

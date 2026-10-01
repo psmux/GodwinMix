@@ -35,7 +35,7 @@ fn lock(m: &Mutex<Feed>) -> MutexGuard<'_, Feed> {
     m.lock().unwrap_or_else(|e| e.into_inner())
 }
 
-fn caps_for(header: &MediaTag) -> Option<gst::Caps> {
+pub(crate) fn caps_for(header: &MediaTag) -> Option<gst::Caps> {
     let skip = if header.kind == TagKind::Audio { 2 } else { 5 };
     let config = gst::Buffer::from_slice(header.payload.get(skip..)?.to_vec());
     let caps = match (header.kind, crate::eflv::fourcc(&header.payload)) {
@@ -121,7 +121,7 @@ impl AsRef<[u8]> for Tail {
     }
 }
 
-fn buffer(tag: &MediaTag, base: u32) -> Option<gst::Buffer> {
+pub(crate) fn buffer(tag: &MediaTag, base: u32) -> Option<gst::Buffer> {
     let (skip, cts) = match tag.kind {
         TagKind::Video => crate::eflv::frame(&tag.payload)?,
         _ => (2, 0),
