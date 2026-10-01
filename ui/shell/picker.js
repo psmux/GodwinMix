@@ -41,6 +41,7 @@ import {
 import { OUTPUT_KINDS } from "../client/destinations.js";
 import { alreadyAdded, sameAddress, easeSchema, unease } from "../client/devices.js";
 import { addChannel } from "../panels/channels/entry.js";
+import { browserEntries } from "../panels/sources/browser-entry.js";
 
 const LIST_KEY = "gmx.picker.list";
 
@@ -172,6 +173,8 @@ function openSourcePicker(client, kinds, plugins, opts) {
     if (cat.media) panel.append(files.node);
 
     if (cat.plugin && !hasPlugin(state.plugins, cat.plugin.name)) {
+      // This browser's own camera needs no camera plugin on the mixer.
+      for (const entry of browserEntries(client, cat.id)) panel.appendChild(row(entry));
       panel.appendChild(installBlock(cat));
       return;
     }
@@ -245,10 +248,13 @@ function openSourcePicker(client, kinds, plugins, opts) {
     return matching(rows, query);
   }
 
-  /** Rows that are not a listing: the file the library has never seen, and a channel to publish to. */
+  /**
+   * Rows that are not a listing: the file the library has never seen, a
+   * channel to publish to, and this browser's own camera and microphone.
+   */
   function extraRowsFor(cat, query) {
     if (cat.id === "streams") return matching([channelEntry()], query);
-    if (!cat.media || state.media === "looking") return [];
+    if (!cat.media || state.media === "looking") return matching(browserEntries(client, cat.id), query);
     return matching([browseEntry()], query);
   }
 
