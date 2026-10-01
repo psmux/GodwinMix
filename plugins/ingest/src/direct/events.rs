@@ -130,7 +130,9 @@ fn input_event(host: &Host, show: &Show) -> (Value, Value) {
         v.insert("error".into(), json!(e));
     }
     let shape = |k: &str| json!([desc[k]["codec"], desc[k]["width"], desc[k]["height"], desc[k]["channels"]]);
-    let key = json!([live, backup, shape("video"), shape("audio"), error]);
+    // The relay too: it opens when a show first needs it, and a station
+    // waiting to read the show learns where only from this event.
+    let key = json!([live, backup, shape("video"), shape("audio"), error, (host.relay)()]);
     (Value::Object(v), key)
 }
 

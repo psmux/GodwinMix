@@ -16,7 +16,7 @@ const REPO: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
 
 /// The ingest plugin as a folder `plugin.add` takes: its manifest and what
 /// it reads, and its binary built in the same profile as the station's.
-fn staged_ingest(dir: &Path) -> PathBuf {
+pub fn staged_ingest(dir: &Path) -> PathBuf {
     let release = BIN.contains("/release/");
     let mut cargo = Command::new(std::env::var("CARGO").unwrap_or_else(|_| "cargo".into()));
     cargo.current_dir(REPO).args(["build", "-q", "-p", "gmx-ingest"]);
@@ -52,10 +52,15 @@ fn copy_dir(from: &Path, to: &Path) {
 
 /// 320x180 H.264 and AAC in MPEG-TS, sent live to `port`.
 fn feed(port: u16) -> gstreamer::Pipeline {
+    feed_with(port, "avenc_aac ! aacparse")
+}
+
+/// The same picture, with the sound encoded by `sound`.
+pub fn feed_with(port: u16, sound: &str) -> gstreamer::Pipeline {
     gstreamer::init().unwrap();
     let text = format!(
-        "videotestsrc is-live=true ! video/x-raw,width=320,height=180,framerate=30/1 ! x264enc tune=zerolatency key-int-max=30 bitrate=600 ! h264parse ! mux. \
-         audiotestsrc is-live=true ! audioconvert ! avenc_aac ! aacparse ! mux. \
+        "videotestsrc is-live=true ! video/x-raw,format=I420,width=320,height=180,framerate=30/1 ! x264enc tune=zerolatency key-int-max=30 bitrate=600 ! h264parse ! mux. \
+         audiotestsrc is-live=true ! audioconvert ! audioresample ! audio/x-raw,rate=48000 ! {sound} ! mux. \
          mpegtsmux name=mux alignment=7 ! udpsink host=127.0.0.1 port={port} sync=false"
     );
     let p = gstreamer::parse::launch(&text).expect("x264enc, avenc_aac and mpegtsmux are installed").downcast::<gstreamer::Pipeline>().unwrap();
@@ -75,7 +80,7 @@ fn received(socket: &UdpSocket, wait: Duration, enough: usize) -> usize {
     n
 }
 
-fn free_udp() -> u16 {
+pub fn free_udp() -> u16 {
     UdpSocket::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port()
 }
 

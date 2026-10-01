@@ -32,6 +32,7 @@ pub mod vitals;
 mod events;
 mod host;
 mod output;
+mod readers;
 mod show;
 pub mod standalone;
 mod stats;
