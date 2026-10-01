@@ -84,6 +84,8 @@ pub struct Station {
     pub quit: tokio::sync::Notify,
     /// Shows without compositing, and the host that runs them.
     pub direct: super::direct::Direct,
+    /// What `show.list` serves, kept by a sampler while someone reads.
+    pub list_cache: super::list::ListCache,
 }
 
 impl Station {
@@ -109,6 +111,7 @@ impl Station {
             stopping: AtomicBool::new(false),
             quit: tokio::sync::Notify::new(),
             direct,
+            list_cache: Default::default(),
         })
     }
 
