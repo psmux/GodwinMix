@@ -56,4 +56,9 @@ export async function browserChannelTests(test, eq, ok) {
     eq(browserEntries({}, "audio").map((e) => e.name), ["This browser's microphone"]);
     eq(browserEntries({}, "screens"), []);
   });
+
+  test("this browser's rows add, as a camera on the mixer does, rather than open something", () => {
+    eq(browserEntries({}, "cameras", { onAdded() {} })[0].label, "Add");
+    eq(browserEntries({}, "audio", { onExisting() {} })[0].label, "Add");
+  });
 }

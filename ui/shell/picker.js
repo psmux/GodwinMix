@@ -174,7 +174,7 @@ function openSourcePicker(client, kinds, plugins, opts) {
 
     if (cat.plugin && !hasPlugin(state.plugins, cat.plugin.name)) {
       // This browser's own camera needs no camera plugin on the mixer.
-      for (const entry of browserEntries(client, cat.id)) panel.appendChild(row(entry));
+      for (const entry of browserEntries(client, cat.id, opts)) panel.appendChild(row(entry));
       panel.appendChild(installBlock(cat));
       return;
     }
@@ -254,7 +254,7 @@ function openSourcePicker(client, kinds, plugins, opts) {
    */
   function extraRowsFor(cat, query) {
     if (cat.id === "streams") return matching([channelEntry()], query);
-    if (!cat.media || state.media === "looking") return matching(browserEntries(client, cat.id), query);
+    if (!cat.media || state.media === "looking") return matching(browserEntries(client, cat.id, opts), query);
     return matching([browseEntry()], query);
   }
 
