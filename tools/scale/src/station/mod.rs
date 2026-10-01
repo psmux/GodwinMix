@@ -9,3 +9,5 @@ pub mod rpc;
 pub mod sample;
 pub mod stats;
 pub mod tables;
+#[cfg(test)]
+mod tests;
