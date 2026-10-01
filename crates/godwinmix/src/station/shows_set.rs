@@ -36,7 +36,7 @@ pub async fn set(st: &Arc<Station>, req: ShowSetRequest) -> Result<Value, RpcErr
         let msg = format!("show {} has no input, and a show without compositing sends one input on. Send `input` in the same call.", req.id);
         return Err(RpcError::invalid_params(msg).with("field", "input").with("show", req.id.clone()));
     }
-    if name.is_some() || req.input.is_some() {
+    if name.is_some() || req.input.is_some() || req.alarms.is_some() {
         if let Some(r) = st.registry.lock().get_mut(&req.id) {
             if let Some(n) = name {
                 r.name = n;
@@ -44,9 +44,12 @@ pub async fn set(st: &Arc<Station>, req: ShowSetRequest) -> Result<Value, RpcErr
             if let Some(i) = &req.input {
                 r.input = Some(i.clone());
             }
+            if let Some(a) = &req.alarms {
+                r.alarms = Some(r.alarms.clone().unwrap_or_default().merged(a));
+            }
         }
         saved(st)?;
-        if req.input.is_some() {
+        if req.input.is_some() || req.alarms.is_some() {
             st.direct.hand_over();
         }
     }

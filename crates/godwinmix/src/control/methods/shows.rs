@@ -115,6 +115,7 @@ async fn alone(call: &Call) -> Result<ShowList, RpcError> {
         input: None,
         outputs: Vec::new(),
         health: Default::default(),
+        alarms: None,
     };
     Ok(ShowList { shows: vec![show], current: id })
 }

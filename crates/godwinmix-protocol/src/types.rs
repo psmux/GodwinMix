@@ -382,7 +382,7 @@ pub enum Event {
     /// A show was removed.
     ShowRemoved { id: String },
     /// A show's health changed state, or an alarm began or ended.
-    ShowHealth { id: String, health: crate::shows::Health },
+    ShowHealth { id: String, health: crate::health::Health },
 }
 
 /// What a surface starts with: the layout, the theme and the gallery mode.

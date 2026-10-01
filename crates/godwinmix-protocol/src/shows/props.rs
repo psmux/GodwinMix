@@ -37,84 +37,56 @@ pub struct BackupInput {
     pub params: Option<Map<String, Value>>,
 }
 
-/// How a show is, in one word.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "lowercase")]
-pub enum HealthState {
-    Ok,
-    Warning,
-    Alarm,
-    /// Stopped, or not running yet.
-    #[default]
-    Off,
-}
-
-/// What an alarm is about.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "kebab-case")]
-pub enum AlarmKind {
-    NoInput,
-    Stall,
-    Black,
-    Freeze,
-    Silence,
-    CcErrors,
-    Loss,
-    OutputFailed,
-    GovernorRefused,
-    Shed,
-}
-
-impl AlarmKind {
-    /// An alarm means a viewer is not getting the show; the rest are
-    /// warnings.
-    pub fn is_alarm(self) -> bool {
-        matches!(
-            self,
-            AlarmKind::NoInput | AlarmKind::Stall | AlarmKind::Black | AlarmKind::Freeze | AlarmKind::OutputFailed | AlarmKind::GovernorRefused
-        )
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
-pub struct Alarm {
-    pub kind: AlarmKind,
-    /// When it began, in unix milliseconds.
-    pub since_ms: u64,
-    /// What a person reads.
-    #[serde(default)]
-    pub detail: String,
-}
-
+/// A show's alarms, as a person sets them from the page. Left out fields
+/// keep the measuring side's defaults; a duration of 0 switches that check
+/// off.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
-pub struct Health {
-    pub state: HealthState,
-    #[serde(default)]
-    pub alarms: Vec<Alarm>,
+pub struct AlarmSettings {
+    /// Whether black, freeze and silence are watched at all. Left out: on
+    /// for a show without compositing, off for one that composites.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub enabled: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub black_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub freeze_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub silence_ms: Option<u64>,
+    /// The peak level under which sound counts as quiet.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub silence_dbfs: Option<f64>,
 }
 
-impl Health {
-    /// The state a list of alarms comes to.
-    pub fn of(alarms: Vec<Alarm>) -> Health {
-        let state = if alarms.iter().any(|a| a.kind.is_alarm()) {
-            HealthState::Alarm
-        } else if !alarms.is_empty() {
-            HealthState::Warning
-        } else {
-            HealthState::Ok
-        };
-        Health { state, alarms }
+impl AlarmSettings {
+    /// The `monitor.thresholds` the measuring side reads
+    /// (`crate::health::Thresholds`), with only the fields a person set.
+    pub fn thresholds(&self) -> serde_json::Value {
+        let mut t = Map::new();
+        let secs = |ms: u64| Value::from(ms as f64 / 1000.0);
+        if let Some(ms) = self.black_ms {
+            t.insert("black_secs".into(), secs(ms));
+        }
+        if let Some(ms) = self.freeze_ms {
+            t.insert("freeze_secs".into(), secs(ms));
+        }
+        if let Some(ms) = self.silence_ms {
+            t.insert("silence_secs".into(), secs(ms));
+        }
+        if let Some(db) = self.silence_dbfs {
+            t.insert("silence_db".into(), Value::from(db));
+        }
+        Value::Object(t)
     }
 
-    /// Whether `other` says something different: its state or its set of
-    /// alarm kinds, never a number alone.
-    pub fn differs(&self, other: &Health) -> bool {
-        let kinds = |h: &Health| {
-            let mut k: Vec<AlarmKind> = h.alarms.iter().map(|a| a.kind).collect();
-            k.sort();
-            k
-        };
-        self.state != other.state || kinds(self) != kinds(other)
+    /// Lay `other` over these: what it names moves, the rest stays.
+    pub fn merged(&self, other: &AlarmSettings) -> AlarmSettings {
+        AlarmSettings {
+            enabled: other.enabled.or(self.enabled),
+            black_ms: other.black_ms.or(self.black_ms),
+            freeze_ms: other.freeze_ms.or(self.freeze_ms),
+            silence_ms: other.silence_ms.or(self.silence_ms),
+            silence_dbfs: other.silence_dbfs.or(self.silence_dbfs),
+        }
     }
 }
 
@@ -122,19 +94,14 @@ impl Health {
 mod tests {
     use super::*;
 
-    fn alarm(kind: AlarmKind) -> Alarm {
-        Alarm { kind, since_ms: 1, detail: String::new() }
-    }
-
     #[test]
-    fn alarms_come_to_a_state_and_only_a_change_of_kind_counts() {
-        assert_eq!(Health::of(vec![]).state, HealthState::Ok);
-        assert_eq!(Health::of(vec![alarm(AlarmKind::Silence)]).state, HealthState::Warning);
-        let black = Health::of(vec![alarm(AlarmKind::Black), alarm(AlarmKind::Silence)]);
-        assert_eq!(black.state, HealthState::Alarm);
-        let later = Health::of(vec![Alarm { since_ms: 99, ..alarm(AlarmKind::Silence) }, alarm(AlarmKind::Black)]);
-        assert!(!black.differs(&later), "the same kinds in another order, at another time");
-        assert!(black.differs(&Health::of(vec![alarm(AlarmKind::Black)])));
-        assert_eq!(serde_json::to_value(AlarmKind::CcErrors).unwrap(), "cc-errors");
+    fn alarm_settings_become_the_thresholds_the_host_reads_and_merge_field_by_field() {
+        let set = AlarmSettings { black_ms: Some(2500), silence_dbfs: Some(-50.0), ..Default::default() };
+        assert_eq!(set.thresholds(), serde_json::json!({"black_secs": 2.5, "silence_db": -50.0}));
+        let t: crate::health::Thresholds = serde_json::from_value(set.thresholds()).unwrap();
+        assert_eq!(t.black_secs, 2.5);
+        assert_eq!(t.freeze_secs, crate::health::Thresholds::default().freeze_secs);
+        let later = set.merged(&AlarmSettings { enabled: Some(false), black_ms: Some(0), ..Default::default() });
+        assert_eq!((later.enabled, later.black_ms, later.silence_dbfs), (Some(false), Some(0), Some(-50.0)));
     }
 }

@@ -127,6 +127,9 @@ pub struct ShowSetRequest {
     pub compositing: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub input: Option<InputSpec>,
+    /// Alarm settings; the fields named move, the rest stay.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub alarms: Option<super::props::AlarmSettings>,
 }
 
 /// What a switch of compositing did, in `show.set`'s answer.

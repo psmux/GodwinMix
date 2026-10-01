@@ -1,6 +1,6 @@
 //! The numbers `show.stats` reads: an input's and each output's.
 
-use super::props::Health;
+use crate::health::Health;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
