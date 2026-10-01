@@ -57,6 +57,15 @@ fn render(run: &Value, feeds: &[Value; 2], add: &Value, sample: &Value, check: &
     }
     let _ = writeln!(s, "## The numbers\n");
     s.push_str(&tables::headline(feeds, add, sample, check, check_in));
+    if let Some(id) = run["toggle"].as_str().filter(|t| !t.is_empty()) {
+        // The first show sends to the first output address, 127.0.0.1:30000.
+        let first = check["streams"].get(0).cloned().unwrap_or(Value::Null);
+        let _ = writeln!(
+            s,
+            "| Compositing on and off for `{id}` ({} of 2 calls answered) | the longest gap on its output, {}, was {} ms |",
+            run["toggle_ok"], first["stream"].as_str().unwrap_or("not checked"), first["silence_max_ms"]
+        );
+    }
     if !sample.is_null() {
         let _ = writeln!(s, "\n## CPU and memory by role\n");
         let _ = writeln!(s, "Percent of one core, sampled once a second. `total` is the station and everything under it.\n");

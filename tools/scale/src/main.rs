@@ -6,6 +6,7 @@
 //! gmx-scale add     add the shows a feeds list names, with show.add_many or show.add
 //! gmx-scale sample  CPU and memory of a station and everything under it, and show.stats, each second
 //! gmx-scale report  put the run's numbers in one markdown table
+//! gmx-scale call    one method on the station, timed
 //! ```
 //!
 //! `gmx-scale <command> --help` says what each takes. dev/bench/scale.sh runs
@@ -21,7 +22,7 @@ mod ts;
 
 use std::process::ExitCode;
 
-const USAGE: &str = "usage: gmx-scale <feeds|check|add|sample|report> [options]. \
+const USAGE: &str = "usage: gmx-scale <feeds|check|add|sample|report|call> [options]. \
 gmx-scale <command> --help lists the options of one.";
 
 fn main() -> ExitCode {
@@ -35,6 +36,7 @@ fn main() -> ExitCode {
         "feeds" => feeds::main,
         "check" => check::main,
         "add" => station::add::main,
+        "call" => station::call::main,
         "sample" => station::sample::main,
         "report" => station::report::main,
         "-h" | "--help" | "help" => {
