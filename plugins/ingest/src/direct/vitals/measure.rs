@@ -33,7 +33,8 @@ fn thumb_caps() -> gst::Caps {
 }
 
 /// The chain for one kind of input: a keyframe of each video codec the hub
-/// carries, a frame already decoded, AAC, or a thumbnail to make a JPEG of.
+/// carries, a frame already decoded, AAC, MPEG-1 audio (layers I to III),
+/// AC-3, E-AC-3, or a thumbnail to make a JPEG of.
 /// `None` when this machine has no decoder for it, which leaves that show
 /// without pictures and says nothing more. `cpu` skips the hardware
 /// decoders, for a worker whose hardware decoder has refused.
@@ -46,13 +47,11 @@ pub fn chain_for(kind: &str, cpu: bool) -> Option<Chain> {
         let all: Vec<&str> = names.iter().chain(scale.iter()).copied().collect();
         return Chain::new(&all, thumb_caps()).ok();
     }
+    if let Some(names) = sound_decoders(kind) {
+        return sound(names);
+    }
     let built = match kind {
         "video/x-raw" => Chain::new(&scale, thumb_caps()),
-        "audio/mpeg" => {
-            let out = gst::Caps::builder("audio/x-raw").field("format", "F32LE").field("layout", "interleaved").build();
-            let dec = ["avdec_aac", "fdkaacdec"].into_iter().find(|d| exists(&[d]))?;
-            Chain::new(&[dec, "audioconvert"], out)
-        }
         jpeg if jpeg.starts_with("jpeg/") => {
             // A thumbnail of the asked size, from the 320 pixel picture.
             let (w, h) = jpeg[5..].split_once('x')?;
@@ -63,6 +62,38 @@ pub fn chain_for(kind: &str, cpu: bool) -> Option<Chain> {
         _ => return None,
     };
     built.ok()
+}
+
+/// The decoders tried for each kind of sound (`sound::kind`), best first.
+/// AAC and MPEG-1 audio are both `audio/mpeg` and share no decoder.
+fn sound_decoders(kind: &str) -> Option<&'static [&'static str]> {
+    Some(match kind {
+        "audio/mpeg" => &["avdec_aac", "fdkaacdec"],
+        "audio/mpeg-1" => &["mpg123audiodec", "avdec_mp2float", "avdec_mp3float"],
+        "audio/x-ac3" => &["avdec_ac3", "a52dec"],
+        "audio/x-eac3" => &["avdec_eac3"],
+        _ => return None,
+    })
+}
+
+/// A decoder of the first of `names` this machine has, to interleaved 32 bit
+/// floats, which is what `peak` reads.
+fn sound(names: &[&str]) -> Option<Chain> {
+    let out = gst::Caps::builder("audio/x-raw").field("format", "F32LE").field("layout", "interleaved").build();
+    let dec = names.iter().find(|d| exists(&[d]))?;
+    Chain::new(&[dec, "audioconvert"], out).ok()
+}
+
+/// The kind of input a chain is built for, from caps: their name, and for
+/// `audio/mpeg` whether it is AAC or MPEG-1 audio, which share the name and
+/// no decoder.
+pub fn kind(caps: &gst::CapsRef) -> Option<String> {
+    let s = caps.structure(0)?;
+    let name = s.name().as_str();
+    Some(match s.get::<i32>("mpegversion") {
+        Ok(1) if name == "audio/mpeg" => "audio/mpeg-1".to_string(),
+        _ => name.to_string(),
+    })
 }
 
 pub fn size(caps: &gst::CapsRef) -> (u32, u32) {

@@ -29,6 +29,7 @@ mod measure;
 mod picture;
 mod pool;
 mod show;
+mod sound;
 mod tap;
 mod ticker;
 mod work;
