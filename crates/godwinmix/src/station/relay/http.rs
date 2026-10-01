@@ -39,25 +39,8 @@ pub async fn forward(st: Arc<Station>, req: Request) -> Response {
         Err(e) => return refusal(&e),
     };
     let url = upstream_url("http", addr, req.uri().path(), req.uri().query());
-    let (parts, body) = req.into_parts();
-    let mut out = st.http.request(parts.method.clone(), &url);
-    for (name, value) in parts.headers.iter().filter(|(n, _)| passed(n)) {
-        out = out.header(name, value);
-    }
-    let out = out.body(reqwest::Body::wrap_stream(body.into_data_stream()));
-    match out.send().await {
-        Ok(answer) => {
-            let status = answer.status();
-            let mut headers = HeaderMap::new();
-            for (name, value) in answer.headers().iter().filter(|(n, _)| passed(n)) {
-                headers.append(name.clone(), value.clone());
-            }
-            let body = Body::from_stream(answer.bytes_stream());
-            let mut response = Response::new(body);
-            *response.status_mut() = status;
-            *response.headers_mut() = headers;
-            response
-        }
+    match pass(&st.http, &url, req).await {
+        Ok(response) => response,
         Err(e) => {
             debug!(%show, %url, error = %e, "a show did not answer a relayed request");
             let e = RpcError::internal(format!(
@@ -67,6 +50,26 @@ pub async fn forward(st: Arc<Station>, req: Request) -> Response {
             (StatusCode::BAD_GATEWAY, axum::Json(e.body(&godwinmix_protocol::trace::new_id()))).into_response()
         }
     }
+}
+
+/// Send `req` to `url` as it came, headers and body streamed, and hand back
+/// the answer the same way.
+pub async fn pass(http: &reqwest::Client, url: &str, req: Request) -> reqwest::Result<Response> {
+    let (parts, body) = req.into_parts();
+    let mut out = http.request(parts.method.clone(), url);
+    for (name, value) in parts.headers.iter().filter(|(n, _)| passed(n)) {
+        out = out.header(name, value);
+    }
+    let answer = out.body(reqwest::Body::wrap_stream(body.into_data_stream())).send().await?;
+    let mut headers = HeaderMap::new();
+    for (name, value) in answer.headers().iter().filter(|(n, _)| passed(n)) {
+        headers.append(name.clone(), value.clone());
+    }
+    let status = answer.status();
+    let mut response = Response::new(Body::from_stream(answer.bytes_stream()));
+    *response.status_mut() = status;
+    *response.headers_mut() = headers;
+    Ok(response)
 }
 
 /// An error the station decided on, in the shape `/api/v1` answers with.
