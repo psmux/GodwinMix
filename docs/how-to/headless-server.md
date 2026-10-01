@@ -64,8 +64,9 @@ and every line in it has a comment saying why it is there.
    Without it, whoever reaches port 8080 can take a source, add an output
    pointing at their own server, and shut the mixer down.
 2. **Bind to loopback and put TLS in front.**
-   [Put it behind a reverse proxy](reverse-proxy.md). The mixer speaks plain
-   HTTP and will not terminate TLS itself.
+   [Put it behind a reverse proxy](reverse-proxy.md) for a public name. On a
+   LAN the mixer's own HTTPS is enough: [serve the control port over
+   HTTPS](serve-https.md).
 3. **Check what is listening.** `ss -ltnp`. Nothing should be on `0.0.0.0` that
    you did not mean. A published Docker port bypasses ufw on most systems,
    which is why every port in the compose file is published as
