@@ -9,16 +9,16 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::time::Duration;
 
-struct Scratch(PathBuf);
+pub(super) struct Scratch(PathBuf);
 
 impl Scratch {
-    fn new(name: &str) -> Scratch {
+    pub(super) fn new(name: &str) -> Scratch {
         let dir = std::env::temp_dir().join(format!("gmx-udp-send-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         Scratch(dir)
     }
-    fn at(&self, name: &str) -> PathBuf {
+    pub(super) fn at(&self, name: &str) -> PathBuf {
         self.0.join(name)
     }
 }
@@ -29,11 +29,11 @@ impl Drop for Scratch {
     }
 }
 
-fn tools() -> Option<(PathBuf, PathBuf)> {
+pub(super) fn tools() -> Option<(PathBuf, PathBuf)> {
     Some((which("gst-launch-1.0")?, which("ffmpeg")?))
 }
 
-fn free_port() -> u16 {
+pub(super) fn free_port() -> u16 {
     std::net::UdpSocket::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port()
 }
 
@@ -57,7 +57,7 @@ fn core_like_writer(gst: &Path, fifo: &Path, reference: &Path, frames: u32) -> C
         .expect("gst-launch-1.0 starts")
 }
 
-fn ffmpeg_receive(ffmpeg: &Path, uri: &str, out: &Path) -> Child {
+pub(super) fn ffmpeg_receive(ffmpeg: &Path, uri: &str, out: &Path) -> Child {
     Command::new(ffmpeg)
         .args(["-hide_banner", "-loglevel", "error", "-y", "-probesize", "65536", "-analyzeduration", "1000000", "-i", uri, "-c", "copy", "-f", "mpegts"])
         .arg(out)
@@ -68,7 +68,7 @@ fn ffmpeg_receive(ffmpeg: &Path, uri: &str, out: &Path) -> Child {
 }
 
 /// The decoded video frame hashes, one per frame, from ffmpeg's framemd5.
-fn frame_hashes(ffmpeg: &Path, file: &Path) -> Vec<String> {
+pub(super) fn frame_hashes(ffmpeg: &Path, file: &Path) -> Vec<String> {
     let out = Command::new(ffmpeg)
         .args(["-hide_banner", "-loglevel", "error", "-i"])
         .arg(file)
@@ -82,7 +82,7 @@ fn frame_hashes(ffmpeg: &Path, file: &Path) -> Vec<String> {
         .collect()
 }
 
-fn mkfifo(path: &Path) {
+pub(super) fn mkfifo(path: &Path) {
     let ok = Command::new("mkfifo").arg(path).status().map(|s| s.success()).unwrap_or(false);
     assert!(ok, "mkfifo failed");
 }
