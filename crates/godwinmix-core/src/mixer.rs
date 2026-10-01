@@ -579,6 +579,8 @@ pub struct MixerHandle {
     coalesced: Arc<Coalesced>,
     /// What the mixer loop is inside, shared with the loop in `spawn`.
     running: Arc<Running>,
+    /// Set while a live source with sound is heard on programme.
+    heard: Arc<AtomicBool>,
 }
 
 impl MixerHandle {
@@ -593,8 +595,17 @@ impl MixerHandle {
             events: EventBus::new(256),
             coalesced: Arc::new(Coalesced::default()),
             running: Arc::new(Running::default()),
+            heard: Arc::default(),
         };
         (handle, rx)
+    }
+
+    /// True while a live source with sound is heard on programme, as the
+    /// mixer last decided the volumes (twice a second). The slate, or a
+    /// scene whose sources carry no sound, is false: there is nothing on air
+    /// to fall silent.
+    pub fn programme_heard(&self) -> bool {
+        self.heard.load(Ordering::Relaxed)
     }
 
     /// Queue a command. Never blocks: this is called from GStreamer clock
@@ -1407,6 +1418,7 @@ impl Mixer {
             events: events.clone(),
             coalesced: Arc::new(Coalesced::default()),
             running: Arc::new(Running::default()),
+            heard: Arc::default(),
         };
 
         let program = gst::Pipeline::with_name("program");
@@ -3437,11 +3449,14 @@ impl Mixer {
         // behaviour and it changes no pad topology, because there is still one
         // audiomixer pad per source however many places it is drawn in.
         let mut targets = Vec::new();
+        let mut heard = false;
         for slot in &self.sources {
             let healthy = matches!(slot.input.observed_state(), SourceState::Live);
             let on = healthy && audible(&placements, &slot.input.id);
+            heard |= on && slot.input.has_audio();
             targets.push((slot.branch.apad.clone(), if on { 1.0f64 } else { 0.0f64 }));
         }
+        self.handle.heard.store(heard, Ordering::Relaxed);
 
         // A pad a transition is driving is the transition's until it settles.
         // The visibility tick runs twice a second and would otherwise stamp a
@@ -6767,6 +6782,7 @@ mod tests {
             events: EventBus::new(8),
             coalesced: Arc::new(Coalesced::default()),
             running: Arc::new(Running::default()),
+            heard: Arc::default(),
         };
         (handle, rx)
     }
