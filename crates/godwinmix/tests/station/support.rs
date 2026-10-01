@@ -35,6 +35,12 @@ impl Drop for Running {
     }
 }
 
+impl Running {
+    pub fn pid(&self) -> u32 {
+        self.child.id()
+    }
+}
+
 fn free_port() -> u16 {
     std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port()
 }
