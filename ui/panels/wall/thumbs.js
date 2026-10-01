@@ -50,6 +50,16 @@ export class Thumbs {
     for (const id of fresh) this.load(id);
   }
 
+  /** Shows with no picture to show: the last one goes, and nothing is asked. */
+  blank(ids) {
+    for (const id of ids) {
+      const img = this.imgs.get(id);
+      if (!img || img.dataset.empty === "1") continue;
+      img.removeAttribute("src");
+      img.dataset.empty = "1";
+    }
+  }
+
   refresh() {
     if (document.hidden) return;
     for (const id of this.ids) this.load(id);
