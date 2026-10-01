@@ -128,7 +128,7 @@ fn watch(plan: &impl Plan, pipeline: &gst::Pipeline, out: &Shared, pads: &Pads, 
         }
         tick = Instant::now();
         let quiet = out.quiet_ms();
-        let notes = pads.note.lock().unwrap_or_else(|e| e.into_inner()).join("; ");
+        let notes = pads.notes();
         (stats.state, stats.error) = match quiet {
             Some(q) if q < LIVE_MS => (State::Live, (!notes.is_empty()).then(|| format!("left out: {notes}"))),
             Some(q) => (State::Retrying, Some(format!("nothing from {} for {} s", plan.address(), q / 1000))),
