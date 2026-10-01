@@ -15,6 +15,9 @@ path = "src/main.rs"
 [dependencies]
 godwinmix-sdk = { path = "../../crates/godwinmix-sdk" }
 gmx-netkit = { path = "../netkit" }
+# The udp plugin's TS parsing, program choice and loss counting, for a direct
+# show's multicast, SRT and RIST inputs (src/direct/input/). Its library half.
+gmx-udp = { path = "../udp" }
 
 gstreamer = { workspace = true }
 gstreamer-app = { workspace = true }

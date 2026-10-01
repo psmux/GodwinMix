@@ -1305,6 +1305,7 @@ dependencies = [
  "bytes",
  "glib",
  "gmx-netkit",
+ "gmx-udp",
  "godwinmix-protocol",
  "godwinmix-sdk",
  "gstreamer",
