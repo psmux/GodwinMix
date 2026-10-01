@@ -19,7 +19,8 @@ gmx-scale sample --pid PID [--station ADDR] [options]
   --token T          a bearer token, when the station has one (or GODWINMIX_TOKEN)
   --seconds S        how long (60)
   --watch NAME=PID   also sample another process, e.g. feeds=4242; repeat
-  --direct WORD      a process whose command has WORD is the direct host (direct-host)
+  --direct WORD      a process whose command has WORD is the direct host (gmx-ingest, the
+                     ingest plugin, which also serves the channels)
   --csv FILE         every second, every role: t,role,count,cpu_percent,rss_mib
   --json FILE        the summary
 ";
@@ -44,7 +45,7 @@ pub fn main(a: Args) -> Result<(), String> {
         let _ = writeln!(f, "t,role,count,cpu_percent,rss_mib");
     }
     let seconds = a.num("seconds", 60.0f64)?;
-    let direct = a.str("direct").unwrap_or("direct-host").to_string();
+    let direct = a.str("direct").unwrap_or("gmx-ingest").to_string();
     let mut roles = Roles::default();
     let mut stats = Stats::default();
     let mut last: HashMap<u32, f64> = HashMap::new();
