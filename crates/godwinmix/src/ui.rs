@@ -287,6 +287,7 @@ const DEV_ASSETS: &[(&str, &str)] = &[
     ("test/wall-preview.js", include_str!("../../../ui/test/wall-preview.js")),
     ("test/wall-stub.js", include_str!("../../../ui/test/wall-stub.js")),
     ("test/wall.html", include_str!("../../../ui/test/wall.html")),
+    ("test/wall.js", include_str!("../../../ui/test/wall.js")),
     // The designer kits' behaviour, as the reference implementation answered
     // it. The TypeScript and Python suites read the same file from the
     // repository; the browser reads it from here, because the page has no file
