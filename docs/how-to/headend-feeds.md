@@ -131,3 +131,7 @@ takes AAC and nothing else. One video and one audio stream are
 taken from each feed: a second language, teletext and subtitles are left
 out, and so is MPEG-2 video, which nothing downstream of a direct show
 carries. `error` names what was left out once the feed is live.
+
+The silence alarm listens to all of those sound codecs. Before this release a
+direct show with layer II, MP3, AC-3 or E-AC-3 sound never had its sound
+measured, so a feed whose sound had really gone quiet raised nothing.
