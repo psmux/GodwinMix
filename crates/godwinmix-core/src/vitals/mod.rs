@@ -11,13 +11,19 @@
 //!                     └──► event/health on a change of state or alarm kinds
 //! ```
 //!
+//! `[vitals] alarms` switches the black, freeze and silence checks on, as a
+//! direct show's `monitor.alarms` does. It is off by default for a show that
+//! composites, whose operator is usually watching it; with it off only the
+//! outputs are judged.
+//!
 //! Sound costs nothing new: the programme meter posts its peaks whether or
-//! not anyone listens. The picture checks read the mosaic, which exists only
-//! while somebody is looking; with `[vitals] alarms = true` this module asks
-//! the tracker for it once a second and so keeps a mosaic going all the time,
-//! which is what that switch costs. With it off (the default for a show
-//! that composites, whose operator is usually watching it), black and freeze
-//! are judged only while the mosaic is up anyway.
+//! not anyone listens. Silence is judged only while the mixer hears a live
+//! source with sound on programme, so the slate, or a scene of pictures
+//! with no sound, is not silent: there is nothing there to fall quiet. The
+//! picture checks read the mosaic, which exists only while somebody is
+//! looking; with the alarms on this module asks the tracker for it once a
+//! second and so keeps a mosaic going all the time, which is what that
+//! switch costs.
 //!
 //! The direct host's vitals (`plugins/ingest/src/direct/vitals/`) do the
 //! same for shows that do not composite. `docs/reference/show-health.md`
@@ -57,13 +63,17 @@ async fn run(mixer: MixerHandle, tracker: Arc<Tracker>, shared: Arc<Shared>) {
     tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     let mut judge = Judge::new(shared.settings().thresholds);
     let mut reported: Option<Health> = None;
+    // Whether the programme's sound is judged, decided once a second.
+    let mut listen = false;
     loop {
         tokio::select! {
             got = events.recv() => match got {
                 Ok(envelope) => {
                     if let Event::AudioLevel { peak_db } = envelope.event {
-                        let peak = peak_db.into_iter().reduce(f64::max).unwrap_or(f64::NEG_INFINITY);
-                        judge.sound(peak, now_ms());
+                        if listen {
+                            let peak = peak_db.into_iter().reduce(f64::max).unwrap_or(f64::NEG_INFINITY);
+                            judge.sound(peak, now_ms());
+                        }
                     }
                 }
                 Err(RecvError::Lagged(_)) => continue,
@@ -72,6 +82,10 @@ async fn run(mixer: MixerHandle, tracker: Arc<Tracker>, shared: Arc<Shared>) {
             _ = tick.tick() => {
                 let cfg = shared.settings();
                 judge.limits = cfg.thresholds.clone();
+                listen = cfg.alarms && mixer.programme_heard();
+                if !listen {
+                    judge.no_sound();
+                }
                 turn(&mixer, &tracker, &cfg, &mut judge).await;
                 let health = judge.health(now_ms());
                 let moved = reported.as_ref().is_none_or(|r| health.changed_from(r));
@@ -93,7 +107,7 @@ async fn turn(mixer: &MixerHandle, tracker: &Arc<Tracker>, cfg: &VitalsConfig, j
     if cfg.alarms {
         tracker.want();
     }
-    match tracker.latest() {
+    match tracker.latest().filter(|_| cfg.alarms) {
         Some(latest) => {
             let luma = cfg.thresholds.black_luma;
             // A JPEG decode: off the runtime's own threads.

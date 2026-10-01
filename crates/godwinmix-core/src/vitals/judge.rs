@@ -35,10 +35,18 @@ impl Judge {
         self.last_black = black_ratio;
     }
 
-    /// Nobody is looking and the picture alarms are off: stop judging it.
+    /// The alarms are off, or there is no mosaic to look at: stop judging
+    /// the picture.
     pub fn no_picture(&mut self) {
         self.black.clear();
         self.freeze.clear();
+    }
+
+    /// The alarms are off, or nothing with sound is on programme: there is
+    /// no sound to judge, so it is not silent.
+    pub fn no_sound(&mut self) {
+        self.silence.clear();
+        self.last_peak = None;
     }
 
     /// The programme meter's loudest channel, in dBFS.

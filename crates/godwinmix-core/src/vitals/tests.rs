@@ -19,8 +19,13 @@ struct Show {
 }
 
 /// A 320x180 programme with three test sources and the multiview on, and
-/// the vitals watching it with `limits`. Nothing is on programme yet.
+/// the vitals watching it with `limits` and the alarms on. Nothing is on
+/// programme yet.
 async fn show(limits: serde_json::Value) -> Show {
+    show_with(true, limits).await
+}
+
+async fn show_with(alarms: bool, limits: serde_json::Value) -> Show {
     let _ = gst::init();
     let mut cfg: Config = toml::from_str("").unwrap();
     (cfg.canvas.width, cfg.canvas.height) = (320, 180);
@@ -41,7 +46,7 @@ async fn show(limits: serde_json::Value) -> Show {
     let tracker = Tracker::new(cfg.snapshot.clone(), mix.multiview_handle(), handle.clone());
     std::mem::forget(mixer::spawn(mix, cmd_rx, handle.clone()));
     let events = handle.subscribe();
-    let cfg = VitalsConfig { alarms: true, thresholds: serde_json::from_value(limits).unwrap() };
+    let cfg = VitalsConfig { alarms, thresholds: serde_json::from_value(limits).unwrap() };
     tokio::spawn(run(handle.clone(), tracker, Shared::new(cfg)));
     Show { handle, events }
 }
@@ -52,20 +57,31 @@ impl Show {
         self.handle.request(move |ack| Command::Take { source, at_running_time_ms: None, ack: Some(ack) }).await.unwrap();
     }
 
+    async fn mute(&self, id: &str) {
+        self.handle.set_audio(SourceId::from(id), None, Some(true), None, Vec::new()).await.unwrap();
+    }
+
     /// Wait for an `event/health` whose alarm kinds are exactly `want`.
     async fn until(&mut self, want: &[AlarmKind], limit: Duration) {
-        let deadline = Instant::now() + limit;
+        let seen = self.kinds_within(limit, |kinds| kinds == want).await;
+        assert!(seen.last().is_some_and(|k| k == want), "no event/health with {want:?} in {limit:?}: {seen:?}");
+    }
+
+    /// Every `event/health` for `limit`, or until `stop` says so, as its
+    /// alarm kinds.
+    async fn kinds_within(&mut self, limit: Duration, stop: impl Fn(&[AlarmKind]) -> bool) -> Vec<Vec<AlarmKind>> {
+        let (deadline, mut seen) = (Instant::now() + limit, Vec::new());
         while Instant::now() < deadline {
             let left = deadline.saturating_duration_since(Instant::now());
             let Ok(Ok(envelope)) = tokio::time::timeout(left, self.events.recv()).await else { continue };
             if let Event::Health { health } = envelope.event {
-                let kinds: Vec<AlarmKind> = health.alarms.iter().map(|a| a.kind).collect();
-                if kinds == want {
-                    return;
+                seen.push(health.alarms.iter().map(|a| a.kind).collect::<Vec<_>>());
+                if stop(seen.last().unwrap()) {
+                    break;
                 }
             }
         }
-        panic!("no event/health with {want:?} in {limit:?}");
+        seen
     }
 }
 
@@ -87,12 +103,28 @@ async fn a_still_programme_freezes_and_moving_bars_clear_it() {
     s.until(&[], Duration::from_secs(15)).await;
 }
 
+/// The slate has no sound to fall quiet; a source with sound on programme
+/// that goes quiet does, and its tone coming back clears it.
 #[tokio::test(flavor = "multi_thread")]
-async fn a_programme_with_nothing_on_it_is_silent_until_a_tone_is_taken() {
+async fn only_a_source_with_sound_on_programme_can_be_silent() {
     let mut s = show(json!({"black_secs": 0, "freeze_secs": 0, "silence_secs": 2})).await;
-    s.until(&[AlarmKind::Silence], Duration::from_secs(30)).await;
+    let seen = s.kinds_within(Duration::from_secs(6), |_| false).await;
+    assert!(!seen.is_empty() && seen.iter().all(Vec::is_empty), "nothing on programme is not silence: {seen:?}");
     s.take("bars").await;
+    s.mute("bars").await;
+    s.until(&[AlarmKind::Silence], Duration::from_secs(30)).await;
+    s.handle.set_audio(SourceId::from("bars"), None, Some(false), None, Vec::new()).await.unwrap();
     s.until(&[], Duration::from_secs(15)).await;
+}
+
+/// With the alarms off, a muted source on programme raises nothing.
+#[tokio::test(flavor = "multi_thread")]
+async fn with_the_alarms_off_a_quiet_programme_raises_nothing() {
+    let mut s = show_with(false, json!({"black_secs": 1, "freeze_secs": 1, "silence_secs": 1})).await;
+    s.take("dark").await;
+    s.mute("dark").await;
+    let seen = s.kinds_within(Duration::from_secs(8), |_| false).await;
+    assert!(!seen.is_empty() && seen.iter().all(Vec::is_empty), "{seen:?}");
 }
 
 /// This process's CPU seconds, from `ps`.
