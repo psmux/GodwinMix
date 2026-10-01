@@ -33,7 +33,7 @@ use serde_json::{json, Value};
 use crate::hub::Hub;
 use crate::transcode::{StreamSpec, Transcoders};
 use runner::Runner;
-pub use table::{wanted, Feed, Wanted};
+pub use table::{destination, wanted, Feed, Wanted};
 
 /// The running destinations.
 pub struct Sends {

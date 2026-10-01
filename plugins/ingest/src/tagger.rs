@@ -48,7 +48,7 @@ pub const HEVC_CAPS: &str = "video/x-h265,stream-format=hvc1,alignment=au";
 pub struct Zero(Mutex<Option<gst::ClockTime>>);
 
 impl Zero {
-    fn ms(&self, at: gst::ClockTime) -> u32 {
+    pub fn ms(&self, at: gst::ClockTime) -> u32 {
         let mut zero = self.0.lock().unwrap_or_else(|e| e.into_inner());
         let base = *zero.get_or_insert(at);
         (at.saturating_sub(base).mseconds() & 0xffff_ffff) as u32

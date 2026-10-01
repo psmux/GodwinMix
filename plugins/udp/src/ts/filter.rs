@@ -111,6 +111,7 @@ impl Filter {
         let gap = h.cc.wrapping_sub(last) & 0x0F;
         if gap > 1 {
             Counters::add(&n.ts_lost, u64::from(gap - 1));
+            Counters::add(&n.cc_errors, 1);
             if let Some(a) = self.assemblers.get_mut(&h.pid) {
                 a.reset();
             }

@@ -47,27 +47,37 @@ impl Wanted {
 pub fn wanted(params: &Value) -> Vec<Wanted> {
     let channels = params.get("channels").and_then(Value::as_array).cloned().unwrap_or_default();
     let text = |v: &Value, k: &str| v.get(k).and_then(Value::as_str).unwrap_or_default().to_string();
-    let some = |v: &Value, k: &str| Some(text(v, k)).filter(|s| !s.is_empty());
     let mut out = Vec::new();
     for c in &channels {
         let (channel, app) = (text(c, "id"), text(c, "app"));
         let enabled = c.get("enabled").and_then(Value::as_bool).unwrap_or(true);
+        let app = if app.is_empty() { channel.clone() } else { app.clone() };
         for d in c.get("destinations").and_then(Value::as_array).into_iter().flatten() {
-            let rendition = d.get("rendition").and_then(Value::as_bool).unwrap_or(false);
-            let w = Wanted {
-                channel: channel.clone(),
-                app: if app.is_empty() { channel.clone() } else { app.clone() },
-                id: text(d, "id"),
-                platform: text(d, "platform"),
-                url: text(d, "url"),
-                stream: some(d, "stream").unwrap_or_else(|| "*".into()),
-                feed: if rendition { Feed::Rendition { video: some(d, "video"), audio: some(d, "audio") } } else { Feed::Copy },
-            };
-            let on = d.get("enabled").and_then(Value::as_bool).unwrap_or(true);
-            if enabled && on && !w.channel.is_empty() && !w.id.is_empty() && !w.url.is_empty() {
+            if let Some(w) = destination(&channel, &app, d).filter(|_| enabled) {
                 out.push(w);
             }
         }
     }
     out
+}
+
+/// One destination row, read as a destination of `channel` reading `app`.
+/// `None` when it is switched off or is missing its id or its address. The
+/// direct host reads its shows' outputs with this, since each is a row of
+/// exactly this shape.
+pub fn destination(channel: &str, app: &str, d: &Value) -> Option<Wanted> {
+    let text = |v: &Value, k: &str| v.get(k).and_then(Value::as_str).unwrap_or_default().to_string();
+    let some = |v: &Value, k: &str| Some(text(v, k)).filter(|s| !s.is_empty());
+    let rendition = d.get("rendition").and_then(Value::as_bool).unwrap_or(false);
+    let w = Wanted {
+        channel: channel.to_string(),
+        app: app.to_string(),
+        id: text(d, "id"),
+        platform: text(d, "platform"),
+        url: text(d, "url"),
+        stream: some(d, "stream").unwrap_or_else(|| "*".into()),
+        feed: if rendition { Feed::Rendition { video: some(d, "video"), audio: some(d, "audio") } } else { Feed::Copy },
+    };
+    let on = d.get("enabled").and_then(Value::as_bool).unwrap_or(true);
+    (on && !w.channel.is_empty() && !w.id.is_empty() && !w.url.is_empty()).then_some(w)
 }

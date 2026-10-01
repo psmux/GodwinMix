@@ -10,7 +10,7 @@
 //! The socket is opened when the pipeline starts and closed when it stops, so
 //! a source that is not running holds no port.
 
-mod elements;
+pub mod elements;
 pub mod health;
 pub mod probe;
 pub mod settings;
