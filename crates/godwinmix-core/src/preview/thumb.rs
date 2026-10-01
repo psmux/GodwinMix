@@ -242,7 +242,7 @@ impl Branch {
         let mut chain = vec![gstutil::queue_preview("pgm-t-q")?, rate];
         chain.extend(bridge);
         chain.push(make("videoscale", "pgm-t-scale")?);
-        chain.push(make("videoconvert", "pgm-t-conv")?);
+        chain.push(make("videoconvert", "pgm-t-rgb")?);
         let height = (i64::from(BRANCH_WIDTH) * i64::from(canvas.1.max(2)) / i64::from(canvas.0.max(2))).max(2) as i32 & !1;
         let caps = gst::Caps::builder("video/x-raw")
             .field("format", "RGB")

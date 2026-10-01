@@ -5148,6 +5148,7 @@ mod tests {
     mod slow_restart;
     mod stale_work;
     mod slow_output;
+    mod thumb;
     use crate::plugin::branch::meter_name;
     use super::*;
 
