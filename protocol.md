@@ -173,7 +173,7 @@ Keys accepted on every method, handled before a method runs.
 | `show.add` | `POST /api/v1/shows` | admin |  | 1 | Make another show and start it: empty, a copy of a show (without its outputs, so nothing goes out twice), or from a project file. |
 | `show.add_many` | `POST /api/v1/shows/add_many` | admin |  | 1 | Make many shows in one call, such as every channel of a headend. The whole batch is checked first. With dry_run (the default) nothing is made: the answer says what would be, what its renditions would cost and whether the governor would admit them. Without it, every show that fits is made and the rest are refused with why; a show is made whole or not at all. |
 | `show.list` | `GET /api/v1/shows` | read |  | 1 | Every show on this machine: its name, whether it is running, what is on air, what its outputs send and what its process costs. `current` is the show a client reaches when it names none. |
-| `show.output.add` | `POST /api/v1/shows/{id}/output/add` | admin |  | 1 | Send a show without compositing to another place: an address (SRT, RTMP, UDP, RTP or RIST), or a platform and its key. Left without a rendition it copies the input's bytes; with one it is planned and admitted by the governor. The key is write only. |
+| `show.output.add` | `POST /api/v1/shows/{id}/output/add` | admin |  | 1 | Send a show without compositing to another place: an address (SRT, RTMP, UDP, RTP or RIST), a platform and its key, or hls://<name> to serve it as HLS from this port. Left without a rendition it copies the input's bytes; with one it is planned and admitted by the governor. The key is write only. |
 | `show.output.remove` | `POST /api/v1/shows/{id}/output/remove` | admin | yes | 1 | Stop one output of a show without compositing and forget it, key and all. |
 | `show.output.set` | `POST /api/v1/shows/{id}/output` | admin |  | 1 | Change one output of a show without compositing, naming only what moves: another address, a new key, on or off, copy or a rendition. |
 | `show.remove` | `DELETE /api/v1/shows/{id}` | admin | yes | 1 | Stop a show and remove it with its folder. Refused for the last show and for main, the show the station was started with. |
@@ -2507,7 +2507,7 @@ MCP tool `list_shows` in the `standard` profile: readOnlyHint true, destructiveH
 
 #### `show.output.add`
 
-Send a show without compositing to another place: an address (SRT, RTMP, UDP, RTP or RIST), or a platform and its key. Left without a rendition it copies the input's bytes; with one it is planned and admitted by the governor. The key is write only.
+Send a show without compositing to another place: an address (SRT, RTMP, UDP, RTP or RIST), a platform and its key, or hls://<name> to serve it as HLS from this port. Left without a rendition it copies the input's bytes; with one it is planned and admitted by the governor. The key is write only.
 
 MCP tool `add_show_output` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint false.
 

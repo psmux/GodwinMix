@@ -78,9 +78,9 @@ fn outputs(reg: &mut Registry<Call>) {
             "show.output.add",
             Scope::Admin,
             "Send a show without compositing to another place: an address (SRT, RTMP, UDP, \
-             RTP or RIST), or a platform and its key. Left without a rendition it copies the \
-             input's bytes; with one it is planned and admitted by the governor. The key is \
-             write only.",
+             RTP or RIST), a platform and its key, or hls://<name> to serve it as HLS from \
+             this port. Left without a rendition it copies the input's bytes; with one it is \
+             planned and admitted by the governor. The key is write only.",
             refused("show.output.add"),
         )
         .params(schema_of::<ShowOutputAddRequest>)
