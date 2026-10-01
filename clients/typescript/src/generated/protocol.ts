@@ -2145,10 +2145,12 @@ export type ShowState = "starting" | "running" | "stopped" | "failed";
 
 /** One show's numbers, as `show.stats` answers them. */
 export interface ShowStats {
+  cpu_millicores?: number | null;
   health: Health;
   id: string;
   input?: InputStats | null;
   outputs?: OutputStats[];
+  work?: ShowWork;
 }
 
 /** `show.stats`'s answer. */
@@ -2161,6 +2163,9 @@ export interface ShowStatsRequest {
   fields?: string[] | null;
   ids?: string[] | null;
 }
+
+/** What a show does to make its outputs, which is what its load pays for. */
+export type ShowWork = "mix" | "transcode" | "copy";
 
 /** `event/snapshot`: the full state, and where in the stream it sits. */
 export interface Snapshot {
