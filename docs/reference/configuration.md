@@ -226,7 +226,7 @@ shed outputs, sent as `event/health` when they change.
 
 | Key | Default | Meaning |
 |---|---|---|
-| `alarms` | false | keep a mosaic up for the black and freeze checks while nobody is looking, which costs a few percent of one core. Off, they are judged only while the mosaic is up anyway; silence and outputs are judged either way |
+| `alarms` | false | judge black, freeze and silence, and keep a mosaic up for black and freeze while nobody is looking, which costs a few percent of one core. Off, only failed and shed outputs are judged. Silence is judged only while a source with sound is heard on programme |
 | `black_secs`, `freeze_secs`, `silence_secs` | 4, 10, 10 | seconds before each alarm; 0 switches that check off |
 | `black_luma`, `black_ratio`, `freeze_diff`, `silence_db` | 38, 0.98, 0.002, -60 | what counts as black, still and quiet |
 

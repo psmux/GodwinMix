@@ -308,8 +308,9 @@ A show that composites gets them too, for the checks it makes of its own
 programme: the station calls the show's `vitals.set` when its process links
 and again when `show.set` changes them while it runs, before it answers. The
 milliseconds become seconds, `silence_dbfs` becomes `silence_db` and
-`enabled` becomes `alarms`, which there means keeping a mosaic up for the
-black and freeze checks while nobody is looking (see
+`enabled` becomes `alarms`, which there switches the black, freeze and
+silence checks on and keeps a mosaic up for black and freeze while nobody is
+looking (see
 [show health](show-health.md#thresholds)). `vitals.get` with `?show=<id>`
 reads back what the show holds.
 
@@ -393,8 +394,9 @@ ingest plugin is not running, `governor-refused` for an output whose
 rendition the governor would not admit, and `output-failed` for an output the
 host reports failed. `since_ms` is unix milliseconds.
 
-A show that composites judges its own programme (black, freeze, silence, a
-failed or shed output) and sends its health to the station over the link
+A show that composites judges its own programme (black, freeze and silence
+while its alarms are on, silence only while a source with sound is heard on
+programme, and a failed or shed output always) and sends its health to the station over the link
 whenever its state or set of alarm kinds changes. The station adds the
 alarms of the show's input, when it has one, and serves the result the same
 way as a direct show's. When the show's process dies, is killed or loses its
