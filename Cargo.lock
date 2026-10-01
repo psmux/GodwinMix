@@ -1310,6 +1310,7 @@ dependencies = [
  "godwinmix-sdk",
  "gstreamer",
  "gstreamer-app",
+ "gstreamer-rtsp-server",
  "gstreamer-sdp",
  "gstreamer-webrtc",
  "libloading",

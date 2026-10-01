@@ -1,7 +1,10 @@
 use super::*;
 
+/// Each tag as (timestamp, keyframe, sequence header, which side sent it).
+type Seen = Vec<(u32, bool, bool, u8)>;
+
 #[derive(Clone, Default)]
-struct Record(Arc<Mutex<Vec<(u32, bool, bool, u8)>>>);
+struct Record(Arc<Mutex<Seen>>);
 
 impl TagSink for Record {
     fn tag(&mut self, t: MediaTag) {

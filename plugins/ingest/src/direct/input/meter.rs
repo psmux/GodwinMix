@@ -19,8 +19,12 @@ pub struct Meter {
     audio: Option<codec::Audio>,
     last_video: Option<Instant>,
     last_audio: Option<Instant>,
-    last_key: Option<Instant>,
+    /// The timestamp of the last keyframe, and of the first and last frame
+    /// this window: the stream's own clock, so a burst after a stall does
+    /// not read as a fast frame rate.
+    last_key: Option<u32>,
     keyframe_ms: Option<u64>,
+    span: Option<(u32, u32)>,
     fps: f64,
     kbps: u32,
 }
@@ -37,6 +41,7 @@ impl Default for Meter {
             last_audio: None,
             last_key: None,
             keyframe_ms: None,
+            span: None,
             fps: 0.0,
             kbps: 0,
         }
@@ -52,9 +57,11 @@ impl Meter {
             TagKind::Video => {
                 self.frames += 1;
                 self.last_video = Some(now);
+                let ts = tag.timestamp_ms;
+                self.span = Some(self.span.map_or((ts, ts), |(first, _)| (first, ts)));
                 if tag.keyframe {
-                    if let Some(prev) = self.last_key.replace(now) {
-                        self.keyframe_ms = Some(now.duration_since(prev).as_millis() as u64);
+                    if let Some(prev) = self.last_key.replace(ts) {
+                        self.keyframe_ms = Some(u64::from(ts.wrapping_sub(prev)));
                     }
                 }
             }
@@ -96,7 +103,12 @@ impl Meter {
         let secs = self.window.elapsed().as_secs_f64();
         if secs >= 1.0 {
             self.kbps = (self.bytes as f64 * 8.0 / 1000.0 / secs).round() as u32;
-            self.fps = (f64::from(self.frames) / secs * 100.0).round() / 100.0;
+            self.fps = match self.span.take() {
+                Some((first, last)) if last > first && self.frames > 1 => {
+                    (f64::from(self.frames - 1) * 1000.0 / f64::from(last - first) * 100.0).round() / 100.0
+                }
+                _ => 0.0,
+            };
             self.window = Instant::now();
             self.bytes = 0;
             self.frames = 0;
@@ -119,23 +131,24 @@ mod tests {
     use super::*;
     use std::sync::Arc;
 
-    fn tag(kind: TagKind, keyframe: bool, body: &[u8]) -> MediaTag {
-        MediaTag { kind, timestamp_ms: 0, keyframe, sequence_header: false, payload: Arc::from(body) }
+    fn tag(kind: TagKind, ms: u32, keyframe: bool, body: &[u8]) -> MediaTag {
+        MediaTag { kind, timestamp_ms: ms, keyframe, sequence_header: false, payload: Arc::from(body) }
     }
 
     #[test]
     fn frames_keyframes_and_ac3_channels_are_read_off_the_tags() {
         let mut m = Meter::default();
-        m.record(&tag(TagKind::Video, true, &[0x17, 1, 0, 0, 0]));
-        std::thread::sleep(std::time::Duration::from_millis(30));
-        m.record(&tag(TagKind::Video, false, &[0x27, 1, 0, 0, 0]));
-        m.record(&tag(TagKind::Video, true, &[0x17, 1, 0, 0, 0]));
+        m.record(&tag(TagKind::Video, 0, true, &[0x17, 1, 0, 0, 0]));
+        m.record(&tag(TagKind::Video, 40, false, &[0x27, 1, 0, 0, 0]));
+        m.record(&tag(TagKind::Video, 1000, true, &[0x17, 1, 0, 0, 0]));
         let mut ac3 = crate::exaudio::prefix(crate::exaudio::AC3).to_vec();
         ac3.extend_from_slice(&[0x0B, 0x77, 0x00, 0x00, 0x1C, 0x40, 0xE1, 0x7F, 0x00]);
-        m.record(&tag(TagKind::Audio, false, &ac3));
+        m.record(&tag(TagKind::Audio, 0, false, &ac3));
         let mut s = InputStats::default();
+        m.window -= std::time::Duration::from_secs(1);
         m.fill(&mut s);
-        assert!(s.keyframe_ms.unwrap() >= 30);
+        assert_eq!(s.keyframe_ms, Some(1000), "read off the stream's clock, not the wall's");
+        assert_eq!(s.fps, 2.0, "three frames over a second of stream time");
         assert_eq!((s.audio_codec.as_str(), s.audio_channels), ("ac3", 6));
         assert!(s.last_frame_ms.unwrap() < 1000);
         assert!(m.has_video() && m.has_frames());
