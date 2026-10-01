@@ -6,12 +6,11 @@
 //!                                     PAT and PMT before every keyframe, and at least every 400 ms
 //! ```
 //!
-//! What UDP, multicast, RIST and recording to a file send. It is a few
-//! hundred lines rather than GStreamer's `mpegtsmux` because an output is
-//! then one thread and a socket, with no pipeline, no parser and no
-//! aggregator thread per output, which is what lets one process carry
-//! hundreds of copies. The clock rides on the video PID, 0.7 s behind the
-//! decode time, as ffmpeg's muxer puts it.
+//! What SRT, UDP, RTP, RIST and a recording send: a few hundred lines rather
+//! than `mpegtsmux`, so an output is one thread and a socket with no pipeline
+//! of its own, which is what lets one process carry hundreds of copies. The
+//! clock rides on the video PID, 0.7 s behind the decode time, as ffmpeg's
+//! muxer puts it.
 
 mod audio;
 mod clock;
@@ -36,8 +35,7 @@ const WRAP: u64 = 1 << 33;
 pub struct Muxer {
     video: Option<es::VideoConfig>,
     audio: Option<audio::Sound>,
-    /// Continuity counters: PAT, PMT, video, audio.
-    cc: [Counter; 4],
+    cc: [Counter; 4], // PAT, PMT, video, audio
     /// When the tables last went out, and whether they have changed since.
     psi_at: Option<u32>,
     psi_dirty: bool,
