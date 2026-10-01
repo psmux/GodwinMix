@@ -170,6 +170,11 @@ name, rather than failing silently.
 
     ~/.godwinmix/plugins/<name>/<version>/
 
+To try a plugin without touching that folder, set `GODWINMIX_HOME` to a
+scratch folder for both the mixer and `gmx`; plugins then go in its
+`plugins/`, and so does everything else per user (see
+[configuration](../reference/configuration.md#where-per-user-files-live)).
+
 Change it with `plugins_dir` under `[control]` in your config. Anything under
 that directory is read at startup, and a manifest that does not validate is
 listed by `gmx plugin list` with the reason rather than dropped in silence:

@@ -59,6 +59,20 @@ export async function actTests(test, eq, ok) {
   view.root.querySelector(`#wl-${id} [data-act=mix]`).click();
   await until(() => sent(stub, "show.set").length);
   test("the switch on a row sends show.set with compositing", () => eq(sent(stub, "show.set")[0].params, { id, compositing: true }));
+  const sw = () => view.root.querySelector(`#wl-${id} [data-act=mix]`);
+  await until(() => sw().getAttribute("aria-busy") === "true");
+  test("while the switch's task runs, the row says it is switching and a click does nothing", () => {
+    eq([sw().getAttribute("aria-busy"), sw().textContent], ["true", "Switching"]);
+    ok([...document.querySelectorAll(".toast")].some((t) => /Switching .* to mixed/.test(t.textContent)), "said it started");
+    sw().click();
+    eq(sent(stub, "show.set").length, 1);
+  });
+  await until(() => sw().getAttribute("aria-busy") === "false");
+  test("once task.get says it is done, the row is mixed and says so", () => {
+    ok(sent(stub, "task.get").length >= 1, "it read the task");
+    eq([sw().getAttribute("aria-checked"), sw().textContent], ["true", "Mixed"]);
+    ok([...document.querySelectorAll(".toast")].some((t) => /is mixed now/.test(t.textContent)), "said it landed");
+  });
   const show = stub.shows.find((s) => s.id === id);
   show.scenes_in_use = 3;
   await wait(60);

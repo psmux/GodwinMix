@@ -56,9 +56,11 @@ function clicked(view, e) {
 export async function compositing(view, id) {
   const show = view.data.find(id);
   if (!show) return;
+  if (show.switching) return;
   const on = !mixed(show);
+  const moving = () => toast({ text: `Switching ${show.name} to ${on ? "mixed" : "direct"}. Its outputs move over in the next half minute.` });
   try {
-    await view.data.set(id, { compositing: on });
+    await view.data.set(id, { compositing: on }, moving);
     toast({ text: on ? `${show.name} is mixed now: it has scenes and its own programme encode.` : `${show.name} is direct now: its input goes straight to its outputs.` });
   } catch (e) {
     errorToast(e, `${show.name} stays ${on ? "direct" : "mixed"}`);

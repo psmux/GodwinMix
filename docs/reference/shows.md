@@ -133,8 +133,27 @@ direct host's table, so its input is closed and its outputs stop.
 
 Admin. Names only what moves. The name and the input change first, then
 compositing, so one call can give a show an input and turn compositing off.
-The answer is the show with a `switch` beside its fields when compositing
-moved:
+A call that does not switch compositing answers with the show.
+
+A switch can take half a minute: the outputs have that long to come live
+again, and with no input flowing they never do. No call may take more than
+five seconds, so a switch answers at once with a task handle, the way
+`plugin.add` does, and carries on:
+
+```text
+{"task_id": "show-set-1", "poll_interval_ms": 1000, "outcome": "indeterminate",
+ "state": "running", "switching": "on", "show": {"id": "bbc-one", ...}, "next": "..."}
+```
+
+`task.get {task_id}` (or `GET /api/v1/tasks/show-set-1`) is answered by the
+station, not a show, and once `state` is `completed` its `result` is what
+the call would have answered: the show, with a `switch` beside its fields.
+Every client hears `event/show.changed` as the show moves, and again when
+the switch lands. A second switch of the same show while one runs is refused
+with `not_in_state` and the running task's `task_id` in `data`. A switch
+cannot be cancelled halfway: `task.cancel` on one is refused, because it
+would leave the outputs nowhere. The station's tasks are kept for an hour
+after they finish and are not in `task.list`, which a show answers.
 
 | `switch` field | Meaning |
 |---|---|
@@ -150,8 +169,9 @@ from the hub, so the input is opened once) and adds the outputs to it with
 `output.add`. Outputs move break then make, because a platform takes one
 publisher per key.
 
-`compositing: false` on a show that composites, refused with `not_in_state`
-and the reason in `data` when:
+`compositing: false` on a show that composites is checked before the task
+starts, so a refusal comes back on the call itself, with `not_in_state` and
+the reason in `data`, when:
 
 | Refused when | `data` |
 |---|---|
@@ -161,6 +181,7 @@ and the reason in `data` when:
 | it has sources besides `input` | `sources` |
 | a scene is on its programme | `scene` |
 | it has an output that was added inside it, whose address is write only | `outputs` |
+| it did not say what it has on air within four seconds | `show`, `retry_after_ms` |
 
 Otherwise its outputs are removed from the show, handed back to the direct
 host and its process is stopped.

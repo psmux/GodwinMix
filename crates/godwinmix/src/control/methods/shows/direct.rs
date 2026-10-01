@@ -22,7 +22,9 @@ pub fn register(reg: &mut Registry<Call>) {
             "Change a show's name, its input, or whether it composites. Turning compositing \
              on starts a show process whose one source is the input and moves the outputs \
              to it; turning it off hands them back to the direct host, when the show has \
-             one source and no scenes in use. The answer says how long the outputs were off.",
+             one source and no scenes in use. A switch can take half a minute, so it answers \
+             at once with a task_id and the show as it is; task.get with that id carries \
+             this answer, with how long the outputs were off, once it is done.",
             refused("show.set"),
         )
         .params(schema_of::<ShowSetRequest>)

@@ -86,6 +86,8 @@ pub struct Station {
     pub direct: super::direct::Direct,
     /// What `show.list` serves, kept by a sampler while someone reads.
     pub list_cache: super::list::ListCache,
+    /// Switches of compositing under way, as tasks `task.get` reads.
+    pub switches: super::switch::Switches,
 }
 
 impl Station {
@@ -112,6 +114,7 @@ impl Station {
             quit: tokio::sync::Notify::new(),
             direct,
             list_cache: Default::default(),
+            switches: Default::default(),
         })
     }
 

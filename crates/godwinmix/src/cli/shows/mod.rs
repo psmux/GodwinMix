@@ -7,6 +7,7 @@
 
 mod feeds;
 mod report;
+mod set;
 mod table;
 
 use anyhow::{Context, Result};
@@ -76,21 +77,7 @@ pub async fn run(base: &str, token: Option<&str>, cmd: Shows) -> Result<()> {
         Shows::List => list(&api).await,
         Shows::Add { from, dry_run, compositing } => add(&api, &from, dry_run, compositing.yes()).await,
         Shows::Stats { watch, interval, ids } => stats(&api, watch, interval, ids).await,
-        Shows::Set { id, compositing, name, input } => {
-            let mut req = json!({ "id": &id });
-            if let Some(c) = compositing {
-                req["compositing"] = json!(c.yes());
-            }
-            if let Some(n) = name {
-                req["name"] = json!(n);
-            }
-            if let Some(uri) = input {
-                req["input"] = json!({ "uri": uri });
-            }
-            let show: Value = api.call("show.set", Some(&id), &req).await?;
-            println!("{}", serde_json::to_string_pretty(&show)?);
-            Ok(())
-        }
+        Shows::Set { id, compositing, name, input } => set::run(&api, &id, compositing.map(OnOff::yes), name, input).await,
     }
 }
 

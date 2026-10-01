@@ -4,6 +4,7 @@
 //! across the two processes. See `docs/reference/shows.md`.
 
 mod direct;
+mod home;
 #[cfg(unix)]
 mod isolation;
 mod many;

@@ -17,7 +17,7 @@ const ALPHABET: &[u8] = b"abcdefghijkmnpqrstuvwxyz23456789";
 
 /// The key for `output_id` on this machine.
 pub fn viewer_key(output_id: &str) -> anyhow::Result<String> {
-    let path = godwinmix_host::marketplace::home_dir().join("secrets").join("key");
+    let path = godwinmix_host::home::secrets_dir().join("key");
     match std::fs::read(&path) {
         Ok(secret) if secret.len() == 32 => Ok(derive(&secret, output_id)),
         _ => crate::secrets::random_key(LEN),

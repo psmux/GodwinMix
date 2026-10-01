@@ -158,8 +158,20 @@ enough for once a second.
 `show.set {"id": "bbc-one", "compositing": true}` turns a feed into a mixed
 show: the station gives it a folder and a process, makes the input its one
 source, puts it on programme and moves the outputs to it. You can then add a
-lower third or a second source as in any show. The answer says which outputs
-moved and `gap_ms`, how long they were off. Measured with a 720p30 UDP feed
+lower third or a second source as in any show.
+
+The call answers at once with a `task_id`, because the switch waits up to
+half a minute for the outputs to come live again. Read it back until it is
+done:
+
+```sh
+curl localhost:8080/api/v1/tasks/show-set-1
+```
+
+Its `result` says which outputs moved and `gap_ms`, how long they were off.
+`gmx shows set bbc-one --compositing on` and the switch on the monitoring
+wall wait for it for you; the wall's row says Switching until it lands.
+Measured with a 720p30 UDP feed
 sent on to an RTMP server, seven switches in all: 0.6 to 0.7 seconds turning
 compositing on (the show starting and the RTMP connection being made again)
 and 0.5 to 1.2 seconds turning it off.

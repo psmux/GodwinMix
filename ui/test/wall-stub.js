@@ -8,6 +8,7 @@
 
 import { renditionStub, STATUS } from "./renditions-stub.js";
 import { RpcError } from "../client/errors.js";
+import { picture } from "./wall-picture.js";
 
 const WORDS = ["News", "Sport", "Movies", "Kids", "Music", "Weather", "Docs", "Drama", "Comedy", "Food", "Travel", "Science", "History", "Nature", "Cars", "Fashion", "Shop", "Arts", "Faith", "Gaming"];
 const CODEC = ["h264", "h264", "h264", "mpeg2", "hevc"];
@@ -48,24 +49,6 @@ function stats(show, i, t) {
   };
 }
 
-/** A picture per show, drawn once: bars, or black for a show gone black. */
-function picture(show, i) {
-  const c = Object.assign(document.createElement("canvas"), { width: 160, height: 90 });
-  const g = c.getContext("2d");
-  const hue = (i * 47) % 360;
-  const grad = g.createLinearGradient(0, 0, 160, 90);
-  grad.addColorStop(0, `hsl(${hue} 45% 32%)`);
-  grad.addColorStop(1, `hsl(${(hue + 40) % 360} 50% 18%)`);
-  const dark = show.health.alarms.some((a) => /black|no-input/.test(a.kind)) || show.state === "stopped";
-  g.fillStyle = dark ? "#000" : grad;
-  g.fillRect(0, 0, 160, 90);
-  if (dark) return c.toDataURL("image/png");
-  Object.assign(g, { fillStyle: "rgba(255,255,255,0.85)", font: "bold 15px system-ui" }).fillText(show.name, 10, 52);
-  g.fillStyle = "rgba(255,255,255,0.35)";
-  g.fillRect(10, 62, 60, 3);
-  return c.toDataURL("image/png");
-}
-
 /**
  * @param {{shows?: Array, n?: number, noShows?: boolean}} opts
  */
@@ -74,6 +57,8 @@ export function wallStub(opts = {}) {
   stub.shows = opts.shows || headend(opts.n ?? 200);
   stub.statsAsked = [];
   stub.thumbAsked = [];
+  stub.tasks = { n: 0 };
+  stub.switchMs = opts.switchMs ?? 400;
   stub.status = { ...STATUS(), ingress_kbps: 0 };
   const pics = new Map();
   stub.showThumbUrl = (id) => {
@@ -108,10 +93,21 @@ export function methods(stub) {
     "show.set": (p) => {
       const s = find(p.id);
       if (p.compositing === false && s.scenes_in_use) throw new RpcError(-32001, `${s.name} uses ${s.scenes_in_use} scenes, so it cannot go direct. Take its scenes off air and keep one source, then switch.`, { id: s.id, scenes: s.scenes_in_use });
-      for (const k of ["name", "compositing", "input", "alarms"]) if (k in p) s[k] = p[k];
-      changed(s);
-      return s;
+      const switching = "compositing" in p && p.compositing !== (s.compositing !== false);
+      for (const k of ["name", "input", "alarms"]) if (k in p) s[k] = p[k];
+      if (!switching) return changed(s), s;
+      // A switch answers at once with a task, as the station's does, and
+      // lands after `switchMs`.
+      const task_id = `show-set-${++stub.tasks.n}`;
+      stub.tasks[task_id] = { task_id, kind: "show.set", state: "running", poll_interval_ms: 250 };
+      setTimeout(() => {
+        s.compositing = p.compositing;
+        changed(s);
+        stub.tasks[task_id] = { task_id, kind: "show.set", state: "completed", result: { ...s, switch: { compositing: p.compositing, outputs: s.outputs.map((o) => o.id), gap_ms: 900 } } };
+      }, stub.switchMs);
+      return { task_id, poll_interval_ms: 250, outcome: "indeterminate", state: "running", show: { ...s }, switching: p.compositing ? "on" : "off" };
     },
+    "task.get": (p) => stub.tasks[p.task_id] || (() => { throw new RpcError(-32004, `There is no task "${p.task_id}".`, { kind: "task" }); })(),
     // `id` is the show and `output` the output, as channel.destination.* name them; `show` is another name for `id`.
     "show.output.add": (p) => { const s = find(p.id || p.show); const o = { id: p.output || `out-${s.outputs.length + 1}`, uri: p.uri, platform: p.platform, enabled: true, rendition: p.rendition ?? null, state: "connecting" }; s.outputs.push(o); changed(s); return o; },
     "show.output.set": (p) => { const s = find(p.id || p.show); const o = s.outputs.find((x) => x.id === p.output); for (const k of ["uri", "enabled", "rendition"]) if (k in p) o[k] = p[k]; changed(s); return o; },

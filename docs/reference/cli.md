@@ -161,7 +161,7 @@ methods, so the page, an agent over MCP and this command see the same thing.
 | `gmx shows stats` | one line per show, worst first: health, input kbps, fps, size, codecs, continuity errors, outputs sending, alarms with their age |
 | `gmx shows stats --watch --interval 2` | the same table, drawn again in place until Ctrl-C |
 | `gmx shows stats --ids bbc-one,bbc-two` | only those shows |
-| `gmx shows set bbc-one --compositing on` | give one show scenes and a programme encode; `off` takes it back |
+| `gmx shows set bbc-one --compositing on` | give one show scenes and a programme encode; `off` takes it back. It waits for the switch's task, up to half a minute, and prints the show with the `switch` report |
 | `gmx shows set bbc-one --name "BBC One HD" --input udp://@239.1.1.9:5000` | rename it, or give it another input |
 
 The feeds list is a CSV whose first line names its columns, or one address
