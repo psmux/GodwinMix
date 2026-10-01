@@ -35,7 +35,11 @@ impl super::Direct {
                     rendition: d.rendition.clone(),
                     plan: None,
                     refused: None,
+                    playback: None,
                 };
+                if let Some((live, playback)) = self.hls.view(id, &d.id).filter(|_| d.enabled && !r.compositing) {
+                    (view.live, view.playback) = (live, Some(playback));
+                }
                 if d.rendition.is_some() && d.enabled && !r.compositing {
                     let (plan, refused) = self.transcode.view(id, &d.id);
                     view.plan = plan;
@@ -56,8 +60,15 @@ impl super::Direct {
             .map(|o| {
                 let counted = seen.output_stats.iter().find(|s| s.id == o.id).cloned();
                 let mut row = counted.unwrap_or_else(|| OutputStats { id: o.id.clone(), ..Default::default() });
+                // An HLS output is the station's own, and the host never
+                // counts it.
+                let hls = self.hls.view(id, &o.id).map(|(l, _)| l);
+                if let Some(l) = &hls {
+                    (row.state, row.kbps, row.reconnects) = (String::new(), l.kbps, l.reconnects);
+                }
+                let live = hls.unwrap_or_else(|| seen.output(&o.id, true));
                 if row.state.is_empty() {
-                    row.state = serde_json::to_value(seen.output(&o.id, true).state).ok().and_then(|v| v.as_str().map(str::to_string)).unwrap_or_default();
+                    row.state = serde_json::to_value(live.state).ok().and_then(|v| v.as_str().map(str::to_string)).unwrap_or_default();
                 }
                 row.rendition_text = match (&o.rendition, self.transcode.view(id, &o.id).0) {
                     (None, _) => "copy".into(),

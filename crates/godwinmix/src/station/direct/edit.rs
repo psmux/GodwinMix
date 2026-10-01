@@ -4,8 +4,10 @@
 //! does (`channel_destinations::rules`), so a platform needs its key and an
 //! address needs a scheme it can carry. Outputs a channel never has (UDP,
 //! RTP and RIST, unicast or multicast) are checked here and carry their
-//! scheme as their platform.
+//! scheme as their platform. So does `hls://`, which the station serves
+//! itself (`super::hls`).
 
+use super::hls::spec as hls;
 use crate::control::methods::channel_destinations::rules;
 use godwinmix_protocol::destination::{AddDestinationRequest, SetDestinationRequest, StoredDestination};
 use godwinmix_protocol::error::RpcError;
@@ -24,11 +26,17 @@ pub fn add(list: &mut Vec<StoredDestination>, show: &str, spec: &ShowOutputSpec)
     let platform = match spec.platform.as_deref() {
         Some(p) => p.to_string(),
         None if scheme(uri) == "srt" => "srt".into(),
-        None if PLAIN.contains(&scheme(uri).as_str()) => scheme(uri),
+        None if PLAIN.contains(&scheme(uri).as_str()) || scheme(uri) == hls::SCHEME => scheme(uri),
         None => "custom".into(),
     };
+    if spec.params.is_some() && platform != hls::SCHEME {
+        let msg = format!("params are for an hls:// output, and this one is {platform}. Leave them out.");
+        return Err(RpcError::invalid_params(msg).with("field", "params"));
+    }
     let label = spec.label.clone().or_else(|| spec.id.clone());
-    let made = if PLAIN.contains(&platform.as_str()) {
+    let made = if platform == hls::SCHEME {
+        super::hls::edit::add(list, label, uri, spec)?
+    } else if PLAIN.contains(&platform.as_str()) {
         plain(list, &platform, label, uri, spec)?
     } else {
         let req = AddDestinationRequest {
@@ -98,7 +106,11 @@ pub fn set(list: &mut [StoredDestination], req: &ShowOutputSetRequest) -> Result
     let Some(d) = list.iter_mut().find(|d| d.id == req.output) else {
         return Err(RpcError::not_found("output", &req.output, &ids).with("show", req.id.clone()));
     };
-    if !PLAIN.contains(&d.platform.as_str()) {
+    if req.params.is_some() && d.platform != hls::SCHEME {
+        let msg = format!("params are for an hls:// output, and {} is {}. Leave them out.", d.id, d.platform);
+        return Err(RpcError::invalid_params(msg).with("field", "params"));
+    }
+    if !PLAIN.contains(&d.platform.as_str()) && d.platform != hls::SCHEME {
         let asked = SetDestinationRequest {
             id: req.id.clone(),
             destination: req.output.clone(),
@@ -115,7 +127,9 @@ pub fn set(list: &mut [StoredDestination], req: &ShowOutputSetRequest) -> Result
     if let Some(label) = &req.label {
         wanted.label = label.clone();
     }
-    if let Some(uri) = &req.uri {
+    if wanted.platform == hls::SCHEME {
+        super::hls::edit::set(&mut wanted, req)?;
+    } else if let Some(uri) = &req.uri {
         if scheme(uri) != wanted.platform {
             let msg = format!("a {} output keeps its scheme. Remove it and add another to send somewhere else.", wanted.platform);
             return Err(RpcError::invalid_params(msg).with("field", "uri"));
@@ -126,6 +140,9 @@ pub fn set(list: &mut [StoredDestination], req: &ShowOutputSetRequest) -> Result
         wanted.enabled = enabled;
     }
     if let Some(r) = &req.rendition {
+        if let (Some(choice), true) = (r, wanted.platform == hls::SCHEME) {
+            hls::check_rendition(&wanted.id, choice)?;
+        }
         wanted.rendition = r.clone();
     }
     *d = wanted;

@@ -1,8 +1,7 @@
 //! Init segments, segments and parts.
 
-use super::playlists::{find, wait};
-use super::{auth, media_response, refuse};
-use crate::control::Ctx;
+use super::playlists::wait;
+use super::{auth, media_response, refuse, Door};
 use axum::extract::{Path, Request, State};
 use axum::http::StatusCode;
 use axum::response::Response;
@@ -30,12 +29,12 @@ pub fn parse(file: &str) -> Option<Name> {
     }
 }
 
-pub async fn file(State(ctx): State<Ctx>, Path((output, rung, file)): Path<(String, String, String)>, req: Request) -> Response {
-    let stream = match find(&output) {
+pub async fn file<D: Door>(State(door): State<D>, Path((output, rung, file)): Path<(String, String, String)>, req: Request) -> Response {
+    let stream = match door.find(&output, &req) {
         Ok(s) => s,
         Err(r) => return *r,
     };
-    let viewer = match auth::admit(&ctx, &stream, &req) {
+    let viewer = match auth::admit(&door, &stream, &req) {
         Ok(v) => v,
         Err(r) => return *r,
     };

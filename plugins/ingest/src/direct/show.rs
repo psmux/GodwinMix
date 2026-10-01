@@ -91,14 +91,14 @@ impl Show {
             }
             Err(why) => lock(&seen).refused = Some(why),
         }
-        let outputs = row.outputs.iter().map(|w| start_output(w, &row, hub, renditions)).collect();
+        let outputs = row.outputs.iter().filter(|w| sends(w)).map(|w| start_output(w, &row, hub, renditions)).collect();
         Show { row, seen, outputs, publication, stop }
     }
 
     /// Make the outputs match `row`'s, touching only those that changed.
     pub fn set_outputs(&mut self, row: &Row, hub: &Hub, renditions: &Hub) {
         self.outputs.retain(|o| row.outputs.contains(&o.wanted));
-        for w in &row.outputs {
+        for w in row.outputs.iter().filter(|w| sends(w)) {
             if !self.outputs.iter().any(|o| &o.wanted == w) {
                 self.outputs.push(start_output(w, row, hub, renditions));
             }
@@ -123,6 +123,13 @@ impl Drop for Show {
     fn drop(&mut self) {
         self.stop();
     }
+}
+
+/// Whether this host sends the output. An HLS output is packaged and
+/// served by the station, which reads the show's stream or the output's
+/// rendition off the relay; its row is here so the rendition is built.
+fn sends(w: &Wanted) -> bool {
+    w.platform != "hls"
 }
 
 fn start_output(w: &Wanted, row: &Row, hub: &Hub, renditions: &Hub) -> Output {

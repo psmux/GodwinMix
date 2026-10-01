@@ -69,16 +69,18 @@ fn input(st: &Arc<Station>, v: &Value) {
         s.input = Some(v.clone());
         moved
     });
-    if moved && converts(st, &id) {
+    if moved && replans(st, &id) {
         st.direct.hand_over();
     }
     st.announce(&id);
     st.direct.announce_health(st, &id);
 }
 
-/// Whether any output of the show asks for a rendition.
-fn converts(st: &Station, id: &str) -> bool {
-    st.registry.lock().get(id).is_some_and(|r| !r.compositing && r.outputs.iter().any(|o| o.rendition.is_some() && o.enabled))
+/// Whether any output of the show asks for a rendition, or is HLS, whose
+/// packager reads from where the input now is.
+fn replans(st: &Station, id: &str) -> bool {
+    let wants = |o: &crate::station::registry::OutputRecord| o.enabled && (o.rendition.is_some() || o.platform == super::hls::spec::SCHEME);
+    st.registry.lock().get(id).is_some_and(|r| !r.compositing && r.outputs.iter().any(wants))
 }
 
 fn output(st: &Arc<Station>, v: &Value) {

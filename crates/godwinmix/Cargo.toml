@@ -49,6 +49,9 @@ godwinmix-wasm = { workspace = true, optional = true }
 # The control plane builds pipelines through the engine, but it also starts
 # GStreamer itself and the bench command builds elements directly.
 gstreamer = { workspace = true }
+# The appsrc a direct show's HLS output is fed through (station/direct/hls).
+# Already in the tree under the engine.
+gstreamer-app = { workspace = true }
 
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "sync", "signal", "time", "io-std", "io-util", "fs", "process"] }
 axum = { workspace = true, features = ["ws"] }
