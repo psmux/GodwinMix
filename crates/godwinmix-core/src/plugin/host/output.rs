@@ -35,6 +35,10 @@ use gstreamer::prelude::*;
 use serde_json::{json, Value};
 use tracing::{debug, warn};
 
+/// How long a reconnect waits, after stopping a plugin that stopped reading,
+/// for the old pipeline to let go. `stop` is given two seconds to answer.
+const STOPPED_PLUGIN_WAIT: std::time::Duration = std::time::Duration::from_secs(5);
+
 pub struct SidecarOutput {
     spec: SidecarSpec,
     child: Option<Sidecar>,
@@ -209,14 +213,19 @@ impl Output for SidecarOutput {
     /// the plugin again, on a fresh FIFO.
     fn shutdown(&mut self, pipeline: gst::Pipeline) {
         use crate::output::retire;
-        if retire::to_null_within(pipeline, retire::RETIRE_WAIT) {
+        let Err(retiring) = retire::to_null_within(pipeline, retire::RETIRE_WAIT) else {
             return;
-        }
+        };
         warn!(
             output = %self.id,
             "the plugin has stopped reading the programme; stopping it so the old pipeline can go, and starting it again"
         );
         self.stop_child("it stopped reading the programme");
+        // Its exit fails the write, and the old pipeline then lets go of the
+        // feed the next one is linked to. Bounded like everything here.
+        if !retiring.wait(STOPPED_PLUGIN_WAIT) {
+            warn!(output = %self.id, pipeline = retiring.name(), "the old pipeline is still going down; the reconnect goes on without it");
+        }
     }
 
     fn connected(&self) -> bool {

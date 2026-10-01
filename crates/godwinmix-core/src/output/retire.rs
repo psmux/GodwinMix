@@ -26,11 +26,28 @@ use tracing::warn;
 /// working reaches NULL in milliseconds.
 pub const RETIRE_WAIT: Duration = Duration::from_secs(2);
 
+/// A pipeline still on its way to NULL, on its own thread.
+pub struct Retiring {
+    name: String,
+    done: Option<mpsc::Receiver<()>>,
+}
+
+impl Retiring {
+    /// Wait up to `within` more. True when it has reached NULL.
+    pub fn wait(&self, within: Duration) -> bool {
+        self.done.as_ref().is_some_and(|d| d.recv_timeout(within).is_ok())
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+}
+
 /// Take `pipeline` to NULL on a thread of its own and wait at most `within`.
 ///
-/// True when it got there in time. When it did not, the thread carries on and
-/// the pipeline goes when its sink lets go of it.
-pub fn to_null_within(pipeline: gst::Pipeline, within: Duration) -> bool {
+/// `Ok` when it got there in time. When it did not, the thread carries on, the
+/// pipeline goes when its sink lets go of it, and the `Retiring` says when.
+pub fn to_null_within(pipeline: gst::Pipeline, within: Duration) -> Result<(), Retiring> {
     let name = pipeline.name().to_string();
     let (done_tx, done_rx) = mpsc::channel::<()>();
     let spawned = std::thread::Builder::new().name(format!("retire-{name}")).spawn(move || {
@@ -41,20 +58,18 @@ pub fn to_null_within(pipeline: gst::Pipeline, within: Duration) -> bool {
         // The pipeline went with the closure. Nothing to wait for, and nothing
         // here may wait unbounded instead.
         warn!(pipeline = %name, ?e, "no thread to take an output pipeline down on; it is dropped as it is");
-        return false;
+        return Err(Retiring { name, done: None });
     }
-    match done_rx.recv_timeout(within) {
-        Ok(()) => true,
-        Err(_) => {
-            warn!(
-                pipeline = %name,
-                waited_ms = within.as_millis() as u64,
-                "the old output pipeline has not stopped: its sink is inside a write that has not returned. \
-                 Going on without it"
-            );
-            false
-        }
+    if done_rx.recv_timeout(within).is_ok() {
+        return Ok(());
     }
+    warn!(
+        pipeline = %name,
+        waited_ms = within.as_millis() as u64,
+        "the old output pipeline has not stopped: its sink is inside a write that has not returned. \
+         Going on without it"
+    );
+    Err(Retiring { name, done: Some(done_rx) })
 }
 
 #[cfg(test)]
@@ -67,7 +82,7 @@ mod tests {
         let _ = gst::init();
         let p = gst::parse::launch("videotestsrc ! fakesink").unwrap().downcast::<gst::Pipeline>().unwrap();
         p.set_state(gst::State::Playing).unwrap();
-        assert!(to_null_within(p.clone(), Duration::from_secs(5)));
+        assert!(to_null_within(p.clone(), Duration::from_secs(5)).is_ok());
         assert_eq!(p.current_state(), gst::State::Null);
     }
 
@@ -91,7 +106,8 @@ mod tests {
         p.set_state(gst::State::Playing).unwrap();
         parked_rx.recv_timeout(Duration::from_secs(5)).expect("a buffer reached the stuck sink");
         let started = Instant::now();
-        assert!(!to_null_within(p.clone(), Duration::from_millis(300)));
+        let retiring = to_null_within(p.clone(), Duration::from_millis(300)).expect_err("it cannot stop");
+        assert!(!retiring.wait(Duration::from_millis(100)));
         assert!(started.elapsed() < Duration::from_secs(2), "the wait was not bounded");
         // The parked thread never returns; the pipeline is left as it is.
         std::mem::forget(p);
