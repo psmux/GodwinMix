@@ -120,6 +120,22 @@ fn show_tools_plan_to_the_station_routes() {
     assert_eq!(at("remove_show", json!({ "id": "news-1" })), "DELETE /api/v1/shows/news-1");
     assert_eq!(at("governor_status", json!({})), "GET /api/v1/governor/status");
     assert_eq!(at("add_channel", json!({ "name": "Studio" })), "POST /api/v1/channels");
+    // The bulk methods are about the collection, and a show's outputs are a
+    // sub resource of the show, as a channel's destinations are. Checked only
+    // once the method is registered.
+    let bound = |tool: &str, args: Value, want: &str| {
+        if let Ok(p) = s.plan(tool, &args) {
+            assert_eq!(format!("{} {}", p.verb, p.path), want);
+        }
+    };
+    bound("add_shows", json!({ "shows": [] }), "POST /api/v1/shows/add_many");
+    bound("remove_shows", json!({ "ids": ["a"] }), "POST /api/v1/shows/remove_many");
+    bound("show_stats", json!({}), "POST /api/v1/shows/stats");
+    let out = json!({ "id": "news-1", "output": "copy" });
+    bound("add_show_output", json!({ "id": "news-1", "uri": "udp://239.2.2.2:5000" }), "POST /api/v1/shows/news-1/output/add");
+    bound("set_show_output", out.clone(), "POST /api/v1/shows/news-1/output");
+    bound("remove_show_output", out, "POST /api/v1/shows/news-1/output/remove");
+    bound("set_show_output", json!({ "show": "news-1", "output": "copy" }), "POST /api/v1/shows/news-1/output");
     // A station tool keeps `show` in the body: it is not a routing hint there.
     let p = s.plan("list_shows", &json!({ "show": "x" })).unwrap();
     assert_eq!(p.path, "/api/v1/shows");

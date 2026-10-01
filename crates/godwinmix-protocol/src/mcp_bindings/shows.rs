@@ -42,10 +42,10 @@ pub const BINDINGS: &[Binding] = &[
         method: "show.output.set",
         tool: "set_show_output",
         tier: Standard,
-        description: "Change one output of a show without compositing: on or off, where it \
-            goes, or its format. rendition null copies the input's own bytes (almost free); \
-            {preset: <id>} from rendition_presets re-encodes, admitted by the governor or \
-            refused with what it would cost.",
+        description: "Change one output of a show without compositing: `id` is the show, \
+            `output` the output. On or off, where it goes, or its format: rendition null copies \
+            the input's own bytes (almost free); {preset: <id>} from rendition_presets \
+            re-encodes, admitted by the governor or refused with what it would cost.",
     },
     Binding {
         method: "show.add",
@@ -95,15 +95,15 @@ pub const BINDINGS: &[Binding] = &[
         method: "show.output.add",
         tool: "add_show_output",
         tier: Search,
-        description: "Send a show without compositing somewhere else as well: an address \
-            (udp, srt, rtmp, hls) or a platform and key. No rendition copies the input; a \
-            rendition or preset re-encodes, priced and admitted first.",
+        description: "Send a show without compositing somewhere else as well: `id` is the \
+            show, then an address (udp, rtp, rist, srt, rtmp) or a platform and key. No \
+            rendition copies the input; a rendition or preset re-encodes, priced first.",
     },
     Binding {
         method: "show.output.remove",
         tool: "remove_show_output",
         tier: Search,
-        description: "Stop one output of a show without compositing and forget it. The show and \
-            its other outputs carry on.",
+        description: "Stop one output of a show without compositing and forget it: `id` is \
+            the show, `output` the output. The show and its other outputs carry on.",
     },
 ];

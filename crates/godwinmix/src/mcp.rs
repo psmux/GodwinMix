@@ -358,10 +358,12 @@ impl Server {
             _ => Map::new(),
         };
         // `{id}` in the path is filled from the argument of that name, or from
-        // `name` where the method calls it that.
+        // `name` where the method calls it that. A show's own methods also
+        // take `show` for it, as the contract says.
         let path = if rest.path.contains("{id}") {
             let id = args
                 .get("id")
+                .or_else(|| args.get("show").filter(|_| method.starts_with("show.")))
                 .or_else(|| args.get("name"))
                 .or_else(|| args.get("task_id"))
                 .and_then(Value::as_str)
