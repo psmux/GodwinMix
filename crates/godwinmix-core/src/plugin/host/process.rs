@@ -61,6 +61,7 @@ struct Shared {
     notices: Mutex<Vec<Notice>>,
     hello: Mutex<Option<Initialize>>,
     hello_signal: Mutex<Option<mpsc::Sender<()>>>,
+    repeats: Mutex<super::repeats::Repeats>,
 }
 
 /// One call on a running plugin, detached from whatever owns the process.
@@ -147,6 +148,7 @@ impl Sidecar {
             notices: Mutex::new(Vec::new()),
             hello: Mutex::new(None),
             hello_signal: Mutex::new(None),
+            repeats: Mutex::new(Default::default()),
         });
         let reader = stderr.map(|err| {
             let shared = shared.clone();
@@ -472,10 +474,7 @@ fn absorb(shared: &Arc<Shared>, line: &str) {
     match frame {
         Frame::NonJson(text) => {
             if !text.trim().is_empty() {
-                // Inside the instance's span, so `log.set {instance, level}`
-                // reaches it. A traceback belongs in the log, not the protocol.
-                let name = shared.instance.clone();
-                crate::observe::in_instance(&name, || info!(plugin = %name, "{text}"));
+                plain_line(shared, &text);
             }
         }
         Frame::Response { id, result } => {
@@ -502,6 +501,25 @@ fn absorb(shared: &Arc<Shared>, line: &str) {
             push(shared, Notice::Request { id, method, params });
         }
     }
+}
+
+/// A line that is not the protocol, into the log. Inside the instance's span,
+/// so `log.set {instance, level}` reaches it: a traceback belongs in the log,
+/// not the protocol. A line said again and again is counted, not repeated
+/// (`super::repeats`).
+fn plain_line(shared: &Arc<Shared>, text: &str) {
+    use super::repeats::Say;
+    let said = shared.repeats.lock().see(text, std::time::Instant::now());
+    let name = shared.instance.clone();
+    crate::observe::in_instance(&name, || match said {
+        Say::Line => info!(plugin = %name, "{text}"),
+        Say::CountThenLine(n) => {
+            info!(plugin = %name, repeated = n, "the line before was said {n} more times");
+            info!(plugin = %name, "{text}");
+        }
+        Say::Count(n) => info!(plugin = %name, repeated = n, "the line before was said {n} more times in the last ten seconds"),
+        Say::Nothing => {}
+    });
 }
 
 fn notice(shared: &Arc<Shared>, method: &str, params: Value) {
@@ -587,6 +605,7 @@ mod tests {
             notices: Mutex::new(Vec::new()),
             hello: Mutex::new(None),
             hello_signal: Mutex::new(None),
+            repeats: Mutex::new(Default::default()),
         })
     }
 
