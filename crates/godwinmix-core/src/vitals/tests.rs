@@ -42,7 +42,7 @@ async fn show(limits: serde_json::Value) -> Show {
     std::mem::forget(mixer::spawn(mix, cmd_rx, handle.clone()));
     let events = handle.subscribe();
     let cfg = VitalsConfig { alarms: true, thresholds: serde_json::from_value(limits).unwrap() };
-    tokio::spawn(run(handle.clone(), tracker, cfg));
+    tokio::spawn(run(handle.clone(), tracker, Shared::new(cfg)));
     Show { handle, events }
 }
 
@@ -118,7 +118,7 @@ async fn cost_of_the_picture_alarms_with_nobody_looking() {
         }
         let tracker = Tracker::new(cfg.snapshot.clone(), mix.multiview_handle(), handle.clone());
         let thread = mixer::spawn(mix, cmd_rx, handle.clone());
-        let vitals = tokio::spawn(run(handle.clone(), tracker, VitalsConfig { alarms, ..Default::default() }));
+        let vitals = tokio::spawn(run(handle.clone(), tracker, Shared::new(VitalsConfig { alarms, ..Default::default() })));
         tokio::time::sleep(Duration::from_secs(5)).await;
         let (c0, t0) = (cpu_secs(), Instant::now());
         tokio::time::sleep(Duration::from_secs(20)).await;

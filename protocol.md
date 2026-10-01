@@ -193,6 +193,8 @@ Keys accepted on every method, handled before a method runs.
 | `task.get` | `GET /api/v1/task` | read |  | 1 | How a piece of long running work is getting on, and its answer once it has one. |
 | `task.list` | `GET /api/v1/task/list` | read |  | 1 | Every background job this core knows about, newest first. |
 | `tool.call` | `POST /api/v1/tool/call` | operate |  | 1 | Call one of a plugin's tools, in MCP's shape. The name is `<plugin>/<tool>`, or the bare tool name when only one plugin has it. |
+| `vitals.get` | `GET /api/v1/vitals` | read |  | 1 | This show's health (its state and alarms, null in the first second) and the thresholds they are judged by. |
+| `vitals.set` | `POST /api/v1/vitals/set` | operate |  | 1 | Change the alarm thresholds, or whether a mosaic is kept up for the black and freeze checks while nobody is looking. Fields left out keep their defaults; a duration of 0 switches that check off. Applies within a second. |
 
 ### Params and results
 
@@ -2792,6 +2794,38 @@ Call one of a plugin's tools, in MCP's shape. The name is `<plugin>/<tool>`, or 
 {
   "params": {
     "$ref": "#/$defs/ToolCallRequest"
+  },
+  "result": {
+    "type": "object"
+  }
+}
+```
+
+#### `vitals.get`
+
+This show's health (its state and alarms, null in the first second) and the thresholds they are judged by.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "type": "object"
+  }
+}
+```
+
+#### `vitals.set`
+
+Change the alarm thresholds, or whether a mosaic is kept up for the black and freeze checks while nobody is looking. Fields left out keep their defaults; a duration of 0 switches that check off. Applies within a second.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/VitalsConfig"
   },
   "result": {
     "type": "object"

@@ -2233,6 +2233,25 @@ export interface VideoWant {
   width?: number | null;
 }
 
+/**
+ * `[vitals]`, and what `vitals.set` changes: the thresholds, and whether
+ * to keep a mosaic up for the picture alarms while nobody is looking.
+ */
+export interface VitalsConfig {
+  alarms?: boolean;
+  black_luma?: number;
+  black_ratio?: number;
+  black_secs?: number;
+  cc_errors?: number;
+  freeze_diff?: number;
+  freeze_secs?: number;
+  loss?: number;
+  silence_db?: number;
+  silence_secs?: number;
+  stall_secs?: number;
+  window_secs?: number;
+}
+
 export interface ProgramTookEvent {
   at_running_time_ms?: number;
   duration_ms?: number;
@@ -2491,6 +2510,8 @@ export interface MethodParams {
   "task.get": TaskRequest;
   "task.list": Record<string, never>;
   "tool.call": ToolCallRequest;
+  "vitals.get": Record<string, never>;
+  "vitals.set": VitalsConfig;
 }
 
 /** What each method answers with, by method name. */
@@ -2655,6 +2676,8 @@ export interface MethodResults {
   "task.get": TaskView;
   "task.list": TaskView[];
   "tool.call": Record<string, unknown>;
+  "vitals.get": Record<string, unknown>;
+  "vitals.set": Record<string, unknown>;
 }
 
 export type MethodName = keyof MethodParams;
@@ -2865,6 +2888,8 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "task.get", summary: "How a piece of long running work is getting on, and its answer once it has one.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/task" } },
   { name: "task.list", summary: "Every background job this core knows about, newest first.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/task/list" } },
   { name: "tool.call", summary: "Call one of a plugin's tools, in MCP's shape. The name is `<plugin>/<tool>`, or the bare tool name when only one plugin has it.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/tool/call" } },
+  { name: "vitals.get", summary: "This show's health (its state and alarms, null in the first second) and the thresholds they are judged by.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/vitals" } },
+  { name: "vitals.set", summary: "Change the alarm thresholds, or whether a mosaic is kept up for the black and freeze checks while nobody is looking. Fields left out keep their defaults; a duration of 0 switches that check off. Applies within a second.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/vitals/set" } },
 ] as const;
 
 /** The `ext` keys this api_level knows, and whether the core implements them yet. */
@@ -3722,6 +3747,16 @@ export class GeneratedMethods {
   /** Call one of a plugin's tools, in MCP's shape. The name is `<plugin>/<tool>`, or the bare tool name when only one plugin has it. */
   toolCall(params: ToolCallRequest): Promise<Record<string, unknown>> {
     return this._call("tool.call", params as unknown as Record<string, unknown>) as Promise<Record<string, unknown>>;
+  }
+
+  /** This show's health (its state and alarms, null in the first second) and the thresholds they are judged by. */
+  vitalsGet(): Promise<Record<string, unknown>> {
+    return this._call("vitals.get", {}) as Promise<Record<string, unknown>>;
+  }
+
+  /** Change the alarm thresholds, or whether a mosaic is kept up for the black and freeze checks while nobody is looking. Fields left out keep their defaults; a duration of 0 switches that check off. Applies within a second. */
+  vitalsSet(params: VitalsConfig = {}): Promise<Record<string, unknown>> {
+    return this._call("vitals.set", params as unknown as Record<string, unknown>) as Promise<Record<string, unknown>>;
   }
 
 }

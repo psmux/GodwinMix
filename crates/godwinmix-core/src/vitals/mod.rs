@@ -25,56 +25,37 @@
 
 mod judge;
 mod look;
+mod shared;
 #[cfg(test)]
 mod tests;
 
-use std::sync::{Arc, OnceLock};
+use std::sync::Arc;
 use std::time::Duration;
 
-use godwinmix_protocol::health::{Health, Thresholds};
-use serde::{Deserialize, Serialize};
+use godwinmix_protocol::health::Health;
 use tokio::sync::broadcast::error::RecvError;
 
 use crate::mixer::MixerHandle;
 use crate::snapshot::Tracker;
 use crate::state::Event;
 use judge::Judge;
-
-/// `[vitals]`: the thresholds, and whether to keep a mosaic up for the
-/// picture alarms when nobody is looking.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
-#[serde(default)]
-pub struct VitalsConfig {
-    pub alarms: bool,
-    #[serde(flatten)]
-    pub thresholds: Thresholds,
-}
-
-static CONFIG: OnceLock<VitalsConfig> = OnceLock::new();
-
-/// Set once at start, from the config file's `[vitals]`, which the core's
-/// own `Config` keeps among the tables it does not know. Unset, or not a
-/// table these fields fit, the defaults.
-pub fn configure(extra: &std::collections::BTreeMap<String, toml::Value>) {
-    let cfg = extra.get("vitals").cloned().and_then(|v| v.try_into().ok()).unwrap_or_default();
-    let _ = CONFIG.set(cfg);
-}
+pub use shared::{configure, process, Shared, VitalsConfig};
 
 fn now_ms() -> u64 {
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0)
 }
 
-/// Watch the programme until the mixer's event stream closes.
+/// Watch the programme until the mixer's event stream closes, with this
+/// process's settings.
 pub fn spawn(mixer: MixerHandle, tracker: Arc<Tracker>) -> tokio::task::JoinHandle<()> {
-    let cfg = CONFIG.get().cloned().unwrap_or_default();
-    tokio::spawn(run(mixer, tracker, cfg))
+    tokio::spawn(run(mixer, tracker, process()))
 }
 
-async fn run(mixer: MixerHandle, tracker: Arc<Tracker>, cfg: VitalsConfig) {
+async fn run(mixer: MixerHandle, tracker: Arc<Tracker>, shared: Arc<Shared>) {
     let mut events = mixer.subscribe();
     let mut tick = tokio::time::interval(Duration::from_secs(1));
     tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
-    let mut judge = Judge::new(cfg.thresholds.clone());
+    let mut judge = Judge::new(shared.settings().thresholds);
     let mut reported: Option<Health> = None;
     loop {
         tokio::select! {
@@ -89,11 +70,14 @@ async fn run(mixer: MixerHandle, tracker: Arc<Tracker>, cfg: VitalsConfig) {
                 Err(RecvError::Closed) => return,
             },
             _ = tick.tick() => {
+                let cfg = shared.settings();
+                judge.limits = cfg.thresholds.clone();
                 turn(&mixer, &tracker, &cfg, &mut judge).await;
                 let health = judge.health(now_ms());
                 if reported.as_ref().is_none_or(|r| health.changed_from(r)) {
                     mixer.emit(Event::Health { health: Box::new(health.clone()) });
                 }
+                shared.judged(health.clone());
                 reported = Some(health);
             }
         }
