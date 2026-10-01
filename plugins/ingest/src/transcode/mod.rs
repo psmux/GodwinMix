@@ -21,7 +21,7 @@
 
 mod build;
 mod graph;
-mod input;
+pub(crate) mod input;
 mod router;
 mod session;
 mod sink;
