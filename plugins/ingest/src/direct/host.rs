@@ -66,6 +66,7 @@ impl Host {
         let wanted: Vec<_> = rows.iter().flat_map(|r| r.outputs.clone()).collect();
         // The pairs first, so a converting output has its pair to read.
         self.transcoders.apply(specs, &wanted);
+        self.share_pictures(&rows);
         let renditions = self.transcoders.renditions();
         let mut shows = self.lock();
         shows.retain(|id, _| rows.iter().any(|r| &r.id == id));
@@ -90,6 +91,21 @@ impl Host {
             events::watch(self);
         }
         refused
+    }
+
+    /// A show that converts already decodes its input: its pictures go to
+    /// the vitals from that decode, about one a second, so the vitals need
+    /// not decode its keyframes a second time.
+    fn share_pictures(&self, rows: &[super::table::Row]) {
+        for row in rows.iter().filter(|r| !r.transcode.is_empty()) {
+            let (vitals, id) = (Arc::downgrade(&self.vitals), row.id.clone());
+            let tap: crate::transcode::Tap = Arc::new(move |sample| {
+                if let Some(v) = vitals.upgrade() {
+                    v.offer_frame(&id, sample);
+                }
+            });
+            self.transcoders.set_tap(&row.app(), STREAM, Some(tap));
+        }
     }
 
     /// Every show's numbers, as `event/direct.stats` carries them, or only
