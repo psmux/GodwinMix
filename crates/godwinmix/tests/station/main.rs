@@ -5,6 +5,7 @@
 
 mod direct;
 mod direct_live;
+mod direct_restart;
 mod health_main;
 mod hls_direct;
 mod home;
