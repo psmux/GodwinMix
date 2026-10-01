@@ -4,7 +4,7 @@
 //! Only a keyframe is ever handed to a decoder, at most one per `PACE`, and
 //! every inter frame is dropped here, before anything is copied. Sound is a
 //! burst of three frames once per `PACE`, and only while the silence check
-//! is on. A show that already decodes its input hands its frames in through
+//! is on, decoded as what its first frame says it is (`sound.rs`). A show that already decodes its input hands its frames in through
 //! `Vitals::offer_frame` instead, and then no keyframe is decoded for it.
 //!
 //! When the directhost's decoded frame tap exists this reader stays for the
@@ -16,9 +16,10 @@ use std::time::Duration;
 
 use crate::hub::{Hub, Reader, Recv};
 use crate::media_tag::{MediaTag, TagKind};
-use crate::transcode::input::{buffer, caps_for};
+use crate::transcode::input::{buffer, caps_for, framed};
 
 use super::show::Show;
+use super::sound;
 use super::pool::Pool;
 use super::work::Job;
 
@@ -114,9 +115,10 @@ impl Tap {
         }
         let burst = std::mem::take(&mut self.burst);
         self.last_sound = now;
-        let Some(caps) = self.audio_header.as_ref().and_then(caps_for) else { return };
+        // What the frames say they are: the AAC header is for AAC alone.
+        let Some(coded) = sound::coded(&burst[0], self.audio_header.as_ref()) else { return };
         let base = burst[0].timestamp_ms;
-        let buffers = burst.iter().filter_map(|t| buffer(t, base)).collect();
-        pool.offer(Job::Sound { show: self.show.clone(), caps, buffers });
+        let buffers = burst.iter().filter_map(|t| framed(t, base, coded.skip, 0)).collect();
+        pool.offer(Job::Sound { show: self.show.clone(), caps: coded.caps, buffers });
     }
 }

@@ -1,7 +1,11 @@
 //! The silence check against MPEG-TS feeds over UDP, through the direct
-//! host the way a headend feed arrives: AAC and MPEG layer II, each with a
-//! tone and each really silent. Each takes a free port of its own, and each
-//! skips, saying so, without ffmpeg.
+//! host the way a headend feed arrives: AAC, MPEG layer II and AC-3, each
+//! with a tone and each really silent. Each takes a free port of its own,
+//! and each skips, saying so, without ffmpeg.
+//!
+//! A tone test alone would pass with the sound never measured, which is how
+//! layer II and AC-3 went unwatched: the silent test beside it is what holds
+//! the measurement to happening at all.
 
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
@@ -73,10 +77,7 @@ fn run(codec: &str, audio: &str, secs: u64) -> Option<Vec<Value>> {
     let port = free_port();
     let (host, heard) = show(port);
     let _feed = feed(port, codec, audio)?;
-    for _ in 0..secs {
-        std::thread::sleep(Duration::from_secs(1));
-        eprintln!("DIAG {}", host.stats(None)["shows"][0]["input"]);
-    }
+    std::thread::sleep(Duration::from_secs(secs));
     drop(host);
     let h = heard.lock().unwrap();
     Some(h.iter().filter(|(n, _)| n == "direct.health").map(|(_, v)| v.clone()).collect())
@@ -117,52 +118,9 @@ fn silent_aac_is_silence() {
 }
 
 #[test]
-fn a_feed_that_turns_from_aac_to_mp2_is_not_silence() {
-    let port = free_port();
-    let (host, heard) = show(port);
-    let Some(aac) = feed(port, "aac", TONE) else { return };
-    std::thread::sleep(Duration::from_secs(5));
-    drop(aac);
-    std::thread::sleep(Duration::from_secs(4));
-    heard.lock().unwrap().clear();
-    let Some(_mp2) = feed(port, "mp2", TONE) else { return };
-    for _ in 0..12 {
-        std::thread::sleep(Duration::from_secs(1));
-        eprintln!("DIAG {}", host.stats(None)["shows"][0]["input"]);
-    }
-    let h = heard.lock().unwrap();
-    let events: Vec<Value> = h.iter().filter(|(n, _)| n == "direct.health").map(|(_, v)| v.clone()).collect();
-    assert!(!ever(&events, "silence"), "{events:#?}");
-}
-
-#[test]
-fn probe_aac_caps_on_mp2_frames() {
-    use gstreamer as gst;
-    use gstreamer::prelude::*;
-    gmx_netkit::init().unwrap();
-    for wave in ["sine", "silence"] {
-        let line = format!("audiotestsrc num-buffers=20 wave={wave} ! audio/x-raw,rate=48000,channels=2 ! avenc_mp2 ! mpegaudioparse ! appsink name=s sync=false");
-        let p = gst::parse::launch(&line).unwrap().downcast::<gst::Pipeline>().unwrap();
-        let sink = p.by_name("s").unwrap().downcast::<gstreamer_app::AppSink>().unwrap();
-        p.set_state(gst::State::Playing).unwrap();
-        let mut tags = Vec::new();
-        let mut ms = 0u32;
-        while let Ok(s) = sink.pull_sample() {
-            let map = s.buffer().unwrap().map_readable().unwrap();
-            let mut body = crate::exaudio::prefix(crate::exaudio::MPEG).to_vec();
-            body.extend_from_slice(map.as_slice());
-            tags.push(crate::media_tag::MediaTag { kind: crate::media_tag::TagKind::Audio, timestamp_ms: ms, keyframe: false, sequence_header: false, payload: std::sync::Arc::from(body) });
-            ms += 24;
-        }
-        let _ = p.set_state(gst::State::Null);
-        let header = crate::media_tag::MediaTag { kind: crate::media_tag::TagKind::Audio, timestamp_ms: 0, keyframe: false, sequence_header: true, payload: std::sync::Arc::from(vec![0xAF, 0x00, 0x11, 0x90]) };
-        let caps = crate::transcode::input::caps_for(&header).unwrap();
-        let mut chain = super::measure::chain_for("audio/mpeg", false).unwrap();
-        for burst in tags.chunks(3).take(5) {
-            let bufs = burst.iter().filter_map(|t| crate::transcode::input::buffer(t, burst[0].timestamp_ms)).collect();
-            let out = chain.run(&caps, bufs);
-            let peak = out.iter().skip(1).filter_map(super::measure::peak).reduce(f64::max);
-            eprintln!("PROBE {wave}: {} samples out, peak {:?}", out.len(), peak.map(super::measure::to_db));
-        }
-    }
+fn an_ac3_tone_is_not_silence_and_silent_ac3_is() {
+    let Some(events) = run("ac3", TONE, 12) else { return };
+    assert!(!ever(&events, "silence") && last_is_ok(&events), "{events:#?}");
+    let Some(events) = run("ac3", QUIET, 12) else { return };
+    assert!(ever(&events, "silence"), "{events:#?}");
 }

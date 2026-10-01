@@ -73,23 +73,12 @@ fn ac3(name: &str, f: &Frame) -> Option<Coded> {
     Some(Coded { caps, skip: 5 })
 }
 
-/// The kind of input a chain is built for, from caps: their name, and for
-/// `audio/mpeg` whether it is AAC or MPEG-1 audio, which share the name and
-/// no decoder.
-pub fn kind(caps: &gst::CapsRef) -> Option<String> {
-    let s = caps.structure(0)?;
-    let name = s.name().as_str();
-    Some(match s.get::<i32>("mpegversion") {
-        Ok(1) if name == "audio/mpeg" => "audio/mpeg-1".to_string(),
-        _ => name.to_string(),
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
 
     use super::*;
+    use crate::direct::vitals::measure::kind;
     use crate::media_tag::TagKind;
 
     fn tag(body: Vec<u8>, header: bool) -> MediaTag {
