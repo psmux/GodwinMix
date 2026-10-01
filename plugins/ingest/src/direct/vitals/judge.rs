@@ -88,10 +88,6 @@ impl Judge {
         self.silence.clear();
     }
 
-    pub fn forget_output(&mut self, id: &str) {
-        self.failed.remove(id);
-    }
-
     /// Everything that holds at `now`.
     pub fn health(&self, now: u64) -> Health {
         let mut alarms = Vec::new();

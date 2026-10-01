@@ -48,11 +48,6 @@ mod hevc;
 mod eflv;
 mod exaudio;
 mod whip_in;
-// Thumbnails and alarms for the direct host's shows. Declared here until the
-// host's own `direct` module exists to hold it.
-#[path = "direct/vitals/mod.rs"]
-#[allow(dead_code)]
-mod vitals;
 
 use godwinmix_sdk::prelude::*;
 use serde_json::{json, Value};

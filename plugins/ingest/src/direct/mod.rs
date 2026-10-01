@@ -26,10 +26,7 @@
 // A few helpers the inputs keep are used by their tests alone.
 #[allow(dead_code)]
 pub mod input;
-// The vitals (the "vitals" work) are their own module. Until it merges, a
-// stand in with the same public names lets the host build and its tests
-// run: delete the `#[path]` line and the stand in file when it does.
-#[path = "vitals_standin.rs"]
+// Thumbnails and alarms: `vitals/mod.rs` says what they cost.
 pub mod vitals;
 
 mod events;

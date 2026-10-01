@@ -39,8 +39,8 @@ mod tests;
 #[cfg(test)]
 mod bench;
 
-// The direct host owns the one `Vitals` and wires `apply_table` and `call`.
-#[allow(unused_imports)]
+// The direct host owns the one `Vitals` and hands it the table rows, the
+// counters, output failures, decoded frames and `direct.thumbnail`.
 pub use registry::Vitals;
 
 /// Unix milliseconds, the clock every alarm's `since_ms` is on.
