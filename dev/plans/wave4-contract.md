@@ -120,6 +120,25 @@ show.add_many with dry_run, read the cost, apply, watch show.stats.
 * The show tabs from wave 3 stay for switching into a mixed show; the wall
   is where many shows are watched.
 
+What the wall reads that the shapes above do not yet name. The wall is
+built against these; whoever lands the method moves this text up into its
+section, or changes the shape here and the wall follows.
+
+* A show's picture: `GET /api/v1/shows/{id}/thumbnail.jpg?width=160`, with
+  the token as `/api/v1/snapshot` takes it. A 404 or 409 while there is no
+  picture; the wall draws a placeholder. Fetched only for rows on screen,
+  every two seconds, only while the wall is open and the tab visible.
+* Totals for the header: `governor.status` answers `ingress_kbps` beside
+  its `egress_kbps`. Without it the wall sums the rows it has read and says
+  so.
+* Alarm thresholds: `show.set {id, alarms: {enabled, black_ms, freeze_ms,
+  silence_ms, silence_dbfs}}`, and the same object on Show as `alarms`.
+* `show.list` answers `{shows: [Show], current}` as in wave 3, each Show
+  carrying `compositing`, `input`, `outputs` and `health` as above.
+  `show.stats {ids}` is asked once a second for the rows on screen only.
+* `event/show.changed {show}`, `event/show.removed {id}` and
+  `event/show.health {id, health}` keep the list current between reads.
+
 ## Performance to report
 
 * 200 direct shows, multicast in, one copy output each: CPU and memory of
