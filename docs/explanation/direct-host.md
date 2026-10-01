@@ -49,13 +49,13 @@ push stayed under 20 ms.
 
 ## An MPEG-TS muxer of its own
 
-UDP, RTP, RIST and recording to a file all want MPEG-TS. GStreamer's
+SRT, UDP, RTP, RIST and recording to a file all want MPEG-TS. GStreamer's
 `mpegtsmux` would do it, behind an `appsrc`, a `flvdemux`, two parsers and an
 aggregator, which is a pipeline and three or four streaming threads per
 output. At two hundred shows that is the difference between hundreds of
 threads and a thousand. The muxer in `plugins/ingest/src/tsmux/` is a few
 hundred lines: Annex B for H.264 and HEVC with the parameter sets before
-every keyframe, ADTS for AAC, PAT and PMT before every keyframe and at least
+every keyframe, ADTS for AAC, AC-3, E-AC-3 and MPEG audio as they came, PAT and PMT before every keyframe and at least
 every 400 ms, the clock on the video PID 0.7 s behind the decode time as
 ffmpeg puts it. It is tested against GStreamer's own `tsdemux` and libav, and
 ffprobe reads its output clean.
@@ -98,30 +98,32 @@ reports it, in `direct.input`'s `backup`.
 
 ## Measured
 
-On an M4 Pro, macOS, with the rest of the machine busy (load average 13 to
-26 from other work during the runs), 50 shows, each a multicast MPEG-TS input
-on the loopback (one 720p30 H.264 and AAC encode at about 2.8 Mbit/s fanned
-out to 50 groups) and one UDP multicast copy output:
+On an M4 Pro, macOS, with the rest of the machine busy (load average 8 to 26
+from other work during the runs), 50 shows, each a multicast MPEG-TS input on
+the loopback (one 720p30 H.264 and AAC encode at about 2.8 Mbit/s fanned out
+to 50 groups) and one UDP multicast copy output, about 140 Mbit/s in and out.
+With the real inputs (`input/`, UDP through `udpsrc`, the udp plugin's
+program filter and `parsebin`), 80 s:
 
 | | |
 |---|---|
-| CPU of the host | 52% to 68% of one core, about 1.2% per show; a 110% peak when the encode's rate rose to 4.3 Mbit/s a feed |
-| Memory | 33 to 43 MB resident for the whole host |
-| Threads | 153: per show the input's streaming thread, its runner (idle), and the output; three for the host |
-| Dropped GOPs | 0 in every run |
-| One output against its input, 60 s | 1800 frames out for 1800 in, no continuity error on the output |
-| One show alone | 1.2% of one core, 15 MB |
+| CPU of the host | 52% to 60% of one core, steady; about 1.1% per show |
+| Memory | 42 to 58 MB resident for the whole host |
+| Threads | 153: per show the input's streaming thread, its runner (waiting on the bus), and the output; three for the host |
+| Dropped GOPs | 0 |
+| Continuity errors on the inputs | 0 |
+| One output against its input, 60 s | 1800 frames out for 1800 in, largest gap between two 34 ms, no continuity error, ffmpeg decodes it without a word |
+| One show alone (stand in input) | 1.2% of one core, 15 MB |
 
-In one 60 s run under a load average of 26, one output's timestamps jumped
-about a second ahead and came back, twice, with every frame present; the
-same feed recorded beside the host at the same time had no jump. Nothing
-between the hub and the socket moves a time, so the jump is in the times the
-stand in input took from `tsdemux`, whose live clock follows arrival when its
-thread is starved. The muxer now keeps each stream's decode times going
-forward whatever it is given, so a receiver never sees one go back, and the
-input work's own runner should be measured the same way once it merges.
+An earlier run used a stand in for the inputs (bare UDP into `tsdemux` on
+the socket's thread) and came out the same within a few percent, except
+that under a load average of 26 one output's timestamps jumped about a
+second ahead and came back, twice, with every frame present, while the same
+feed recorded beside the host had no jump. Nothing between the hub and the
+socket moves a time, so the jump was in the times that input took from
+`tsdemux`, whose live clock follows arrival when its thread is starved. The
+muxer keeps each stream's decode times going forward whatever it is given,
+so a receiver never sees one go back.
 
-The numbers above used a stand in for the inputs (bare UDP into `tsdemux`
-and the parsers on the socket's one thread), because the inputs were built
-alongside. `gmx-ingest --direct <table.json>` runs the host alone on a table
-file, so the same run can be repeated at any size with the real inputs.
+`gmx-ingest --direct <table.json>` runs the host alone on a table file, so
+the same run can be repeated at any size.

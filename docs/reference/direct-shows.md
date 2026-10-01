@@ -64,15 +64,27 @@ goes is the scheme of `url`; `platform` agrees with it.
 | `url` | What is sent | Options in the query |
 |---|---|---|
 | `rtmp://`, `rtmps://` | the tags as they are, no decode | none |
-| `srt://` | MPEG-TS through GStreamer's `mpegtsmux` and `srtsink` | as `srtsink` takes them |
+| `srt://` | MPEG-TS, handed to GStreamer's `srtsink` | as `srtsink` takes them |
 | `udp://host:port` | MPEG-TS, seven packets to a datagram, unicast or multicast | `ttl` (default 16), `interface` (a name or an address) |
 | `rtp://host:port` | the same in RTP, payload type 33, one sequence number per datagram | as `udp://` |
 | `rist://host:port` | MPEG-TS in RTP through `ristsink`, with retransmission; the port must be even | `buffer` in ms (default 1000) |
 | `file:///path/name.ts` | MPEG-TS written to the file; a name already there gets the time added | none |
 
-UDP, RTP, RIST and files are muxed by the plugin's own MPEG-TS muxer
-(`plugins/ingest/src/tsmux/`), H.264, HEVC and AAC, nothing decoded. A
-channel destination takes the same addresses.
+SRT, UDP, RTP, RIST and files are muxed by the plugin's own MPEG-TS muxer
+(`plugins/ingest/src/tsmux/`), nothing decoded. A channel destination takes
+the same addresses.
+
+| Codec on the hub | In MPEG-TS | To RTMP |
+|---|---|---|
+| H.264 | stream type `0x1B`, Annex B, parameter sets before every keyframe | as it is |
+| HEVC (enhanced RTMP) | `0x24`, the same | as it is, enhanced RTMP |
+| AAC | `0x0F`, ADTS | as it is |
+| AC-3, E-AC-3 | `0x81`, `0x87` on private stream 1, frames as they came | not sent: the picture goes alone and the log says so once |
+| MPEG audio, layers II and III | `0x03` for MPEG-1, `0x04` for MPEG-2, frames as they came | not sent, as above |
+
+AAC to an RTMP destination from AC-3 or MPEG audio is a rendition: the
+station plans an AAC audio encode for that output and admits it like any
+other.
 
 An output with `rendition = true` reads the pair named by `video` and
 `audio` instead of the input, from the conversion the `transcode` nodes
