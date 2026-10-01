@@ -107,7 +107,7 @@ impl Live {
         len
     }
 
-    /// Sends every datagram due by `now`, answering how late the latest was.
+    /// Sends every datagram due by `now`, answering how late the oldest of them was.
     pub fn send_due(&mut self, now: u64, sock: &UdpSocket, buf: &mut [u8], t: &Totals) -> u64 {
         let mut late = 0;
         while self.due <= now {
@@ -120,7 +120,7 @@ impl Live {
             } else {
                 t.errors.fetch_add(1, Relaxed);
             }
-            late = now - self.due;
+            late = late.max(now - self.due);
             let jitter = (self.dice.unit() * self.feed.jitter_ns as f64) as u64;
             self.due = self.due.max(self.scheduled() + jitter);
         }
