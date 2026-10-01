@@ -25,6 +25,8 @@
 
 mod judge;
 mod look;
+#[cfg(test)]
+mod tests;
 
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
