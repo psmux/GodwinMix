@@ -29,6 +29,9 @@ pub struct Row {
     pub transcode: Vec<StreamSpec>,
     /// `{alarms, pictures, thresholds?}`, handed to the vitals as it is.
     pub monitor: Value,
+    /// Why the input cannot be opened as written, when it cannot. The show
+    /// still runs, idle, and says so in `direct.input`.
+    pub refused: Option<String>,
 }
 
 impl Row {
@@ -56,7 +59,14 @@ fn row(r: &Value) -> Result<Row, String> {
     if id.is_empty() {
         return Err("a direct table row has no id, so it was left out".into());
     }
-    let input = InputSpec::from_json(r.get("input").unwrap_or(&Value::Null)).map_err(|e| format!("show {id}: {}", e.message))?;
+    let raw = r.get("input").unwrap_or(&Value::Null);
+    let (input, refused) = match InputSpec::from_json(raw) {
+        Ok(input) => (input, None),
+        Err(e) => {
+            let uri = raw.get("uri").and_then(Value::as_str).unwrap_or_default();
+            (InputSpec { uri: uri.to_string(), program: None, params: Value::Null, backup: None }, Some(e.message))
+        }
+    };
     let app = app_of(&id);
     let outputs = r
         .get("outputs")
@@ -75,6 +85,7 @@ fn row(r: &Value) -> Result<Row, String> {
         outputs,
         transcode: stream_specs(&app, r.get("transcode")),
         monitor: r.get("monitor").cloned().unwrap_or(Value::Null),
+        refused,
         id,
     })
 }

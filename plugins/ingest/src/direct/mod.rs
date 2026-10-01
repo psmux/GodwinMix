@@ -23,12 +23,12 @@
 //! (which the vitals raise). `docs/explanation/direct-host.md` says why it
 //! is built this way.
 
-// The inputs (the "directin" work) and the vitals (the "vitals" work) are
-// their own modules. Until they merge, a stand in with the same public
-// names lets the host build and its tests run: delete the `#[path]` lines
-// and the two stand in files when they do.
-#[path = "input_standin.rs"]
+// A few helpers the inputs keep are used by their tests alone.
+#[allow(dead_code)]
 pub mod input;
+// The vitals (the "vitals" work) are their own module. Until it merges, a
+// stand in with the same public names lets the host build and its tests
+// run: delete the `#[path]` line and the stand in file when it does.
 #[path = "vitals_standin.rs"]
 pub mod vitals;
 
