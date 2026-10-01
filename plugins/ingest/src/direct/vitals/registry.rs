@@ -1,18 +1,15 @@
 //! Every watched show, the one thread that reads them, and what the direct
 //! host calls.
 //!
-//! One thread drains every show's hub reader each `TURN` and judges every
-//! show once a second. Nothing it does waits on a decode: the workers are
-//! behind a queue that drops when full.
+//! The thread that reads and judges them is `ticker.rs`.
 
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, Weak};
-use std::time::Duration;
+use std::sync::{Arc, Mutex};
 
 use godwinmix_protocol::health::{Health, Thresholds};
 use gstreamer as gst;
-use serde_json::{json, Value};
+use serde_json::Value;
 
 use super::show::{lock, Show, Thumb};
 use super::tap::{Tap, PACE};
@@ -20,8 +17,6 @@ use super::work::{Job, Pool};
 use super::now_ms;
 use crate::hub::Hub;
 
-/// How often the hub readers are drained.
-const TURN: Duration = Duration::from_millis(20);
 /// How long one thumbnail request keeps a show's pictures coming.
 pub const ASKED_FOR_MS: u64 = 10_000;
 
@@ -29,11 +24,11 @@ pub const ASKED_FOR_MS: u64 = 10_000;
 pub type Emit = Arc<dyn Fn(&str, Value) + Send + Sync>;
 
 pub struct Vitals {
-    hub: Hub,
-    pool: Pool,
-    taps: Mutex<BTreeMap<String, Tap>>,
-    emit: Emit,
-    stopped: AtomicBool,
+    pub(super) hub: Hub,
+    pub(super) pool: Pool,
+    pub(super) taps: Mutex<BTreeMap<String, Tap>>,
+    pub(super) emit: Emit,
+    pub(super) stopped: AtomicBool,
 }
 
 impl Vitals {
@@ -43,7 +38,7 @@ impl Vitals {
         let pool = Pool::start(workers, 64);
         let me = Arc::new(Vitals { hub, pool, taps: Mutex::default(), emit, stopped: AtomicBool::new(false) });
         let weak = Arc::downgrade(&me);
-        std::thread::Builder::new().name("vitals-tap".into()).spawn(move || run(weak)).expect("the vitals thread");
+        std::thread::Builder::new().name("vitals-tap".into()).spawn(move || super::ticker::run(weak)).expect("the vitals thread");
         me
     }
 
@@ -123,57 +118,10 @@ impl Vitals {
     pub fn counts(&self) -> (u64, u64) {
         (self.pool.skipped.load(Ordering::Relaxed), self.pool.done.load(Ordering::Relaxed))
     }
-
-    /// Judge every show, and say so for each whose health changed.
-    fn tick(&self, now: u64) {
-        let shows: Vec<(Arc<Show>, bool)> = {
-            let taps = lock(&self.taps);
-            taps.values().map(|t| (t.show.clone(), self.hub.is_live(&t.app, &t.stream))).collect()
-        };
-        for (show, live) in shows {
-            let health = {
-                let mut judge = lock(&show.judge);
-                judge.live(live, now);
-                let last = show.last_packet.load(Ordering::Relaxed);
-                if last > 0 {
-                    judge.packet(last);
-                }
-                if !show.alarms.load(Ordering::Relaxed) {
-                    judge.clear_media();
-                }
-                judge.health(now)
-            };
-            show.forget_pictures(now);
-            let mut reported = lock(&show.reported);
-            if reported.as_ref().is_none_or(|r| health.changed_from(r)) {
-                (self.emit)("direct.health", json!({"show": show.id, "health": health}));
-            }
-            *reported = Some(health);
-        }
-    }
 }
 
 impl Drop for Vitals {
     fn drop(&mut self) {
         self.stopped.store(true, Ordering::Relaxed);
-    }
-}
-
-fn run(weak: Weak<Vitals>) {
-    let mut next_tick = 0;
-    while let Some(v) = weak.upgrade() {
-        if v.stopped.load(Ordering::Relaxed) {
-            return;
-        }
-        let now = now_ms();
-        for tap in lock(&v.taps).values_mut() {
-            tap.drain(&v.hub, &v.pool, now);
-        }
-        if now >= next_tick {
-            v.tick(now);
-            next_tick = now + 1000;
-        }
-        drop(v);
-        std::thread::sleep(TURN);
     }
 }
