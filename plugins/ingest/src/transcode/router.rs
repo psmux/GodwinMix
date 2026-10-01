@@ -46,8 +46,12 @@ struct Inner {
     nodes: HashMap<String, Value>,
 }
 
+/// Where a converted stream's decoded pictures go, when someone asked.
+pub type Tap = std::sync::Arc<dyn Fn(&gstreamer::Sample) + Send + Sync>;
+
 pub struct Router {
     hub: Hub,
+    tap: Mutex<Option<Tap>>,
     app: String,
     base: AtomicU32,
     inner: Mutex<Inner>,
@@ -55,11 +59,16 @@ pub struct Router {
 
 impl Router {
     pub fn new(hub: Hub, app: &str) -> Router {
-        Router { hub, app: app.to_string(), base: AtomicU32::new(0), inner: Mutex::default() }
+        Router { hub, tap: Mutex::default(), app: app.to_string(), base: AtomicU32::new(0), inner: Mutex::default() }
     }
 
     fn lock(&self) -> MutexGuard<'_, Inner> {
         self.inner.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// Send the decoded pictures to `tap`, or to nobody.
+    pub fn set_tap(&self, tap: Option<Tap>) {
+        *self.tap.lock().unwrap_or_else(|e| e.into_inner()) = tap;
     }
 
     pub fn set_base(&self, ms: u32) {
@@ -151,6 +160,13 @@ impl Route for Router {
 
     fn base_ms(&self) -> u32 {
         self.base.load(Ordering::Relaxed)
+    }
+
+    fn frame(&self, _node: &str, sample: &gstreamer::Sample) {
+        let tap = self.tap.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        if let Some(tap) = tap {
+            tap(sample);
+        }
     }
 }
 

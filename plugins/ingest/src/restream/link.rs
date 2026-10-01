@@ -39,6 +39,9 @@ pub fn dial(target: &Target) -> Result<Box<dyn Link>, Failure> {
     let scheme = target.url.split_once("://").map(|(s, _)| s.to_ascii_lowercase());
     match scheme.as_deref() {
         Some("srt") => Ok(Box::new(super::srt_out::SrtLink::dial(target)?)),
+        Some("udp" | "rtp") => Ok(Box::new(super::udp_out::UdpLink::dial(target)?)),
+        Some("rist") => Ok(Box::new(super::rist_out::RistLink::dial(target)?)),
+        Some("file") => Ok(Box::new(super::file_out::FileLink::dial(target)?)),
         _ => {
             let url = RtmpUrl::parse(&target.url).map_err(Failure::Refused)?;
             Ok(Box::new(super::rtmp_out::RtmpLink::dial(target, url)?))

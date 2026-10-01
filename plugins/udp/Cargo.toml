@@ -12,6 +12,13 @@ publish = false
 name = "gmx-udp"
 path = "src/main.rs"
 
+# The receive and send halves as a library, for the direct host in
+# plugins/ingest. Its docs are off so they do not collide with the binary's.
+[lib]
+name = "gmx_udp"
+path = "src/lib.rs"
+doc = false
+
 [dependencies]
 godwinmix-sdk = { path = "../../crates/godwinmix-sdk" }
 gmx-netkit = { path = "../netkit" }

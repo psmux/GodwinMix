@@ -77,6 +77,11 @@ impl Reader {
         self.shared.recv(wait)
     }
 
+    /// Drop what waits, back to the newest keyframe.
+    pub fn skip_to_latest_keyframe(&self) {
+        self.shared.skip_to_latest_keyframe()
+    }
+
     /// GOPs this reader lost by falling behind.
     pub fn dropped_gops(&self) -> u64 {
         self.shared.dropped_gops()
