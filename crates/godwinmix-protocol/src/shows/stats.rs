@@ -53,11 +53,32 @@ pub struct OutputStats {
     pub cpu_millicores: u32,
 }
 
+/// What a show does to make its outputs, which is what its load pays for.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum ShowWork {
+    /// It composites and encodes a programme of its own: a show that mixes.
+    Mix,
+    /// A direct show with an output given a rendition, which is encoded.
+    Transcode,
+    /// A direct show whose outputs all copy the input.
+    #[default]
+    Copy,
+}
+
 /// One show's numbers, as `show.stats` answers them.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct ShowStats {
     pub id: String,
     pub health: Health,
+    /// `mix`, `transcode` or `copy`.
+    #[serde(default)]
+    pub work: ShowWork,
+    /// What the show costs the machine, thousandths of a core: for a show
+    /// that mixes, its process as last measured; for a direct show, its
+    /// outputs' encodes summed. Left out while nothing has measured it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cpu_millicores: Option<u32>,
     /// None for a show with no input, or before the host has counted any.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub input: Option<InputStats>,
