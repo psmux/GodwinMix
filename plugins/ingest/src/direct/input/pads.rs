@@ -99,6 +99,10 @@ fn attach(pipeline: &gst::Pipeline, pad: &gst::Pad, pads: &Pads) -> Result<(), S
         return discard(pipeline, pad, format!("a second {} stream ({name}); the first is taken", if video { "video" } else { "audio" }));
     }
     sink.set_property("sync", pads.sync);
+    // Never wait to preroll: srtsrc and urisourcebin are not live, and a
+    // video sink waiting for its first keyframe would hold the demuxer, back
+    // up the audio, and stall the transport until the sender gives up.
+    sink.set_property("async", false);
     let queue = make("queue")?;
     let parse = make(parser)?;
     link(pipeline, pad, &[&queue, &parse, &sink])

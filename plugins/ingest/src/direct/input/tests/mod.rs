@@ -4,6 +4,7 @@
 //! saying so, when a tool it needs is not installed, and every wait has a
 //! deadline.
 
+mod cpu;
 mod files;
 mod pull;
 mod ts;
