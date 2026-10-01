@@ -81,6 +81,13 @@ impl Judge {
         }
     }
 
+    /// The black, freeze and silence checks were switched off.
+    pub fn clear_media(&mut self) {
+        self.black.clear();
+        self.freeze.clear();
+        self.silence.clear();
+    }
+
     pub fn forget_output(&mut self, id: &str) {
         self.failed.remove(id);
     }
