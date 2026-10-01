@@ -1,7 +1,7 @@
 //! What the direct host last said about one show.
 
 use godwinmix_protocol::destination::{DestinationLive, DestinationState};
-use godwinmix_protocol::shows::{Health, InputStats, OutputStats};
+use godwinmix_protocol::shows::{AlarmKind, Health, InputStats, OutputStats};
 use serde_json::Value;
 use std::collections::BTreeMap;
 use std::time::{Duration, Instant};
@@ -21,6 +21,9 @@ pub struct Seen {
     pub announced: Option<Health>,
     /// A show that composites: the hub path its input source was given.
     pub source_for: Option<String>,
+    /// When each alarm that holds now was first seen, unix ms. Kept until
+    /// the alarm clears, so its age reads true.
+    pub alarm_since: BTreeMap<AlarmKind, u64>,
 }
 
 impl Seen {
