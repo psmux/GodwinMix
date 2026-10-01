@@ -84,7 +84,8 @@ pub fn output(st: &Arc<Station>, method: &str, params: Value) -> Result<Value, R
             // Priced before it is kept: an output the planner cannot serve
             // is refused here rather than written down and left failing.
             edit_outputs(st, &req.id, |list| {
-                direct::add_output(list, &req.id, &req.spec())?;
+                let made = direct::add_output(list, &req.id, &req.spec())?;
+                direct::hls::check_sound(st, &req.id, list.iter().find(|d| d.id == made))?;
                 st.direct
                     .price(list)
                     .map(|_| ())
