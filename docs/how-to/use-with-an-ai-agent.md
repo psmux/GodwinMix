@@ -60,12 +60,14 @@ godwinmix mcp --profile minimal          # or GODWINMIX_MCP_PROFILE=minimal
 ```
 
 `minimal` is `agent_state`, `take`, `add_source`, `list_sources` and
-`search_tools`. `standard` adds `status`, `snapshot`, `remove_source`,
-`revert`, `go_live`, `list_outputs` and `add_output`.
+`search_tools`. `standard` adds the shows (`list_shows`, `add_shows`,
+`show_stats`, `set_show`, `set_show_output`), `revert` and `go_live`.
 
-Everything else, about twenty tools covering outputs, media, ad breaks,
-seeking, audio and codecs, is still callable by name. `search_tools` finds one
-by what you want to do:
+Everything else is still callable by name: outputs, snapshots, media, ad
+breaks, seeking, audio, codecs, channels and their destinations, the governor,
+the project file, and the rest of the show tools (`add_show`, `remove_shows`,
+`start_show`, `stop_show`, `add_show_output`). `search_tools` finds one by
+what you want to do:
 
 ```
 search_tools {"query": "stop sending to youtube"}
@@ -81,6 +83,54 @@ price on every call. A test asserts it.
 A token can also carry `profile = "minimal"` in the `[[tokens]]` table, which
 `core.info` reports back, so a credential can say which surface it was issued
 for.
+
+## Name a show
+
+A machine runs shows, each one encoder, and the tools that work inside one
+show (`take`, `agent_state`, `add_source`, outputs, scenes) take a `show`
+argument with its id. Left out, the call goes to the first show, so a machine
+with one show works as it always did. The MCP server sends it as `?show=<id>`,
+which is how the station picks the show to pass the call to. The show tools
+themselves (`list_shows`, `add_shows`, `show_stats` and the rest) are answered
+by the station and take no `show`. The `minimal` profile does not advertise
+`show`, because its budget has no room for it; it still works if sent.
+
+## A headend: many channels in four calls
+
+"I have 200 channels coming from a headend; add them and run them." Each
+channel becomes a show with compositing off: its input straight to its
+outputs, copied or transcoded, with no process of its own. The agent's path
+does not grow with the number of channels.
+
+1. `add_shows` with the whole list and `"dry_run": true`. Each entry is a
+   name, an input (`{"uri": "udp://@239.1.1.1:5000", "program": 101}`),
+   `"compositing": false` and its outputs. The answer says what would be
+   added, what is refused with its `index` and `why`, and
+   `plan: {cost, fits}` against this machine's governor.
+2. The same call with `"dry_run": false`. Everything that fits is added whole.
+3. `show_stats {}`: every show's health, its alarms, the input's numbers and
+   each output's state, in one read. Read it again when
+   `event/show.health` says something changed, or every few seconds.
+4. When asked: `set_show_output` to change one output's format (`rendition`
+   `null` copies, `{"preset": "youtube-720p30"}` re-encodes), and
+   `set_show {"id": "...", "compositing": true}` to give one show scenes and
+   takes. Its outputs keep sending across the switch.
+
+```
+add_shows {"dry_run": true, "shows": [
+  {"name": "BBC One", "compositing": false,
+   "input": {"uri": "udp://@239.1.1.1:5000", "program": 101},
+   "outputs": [{"uri": "srt://10.0.0.9:9001"}]}]}
+```
+
+What it cost, measured with `gmx mcp` over stdio against a real station
+(`crates/godwinmix/tests/agent_headend`):
+
+COST_TABLE
+
+A person does the same from a terminal with `gmx shows add --from feeds.csv
+--dry-run`, then without `--dry-run`, and `gmx shows stats --watch`; see
+[`docs/reference/cli.md`](../reference/cli.md#many-shows).
 
 ## Install the skills first
 
