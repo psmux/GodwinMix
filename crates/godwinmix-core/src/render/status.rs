@@ -79,6 +79,7 @@ pub fn governor_status(station: &Station, shed: &[ShedNote]) -> GovernorStatus {
         cpu: CpuUse { cores, used_millicores: used, room_millicores: room.cpu_millicores },
         devices,
         egress_kbps: if committed.egress_kbps == UNLIMITED { 0 } else { committed.egress_kbps },
+        ingress_kbps: 0,
         shed: shed.to_vec(),
     }
 }

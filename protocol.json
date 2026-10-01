@@ -429,17 +429,17 @@
       "type": "object"
     },
     "Alarm": {
+      "description": "One condition that holds now.",
       "properties": {
         "detail": {
-          "default": "",
-          "description": "What a person reads.",
+          "description": "One sentence for a person: what was measured, and against what.",
           "type": "string"
         },
         "kind": {
           "$ref": "#/$defs/AlarmKind"
         },
         "since_ms": {
-          "description": "When it began, in unix milliseconds.",
+          "description": "Unix milliseconds when the condition began. For black, freeze and\nsilence that is when the picture or sound first measured so, not when\nthe alarm's duration ran out.",
           "format": "uint64",
           "minimum": 0,
           "type": "integer"
@@ -447,7 +447,8 @@
       },
       "required": [
         "kind",
-        "since_ms"
+        "since_ms",
+        "detail"
       ],
       "type": "object"
     },
@@ -466,6 +467,51 @@
         "shed"
       ],
       "type": "string"
+    },
+    "AlarmSettings": {
+      "description": "A show's alarms, as a person sets them from the page. Left out fields\nkeep the measuring side's defaults; a duration of 0 switches that check\noff.",
+      "properties": {
+        "black_ms": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "enabled": {
+          "description": "Whether black, freeze and silence are watched at all. Left out: on\nfor a show without compositing, off for one that composites.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "freeze_ms": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "silence_dbfs": {
+          "description": "The peak level under which sound counts as quiet.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "silence_ms": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
     },
     "Align": {
       "description": "The nine alignment keywords, used to place content inside its frame.",
@@ -3420,6 +3466,13 @@
             "null"
           ]
         },
+        "ingress_kbps": {
+          "default": 0,
+          "description": "What arrives: every channel stream and every direct show's input,\nas last counted. Zero on a core with no station.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
         "shed": {
           "items": {
             "$ref": "#/$defs/ShedNote"
@@ -3561,9 +3614,10 @@
       "type": "object"
     },
     "Health": {
+      "description": "A show's health.",
       "properties": {
         "alarms": {
-          "default": [],
+          "description": "Every alarm that holds now, oldest first.",
           "items": {
             "$ref": "#/$defs/Alarm"
           },
@@ -3574,24 +3628,32 @@
         }
       },
       "required": [
-        "state"
+        "state",
+        "alarms"
       ],
       "type": "object"
     },
     "HealthState": {
-      "description": "How a show is, in one word.",
+      "description": "The one word a monitoring wall colours a row by.",
       "oneOf": [
         {
-          "enum": [
-            "ok",
-            "warning",
-            "alarm"
-          ],
+          "const": "ok",
+          "description": "Running and nothing is wrong.",
+          "type": "string"
+        },
+        {
+          "const": "warning",
+          "description": "Something is degraded but the picture and sound are going out:\ncontinuity errors or packet loss on the input.",
+          "type": "string"
+        },
+        {
+          "const": "alarm",
+          "description": "Something a viewer notices, or nothing is going out: no input, a\nstall, black, a frozen picture, silence, a failed output, a rendition\nthe governor refused or shed.",
           "type": "string"
         },
         {
           "const": "off",
-          "description": "Stopped, or not running yet.",
+          "description": "Not monitored: the show is stopped or has no input to watch.",
           "type": "string"
         }
       ]
@@ -7509,6 +7571,17 @@
     "Show": {
       "description": "One show, as `show.list` and `event/show.changed` carry it.",
       "properties": {
+        "alarms": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AlarmSettings"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The alarms a person set for it, when they set any."
+        },
         "compositing": {
           "default": true,
           "description": "true: scenes, transitions and a programme encode, in a process of\nits own. false: one input straight to its outputs, in the shared\ndirect host, with no compositor.",
@@ -7531,7 +7604,7 @@
           "$ref": "#/$defs/Health",
           "default": {
             "alarms": [],
-            "state": "off"
+            "state": "ok"
           }
         },
         "id": {
@@ -8110,6 +8183,17 @@
     "ShowSetRequest": {
       "description": "`show.set`. Names only what moves.",
       "properties": {
+        "alarms": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AlarmSettings"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Alarm settings; the fields named move, the rest stay."
+        },
         "compositing": {
           "description": "true starts a show process whose one source is the input and moves\nthe outputs to it; false goes back to a show without compositing,\nwhen it has one source and no scenes in use.",
           "type": [
@@ -8145,6 +8229,17 @@
     "ShowSetResult": {
       "description": "`show.set`'s answer: the show, and what a switch of compositing did.",
       "properties": {
+        "alarms": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AlarmSettings"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The alarms a person set for it, when they set any."
+        },
         "compositing": {
           "default": true,
           "description": "true: scenes, transitions and a programme encode, in a process of\nits own. false: one input straight to its outputs, in the shared\ndirect host, with no compositor.",
@@ -8167,7 +8262,7 @@
           "$ref": "#/$defs/Health",
           "default": {
             "alarms": [],
-            "state": "off"
+            "state": "ok"
           }
         },
         "id": {

@@ -207,6 +207,12 @@ impl Channels {
         }
     }
 
+    /// What the live streams bring in, as last counted, in kbit/s.
+    pub fn ingress_kbps(&self) -> u32 {
+        let live = self.live.lock();
+        live.iter().filter(|l| l.state == "live").map(|l| l.video.as_ref().map_or(0, |v| v.kbps) + l.audio.as_ref().map_or(0, |a| a.kbps)).sum()
+    }
+
     /// `channel.get`.
     pub fn get(&self, id: &str) -> Result<Channel, RpcError> {
         self.refresh();

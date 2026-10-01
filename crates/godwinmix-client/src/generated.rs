@@ -234,14 +234,16 @@ pub struct AgentStateRequest {
     pub response_format: Option<ResponseFormat>,
 }
 
+/// One condition that holds now.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Alarm {
-    /// What a person reads.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub detail: Option<String>,
+    /// One sentence for a person: what was measured, and against what.
+    pub detail: String,
     pub kind: AlarmKind,
-    /// When it began, in unix milliseconds.
+    /// Unix milliseconds when the condition began. For black, freeze and
+    /// silence that is when the picture or sound first measured so, not when
+    /// the alarm's duration ran out.
     pub since_ms: u64,
 }
 
@@ -249,6 +251,27 @@ pub struct Alarm {
 pub type AlarmKind = String;
 /// The values api_level 1 knows for [`AlarmKind`].
 pub const ALARM_KIND_VALUES: &[&str] = &["no-input", "stall", "black", "freeze", "silence", "cc-errors", "loss", "output-failed", "governor-refused", "shed"];
+
+/// A show's alarms, as a person sets them from the page. Left out fields
+/// keep the measuring side's defaults; a duration of 0 switches that check
+/// off.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AlarmSettings {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub black_ms: Option<u64>,
+    /// Whether black, freeze and silence are watched at all. Left out: on
+    /// for a show without compositing, off for one that composites.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enabled: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub freeze_ms: Option<u64>,
+    /// The peak level under which sound counts as quiet.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub silence_dbfs: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub silence_ms: Option<u64>,
+}
 
 /// The nine alignment keywords, used to place content inside its frame.
 pub type Align = String;
@@ -1514,6 +1537,10 @@ pub struct GovernorStatus {
     /// The key the calibration is stored under.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fingerprint: Option<String>,
+    /// What arrives: every channel stream and every direct show's input,
+    /// as last counted. Zero on a core with no station.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ingress_kbps: Option<u32>,
     pub shed: Vec<ShedNote>,
 }
 
@@ -1581,17 +1608,19 @@ pub struct HeaderChange {
     pub before: Header,
 }
 
+/// A show's health.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Health {
+    /// Every alarm that holds now, oldest first.
     pub alarms: Vec<Alarm>,
     pub state: HealthState,
 }
 
-/// How a show is, in one word.
+/// The one word a monitoring wall colours a row by.
 pub type HealthState = String;
 /// The values api_level 1 knows for [`HealthState`].
-pub const HEALTH_STATE_VALUES: &[&str] = &["off", "ok", "warning", "alarm"];
+pub const HEALTH_STATE_VALUES: &[&str] = &["ok", "warning", "alarm", "off"];
 
 /// `program.history`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -3368,6 +3397,9 @@ pub struct ShedNote {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Show {
+    /// The alarms a person set for it, when they set any.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub alarms: Option<AlarmSettings>,
     /// true: scenes, transitions and a programme encode, in a process of
     /// its own. false: one input straight to its outputs, in the shared
     /// direct host, with no compositor.
@@ -3632,6 +3664,9 @@ pub struct ShowRenameRequest {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ShowSetRequest {
+    /// Alarm settings; the fields named move, the rest stay.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub alarms: Option<AlarmSettings>,
     /// true starts a show process whose one source is the input and moves
     /// the outputs to it; false goes back to a show without compositing,
     /// when it has one source and no scenes in use.
@@ -3648,6 +3683,9 @@ pub struct ShowSetRequest {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ShowSetResult {
+    /// The alarms a person set for it, when they set any.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub alarms: Option<AlarmSettings>,
     /// true: scenes, transitions and a programme encode, in a process of
     /// its own. false: one input straight to its outputs, in the shared
     /// direct host, with no compositor.

@@ -39,7 +39,11 @@ pub async fn call(st: &Arc<Station>, token: &Token, method: &str, params: Value)
     match method {
         m if m.starts_with("show.") => super::shows_call::call(st, m, params).await,
         m if m.starts_with("channel.") => super::channel_calls::call(st, token, m, params).await,
-        "governor.status" => Ok(serde_json::to_value(status::governor_status(&st.render, &[])).unwrap_or_default()),
+        "governor.status" => {
+            let mut status = status::governor_status(&st.render, &[]);
+            status.ingress_kbps = ingress_kbps(st);
+            Ok(serde_json::to_value(status).unwrap_or_default())
+        }
         "governor.calibrate" => calibrate(st, &params),
         "rendition.plan" => plan(st, &params),
         other => Err(no_such_method(other)),
@@ -57,6 +61,14 @@ pub fn no_such_method(method: &str) -> RpcError {
     )
     .with("method", method)
     .with("nearest", near)
+}
+
+/// What arrives on this machine: the channels' live streams and the
+/// direct shows' inputs, as last counted.
+fn ingress_kbps(st: &Station) -> u32 {
+    let channels = st.channels.get().map(|c| c.ingress_kbps()).unwrap_or(0);
+    let direct: u32 = st.direct.seen.lock().values().filter_map(|s| s.input_stats.as_ref()).map(|i| i.kbps).sum();
+    channels.saturating_add(direct)
 }
 
 fn calibrate(st: &Station, params: &Value) -> Result<Value, RpcError> {
