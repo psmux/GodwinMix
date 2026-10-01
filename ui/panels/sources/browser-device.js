@@ -1,9 +1,11 @@
 // This browser's camera and microphone as a mixer source.
 //
-// The publisher from /join/, mounted in a card that floats over the
-// workspace, so it keeps publishing while the operator switches scenes,
-// opens drawers and closes dialogs. It publishes by WHIP into the `browser`
-// channel, and the channel makes the source, as it would for OBS.
+// Picking it is the whole of adding it, as for a camera on the mixer: the
+// card opens the devices, starts sending by itself, and once the channel has
+// made the source it is handed to `onSource`, which is how the picker puts it
+// in the scene. The card then folds to a bar. It has to stay on the page,
+// because the camera belongs to this tab, and the bar is where the operator
+// switches device, mutes or stops it.
 
 import { el } from "../../shell/dom.js";
 import { confirmModal } from "../../shell/modal.js";
@@ -13,9 +15,13 @@ import { ensureBrowserChannel, streamNameFor, sourceIdFor, streamOf } from "./br
 
 let current = null;
 
-/** Open the card, or bring back the one already open. `camera: false` starts with the microphone alone. */
-export async function openBrowserDevice(client, { camera = true } = {}) {
-  if (current) return current.show();
+/**
+ * Open the card, or bring back the one already open. `camera: false` starts
+ * with the microphone alone. `onSource` is called once with the mixer source,
+ * as soon as there is one.
+ */
+export async function openBrowserDevice(client, { camera = true, onSource } = {}) {
+  if (current) return current.show().whenSource(onSource);
   let got;
   try {
     got = await ensureBrowserChannel(client);
@@ -23,9 +29,9 @@ export async function openBrowserDevice(client, { camera = true } = {}) {
     errorToast(e, "This browser's camera");
     return null;
   }
-  if (current) return current.show();
+  if (current) return current.show().whenSource(onSource);
   current = new BrowserDock(client, got, camera);
-  return current;
+  return current.whenSource(onSource);
 }
 
 class BrowserDock {
@@ -35,6 +41,8 @@ class BrowserDock {
     this.stream = streamNameFor();
     this.source = sourceIdFor(channel, this.stream);
     this.label = camera ? "This browser's camera" : "This browser's microphone";
+    this.waiting = [];
+    this.folded = false;
     stylesheet();
     this.note = el("div.pub-dock-note.sm.dim");
     this.body = el("div.pub-dock-body", {}, [this.note]);
@@ -53,7 +61,8 @@ class BrowserDock {
       url: `/whip/${encodeURIComponent(channel.app || channel.id)}/${encodeURIComponent(this.stream)}`,
       key,
       camera,
-      labels: { where },
+      autostart: true,
+      labels: { where, go: "Send to the mixer" },
       onState: () => this.paint(),
     });
     this.offs = [
@@ -72,13 +81,33 @@ class BrowserDock {
     this.paint();
   }
 
+  /** Call `fn` with the mixer source once it exists: now, or when it arrives. */
+  whenSource(fn) {
+    if (fn) this.waiting.push(fn);
+    this.paint();
+    return this;
+  }
+
+  /** Hand the source to whoever is waiting for it, once each, and fold away the first time. */
+  arrived(source) {
+    const waiting = this.waiting.splice(0);
+    for (const fn of waiting) Promise.resolve(fn(source)).catch((e) => errorToast(e, this.label));
+    if (!this.folded) {
+      this.folded = true;
+      this.fold(true);
+    }
+  }
+
   /** The line above the picture: what the mixer has made of the stream. */
   paint() {
     const s = streamOf(this.channel, this.stream);
-    const inMixer = (this.client.state.sources || []).some((x) => x.id === this.source);
+    const source = (this.client.state.sources || []).find((x) => x.id === this.source);
+    const inMixer = !!source;
+    if (source && this.pub.active()) this.arrived(source);
     let text = "";
-    if (this.pub.active() && inMixer) text = `In the mixer as ${this.source}. Put it in a scene from Sources.`;
+    if (this.pub.active() && inMixer) text = `In the mixer as ${this.source}.`;
     else if (this.pub.active() && s && s.state === "live") text = `The channel has the stream; ${this.source} is on its way.`;
+    else if (this.pub.active()) text = "Sending to the mixer.";
     this.note.textContent = text;
     const state = this.pub.state();
     this.title.textContent = state === "live" ? `${this.label} (live)` : this.label;
@@ -90,8 +119,7 @@ class BrowserDock {
     return this;
   }
 
-  fold() {
-    const folding = !this.node.classList.contains("min");
+  fold(folding = !this.node.classList.contains("min")) {
     this.node.classList.toggle("min", folding);
     this.pub.setVisible(!folding);
   }

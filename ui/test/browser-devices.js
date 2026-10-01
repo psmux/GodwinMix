@@ -189,5 +189,15 @@ export async function browserDeviceTests(test, eq, ok) {
     eq(r.go.textContent, "Go live");
   });
 
+  test("the mixer's own card names its start button itself", () => {
+    const labels = { go: "Send to the mixer" };
+    const r = buildForm(labels);
+    eq(r.go.textContent, "Send to the mixer");
+    paintState(r, { state: "live", error: "" }, labels);
+    eq(r.go.textContent, "Stop");
+    paintState(r, { state: "stopped", error: "" }, labels);
+    eq(r.go.textContent, "Send to the mixer");
+  });
+
   await browserChannelTests(test, eq, ok);
 }

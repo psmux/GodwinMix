@@ -704,7 +704,12 @@ class SourcesPanel extends HTMLElement {
         id: "tray.browser-camera",
         title: "Use this browser's camera and microphone",
         group: "Sources",
-        run: () => import("./browser-device.js").then((m) => m.openBrowserDevice(this.client)),
+        run: () => {
+          const scene = this.scopedTo();
+          return import("./browser-device.js").then((m) =>
+            m.openBrowserDevice(this.client, { onSource: (source) => this.place(scene, source) })
+          );
+        },
       },
       { id: "tray.filter", title: "Filter the sources", group: "Sources", key: "Ctrl+F", run: () => this.search.focus() },
       { id: "tray.select-all", title: "Select all", group: "Sources", key: "Ctrl+A", run: () => this.selectAll() },

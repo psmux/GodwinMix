@@ -15,8 +15,11 @@ import { StatsLine } from "./stats.js";
 /**
  * @param {HTMLElement} host
  * @param {{url: string, key: string, labels?: object, camera?: boolean,
- *          onState?: (s: object) => void}} opts
+ *          autostart?: boolean, onState?: (s: object) => void}} opts
  * `camera: false` opens with the camera set to none, for a microphone alone.
+ * `autostart` publishes as soon as the devices are open, with no button to
+ * press: the mixer's own page uses it, because there the browser is a device
+ * like any other and picking it is the whole of adding it.
  */
 export function mountPublisher(host, opts) {
   const r = buildForm(opts.labels);
@@ -38,7 +41,10 @@ class Publisher {
     this.stats = new StatsLine(r.stats, () => this.session && this.session.pc);
     this.session = null;
     this.wire();
-    this.open().then(() => refreshDevices(this));
+    this.open().then(() => {
+      refreshDevices(this);
+      if (opts.autostart && (this.tracks.video || this.tracks.audio)) this.startPublishing();
+    });
   }
 
   controller() {
@@ -105,7 +111,7 @@ class Publisher {
   }
 
   changed(s) {
-    paintState(this.r, s);
+    paintState(this.r, s, this.opts.labels);
     this.applyVisibility();
     if (this.opts.onState) this.opts.onState(s);
   }
