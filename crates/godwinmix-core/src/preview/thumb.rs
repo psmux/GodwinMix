@@ -33,7 +33,8 @@ use gstreamer_app as gst_app;
 use parking_lot::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
+use tokio::time::Instant;
 use tracing::{debug, warn};
 
 /// How long one ask keeps pictures coming. The wall asks every two seconds
@@ -84,7 +85,13 @@ pub struct ProgrammeThumb {
     running: AtomicBool,
     starts: AtomicU64,
     frames: AtomicU64,
+    /// `gmx_stream_clients{kind="thumbnail"}` is 1 while the branch is on.
+    counted: Mutex<Option<super::ClientGuard>>,
 }
+
+/// Puts the branch on the tee (`true`) or takes it off (`false`). A send on
+/// the mixer's queue, which never waits.
+pub type Switch = Arc<dyn Fn(bool) + Send + Sync>;
 
 impl ProgrammeThumb {
     pub fn new() -> Arc<Self> {
@@ -110,7 +117,7 @@ impl ProgrammeThumb {
     /// Say somebody wants pictures for the next [`ASKED_FOR`]. The first ask
     /// after a quiet spell puts the branch on (`switch(true)`) and starts the
     /// watch that takes it off again (`switch(false)`) once asks stop.
-    pub fn want(self: &Arc<Self>, switch: Arc<dyn Fn(bool) + Send + Sync>) {
+    pub fn want(self: &Arc<Self>, switch: Switch, clients: &Arc<super::StreamClients>) {
         // The deadline and the flag move under one lock, so an ask that lands
         // while the watch is giving up is never lost: either the watch sees
         // the new deadline, or this sees the flag down and starts again.
@@ -123,12 +130,13 @@ impl ProgrammeThumb {
             return;
         }
         self.starts.fetch_add(1, Ordering::Relaxed);
+        *self.counted.lock() = Some(clients.open("thumbnail"));
         switch(true);
         drop(until);
         tokio::spawn(self.clone().watch(switch));
     }
 
-    async fn watch(self: Arc<Self>, switch: Arc<dyn Fn(bool) + Send + Sync>) {
+    async fn watch(self: Arc<Self>, switch: Switch) {
         loop {
             let left = self.until.lock().map(|u| u.saturating_duration_since(Instant::now())).unwrap_or_default();
             if !left.is_zero() {
@@ -142,6 +150,7 @@ impl ProgrammeThumb {
             self.running.store(false, Ordering::SeqCst);
             // Under the lock, so the next ask's `true` lands behind it.
             switch(false);
+            self.counted.lock().take();
             drop(until);
             *self.latest.lock() = None;
             *self.encoded.lock() = None;
@@ -337,22 +346,25 @@ mod tests {
     #[tokio::test(start_paused = true)]
     async fn one_ask_switches_on_once_and_the_watch_switches_off_when_asks_stop() {
         let thumb = ProgrammeThumb::new();
+        let clients = super::super::StreamClients::new();
         let said: Arc<Mutex<Vec<bool>>> = Arc::default();
-        let switch: Arc<dyn Fn(bool) + Send + Sync> = {
+        let switch: Switch = {
             let said = said.clone();
             Arc::new(move |on| said.lock().push(on))
         };
-        thumb.want(switch.clone());
-        thumb.want(switch.clone());
+        thumb.want(switch.clone(), &clients);
+        thumb.want(switch.clone(), &clients);
         assert_eq!(*said.lock(), vec![true]);
+        assert_eq!(clients.count("thumbnail"), 1);
         tokio::time::sleep(ASKED_FOR / 2).await;
-        thumb.want(switch.clone());
+        thumb.want(switch.clone(), &clients);
         tokio::time::sleep(ASKED_FOR - Duration::from_secs(1)).await;
         assert_eq!(*said.lock(), vec![true], "an ask inside the window keeps it on");
         tokio::time::sleep(Duration::from_secs(2)).await;
         assert_eq!(*said.lock(), vec![true, false]);
         assert!(!thumb.running());
-        thumb.want(switch);
+        assert_eq!(clients.count("thumbnail"), 0, "the gauge falls with the branch");
+        thumb.want(switch, &clients);
         assert_eq!(*said.lock(), vec![true, false, true], "the next ask starts it again");
         assert_eq!(thumb.starts(), 2);
     }
