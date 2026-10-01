@@ -29,13 +29,7 @@ pub fn main(a: Args) -> Result<(), String> {
     let token = a.str("token").map(String::from).or_else(|| std::env::var("GODWINMIX_TOKEN").ok());
     let c = Client::connect(a.str("station").unwrap_or("127.0.0.1:8080"), token)?;
     let start = Instant::now();
-    let mut out = if a.flag("legacy") {
-        legacy(&c, &rows)
-    } else if c.has("show.add_many") {
-        many(&c, &rows)?
-    } else {
-        one_by_one(&c, &rows)
-    };
+    let mut out = run(&c, &rows, a.flag("legacy"))?;
     out["requested"] = json!(rows.len());
     out["seconds"] = json!((start.elapsed().as_secs_f64() * 100.0).round() / 100.0);
     println!("{out}");
@@ -43,6 +37,17 @@ pub fn main(a: Args) -> Result<(), String> {
         std::fs::write(path, format!("{out}\n")).map_err(|e| format!("could not write {path}: {e}"))?;
     }
     Ok(())
+}
+
+/// Adds every row: today's shape when `legacy`, else in bulk when the station can.
+pub fn run(c: &Client, rows: &[Row], legacy_shape: bool) -> Result<Value, String> {
+    if legacy_shape {
+        Ok(legacy(c, rows))
+    } else if c.has("show.add_many") {
+        many(c, rows)
+    } else {
+        Ok(one_by_one(c, rows))
+    }
 }
 
 /// The contract's ShowAdd for one row: no compositing, the input, one output.
@@ -100,8 +105,7 @@ fn one_by_one(c: &Client, rows: &[Row]) -> Value {
 }
 
 fn legacy(c: &Client, rows: &[Row]) -> Value {
-    let mut refused = Vec::new();
-    let mut added = 0;
+    let (mut refused, mut added) = (Vec::new(), 0);
     for (i, r) in rows.iter().enumerate() {
         match legacy_one(c, r) {
             Ok(()) => added += 1,
