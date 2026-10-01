@@ -3,7 +3,7 @@
 
 import { el } from "../../shell/dom.js";
 import { alarms, inputCell, loadCell, mixSwitch, outputChip, rateCell } from "./cells.js";
-import { healthOf } from "./model.js";
+import { healthOf, mixed } from "./model.js";
 
 export const COLUMNS = [
   ["pic", ""], ["name", "Show"], ["input", "Input"], ["kbps", "Bitrate"],
@@ -39,7 +39,7 @@ function title(show) {
 function outputs(show, st) {
   const by = new Map(((st && st.outputs) || []).map((o) => [o.id, o]));
   const list = show.outputs || [];
-  if (!list.length) return el("span.wl-calm", { text: show.compositing ? "Outputs inside the show" : "No outputs" });
+  if (!list.length) return el("span.wl-calm", { text: mixed(show) ? "Outputs inside the show" : "No outputs" });
   return el("span.wl-chips", {}, list.map((o) => outputChip(o, by.get(o.id))));
 }
 

@@ -2,7 +2,7 @@
 // alarm with its age, the compositing switch. Plain nodes, no state.
 
 import { el } from "../../shell/dom.js";
-import { ALARMS, age, codec, format, healthOf, kbps, load, transport } from "./model.js";
+import { ALARMS, age, codec, format, healthOf, kbps, load, mixed, transport } from "./model.js";
 
 const NS = "http://www.w3.org/2000/svg";
 
@@ -75,7 +75,7 @@ export function alarms(show, acked, now) {
 
 /** The compositing switch, with what it means in its title. */
 export function mixSwitch(show) {
-  const on = !!show.compositing;
+  const on = mixed(show);
   return el("button.wl-switch", {
     type: "button", role: "switch", "aria-checked": String(on), "data-act": "mix", "data-id": show.id, tabindex: "-1",
     title: on ? "Mixed: scenes, transitions and a programme encode. Click to send the input straight to the outputs." : "Direct: the input goes straight to the outputs. Click to mix it with scenes and transitions.",
@@ -85,7 +85,7 @@ export function mixSwitch(show) {
 /** The input's numbers: transport and shape on one line, health on the next. */
 export function inputCell(show, st) {
   const i = (st && st.input) || {};
-  const t = transport(show.input && show.input.uri) || (show.compositing ? "Scenes" : "");
+  const t = transport(show.input && show.input.uri) || (mixed(show) ? "Scenes" : "");
   const line = [t, format(i)].filter(Boolean).join(" · ");
   const audio = i.audio_codec ? `${codec(i.audio_codec)}${i.audio_channels ? ` ${i.audio_channels}ch` : ""}` : "";
   return el("span.wl-in", { title: show.input ? show.input.uri : "" }, [el("span.wl-line", { text: line || "Waiting for the input" }), el("span.wl-sub", { text: audio || (show.input ? show.input.uri : "") })]);

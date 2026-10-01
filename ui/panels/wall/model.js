@@ -52,6 +52,8 @@ export function format(i) {
 const CODECS = { h264: "H.264", h265: "HEVC", hevc: "HEVC", mpeg2: "MPEG-2", av1: "AV1", vp9: "VP9", aac: "AAC", mp2: "MP2", ac3: "AC-3", opus: "Opus" };
 export const codec = (c) => CODECS[String(c).toLowerCase()] || String(c || "").toUpperCase();
 
+/** A show from before wave 4 has no `compositing`: every one of those mixes. */
+export const mixed = (show) => !!show && show.compositing !== false;
 export const healthOf = (show) => (show && show.health) || { state: show && show.state === "stopped" ? "off" : "ok", alarms: [] };
 export const rank = (show) => RANK[healthOf(show).state] ?? 1;
 export const isLive = (show) => show.state === "running" || show.state === "live";
@@ -86,7 +88,7 @@ export const SORTS = {
   outputs: { key: (s) => -(s.outputs || []).filter((o) => o.state === "failed" || o.error).length * 1000 - (s.outputs || []).length },
   load: { key: (s, st) => -load(st) },
   alarms: { key: (s) => [-rank(s), oldest(s)] },
-  mixing: { key: (s) => (s.compositing ? 0 : 1) },
+  mixing: { key: (s) => (mixed(s) ? 0 : 1) },
 };
 
 function compare(a, b) {
