@@ -115,6 +115,57 @@ curl -X POST 'localhost:8080/api/v1/sources?show=second-room' -H 'content-type: 
 Both shows read the one stream the station received; the encoder publishes
 once.
 
+## Send a feed straight on, with no mixing
+
+A headend channel, a contribution feed or a camera you only pass along needs
+no scenes and no programme encode. Make it a show without compositing: one
+input sent to its outputs, copied as it arrives unless an output asks for a
+rendition. It has no process of its own; the direct host in the ingest
+plugin runs all of them, so two hundred cost what two hundred inputs cost
+and not two hundred mixers.
+
+```sh
+curl -X POST localhost:8080/api/v1/shows -H 'content-type: application/json' -d '{
+  "name": "BBC One", "compositing": false,
+  "input": {"uri": "udp://@239.1.1.1:5000", "program": 101},
+  "outputs": [{"uri": "srt://10.0.0.9:9000"},
+              {"platform": "youtube", "key": "xxxx-xxxx", "rendition": {"preset": "youtube-720p30"}}]}'
+```
+
+The answer is the show, already `running`. Its `health` says `alarm` with
+`no-input` until the feed arrives. The key is sealed in the secret store and
+never comes back; `has_key` says it is there. Add, change and remove outputs
+with `show.output.add`, `show.output.set` and `show.output.remove`
+(`POST /api/v1/shows/bbc-one/output/add`, `POST /api/v1/shows/bbc-one/output`,
+`POST /api/v1/shows/bbc-one/output/remove`), each with `"output"` naming the
+output. Output addresses may be `srt://`, `rtmp://`, `udp://` (multicast
+too), `rtp://` or `rist://`.
+
+To make many at once, send them all to `show.add_many`. It checks every one
+first and, unless you send `"dry_run": false`, makes nothing: it answers which
+would be made, which would be refused and why, and what their renditions
+would cost against what this machine has free. Read that, then send the same
+list with `"dry_run": false`. A show with one bad output is refused whole.
+The page does this from File, New shows: see
+[add shows in bulk](add-shows-in-bulk.md), and watch them all on
+[the monitoring wall](monitor-many-shows.md).
+
+`show.stats` reads the health and numbers of every show in one call, cheap
+enough for once a second.
+
+## Mix a feed after all, and back
+
+`show.set {"id": "bbc-one", "compositing": true}` turns a feed into a mixed
+show: the station gives it a folder and a process, makes the input its one
+source, puts it on programme and moves the outputs to it. You can then add a
+lower third or a second source as in any show. The answer says which outputs
+moved and `gap_ms`, how long they were off: in a test the output was off for
+0.7 seconds (the show starting and the RTMP connection being made again).
+
+`"compositing": false` goes back, when the show has that one source, no
+scene on programme and only outputs it took over. Otherwise it is refused
+with what is in the way, such as the sources to remove first.
+
 ## When a show dies
 
 The station starts it again at once and says so: `event/show.changed` with
