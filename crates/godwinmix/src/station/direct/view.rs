@@ -2,7 +2,6 @@
 //! of each, its numbers for `show.stats`, and, for a show that composites,
 //! its input made its one source.
 
-use super::outputs;
 use crate::station::state::Station;
 use godwinmix_protocol::destination::Destination;
 use godwinmix_protocol::shows::{OutputStats, ShowStats, ShowState};
@@ -19,10 +18,24 @@ impl super::Direct {
     pub fn output_views(&self, st: &Station, id: &str) -> Vec<Destination> {
         let Some(r) = st.registry.lock().get(id).cloned() else { return Vec::new() };
         let seen = self.seen.lock().get(id).cloned().unwrap_or_default();
-        outputs::stored(id, &r.outputs)
+        // From the records alone: a list of two hundred shows unseals no key.
+        r.outputs
             .iter()
             .map(|d| {
-                let mut view = d.view(seen.output(&d.id, d.enabled && !r.compositing));
+                let live = seen.output(&d.id, d.enabled && !r.compositing);
+                let mut view = Destination {
+                    id: d.id.clone(),
+                    platform: d.platform.clone(),
+                    label: d.label.clone(),
+                    uri_host: d.uri_host.clone(),
+                    has_key: d.has_key,
+                    stream: "main".into(),
+                    enabled: d.enabled,
+                    live,
+                    rendition: d.rendition.clone(),
+                    plan: None,
+                    refused: None,
+                };
                 if d.rendition.is_some() && d.enabled && !r.compositing {
                     let (plan, refused) = self.transcode.view(id, &d.id);
                     view.plan = plan;

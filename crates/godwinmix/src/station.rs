@@ -24,7 +24,7 @@ pub mod direct;
 pub mod child;
 mod files;
 mod host;
-mod list;
+pub mod list;
 pub mod methods;
 mod programme;
 mod project;
