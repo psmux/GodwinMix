@@ -61,7 +61,7 @@ pub trait Output: Send {
     /// returns would otherwise hold a reconnect for ever. See
     /// `output::retire`.
     fn shutdown(&mut self, pipeline: gst::Pipeline) {
-        crate::output::retire::to_null_within(pipeline, crate::output::retire::RETIRE_WAIT);
+        let _ = crate::output::retire::to_null_within(pipeline, crate::output::retire::RETIRE_WAIT);
     }
 
     fn configure(&mut self, params: &Params) -> Result<Configure>;
