@@ -584,6 +584,7 @@ export interface Destination {
   label: string;
   plan?: DestinationPlan | null;
   platform: string;
+  playback?: Playback | null;
   reconnects: number;
   refused?: DestinationRefusal | null;
   rendition?: RenditionChoice | null;
@@ -950,6 +951,18 @@ export interface HistoryStep {
   patch: Patch;
   redo: number;
   undo: number;
+}
+
+/**
+ * The `params` of a show's `hls://` output: the same names, defaults and
+ * limits as an `hls/output`'s (`docs/reference/hls-output.md`).
+ */
+export interface HlsOutputParams {
+  low_latency?: boolean | null;
+  part_ms?: number | null;
+  segment_ms?: number | null;
+  viewer_key?: string | null;
+  window?: number | null;
 }
 
 /** A UUID in the hyphenated form. Minted ids are version 7 (time ordered); ids derived from a layout are version 8. */
@@ -1525,6 +1538,16 @@ export interface PlanView {
   totals: PlanTotals;
 }
 
+/**
+ * The links of an output served as HLS from the control port, each with
+ * the output's viewer key on it.
+ */
+export interface Playback {
+  dash_url_path: string;
+  master_url_path: string;
+  viewers: number;
+}
+
 /** The whole of one plugin, for an agent about to use it. */
 export interface PluginDescription {
   description: string;
@@ -2042,6 +2065,7 @@ export interface ShowOutputAddRequest {
   key?: string | null;
   label?: string | null;
   output?: string | null;
+  params?: HlsOutputParams | null;
   platform?: string | null;
   rendition?: RenditionChoice | null;
   uri?: string | null;
@@ -2060,6 +2084,7 @@ export interface ShowOutputSetRequest {
   key?: string | null;
   label?: string | null;
   output: string;
+  params?: HlsOutputParams | null;
   rendition?: RenditionChoice | null;
   uri?: string | null;
 }
@@ -2073,6 +2098,7 @@ export interface ShowOutputSpec {
   id?: string | null;
   key?: string | null;
   label?: string | null;
+  params?: HlsOutputParams | null;
   platform?: string | null;
   rendition?: RenditionChoice | null;
   uri?: string | null;
