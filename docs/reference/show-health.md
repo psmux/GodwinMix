@@ -180,8 +180,17 @@ has asked about for ten seconds has its JPEG thrown away, and if its alarms are 
 JPEG is made from the 320 pixel picture the checks already decoded, so a
 thumbnail costs one small JPEG encode a second and no decode of its own.
 
-For a show that composites the picture is the programme cell of its own
-mosaic, `/api/v1/snapshot/program.jpg?show=<id>`.
+For a show that composites the station calls the show's own
+`program.thumbnail {width?}`, which answers in the same shape: `{jpeg, width,
+height, at_ms}`, or `{pending: true}` while the first picture is on its way.
+A request keeps pictures coming for ten seconds, as the host's does. The
+picture comes from a branch on the show's raw programme tee, behind a leaky
+queue of its own: the rate is cut to one frame a second before anything is
+scaled, the frame is scaled to 320 wide and kept, and the JPEG is made at the
+asked width (16 to 320) when somebody asks. No mosaic is built for it, and
+with nobody asking for ten seconds the branch is taken off the tee and its
+frame thrown away. `gmx_stream_clients{kind="thumbnail"}` on the show's
+`/metrics` is 1 while the branch runs.
 
 ## What it costs
 
