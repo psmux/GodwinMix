@@ -98,6 +98,7 @@ fn a_gap_in_the_continuity_counter_is_counted_as_loss() {
     let (_, _, n) = run(Choice::default(), &input);
     // 256 carried cc 0 in `mux`, then 0 again (a repeat, allowed), 1, then 4.
     assert_eq!(n.ts_lost.load(std::sync::atomic::Ordering::Relaxed), 2);
+    assert_eq!(n.cc_errors.load(std::sync::atomic::Ordering::Relaxed), 1, "one jump, one error");
 }
 
 fn sdt(services: &[(u16, &str)]) -> Vec<u8> {
