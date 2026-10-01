@@ -16,7 +16,7 @@ use gstreamer::prelude::*;
 
 use super::build::{build, Built};
 use super::input::Input;
-use super::sink::{attach, Route};
+use super::sink::{attach, tap_pictures, Route};
 use super::spec::NodeSpec;
 use crate::media_tag::TagKind;
 
@@ -104,6 +104,9 @@ impl Graph {
             },
             _ => None,
         };
+        if let ("decode", "video", Some(tee)) = (spec.kind.as_str(), spec.track(), &built.tee) {
+            tap_pictures(tee, spec.id.clone(), route.clone());
+        }
         if let Some(src) = &built.appsrc {
             let track = if spec.track() == "audio" { TagKind::Audio } else { TagKind::Video };
             input.attach(track, Some(src.clone()));

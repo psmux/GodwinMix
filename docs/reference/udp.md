@@ -52,8 +52,9 @@ On the streaming thread, per datagram:
    gap in its sequence numbers is counted as `rtp_packets_lost`. Anything else
    is counted as `malformed` and dropped.
 2. Null packets (PID 0x1FFF) are dropped and counted.
-3. A gap in a PID's continuity counter is counted as `ts_packets_lost`. A
-   packet with the discontinuity flag set is not a gap.
+3. A gap in a PID's continuity counter is counted as `ts_packets_lost`, the
+   packets it skipped, and once as `cc_errors`, the way TR 101 290 counts a
+   continuity error. A packet with the discontinuity flag set is not a gap.
 4. The PAT, every PMT and the SDT are reassembled and parsed, only when their
    CRC changes.
 5. With one program and nothing chosen, every other packet passes untouched,
@@ -90,8 +91,8 @@ blocked socket.
 ```json
 {"address": "udp://@239.1.1.1:19471",
  "stats": {"datagrams": 48417, "bytes_in": 62544968, "bytes_out": 62544968,
-           "null_packets_dropped": 0, "ts_packets_lost": 0, "rtp_packets_lost": 0,
-           "malformed": 0, "flagged_by_sender": 0, "resumed": 0, "silent_ms": 12}}
+           "null_packets_dropped": 0, "ts_packets_lost": 0, "cc_errors": 0,
+           "rtp_packets_lost": 0, "malformed": 0, "flagged_by_sender": 0, "resumed": 0, "silent_ms": 12}}
 ```
 
 `programs`:

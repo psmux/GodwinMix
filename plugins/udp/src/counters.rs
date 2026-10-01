@@ -22,6 +22,9 @@ pub struct Counters {
     pub nulls: AtomicU64,
     /// TS packets the continuity counters say never arrived.
     pub ts_lost: AtomicU64,
+    /// Continuity counter errors: one per jump, however many packets it
+    /// skipped, which is how TR 101 290 (1.4) counts them.
+    pub cc_errors: AtomicU64,
     /// RTP datagrams the sequence numbers say never arrived.
     pub rtp_lost: AtomicU64,
     /// Packets without a sync byte, and datagrams that were neither TS nor RTP.
@@ -44,6 +47,7 @@ impl Default for Counters {
             bytes_out: AtomicU64::new(0),
             nulls: AtomicU64::new(0),
             ts_lost: AtomicU64::new(0),
+            cc_errors: AtomicU64::new(0),
             rtp_lost: AtomicU64::new(0),
             malformed: AtomicU64::new(0),
             flagged: AtomicU64::new(0),
@@ -90,6 +94,7 @@ impl Counters {
             "bytes_out": self.bytes_out.load(Relaxed),
             "null_packets_dropped": self.nulls.load(Relaxed),
             "ts_packets_lost": self.ts_lost.load(Relaxed),
+            "cc_errors": self.cc_errors.load(Relaxed),
             "rtp_packets_lost": self.rtp_lost.load(Relaxed),
             "malformed": self.malformed.load(Relaxed),
             "flagged_by_sender": self.flagged.load(Relaxed),
