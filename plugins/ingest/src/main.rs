@@ -287,13 +287,15 @@ impl Device for Publishers {
         if let Some(answer) = self.whip_call(name, &arguments) {
             return answer;
         }
-        if name == "direct.stats" {
-            // The station's to call for show.stats, like whip.offer.
-            let ids: Option<Vec<String>> = arguments.get("ids").and_then(|v| serde_json::from_value(v.clone()).ok());
-            return match self.running.as_ref() {
-                Some(r) => Ok(r.direct.stats(ids.as_deref())),
-                None => Err(RpcError::new(codes::WRONG_STATE, "the channel server is not running, so no direct show is either")),
-            };
+        if name.starts_with("direct.") {
+            // The station's to call, like whip.offer: direct.stats for
+            // show.stats, direct.thumbnail for the wall's pictures.
+            let running = self.running.as_ref().ok_or_else(|| {
+                RpcError::new(codes::WRONG_STATE, "the channel server is not running, so no direct show is either")
+            })?;
+            return running.direct.call(name, &arguments).ok_or_else(|| {
+                RpcError::new(codes::METHOD_NOT_FOUND, format!("the direct host has no call '{name}'. It answers direct.stats and direct.thumbnail."))
+            });
         }
         let short = name.rsplit('/').next().unwrap_or(name);
         if !matches!(short, "streams" | "add_publishers") {

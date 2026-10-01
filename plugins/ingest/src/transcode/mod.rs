@@ -56,6 +56,14 @@ impl Transcoders {
         Transcoders { hub, renditions: Hub::new(), running: Mutex::default() }
     }
 
+    /// Converted pairs published on `hub` itself, beside the streams they
+    /// come from. The direct host does this so the relay, which serves that
+    /// hub, can hand any rendition of a show to the station (for HLS) with
+    /// nothing decoded again.
+    pub fn sharing(hub: Hub) -> Transcoders {
+        Transcoders { renditions: hub.clone(), hub, running: Mutex::default() }
+    }
+
     /// Where converted pairs are published, for the senders to read.
     pub fn renditions(&self) -> Hub {
         self.renditions.clone()

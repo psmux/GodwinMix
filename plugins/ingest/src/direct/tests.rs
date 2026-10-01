@@ -194,6 +194,12 @@ fn an_input_that_cannot_open_says_why_and_its_show_still_runs() {
     let input = &said(&heard, "direct.input")[0];
     assert_eq!(input["state"], "idle");
     assert!(input["error"].as_str().unwrap_or("").contains("carrier-pigeon"), "{input}");
+    // What the station calls answers for it, and for nothing else.
+    let stats = host.call("direct.stats", &json!({"ids": ["bad"]})).unwrap();
+    assert_eq!(stats["shows"][0]["id"], "bad");
+    assert_eq!(host.call("direct.stats", &json!({"ids": ["other"]})).unwrap()["shows"], json!([]));
+    assert!(host.call("direct.thumbnail", &json!({"show": "bad"})).is_some());
+    assert!(host.call("direct.teleport", &json!({})).is_none());
 }
 
 #[test]
