@@ -264,7 +264,7 @@ show is not running); `404` for a show that is not there.
 
 ### `governor.status`
 
-As in the [governor reference](renditions.md), with `ingress_kbps` beside
+As in the [governor reference](governor.md), with `ingress_kbps` beside
 `egress_kbps`: every channel stream and every direct show's input, as last
 counted.
 
