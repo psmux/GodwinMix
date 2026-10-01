@@ -98,7 +98,7 @@ mod tests {
     #[test]
     fn bytes_reaching_the_sink_are_counted_and_a_stop_is_noticed() {
         let _ = gst::init();
-        let p = gst::parse::launch("videotestsrc num-buffers=5 ! video/x-raw,width=64,height=64 ! fakesink")
+        let p = gst::parse::launch("videotestsrc num-buffers=5 ! video/x-raw,format=I420,width=64,height=64 ! fakesink")
             .unwrap()
             .downcast::<gst::Pipeline>()
             .unwrap();
