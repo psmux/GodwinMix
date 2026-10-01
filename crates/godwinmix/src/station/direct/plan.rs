@@ -66,3 +66,22 @@ impl Direct {
         self.transcode.price(outputs, &assumed)
     }
 }
+
+/// What a batch of renditions is judged against: the CPU, memory and
+/// uplink free now, and the encoding device with the most room. The CPU
+/// alone has no device room, so judged on it every hardware encode was
+/// refused; a machine has one such device in nearly every case, and where
+/// it has several the planner puts each node on one with room anyway.
+pub fn room(render: &godwinmix_core::render::Station) -> Cost {
+    let g = render.governor();
+    let mut have = g.headroom(None);
+    let mut devices = g.profile().devices();
+    devices.extend(render.slots().into_iter().filter_map(|s| s.device));
+    for d in devices {
+        let on = g.headroom(Some(&d));
+        if on.device_millis > have.device_millis {
+            (have.device_millis, have.device_sessions) = (on.device_millis, on.device_sessions);
+        }
+    }
+    have
+}

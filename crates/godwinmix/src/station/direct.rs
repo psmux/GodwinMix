@@ -31,6 +31,7 @@ mod tests_intake;
 mod view;
 
 pub use edit::{add as add_output, set as set_output};
+pub use plan::room;
 pub use seen::Seen;
 pub use view::{feed_source, INPUT_SOURCE};
 pub use intake::take as take_event;

@@ -126,12 +126,12 @@ fn open_channels(st: &Arc<Station>, cfg: &Config, config: &std::path::Path, even
     channels.use_governor(st.render.governor().clone());
     let _ = st.channels.set(channels);
     super::direct::Direct::attach(st, supervisor.clone());
-    let starting = supervisor.clone();
+    let (starting, station) = (supervisor.clone(), st.clone());
     std::thread::spawn(move || {
         if plugin::loader::get(crate::channels::PLUGIN).is_none() {
             return info!("the ingest plugin is not installed; channels take no publishers until it is, and it starts the moment it is");
         }
-        if let Err(e) = starting.start(crate::channels::PROVIDE) {
+        if let Err(e) = super::ingest::start(&station, &starting) {
             warn!(error = %format!("{e:#}"), "the ingest plugin would not start");
         }
     });
