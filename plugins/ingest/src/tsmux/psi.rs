@@ -20,11 +20,11 @@ pub fn crc32(bytes: &[u8]) -> u32 {
 }
 
 /// A long form section: the header, `body`, and the CRC.
-fn section(table_id: u8, id: u16, body: &[u8]) -> Vec<u8> {
+fn section(table_id: u8, id: u16, version: u8, body: &[u8]) -> Vec<u8> {
     let length = 5 + body.len() + 4;
     let mut s = vec![table_id, 0xb0 | ((length >> 8) as u8 & 0x0f), length as u8];
     s.extend_from_slice(&id.to_be_bytes());
-    s.extend_from_slice(&[0xc1, 0x00, 0x00]); // version 0, current, section 0 of 0
+    s.extend_from_slice(&[0xc1 | ((version & 0x1f) << 1), 0x00, 0x00]); // version, current, section 0 of 0
     s.extend_from_slice(body);
     let crc = crc32(&s);
     s.extend_from_slice(&crc.to_be_bytes());
@@ -35,12 +35,13 @@ fn section(table_id: u8, id: u16, body: &[u8]) -> Vec<u8> {
 pub fn pat() -> Vec<u8> {
     let mut body = PROGRAM.to_be_bytes().to_vec();
     body.extend_from_slice(&(0xe000 | PMT_PID).to_be_bytes());
-    section(0x00, 1, &body)
+    section(0x00, 1, 0, &body)
 }
 
 /// The program map: each elementary stream's type and PID, and the PID the
-/// clock rides on.
-pub fn pmt(video: Option<u8>, audio: Option<u8>) -> Vec<u8> {
+/// clock rides on. `version` moves whenever that changes, or a receiver
+/// that read the old map keeps it.
+pub fn pmt(version: u8, video: Option<u8>, audio: Option<u8>) -> Vec<u8> {
     let pcr = if video.is_some() { VIDEO_PID } else { AUDIO_PID };
     let mut body = (0xe000 | pcr).to_be_bytes().to_vec();
     body.extend_from_slice(&[0xf0, 0x00]); // no program descriptors
@@ -51,7 +52,7 @@ pub fn pmt(video: Option<u8>, audio: Option<u8>) -> Vec<u8> {
             body.extend_from_slice(&[0xf0, 0x00]);
         }
     }
-    section(0x02, PROGRAM, &body)
+    section(0x02, PROGRAM, version, &body)
 }
 
 #[cfg(test)]
@@ -63,6 +64,6 @@ mod tests {
         // The PAT every single program muxer writes for program 1 at 0x1000.
         assert_eq!(pat(), [0x00, 0xb0, 0x0d, 0x00, 0x01, 0xc1, 0x00, 0x00, 0x00, 0x01, 0xf0, 0x00, 0x2a, 0xb1, 0x04, 0xb2]);
         // A section with its CRC appended checks to zero.
-        assert_eq!(crc32(&pmt(Some(0x1b), Some(0x0f))), 0);
+        assert_eq!(crc32(&pmt(3, Some(0x1b), Some(0x0f))), 0);
     }
 }

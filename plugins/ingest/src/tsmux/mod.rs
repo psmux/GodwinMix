@@ -39,6 +39,9 @@ pub struct Muxer {
     /// When the tables last went out, and whether they have changed since.
     psi_at: Option<u32>,
     psi_dirty: bool,
+    /// The stream types the last PMT carried, and its version.
+    announced: (Option<u8>, Option<u8>),
+    version: u8,
 }
 
 impl Muxer {
@@ -86,8 +89,12 @@ impl Muxer {
         }
         let video = self.video.as_ref().map(es::VideoConfig::stream_type);
         let audio = self.audio.map(|_| 0x0f);
+        if self.psi_at.is_some() && self.announced != (video, audio) {
+            self.version = (self.version + 1) & 0x1f;
+        }
+        self.announced = (video, audio);
         packet::write(out, 0, &mut self.cc[0], First::default(), true, &psi::pat());
-        packet::write(out, psi::PMT_PID, &mut self.cc[1], First::default(), true, &psi::pmt(video, audio));
+        packet::write(out, psi::PMT_PID, &mut self.cc[1], First::default(), true, &psi::pmt(self.version, video, audio));
         self.psi_at = Some(ms);
         self.psi_dirty = false;
     }
