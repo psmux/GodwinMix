@@ -117,6 +117,7 @@ Keys accepted on every method, handled before a method runs.
 | `program.history` | `GET /api/v1/program/history` | read |  | 1 | The last hundred takes, newest first, with the token that asked for each. |
 | `program.revert` | `POST /api/v1/program/revert` | operate |  | 1 | Take back to the shot before this one. |
 | `program.take` | `POST /api/v1/program/take` | operate |  | 1 | Put a scene or a source on programme. The cut is instant and the outgoing stream is not disturbed. |
+| `program.thumbnail` | `GET /api/v1/program/thumbnail` | read |  | 1 | What is on air as a small JPEG in base64, {jpeg, width, height, at_ms}, or {pending: true} while the first picture is on its way. An ask keeps one picture a second coming for ten seconds; nothing runs between asks. |
 | `project.export` | `POST /api/v1/project/export` | admin |  | 1 | This mixer as one project file: settings, sources, outputs and renditions, channels, scenes, the page's layout, and its clips by name and size. Keys only with include_secrets. |
 | `project.import` | `POST /api/v1/project/import` | admin | yes | 1 | Open a project file: answers with what it would change (dry_run is true unless false is sent), then replaces this mixer's setup or merges beside it. Says which settings wait for a restart. |
 | `rendition.plan` | `POST /api/v1/rendition/plan` | read |  | 1 | What the planner built for every output that asked for a rendition: each node, what it serves, which encoder and why, and the totals. |
@@ -1593,6 +1594,21 @@ MCP tool `take` in the `minimal` profile: readOnlyHint false, destructiveHint fa
   },
   "result": {
     "$ref": "#/$defs/ProgramState"
+  }
+}
+```
+
+#### `program.thumbnail`
+
+What is on air as a small JPEG in base64, {jpeg, width, height, at_ms}, or {pending: true} while the first picture is on its way. An ask keeps one picture a second coming for ten seconds; nothing runs between asks.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ThumbnailRequest"
+  },
+  "result": {
+    "type": "object"
   }
 }
 ```
