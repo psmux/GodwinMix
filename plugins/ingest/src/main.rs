@@ -42,6 +42,7 @@ mod source;
 mod sps;
 mod hevc;
 mod eflv;
+mod exaudio;
 mod whip_in;
 
 use godwinmix_sdk::prelude::*;

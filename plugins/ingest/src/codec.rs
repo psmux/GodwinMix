@@ -59,6 +59,7 @@ pub fn audio_codec(body: &[u8]) -> String {
         2 | 14 => "mp3".into(),
         11 => "speex".into(),
         7 | 8 => "g711".into(),
+        crate::exaudio::EX_HEADER => crate::exaudio::codec(body),
         other => format!("flv-audio-{other}"),
     }
 }
@@ -74,6 +75,7 @@ pub fn is_sequence_header(kind: TagKind, body: &[u8]) -> bool {
     match kind {
         TagKind::Video if enhanced(first) => first & 0x0f == 0,
         TagKind::Video => matches!(first & 0x0f, 7 | 12) && second == 0,
+        TagKind::Audio if first >> 4 == crate::exaudio::EX_HEADER => first & 0x0f == crate::exaudio::SEQUENCE_START,
         TagKind::Audio => first >> 4 == 10 && second == 0,
         TagKind::Script => false,
     }
@@ -99,6 +101,9 @@ pub fn read_video(tag: &MediaTag) -> Video {
 pub fn read_audio(tag: &MediaTag) -> Audio {
     let body = &tag.payload[..];
     let codec = audio_codec(body);
+    if let Some(f) = crate::exaudio::read(body) {
+        return Audio { codec, channels: f.channels, sample_rate: f.sample_rate };
+    }
     if codec != "aac" || body.len() < 4 {
         // The flags byte says 44.1 kHz stereo for everything but AAC, and is
         // right about it often enough to report.
@@ -157,6 +162,7 @@ mod tests {
         assert_eq!(video_codec(&[0x90, b'h', b'v', b'c', b'1']), "h265");
         assert_eq!(audio_codec(&[0xaf, 0]), "aac");
         assert_eq!(audio_codec(&[0x2f, 0]), "mp3");
+        assert_eq!(audio_codec(&[0x91, b'a', b'c', b'-', b'3', 0x0b, 0x77]), "ac3");
     }
 
     #[test]
