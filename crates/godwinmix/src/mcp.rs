@@ -378,6 +378,7 @@ impl Server {
         } else {
             rest.path.clone()
         };
+        let path = with_show_query(tool, method, path, &mut args)?;
         let verb = Method::from_bytes(rest.http.as_bytes())
             .map_err(|_| format!("{} is not an HTTP method", rest.http))?;
         let args = Value::Object(args);
@@ -471,6 +472,29 @@ impl Server {
         let text = resp.text().await.map_err(|e| format!("reading response: {e}"))?;
         Ok(text_result(render_body(&text)))
     }
+}
+
+/// `show` on a tool one show answers becomes `?show=<id>`, which is how the
+/// station picks the show to pass the call to. In the body it would reach the
+/// show as an argument its method does not take.
+fn with_show_query(
+    tool: &str,
+    method: &str,
+    path: String,
+    args: &mut Map<String, Value>,
+) -> Result<String, String> {
+    if !mcp_tools::addresses_one_show(method) {
+        return Ok(path);
+    }
+    let Some(show) = args.remove("show") else { return Ok(path) };
+    let show = show.as_str().map(str::trim).unwrap_or_default().to_string();
+    if show.is_empty() {
+        return Ok(path);
+    }
+    if !show.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') {
+        return Err(format!("{tool}: `show` {show:?} is not a show id. list_shows names them."));
+    }
+    Ok(format!("{path}?show={show}"))
 }
 
 /// One tool call worked out into a request, before anything is sent.
@@ -576,6 +600,10 @@ fn text_result(text: String) -> Value {
 fn error_result(text: String) -> Value {
     json!({ "content": [{ "type": "text", "text": text }], "isError": true })
 }
+
+#[cfg(test)]
+#[path = "mcp_shows_tests.rs"]
+mod shows_tests;
 
 #[cfg(test)]
 mod tests {

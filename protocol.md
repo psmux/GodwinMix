@@ -253,6 +253,8 @@ MCP tool `agent_state` in the `minimal` profile: readOnlyHint true, destructiveH
 
 Make a channel and its first key, which is in this answer. channel.key.reveal reads it again later.
 
+MCP tool `add_channel` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint false.
+
 ```json
 {
   "params": {
@@ -298,6 +300,8 @@ Give RTMPS a certificate: the PEM of the certificate (and its chain) and of its 
 
 Send a channel's stream on to YouTube, Facebook, Twitch, an RTMP server or an SRT receiver as it arrives. Nothing is decoded or encoded. The key is write only.
 
+MCP tool `add_channel_destination` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
 ```json
 {
   "params": {
@@ -312,6 +316,8 @@ Send a channel's stream on to YouTube, Facebook, Twitch, an RTMP server or an SR
 #### `channel.destination.remove`
 
 Stop sending a channel's stream to one destination and forget it. The publisher and the other destinations are not touched.
+
+MCP tool `remove_channel_destination` in the `search` profile: readOnlyHint false, destructiveHint true, idempotentHint true.
 
 ```json
 {
@@ -328,6 +334,8 @@ Stop sending a channel's stream to one destination and forget it. The publisher 
 
 Change one of a channel's destinations, naming only what moves: a new key, another server, which stream it sends, on or off. A key left out is kept.
 
+MCP tool `set_channel_destination` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
 ```json
 {
   "params": {
@@ -342,6 +350,8 @@ Change one of a channel's destinations, naming only what moves: a new key, anoth
 #### `channel.get`
 
 One channel.
+
+MCP tool `get_channel` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
 
 ```json
 {
@@ -422,6 +432,8 @@ MCP tool `list_channels` in the `search` profile: readOnlyHint true, destructive
 
 Remove a channel and forget its keys. Sources it made that no scene holds go with it.
 
+MCP tool `remove_channel` in the `search` profile: readOnlyHint false, destructiveHint true, idempotentHint true.
+
 ```json
 {
   "params": {
@@ -436,6 +448,8 @@ Remove a channel and forget its keys. Sources it made that no scene holds go wit
 #### `channel.set`
 
 Rename a channel, switch it on or off, or change its application name, whether its streams become sources, how its key is given, which protocols it takes (rtmp, srt, whip) or RTMPS and its port. A port opens when the first channel needs it and closes when the last one stops. Only what is named moves.
+
+MCP tool `set_channel` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
 
 ```json
 {
@@ -654,7 +668,7 @@ How long each stage of the start took, and what was over the 250 ms mark.
 
 The full state: programme, every source, every output, the multiview grid, the encoder backend and any ad break.
 
-MCP tool `status` in the `standard` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+MCP tool `status` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
 
 ```json
 {
@@ -769,6 +783,8 @@ Change a filter's settings in place. A filter that cannot take the change while 
 
 Measure this machine's encoders again, in the background, a few seconds of every core. Refused while anything is on air unless `confirm` is true.
 
+MCP tool `calibrate_governor` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
 ```json
 {
   "params": {
@@ -783,6 +799,8 @@ Measure this machine's encoders again, in the background, a few seconds of every
 #### `governor.status`
 
 The resource governor: when this machine was measured, what is in use and free on the CPU and each GPU encoder, and what was shed to keep the programme whole.
+
+MCP tool `governor_status` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
 
 ```json
 {
@@ -997,7 +1015,7 @@ Forget a node. Its bridge is closed, every token minted for a plugin on it is re
 
 Send the programme to another destination. The encoder is shared, so adding one costs nothing on air.
 
-MCP tool `add_output` in the `standard` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+MCP tool `add_output` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
 
 ```json
 {
@@ -1029,7 +1047,7 @@ One destination.
 
 Every destination, with its state, reconnect count and how much is buffered.
 
-MCP tool `list_outputs` in the `standard` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+MCP tool `list_outputs` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
 
 ```json
 {
@@ -1574,6 +1592,8 @@ MCP tool `take` in the `minimal` profile: readOnlyHint false, destructiveHint fa
 
 This mixer as one project file: settings, sources, outputs and renditions, channels, scenes, the page's layout, and its clips by name and size. Keys only with include_secrets.
 
+MCP tool `export_project` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+
 ```json
 {
   "params": {
@@ -1589,6 +1609,8 @@ This mixer as one project file: settings, sources, outputs and renditions, chann
 
 Open a project file: answers with what it would change (dry_run is true unless false is sent), then replaces this mixer's setup or merges beside it. Says which settings wait for a restart.
 
+MCP tool `import_project` in the `search` profile: readOnlyHint false, destructiveHint true, idempotentHint false.
+
 ```json
 {
   "params": {
@@ -1603,6 +1625,8 @@ Open a project file: answers with what it would change (dry_run is true unless f
 #### `rendition.plan`
 
 What the planner built for every output that asked for a rendition: each node, what it serves, which encoder and why, and the totals.
+
+MCP tool `plan_rendition` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
 
 ```json
 {
@@ -2423,6 +2447,8 @@ MCP tool `validate_scene` in the `search` profile: readOnlyHint true, destructiv
 
 Make another show and start it: empty, a copy of a show (without its outputs, so nothing goes out twice), or from a project file.
 
+MCP tool `add_show` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint false.
+
 ```json
 {
   "params": {
@@ -2438,7 +2464,7 @@ Make another show and start it: empty, a copy of a show (without its outputs, so
 
 Every show on this machine: its name, whether it is running, what is on air, what its outputs send and what its process costs. `current` is the show a client reaches when it names none.
 
-MCP tool `list_shows` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+MCP tool `list_shows` in the `standard` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
 
 ```json
 {
@@ -2457,6 +2483,8 @@ MCP tool `list_shows` in the `search` profile: readOnlyHint true, destructiveHin
 
 Stop a show and remove it with its folder. Refused for the last show and for main, the show the station was started with.
 
+MCP tool `remove_show` in the `search` profile: readOnlyHint false, destructiveHint true, idempotentHint true.
+
 ```json
 {
   "params": {
@@ -2471,6 +2499,8 @@ Stop a show and remove it with its folder. Refused for the last show and for mai
 #### `show.rename`
 
 Give a show another name. Its id stays.
+
+MCP tool `rename_show` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
 
 ```json
 {
@@ -2487,6 +2517,8 @@ Give a show another name. Its id stays.
 
 Start a stopped or failed show.
 
+MCP tool `start_show` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
 ```json
 {
   "params": {
@@ -2501,6 +2533,8 @@ Start a stopped or failed show.
 #### `show.stop`
 
 Stop a show. It keeps its config, and stays stopped when the station starts again, until show.start.
+
+MCP tool `stop_show` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
 
 ```json
 {
@@ -2517,7 +2551,7 @@ Stop a show. It keeps its config, and stays stopped when the station starts agai
 
 One JPEG: the whole contact sheet, the programme, or one source cut out of the mosaic.
 
-MCP tool `snapshot` in the `standard` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+MCP tool `snapshot` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
 
 ```json
 {
@@ -2653,7 +2687,7 @@ Sources that are not running, and why: failed, could not be started (with the er
 
 Remove a source. If it is on programme the mixer cuts to the slate first.
 
-MCP tool `remove_source` in the `standard` profile: readOnlyHint false, destructiveHint true, idempotentHint true.
+MCP tool `remove_source` in the `search` profile: readOnlyHint false, destructiveHint true, idempotentHint true.
 
 ```json
 {

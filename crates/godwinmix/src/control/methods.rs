@@ -84,6 +84,9 @@ pub fn registry() -> Registry<Call> {
     shows::register(&mut reg);
     config::register(&mut reg);
     crate::observe::register(&mut reg);
+    // Last, so it sees every method: the station's tools and a tool for
+    // everything else that has none.
+    godwinmix_protocol::mcp_bindings::bind(&mut reg);
     // Other modules add their own here. One line each, and they land on
     // /rpc, /api/v1, protocol.json and the tool list together. See
     // the README in `godwinmix-protocol`.
@@ -148,7 +151,7 @@ fn register_core(reg: &mut Registry<Call>) {
         .result(schema_of::<MixerStatus>)
         .tool(
             "status",
-            Tier::Standard,
+            Tier::Search,
             "Full snapshot of the mixer: what is on programme, every source with its id, \
              name, URL, connection state and whether it has video and audio right now, \
              every output with its state and reconnect count, the encoder backend, and any \

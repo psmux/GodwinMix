@@ -9604,6 +9604,13 @@
     {
       "destructive": false,
       "idempotent": false,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "add_channel"
+      },
       "mutating": true,
       "name": "channel.add",
       "params": {
@@ -9661,6 +9668,13 @@
     {
       "destructive": false,
       "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "add_channel_destination"
+      },
       "mutating": true,
       "name": "channel.destination.add",
       "params": {
@@ -9680,6 +9694,13 @@
     {
       "destructive": true,
       "idempotent": true,
+      "mcp": {
+        "destructiveHint": true,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "remove_channel_destination"
+      },
       "mutating": true,
       "name": "channel.destination.remove",
       "params": {
@@ -9699,6 +9720,13 @@
     {
       "destructive": false,
       "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "set_channel_destination"
+      },
       "mutating": true,
       "name": "channel.destination.set",
       "params": {
@@ -9718,6 +9746,13 @@
     {
       "destructive": false,
       "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": true,
+        "tool": "get_channel"
+      },
       "mutating": false,
       "name": "channel.get",
       "params": {
@@ -9822,6 +9857,13 @@
     {
       "destructive": true,
       "idempotent": true,
+      "mcp": {
+        "destructiveHint": true,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "remove_channel"
+      },
       "mutating": true,
       "name": "channel.remove",
       "params": {
@@ -9841,6 +9883,13 @@
     {
       "destructive": false,
       "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "set_channel"
+      },
       "mutating": true,
       "name": "channel.set",
       "params": {
@@ -10128,7 +10177,7 @@
       "mcp": {
         "destructiveHint": false,
         "idempotentHint": true,
-        "profile": "standard",
+        "profile": "search",
         "readOnlyHint": true,
         "tool": "status"
       },
@@ -10279,6 +10328,13 @@
     {
       "destructive": false,
       "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "calibrate_governor"
+      },
       "mutating": true,
       "name": "governor.calibrate",
       "params": {
@@ -10298,6 +10354,13 @@
     {
       "destructive": false,
       "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": true,
+        "tool": "governor_status"
+      },
       "mutating": false,
       "name": "governor.status",
       "params": {
@@ -10586,7 +10649,7 @@
       "mcp": {
         "destructiveHint": false,
         "idempotentHint": true,
-        "profile": "standard",
+        "profile": "search",
         "readOnlyHint": false,
         "tool": "add_output"
       },
@@ -10631,7 +10694,7 @@
       "mcp": {
         "destructiveHint": false,
         "idempotentHint": true,
-        "profile": "standard",
+        "profile": "search",
         "readOnlyHint": true,
         "tool": "list_outputs"
       },
@@ -11375,6 +11438,13 @@
     {
       "destructive": false,
       "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": true,
+        "tool": "export_project"
+      },
       "mutating": false,
       "name": "project.export",
       "params": {
@@ -11394,6 +11464,13 @@
     {
       "destructive": true,
       "idempotent": false,
+      "mcp": {
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "import_project"
+      },
       "mutating": true,
       "name": "project.import",
       "params": {
@@ -11413,6 +11490,13 @@
     {
       "destructive": false,
       "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": true,
+        "tool": "plan_rendition"
+      },
       "mutating": false,
       "name": "rendition.plan",
       "params": {
@@ -12521,6 +12605,13 @@
     {
       "destructive": false,
       "idempotent": false,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "add_show"
+      },
       "mutating": true,
       "name": "show.add",
       "params": {
@@ -12543,7 +12634,7 @@
       "mcp": {
         "destructiveHint": false,
         "idempotentHint": true,
-        "profile": "search",
+        "profile": "standard",
         "readOnlyHint": true,
         "tool": "list_shows"
       },
@@ -12568,6 +12659,13 @@
     {
       "destructive": true,
       "idempotent": true,
+      "mcp": {
+        "destructiveHint": true,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "remove_show"
+      },
       "mutating": true,
       "name": "show.remove",
       "params": {
@@ -12587,6 +12685,13 @@
     {
       "destructive": false,
       "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "rename_show"
+      },
       "mutating": true,
       "name": "show.rename",
       "params": {
@@ -12606,6 +12711,13 @@
     {
       "destructive": false,
       "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "start_show"
+      },
       "mutating": true,
       "name": "show.start",
       "params": {
@@ -12625,6 +12737,13 @@
     {
       "destructive": false,
       "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "stop_show"
+      },
       "mutating": true,
       "name": "show.stop",
       "params": {
@@ -12647,7 +12766,7 @@
       "mcp": {
         "destructiveHint": false,
         "idempotentHint": true,
-        "profile": "standard",
+        "profile": "search",
         "readOnlyHint": true,
         "tool": "snapshot"
       },
@@ -12835,7 +12954,7 @@
       "mcp": {
         "destructiveHint": true,
         "idempotentHint": true,
-        "profile": "standard",
+        "profile": "search",
         "readOnlyHint": false,
         "tool": "remove_source"
       },

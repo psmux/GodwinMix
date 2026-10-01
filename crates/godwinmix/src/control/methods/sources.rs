@@ -84,7 +84,7 @@ pub fn register(reg: &mut Registry<Call>) {
         .destructive()
         .tool(
             "remove_source",
-            Tier::Standard,
+            Tier::Search,
             "Remove a source by id and stop its pipeline. If it is on programme the mixer \
              cuts to the slate first, so this can take the picture off air: check \
              `agent_state` before using it on the live source. Pass dry_run true to see \

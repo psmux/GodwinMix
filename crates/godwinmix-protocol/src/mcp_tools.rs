@@ -85,12 +85,37 @@ pub fn all_tools<C>(registry: &Registry<C>) -> Vec<Value> {
     built
         .into_iter()
         .map(|(_, mut tool)| {
+            let one_show = addresses_one_show(tool["method"].as_str().unwrap_or_default());
             if let Some(schema) = tool.get_mut("inputSchema") {
                 *schema = inline_refs(schema, &defs, 0);
+                if one_show {
+                    add_show(schema);
+                }
             }
             tool
         })
         .collect()
+}
+
+/// True for a method one show answers, as against the station in front of
+/// the shows. Those tools take a `show` argument naming which show, and the
+/// MCP server sends it as `?show=<id>`; the station's own methods (`show.*`,
+/// `channel.*`, the governor) are about every show and take none.
+pub fn addresses_one_show(method: &str) -> bool {
+    !(method.starts_with("show.")
+        || method.starts_with("channel.")
+        || method.starts_with("governor."))
+}
+
+/// The `show` argument, added to an inlined input schema.
+fn add_show(schema: &mut Value) {
+    let Some(map) = schema.as_object_mut() else { return };
+    let props = map.entry("properties").or_insert_with(|| json!({}));
+    if let Some(props) = props.as_object_mut() {
+        props.entry("show").or_insert_with(|| {
+            json!({ "type": "string", "description": "Which show, from list_shows. Default: the first." })
+        });
+    }
 }
 
 /// The hot list for a profile: what `tools/list` answers with.
@@ -113,9 +138,20 @@ pub fn tools<C>(registry: &Registry<C>, profile: Profile) -> Vec<Value> {
         .into_iter()
         .filter(|t| hot_names.contains(&t["name"].as_str().unwrap_or_default()))
         .map(strip_method)
+        .map(|tool| if profile == Profile::Minimal { without_show(tool) } else { tool })
         .collect();
     hot.push(search_tool(hot.len() + 1, total));
     hot
+}
+
+/// The minimal profile is for a small model working one show, and its
+/// budget has no room for an argument that picks another. The tool still
+/// takes it if sent; it is only not advertised.
+fn without_show(mut tool: Value) -> Value {
+    if let Some(props) = tool["inputSchema"]["properties"].as_object_mut() {
+        props.remove("show");
+    }
+    tool
 }
 
 /// `method` is how the server routes a call; an agent has no use for it and
