@@ -310,6 +310,22 @@ enum Command {
         cmd: Option<cli::node::Node>,
     },
 
+    /// Many shows at once: add a list of feeds, watch them, change one.
+    ///
+    /// `gmx shows add --from feeds.csv --dry-run` says what a headend's
+    /// channel list would cost before anything starts. A thin client of the
+    /// `show.*` methods, like every other `gmx` subcommand.
+    Shows {
+        /// Address of the station's control server [default: http://127.0.0.1:8080].
+        #[arg(long, env = "GODWINMIX_URL")]
+        url: Option<String>,
+        /// Bearer token, when the station has one configured.
+        #[arg(long, env = "GODWINMIX_TOKEN", hide_env_values = true)]
+        token: Option<String>,
+        #[command(subcommand)]
+        cmd: cli::shows::Shows,
+    },
+
     /// Start a whole UI against the running mixer. See `src/cli/ui.rs`.
     ///
     /// `gmx ui tui` runs the terminal UI; `gmx ui list` shows every surface
@@ -600,6 +616,11 @@ pub async fn run() -> Result<()> {
             let url = url.or_else(|| config::env_var("URL")).unwrap_or_else(|| DEFAULT_URL.into());
             let token = token.or_else(|| config::env_var("TOKEN"));
             return cli::plugin::run(&url, token.as_deref(), cmd).await;
+        }
+        Some(Command::Shows { url, token, cmd }) => {
+            let url = url.or_else(|| config::env_var("URL")).unwrap_or_else(|| DEFAULT_URL.into());
+            let token = token.or_else(|| config::env_var("TOKEN"));
+            return cli::shows::run(&url, token.as_deref(), cmd).await;
         }
         Some(Command::Chaos { url, token, cmd }) => {
             let url = url.or_else(|| config::env_var("URL")).unwrap_or_else(|| DEFAULT_URL.into());
