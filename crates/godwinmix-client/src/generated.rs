@@ -1053,6 +1053,9 @@ pub struct Destination {
     pub plan: Option<DestinationPlan>,
     /// A platform id from the table: youtube, facebook, twitch, custom, srt.
     pub platform: String,
+    /// Where a player opens it, for an output this machine serves as HLS.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub playback: Option<Playback>,
     /// Connections lost and made again since it was switched on.
     pub reconnects: u32,
     /// Why it is not sending what it asked for, and what would fit.
@@ -1652,6 +1655,30 @@ pub struct HistoryStep {
     pub redo: i64,
     /// How many steps are still on each stack, so a UI greys out a button.
     pub undo: i64,
+}
+
+/// The `params` of a show's `hls://` output: the same names, defaults and
+/// limits as an `hls/output`'s (`docs/reference/hls-output.md`).
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct HlsOutputParams {
+    /// true gives parts of 333 ms when `part_ms` names no other length.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub low_latency: Option<bool>,
+    /// LL-HLS part length; 0 is plain HLS. Default 0.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub part_ms: Option<u32>,
+    /// Target segment length, 500 to 10000. Segments are cut at the first
+    /// keyframe at or after it. Default 2000.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub segment_ms: Option<u32>,
+    /// The key a viewer's link carries, at least 16 characters. Left out:
+    /// derived from the show and the output on this machine.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub viewer_key: Option<String>,
+    /// Seconds of the past each rung keeps and lists. Default 30.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub window: Option<u32>,
 }
 
 /// A UUID in the hyphenated form. Minted ids are version 7 (time ordered); ids derived from a layout are version 8.
@@ -2656,6 +2683,19 @@ pub struct PlanView {
     pub totals: PlanTotals,
 }
 
+/// The links of an output served as HLS from the control port, each with
+/// the output's viewer key on it.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Playback {
+    /// The same segments as a DASH MPD.
+    pub dash_url_path: String,
+    /// `/hls/viewers/master.m3u8?show=bbc-one&key=...`.
+    pub master_url_path: String,
+    /// Players that fetched something in the last two windows.
+    pub viewers: u32,
+}
+
 /// The whole of one plugin, for an agent about to use it.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -3552,6 +3592,9 @@ pub struct ShowOutputAddRequest {
     /// The new output's own id, a slug. Made from the label when left out.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub output: Option<String>,
+    /// For an `hls://` output, as in `show.add`'s outputs.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub params: Option<HlsOutputParams>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub platform: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -3584,6 +3627,10 @@ pub struct ShowOutputSetRequest {
     pub label: Option<String>,
     /// The output's id.
     pub output: String,
+    /// An `hls://` output's params, all of them: a name left out goes back
+    /// to its default.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub params: Option<HlsOutputParams>,
     /// Left out keeps what it has; `null` or `{"preset": "copy"}` goes back
     /// to a copy.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -3608,6 +3655,10 @@ pub struct ShowOutputSpec {
     pub key: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,
+    /// For an `hls://` output: segment and part lengths, the window and the
+    /// viewer key, as an `hls/output` takes them. Refused on any other.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub params: Option<HlsOutputParams>,
     /// youtube, facebook, twitch, custom or srt. Left out: custom, which
     /// takes a whole address in `uri`.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -3618,8 +3669,9 @@ pub struct ShowOutputSpec {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rendition: Option<RenditionChoice>,
     /// The whole address: `srt://10.0.0.9:9000`, `rtmp://host/app/key`,
-    /// `udp://239.2.2.2:5000`. For a platform, its ingest server when it is
-    /// not the platform's own.
+    /// `udp://239.2.2.2:5000`, or `hls://viewers` for HLS served from the
+    /// station's own port. For a platform, its ingest server when it is not
+    /// the platform's own.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub uri: Option<String>,
 }

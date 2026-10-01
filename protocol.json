@@ -2323,6 +2323,17 @@
           "description": "A platform id from the table: youtube, facebook, twitch, custom, srt.",
           "type": "string"
         },
+        "playback": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Playback"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Where a player opens it, for an output this machine serves as HLS."
+        },
         "reconnects": {
           "description": "Connections lost and made again since it was switched on.",
           "format": "uint32",
@@ -3718,6 +3729,54 @@
         "undo",
         "redo"
       ],
+      "type": "object"
+    },
+    "HlsOutputParams": {
+      "additionalProperties": false,
+      "description": "The `params` of a show's `hls://` output: the same names, defaults and\nlimits as an `hls/output`'s (`docs/reference/hls-output.md`).",
+      "properties": {
+        "low_latency": {
+          "description": "true gives parts of 333 ms when `part_ms` names no other length.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "part_ms": {
+          "description": "LL-HLS part length; 0 is plain HLS. Default 0.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "segment_ms": {
+          "description": "Target segment length, 500 to 10000. Segments are cut at the first\nkeyframe at or after it. Default 2000.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "viewer_key": {
+          "description": "The key a viewer's link carries, at least 16 characters. Left out:\nderived from the show and the output on this machine.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "window": {
+          "description": "Seconds of the past each rung keeps and lists. Default 30.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
       "type": "object"
     },
     "Id": {
@@ -5937,6 +5996,31 @@
       ],
       "type": "object"
     },
+    "Playback": {
+      "description": "The links of an output served as HLS from the control port, each with\nthe output's viewer key on it.",
+      "properties": {
+        "dash_url_path": {
+          "description": "The same segments as a DASH MPD.",
+          "type": "string"
+        },
+        "master_url_path": {
+          "description": "`/hls/viewers/master.m3u8?show=bbc-one&key=...`.",
+          "type": "string"
+        },
+        "viewers": {
+          "description": "Players that fetched something in the last two windows.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "master_url_path",
+        "dash_url_path",
+        "viewers"
+      ],
+      "type": "object"
+    },
     "PluginDescription": {
       "description": "The whole of one plugin, for an agent about to use it.",
       "properties": {
@@ -7940,6 +8024,17 @@
             "null"
           ]
         },
+        "params": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/HlsOutputParams"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "For an `hls://` output, as in `show.add`'s outputs."
+        },
         "platform": {
           "type": [
             "string",
@@ -8015,6 +8110,17 @@
           "description": "The output's id.",
           "type": "string"
         },
+        "params": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/HlsOutputParams"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "An `hls://` output's params, all of them: a name left out goes back\nto its default."
+        },
         "rendition": {
           "anyOf": [
             {
@@ -8069,6 +8175,17 @@
             "null"
           ]
         },
+        "params": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/HlsOutputParams"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "For an `hls://` output: segment and part lengths, the window and the\nviewer key, as an `hls/output` takes them. Refused on any other."
+        },
         "platform": {
           "description": "youtube, facebook, twitch, custom or srt. Left out: custom, which\ntakes a whole address in `uri`.",
           "type": [
@@ -8088,7 +8205,7 @@
           "description": "Left out: a copy of the input's own bytes, repackaged. Otherwise a\nrendition request or `{\"preset\": \"youtube-720p30\"}`, planned and\nadmitted by the governor."
         },
         "uri": {
-          "description": "The whole address: `srt://10.0.0.9:9000`, `rtmp://host/app/key`,\n`udp://239.2.2.2:5000`. For a platform, its ingest server when it is\nnot the platform's own.",
+          "description": "The whole address: `srt://10.0.0.9:9000`, `rtmp://host/app/key`,\n`udp://239.2.2.2:5000`, or `hls://viewers` for HLS served from the\nstation's own port. For a platform, its ingest server when it is not\nthe platform's own.",
           "type": [
             "string",
             "null"
