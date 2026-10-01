@@ -196,9 +196,9 @@ Keys accepted on every method, handled before a method runs.
 | `source.restore` | `POST /api/v1/sources/{id}/restore` | operate |  | 1 | Put back a source that source.remove took away, as it was: same id, address, settings, fader and mute. The mixer remembers the last sixteen it removed, until it restarts. |
 | `source.seek` | `POST /api/v1/sources/{id}/seek` | operate |  | 1 | Move a seekable source to a position. Answers with where it actually landed. |
 | `source.set` | `POST /api/v1/sources/{id}/set` | operate |  | 1 | Change a running source: its name and colour, its params, or where it runs. The name and colour live on the scene document. Moving a source between the core, a sidecar and a node is `place`; the programme keeps its frame rate across the move and the compositor covers the swap. |
-| `task.cancel` | `POST /api/v1/task/cancel` | operate |  | 1 | Ask a piece of long running work to stop. Cooperative: the answer says the request landed, not that the work has stopped yet. |
-| `task.get` | `GET /api/v1/task` | read |  | 1 | How a piece of long running work is getting on, and its answer once it has one. |
-| `task.list` | `GET /api/v1/task/list` | read |  | 1 | Every background job this core knows about, newest first. |
+| `task.cancel` | `POST /api/v1/tasks/{id}/cancel` | operate |  | 1 | Ask a piece of long running work to stop. Cooperative: the answer says the request landed, not that the work has stopped yet. |
+| `task.get` | `GET /api/v1/tasks/{id}` | read |  | 1 | How a piece of long running work is getting on, and its answer once it has one. |
+| `task.list` | `GET /api/v1/tasks` | read |  | 1 | Every background job this core knows about, newest first. |
 | `tool.call` | `POST /api/v1/tool/call` | operate |  | 1 | Call one of a plugin's tools, in MCP's shape. The name is `<plugin>/<tool>`, or the bare tool name when only one plugin has it. |
 
 ### Params and results
