@@ -46,3 +46,22 @@ fn a_list_that_will_not_parse_is_refused_and_not_written_over() {
     assert_eq!(std::fs::read_to_string(dir.join("shows.json")).unwrap(), "{ not json");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn a_list_from_before_wave_four_composites_and_a_direct_show_reads_back_as_it_was() {
+    let dir = scratch("wave4");
+    let old = r#"{"shows": [{"id": "main", "name": "Main"}, {"id": "b", "name": "B", "config": "shows/b/godwinmix.toml"}]}"#;
+    std::fs::write(dir.join("shows.json"), old).unwrap();
+    let config = dir.join("godwinmix.toml");
+    let mut reg = Registry::open(&config).unwrap();
+    assert!(reg.records.iter().all(|r| r.compositing && r.input.is_none() && r.outputs.is_empty()));
+    let mut feed = Record::new("feed", "Feed", None);
+    feed.compositing = false;
+    feed.input = Some(godwinmix_protocol::shows::InputSpec { uri: "udp://@239.1.1.1:5000".into(), program: Some(7), params: None, backup: None });
+    reg.records.push(feed.clone());
+    reg.save().unwrap();
+    let text = std::fs::read_to_string(dir.join("shows.json")).unwrap();
+    assert_eq!(text.matches("compositing").count(), 1, "only the show that differs says so: {text}");
+    assert_eq!(Registry::open(&config).unwrap().get("feed"), Some(&feed));
+    let _ = std::fs::remove_dir_all(&dir);
+}

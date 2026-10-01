@@ -24,6 +24,10 @@ pub mod outputs;
 mod plan;
 mod seen;
 mod table;
+#[cfg(test)]
+mod tests;
+#[cfg(test)]
+mod tests_intake;
 mod view;
 
 pub use edit::{add as add_output, set as set_output};
