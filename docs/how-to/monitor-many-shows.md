@@ -136,9 +136,14 @@ with the wall closed nothing is made for pictures. A direct show still
 decodes keyframes and a little sound for its black, freeze and silence
 alarms when they are switched on, which they are by default.
 
-A silence alarm on the show called `main` on a fresh station is real: that
-is the station's own show, which composites, and with no source in it its
-programme is digital silence. Its detail reads `Programme peak -350 dBFS`.
+The show called `main` on a fresh station is the station's own show. It
+composites and has no source, and it raises no alarm for that. A show that
+composites judges black, freeze and silence on its programme only with its
+alarms on (`enabled` in the show's alarm settings, or `[vitals] alarms =
+true` in its config), and silence only while a source with sound is heard on
+programme. The slate has nothing to fall quiet. Take a source with sound to
+`main` and switch its alarms on, and a muted or quiet source raises
+`silence` after `silence_secs`.
 
 ## From a script
 

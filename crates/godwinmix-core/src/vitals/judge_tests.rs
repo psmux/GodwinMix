@@ -48,6 +48,20 @@ fn quiet_programme_sound_is_silence() {
 }
 
 #[test]
+fn no_sound_on_programme_is_not_silence_and_judging_starts_again_from_then() {
+    let mut j = Judge::new(Thresholds::default());
+    for t in 0..=100 {
+        j.sound(-80.0, t * 100);
+    }
+    j.no_sound();
+    assert!(j.health(10_000).alarms.is_empty(), "the slate has nothing to fall quiet");
+    for t in 101..=150 {
+        j.sound(-80.0, t * 100);
+    }
+    assert!(j.health(15_000).alarms.is_empty(), "five seconds quiet since a source came on is not ten");
+}
+
+#[test]
 fn failed_and_shed_outputs_are_named_and_keep_their_start() {
     let mut j = Judge::new(Thresholds::default());
     j.outputs(&[output("yt", OutputState::Failed, None), output("fb", OutputState::Live, Some("the CPU is full"))], 1_000);

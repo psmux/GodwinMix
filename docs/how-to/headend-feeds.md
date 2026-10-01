@@ -102,6 +102,31 @@ the same way. The outputs see one unbroken stream. While the backup is on,
 the input's `error` starts with `on the backup input:` and says what is
 wrong with the main.
 
+## When the sender restarts
+
+An encoder that is stopped and started again comes back on the same address,
+often laid out differently: new PIDs, a new program number, a sound stream
+added to its PMT, or the same layout with its clock started somewhere else.
+The input follows it without reconnecting. The demuxer offers the new
+streams before it lets go of the old ones, so they wait beside them; when the
+old video and sound go, the first new video and the first new sound take
+their places. The input's time carries on from where it was, so the outputs
+see a gap about as long as the sender was away and the show's health goes
+back to `ok` once frames arrive again. A rendition keeps the frame rate it
+was planned at: the second in which a sender restarts holds a frame or two,
+and a reading like that is not taken for a new rate.
+
+A second video stream in the same live program is still left out, and
+`error` still names it.
+
+This was tested with gst-launch and ffmpeg senders stopped and started again
+on one UDP port with new PIDs, a new program, an added sound stream and the
+same layout, and with an SRT caller that called again
+(`plugins/ingest/src/direct/input/tests/restart.rs`). Through a station, a
+UDP copy and a transcoded UDP output were sending again about 600 ms after
+each new sender started (`crates/godwinmix/tests/station/direct_restart.rs`).
+An HLS output was not part of that test.
+
 ## Read the numbers
 
 Each input reports about once a second:
@@ -130,7 +155,7 @@ AC-3 or layer II as they are depends on where it sends: an RTMP platform
 takes AAC and nothing else. One video and one audio stream are
 taken from each feed: a second language, teletext and subtitles are left
 out, and so is MPEG-2 video, which nothing downstream of a direct show
-carries. `error` names what was left out once the feed is live.
+carries. `error` names what is left out while the feed is live.
 
 An HLS output carries AAC sound only. For a feed with layer II or AC-3
 sound, give the HLS output the rendition `{"audio": {"codec": "aac"}}`: the

@@ -31,6 +31,9 @@ pub struct Seen {
     /// A show that composites: when its link closed or its process failed,
     /// unix milliseconds, until it says hello again or is started afresh.
     pub lost_ms: Option<u64>,
+    /// The frame rate the stats read last time, which the next reading has
+    /// to agree with before either is taken.
+    pub last_fps: Option<f64>,
 }
 
 impl Seen {
@@ -92,10 +95,15 @@ impl Seen {
     /// Take the rate the stats measure once the input has run a few
     /// seconds. `direct.input` carries the hub's first reading, of part of
     /// a second (none, or 8 for a 30 fps feed), and is not sent again for a
-    /// rate. A fifth off or more is taken; a wobble is not. True when taken.
+    /// rate. A fifth off or more is taken; a wobble is not. Two readings in
+    /// a row must agree first: the second in which a sender restarts holds
+    /// a frame or two a second apart and reads as 1 fps, and a rendition
+    /// planned on that would carry 1 fps from then on. True when taken.
     pub fn settle_fps(&mut self) -> bool {
         let measured = self.input_stats.as_ref().map(|s| s.fps).filter(|f| *f > 0.0);
-        let Some((input, fps)) = self.input.as_mut().zip(measured) else { return false };
+        let before = std::mem::replace(&mut self.last_fps, measured);
+        let agreed = measured.zip(before).is_some_and(|(now, then)| (now - then).abs() < now / 5.0);
+        let Some((input, fps)) = self.input.as_mut().zip(measured.filter(|_| agreed)) else { return false };
         let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0);
         if input["state"] != "live" || now.saturating_sub(input["since_ms"].as_u64().unwrap_or(now)) < 3000 {
             return false;
@@ -140,11 +148,24 @@ mod tests {
         let mut seen = Seen { input, ..Seen::default() };
         assert!(!seen.settle_fps(), "nothing measured yet");
         seen.take_stats(&json!({"id": "a", "input": {"fps": 29.97}}));
+        assert!(!seen.settle_fps(), "one reading is not a rate yet");
+        seen.take_stats(&json!({"id": "a", "input": {"fps": 29.99}}));
         assert!(seen.settle_fps());
-        assert_eq!(seen.input.as_ref().unwrap()["video"]["fps"], 29.97);
+        assert_eq!(seen.input.as_ref().unwrap()["video"]["fps"], 29.99);
         seen.take_stats(&json!({"id": "a", "input": {"fps": 30.02}}));
         assert!(!seen.settle_fps(), "a wobble is not a new rate");
         seen.input = Some(json!({"state": "live", "since_ms": u64::MAX, "video": {"fps": 0}}));
         assert!(!seen.settle_fps(), "an input live for less than a few seconds is left alone");
+    }
+
+    #[test]
+    fn the_second_a_sender_restarts_in_is_not_taken_for_its_rate() {
+        let input = Some(json!({"state": "live", "since_ms": 1000, "video": {"codec": "h264", "fps": 30.0}}));
+        let mut seen = Seen { input, ..Seen::default() };
+        for fps in [30.0, 0.87, 30.0, 29.9] {
+            seen.take_stats(&json!({"id": "a", "input": {"fps": fps}}));
+            assert!(!seen.settle_fps(), "{fps}");
+        }
+        assert_eq!(seen.input.as_ref().unwrap()["video"]["fps"], 30.0);
     }
 }

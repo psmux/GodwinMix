@@ -5,20 +5,21 @@
 //! ```text
 //!   transport ──► parsebin ─┬─► h264parse | h265parse ──► appsink (video tags)
 //!                           ├─► aacparse | ac3parse | mpegaudioparse ──► appsink (audio tags)
-//!                           └─► fakesink (a second audio track, teletext, MPEG-2 video)
+//!                           └─► fakesink (teletext, MPEG-2 video)
 //! ```
 //!
-//! One video and one audio stream are taken, the first of each to appear.
-//! The rest go to a fakesink and are named once in `note`, because a tag
-//! stream carries one of each.
+//! One video and one audio stream are carried, the first of each to appear.
+//! A second one of a kind stands by until the first one's pad goes away,
+//! which is what a sender restarting with a new layout looks like
+//! (`streams.rs`). What is left out is named in the input's error.
 
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use gstreamer as gst;
 use gstreamer::prelude::*;
 
 use super::frames;
+use super::streams::{gate, take_out, Slot, Streams};
 use crate::tagger::{self, Zero};
 
 /// What every pad of one session shares.
@@ -29,9 +30,8 @@ pub struct Pads {
     pub sync: bool,
     /// The MPEG-TS program to take, set on any `tsdemux` parsebin makes.
     pub program: Option<u16>,
-    video: AtomicBool,
-    audio: AtomicBool,
-    /// Streams left out, said once.
+    streams: Streams,
+    /// What went wrong putting the demuxer in, said once.
     pub note: Mutex<Vec<String>>,
 }
 
@@ -42,10 +42,16 @@ impl Pads {
             zero: Arc::new(Zero::default()),
             sync,
             program,
-            video: AtomicBool::new(false),
-            audio: AtomicBool::new(false),
+            streams: Streams::default(),
             note: Mutex::new(Vec::new()),
         })
+    }
+
+    /// Everything left out right now, joined for a message.
+    pub fn notes(&self) -> String {
+        let mut all = self.note.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        all.extend(self.streams.notes());
+        all.join("; ")
     }
 }
 
@@ -61,6 +67,12 @@ pub fn parse_into(pipeline: &gst::Pipeline, pad: &gst::Pad, pads: &Arc<Pads>) ->
             None
         });
     }
+    let (weak, shared) = (pipeline.downgrade(), pads.clone());
+    parse.connect_pad_removed(move |_, pad| {
+        if let Some(pipeline) = weak.upgrade() {
+            take_out(&pipeline, shared.streams.removed(pad));
+        }
+    });
     let (weak, shared) = (pipeline.downgrade(), pads.clone());
     parse.connect_pad_added(move |_, pad| {
         if let Some(pipeline) = weak.upgrade() {
@@ -85,19 +97,15 @@ fn attach(pipeline: &gst::Pipeline, pad: &gst::Pad, pads: &Pads) -> Result<(), S
     let name = s.as_ref().map(|s| s.name().to_string()).unwrap_or_default();
     // MPEG-1 audio is layers I to III; anything else called audio/mpeg is AAC.
     let layered = s.as_ref().is_some_and(|s| s.get::<i32>("mpegversion").ok() == Some(1) || s.has_field("layer"));
-    let video = name.starts_with("video/");
-    let first = if video { &pads.video } else { &pads.audio };
+    let slot = if name.starts_with("video/") { Slot::Video } else { Slot::Audio };
     let (parser, sink) = match name.as_str() {
         "video/x-h264" => ("h264parse", tagger::video_sink(pads.to.clone(), pads.zero.clone())),
         "video/x-h265" => ("h265parse", tagger::hevc_sink(pads.to.clone(), pads.zero.clone())),
         "audio/mpeg" if !layered => ("aacparse", tagger::audio_sink(pads.to.clone(), pads.zero.clone())),
         "audio/x-ac3" | "audio/x-eac3" => ("ac3parse", frames::ac3_sink(pads.to.clone(), pads.zero.clone())),
         "audio/mpeg" => ("mpegaudioparse", frames::mpeg_sink(pads.to.clone(), pads.zero.clone())),
-        _ => return discard(pipeline, pad, format!("{name}, which a direct show does not carry")),
+        _ => return discard(pipeline, pad, pads, &name),
     };
-    if first.swap(true, Ordering::Relaxed) {
-        return discard(pipeline, pad, format!("a second {} stream ({name}); the first is taken", if video { "video" } else { "audio" }));
-    }
     sink.set_property("sync", pads.sync);
     // Never wait to preroll: srtsrc and urisourcebin are not live, and a
     // video sink waiting for its first keyframe would hold the demuxer, back
@@ -106,16 +114,17 @@ fn attach(pipeline: &gst::Pipeline, pad: &gst::Pad, pads: &Pads) -> Result<(), S
     // No queue of our own: parsebin already puts a multiqueue after a
     // demuxer, and two more threads per input is 400 for 200 shows.
     let parse = make(parser)?;
+    gate(pad, pads.streams.add(pad, slot, &name, vec![parse.clone(), sink.clone()]));
     link(pipeline, pad, &[&parse, &sink])
 }
 
-/// Send a stream nobody takes to a fakesink, and say why once.
-fn discard(pipeline: &gst::Pipeline, pad: &gst::Pad, why: String) -> Result<(), String> {
+/// Send a stream nobody carries to a fakesink; `Streams` says why.
+fn discard(pipeline: &gst::Pipeline, pad: &gst::Pad, pads: &Pads, what: &str) -> Result<(), String> {
     let sink = make("fakesink")?;
     sink.set_property("sync", false);
     sink.set_property("async", false);
-    link(pipeline, pad, &[&sink])?;
-    Err(why)
+    pads.streams.add(pad, Slot::None, what, vec![sink.clone()]);
+    link(pipeline, pad, &[&sink])
 }
 
 fn link(pipeline: &gst::Pipeline, pad: &gst::Pad, chain: &[&gst::Element]) -> Result<(), String> {
