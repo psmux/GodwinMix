@@ -3,8 +3,8 @@
 //! way the hub carries it. Nothing is decoded.
 //!
 //! ```text
-//!   transport ──► parsebin ─┬─► queue ──► h264parse | h265parse ──► appsink (video tags)
-//!                           ├─► queue ──► aacparse | ac3parse | mpegaudioparse ──► appsink (audio tags)
+//!   transport ──► parsebin ─┬─► h264parse | h265parse ──► appsink (video tags)
+//!                           ├─► aacparse | ac3parse | mpegaudioparse ──► appsink (audio tags)
 //!                           └─► fakesink (a second audio track, teletext, MPEG-2 video)
 //! ```
 //!
@@ -103,9 +103,10 @@ fn attach(pipeline: &gst::Pipeline, pad: &gst::Pad, pads: &Pads) -> Result<(), S
     // video sink waiting for its first keyframe would hold the demuxer, back
     // up the audio, and stall the transport until the sender gives up.
     sink.set_property("async", false);
-    let queue = make("queue")?;
+    // No queue of our own: parsebin already puts a multiqueue after a
+    // demuxer, and two more threads per input is 400 for 200 shows.
     let parse = make(parser)?;
-    link(pipeline, pad, &[&queue, &parse, &sink])
+    link(pipeline, pad, &[&parse, &sink])
 }
 
 /// Send a stream nobody takes to a fakesink, and say why once.

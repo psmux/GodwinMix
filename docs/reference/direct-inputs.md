@@ -124,13 +124,17 @@ core, the sender in another process.
 
 | Input | CPU |
 |---|---|
-| UDP | 0.9 to 1.1 % |
-| RTP | 1.0 to 1.4 % |
+| UDP | 0.7 to 1.1 % |
+| RTP | 0.7 to 1.4 % |
 | SRT listener | 1.5 to 3.0 % |
 | RIST | 1.7 to 2.1 % |
 | File, looped | 0.7 to 0.9 % |
-| RTMP pull | 1.3 % |
-| HLS pull | 0.8 % |
+| RTMP pull | 1.3 to 2.0 % |
+| HLS pull | 0.8 to 1.4 % |
+
+The ranges are three runs on a machine other work was loading. Each input
+also holds three to five threads while it runs: its own, the transport's,
+and the demuxer's queue for each stream.
 
 The test that measures it is `cpu_per_input_at_1080p_8_mbit` in
 `plugins/ingest/src/direct/input/tests/cpu.rs`, run by hand in release.
