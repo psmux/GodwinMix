@@ -17,7 +17,8 @@ fn saved(st: &Station) -> Result<(), RpcError> {
 }
 
 /// `show.set`: the name and the input first, then the switch, so a show
-/// can be given an input and turned to direct in one call.
+/// can be given an input and turned to direct in one call. A switch answers
+/// with a task handle rather than the show.
 pub async fn set(st: &Arc<Station>, req: ShowSetRequest) -> Result<Value, RpcError> {
     let (was, has_input) = {
         let reg = st.registry.lock();
@@ -37,12 +38,14 @@ pub async fn set(st: &Arc<Station>, req: ShowSetRequest) -> Result<Value, RpcErr
         return Err(RpcError::invalid_params(msg).with("field", "input").with("show", req.id.clone()));
     }
     if name.is_some() || req.input.is_some() || req.alarms.is_some() {
+        // Sealed before the list is locked: the secret store writes a file.
+        let input = direct::inputs::seal_some(&req.id, req.input.clone())?;
         if let Some(r) = st.registry.lock().get_mut(&req.id) {
             if let Some(n) = name {
                 r.name = n;
             }
-            if let Some(i) = &req.input {
-                r.input = Some(i.clone());
+            if input.is_some() {
+                r.input = input;
             }
             if let Some(a) = &req.alarms {
                 r.alarms = Some(r.alarms.clone().unwrap_or_default().merged(a));
@@ -52,15 +55,25 @@ pub async fn set(st: &Arc<Station>, req: ShowSetRequest) -> Result<Value, RpcErr
         if req.input.is_some() || req.alarms.is_some() {
             st.direct.hand_over();
         }
+        // A show that composites judges its own programme. One that is not
+        // running yet is handed its alarms when it says hello.
+        if req.alarms.is_some() && was && st.state_of(&req.id) == Some(ShowState::Running) {
+            direct::hand_alarms(st, &req.id).await;
+        }
     }
-    let switch = match req.compositing {
-        Some(true) if !was => Some(switch::on(st, &req.id).await?),
-        Some(false) if was => Some(switch::off(st, &req.id).await?),
-        _ => None,
-    };
+    // A switch takes up to half a minute, so it runs as a task and this
+    // answers with its handle; see `switch::task`.
+    match req.compositing {
+        Some(true) if !was => return switch::task::start(st, &req.id, true, Vec::new()),
+        Some(false) if was => {
+            let moving = switch::check_off(st, &req.id).await?;
+            return switch::task::start(st, &req.id, false, moving);
+        }
+        _ => {}
+    }
     st.announce(&req.id);
     let show = st.view(&req.id).ok_or_else(|| RpcError::internal(format!("show {} went while it was being changed", req.id)))?;
-    Ok(serde_json::to_value(ShowSetResult { show, switch }).unwrap_or_default())
+    Ok(serde_json::to_value(ShowSetResult { show, switch: None }).unwrap_or_default())
 }
 
 /// `show.output.add`, `.set` and `.remove`, on a show without compositing.

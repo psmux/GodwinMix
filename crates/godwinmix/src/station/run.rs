@@ -44,6 +44,7 @@ pub async fn run(opts: Options) -> Result<()> {
     let exe = std::env::current_exe().context("finding this program, to start the shows with")?;
     let launch = Launch { exe, common: opts.common.clone(), calibration: Some(runtime.clone()) };
     let st = Station::new(Registry::open(&opts.config)?, events.clone(), tokens, render.clone(), launch);
+    super::direct::inputs::seal_written(&st);
     let addr = link::listen(Arc::new(Linked(st.clone()))).await.context("opening the show link")?;
     let _ = st.link.set(addr);
 
@@ -98,7 +99,7 @@ async fn ended() {
 /// runs here; every other one runs in the shows, as it did before.
 fn load_plugins(cfg: &Config, tokens: &Arc<godwinmix_protocol::scope::Tokens>, runtime: &std::path::Path) {
     if let Some(dir) = cfg.control.plugins_dir.as_deref() {
-        plugin::loader::set_dir(PathBuf::from(dir));
+        plugin::loader::set_dir(godwinmix_host::home::expand(dir));
     }
     super::ingest::configure(cfg.plugins.settings.clone());
     for installed in plugin::loader::load_all(&cfg.plugins) {

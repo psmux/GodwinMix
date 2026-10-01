@@ -85,10 +85,11 @@ fn free_id(reg: &Registry, name: &str, taken: &[String]) -> String {
 /// down, hand the host the table. All or nothing: a failure takes back
 /// what was sealed.
 pub fn make_direct(st: &Station, p: Prepared) -> Result<String, RpcError> {
-    let records = outputs::seal(&p.id, &[], &p.outputs).inspect_err(|_| outputs::forget(&p.id))?;
+    let undo = direct::inputs::forget_show;
+    let records = outputs::seal(&p.id, &[], &p.outputs).inspect_err(|_| undo(&p.id))?;
     let mut record = Record::new(&p.id, &p.name, None);
     record.compositing = false;
-    record.input = p.input;
+    record.input = direct::inputs::seal_some(&p.id, p.input).inspect_err(|_| undo(&p.id))?;
     record.outputs = records;
     {
         let mut reg = st.registry.lock();
@@ -96,7 +97,7 @@ pub fn make_direct(st: &Station, p: Prepared) -> Result<String, RpcError> {
         if let Err(e) = reg.save() {
             reg.records.retain(|r| r.id != p.id);
             drop(reg);
-            outputs::forget(&p.id);
+            undo(&p.id);
             return Err(RpcError::internal(format!("saving the list of shows: {e:#}")));
         }
     }

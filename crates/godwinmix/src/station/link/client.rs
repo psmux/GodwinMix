@@ -80,6 +80,11 @@ impl Link {
     pub fn on_air(&self, on: bool) {
         self.send(Line::call(None, "show.on_air", json!({ "on": on })));
     }
+
+    /// The programme's health moved: its state or its set of alarm kinds.
+    pub fn health(&self, health: &godwinmix_protocol::health::Health) {
+        self.send(Line::call(None, "show.health", json!({ "health": health })));
+    }
 }
 
 fn read_answers(stream: TcpStream, pending: &Pending, shed: &Shed) {

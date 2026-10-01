@@ -775,7 +775,7 @@ pub async fn run() -> Result<()> {
     {
         let stage = core_observe::introspect::stage("plugins");
         if let Some(dir) = cfg.control.plugins_dir.as_deref() {
-            plugin::loader::set_dir(std::path::PathBuf::from(dir));
+            plugin::loader::set_dir(godwinmix_host::home::expand(dir));
         }
         for installed in plugin::loader::load_all(&cfg.plugins) {
             match &installed.problem {

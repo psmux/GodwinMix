@@ -16,6 +16,9 @@ impl Station {
             p.stop = None;
             p.addr.send_replace(None);
         }
+        if state == ShowState::Failed {
+            self.direct.lost(self, id);
+        }
         self.on_air.lock().remove(id);
         self.announce(id);
     }

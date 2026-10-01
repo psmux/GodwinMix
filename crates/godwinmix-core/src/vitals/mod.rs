@@ -74,10 +74,14 @@ async fn run(mixer: MixerHandle, tracker: Arc<Tracker>, shared: Arc<Shared>) {
                 judge.limits = cfg.thresholds.clone();
                 turn(&mixer, &tracker, &cfg, &mut judge).await;
                 let health = judge.health(now_ms());
-                if reported.as_ref().is_none_or(|r| health.changed_from(r)) {
+                let moved = reported.as_ref().is_none_or(|r| health.changed_from(r));
+                if moved {
                     mixer.emit(Event::Health { health: Box::new(health.clone()) });
                 }
                 shared.judged(health.clone());
+                if moved {
+                    shared.changed(&health);
+                }
                 reported = Some(health);
             }
         }

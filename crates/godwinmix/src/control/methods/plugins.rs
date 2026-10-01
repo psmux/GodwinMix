@@ -1119,14 +1119,14 @@ fn secret_fields_of(installed: &loader::Installed) -> Vec<String> {
 
 /// The secret store, opened once under the plugins directory's parent.
 ///
-/// `~/.godwinmix/secrets`, beside the plugins themselves. A process global
+/// `secrets` under `GODWINMIX_HOME` (`~/.godwinmix/secrets`). A process global
 /// because `settings_of` is called from a handler that has no place to keep
 /// one, and because there is exactly one of these per machine.
 pub(crate) fn secrets() -> &'static godwinmix_core::secrets::Secrets {
     static STORE: std::sync::OnceLock<godwinmix_core::secrets::Secrets> =
         std::sync::OnceLock::new();
     STORE.get_or_init(|| {
-        let dir = godwinmix_host::marketplace::home_dir().join("secrets");
+        let dir = godwinmix_host::home::secrets_dir();
         godwinmix_core::secrets::Secrets::open(&dir).unwrap_or_else(|e| {
             // A store that will not open is a machine problem, not a reason to
             // refuse to start. Secrets are then not stored and the settings

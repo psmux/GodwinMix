@@ -77,7 +77,7 @@ with a `channel:<id>` scope.
 | `restarts` | how often the station started it again after it died |
 | `error` | why it is not running, when a person did not ask for that |
 | `compositing` | `true` for a show with scenes and a programme in a process of its own; `false` for a show without compositing (below) |
-| `input` | what the show takes in, `{uri, program?, params?, backup?}`. Absent for a show that has none |
+| `input` | what the show takes in, `{uri, program?, params?, backup?}`. Absent for a show that has none. An SRT passphrase reads `__secret__` here (see [Input passphrases](#input-passphrases)) |
 | `outputs` | a show without compositing's outputs, each as a channel destination is shown: `id`, `platform`, `label`, `uri_host`, `has_key`, `enabled`, `state`, `kbps`, `reconnects`, `error`, and `rendition`, `plan` or `refused` when it converts. Absent for a show that composites |
 | `health` | `{state, alarms}`, see [Health](#health) |
 
@@ -133,8 +133,27 @@ direct host's table, so its input is closed and its outputs stop.
 
 Admin. Names only what moves. The name and the input change first, then
 compositing, so one call can give a show an input and turn compositing off.
-The answer is the show with a `switch` beside its fields when compositing
-moved:
+A call that does not switch compositing answers with the show.
+
+A switch can take half a minute: the outputs have that long to come live
+again, and with no input flowing they never do. No call may take more than
+five seconds, so a switch answers at once with a task handle, the way
+`plugin.add` does, and carries on:
+
+```text
+{"task_id": "show-set-1", "poll_interval_ms": 1000, "outcome": "indeterminate",
+ "state": "running", "switching": "on", "show": {"id": "bbc-one", ...}, "next": "..."}
+```
+
+`task.get {task_id}` (or `GET /api/v1/tasks/show-set-1`) is answered by the
+station, not a show, and once `state` is `completed` its `result` is what
+the call would have answered: the show, with a `switch` beside its fields.
+Every client hears `event/show.changed` as the show moves, and again when
+the switch lands. A second switch of the same show while one runs is refused
+with `not_in_state` and the running task's `task_id` in `data`. A switch
+cannot be cancelled halfway: `task.cancel` on one is refused, because it
+would leave the outputs nowhere. The station's tasks are kept for an hour
+after they finish and are not in `task.list`, which a show answers.
 
 | `switch` field | Meaning |
 |---|---|
@@ -150,8 +169,9 @@ from the hub, so the input is opened once) and adds the outputs to it with
 `output.add`. Outputs move break then make, because a platform takes one
 publisher per key.
 
-`compositing: false` on a show that composites, refused with `not_in_state`
-and the reason in `data` when:
+`compositing: false` on a show that composites is checked before the task
+starts, so a refusal comes back on the call itself, with `not_in_state` and
+the reason in `data`, when:
 
 | Refused when | `data` |
 |---|---|
@@ -161,6 +181,7 @@ and the reason in `data` when:
 | it has sources besides `input` | `sources` |
 | a scene is on its programme | `scene` |
 | it has an output that was added inside it, whose address is write only | `outputs` |
+| it did not say what it has on air within four seconds | `show`, `retry_after_ms` |
 
 Otherwise its outputs are removed from the show, handed back to the direct
 host and its process is stopped.
@@ -262,6 +283,15 @@ one that composites. A duration of 0 switches that check off. The direct host
 gets them in its table as thresholds; a field never set keeps the host's
 default (black 4 s, freeze 10 s, silence 10 s under -60 dBFS).
 
+A show that composites gets them too, for the checks it makes of its own
+programme: the station calls the show's `vitals.set` when its process links
+and again when `show.set` changes them while it runs, before it answers. The
+milliseconds become seconds, `silence_dbfs` becomes `silence_db` and
+`enabled` becomes `alarms`, which there means keeping a mosaic up for the
+black and freeze checks while nobody is looking (see
+[show health](show-health.md#thresholds)). `vitals.get` with `?show=<id>`
+reads back what the show holds.
+
 ### `GET /api/v1/shows/{id}/thumbnail.jpg?width=160`
 
 Read, with the token as a header or `?token=`. The show's picture as a JPEG,
@@ -299,6 +329,26 @@ Every other method with `?show=<id>` of a show without compositing (a scene,
 a source, the programme) is refused at once with `not_in_state` and
 `data.compositing: false`.
 
+### Input passphrases
+
+An SRT passphrase in a show's input, in the address
+(`srt://feed:9000?passphrase=...`) or in `params.passphrase`, of the input or
+of its backup, is sealed in the secret store under `show.<id>.input` when the
+input is given to `show.add`, `show.add_many` or `show.set`. The list of
+shows on disk, `show.list` and `event/show.changed` carry the secret store's
+sentinel in its place:
+
+```json
+{"uri": "srt://feed:9000?mode=caller&passphrase=__secret__&latency=200"}
+```
+
+Sending the input back with the sentinel still in it keeps the sealed
+passphrase, so a form that edits the input without knowing the passphrase
+cannot lose it. Sending one without the field forgets it. Only the table the
+direct host opens the input from has the passphrase itself. A list written
+before passphrases were sealed is sealed when the station starts, and
+removing a show forgets its passphrases with its output keys.
+
 ## Health
 
 ```json
@@ -308,15 +358,25 @@ a source, the programme) is refused at once with `not_in_state` and
 | `state` | When |
 |---|---|
 | `ok` | running and nothing wrong |
-| `warning` | an alarm that does not stop viewers getting the show: `silence`, `cc-errors`, `loss`, `shed` |
-| `alarm` | one that does: `no-input`, `stall`, `black`, `freeze`, `output-failed`, `governor-refused`; or a show process that failed |
-| `off` | stopped, or a show that composites and is not running |
+| `warning` | only `cc-errors` or `loss`: the feed is damaged but still arriving |
+| `alarm` | any other alarm, including a show process that died, lost its link or failed |
+| `off` | stopped, or a show that composites and has not linked to the station since it was started |
 
 The direct host says `stall`, `black`, `freeze`, `silence`, `cc-errors` and
 `loss`. The station adds `no-input` while the input has not arrived or the
 ingest plugin is not running, `governor-refused` for an output whose
 rendition the governor would not admit, and `output-failed` for an output the
 host reports failed. `since_ms` is unix milliseconds.
+
+A show that composites judges its own programme (black, freeze, silence, a
+failed or shed output) and sends its health to the station over the link
+whenever its state or set of alarm kinds changes. The station adds the
+alarms of the show's input, when it has one, and serves the result the same
+way as a direct show's. When the show's process dies, is killed or loses its
+link, what it last said is dropped: it reads `alarm` with one `stall` alarm
+from the moment the link closed until a new process has linked and sent its
+first health, and the same once the station has given up on it (`failed`).
+The thresholds and what each check costs are in [show health](show-health.md).
 
 ## Events
 

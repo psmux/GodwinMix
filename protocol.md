@@ -179,7 +179,7 @@ Keys accepted on every method, handled before a method runs.
 | `show.remove` | `DELETE /api/v1/shows/{id}` | admin | yes | 1 | Stop a show and remove it with its folder. Refused for the last show and for main, the show the station was started with. |
 | `show.remove_many` | `POST /api/v1/shows/remove_many` | admin | yes | 1 | Stop and remove many shows. Each id that cannot go (main, or one not there) is refused with why, and the rest go. |
 | `show.rename` | `POST /api/v1/shows/{id}/rename` | admin |  | 1 | Give a show another name. Its id stays. |
-| `show.set` | `POST /api/v1/shows/{id}/set` | admin |  | 1 | Change a show's name, its input, or whether it composites. Turning compositing on starts a show process whose one source is the input and moves the outputs to it; turning it off hands them back to the direct host, when the show has one source and no scenes in use. The answer says how long the outputs were off. |
+| `show.set` | `POST /api/v1/shows/{id}/set` | admin |  | 1 | Change a show's name, its input, or whether it composites. Turning compositing on starts a show process whose one source is the input and moves the outputs to it; turning it off hands them back to the direct host, when the show has one source and no scenes in use. A switch can take half a minute, so it answers at once with a task_id and the show as it is; task.get with that id carries this answer, with how long the outputs were off, once it is done. |
 | `show.start` | `POST /api/v1/shows/{id}/start` | admin |  | 1 | Start a stopped or failed show. |
 | `show.stats` | `POST /api/v1/shows/stats` | read |  | 1 | Health, input numbers and each output's numbers for many shows in one read, from what the station already holds, so it is cheap to call every second for two hundred shows. `fields` narrows it to health, input or outputs. |
 | `show.stop` | `POST /api/v1/shows/{id}/stop` | admin |  | 1 | Stop a show. It keeps its config, and stays stopped when the station starts again, until show.start. |
@@ -2609,7 +2609,7 @@ MCP tool `rename_show` in the `search` profile: readOnlyHint false, destructiveH
 
 #### `show.set`
 
-Change a show's name, its input, or whether it composites. Turning compositing on starts a show process whose one source is the input and moves the outputs to it; turning it off hands them back to the direct host, when the show has one source and no scenes in use. The answer says how long the outputs were off.
+Change a show's name, its input, or whether it composites. Turning compositing on starts a show process whose one source is the input and moves the outputs to it; turning it off hands them back to the direct host, when the show has one source and no scenes in use. A switch can take half a minute, so it answers at once with a task_id and the show as it is; task.get with that id carries this answer, with how long the outputs were off, once it is done.
 
 MCP tool `set_show` in the `standard` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
 
