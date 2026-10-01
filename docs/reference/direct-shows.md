@@ -13,6 +13,15 @@ The station lays the table over the plugin's settings as `direct` and calls
 `configure`. The whole table comes every time; the host compares it with
 what it runs and changes only what changed.
 
+The station runs the ingest plugin once for the machine; a show never starts
+it, even the one that answers `plugin.add`. When the station starts, it waits
+for its first table (ten seconds at most) and starts the plugin with the table
+already in its settings. When the plugin is installed, updated, enabled or
+reloaded while the station runs, the station looks for it once a second, for
+up to twenty minutes, and starts it the same way. Either way the table is
+handed again the moment the plugin runs, because one handed while it was
+still starting reached nobody.
+
 ```json
 {"direct": [
   {

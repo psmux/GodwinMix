@@ -24,8 +24,9 @@ every wait in the script gives up with a message instead of hanging.
 
 ## What a run does
 
-1. Builds the station, the udp plugin and the harness in release. `--no-build`
-   skips this.
+1. Builds the station, the udp plugin, the ingest plugin (staged beside its
+   manifest with `plugins/ingest/build`) and the harness in release.
+   `--no-build` skips this.
 2. Makes four ten second clips in `dev/bench/media/` the first time, with
    ffmpeg: 1080p30 at 8 Mbit/s with AAC, 720p30 at 4 Mbit/s with MP2, SD at
    2 Mbit/s with AAC, and a 6.5 Mbit/s multiplex carrying two programs (720p
@@ -36,9 +37,13 @@ every wait in the script gives up with a message instead of hanging.
    and what the generator cost, before the station is in the picture.
 4. Starts a release station from a copy of `godwinmix.example.toml`, with the
    bind changed to `127.0.0.1:18480` (`--port`) and the example's sources and
-   outputs left out, and a plugins folder of its own. The default `live`
-   channel is removed so port 1935 is free for anything else on the machine,
-   and the udp plugin is installed from `plugins/udp`.
+   outputs left out. Its `[control] plugins_dir` is set to `plugins` in the
+   run's folder and `GODWINMIX_HOME` to `home` there, so nothing is installed
+   into or read from your own `~/.godwinmix`. The default `live` channel is
+   removed so port 1935 is free for anything else on the machine, and the udp
+   plugin is installed from `plugins/udp`. In direct mode the ingest plugin is
+   installed from `plugins/ingest` too, while the station runs; direct shows
+   run in it, and the station starts it the moment it is installed.
 5. Part two. Starts the feeds again, adds one show per feed from the feeds
    list, waits 15 seconds, then measures for `--seconds`: CPU and memory of
    the station and of every process under it once a second, `show.stats` once
