@@ -15,8 +15,34 @@ fn now_ms() -> u64 {
 }
 
 impl Direct {
-    /// What a show's health is now.
+    /// What a show's health is now, each alarm dated from when it began.
     pub fn health_of(&self, st: &Station, id: &str) -> Health {
+        let judged = self.judge(st, id);
+        self.pin(id, judged)
+    }
+
+    /// Keep each alarm's `since_ms` where it was first seen until the alarm
+    /// clears. An alarm the station adds itself is judged afresh on every
+    /// read, and a window alarm from the host slides with its window, so
+    /// without this the wall would show every alarm's age as nothing.
+    fn pin(&self, id: &str, mut health: Health) -> Health {
+        let mut seen = self.seen.lock();
+        if health.alarms.is_empty() {
+            if let Some(s) = seen.get_mut(id) {
+                s.alarm_since.clear();
+            }
+            return health;
+        }
+        let s = seen.entry(id.to_string()).or_default();
+        s.alarm_since.retain(|kind, _| health.alarms.iter().any(|a| a.kind == *kind));
+        for a in &mut health.alarms {
+            a.since_ms = *s.alarm_since.entry(a.kind).or_insert(a.since_ms);
+        }
+        health.alarms.sort_by_key(|a| (a.since_ms, a.kind));
+        health
+    }
+
+    fn judge(&self, st: &Station, id: &str) -> Health {
         let Some(r) = st.registry.lock().get(id).cloned() else { return Health::off() };
         if r.stopped {
             return Health::off();

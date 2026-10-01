@@ -88,3 +88,26 @@ fn a_stopped_show_is_off_and_a_show_list_view_carries_the_new_properties() {
     assert_eq!(table[0]["monitor"]["alarms"], true);
     assert!(toml::Value::try_from(&table).is_ok(), "{table}");
 }
+
+#[test]
+fn an_alarm_keeps_the_time_it_began_on_every_read_until_it_clears() {
+    let (st, _heard) = station("since");
+    let no_input = |h: &godwinmix_protocol::shows::Health| h.alarms.iter().find(|a| a.kind == AlarmKind::NoInput).map(|a| a.since_ms);
+    let began = no_input(&st.direct.health_of(&st, "feed")).expect("no input");
+    std::thread::sleep(std::time::Duration::from_millis(30));
+    assert_eq!(no_input(&st.direct.health_of(&st, "feed")), Some(began), "read again, it began at the same time");
+
+    // A window alarm from the host whose start slides with its window keeps
+    // the start the station first heard.
+    let cc = |since: u64| json!({"show": "feed", "health": {"state": "warning", "alarms": [{"kind": "cc-errors", "since_ms": since, "detail": "3 errors"}]}});
+    let at = |h: &godwinmix_protocol::shows::Health| h.alarms.iter().find(|a| a.kind == AlarmKind::CcErrors).map(|a| a.since_ms);
+    take_event(&st, "direct.health", &cc(1_000));
+    assert_eq!(at(&st.direct.health_of(&st, "feed")), Some(1_000));
+    take_event(&st, "direct.health", &cc(2_000));
+    assert_eq!(at(&st.direct.health_of(&st, "feed")), Some(1_000), "it held, so it is the same alarm");
+
+    take_event(&st, "direct.health", &json!({"show": "feed", "health": {"state": "ok", "alarms": []}}));
+    assert_eq!(at(&st.direct.health_of(&st, "feed")), None, "cleared");
+    take_event(&st, "direct.health", &cc(3_000));
+    assert_eq!(at(&st.direct.health_of(&st, "feed")), Some(3_000), "a new alarm after it cleared has its own start");
+}

@@ -640,7 +640,9 @@ async fn add(call: Call, params: Value) -> Result<Value, RpcError> {
             // and starts with the core, so a plugin installed while the core
             // is running starts now rather than at the next restart. Anything
             // already running is left alone.
-            let failures = tokio::task::spawn_blocking(move || supervisor.start_all())
+            // Under a station the ingest plugin is the station's to run, with
+            // the channel and direct tables; a show leaves it alone.
+            let failures = tokio::task::spawn_blocking(move || crate::start_singletons(&supervisor))
                 .await
                 .unwrap_or_default();
             // The channel server just arrived: a mixer with no channels gets
@@ -877,7 +879,7 @@ async fn set_enabled(call: Call, params: Value, on: bool) -> Result<Value, RpcEr
     let name = req.id.clone();
     let _ = tokio::task::spawn_blocking(move || match on {
         true => {
-            supervisor.start_all();
+            crate::start_singletons(&supervisor);
         }
         false => {
             supervisor.stop_plugin(&name, "the plugin was disabled");

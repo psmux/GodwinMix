@@ -64,6 +64,7 @@ async fn api(State(st): State<Arc<Station>>, req: Request) -> Response {
     let query = req.uri().query().unwrap_or_default().to_string();
     let peek = rest::params_from(Value::Null, &query, captures.clone());
     if !methods::answers(route.method, &peek) {
+        super::ingest::after(&st, route.method);
         return http::forward(st, req).await;
     }
     let presented = crate::control::presented_token(req.method(), req.headers(), req.uri());

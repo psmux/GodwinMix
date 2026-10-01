@@ -100,6 +100,7 @@ fn load_plugins(cfg: &Config, tokens: &Arc<godwinmix_protocol::scope::Tokens>, r
     if let Some(dir) = cfg.control.plugins_dir.as_deref() {
         plugin::loader::set_dir(PathBuf::from(dir));
     }
+    super::ingest::configure(cfg.plugins.settings.clone());
     for installed in plugin::loader::load_all(&cfg.plugins) {
         if let Some(problem) = &installed.problem {
             warn!(plugin = installed.name(), "{problem}");
@@ -128,7 +129,7 @@ fn open_channels(st: &Arc<Station>, cfg: &Config, config: &std::path::Path, even
     let starting = supervisor.clone();
     std::thread::spawn(move || {
         if plugin::loader::get(crate::channels::PLUGIN).is_none() {
-            return info!("the ingest plugin is not installed; channels take no publishers until it is");
+            return info!("the ingest plugin is not installed; channels take no publishers until it is, and it starts the moment it is");
         }
         if let Err(e) = starting.start(crate::channels::PROVIDE) {
             warn!(error = %format!("{e:#}"), "the ingest plugin would not start");

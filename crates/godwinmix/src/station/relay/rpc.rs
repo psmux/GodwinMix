@@ -120,6 +120,7 @@ impl Relay {
             self.answer_later(frame.get("id").cloned(), method, params, answers.clone());
             return None;
         }
+        super::super::ingest::after(&self.st, &method);
         if method == "core.subscribe" {
             let req: SubscribeRequest = serde_json::from_value(params).unwrap_or_default();
             if let Some(show) = req.show.filter(|s| *s != self.show) {

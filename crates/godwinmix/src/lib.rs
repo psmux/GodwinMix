@@ -505,7 +505,7 @@ fn show_flags(args: &Args) -> Vec<String> {
 
 /// Every plugin singleton, as `start_all` starts them, except the ingest
 /// plugin in a show under a station: the station runs it once for every show.
-fn start_singletons(supervisor: &plugin::supervisor::Supervisor) -> Vec<(String, String)> {
+pub(crate) fn start_singletons(supervisor: &plugin::supervisor::Supervisor) -> Vec<(String, String)> {
     if !station::show::under_station() {
         return supervisor.start_all();
     }
