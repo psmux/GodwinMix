@@ -1,4 +1,5 @@
 use super::*;
+use serde_json::Value;
 
 #[test]
 fn a_csv_with_a_header_is_read_by_column_name() {
@@ -44,4 +45,17 @@ fn a_mistake_names_its_line_and_what_to_write() {
     let err = parse("x,udp://@239.1.1.1:5000,one").unwrap_err().to_string();
     assert!(err.contains("line 1") && err.contains("program"), "{err}");
     assert!(parse("# nothing\n\n").is_err());
+}
+
+#[test]
+fn the_list_gmx_scale_writes_is_read_with_its_format() {
+    let text = "name,input,program,output,format\n\
+                feed-001,udp://@239.77.0.1:5000,1,udp://127.0.0.1:30000,copy\n\
+                feed-002,udp://@:20001,1,udp://127.0.0.1:30001,youtube-720p30\n";
+    let feeds = parse(text).unwrap();
+    assert_eq!(feeds[0].outputs, vec!["udp://127.0.0.1:30000"]);
+    assert_eq!(feeds[0].to_show(false)["outputs"][0]["rendition"], Value::Null);
+    let show = feeds[1].to_show(false);
+    assert_eq!(show["outputs"][0]["rendition"]["preset"], "youtube-720p30");
+    assert_eq!(show["input"]["program"], 1);
 }
