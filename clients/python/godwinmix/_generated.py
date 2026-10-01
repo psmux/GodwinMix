@@ -633,6 +633,8 @@ class Cost(TypedDict, total=False):
 
 class CpuUse(TypedDict, total=False):
     cores: int
+    measured_millicores: Optional[int]
+    # What a station's processes cost now, read when asked: its own, every show process and every plugin it started. Left out by a single process core and where another process's CPU cannot be read.
     room_millicores: int
     used_millicores: int
 
@@ -2374,11 +2376,15 @@ class ShowSetResult(TypedDict, total=False):
 class ShowStats(TypedDict, total=False):
     """One show's numbers, as `show.stats` answers them."""
 
+    cpu_millicores: Optional[int]
+    # What the show costs the machine, thousandths of a core: for a show that mixes, its process as last measured; for a direct show, its outputs' encodes summed. Left out while nothing has measured it.
     health: Health
     id: str
     input: Union[InputStats, None]
     # None for a show with no input, or before the host has counted any.
     outputs: List[OutputStats]
+    work: ShowWork
+    # `mix`, `transcode` or `copy`.
 
 class ShowStatsList(TypedDict, total=False):
     """`show.stats`'s answer."""
@@ -2901,6 +2907,9 @@ ShowFrom = Union[str, Dict[str, Any]]
 
 # Where a show is in its life.
 ShowState = Literal['starting', 'running', 'stopped', 'failed']
+
+# What a show does to make its outputs, which is what its load pays for.
+ShowWork = Literal['mix', 'transcode', 'copy']
 
 SourceState = Literal['connecting', 'live', 'stalled', 'failed']
 

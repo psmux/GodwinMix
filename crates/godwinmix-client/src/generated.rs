@@ -999,6 +999,11 @@ pub struct Cost {
 #[serde(default)]
 pub struct CpuUse {
     pub cores: u32,
+    /// What a station's processes cost now, read when asked: its own, every
+    /// show process and every plugin it started. Left out by a single
+    /// process core and where another process's CPU cannot be read.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub measured_millicores: Option<u32>,
     pub room_millicores: u32,
     pub used_millicores: u32,
 }
@@ -3742,12 +3747,20 @@ pub const SHOW_STATE_VALUES: &[&str] = &["starting", "running", "stopped", "fail
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ShowStats {
+    /// What the show costs the machine, thousandths of a core: for a show
+    /// that mixes, its process as last measured; for a direct show, its
+    /// outputs' encodes summed. Left out while nothing has measured it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cpu_millicores: Option<u32>,
     pub health: Health,
     pub id: String,
     /// None for a show with no input, or before the host has counted any.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub input: Option<InputStats>,
     pub outputs: Vec<OutputStats>,
+    /// `mix`, `transcode` or `copy`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub work: Option<ShowWork>,
 }
 
 /// `show.stats`'s answer.
@@ -3768,6 +3781,11 @@ pub struct ShowStatsRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ids: Option<Vec<String>>,
 }
+
+/// What a show does to make its outputs, which is what its load pays for.
+pub type ShowWork = String;
+/// The values api_level 1 knows for [`ShowWork`].
+pub const SHOW_WORK_VALUES: &[&str] = &["mix", "transcode", "copy"];
 
 /// `event/snapshot`: the full state, and where in the stream it sits.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]

@@ -75,7 +75,8 @@ pub struct Station {
     pub on_air: Mutex<BTreeSet<String>>,
     /// What each show holding a ticket last said it measures of itself.
     pub loads: Mutex<BTreeMap<String, u32>>,
-    pub sampler: Mutex<godwinmix_host::sampler::Sampler>,
+    /// What the show processes and the plugins cost, read when asked.
+    pub usage: super::usage::Usage,
     /// Set once the station is shutting down, so a show that exits is not
     /// started again.
     pub stopping: AtomicBool,
@@ -109,7 +110,7 @@ impl Station {
                 .unwrap_or_default(),
             on_air: Mutex::new(BTreeSet::new()),
             loads: Mutex::new(BTreeMap::new()),
-            sampler: Mutex::new(godwinmix_host::sampler::Sampler::new()),
+            usage: Default::default(),
             stopping: AtomicBool::new(false),
             quit: tokio::sync::Notify::new(),
             direct,
