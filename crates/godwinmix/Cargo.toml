@@ -56,6 +56,9 @@ gstreamer-app = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "sync", "signal", "time", "io-std", "io-util", "fs", "process"] }
 axum = { workspace = true, features = ["ws"] }
 tokio-tungstenite = { workspace = true }
+# HTTPS on the control port (src/tls.rs). Already in the tree under the node
+# bridge and the core, so nothing new to compile.
+tokio-rustls = { workspace = true }
 tower-http = { workspace = true, features = ["fs", "cors", "trace"] }
 
 serde = { workspace = true, features = ["derive"] }
