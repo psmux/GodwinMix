@@ -89,7 +89,7 @@ fn one_by_one(c: &Client, rows: &[Row]) -> Value {
     for (i, r) in rows.iter().enumerate() {
         match c.call("show.add", show_add(r), None) {
             Ok(a) if a.ok() && a.body["compositing"] != json!(false) => {
-                let why = "show.add made a compositing show and ignored the input: this station predates wave 4. Run with --legacy for today's shape";
+                let why = "show.add made a compositing show and ignored the input: this station predates wave 4. Use today's shape instead: --legacy here, --mode legacy in dev/bench/scale.sh";
                 refused.push(json!({"index": i, "name": r.name, "why": why}));
                 break;
             }
