@@ -37,6 +37,7 @@ mod host;
 mod output;
 mod show;
 pub mod standalone;
+mod stats;
 mod table;
 
 #[cfg(test)]
