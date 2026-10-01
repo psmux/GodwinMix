@@ -65,7 +65,8 @@ pub async fn add_many(st: &Arc<Station>, req: ShowAddManyRequest) -> Result<Valu
     }
     let dry_run = req.dry_run.unwrap_or(true);
     let (priced, mut refused) = check(st, &req.shows);
-    let have = st.render.governor().headroom(None);
+    first_sample(st).await;
+    let have = super::direct::room(&st.render);
     let (_, label) = crate::channels::transcode::assumed_input();
     let mut cost = Cost::default();
     let mut fitting = Vec::new();
@@ -102,6 +103,16 @@ pub async fn add_many(st: &Arc<Station>, req: ShowAddManyRequest) -> Result<Valu
     refused.sort_by_key(|r| r.index);
     let plan = BulkPlan { cost, have, fits, assumed_input: label.to_string() };
     Ok(serde_json::to_value(ShowAddManyResult { added, refused, plan, dry_run }).unwrap_or_default())
+}
+
+/// A station asked in its first second has not read the machine's load
+/// yet, and its room would be the whole machine. Wait for the first reading,
+/// a second or so, never more than three.
+async fn first_sample(st: &Station) {
+    let until = std::time::Instant::now() + std::time::Duration::from_secs(3);
+    while st.render.governor().load().samples == 0 && std::time::Instant::now() < until {
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
 }
 
 /// Make one show of the batch.

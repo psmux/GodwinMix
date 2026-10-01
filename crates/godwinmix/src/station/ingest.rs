@@ -23,6 +23,8 @@ use tracing::{info, warn};
 /// How long one plugin call keeps the station looking.
 const LOOK_FOR: Duration = Duration::from_secs(20 * 60);
 const EVERY: Duration = Duration::from_secs(1);
+/// How long a start waits for the first direct table.
+const TABLE_WAIT: Duration = Duration::from_secs(10);
 
 static BUDGETS: OnceLock<BTreeMap<String, Params>> = OnceLock::new();
 static LOOKING: AtomicBool = AtomicBool::new(false);
@@ -48,9 +50,10 @@ pub fn after(st: &Arc<Station>, method: &str) {
     if plugins.is_running(crate::channels::PLUGIN) || LOOKING.swap(true, Ordering::SeqCst) {
         return;
     }
+    let st = Arc::downgrade(st);
     let spawned = std::thread::Builder::new().name("ingest-arrives".into()).spawn(move || {
         let until = Instant::now() + LOOK_FOR;
-        while Instant::now() < until && !try_start(&plugins) {
+        while Instant::now() < until && !st.upgrade().is_none_or(|st| try_start(&st, &plugins)) {
             std::thread::sleep(EVERY);
         }
         LOOKING.store(false, Ordering::SeqCst);
@@ -62,7 +65,7 @@ pub fn after(st: &Arc<Station>, method: &str) {
 }
 
 /// Start the ingest plugin if it is installed and well. True when it runs.
-pub fn try_start(plugins: &Supervisor) -> bool {
+fn try_start(st: &Station, plugins: &Supervisor) -> bool {
     if plugins.is_running(crate::channels::PLUGIN) {
         return true;
     }
@@ -72,7 +75,7 @@ pub fn try_start(plugins: &Supervisor) -> bool {
         return false;
     };
     loader::insert(found);
-    match plugins.start(crate::channels::PROVIDE) {
+    match start(st, plugins) {
         Ok(()) => {
             info!("the ingest plugin arrived and was started with the channel and direct tables");
             true
@@ -82,4 +85,19 @@ pub fn try_start(plugins: &Supervisor) -> bool {
             false
         }
     }
+}
+
+/// Start the ingest plugin with the direct table in its settings. The table
+/// is built on a thread of its own, so the first one may still be on its
+/// way: wait for it (a few seconds at most) before starting. And a table
+/// handed while the plugin was still starting reached nobody, since only a
+/// running plugin is configured, so hand it again once it runs.
+pub fn start(st: &Station, plugins: &Supervisor) -> anyhow::Result<()> {
+    let asked = st.direct.hand_over();
+    if !st.direct.wait_handed(asked, TABLE_WAIT) {
+        warn!("the direct table was not ready in time; the ingest plugin starts without it and is handed it when it is");
+    }
+    plugins.start(crate::channels::PROVIDE)?;
+    st.direct.hand_over();
+    Ok(())
 }
