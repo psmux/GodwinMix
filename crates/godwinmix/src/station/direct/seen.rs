@@ -136,8 +136,8 @@ mod tests {
 
     #[test]
     fn a_first_reading_of_the_rate_gives_way_to_the_measured_one_and_a_wobble_does_not() {
-        let mut seen = Seen::default();
-        seen.input = Some(json!({"state": "live", "since_ms": 1000, "video": {"codec": "h264", "fps": 8.0}}));
+        let input = Some(json!({"state": "live", "since_ms": 1000, "video": {"codec": "h264", "fps": 8.0}}));
+        let mut seen = Seen { input, ..Seen::default() };
         assert!(!seen.settle_fps(), "nothing measured yet");
         seen.take_stats(&json!({"id": "a", "input": {"fps": 29.97}}));
         assert!(seen.settle_fps());
