@@ -46,7 +46,7 @@ never for a number alone. The numbers themselves are read with `show.stats`.
 | `stall` | the input is up but no packet came for `stall_secs`. Hides black, freeze and silence while it holds. For a show that composites, also: its process died or lost its link to the station | direct host; the station for a show process that went |
 | `black` | at least `black_ratio` of the picture's pixels have a luma at or under `black_luma`, for `black_secs`. Hides freeze | both |
 | `freeze` | the mean luma difference between two looks stays under `freeze_diff` for `freeze_secs` | both |
-| `silence` | the sound's peak stays under `silence_db` for `silence_secs` | both |
+| `silence` | the sound's peak stays under `silence_db` for `silence_secs`. For a show that composites, only while a source with sound is heard on programme | both |
 | `cc-errors` | at least `cc_errors` MPEG-TS continuity errors inside `window_secs` | direct host, from the input's counters |
 | `loss` | at least `loss` packets lost inside `window_secs` | direct host, from the input's counters |
 | `output-failed` | an output's state is `failed`. One alarm per output, named in `detail` | both |
@@ -86,9 +86,10 @@ the station calls with the settings it keeps for the show:
 | `vitals.get {}` | `GET /api/v1/vitals` | `{health, settings}`: the health last judged (null in the first second) and the settings in force |
 | `vitals.set {alarms?, black_secs?, ...}` | `POST /api/v1/vitals/set` | new settings, flat as in the table above; a field left out takes its default. Applies within a second, nothing restarted. Answers as `vitals.get` |
 
-`alarms` there means keeping a mosaic up for black and freeze while nobody
-looks. The same fields can start in the show's config as `[vitals]`
-(`docs/reference/configuration.md`).
+`alarms` there switches the black, freeze and silence checks on, as a direct
+show's `monitor.alarms` does, and keeps a mosaic up for black and freeze
+while nobody looks. It is off unless set. The same fields can start in the
+show's config as `[vitals]` (`docs/reference/configuration.md`).
 
 A person sets them from the wall with `show.set {id, alarms: {enabled,
 black_ms, freeze_ms, silence_ms, silence_dbfs}}` (`docs/reference/shows.md`).
@@ -137,14 +138,20 @@ own queue.
 
 ## How a show that composites is measured
 
+* With `[vitals] alarms` off, which is the default, black, freeze and
+  silence are not judged at all, as for a direct show with `monitor.alarms`
+  off. Failed and shed outputs are judged either way.
 * Sound comes from the programme meter, which posts its peaks ten times a
-  second whether anyone listens or not. It costs nothing new.
+  second whether anyone listens or not. It costs nothing new. Silence is
+  judged only while the mixer hears a live source with sound on programme,
+  which it decides twice a second as it sets each source's volume. The
+  slate, or a scene whose sources carry no sound, has nothing to fall quiet
+  and raises no `silence`. A muted source on programme still counts.
 * Pictures come from the multiview's programme cell: the snapshot tracker
   already decodes the mosaic and scores motion per cell, so black is one more
   JPEG decode a second and freeze is the tracker's motion score. The mosaic
-  exists only while somebody is looking. With `[vitals] alarms = true` the
-  show keeps one up for its alarms; with it off (the default) black and
-  freeze are judged only while the mosaic is up anyway.
+  exists only while somebody is looking, and with the alarms on the show
+  keeps one up for them.
 * Outputs come from the status once a second: `failed` and `shed`.
 
 The show sends `event/health {health}` to its own clients, and the same
