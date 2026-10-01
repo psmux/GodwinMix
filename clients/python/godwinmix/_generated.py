@@ -2581,6 +2581,12 @@ class TaskView(TypedDict, total=False):
     state: TaskState
     task_id: str
 
+class ThumbnailRequest(TypedDict, total=False):
+    """`program.thumbnail`."""
+
+    width: Optional[int]
+    # Pixels across, 16 to 320, made even. 320 when left out.
+
 class TokenInfo(TypedDict, total=False):
     """What the calling token is allowed to do, echoed back so a surface can grey out what it cannot reach instead of discovering it at the first refusal."""
 
@@ -3008,6 +3014,7 @@ METHODS = (
     {"name": "program.history", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/program/history"), "summary": 'The last hundred takes, newest first, with the token that asked for each.'},
     {"name": "program.revert", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/program/revert"), "summary": 'Take back to the shot before this one.'},
     {"name": "program.take", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/program/take"), "summary": 'Put a scene or a source on programme. The cut is instant and the outgoing stream is not disturbed.'},
+    {"name": "program.thumbnail", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/program/thumbnail"), "summary": 'What is on air as a small JPEG in base64, {jpeg, width, height, at_ms}, or {pending: true} while the first picture is on its way. An ask keeps one picture a second coming for ten seconds; nothing runs between asks.'},
     {"name": "project.export", "scope": "admin", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/project/export"), "summary": "This mixer as one project file: settings, sources, outputs and renditions, channels, scenes, the page's layout, and its clips by name and size. Keys only with include_secrets."},
     {"name": "project.import", "scope": "admin", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/project/import"), "summary": "Open a project file: answers with what it would change (dry_run is true unless false is sent), then replaces this mixer's setup or merges beside it. Says which settings wait for a restart."},
     {"name": "rendition.plan", "scope": "read", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/rendition/plan"), "summary": 'What the planner built for every output that asked for a rendition: each node, what it serves, which encoder and why, and the totals.'},
@@ -4107,6 +4114,17 @@ class GeneratedMethods:
         if transition is not None:
             params["transition"] = transition
         return await self._call("program.take", params)
+
+    async def program_thumbnail(
+        self,
+        *,
+        width: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """What is on air as a small JPEG in base64, {jpeg, width, height, at_ms}, or {pending: true} while the first picture is on its way. An ask keeps one picture a second coming for ten seconds; nothing runs between asks."""
+        params: Dict[str, Any] = {}
+        if width is not None:
+            params["width"] = width
+        return await self._call("program.thumbnail", params)
 
     async def project_export(
         self,

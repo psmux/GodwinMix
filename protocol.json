@@ -9217,6 +9217,22 @@
       ],
       "description": "`ext.telemetry`. Accepts `false` to mean off, `true` for the default rate,\nor an object naming it."
     },
+    "ThumbnailRequest": {
+      "description": "`program.thumbnail`.",
+      "properties": {
+        "width": {
+          "default": null,
+          "description": "Pixels across, 16 to 320, made even. 320 when left out.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
     "TokenInfo": {
       "description": "What the calling token is allowed to do, echoed back so a surface can grey\nout what it cannot reach instead of discovering it at the first refusal.",
       "properties": {
@@ -12652,6 +12668,25 @@
       "scope": "operate",
       "since": "1",
       "summary": "Put a scene or a source on programme. The cut is instant and the outgoing stream is not disturbed."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mutating": false,
+      "name": "program.thumbnail",
+      "params": {
+        "$ref": "#/$defs/ThumbnailRequest"
+      },
+      "rest": {
+        "method": "GET",
+        "path": "/api/v1/program/thumbnail"
+      },
+      "result": {
+        "type": "object"
+      },
+      "scope": "read",
+      "since": "1",
+      "summary": "What is on air as a small JPEG in base64, {jpeg, width, height, at_ms}, or {pending: true} while the first picture is on its way. An ask keeps one picture a second coming for ten seconds; nothing runs between asks."
     },
     {
       "destructive": false,
