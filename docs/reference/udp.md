@@ -142,6 +142,18 @@ and HEVC parameter sets are repeated before every keyframe, so a receiver that
 tunes in late starts at the next one. With `rtp://`, the payloader uses
 payload type 33 and one datagram per seven packets.
 
+Each of the two queues holds up to ten seconds, with no limit by buffers or
+bytes. `mpegtsmux` writes nothing until both streams have a buffer, and an
+output added in the middle of a GOP gets its audio straight away and its video
+at the next keyframe, so the stream that is ahead has to wait somewhere. With
+the one second a queue holds by default, two seconds of audio ahead was enough
+to stop the demuxer and the FIFO for good.
+
+Nobody listening is not a fault. A datagram to a port with no receiver is sent
+like any other, the output keeps sending at the programme's rate, health stays
+`ok`, and a receiver that starts again on the same port picks the stream up at
+the next keyframe. Nothing is reconnected.
+
 Health is `ok` with the rate while bytes leave, `degraded` when nothing has
 left in the last second, and `failing` with the reason when the pipeline
 fails. UDP has no answer from the far end, so `ok` means sent, not received.

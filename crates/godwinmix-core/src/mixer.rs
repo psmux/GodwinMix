@@ -1518,10 +1518,20 @@ impl Mixer {
         // stepped backwards; this output, captured straight into ffmpeg,
         // measured clean without it. Kept because it costs nothing and closes
         // a gap that would otherwise be real the day an input drifts.
+        //
+        // `skip-to-first`, because the chain is attached on demand to a
+        // programme that may have been running for hours. Without it
+        // `audiorate` fills from the start of the segment to its first buffer,
+        // so the first output added an hour in got an hour of silence in one
+        // burst, stamped from zero, ahead of a video stream stamped an hour in.
+        // Found on 2026-10-01 by the scale harness: a udp output's remuxer
+        // waited on that audio for its video and never sent again.
+        let arate = make("audiorate", "aenc-rate")?;
+        crate::probe::set_bool(&arate, "skip-to-first", true);
         let mut achain: Vec<gst::Element> = vec![
             gstutil::queue_thread("aenc-q")?,
             make("audioconvert", "aenc-conv")?,
-            make("audiorate", "aenc-rate")?,
+            arate,
             aenc.clone(),
         ];
         achain.extend(parser_for(sel.audio_encode.parser.as_deref(), "aparse")?);
