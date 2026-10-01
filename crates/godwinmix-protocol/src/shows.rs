@@ -7,17 +7,21 @@
 //! client. Everything else a client calls addresses one show, chosen with
 //! `?show=<id>` or the `show` field of `core.subscribe`.
 
-use crate::method::schema_of;
-use crate::protocol::EventDef;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+mod bulk;
+mod events;
 mod props;
 mod requests;
+mod stats;
 
+pub use bulk::*;
+pub use events::*;
 pub use props::*;
 pub use requests::*;
+pub use stats::*;
 
 use crate::destination::Destination;
 
@@ -138,92 +142,5 @@ pub struct ShowRemoved {
     pub removed: String,
 }
 
-/// `event/show.changed`.
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-pub struct ShowChanged {
-    pub show: Show,
-}
-
-/// `event/show.removed`.
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-pub struct ShowRemovedEvent {
-    pub id: String,
-}
-
-/// The two show events, as rows of the protocol's event table.
-pub fn events() -> Vec<EventDef> {
-    vec![
-        EventDef {
-            name: "show.changed",
-            since: "1",
-            summary: "A show was added, renamed, started, stopped, died or came back. \
-                      Sent by the station to every client, whichever show it is \
-                      looking at.",
-            ext: None,
-            legacy: None,
-            payload: schema_of::<ShowChanged>,
-        },
-        EventDef {
-            name: "show.removed",
-            since: "1",
-            summary: "A show was removed. Its process was stopped first.",
-            ext: None,
-            legacy: None,
-            payload: schema_of::<ShowRemovedEvent>,
-        },
-        EventDef {
-            name: "show.health",
-            since: "1",
-            summary: "A show's health changed state, or an alarm began or ended. Never sent \
-                      for a number alone: read those with show.stats.",
-            ext: None,
-            legacy: None,
-            payload: schema_of::<ShowHealthEvent>,
-        },
-    ]
-}
-
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use serde_json::json;
-
-    #[test]
-    fn from_reads_a_name_a_show_or_a_project() {
-        let named: ShowFrom = serde_json::from_value(json!("empty")).unwrap();
-        assert_eq!(named, ShowFrom::Named("empty".into()));
-        let project: ShowFrom = serde_json::from_value(json!({"project": {"name": "x"}})).unwrap();
-        assert!(matches!(project, ShowFrom::Project { .. }));
-    }
-
-    #[test]
-    fn a_show_says_its_state_in_lowercase() {
-        let show = Show {
-            id: "main".into(),
-            name: "Main".into(),
-            state: ShowState::Running,
-            on_air: None,
-            programme_kbps: 0,
-            cpu_millicores: 0,
-            memory_mib: 0,
-            restarts: 0,
-            error: None,
-            compositing: true,
-            input: None,
-            outputs: vec![],
-            health: Health::default(),
-        };
-        assert_eq!(serde_json::to_value(&show).unwrap()["state"], "running");
-    }
-
-    #[test]
-    fn a_show_written_before_wave_four_composites() {
-        let show: Show = serde_json::from_value(json!({
-            "id": "main", "name": "Main", "state": "running", "on_air": null,
-            "programme_kbps": 0, "cpu_millicores": 0
-        }))
-        .unwrap();
-        assert!(show.compositing);
-        assert!(show.input.is_none() && show.outputs.is_empty());
-    }
-}
+mod tests;
