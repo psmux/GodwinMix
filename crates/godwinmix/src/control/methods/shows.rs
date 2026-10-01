@@ -6,6 +6,8 @@
 //! with `--show`, an embedded one, or a show reached on its own socket. It
 //! has one show, itself, and says so; the changes need a station.
 
+mod direct;
+
 use super::{body, handler};
 use crate::control::call::Call;
 use godwinmix_protocol::error::RpcError;
@@ -83,9 +85,10 @@ pub fn register(reg: &mut Registry<Call>) {
         .params(schema_of::<IdRequest>)
         .result(schema_of::<Show>),
     );
+    direct::register(reg);
 }
 
-fn needs_station(method: &str) -> RpcError {
+pub(super) fn needs_station(method: &str) -> RpcError {
     let under = crate::station::show::mode().map(|m| m.id.clone());
     let message = match &under {
         Some(id) => format!("this is show {id}'s own socket; {method} is answered by the station in front of it. Call it on the station's control port."),
@@ -108,6 +111,11 @@ async fn alone(call: &Call) -> Result<ShowList, RpcError> {
         memory_mib: 0,
         restarts: 0,
         error: None,
+        compositing: true,
+        input: None,
+        outputs: Vec::new(),
+        health: Default::default(),
+        alarms: None,
     };
     Ok(ShowList { shows: vec![show], current: id })
 }

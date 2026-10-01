@@ -186,6 +186,10 @@ pub struct GovernorStatus {
     pub cpu: CpuUse,
     pub devices: Vec<DeviceUse>,
     pub egress_kbps: u32,
+    /// What arrives: every channel stream and every direct show's input,
+    /// as last counted. Zero on a core with no station.
+    #[serde(default)]
+    pub ingress_kbps: u32,
     pub shed: Vec<ShedNote>,
 }
 

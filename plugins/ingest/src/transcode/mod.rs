@@ -21,7 +21,7 @@
 
 mod build;
 mod graph;
-mod input;
+pub(crate) mod input;
 mod router;
 mod session;
 mod sink;
@@ -35,9 +35,9 @@ use std::sync::{Mutex, MutexGuard};
 
 use crate::hub::Hub;
 use crate::sends::{Feed, Wanted};
-pub use router::Output;
+pub use router::{Output, Tap};
 use session::Session;
-pub use spec::{specs, StreamSpec};
+pub use spec::{specs, stream_specs, StreamSpec};
 
 /// The name a pair is published under on the renditions hub.
 pub fn output_key(stream: &str, video: Option<&str>, audio: Option<&str>) -> String {
@@ -54,6 +54,14 @@ pub struct Transcoders {
 impl Transcoders {
     pub fn new(hub: Hub) -> Transcoders {
         Transcoders { hub, renditions: Hub::new(), running: Mutex::default() }
+    }
+
+    /// Converted pairs published on `hub` itself, beside the streams they
+    /// come from. The direct host does this so the relay, which serves that
+    /// hub, can hand any rendition of a show to the station (for HLS) with
+    /// nothing decoded again.
+    pub fn sharing(hub: Hub) -> Transcoders {
+        Transcoders { renditions: hub.clone(), hub, running: Mutex::default() }
     }
 
     /// Where converted pairs are published, for the senders to read.
@@ -81,6 +89,14 @@ impl Transcoders {
                     running.insert(key, session);
                 }
             }
+        }
+    }
+
+    /// Hand one converted stream's decoded pictures, about one a second, to
+    /// `tap`, or to nobody. A stream not being converted has no pictures.
+    pub fn set_tap(&self, app: &str, stream: &str, tap: Option<router::Tap>) {
+        if let Some(session) = self.lock().get(&(app.to_string(), stream.to_string())) {
+            session.set_tap(tap);
         }
     }
 

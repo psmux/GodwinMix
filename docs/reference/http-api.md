@@ -28,7 +28,7 @@ these and nothing else. A generated `openapi.json` and a `protocol.md` from
 | `GET /api/v1/program/history` | the last hundred takes, newest first, each with the token that asked |
 | `GET /api/v1/tasks` | every background job, newest first |
 | `GET /api/v1/tasks/{id}` | one job: `state`, `progress`, `result`, `error`. See [tasks.md](tasks.md) |
-| `POST /api/v1/task/cancel` | ask one to stop, cooperatively |
+| `POST /api/v1/tasks/{id}/cancel` | ask one to stop, cooperatively |
 | `GET /api/snapshot/sheet.jpg` | every source and the programme in one mosaic JPEG; `?width=N` scales it |
 | `GET /api/snapshot/program.jpg` | the programme alone |
 | `GET /api/snapshot/{source_id}.jpg` | one source alone |

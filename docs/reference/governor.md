@@ -60,7 +60,6 @@ fields are counted.
 | `device_sessions` | sessions | the limit calibration found, less the sessions held; `u32::MAX` when no limit was found |
 | `memory_mib` | MiB | available memory, less a tenth of the total (at least 512 MiB), and never more than the total less that reserve less every ticket's memory |
 | `egress_kbps` | kbit/s | four fifths of `uplink_kbps` less the tickets' egress; `u32::MAX` when the uplink is not known |
-
 ### Refusals
 
 `advice.text` is one or two sentences. On an eight core machine with five

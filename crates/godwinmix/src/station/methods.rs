@@ -32,21 +32,43 @@ pub fn answers(method: &str, params: &Value) -> bool {
 
 /// Answer one of the station's methods for `token`.
 pub async fn call(st: &Arc<Station>, token: &Token, method: &str, params: Value) -> Result<Value, RpcError> {
-    let Some(def) = registry().get(method) else {
-        let near: Vec<String> = registry().nearest(method).iter().map(|s| s.to_string()).collect();
-        return Err(RpcError::not_found("method", method, &near));
-    };
+    let Some(def) = registry().get(method) else { return Err(no_such_method(method)) };
     if !token.has(def.scope) {
         return Err(RpcError::scope(method, def.scope.as_str(), &token.scope_names()));
     }
     match method {
-        m if m.starts_with("show.") => super::shows_api::call(st, m, params).await,
+        m if m.starts_with("show.") => super::shows_call::call(st, m, params).await,
         m if m.starts_with("channel.") => super::channel_calls::call(st, token, m, params).await,
-        "governor.status" => Ok(serde_json::to_value(status::governor_status(&st.render, &[])).unwrap_or_default()),
+        "governor.status" => {
+            let mut status = status::governor_status(&st.render, &[]);
+            status.ingress_kbps = ingress_kbps(st);
+            Ok(serde_json::to_value(status).unwrap_or_default())
+        }
         "governor.calibrate" => calibrate(st, &params),
         "rendition.plan" => plan(st, &params),
-        other => Err(RpcError::not_found("method", other, &[])),
+        other => Err(no_such_method(other)),
     }
+}
+
+/// A method the table does not have: -32601, as a single process core
+/// answers it, so a client tells a missing method from a missing show.
+pub fn no_such_method(method: &str) -> RpcError {
+    let near: Vec<String> = registry().nearest(method).iter().map(|s| s.to_string()).collect();
+    let nearest = if near.is_empty() { String::new() } else { format!("Nearest: {}. ", near.join(", ")) };
+    RpcError::new(
+        godwinmix_protocol::ErrorCode::MethodNotFound,
+        format!("there is no method '{method}'. {nearest}Call core.api for the whole list."),
+    )
+    .with("method", method)
+    .with("nearest", near)
+}
+
+/// What arrives on this machine: the channels' live streams and the
+/// direct shows' inputs, as last counted.
+fn ingress_kbps(st: &Station) -> u32 {
+    let channels = st.channels.get().map(|c| c.ingress_kbps()).unwrap_or(0);
+    let direct: u32 = st.direct.seen.lock().values().filter_map(|s| s.input_stats.as_ref()).map(|i| i.kbps).sum();
+    channels.saturating_add(direct)
 }
 
 fn calibrate(st: &Station, params: &Value) -> Result<Value, RpcError> {
@@ -87,5 +109,12 @@ mod tests {
         assert!(!answers("rendition.plan", &json!({})));
         assert!(!answers("program.take", &json!({})));
         assert!(!answers("core.subscribe", &json!({})));
+    }
+
+    #[test]
+    fn a_method_the_table_does_not_have_is_method_not_found_with_the_nearest() {
+        let e = no_such_method("show.statz");
+        assert_eq!(e.code, -32601);
+        assert!(e.data["nearest"].as_array().unwrap().iter().any(|n| n == "show.list"), "{:?}", e.data);
     }
 }

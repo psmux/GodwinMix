@@ -22,6 +22,9 @@ use tracing::{info, warn};
 
 /// Start supervising `id`. Already supervised is left alone.
 pub fn start(st: &Arc<Station>, id: &str) {
+    if st.is_direct(id) {
+        return;
+    }
     let (tx, rx) = watch::channel(false);
     {
         let mut procs = st.procs.lock();

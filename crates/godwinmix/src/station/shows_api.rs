@@ -6,7 +6,7 @@ use super::{files, supervise};
 use godwinmix_protocol::error::RpcError;
 use godwinmix_protocol::shows::{Show, ShowAddRequest, ShowFrom, ShowRemoved, ShowRenameRequest};
 use godwinmix_protocol::types::Event;
-use serde_json::{json, Value};
+use serde_json::Value;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -39,6 +39,11 @@ fn shown(st: &Station, id: &str) -> Result<Value, RpcError> {
 }
 
 pub async fn add(st: &Arc<Station>, req: ShowAddRequest) -> Result<Value, RpcError> {
+    let prepared = super::shows_direct::prepare(&st.registry.lock(), &req, &[])?;
+    if !prepared.compositing {
+        let id = super::shows_direct::priced_direct(st, prepared)?;
+        return shown(st, &id);
+    }
     let name = named(&req.name)?;
     let project = match &req.from {
         Some(ShowFrom::Project { project }) => Some(super::project::usable(project)?),
@@ -61,8 +66,13 @@ pub async fn add(st: &Arc<Station>, req: ShowAddRequest) -> Result<Value, RpcErr
         None => files::fresh(&folder),
     };
     let config = made.map_err(|e| RpcError::internal(format!("making the show's folder {}: {e:#}", folder.display())))?;
-    st.registry.lock().records.push(Record { id: id.clone(), name, config: Some(config), stopped: false });
+    let mut record = Record::new(&id, &name, Some(config));
+    record.input = req.input.clone();
+    st.registry.lock().records.push(record);
     saved(st)?;
+    if req.input.is_some() {
+        st.direct.hand_over();
+    }
     supervise::start(st, &id);
     if let Some(project) = project {
         super::project::open(st, &id, project, PROJECT_WAIT).await?;
@@ -93,6 +103,7 @@ pub async fn remove(st: &Arc<Station>, id: &str) -> Result<Value, RpcError> {
         .with("show", id));
     }
     supervise::stop(st, id).await;
+    let direct = st.is_direct(id) || st.registry.lock().get(id).is_some_and(|r| r.input.is_some());
     let folder = {
         let mut reg = st.registry.lock();
         let folder = reg.folder_for(id);
@@ -103,6 +114,11 @@ pub async fn remove(st: &Arc<Station>, id: &str) -> Result<Value, RpcError> {
     saved(st)?;
     if folder.starts_with(st.registry.lock().data_dir().join("shows")) {
         let _ = std::fs::remove_dir_all(&folder);
+    }
+    super::direct::outputs::forget(id);
+    st.direct.forget(id);
+    if direct {
+        st.direct.hand_over();
     }
     st.events.emit(Event::ShowRemoved { id: id.to_string() });
     Ok(serde_json::to_value(ShowRemoved { removed: id.to_string() }).unwrap_or_default())
@@ -115,6 +131,8 @@ pub async fn start(st: &Arc<Station>, id: &str) -> Result<Value, RpcError> {
     }
     saved(st)?;
     supervise::start(st, id);
+    st.direct.hand_over();
+    st.announce(id);
     shown(st, id)
 }
 
@@ -125,23 +143,7 @@ pub async fn stop(st: &Arc<Station>, id: &str) -> Result<Value, RpcError> {
     }
     saved(st)?;
     supervise::stop(st, id).await;
+    st.direct.hand_over();
+    st.announce(id);
     shown(st, id)
-}
-
-fn parse<T: serde::de::DeserializeOwned>(method: &str, params: Value) -> Result<T, RpcError> {
-    serde_json::from_value(params).map_err(|e| RpcError::invalid_params(format!("{method}: {e}")))
-}
-
-/// The station's answer to `show.*`, by name.
-pub async fn call(st: &Arc<Station>, method: &str, params: Value) -> Result<Value, RpcError> {
-    let id = || params.get("id").and_then(Value::as_str).map(str::to_string).ok_or_else(|| RpcError::invalid_params("name the show with id").with("field", "id"));
-    match method {
-        "show.list" => Ok(serde_json::to_value(st.list().await).unwrap_or_default()),
-        "show.add" => add(st, parse(method, params.clone())?).await,
-        "show.rename" => rename(st, parse(method, params.clone())?),
-        "show.remove" => remove(st, &id()?).await,
-        "show.start" => start(st, &id()?).await,
-        "show.stop" => stop(st, &id()?).await,
-        other => Err(RpcError::not_found("method", other, &[]).with("hint", json!("show.list, show.add, show.rename, show.remove, show.start, show.stop"))),
-    }
 }

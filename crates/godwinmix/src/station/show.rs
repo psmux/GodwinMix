@@ -60,12 +60,38 @@ pub fn with_station_token(tokens: Tokens) -> Tokens {
     Tokens::new(entries, tokens.rehearsal_core)
 }
 
+/// How long a show whose station went gets to stop in order before it is
+/// stopped outright.
+pub const ORPHAN_GRACE: std::time::Duration = std::time::Duration::from_secs(4);
+
+/// The station is gone (stopped, or killed, which closes the link just the
+/// same). Nothing can reach this show and nothing will stop it, so it must
+/// not outlive its station: it stops in order if it can, and after
+/// [`ORPHAN_GRACE`] it ends itself and its process group, which takes the
+/// plugins that did not lead groups of their own. Those that do (sources)
+/// read their stdin, which closes with this process.
+fn orphaned_watchdog() {
+    let _ = std::thread::Builder::new().name("orphaned".into()).spawn(|| {
+        std::thread::sleep(ORPHAN_GRACE);
+        tracing::warn!("the station is gone and this show did not stop in time; ending it");
+        #[cfg(unix)]
+        unsafe {
+            // This show leads its group (the station started it so).
+            libc::kill(-(std::process::id() as i32), libc::SIGKILL);
+        }
+        std::process::exit(1);
+    });
+}
+
 /// Open the link, point the governor at the station, and say hello with the
 /// address this show's control socket is bound to.
 pub fn link(bound: SocketAddr, render: &godwinmix_core::render::Station, quit: Arc<tokio::sync::Notify>) -> anyhow::Result<Arc<Link>> {
     let mode = MODE.get().ok_or_else(|| anyhow::anyhow!("not a show under a station"))?;
     let hello = Hello { show: mode.id.clone(), addr: bound, secret: mode.secret.clone(), pid: std::process::id() };
-    let lost = Box::new(move || quit.notify_one());
+    let lost = Box::new(move || {
+        quit.notify_one();
+        orphaned_watchdog();
+    });
     let link = Link::connect(mode.station, &hello, lost)
         .map_err(|e| anyhow::anyhow!("could not reach the station at {}: {e}", mode.station))?;
     render.governor().set_remote(link.clone());

@@ -82,11 +82,16 @@ pub struct Station {
     /// Rung when the station should stop: the only show was shut down on
     /// purpose, which in one process would have stopped everything.
     pub quit: tokio::sync::Notify,
+    /// Shows without compositing, and the host that runs them.
+    pub direct: super::direct::Direct,
+    /// What `show.list` serves, kept by a sampler while someone reads.
+    pub list_cache: super::list::ListCache,
 }
 
 impl Station {
     pub fn new(registry: Registry, events: MixerHandle, tokens: Arc<Tokens>, render: godwinmix_core::render::Station, launch: Launch) -> Arc<Station> {
         let procs = registry.records.iter().map(|r| (r.id.clone(), Proc::new())).collect();
+        let direct = super::direct::Direct::new(Some(registry.data_dir().to_path_buf()));
         Arc::new(Station {
             registry: Mutex::new(registry),
             procs: Mutex::new(procs),
@@ -105,6 +110,8 @@ impl Station {
             sampler: Mutex::new(godwinmix_host::sampler::Sampler::new()),
             stopping: AtomicBool::new(false),
             quit: tokio::sync::Notify::new(),
+            direct,
+            list_cache: Default::default(),
         })
     }
 
@@ -115,5 +122,10 @@ impl Station {
 
     pub fn state_of(&self, id: &str) -> Option<ShowState> {
         self.procs.lock().get(id).map(|p| p.state)
+    }
+
+    /// Whether `id` is a show without compositing, which has no process.
+    pub fn is_direct(&self, id: &str) -> bool {
+        self.registry.lock().get(id).is_some_and(|r| !r.compositing)
     }
 }
