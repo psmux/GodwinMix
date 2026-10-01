@@ -52,7 +52,7 @@ A tool list is charged for on every single call, so there are two of them.
 
 | | Tools | About |
 |---|---|---|
-| `--profile standard` (default) | 12 | roughly 2,600 tokens |
+| `--profile standard` (default) | 12 | 13,182 bytes, roughly 3,300 tokens |
 | `--profile minimal` | 5 | roughly 1,200 tokens, for a small context |
 
 ```sh
@@ -111,7 +111,7 @@ does not grow with the number of channels.
 3. `show_stats {}`: every show's health, its alarms, the input's numbers and
    each output's state, in one read. Read it again when
    `event/show.health` says something changed, or every few seconds.
-4. When asked: `set_show_output` to change one output's format (`rendition`
+4. When asked: `set_show_output` (`id` the show, `output` the output) to change one output's format (`rendition`
    `null` copies, `{"preset": "youtube-720p30"}` re-encodes), and
    `set_show {"id": "...", "compositing": true}` to give one show scenes and
    takes. Its outputs keep sending across the switch.
@@ -126,7 +126,18 @@ add_shows {"dry_run": true, "shows": [
 What it cost, measured with `gmx mcp` over stdio against a real station
 (`crates/godwinmix/tests/agent_headend`):
 
-COST_TABLE
+| Step | Calls | Bytes the agent read |
+|---|---|---|
+| `tools/list`, standard profile, 12 tools | 1 | 13,182 |
+| `search_tools` for "add many shows" (not needed: `add_shows` is hot) | 1 | 14,294 |
+| `add_shows` dry run, `list_shows`, `add_shows`, one `show_stats` of 20 | 4 | 9,329 |
+| the whole session, `initialize` included | 5 tool calls | 38,507 read, 6,027 sent |
+
+Adding the twenty took 27 ms on the station and the whole session about two
+seconds. One `show_stats` of twenty shows was 5,922 bytes with nothing yet
+arriving on their inputs; with live inputs each show also carries its input's
+numbers. A tool answer over 2 kB comes back compact rather than indented,
+because the model is charged for every space.
 
 A person does the same from a terminal with `gmx shows add --from feeds.csv
 --dry-run`, then without `--dry-run`, and `gmx shows stats --watch`; see

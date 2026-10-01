@@ -80,10 +80,14 @@ almost nothing; 200 copies fit on a small machine. An output with
 is priced against the governor. Copy unless you were asked for a format.
 
 Measured on a real station with `gmx mcp` over stdio, twenty UDP feeds:
-COST_LINE
+five calls in about two seconds, 9 kB read
+for the work itself (dry run, `list_shows`, apply, one `show_stats` of all
+twenty at 5.9 kB). The tool list is 13 kB once per session. `add_shows` and
+`show_stats` are already in it, so do not search for them: a `search_tools`
+answer is about 14 kB, more than the work.
 
-To change one output's format afterwards, `set_show_output` with the show,
-the output and a `rendition`; `null` goes back to copying. To give one show
+To change one output's format afterwards, `set_show_output` with `id` (the show),
+`output` (the output) and a `rendition`; `null` goes back to copying. To give one show
 scenes, graphics and takes, `set_show {"id": "<id>", "compositing": true}`;
 its outputs keep sending across the switch. `false` takes it back, and is
 refused while the show holds more than one source or a scene.

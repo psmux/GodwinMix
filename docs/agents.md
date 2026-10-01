@@ -294,7 +294,7 @@ in front of you can do, and there are two sizes of it:
 
 | | tools | about |
 |---|---|---|
-| `--profile standard` (default) | 12 | roughly 2,600 tokens |
+| `--profile standard` (default) | 12 | 13,182 bytes, roughly 3,300 tokens |
 | `--profile minimal` | 5 | roughly 1,200 tokens, for a small context |
 
 `minimal` is `agent_state`, `take`, `add_source`, `list_sources` and
