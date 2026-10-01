@@ -4,7 +4,8 @@
 //! exists), or a short burst of sound. `pool.rs` is the queue in front of
 //! them, which never makes a tap wait.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
+use std::time::{Duration, Instant};
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
@@ -38,24 +39,50 @@ impl Job {
 #[derive(Default)]
 struct Chains {
     built: HashMap<String, Chain>,
-    cpu: HashSet<String>,
+    /// Kinds on the CPU, and since when: the hardware is tried again after
+    /// `BACK_AFTER`, so one bad minute does not cost it for good.
+    cpu: HashMap<String, Instant>,
+    /// Empty answers in a row, by kind.
+    fails: HashMap<String, u32>,
 }
+
+/// Empty answers in a row before a kind is decoded on the CPU. A hardware
+/// session can miss its first picture while it starts; three in a row is a
+/// decoder that will not do it.
+const TRIES: u32 = 3;
+const BACK_AFTER: Duration = Duration::from_secs(60);
 
 impl Chains {
     fn get(&mut self, caps: &gst::Caps) -> Option<&mut Chain> {
         let name = caps.structure(0)?.name().to_string();
+        if self.cpu.get(&name).is_some_and(|t| t.elapsed() >= BACK_AFTER) {
+            self.cpu.remove(&name);
+            self.built.remove(&name);
+        }
         if !self.built.contains_key(&name) {
-            let built = measure::chain_for(&name, self.cpu.contains(&name))?;
+            let built = measure::chain_for(&name, self.cpu.contains_key(&name))?;
             self.built.insert(name.clone(), built);
         }
         self.built.get_mut(&name)
     }
 
-    /// A chain gave nothing back: build it again, on the CPU this time.
+    /// A chain gave nothing back. After `TRIES` in a row it is built again,
+    /// on the CPU.
     fn refused(&mut self, caps: &gst::Caps) {
+        let Some(s) = caps.structure(0) else { return };
+        let name = s.name().to_string();
+        let fails = self.fails.entry(name.clone()).or_default();
+        *fails += 1;
+        if *fails >= TRIES {
+            self.built.remove(&name);
+            self.fails.remove(&name);
+            self.cpu.insert(name, Instant::now());
+        }
+    }
+
+    fn answered(&mut self, caps: &gst::Caps) {
         if let Some(s) = caps.structure(0) {
-            self.built.remove(s.name().as_str());
-            self.cpu.insert(s.name().to_string());
+            self.fails.remove(s.name().as_str());
         }
     }
 }
@@ -78,6 +105,7 @@ fn picture(chains: &mut Chains, show: &Show, caps: &gst::Caps, buffer: gst::Buff
         chains.refused(caps);
         return;
     };
+    chains.answered(caps);
     let now = now_ms();
     if let Some(luma) = measure::luma(&sample) {
         show.picture(luma, now);
