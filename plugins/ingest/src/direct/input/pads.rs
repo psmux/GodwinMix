@@ -78,18 +78,21 @@ pub fn parse_into(pipeline: &gst::Pipeline, pad: &gst::Pad, pads: &Arc<Pads>) ->
 
 /// One elementary stream, to the sink for its kind, or to a fakesink.
 fn attach(pipeline: &gst::Pipeline, pad: &gst::Pad, pads: &Pads) -> Result<(), String> {
-    let caps = pad.current_caps().unwrap_or_else(|| pad.query_caps(None));
+    // parsebin says what a pad carries in its stream object; the pad's own
+    // caps may not be set yet when it is announced.
+    let caps = pad.current_caps().or_else(|| pad.stream().and_then(|s| s.caps())).unwrap_or_else(|| pad.query_caps(None));
     let s = caps.structure(0).map(|s| s.to_owned());
     let name = s.as_ref().map(|s| s.name().to_string()).unwrap_or_default();
-    let mpeg = s.as_ref().and_then(|s| s.get::<i32>("mpegversion").ok()).unwrap_or(0);
+    // MPEG-1 audio is layers I to III; anything else called audio/mpeg is AAC.
+    let layered = s.as_ref().is_some_and(|s| s.get::<i32>("mpegversion").ok() == Some(1) || s.has_field("layer"));
     let video = name.starts_with("video/");
     let first = if video { &pads.video } else { &pads.audio };
     let (parser, sink) = match name.as_str() {
         "video/x-h264" => ("h264parse", tagger::video_sink(pads.to.clone(), pads.zero.clone())),
         "video/x-h265" => ("h265parse", tagger::hevc_sink(pads.to.clone(), pads.zero.clone())),
-        "audio/mpeg" if mpeg == 2 || mpeg == 4 => ("aacparse", tagger::audio_sink(pads.to.clone(), pads.zero.clone())),
+        "audio/mpeg" if !layered => ("aacparse", tagger::audio_sink(pads.to.clone(), pads.zero.clone())),
         "audio/x-ac3" | "audio/x-eac3" => ("ac3parse", frames::ac3_sink(pads.to.clone(), pads.zero.clone())),
-        "audio/mpeg" if mpeg == 1 => ("mpegaudioparse", frames::mpeg_sink(pads.to.clone(), pads.zero.clone())),
+        "audio/mpeg" => ("mpegaudioparse", frames::mpeg_sink(pads.to.clone(), pads.zero.clone())),
         _ => return discard(pipeline, pad, format!("{name}, which a direct show does not carry")),
     };
     if first.swap(true, Ordering::Relaxed) {

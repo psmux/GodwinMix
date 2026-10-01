@@ -140,7 +140,7 @@ pub struct Rist {
 
 impl Rist {
     pub fn new(spec: &InputSpec) -> Result<Rist, InputError> {
-        let rest = spec.uri.splitn(2, "://").nth(1).unwrap_or("").trim_start_matches('@');
+        let rest = spec.uri.split_once("://").map_or("", |(_, r)| r).trim_start_matches('@');
         let hostport = rest.split(['?', '/']).next().unwrap_or("");
         let (host, port) = hostport.rsplit_once(':').unwrap_or((hostport, ""));
         let port = port.parse::<u16>().ok().filter(|p| p % 2 == 0).ok_or_else(|| {

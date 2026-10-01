@@ -66,3 +66,6 @@ webrtc = ["dep:gstreamer-webrtc", "dep:gstreamer-sdp"]
 # A self signed certificate for the RTMPS test; already in the tree under the
 # core's node certificate authority.
 rcgen = { workspace = true }
+# A camera for the direct show's RTSP input test (src/direct/input/tests/),
+# already built for plugins/rtsp, so nothing new is compiled.
+gstreamer-rtsp-server = "0.24"
