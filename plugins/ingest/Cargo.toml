@@ -55,6 +55,12 @@ libloading = "0.8"
 gstreamer-webrtc = { version = "0.24", optional = true }
 gstreamer-sdp = { version = "0.24", optional = true }
 
+# getifaddrs and setsockopt, for the interface a UDP multicast output leaves
+# by and a send buffer that holds a keyframe (src/restream/iface.rs). Already
+# in the tree under the core and the udp plugin.
+[target.'cfg(unix)'.dependencies]
+libc = { workspace = true }
+
 [features]
 default = ["webrtc"]
 webrtc = ["dep:gstreamer-webrtc", "dep:gstreamer-sdp"]
