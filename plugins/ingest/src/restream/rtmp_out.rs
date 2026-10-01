@@ -29,6 +29,8 @@ pub struct RtmpLink {
     session: ClientSession,
     name: String,
     buf: Vec<u8>,
+    /// Said once that the sound could not be sent.
+    told_sound: bool,
 }
 
 impl RtmpLink {
@@ -41,7 +43,7 @@ impl RtmpLink {
         config.tc_url = Some(url.tc_url());
         let (session, _) = ClientSession::new(config)
             .map_err(|e| lost(&format!("could not start a session: {e:?}")))?;
-        let mut link = RtmpLink { io, session, name, buf: vec![0; 16 * 1024] };
+        let mut link = RtmpLink { io, session, name, buf: vec![0; 16 * 1024], told_sound: false };
         link.publish(&url, rest)?;
         link.io.read_wait(Duration::from_millis(1));
         Ok(link)
@@ -149,12 +151,32 @@ impl RtmpLink {
     }
 }
 
+impl RtmpLink {
+    /// AC-3, E-AC-3 and MPEG audio as enhanced RTMP v2 frames them: no
+    /// platform takes those, so the picture goes on alone and the log says
+    /// once what to do. AAC for an RTMP destination is a rendition, planned
+    /// and admitted by the station like any other.
+    fn unsendable_sound(&mut self, tag: &MediaTag) -> usize {
+        if !self.told_sound {
+            self.told_sound = true;
+            eprintln!(
+                "{}: the sound is {}, which RTMP does not carry, so the picture is sent alone. \
+                 Ask this destination for a rendition with AAC sound.",
+                self.name,
+                crate::exaudio::codec(&tag.payload)
+            );
+        }
+        0
+    }
+}
+
 impl Link for RtmpLink {
     fn send(&mut self, tag: &MediaTag, timestamp_ms: u32) -> Result<usize, Failure> {
         let at = RtmpTimestamp::new(timestamp_ms);
         let payload = Bytes::from_owner(tag.payload.clone());
         let result = match tag.kind {
             TagKind::Video => self.session.publish_video_data(payload, at, false),
+            TagKind::Audio if crate::exaudio::fourcc(&tag.payload).is_some() => return Ok(self.unsendable_sound(tag)),
             TagKind::Audio => self.session.publish_audio_data(payload, at, false),
             TagKind::Script => match super::meta::parse(&tag.payload) {
                 Some(m) => self.session.publish_metadata(&m),
