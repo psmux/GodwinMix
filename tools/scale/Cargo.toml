@@ -1,0 +1,24 @@
+[package]
+name = "gmx-scale"
+description = "The headend scale harness: a paced MPEG-TS feed generator, a UDP receiver that checks what comes back, and the station side of a benchmark run (bulk add, sampling, the report)"
+version = "0.2.0"
+edition = "2021"
+rust-version = "1.82"
+license = "Apache-2.0"
+publish = false
+
+# A workspace of its own, so the main build never compiles it and its lockfile
+# never touches the main one. dev/bench/scale.sh builds it with
+# `cargo build --release --manifest-path tools/scale/Cargo.toml`.
+[workspace]
+
+[[bin]]
+name = "gmx-scale"
+path = "src/main.rs"
+
+# Both are already in the main tree, so nothing new is downloaded. libc is for
+# the socket options std has no call for (the multicast interface, the receive
+# buffer, SO_REUSEPORT), poll, getrusage and, on macOS, a process's CPU time.
+[dependencies]
+libc = "0.2"
+serde_json = "1"
