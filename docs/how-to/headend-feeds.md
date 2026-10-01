@@ -132,6 +132,25 @@ taken from each feed: a second language, teletext and subtitles are left
 out, and so is MPEG-2 video, which nothing downstream of a direct show
 carries. `error` names what was left out once the feed is live.
 
+An HLS output carries AAC sound only. For a feed with layer II or AC-3
+sound, give the HLS output the rendition `{"audio": {"codec": "aac"}}`: the
+sound is decoded once and encoded as AAC, and the picture is still copied.
+E-AC-3 cannot be converted yet.
+
+## Watch a feed on a phone or in a browser
+
+Add an output with the address `hls://` and a name, and the station serves
+the feed as HLS from its own port, copied and not decoded:
+
+```json
+{"id": "bbc-one", "uri": "hls://viewers"}
+```
+
+That is `show.output.add`. The link a player opens is the output's
+`playback.master_url_path` in `show.list`,
+`/hls/viewers/master.m3u8?show=bbc-one&key=...`. [Serve HLS to
+viewers](serve-hls.md) has the rest, and what to do about MP2 sound.
+
 The silence alarm listens to all of those sound codecs. Before this release a
 direct show with layer II, MP3, AC-3 or E-AC-3 sound never had its sound
 measured, so a feed whose sound had really gone quiet raised nothing.

@@ -69,16 +69,18 @@ fn input(st: &Arc<Station>, v: &Value) {
         s.input = Some(v.clone());
         moved
     });
-    if moved && converts(st, &id) {
+    if moved && replans(st, &id) {
         st.direct.hand_over();
     }
     st.announce(&id);
     st.direct.announce_health(st, &id);
 }
 
-/// Whether any output of the show asks for a rendition.
-fn converts(st: &Station, id: &str) -> bool {
-    st.registry.lock().get(id).is_some_and(|r| !r.compositing && r.outputs.iter().any(|o| o.rendition.is_some() && o.enabled))
+/// Whether any output of the show asks for a rendition, or is HLS, whose
+/// packager reads from where the input now is.
+fn replans(st: &Station, id: &str) -> bool {
+    let wants = |o: &crate::station::registry::OutputRecord| o.enabled && (o.rendition.is_some() || o.platform == super::hls::spec::SCHEME);
+    st.registry.lock().get(id).is_some_and(|r| !r.compositing && r.outputs.iter().any(wants))
 }
 
 fn output(st: &Arc<Station>, v: &Value) {
@@ -107,9 +109,18 @@ fn host_health(st: &Arc<Station>, v: &Value) {
 fn stats(st: &Arc<Station>, v: &Value) {
     let Some(rows) = v["shows"].as_array() else { return };
     let ids = st.registry.lock().ids();
+    let mut filled = Vec::new();
     let mut seen = st.direct.seen.lock();
     for row in rows {
         let Some(id) = row["id"].as_str().filter(|id| ids.iter().any(|k| k == id)) else { continue };
-        seen.entry(id.to_string()).or_default().take_stats(row);
+        let s = seen.entry(id.to_string()).or_default();
+        s.take_stats(row);
+        if s.settle_fps() {
+            filled.push(id.to_string());
+        }
+    }
+    drop(seen);
+    if filled.iter().any(|id| replans(st, id)) {
+        st.direct.hand_over();
     }
 }

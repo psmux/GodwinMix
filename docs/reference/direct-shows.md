@@ -78,6 +78,7 @@ goes is the scheme of `url`; `platform` agrees with it.
 | `rtp://host:port` | the same in RTP, payload type 33, one sequence number per datagram | as `udp://` |
 | `rist://host:port` | MPEG-TS in RTP through `ristsink`, with retransmission; the port must be even | `buffer` in ms (default 1000) |
 | `file:///path/name.ts` | MPEG-TS written to the file; a name already there gets the time added | none |
+| `hls://name` | nothing: the station packages it and serves it at `/hls/<id>/` with `?show=` | none; `params` are the station's |
 
 SRT, UDP, RTP, RIST and files are muxed by the plugin's own MPEG-TS muxer
 (`plugins/ingest/src/tsmux/`), nothing decoded. A channel destination takes
@@ -100,6 +101,12 @@ An output with `rendition = true` reads the pair named by `video` and
 build. The input is decoded once per show however many renditions it has.
 With `rendition = true` and no `video` yet the output waits and sends
 nothing.
+
+An `hls` row starts no sender in the host. It is in the table so that its
+rendition, when it has one, is built, and so that the relay's loopback port
+is open while the show runs: the station reads `direct.<id>/main`, or the
+pair, through it with `GMXHUB` and packages it with the engine's HLS
+packager (`docs/reference/hls-output.md`).
 
 ## Events
 
@@ -177,8 +184,5 @@ listening port are needed; a `channel:` input has no channels to read here.
 
 ## What is not here yet
 
-* HLS from a direct show. The packager is the station's (`hls/output`);
-  every show's stream and every rendition pair is on the hub the relay
-  serves, so the station can read one with `GMXHUB direct.<id>/<name>` and
-  package it with nothing decoded again. That station side is not written.
+* A ladder of renditions for a direct show's HLS output: it carries one.
 * Per output CPU, which needs a per thread clock this host does not read.

@@ -669,6 +669,8 @@ class Destination(TypedDict, total=False):
     # What the plan gave it, while its stream is live.
     platform: str
     # A platform id from the table: youtube, facebook, twitch, custom, srt.
+    playback: Union[Playback, None]
+    # Where a player opens it, for an output this machine serves as HLS.
     reconnects: int
     # Connections lost and made again since it was switched on.
     refused: Union[DestinationRefusal, None]
@@ -1050,6 +1052,20 @@ class HistoryStep(TypedDict, total=False):
     redo: int
     undo: int
     # How many steps are still on each stack, so a UI greys out a button.
+
+class HlsOutputParams(TypedDict, total=False):
+    """An `hls://` output's params, as an `hls/output` takes them."""
+
+    low_latency: Optional[bool]
+    # true: parts of 333 ms.
+    part_ms: Optional[int]
+    # LL-HLS part, 0 for none.
+    segment_ms: Optional[int]
+    # 500 to 10000, default 2000.
+    viewer_key: Optional[str]
+    # 16 characters or more.
+    window: Optional[int]
+    # Seconds kept, default 30.
 
 class IdRequest(TypedDict, total=False):
     """An id on its own: `source.get`, `source.remove`, `output.remove`, `output.reconnect`, `media.remove`."""
@@ -1668,6 +1684,16 @@ class PlanView(TypedDict, total=False):
     nodes: List[PlanNode]
     totals: PlanTotals
 
+class Playback(TypedDict, total=False):
+    """The links of an output served as HLS from the control port, each with the output's viewer key on it."""
+
+    dash_url_path: str
+    # The same segments as a DASH MPD.
+    master_url_path: str
+    # `/hls/viewers/master.m3u8?show=bbc-one&key=...`.
+    viewers: int
+    # Players that fetched something in the last two windows.
+
 class PluginDescription(TypedDict, total=False):
     """The whole of one plugin, for an agent about to use it."""
 
@@ -2252,6 +2278,7 @@ class ShowOutputAddRequest(TypedDict, total=False):
     label: Optional[str]
     output: Optional[str]
     # The new output's own id, a slug. Made from the label when left out.
+    params: HlsOutputParams
     platform: Optional[str]
     rendition: Union[RenditionChoice, None]
     uri: Optional[str]
@@ -2274,6 +2301,8 @@ class ShowOutputSetRequest(TypedDict, total=False):
     label: Optional[str]
     output: str
     # The output's id.
+    params: HlsOutputParams
+    # Replaces them all.
     rendition: Union[RenditionChoice, None]
     # Left out keeps what it has; `null` or `{"preset": "copy"}` goes back to a copy.
     uri: Optional[str]
@@ -2288,12 +2317,14 @@ class ShowOutputSpec(TypedDict, total=False):
     key: Optional[str]
     # A platform's stream key. Write only: no method reads it back.
     label: Optional[str]
+    params: HlsOutputParams
+    # For an `hls://` output only.
     platform: Optional[str]
     # youtube, facebook, twitch, custom or srt. Left out: custom, which takes a whole address in `uri`.
     rendition: Union[RenditionChoice, None]
     # Left out: a copy of the input's own bytes, repackaged. Otherwise a rendition request or `{"preset": "youtube-720p30"}`, planned and admitted by the governor.
     uri: Optional[str]
-    # The whole address: `srt://10.0.0.9:9000`, `rtmp://host/app/key`, `udp://239.2.2.2:5000`. For a platform, its ingest server when it is not the platform's own.
+    # The whole address: `srt://10.0.0.9:9000`, `rtmp://host/app/key`, `udp://239.2.2.2:5000`, `hls://viewers`. For a platform, its ingest server when it is not the platform's own.
 
 class ShowRefused(TypedDict, total=False):
     """A show of `show.add_many` that was not made, and why."""
@@ -3071,7 +3102,7 @@ METHODS = (
     {"name": "show.add", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/shows"), "summary": 'Make another show and start it: empty, a copy of a show (without its outputs, so nothing goes out twice), or from a project file.'},
     {"name": "show.add_many", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/shows/add_many"), "summary": 'Make many shows in one call, such as every channel of a headend. The whole batch is checked first. With dry_run (the default) nothing is made: the answer says what would be, what its renditions would cost and whether the governor would admit them. Without it, every show that fits is made and the rest are refused with why; a show is made whole or not at all.'},
     {"name": "show.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/shows"), "summary": 'Every show on this machine: its name, whether it is running, what is on air, what its outputs send and what its process costs. `current` is the show a client reaches when it names none.'},
-    {"name": "show.output.add", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/shows/{id}/output/add"), "summary": "Send a show without compositing to another place: an address (SRT, RTMP, UDP, RTP or RIST), or a platform and its key. Left without a rendition it copies the input's bytes; with one it is planned and admitted by the governor. The key is write only."},
+    {"name": "show.output.add", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/shows/{id}/output/add"), "summary": "Send a show without compositing to another place: an address (SRT, RTMP, UDP, RTP or RIST), a platform and its key, or hls://<name> to serve it as HLS from this port. Left without a rendition it copies the input's bytes; with one it is planned and admitted by the governor. The key is write only."},
     {"name": "show.output.remove", "scope": "admin", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/shows/{id}/output/remove"), "summary": 'Stop one output of a show without compositing and forget it, key and all.'},
     {"name": "show.output.set", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/shows/{id}/output"), "summary": 'Change one output of a show without compositing, naming only what moves: another address, a new key, on or off, copy or a rendition.'},
     {"name": "show.remove", "scope": "admin", "mutating": True, "destructive": True, "rest": ("DELETE", "/api/v1/shows/{id}"), "summary": 'Stop a show and remove it with its folder. Refused for the last show and for main, the show the station was started with.'},
@@ -5079,11 +5110,12 @@ class GeneratedMethods:
         key: Optional[str] = None,
         label: Optional[str] = None,
         output: Optional[str] = None,
+        params: Optional[HlsOutputParams] = None,
         platform: Optional[str] = None,
         rendition: Optional[Union[RenditionChoice, None]] = None,
         uri: Optional[str] = None,
     ) -> Show:
-        """Send a show without compositing to another place: an address (SRT, RTMP, UDP, RTP or RIST), or a platform and its key. Left without a rendition it copies the input's bytes; with one it is planned and admitted by the governor. The key is write only."""
+        """Send a show without compositing to another place: an address (SRT, RTMP, UDP, RTP or RIST), a platform and its key, or hls://<name> to serve it as HLS from this port. Left without a rendition it copies the input's bytes; with one it is planned and admitted by the governor. The key is write only."""
         params: Dict[str, Any] = {}
         params["id"] = id
         if enabled is not None:
@@ -5094,6 +5126,8 @@ class GeneratedMethods:
             params["label"] = label
         if output is not None:
             params["output"] = output
+        if params is not None:
+            params["params"] = params
         if platform is not None:
             params["platform"] = platform
         if rendition is not None:
@@ -5121,6 +5155,7 @@ class GeneratedMethods:
         enabled: Optional[bool] = None,
         key: Optional[str] = None,
         label: Optional[str] = None,
+        params: Optional[HlsOutputParams] = None,
         rendition: Optional[Union[RenditionChoice, None]] = None,
         uri: Optional[str] = None,
     ) -> Show:
@@ -5134,6 +5169,8 @@ class GeneratedMethods:
             params["key"] = key
         if label is not None:
             params["label"] = label
+        if params is not None:
+            params["params"] = params
         if rendition is not None:
             params["rendition"] = rendition
         if uri is not None:

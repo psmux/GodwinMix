@@ -6,8 +6,10 @@ use godwinmix_render::{NodeKind, Plan, PlanError, Track};
 
 use super::source::video_codec;
 
-/// The listener decodes H.264, HEVC and AAC, and its senders carry the same
-/// (HEVC as enhanced RTMP, and in MPEG-TS made from it). A plan that would
+/// The listener decodes H.264, HEVC and AAC, and the sound broadcast feeds
+/// carry (MPEG audio and AC-3, read frame by frame by `transcode::input`);
+/// its senders carry H.264, HEVC and AAC (HEVC as enhanced RTMP, and in
+/// MPEG-TS made from it). A plan that would
 /// decode or encode anything else is refused for the destinations it serves,
 /// with the reason. AV1 is left out: its size cannot be read off the stream
 /// yet, and the SRT sender's demuxer does not read it.
@@ -29,12 +31,13 @@ pub fn undecodable(plan: &Plan, sources: &[(String, StreamInfo)]) -> Option<(Vec
         let info = sources.iter().find(|(s, _)| s == source).map(|(_, i)| i)?;
         let (ok, name) = match track {
             Track::Video => (info.video.is_some_and(|v| carried(v.codec)), "its video"),
-            Track::Audio => (info.audio.is_some_and(|a| a.codec == AudioCodec::Aac), "its sound"),
+            Track::Audio => (info.audio.is_some_and(|a| matches!(a.codec, AudioCodec::Aac | AudioCodec::Mp3 | AudioCodec::Ac3)), "its sound"),
         };
         if !ok {
             let message = format!(
-                "Stream `{source}` would have to be decoded to make this, and {name} is not H.264, HEVC or AAC, \
-                 which is all the channel server converts from. Ask for a copy, or send H.264 or HEVC and AAC."
+                "Stream `{source}` would have to be decoded to make this, and {name} is not H.264, HEVC, AAC, \
+                 MPEG audio or AC-3, which is all the channel server converts from. Ask for a copy, or send H.264 \
+                 or HEVC and AAC."
             );
             return Some((n.serves.clone(), refusal("plan", message)));
         }

@@ -143,6 +143,7 @@ impl Channels {
                     rendition: d.rendition.clone(),
                     plan,
                     refused,
+                    playback: None,
                 }
             })
             .collect()

@@ -184,6 +184,11 @@ impl Discover {
                 r.warn(why);
             }
         }
+        // A show the station reads through the relay keeps it open.
+        let table = self.gate.table.read().unwrap_or_else(|e| e.into_inner()).clone();
+        let mut listeners = self.lock_listeners();
+        listeners.readers = self.direct.readers();
+        listeners.apply(&table);
     }
 
     /// What `discover` answers with: one candidate per live channel stream.

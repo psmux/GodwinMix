@@ -19,6 +19,7 @@
 
 mod edit;
 mod health;
+pub mod hls;
 pub mod inputs;
 mod intake;
 mod mixed;
@@ -59,6 +60,8 @@ pub struct Direct {
     /// The renditions of direct outputs, planned and admitted like a
     /// channel's, against the station's governor.
     pub(crate) transcode: Transcode,
+    /// The HLS outputs, packaged and served by the station itself.
+    pub(crate) hls: hls::Packagers,
     /// How many times a table was asked for, and how many were handed.
     gens: Mutex<(u64, u64)>,
     handed: Condvar,
@@ -71,6 +74,7 @@ impl Direct {
             plugins: OnceLock::new(),
             seen: Mutex::new(BTreeMap::new()),
             transcode: Transcode::new(data_dir),
+            hls: hls::Packagers::default(),
             gens: Mutex::new((0, 0)),
             handed: Condvar::new(),
             wake: Mutex::new(None),

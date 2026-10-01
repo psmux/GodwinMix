@@ -22,7 +22,10 @@ pub fn router(st: Arc<Station>) -> Router {
         .route("/api/v1/shows/{id}/thumbnail.jpg", get(super::thumb::thumbnail))
         .route("/api/v1/{*rest}", any(api))
         .fallback(any(relay))
-        .with_state(st);
+        .with_state(st.clone())
+        // A show without compositing has its HLS served here; every other
+        // show's goes on to it.
+        .merge(super::direct::hls::router(st));
     if let Some(whip) = whip {
         router = router.merge(whip);
     }
