@@ -134,6 +134,26 @@ impl Shared {
         }
     }
 
+    /// Throw away everything before the newest keyframe, headers apart, and
+    /// count each GOP thrown away. A reader that has been away (a
+    /// destination reconnecting) starts from now, not from what it missed.
+    pub fn skip_to_latest_keyframe(&self) {
+        let mut q = self.lock();
+        let Some(latest) = q.tags.iter().rposition(is_gop_start) else { return };
+        let gone = q.tags.iter().take(latest).filter(|t| is_gop_start(t)).count() as u64;
+        let mut kept = VecDeque::with_capacity(q.tags.len() - latest + 3);
+        let mut bytes = 0;
+        for (i, t) in std::mem::take(&mut q.tags).into_iter().enumerate() {
+            if i >= latest || t.sequence_header || t.kind == TagKind::Script {
+                bytes += t.payload.len();
+                kept.push_back(t);
+            }
+        }
+        q.tags = kept;
+        q.bytes = bytes;
+        q.dropped_gops += gone;
+    }
+
     pub fn dropped_gops(&self) -> u64 {
         self.lock().dropped_gops
     }
