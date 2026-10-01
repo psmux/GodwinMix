@@ -966,6 +966,10 @@ pub struct CoreInfo {
     /// the desktop app starts it again after it exits.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub supervised: Option<bool>,
+    /// HTTPS on the control port, when it is on. Absent when `[control.tls]`
+    /// is off or the certificate could not be loaded.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tls: Option<TlsInfo>,
     /// Present when the request carried a token the core recognises.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub token: Option<TokenInfo>,
@@ -4150,6 +4154,26 @@ pub struct ThumbnailRequest {
     /// Pixels across, 16 to 320, made even. 320 when left out.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub width: Option<u32>,
+}
+
+/// `core.info.tls`: what the control port answers HTTPS with.
+///
+/// Enough for a page to say "open this address, accept the certificate
+/// warning once, and check the fingerprint is this one".
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TlsInfo {
+    /// SHA-256 of the certificate, upper case hex in colon separated pairs,
+    /// the way a browser's certificate viewer shows it.
+    pub fingerprint: String,
+    /// The host names and addresses a self signed certificate was made for.
+    /// Empty for an operator's own certificate.
+    pub names: Vec<String>,
+    /// Where the certificate came from: `self_signed` (made by this mixer) or
+    /// `files` (the operator's own, from `[control.tls] cert` and `key`).
+    pub source: String,
+    /// `https://` addresses this mixer can be opened at, the LAN one first.
+    pub urls: Vec<String>,
 }
 
 /// What the calling token is allowed to do, echoed back so a surface can grey

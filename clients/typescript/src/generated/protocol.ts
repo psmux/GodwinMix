@@ -532,6 +532,7 @@ export interface CoreInfo {
   rehearsal: boolean;
   restart?: RestartInfo;
   supervised?: boolean;
+  tls?: TlsInfo | null;
   token?: TokenInfo | null;
   ui?: UiDefaults | null;
   version: string;
@@ -2370,6 +2371,19 @@ export type TelemetryExt = boolean | {
 /** `program.thumbnail`. */
 export interface ThumbnailRequest {
   width?: number | null;
+}
+
+/**
+ * `core.info.tls`: what the control port answers HTTPS with.
+ *
+ * Enough for a page to say "open this address, accept the certificate
+ * warning once, and check the fingerprint is this one".
+ */
+export interface TlsInfo {
+  fingerprint: string;
+  names?: string[];
+  source: string;
+  urls: string[];
 }
 
 /**
