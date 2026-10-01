@@ -6,6 +6,8 @@
 mod direct;
 mod direct_live;
 mod hls_direct;
+#[cfg(unix)]
+mod hls_isolation;
 mod home;
 #[cfg(unix)]
 mod isolation;
