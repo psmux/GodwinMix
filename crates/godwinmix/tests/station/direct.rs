@@ -110,6 +110,12 @@ async fn a_batch_is_checked_whole_priced_on_a_dry_run_and_made_without_half_a_sh
         }
     };
     assert!(priced.unwrap_or(0) > 0, "the rendition was priced: {d}");
+    // Judged against the encoding device too, where the machine has one: on
+    // the CPU's room alone a hardware encode never fit.
+    let gov = get(&st, "/api/v1/governor/status").await;
+    if gov["devices"].as_array().is_some_and(|d| !d.is_empty()) {
+        assert!(d["plan"]["have"]["device_millis"].as_u64() > Some(0), "{d} {gov}");
+    }
     assert!(d["plan"]["assumed_input"].as_str().unwrap().contains("1920x1080"));
     let list = get(&st, "/api/v1/shows").await;
     assert_eq!(list["shows"].as_array().map(Vec::len), Some(1), "a dry run makes nothing: {list}");
