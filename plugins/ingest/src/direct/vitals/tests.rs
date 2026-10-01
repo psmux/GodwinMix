@@ -94,9 +94,14 @@ fn a_clean_stream_raises_nothing_and_gets_a_thumbnail() {
     std::thread::sleep(Duration::from_secs(5));
     let all = w.events.lock().unwrap().clone();
     assert!(all.iter().all(|e| kinds(e).is_empty() || kinds(e) == ["no-input"]), "{all:#?}");
-    let thumb = w.vitals.thumbnail("news").unwrap().expect("a thumbnail after five seconds");
+    let thumb = w.vitals.thumbnail("news", None).unwrap().expect("a thumbnail after five seconds");
     assert_eq!((thumb.width, thumb.height), (320, 180));
     assert_eq!(&thumb.jpeg[..2], &[0xff, 0xd8], "a JPEG");
+    w.vitals.thumbnail("news", Some(160)).unwrap();
+    std::thread::sleep(Duration::from_secs(3));
+    let small = w.vitals.thumbnail("news", Some(160)).unwrap().unwrap();
+    assert_eq!((small.width, small.height), (160, 90), "the wall's width, from the next keyframe on");
+    assert!(small.jpeg.len() < thumb.jpeg.len());
 }
 
 #[test]
@@ -110,7 +115,7 @@ fn a_black_picture_is_black_until_it_is_not() {
     p.by_name("v").unwrap().set_property_from_str("pattern", "smpte75");
     p.by_name("v").unwrap().set_property("horizontal-speed", 8i32);
     w.until(&[], Duration::from_secs(10));
-    assert!(w.vitals.thumbnail("news").unwrap().is_none(), "no JPEG was made: nobody was looking");
+    assert!(w.vitals.thumbnail("news", None).unwrap().is_none(), "no JPEG was made: nobody was looking");
 }
 
 #[test]

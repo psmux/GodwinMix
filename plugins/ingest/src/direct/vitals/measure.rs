@@ -50,7 +50,13 @@ pub fn chain_for(kind: &str, cpu: bool) -> Option<Chain> {
             let dec = ["avdec_aac", "fdkaacdec"].into_iter().find(|d| exists(&[d]))?;
             Chain::new(&[dec, "audioconvert"], out)
         }
-        "jpeg" => Chain::new(&["jpegenc"], gst::Caps::new_empty_simple("image/jpeg")),
+        jpeg if jpeg.starts_with("jpeg/") => {
+            // A thumbnail of the asked size, from the 320 pixel picture.
+            let (w, h) = jpeg[5..].split_once('x')?;
+            let (width, height): (i32, i32) = (w.parse().ok()?, h.parse().ok()?);
+            let out = gst::Caps::builder("image/jpeg").field("width", width).field("height", height).build();
+            Chain::new(&["videoscale", "jpegenc"], out)
+        }
         _ => return None,
     };
     built.ok()

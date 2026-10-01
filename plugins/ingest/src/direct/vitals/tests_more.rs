@@ -43,7 +43,7 @@ fn with_its_alarms_off_and_nobody_looking_nothing_is_decoded() {
     let all = w.events.lock().unwrap().clone();
     assert!(all.iter().all(|e| super::kinds(e).iter().all(|k| k == "no-input")), "{all:#?}");
     // A thumbnail request turns pictures on for a while, alarms or not.
-    assert!(w.vitals.thumbnail("news").unwrap().is_none());
+    assert!(w.vitals.thumbnail("news", Some(160)).unwrap().is_none());
     std::thread::sleep(Duration::from_secs(3));
-    assert!(w.vitals.thumbnail("news").unwrap().is_some(), "the request started the keyframe decode");
+    assert!(w.vitals.thumbnail("news", Some(160)).unwrap().is_some(), "the request started the keyframe decode");
 }

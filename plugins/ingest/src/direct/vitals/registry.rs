@@ -55,7 +55,7 @@ impl Vitals {
             taps.insert(id.to_string(), Tap::new(show, app, stream));
         }
         let show = &taps[id].show;
-        show.alarms.store(monitor["alarms"].as_bool().unwrap_or(true), Ordering::Relaxed);
+        show.set_checks(monitor["alarms"].as_bool().unwrap_or(true), &limits);
         show.pictures.store(monitor["pictures"].as_bool().unwrap_or(false), Ordering::Relaxed);
         lock(&show.judge).limits = limits;
     }
@@ -98,12 +98,16 @@ impl Vitals {
         self.pool.offer(Job::Picture { show: tap.show.clone(), caps, buffer, jpeg });
     }
 
-    /// The newest thumbnail, and pictures kept on for `ASKED_FOR_MS` more.
+    /// The newest thumbnail, and pictures kept on for `ASKED_FOR_MS` more,
+    /// `width` pixels across from the next keyframe on (16 to 640, even).
     /// `Err` for a show this host does not run; `Ok(None)` while the first
     /// keyframe is still on its way.
-    pub fn thumbnail(&self, id: &str) -> Result<Option<Thumb>, String> {
+    pub fn thumbnail(&self, id: &str, width: Option<u32>) -> Result<Option<Thumb>, String> {
         let show = self.show(id).ok_or_else(|| format!("no direct show called {id} is running here"))?;
         show.asked_until.store(now_ms() + ASKED_FOR_MS, Ordering::Relaxed);
+        if let Some(w) = width {
+            show.jpeg_width.store(w.clamp(16, 640) & !1, Ordering::Relaxed);
+        }
         let thumb = lock(&show.thumb).clone();
         Ok(thumb)
     }
