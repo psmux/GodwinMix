@@ -38,6 +38,9 @@ fn thumb_caps() -> gst::Caps {
 /// without pictures and says nothing more. `cpu` skips the hardware
 /// decoders, for a worker whose hardware decoder has refused.
 pub fn chain_for(kind: &str, cpu: bool) -> Option<Chain> {
+    // `GMX_VITALS_CPU` set: never the hardware, which is how the benches
+    // measure a machine without one.
+    let cpu = cpu || std::env::var_os("GMX_VITALS_CPU").is_some();
     let scale = ["videoscale", "videoconvert"];
     if let Some(names) = decoders(kind).iter().filter(|d| !cpu || d.len() == 1).find(|d| exists(d)) {
         let all: Vec<&str> = names.iter().chain(scale.iter()).copied().collect();

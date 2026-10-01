@@ -17,6 +17,7 @@ use gstreamer::prelude::*;
 use serde_json::json;
 
 use super::Vitals;
+use ways::phase;
 use crate::hub::{Hub, Publication};
 use crate::media_tag::MediaTag;
 use crate::rtmp::Inlet;
@@ -31,7 +32,7 @@ impl Inlet for Collect {
 }
 
 /// Ten seconds of 1080p, encoded as fast as the encoder goes.
-fn clip() -> Vec<MediaTag> {
+pub fn clip() -> Vec<MediaTag> {
     gmx_netkit::init().unwrap();
     let tags: Arc<Mutex<Vec<MediaTag>>> = Arc::default();
     let to = tagger::share(Box::new(Collect(tags.clone())));
@@ -81,25 +82,13 @@ fn replay(hub: &Hub, clip: Vec<MediaTag>, n: usize, stop: Arc<AtomicBool>) -> st
     })
 }
 
-/// This process's CPU seconds and resident MB, from `ps`.
-fn usage() -> (f64, f64) {
-    let out = std::process::Command::new("ps").args(["-o", "time=,rss=", "-p", &std::process::id().to_string()]).output().unwrap();
-    let text = String::from_utf8_lossy(&out.stdout);
-    let mut f = text.split_whitespace();
-    let time = f.next().unwrap_or("0:0");
-    let secs = time.split(':').fold(0.0, |acc, part| acc * 60.0 + part.parse::<f64>().unwrap_or(0.0));
-    (secs, f.next().unwrap_or("0").parse::<f64>().unwrap_or(0.0) / 1024.0)
-}
-
-/// CPU in percent of one core and resident MB over `secs`.
-fn phase(name: &str, secs: u64) -> (f64, f64) {
-    let (c0, _) = usage();
-    let t0 = Instant::now();
-    std::thread::sleep(Duration::from_secs(secs));
-    let (c1, mb) = usage();
-    let cpu = 100.0 * (c1 - c0) / t0.elapsed().as_secs_f64();
-    eprintln!("BENCH {name}: {cpu:.1}% of one core, {mb:.0} MB resident");
-    (cpu, mb)
+/// `VITALS_CHECKS=picture` or `sound` measures one half alone.
+fn checks() -> serde_json::Value {
+    match std::env::var("VITALS_CHECKS").as_deref() {
+        Ok("picture") => json!({"silence_secs": 0}),
+        Ok("sound") => json!({"black_secs": 0, "freeze_secs": 0}),
+        _ => json!({}),
+    }
 }
 
 fn run(n: usize, wall: usize, workers: usize) {
@@ -111,7 +100,7 @@ fn run(n: usize, wall: usize, workers: usize) {
     let vitals = Vitals::start(hub.clone(), Arc::new(|_, _| {}), workers);
     for i in 0..n {
         let id = format!("show-{i}");
-        vitals.watch(&id, &id, "main", &json!({"alarms": true, "pictures": false}));
+        vitals.watch(&id, &id, "main", &json!({"alarms": true, "pictures": false, "thresholds": checks()}));
     }
     std::thread::sleep(Duration::from_secs(3));
     let (alarms, mb) = phase(&format!("{n} shows, alarms on, nobody looking, {workers} workers"), 20);
@@ -145,3 +134,6 @@ fn two_hundred_shows_and_a_wall_of_forty() {
     let workers = std::env::var("VITALS_WORKERS").ok().and_then(|w| w.parse().ok()).unwrap_or(3);
     run(200, 40, workers);
 }
+
+#[path = "bench_ways.rs"]
+mod ways;
