@@ -48,7 +48,7 @@ pub async fn call(st: &Arc<Station>, token: &Token, method: &str, params: Value)
         "governor.status" => {
             let mut status = status::governor_status(&st.render, &[]);
             status.ingress_kbps = ingress_kbps(st);
-            status.cpu.used_millicores = status.cpu.used_millicores.max(station_used(st).await);
+            status.cpu.measured_millicores = measured(st).await;
             Ok(serde_json::to_value(status).unwrap_or_default())
         }
         "governor.calibrate" => calibrate(st, &params),
@@ -87,12 +87,13 @@ fn ingress_kbps(st: &Station) -> u32 {
 /// station's own process, as the governor samples it, and every show
 /// process and plugin it started, the direct host among them. The shows'
 /// reports are taken out of the governor's figure first, since the reading
-/// of the children counts those processes already.
-async fn station_used(st: &Arc<Station>) -> u32 {
-    let Some(children) = super::usage::children(st).await.millicores() else { return 0 };
+/// of the children counts those processes already. None where another
+/// process's CPU cannot be read.
+async fn measured(st: &Arc<Station>) -> Option<u32> {
+    let children = super::usage::children(st).await.millicores()?;
     let reported: u32 = st.loads.lock().values().sum();
     let own = st.render.governor().load().own_millicores.saturating_sub(reported);
-    own.saturating_add(children)
+    Some(own.saturating_add(children))
 }
 
 fn calibrate(st: &Station, params: &Value) -> Result<Value, RpcError> {

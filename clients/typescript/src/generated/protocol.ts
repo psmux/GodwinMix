@@ -548,6 +548,7 @@ export interface Cost {
 
 export interface CpuUse {
   cores: number;
+  measured_millicores?: number | null;
   room_millicores: number;
   used_millicores: number;
 }

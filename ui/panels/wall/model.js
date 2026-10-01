@@ -126,6 +126,12 @@ export function rows(shows, stats, opts = {}) {
 }
 
 /** The header's counts. `gov` is governor.status, or null. */
+/**
+ * The header's CPU: what a station measures of every process it started,
+ * where it can, else what the governor counts as used.
+ */
+export const cpuMillicores = (cpu) => (cpu.measured_millicores != null ? cpu.measured_millicores : cpu.used_millicores || 0);
+
 export function summary(shows, stats, gov) {
   const live = shows.filter(isLive).length;
   const alarm = shows.filter((s) => healthOf(s).state === "alarm").length;
@@ -134,7 +140,7 @@ export function summary(shows, stats, gov) {
   const partial = inK == null;
   if (inK == null) inK = [...stats.values()].reduce((n, st) => n + inKbps(st), 0);
   if (outK == null) outK = [...stats.values()].reduce((n, st) => n + (st.outputs || []).reduce((m, o) => m + (o.kbps || 0), 0), 0);
-  const cpu = gov && gov.cpu && gov.cpu.cores ? Math.round(gov.cpu.used_millicores / gov.cpu.cores / 10) : null;
+  const cpu = gov && gov.cpu && gov.cpu.cores ? Math.round(cpuMillicores(gov.cpu) / gov.cpu.cores / 10) : null;
   const dev = gov && (gov.devices || [])[0];
   const gpu = dev ? Math.round((dev.used_millis || 0) / 10) : null;
   return { shows: shows.length, live, alarm, inK, outK, partial, cpu, gpu };

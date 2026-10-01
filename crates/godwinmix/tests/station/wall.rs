@@ -98,7 +98,7 @@ async fn the_wall_counts_what_a_show_that_mixes_costs_in_its_load_and_header() {
     let s = call(&mut ws, 6, "show.stats", json!({"ids": ["main"]})).await;
     let mixes = s["result"]["shows"][0]["cpu_millicores"].as_u64().unwrap_or(0);
     let g = call(&mut ws, 7, "governor.status", json!({})).await;
-    let used = g["result"]["cpu"]["used_millicores"].as_u64().unwrap_or(0);
+    let used = g["result"]["cpu"]["measured_millicores"].as_u64().unwrap_or(0);
     assert!(mixes > 0, "a show recording its programme costs something: {s}");
     assert!(used >= mixes * 3 / 4, "the header's CPU, {used} millicores, leaves out the show that mixes at {mixes}: {g}");
 }

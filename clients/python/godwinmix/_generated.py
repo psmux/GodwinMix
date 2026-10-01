@@ -633,6 +633,8 @@ class Cost(TypedDict, total=False):
 
 class CpuUse(TypedDict, total=False):
     cores: int
+    measured_millicores: Optional[int]
+    # What a station's processes cost now, read when asked: its own, every show process and every plugin it started. Left out by a single process core and where another process's CPU cannot be read.
     room_millicores: int
     used_millicores: int
 
