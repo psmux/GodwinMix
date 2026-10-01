@@ -67,8 +67,8 @@ pub fn output(st: &Arc<Station>, method: &str, params: Value) -> Result<Value, R
             let req: ShowOutputAddRequest = parse(method, params)?;
             // Priced before it is kept: an output the planner cannot serve
             // is refused here rather than written down and left failing.
-            edit_outputs(st, &req.show, |list| {
-                direct::add_output(list, &req.show, &req.output)?;
+            edit_outputs(st, &req.id, |list| {
+                direct::add_output(list, &req.id, &req.spec())?;
                 st.direct
                     .price(list)
                     .map(|_| ())
@@ -77,13 +77,13 @@ pub fn output(st: &Arc<Station>, method: &str, params: Value) -> Result<Value, R
         }
         "show.output.set" => {
             let req: ShowOutputSetRequest = parse(method, params)?;
-            edit_outputs(st, &req.show, |list| direct::set_output(list, &req))
+            edit_outputs(st, &req.id, |list| direct::set_output(list, &req))
         }
         "show.output.remove" => {
             let req: ShowOutputRemoveRequest = parse(method, params)?;
-            edit_outputs(st, &req.show, |list| {
+            edit_outputs(st, &req.id, |list| {
                 let ids: Vec<String> = list.iter().map(|d| d.id.clone()).collect();
-                let at = list.iter().position(|d| d.id == req.output).ok_or_else(|| RpcError::not_found("output", &req.output, &ids).with("show", req.show.clone()))?;
+                let at = list.iter().position(|d| d.id == req.output).ok_or_else(|| RpcError::not_found("output", &req.output, &ids).with("show", req.id.clone()))?;
                 list.remove(at);
                 Ok(())
             })

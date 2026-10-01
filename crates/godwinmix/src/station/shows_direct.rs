@@ -38,8 +38,10 @@ pub fn check_input(input: &InputSpec) -> Result<(), RpcError> {
         return Err(RpcError::invalid_params(msg).with("field", "input.uri").with("schemes", INPUTS.to_vec()));
     }
     match &input.backup {
-        Some(b) if b.backup.is_some() => Err(RpcError::invalid_params("a backup input has no backup of its own").with("field", "input.backup.backup")),
-        Some(b) => check_input(b).map_err(|e| e.with("backup", true)),
+        Some(b) => {
+            let main = InputSpec { uri: b.uri.clone(), program: b.program, params: b.params.clone(), backup: None };
+            check_input(&main).map_err(|e| e.with("field", "input.backup.uri"))
+        }
         None => Ok(()),
     }
 }

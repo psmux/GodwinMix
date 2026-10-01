@@ -171,10 +171,17 @@ Keys accepted on every method, handled before a method runs.
 | `scene.undo` | `POST /api/v1/scenes/undo` | operate |  | 1 | Undo the last change. A drag marked with scene.history.mark undoes as one step. |
 | `scene.validate` | `GET /api/v1/scenes/validate` | read |  | 1 | Overlaps, items off the canvas, safe area breaches and missing sources: what to fix before saying a scene is done. |
 | `show.add` | `POST /api/v1/shows` | admin |  | 1 | Make another show and start it: empty, a copy of a show (without its outputs, so nothing goes out twice), or from a project file. |
+| `show.add_many` | `POST /api/v1/shows/add_many` | admin |  | 1 | Make many shows in one call, such as every channel of a headend. The whole batch is checked first. With dry_run (the default) nothing is made: the answer says what would be, what its renditions would cost and whether the governor would admit them. Without it, every show that fits is made and the rest are refused with why; a show is made whole or not at all. |
 | `show.list` | `GET /api/v1/shows` | read |  | 1 | Every show on this machine: its name, whether it is running, what is on air, what its outputs send and what its process costs. `current` is the show a client reaches when it names none. |
+| `show.output.add` | `POST /api/v1/shows/{id}/output/add` | admin |  | 1 | Send a show without compositing to another place: an address (SRT, RTMP, UDP, RTP or RIST), or a platform and its key. Left without a rendition it copies the input's bytes; with one it is planned and admitted by the governor. The key is write only. |
+| `show.output.remove` | `POST /api/v1/shows/{id}/output/remove` | admin | yes | 1 | Stop one output of a show without compositing and forget it, key and all. |
+| `show.output.set` | `POST /api/v1/shows/{id}/output` | admin |  | 1 | Change one output of a show without compositing, naming only what moves: another address, a new key, on or off, copy or a rendition. |
 | `show.remove` | `DELETE /api/v1/shows/{id}` | admin | yes | 1 | Stop a show and remove it with its folder. Refused for the last show and for main, the show the station was started with. |
+| `show.remove_many` | `POST /api/v1/shows/remove_many` | admin | yes | 1 | Stop and remove many shows. Each id that cannot go (main, or one not there) is refused with why, and the rest go. |
 | `show.rename` | `POST /api/v1/shows/{id}/rename` | admin |  | 1 | Give a show another name. Its id stays. |
+| `show.set` | `POST /api/v1/shows/{id}/set` | admin |  | 1 | Change a show's name, its input, or whether it composites. Turning compositing on starts a show process whose one source is the input and moves the outputs to it; turning it off hands them back to the direct host, when the show has one source and no scenes in use. The answer says how long the outputs were off. |
 | `show.start` | `POST /api/v1/shows/{id}/start` | admin |  | 1 | Start a stopped or failed show. |
+| `show.stats` | `POST /api/v1/shows/stats` | read |  | 1 | Health, input numbers and each output's numbers for many shows in one read, from what the station already holds, so it is cheap to call every second for two hundred shows. `fields` narrows it to health, input or outputs. |
 | `show.stop` | `POST /api/v1/shows/{id}/stop` | admin |  | 1 | Stop a show. It keeps its config, and stays stopped when the station starts again, until show.start. |
 | `snapshot.get` | `GET /api/v1/snapshot/{id}` | read |  | 1 | One JPEG: the whole contact sheet, the programme, or one source cut out of the mosaic. |
 | `source.add` | `POST /api/v1/sources` | operate |  | 1 | Add a source while the mixer runs. Answers with the id it got and the whole source record. |
@@ -2434,6 +2441,21 @@ Make another show and start it: empty, a copy of a show (without its outputs, so
 }
 ```
 
+#### `show.add_many`
+
+Make many shows in one call, such as every channel of a headend. The whole batch is checked first. With dry_run (the default) nothing is made: the answer says what would be, what its renditions would cost and whether the governor would admit them. Without it, every show that fits is made and the rest are refused with why; a show is made whole or not at all.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ShowAddManyRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/ShowAddManyResult"
+  }
+}
+```
+
 #### `show.list`
 
 Every show on this machine: its name, whether it is running, what is on air, what its outputs send and what its process costs. `current` is the show a client reaches when it names none.
@@ -2453,6 +2475,51 @@ MCP tool `list_shows` in the `search` profile: readOnlyHint true, destructiveHin
 }
 ```
 
+#### `show.output.add`
+
+Send a show without compositing to another place: an address (SRT, RTMP, UDP, RTP or RIST), or a platform and its key. Left without a rendition it copies the input's bytes; with one it is planned and admitted by the governor. The key is write only.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ShowOutputAddRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/Show"
+  }
+}
+```
+
+#### `show.output.remove`
+
+Stop one output of a show without compositing and forget it, key and all.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ShowOutputRemoveRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/Show"
+  }
+}
+```
+
+#### `show.output.set`
+
+Change one output of a show without compositing, naming only what moves: another address, a new key, on or off, copy or a rendition.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ShowOutputSetRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/Show"
+  }
+}
+```
+
 #### `show.remove`
 
 Stop a show and remove it with its folder. Refused for the last show and for main, the show the station was started with.
@@ -2464,6 +2531,21 @@ Stop a show and remove it with its folder. Refused for the last show and for mai
   },
   "result": {
     "$ref": "#/$defs/ShowRemoved"
+  }
+}
+```
+
+#### `show.remove_many`
+
+Stop and remove many shows. Each id that cannot go (main, or one not there) is refused with why, and the rest go.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ShowRemoveManyRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/ShowRemoveManyResult"
   }
 }
 ```
@@ -2483,6 +2565,21 @@ Give a show another name. Its id stays.
 }
 ```
 
+#### `show.set`
+
+Change a show's name, its input, or whether it composites. Turning compositing on starts a show process whose one source is the input and moves the outputs to it; turning it off hands them back to the direct host, when the show has one source and no scenes in use. The answer says how long the outputs were off.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ShowSetRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/ShowSetResult"
+  }
+}
+```
+
 #### `show.start`
 
 Start a stopped or failed show.
@@ -2494,6 +2591,21 @@ Start a stopped or failed show.
   },
   "result": {
     "$ref": "#/$defs/Show"
+  }
+}
+```
+
+#### `show.stats`
+
+Health, input numbers and each output's numbers for many shows in one read, from what the station already holds, so it is cheap to call every second for two hundred shows. `fields` narrows it to health, input or outputs.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ShowStatsRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/ShowStatsList"
   }
 }
 ```
@@ -2833,6 +2945,7 @@ Subscribe with `core.subscribe`. Patterns match the part after `event/`, so `pro
 | `event/governor.shed` |  |  | The machine ran short while on air and the governor stopped something to keep what is on air whole: what it was and why. It is brought back by itself when there is room again. |
 | `event/show.changed` |  |  | A show was added, renamed, started, stopped, died or came back. Sent by the station to every client, whichever show it is looking at. |
 | `event/show.removed` |  |  | A show was removed. Its process was stopped first. |
+| `event/show.health` |  |  | A show's health changed state, or an alarm began or ended. Never sent for a number alone: read those with show.stats. |
 
 ## The routes this replaces
 

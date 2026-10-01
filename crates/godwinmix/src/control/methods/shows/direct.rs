@@ -41,7 +41,6 @@ pub fn register(reg: &mut Registry<Call>) {
         )
         .params(schema_of::<ShowAddManyRequest>)
         .result(schema_of::<ShowAddManyResult>)
-        .rest_at("POST", "/api/v1/shows/add_many")
         .not_idempotent(),
     );
     reg.register(
@@ -54,7 +53,6 @@ pub fn register(reg: &mut Registry<Call>) {
         )
         .params(schema_of::<ShowRemoveManyRequest>)
         .result(schema_of::<ShowRemoveManyResult>)
-        .rest_at("POST", "/api/v1/shows/remove_many")
         .destructive(),
     );
     reg.register(
@@ -67,8 +65,7 @@ pub fn register(reg: &mut Registry<Call>) {
             refused("show.stats"),
         )
         .params(schema_of::<ShowStatsRequest>)
-        .result(schema_of::<ShowStatsList>)
-        .rest_at("POST", "/api/v1/shows/stats"),
+        .result(schema_of::<ShowStatsList>),
     );
     outputs(reg);
 }
@@ -86,7 +83,6 @@ fn outputs(reg: &mut Registry<Call>) {
         )
         .params(schema_of::<ShowOutputAddRequest>)
         .result(schema_of::<Show>)
-        .rest_at("POST", "/api/v1/shows/{show}/outputs")
         .not_idempotent(),
     );
     reg.register(
@@ -98,8 +94,7 @@ fn outputs(reg: &mut Registry<Call>) {
             refused("show.output.set"),
         )
         .params(schema_of::<ShowOutputSetRequest>)
-        .result(schema_of::<Show>)
-        .rest_at("POST", "/api/v1/shows/{show}/outputs/{output}"),
+        .result(schema_of::<Show>),
     );
     reg.register(
         MethodDef::new(
@@ -110,7 +105,6 @@ fn outputs(reg: &mut Registry<Call>) {
         )
         .params(schema_of::<ShowOutputRemoveRequest>)
         .result(schema_of::<Show>)
-        .rest_at("DELETE", "/api/v1/shows/{show}/outputs/{output}")
         .destructive(),
     );
 }

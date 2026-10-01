@@ -24,7 +24,17 @@ pub struct InputSpec {
     pub params: Option<Map<String, Value>>,
     /// Switched to when the input stalls, and back when it returns.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub backup: Option<Box<InputSpec>>,
+    pub backup: Option<BackupInput>,
+}
+
+/// An input's backup: an input with no backup of its own.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct BackupInput {
+    pub uri: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub program: Option<u16>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub params: Option<Map<String, Value>>,
 }
 
 /// How a show is, in one word.

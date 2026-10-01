@@ -428,6 +428,45 @@
       },
       "type": "object"
     },
+    "Alarm": {
+      "properties": {
+        "detail": {
+          "default": "",
+          "description": "What a person reads.",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/AlarmKind"
+        },
+        "since_ms": {
+          "description": "When it began, in unix milliseconds.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "kind",
+        "since_ms"
+      ],
+      "type": "object"
+    },
+    "AlarmKind": {
+      "description": "What an alarm is about.",
+      "enum": [
+        "no-input",
+        "stall",
+        "black",
+        "freeze",
+        "silence",
+        "cc-errors",
+        "loss",
+        "output-failed",
+        "governor-refused",
+        "shed"
+      ],
+      "type": "string"
+    },
     "Align": {
       "description": "The nine alignment keywords, used to place content inside its frame.",
       "enum": [
@@ -820,6 +859,34 @@
       ],
       "type": "object"
     },
+    "BackupInput": {
+      "description": "An input's backup: an input with no backup of its own.",
+      "properties": {
+        "params": {
+          "additionalProperties": true,
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "program": {
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "uri": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "uri"
+      ],
+      "type": "object"
+    },
     "BindRequest": {
       "description": "`scene.item.bind`.",
       "properties": {
@@ -884,6 +951,34 @@
           "type": "string"
         }
       ]
+    },
+    "BulkPlan": {
+      "description": "What a batch costs, priced by the governor without taking anything.",
+      "properties": {
+        "assumed_input": {
+          "description": "The input every rendition was priced against, because an input's\nshape is known only once it arrives.",
+          "type": "string"
+        },
+        "cost": {
+          "$ref": "#/$defs/Cost",
+          "description": "Every rendition of the shows that fit, summed. Copies cost nothing."
+        },
+        "fits": {
+          "description": "Whether every show of the batch fits.",
+          "type": "boolean"
+        },
+        "have": {
+          "$ref": "#/$defs/Cost",
+          "description": "What the machine has free now."
+        }
+      },
+      "required": [
+        "cost",
+        "have",
+        "fits",
+        "assumed_input"
+      ],
+      "type": "object"
     },
     "Bundle": {
       "description": "What an importer is told before it reads the document.",
@@ -3465,6 +3560,42 @@
       ],
       "type": "object"
     },
+    "Health": {
+      "properties": {
+        "alarms": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Alarm"
+          },
+          "type": "array"
+        },
+        "state": {
+          "$ref": "#/$defs/HealthState"
+        }
+      },
+      "required": [
+        "state"
+      ],
+      "type": "object"
+    },
+    "HealthState": {
+      "description": "How a show is, in one word.",
+      "oneOf": [
+        {
+          "enum": [
+            "ok",
+            "warning",
+            "alarm"
+          ],
+          "type": "string"
+        },
+        {
+          "const": "off",
+          "description": "Stopped, or not running yet.",
+          "type": "string"
+        }
+      ]
+    },
     "HistoryRequest": {
       "description": "`program.history`.",
       "properties": {
@@ -3711,6 +3842,125 @@
         "items",
         "bundle"
       ],
+      "type": "object"
+    },
+    "InputSpec": {
+      "description": "What a show without compositing takes in. A show that composites makes\nits input its one source.",
+      "properties": {
+        "backup": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BackupInput"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Switched to when the input stalls, and back when it returns."
+        },
+        "params": {
+          "additionalProperties": true,
+          "description": "Per transport: `interface` for multicast, `latency` for SRT,\n`passphrase`. Passed to the host as given.",
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "program": {
+          "description": "The MPEG-TS program of a feed that carries several. Left out: the\nfirst.",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "uri": {
+          "description": "`udp://@239.1.1.1:5000`, `srt://...`, `rtmp://host/app/key`,\n`rtsp://...`, `https://.../x.m3u8`, `file:///clip.ts`, `rist://...`,\nor a channel's stream, `channel:<app>/<stream>`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "uri"
+      ],
+      "type": "object"
+    },
+    "InputStats": {
+      "description": "What the input is doing, as the host last counted it.",
+      "properties": {
+        "audio_channels": {
+          "default": 0,
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "audio_codec": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cc_errors": {
+          "default": 0,
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "fps": {
+          "default": 0.0,
+          "format": "double",
+          "type": "number"
+        },
+        "height": {
+          "default": 0,
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "kbps": {
+          "default": 0,
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "keyframe_ms": {
+          "description": "Between the last two keyframes.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "last_frame_ms": {
+          "description": "Since the last frame arrived.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "packets_lost": {
+          "default": 0,
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "video_codec": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "width": {
+          "default": 0,
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
       "type": "object"
     },
     "InstanceRecord": {
@@ -5094,6 +5344,52 @@
         "failed"
       ],
       "type": "string"
+    },
+    "OutputStats": {
+      "description": "What one output is doing.",
+      "properties": {
+        "cpu_millicores": {
+          "default": 0,
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "encoder": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "kbps": {
+          "default": 0,
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "reconnects": {
+          "default": 0,
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "rendition_text": {
+          "default": "",
+          "description": "`copy`, or what the plan gave it, such as `h264 1280x720`.",
+          "type": "string"
+        },
+        "state": {
+          "default": "",
+          "description": "waiting, connecting, live, reconnecting, failed, or off.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object"
     },
     "OutputStatus": {
       "additionalProperties": true,
@@ -7213,6 +7509,11 @@
     "Show": {
       "description": "One show, as `show.list` and `event/show.changed` carry it.",
       "properties": {
+        "compositing": {
+          "default": true,
+          "description": "true: scenes, transitions and a programme encode, in a process of\nits own. false: one input straight to its outputs, in the shared\ndirect host, with no compositor.",
+          "type": "boolean"
+        },
         "cpu_millicores": {
           "description": "Its process's CPU, in thousandths of one core, measured between two\nreads of `show.list`. Zero on the first read and while it is stopped.",
           "format": "uint32",
@@ -7226,9 +7527,27 @@
             "null"
           ]
         },
+        "health": {
+          "$ref": "#/$defs/Health",
+          "default": {
+            "alarms": [],
+            "state": "off"
+          }
+        },
         "id": {
           "description": "A slug: `main`, `second-room`.",
           "type": "string"
+        },
+        "input": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/InputSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "What it takes in. A show that composites makes it its one source."
         },
         "memory_mib": {
           "default": 0,
@@ -7246,6 +7565,13 @@
             "string",
             "null"
           ]
+        },
+        "outputs": {
+          "description": "The outputs of a show without compositing. A show that composites\nkeeps its outputs inside it, under `output.*` with `?show=<id>`.",
+          "items": {
+            "$ref": "#/$defs/Destination"
+          },
+          "type": "array"
         },
         "programme_kbps": {
           "description": "What its outputs are sending, summed, in kilobits a second.",
@@ -7273,9 +7599,114 @@
       ],
       "type": "object"
     },
+    "ShowAdd": {
+      "description": "One show of `show.add_many`: what `show.add` takes.",
+      "properties": {
+        "compositing": {
+          "description": "Left out: true, a show with scenes and a programme, as before.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "from": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ShowFrom"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "input": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/InputSpec"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "outputs": {
+          "items": {
+            "$ref": "#/$defs/ShowOutputSpec"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "ShowAddManyRequest": {
+      "description": "`show.add_many`.",
+      "properties": {
+        "dry_run": {
+          "description": "Left out: true. Says what would be made and what it would cost,\nand makes nothing.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "shows": {
+          "items": {
+            "$ref": "#/$defs/ShowAdd"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "shows"
+      ],
+      "type": "object"
+    },
+    "ShowAddManyResult": {
+      "description": "`show.add_many`'s answer.",
+      "properties": {
+        "added": {
+          "description": "The ids made, or that would be made on a dry run.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "dry_run": {
+          "type": "boolean"
+        },
+        "plan": {
+          "$ref": "#/$defs/BulkPlan"
+        },
+        "refused": {
+          "items": {
+            "$ref": "#/$defs/ShowRefused"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "added",
+        "refused",
+        "plan",
+        "dry_run"
+      ],
+      "type": "object"
+    },
     "ShowAddRequest": {
       "description": "`show.add`.",
       "properties": {
+        "compositing": {
+          "description": "Left out: true, a show with scenes and a programme, as before.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
         "from": {
           "anyOf": [
             {
@@ -7287,9 +7718,27 @@
           ],
           "description": "`\"empty\"` (the default), the id of a show to copy, or\n`{project: <file>}`. A copy takes the show's settings, sources and\nscenes, and leaves its outputs behind so nothing goes out twice."
         },
+        "input": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/InputSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "What it takes in. Needed by a show without compositing."
+        },
         "name": {
           "description": "What a person calls it. The id is made from it.",
           "type": "string"
+        },
+        "outputs": {
+          "description": "Where a show without compositing sends its input.",
+          "items": {
+            "$ref": "#/$defs/ShowOutputSpec"
+          },
+          "type": "array"
         }
       },
       "required": [
@@ -7328,6 +7777,22 @@
       ],
       "description": "What a new show starts from."
     },
+    "ShowHealthEvent": {
+      "description": "`event/show.health`.",
+      "properties": {
+        "health": {
+          "$ref": "#/$defs/Health"
+        },
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "health"
+      ],
+      "type": "object"
+    },
     "ShowList": {
       "description": "`show.list`.",
       "properties": {
@@ -7345,6 +7810,260 @@
       "required": [
         "shows",
         "current"
+      ],
+      "type": "object"
+    },
+    "ShowOutputAddRequest": {
+      "description": "`show.output.add`.",
+      "properties": {
+        "enabled": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "id": {
+          "description": "The show. `show` is taken as another name for it.",
+          "type": "string"
+        },
+        "key": {
+          "description": "Write only.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "label": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "output": {
+          "description": "The new output's own id, a slug. Made from the label when left out.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "platform": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "rendition": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RenditionChoice"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "uri": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object"
+    },
+    "ShowOutputRemoveRequest": {
+      "description": "`show.output.remove`.",
+      "properties": {
+        "id": {
+          "description": "The show. `show` is taken as another name for it.",
+          "type": "string"
+        },
+        "output": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "output"
+      ],
+      "type": "object"
+    },
+    "ShowOutputSetRequest": {
+      "description": "`show.output.set`. Names only what moves.",
+      "properties": {
+        "enabled": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "id": {
+          "description": "The show. `show` is taken as another name for it.",
+          "type": "string"
+        },
+        "key": {
+          "description": "A new key. Left out keeps the one it has.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "label": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "output": {
+          "description": "The output's id.",
+          "type": "string"
+        },
+        "rendition": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RenditionChoice"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Left out keeps what it has; `null` or `{\"preset\": \"copy\"}` goes back\nto a copy."
+        },
+        "uri": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "output"
+      ],
+      "type": "object"
+    },
+    "ShowOutputSpec": {
+      "description": "An output as it is given to a show without compositing: an address, or\na platform and a key.",
+      "properties": {
+        "enabled": {
+          "description": "On by default.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "id": {
+          "description": "A slug, unique within the show. Made from the label when left out.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "key": {
+          "description": "A platform's stream key. Write only: no method reads it back.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "label": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "platform": {
+          "description": "youtube, facebook, twitch, custom or srt. Left out: custom, which\ntakes a whole address in `uri`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "rendition": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RenditionChoice"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Left out: a copy of the input's own bytes, repackaged. Otherwise a\nrendition request or `{\"preset\": \"youtube-720p30\"}`, planned and\nadmitted by the governor."
+        },
+        "uri": {
+          "description": "The whole address: `srt://10.0.0.9:9000`, `rtmp://host/app/key`,\n`udp://239.2.2.2:5000`. For a platform, its ingest server when it is\nnot the platform's own.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "ShowRefused": {
+      "description": "A show of `show.add_many` that was not made, and why.",
+      "properties": {
+        "data": {
+          "default": null
+        },
+        "index": {
+          "description": "Its place in `shows`, from 0.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "name": {
+          "type": "string"
+        },
+        "why": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "index",
+        "name",
+        "why"
+      ],
+      "type": "object"
+    },
+    "ShowRemoveManyRequest": {
+      "description": "`show.remove_many`.",
+      "properties": {
+        "ids": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "ids"
+      ],
+      "type": "object"
+    },
+    "ShowRemoveManyResult": {
+      "description": "`show.remove_many`'s answer.",
+      "properties": {
+        "refused": {
+          "description": "Ids that were not removed, each with why.",
+          "items": {
+            "$ref": "#/$defs/ShowRefused"
+          },
+          "type": "array"
+        },
+        "removed": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "removed",
+        "refused"
       ],
       "type": "object"
     },
@@ -7388,6 +8107,144 @@
       ],
       "type": "object"
     },
+    "ShowSetRequest": {
+      "description": "`show.set`. Names only what moves.",
+      "properties": {
+        "compositing": {
+          "description": "true starts a show process whose one source is the input and moves\nthe outputs to it; false goes back to a show without compositing,\nwhen it has one source and no scenes in use.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "input": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/InputSpec"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object"
+    },
+    "ShowSetResult": {
+      "description": "`show.set`'s answer: the show, and what a switch of compositing did.",
+      "properties": {
+        "compositing": {
+          "default": true,
+          "description": "true: scenes, transitions and a programme encode, in a process of\nits own. false: one input straight to its outputs, in the shared\ndirect host, with no compositor.",
+          "type": "boolean"
+        },
+        "cpu_millicores": {
+          "description": "Its process's CPU, in thousandths of one core, measured between two\nreads of `show.list`. Zero on the first read and while it is stopped.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "error": {
+          "description": "Why it is not running, when it is not and a person did not ask.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "health": {
+          "$ref": "#/$defs/Health",
+          "default": {
+            "alarms": [],
+            "state": "off"
+          }
+        },
+        "id": {
+          "description": "A slug: `main`, `second-room`.",
+          "type": "string"
+        },
+        "input": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/InputSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "What it takes in. A show that composites makes it its one source."
+        },
+        "memory_mib": {
+          "default": 0,
+          "description": "Its process's resident memory, in MiB.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "name": {
+          "type": "string"
+        },
+        "on_air": {
+          "description": "The scene, or the source, on its programme. None while it shows the\nslate or is not running.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "outputs": {
+          "description": "The outputs of a show without compositing. A show that composites\nkeeps its outputs inside it, under `output.*` with `?show=<id>`.",
+          "items": {
+            "$ref": "#/$defs/Destination"
+          },
+          "type": "array"
+        },
+        "programme_kbps": {
+          "description": "What its outputs are sending, summed, in kilobits a second.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "restarts": {
+          "default": 0,
+          "description": "How many times the station has started it again after it died.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "state": {
+          "$ref": "#/$defs/ShowState"
+        },
+        "switch": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SwitchReport"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "state",
+        "programme_kbps",
+        "cpu_millicores"
+      ],
+      "type": "object"
+    },
     "ShowState": {
       "description": "Where a show is in its life.",
       "oneOf": [
@@ -7412,6 +8269,81 @@
           "type": "string"
         }
       ]
+    },
+    "ShowStats": {
+      "description": "One show's numbers, as `show.stats` answers them.",
+      "properties": {
+        "health": {
+          "$ref": "#/$defs/Health"
+        },
+        "id": {
+          "type": "string"
+        },
+        "input": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/InputStats"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "None for a show with no input, or before the host has counted any."
+        },
+        "outputs": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/OutputStats"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "health"
+      ],
+      "type": "object"
+    },
+    "ShowStatsList": {
+      "description": "`show.stats`'s answer.",
+      "properties": {
+        "shows": {
+          "items": {
+            "$ref": "#/$defs/ShowStats"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "shows"
+      ],
+      "type": "object"
+    },
+    "ShowStatsRequest": {
+      "description": "`show.stats`.",
+      "properties": {
+        "fields": {
+          "description": "Of `health`, `input` and `outputs`. Left out: all three.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "ids": {
+          "description": "Left out: every show.",
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
     },
     "Snapshot": {
       "description": "`event/snapshot`: the full state, and where in the stream it sits.",
@@ -7911,6 +8843,40 @@
         "seq",
         "events",
         "ignored_ext"
+      ],
+      "type": "object"
+    },
+    "SwitchReport": {
+      "description": "What a switch of compositing did, in `show.set`'s answer.",
+      "properties": {
+        "compositing": {
+          "description": "What the show does now.",
+          "type": "boolean"
+        },
+        "gap_ms": {
+          "description": "From the moment the outputs stopped where they were to the moment\nevery one of them was live again where they went. None when they\nwere not all live within the wait, or there were none.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "note": {
+          "description": "What a person should know: an output that was still connecting when\nthe answer was sent, and so on.",
+          "type": "string"
+        },
+        "outputs": {
+          "description": "The outputs that moved.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "compositing",
+        "outputs"
       ],
       "type": "object"
     },
@@ -9248,6 +10214,17 @@
       },
       "since": "1",
       "summary": "A show was removed. Its process was stopped first."
+    },
+    {
+      "ext": null,
+      "legacy": null,
+      "name": "event/show.health",
+      "pattern": "show.health",
+      "payload": {
+        "$ref": "#/$defs/ShowHealthEvent"
+      },
+      "since": "1",
+      "summary": "A show's health changed state, or an alarm began or ended. Never sent for a number alone: read those with show.stats."
     }
   ],
   "ext": [
@@ -12539,6 +13516,25 @@
     },
     {
       "destructive": false,
+      "idempotent": false,
+      "mutating": true,
+      "name": "show.add_many",
+      "params": {
+        "$ref": "#/$defs/ShowAddManyRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/shows/add_many"
+      },
+      "result": {
+        "$ref": "#/$defs/ShowAddManyResult"
+      },
+      "scope": "admin",
+      "since": "1",
+      "summary": "Make many shows in one call, such as every channel of a headend. The whole batch is checked first. With dry_run (the default) nothing is made: the answer says what would be, what its renditions would cost and whether the governor would admit them. Without it, every show that fits is made and the rest are refused with why; a show is made whole or not at all."
+    },
+    {
+      "destructive": false,
       "idempotent": true,
       "mcp": {
         "destructiveHint": false,
@@ -12566,6 +13562,63 @@
       "summary": "Every show on this machine: its name, whether it is running, what is on air, what its outputs send and what its process costs. `current` is the show a client reaches when it names none."
     },
     {
+      "destructive": false,
+      "idempotent": false,
+      "mutating": true,
+      "name": "show.output.add",
+      "params": {
+        "$ref": "#/$defs/ShowOutputAddRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/shows/{id}/output/add"
+      },
+      "result": {
+        "$ref": "#/$defs/Show"
+      },
+      "scope": "admin",
+      "since": "1",
+      "summary": "Send a show without compositing to another place: an address (SRT, RTMP, UDP, RTP or RIST), or a platform and its key. Left without a rendition it copies the input's bytes; with one it is planned and admitted by the governor. The key is write only."
+    },
+    {
+      "destructive": true,
+      "idempotent": true,
+      "mutating": true,
+      "name": "show.output.remove",
+      "params": {
+        "$ref": "#/$defs/ShowOutputRemoveRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/shows/{id}/output/remove"
+      },
+      "result": {
+        "$ref": "#/$defs/Show"
+      },
+      "scope": "admin",
+      "since": "1",
+      "summary": "Stop one output of a show without compositing and forget it, key and all."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mutating": true,
+      "name": "show.output.set",
+      "params": {
+        "$ref": "#/$defs/ShowOutputSetRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/shows/{id}/output"
+      },
+      "result": {
+        "$ref": "#/$defs/Show"
+      },
+      "scope": "admin",
+      "since": "1",
+      "summary": "Change one output of a show without compositing, naming only what moves: another address, a new key, on or off, copy or a rendition."
+    },
+    {
       "destructive": true,
       "idempotent": true,
       "mutating": true,
@@ -12583,6 +13636,25 @@
       "scope": "admin",
       "since": "1",
       "summary": "Stop a show and remove it with its folder. Refused for the last show and for main, the show the station was started with."
+    },
+    {
+      "destructive": true,
+      "idempotent": true,
+      "mutating": true,
+      "name": "show.remove_many",
+      "params": {
+        "$ref": "#/$defs/ShowRemoveManyRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/shows/remove_many"
+      },
+      "result": {
+        "$ref": "#/$defs/ShowRemoveManyResult"
+      },
+      "scope": "admin",
+      "since": "1",
+      "summary": "Stop and remove many shows. Each id that cannot go (main, or one not there) is refused with why, and the rest go."
     },
     {
       "destructive": false,
@@ -12607,6 +13679,25 @@
       "destructive": false,
       "idempotent": true,
       "mutating": true,
+      "name": "show.set",
+      "params": {
+        "$ref": "#/$defs/ShowSetRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/shows/{id}/set"
+      },
+      "result": {
+        "$ref": "#/$defs/ShowSetResult"
+      },
+      "scope": "admin",
+      "since": "1",
+      "summary": "Change a show's name, its input, or whether it composites. Turning compositing on starts a show process whose one source is the input and moves the outputs to it; turning it off hands them back to the direct host, when the show has one source and no scenes in use. The answer says how long the outputs were off."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mutating": true,
       "name": "show.start",
       "params": {
         "$ref": "#/$defs/IdRequest"
@@ -12621,6 +13712,25 @@
       "scope": "admin",
       "since": "1",
       "summary": "Start a stopped or failed show."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mutating": false,
+      "name": "show.stats",
+      "params": {
+        "$ref": "#/$defs/ShowStatsRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/shows/stats"
+      },
+      "result": {
+        "$ref": "#/$defs/ShowStatsList"
+      },
+      "scope": "read",
+      "since": "1",
+      "summary": "Health, input numbers and each output's numbers for many shows in one read, from what the station already holds, so it is cheap to call every second for two hundred shows. `fields` narrows it to health, input or outputs."
     },
     {
       "destructive": false,

@@ -230,7 +230,8 @@ fn the_table_matches_the_scopes_in_the_protocol_document() {
     assert_eq!(scope("config.schema"), Scope::Read);
     // Shows: seeing them is a read, changing which exist is the machine's.
     assert_eq!(scope("show.list"), Scope::Read);
-    for name in ["show.add", "show.rename", "show.remove", "show.start", "show.stop"] {
+    assert_eq!(scope("show.stats"), Scope::Read);
+    for name in ["show.add", "show.rename", "show.remove", "show.start", "show.stop", "show.set", "show.add_many", "show.remove_many"] {
         assert_eq!(scope(name), Scope::Admin, "{name}");
     }
 
@@ -268,7 +269,9 @@ fn the_table_matches_the_scopes_in_the_protocol_document() {
             "scene.remove",
             // A show removed takes its folder with it: its scenes, its
             // sources and its settings.
+            "show.output.remove",
             "show.remove",
+            "show.remove_many",
             "source.remove",
         ],
         "the destructive set is the one 03 section 6 marks, plus filter.remove (taking a \
@@ -276,8 +279,9 @@ fn the_table_matches_the_scopes_in_the_protocol_document() {
          plugin.update (it replaces a running plugin, and rolls back rather than undoes), \
          preset.apply (it rewrites the operator's configuration file), core.restart \
          (the programme goes off air until the mixer is back), the two scene \
-         removals (a deleted composition does not come back) and show.remove (a show's \
-         folder goes with it)"
+         removals (a deleted composition does not come back), show.remove and \
+         show.remove_many (a show's folder goes with it) and show.output.remove (its \
+         key is forgotten)"
     );
 }
 
