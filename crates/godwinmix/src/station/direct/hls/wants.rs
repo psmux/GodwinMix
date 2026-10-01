@@ -38,16 +38,20 @@ fn source_of(st: &Station, show: &str, d: &StoredDestination, relay: Option<&(St
     let Some((addr, stream)) = relay else { return (None, Some("waiting for the input to go live".into())) };
     let Ok(relay) = addr.parse() else { return (None, Some(format!("the direct host gave {addr} as its relay, which is not an address"))) };
     let app = stream.split_once('/').map(|(a, _)| a).unwrap_or(stream);
+    let copy = Source { relay, path: format!("{app}/main") };
     if d.rendition.is_none() {
-        return (Some(Source { relay, path: format!("{app}/main") }), None);
+        return (Some(copy), None);
     }
+    let (plan, refused) = st.direct.transcode.view(show, &d.id);
     let Some(row) = st.direct.transcode.row(show, d, json!({})) else {
-        let (_, refused) = st.direct.transcode.view(show, &d.id);
         return (None, Some(refused.map(|r| r.message).unwrap_or_else(|| "the rendition was refused".into())));
     };
     let (video, audio) = (row["video"].as_str(), row["audio"].as_str());
-    if video.is_none() && audio.is_none() {
-        return (None, Some("waiting for the rendition to be planned".into()));
+    match (video.is_none() && audio.is_none(), plan.is_some()) {
+        // The input already is what the rendition asks for: a copy.
+        (true, true) => return (Some(copy), None),
+        (true, false) => return (None, Some("waiting for the input's shape, to plan the rendition against".into())),
+        _ => {}
     }
     let main = row["stream"].as_str().unwrap_or("main");
     let key = format!("{main}|{}|{}", video.unwrap_or("-"), audio.unwrap_or("-"));

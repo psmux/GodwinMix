@@ -76,9 +76,17 @@ scale per size, one encoder per rendition, however many outputs share them.
 The renditions are published on the same hub as the input (`Transcoders::
 sharing`), under `direct.<id>/main|<video node>|<audio node>`. That puts
 every rendition where the relay can hand it to another process. The station,
-which serves HLS from the control port, can read any of them with nothing
-decoded a second time. That is the honest way to HLS for a direct show, and
-it is the station's half to write; until then a direct show has no HLS.
+which serves HLS from the control port, reads the one an HLS output asks for,
+or the show's own stream, with nothing decoded a second time.
+
+That is why a direct show's HLS is packaged in the station and not here. The
+packager, the rings that hold the segments, the playlists, LL-HLS, DASH and
+the viewer keys exist once, in the engine and the control port's `/hls`
+routes, and the station links both. Packaging in the host would mean writing
+all of that again inside a plugin, or writing segments to disk for the
+station to serve. Each HLS output is one thread and one small pipeline in the
+station, `appsrc` into `cmafmux`; one that fails says so on its own output and
+nothing else stops.
 
 A show whose renditions already decode the input hands one decoded picture a
 second from that decode to the vitals (`transcode::Tap`), so the vitals do

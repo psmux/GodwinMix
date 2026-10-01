@@ -109,9 +109,18 @@ fn host_health(st: &Arc<Station>, v: &Value) {
 fn stats(st: &Arc<Station>, v: &Value) {
     let Some(rows) = v["shows"].as_array() else { return };
     let ids = st.registry.lock().ids();
+    let mut filled = Vec::new();
     let mut seen = st.direct.seen.lock();
     for row in rows {
         let Some(id) = row["id"].as_str().filter(|id| ids.iter().any(|k| k == id)) else { continue };
-        seen.entry(id.to_string()).or_default().take_stats(row);
+        let s = seen.entry(id.to_string()).or_default();
+        s.take_stats(row);
+        if s.settle_fps() {
+            filled.push(id.to_string());
+        }
+    }
+    drop(seen);
+    if filled.iter().any(|id| replans(st, id)) {
+        st.direct.hand_over();
     }
 }
