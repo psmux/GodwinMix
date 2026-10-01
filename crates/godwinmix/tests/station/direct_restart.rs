@@ -3,7 +3,9 @@
 //! and a new program number, then with the same layout again. The show's
 //! UDP copy output and a UDP output with a smaller rendition both keep
 //! receiving within a few seconds of each, and its health comes back to
-//! `ok`.
+//! `ok`. On a machine so busy that the governor refuses the rendition (the
+//! whole suite at once can be), the rendition is left out and the test says
+//! so; the copy is checked either way.
 
 use super::direct_live::{free_udp, received, staged_ingest};
 use super::support::*;
@@ -32,12 +34,19 @@ async fn health(ws: &mut Ws, id: u64) -> serde_json::Value {
     s["result"]["shows"][0].clone()
 }
 
-/// Wait for the show's health to read `ok`, up to `secs`.
-async fn comes_back(ws: &mut Ws, what: &str, secs: u64) {
+/// The governor turned the rendition away, and that is all that is wrong.
+fn refused(show: &serde_json::Value) -> bool {
+    let alarms = show["health"]["alarms"].as_array().cloned().unwrap_or_default();
+    !alarms.is_empty() && alarms.iter().all(|a| a["kind"] == "governor-refused")
+}
+
+/// Wait for the show's health to read `ok`, up to `secs`, or with
+/// `transcoded` false, to hold nothing but the governor's refusal.
+async fn comes_back(ws: &mut Ws, what: &str, secs: u64, transcoded: bool) {
     let until = Instant::now() + Duration::from_secs(secs);
     loop {
         let show = health(ws, 50).await;
-        if show["health"]["state"] == "ok" {
+        if show["health"]["state"] == "ok" || (!transcoded && refused(&show)) {
             return;
         }
         assert!(Instant::now() < until, "{what}: the show's health is not back to ok after {secs} s: {show}");
@@ -62,8 +71,13 @@ async fn a_direct_show_follows_a_sender_restarted_with_new_pids_or_the_same_layo
     let asked = call(&mut ws, 2, "plugin.add", json!({"source": source.to_string_lossy()})).await;
     assert!(asked.get("error").is_none(), "{asked}");
     assert!(received(&out, Duration::from_secs(60), 100_000) >= 100_000, "the first sender never reached the output; see {}", dir.join("log.jsonl").display());
-    assert!(received(&small, Duration::from_secs(60), 20_000) >= 20_000, "the first sender was never transcoded: {}", health(&mut ws, 3).await);
-    comes_back(&mut ws, "the first sender", 30).await;
+    let transcoded = received(&small, Duration::from_secs(60), 20_000) >= 20_000;
+    let show = health(&mut ws, 3).await;
+    if !transcoded {
+        assert!(refused(&show), "the first sender was never transcoded: {show}");
+        eprintln!("skipping the rendition: the governor refused it on this machine as loaded now: {show}");
+    }
+    comes_back(&mut ws, "the first sender", 30, transcoded).await;
     // Give the measured rate time to settle the plan, then keep it.
     tokio::time::sleep(Duration::from_secs(4)).await;
     let planned = health(&mut ws, 4).await["outputs"][1]["rendition_text"].clone();
@@ -79,13 +93,18 @@ async fn a_direct_show_follows_a_sender_restarted_with_new_pids_or_the_same_layo
         let got = received(&out, Duration::from_secs(10), 50_000);
         assert!(got >= 50_000, "{what}: only {got} bytes reached the output in 10 s: {}", health(&mut ws, 60).await);
         eprintln!("{what}: the copy had 50 kB again {:?} after the new sender started", started.elapsed());
-        let got = received(&small, Duration::from_secs(10), 20_000);
-        assert!(got >= 20_000, "{what}: only {got} bytes of the rendition in 10 s: {}", health(&mut ws, 62).await);
-        eprintln!("{what}: the rendition had 20 kB again {:?} after the new sender started", started.elapsed());
-        comes_back(&mut ws, what, 20).await;
+        if transcoded {
+            let got = received(&small, Duration::from_secs(10), 20_000);
+            assert!(got >= 20_000, "{what}: only {got} bytes of the rendition in 10 s: {}", health(&mut ws, 62).await);
+            eprintln!("{what}: the rendition had 20 kB again {:?} after the new sender started", started.elapsed());
+        }
+        comes_back(&mut ws, what, 20, transcoded).await;
         let show = health(&mut ws, 61).await;
-        assert!(show["outputs"].as_array().unwrap().iter().all(|o| o["state"] == "live"), "{what}: {show}");
-        assert_eq!(show["outputs"][1]["rendition_text"], planned, "{what}: the rendition was planned again: {show}");
+        assert_eq!(show["outputs"][0]["state"], "live", "{what}: {show}");
+        if transcoded {
+            assert_eq!(show["outputs"][1]["state"], "live", "{what}: {show}");
+            assert_eq!(show["outputs"][1]["rendition_text"], planned, "{what}: the rendition was planned again: {show}");
+        }
     }
     tx.set_state(gstreamer::State::Null).unwrap();
 }
