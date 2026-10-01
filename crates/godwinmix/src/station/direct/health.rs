@@ -17,9 +17,9 @@ fn now_ms() -> u64 {
 impl Direct {
     /// What a show's health is now.
     pub fn health_of(&self, st: &Station, id: &str) -> Health {
-        let Some(r) = st.registry.lock().get(id).cloned() else { return Health::default() };
+        let Some(r) = st.registry.lock().get(id).cloned() else { return Health::off() };
         if r.stopped {
-            return Health::default();
+            return Health::off();
         }
         let seen = self.seen.lock().get(id).cloned().unwrap_or_default();
         let since = |kind| seen.host_health.as_ref().and_then(|h| h.alarms.iter().find(|a| a.kind == kind)).map(|a| a.since_ms);
@@ -32,8 +32,8 @@ impl Direct {
         if r.compositing {
             match st.state_of(id) {
                 Some(ShowState::Failed) => return Health { state: HealthState::Alarm, alarms },
-                Some(ShowState::Stopped) | None => return Health::default(),
-                _ if r.input.is_none() => return Health::of(alarms),
+                Some(ShowState::Stopped) | None => return Health::off(),
+                _ if r.input.is_none() => return Health::from_alarms(alarms),
                 _ => {}
             }
         }
@@ -50,7 +50,7 @@ impl Direct {
                 add(AlarmKind::OutputFailed, format!("{} failed", o.id));
             }
         }
-        Health::of(alarms)
+        Health::from_alarms(alarms)
     }
 
     /// Send `event/show.health` when the show's health moved.
@@ -59,7 +59,7 @@ impl Direct {
         let moved = {
             let mut seen = self.seen.lock();
             let s = seen.entry(id.to_string()).or_default();
-            let moved = s.announced.as_ref().is_none_or(|was| was.differs(&now));
+            let moved = s.announced.as_ref().is_none_or(|was| was.changed_from(&now));
             if moved {
                 s.announced = Some(now.clone());
             }

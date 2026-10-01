@@ -2,7 +2,7 @@
 
 use super::state::Station;
 use godwinmix_protocol::error::RpcError;
-use serde_json::{json, Value};
+use serde_json::Value;
 use std::sync::Arc;
 
 fn parse<T: serde::de::DeserializeOwned>(method: &str, params: Value) -> Result<T, RpcError> {
@@ -24,6 +24,6 @@ pub async fn call(st: &Arc<Station>, method: &str, params: Value) -> Result<Valu
         "show.remove_many" => super::shows_bulk::remove_many(st, parse(method, params)?).await,
         "show.stats" => super::shows_stats::stats(st, parse(method, params)?),
         m if m.starts_with("show.output.") => super::shows_set::output(st, m, params),
-        other => Err(RpcError::not_found("method", other, &[]).with("hint", json!("show.list, show.add, show.add_many, show.set, show.rename, show.remove, show.remove_many, show.start, show.stop, show.stats, show.output.add, show.output.set, show.output.remove"))),
+        other => Err(super::methods::no_such_method(other)),
     }
 }

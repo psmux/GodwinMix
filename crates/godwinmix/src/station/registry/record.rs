@@ -1,7 +1,7 @@
 //! One show as the list keeps it.
 
 use super::OutputRecord;
-use godwinmix_protocol::shows::InputSpec;
+use godwinmix_protocol::shows::{AlarmSettings, InputSpec};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
@@ -22,6 +22,9 @@ pub struct Record {
     pub input: Option<InputSpec>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub outputs: Vec<OutputRecord>,
+    /// What a person set for its alarms, when they set anything.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub alarms: Option<AlarmSettings>,
 }
 
 fn yes() -> bool {
@@ -35,6 +38,6 @@ fn is_true(b: &bool) -> bool {
 impl Record {
     /// A show that composites, as every show was before wave 4.
     pub fn new(id: &str, name: &str, config: Option<PathBuf>) -> Record {
-        Record { id: id.into(), name: name.into(), config, stopped: false, compositing: true, input: None, outputs: Vec::new() }
+        Record { id: id.into(), name: name.into(), config, stopped: false, compositing: true, input: None, outputs: Vec::new(), alarms: None }
     }
 }

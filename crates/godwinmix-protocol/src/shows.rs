@@ -24,6 +24,7 @@ pub use requests::*;
 pub use stats::*;
 
 use crate::destination::Destination;
+pub use crate::health::{Alarm, AlarmKind, Health, HealthState};
 
 fn yes() -> bool {
     true
@@ -81,6 +82,9 @@ pub struct Show {
     pub outputs: Vec<Destination>,
     #[serde(default)]
     pub health: Health,
+    /// The alarms a person set for it, when they set any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub alarms: Option<AlarmSettings>,
 }
 
 /// `show.list`.

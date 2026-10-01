@@ -1,6 +1,7 @@
 //! The show events, as rows of the protocol's event table.
 
-use super::{Health, Show};
+use super::Show;
+use crate::health::Health;
 use crate::method::schema_of;
 use crate::protocol::EventDef;
 use schemars::JsonSchema;

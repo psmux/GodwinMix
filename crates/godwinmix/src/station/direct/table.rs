@@ -61,7 +61,7 @@ impl Direct {
             "name": r.name,
             "input": serde_json::to_value(&r.input).unwrap_or_default(),
             "outputs": rows,
-            "monitor": {"alarms": !r.compositing, "pictures": false},
+            "monitor": monitor(r),
         });
         if let Some(streams) = self.transcode.streams(&r.id) {
             row["transcode"] = streams;
@@ -84,6 +84,19 @@ impl Direct {
             }
         }
     }
+}
+
+/// What the host watches: black, freeze and silence on by default for a
+/// show without compositing and off for one that composites, the thresholds
+/// a person set, and no pictures unless someone asks for a thumbnail, which
+/// turns them on for a while by itself.
+fn monitor(r: &Record) -> Value {
+    let set = r.alarms.clone().unwrap_or_default();
+    let mut m = json!({"alarms": set.enabled.unwrap_or(!r.compositing), "pictures": false});
+    if set != Default::default() {
+        m["thresholds"] = set.thresholds();
+    }
+    m
 }
 
 /// TOML has no null: a field that does not apply is left out.

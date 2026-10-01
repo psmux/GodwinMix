@@ -25,6 +25,7 @@ fn a_show_says_its_state_in_lowercase() {
         input: None,
         outputs: vec![],
         health: Health::default(),
+        alarms: None,
     };
     assert_eq!(serde_json::to_value(&show).unwrap()["state"], "running");
 }
