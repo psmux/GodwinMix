@@ -86,6 +86,8 @@
 .wl-switch[aria-checked="true"] .wl-knob { background: var(--accent); }
 .wl-switch[aria-checked="true"] .wl-knob::after { transform: translateX(12px); background: var(--on-accent); }
 .wl-switch:hover, .wl-switch:focus-visible { color: var(--text); outline: none; }
+.wl-switch[aria-busy="true"] { cursor: progress; color: var(--text); }
+.wl-switch[aria-busy="true"] .wl-knob { opacity: .55; }
 
 /* Tiles. */
 .wl-tiles { display: grid; gap: 12px; padding: 6px 12px; }
