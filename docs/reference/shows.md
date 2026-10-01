@@ -243,6 +243,31 @@ A field the host has not counted yet is left out. A show that composites has
 its health and, when it has an input, the input's numbers; its outputs are
 read with `output.list` and `?show=<id>`.
 
+### Alarm settings: `show.set {id, alarms}`
+
+`alarms` is `{enabled?, black_ms?, freeze_ms?, silence_ms?, silence_dbfs?}`.
+The fields named move and the rest stay; the show carries the result as
+`alarms`. `enabled` left out is on for a show without compositing and off for
+one that composites. A duration of 0 switches that check off. The direct host
+gets them in its table as thresholds; a field never set keeps the host's
+default (black 4 s, freeze 10 s, silence 10 s under -60 dBFS).
+
+### `GET /api/v1/shows/{id}/thumbnail.jpg?width=160`
+
+Read, with the token as a header or `?token=`. The show's picture as a JPEG,
+32 to 1280 pixels wide. For a show without compositing it comes from the
+direct host, which decodes keyframes only, about one a second, and only for a
+show someone asked a picture of lately; for a show that composites it is its
+programme snapshot. `409` with `data.retry_after_ms` while there is no picture
+yet (the host has decoded no keyframe, the ingest plugin is not running, the
+show is not running); `404` for a show that is not there.
+
+### `governor.status`
+
+As in the [governor reference](renditions.md), with `ingress_kbps` beside
+`egress_kbps`: every channel stream and every direct show's input, as last
+counted.
+
 ## Shows without compositing
 
 A show without compositing is one input sent straight to its outputs, with
