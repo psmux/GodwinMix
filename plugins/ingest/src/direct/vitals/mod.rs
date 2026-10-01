@@ -6,9 +6,9 @@
 //!            packet clock                     3 sound frames, about 1/s ──┤
 //!   a decode that exists (offer_frame) ─────► one frame a second ────────┤
 //!                                                                         ▼
-//!                        a bounded queue ──► a few workers (work.rs), each with
-//!                        (full: dropped)     one decoder per codec, shared by
-//!                                            every show (chain.rs)
+//!                one waiting job per show ──► a few workers (work.rs), each with
+//!                (pool.rs; newest wins)       one decoder per codec, shared by
+//!                                             every show (chain.rs)
 //!                                                │
 //!          luma, black share, change, peak ◄─────┘──► JPEG, only while wanted
 //!                     │
@@ -27,6 +27,7 @@ mod chain;
 mod judge;
 mod measure;
 mod picture;
+mod pool;
 mod show;
 mod tap;
 mod ticker;
@@ -35,6 +36,8 @@ mod registry;
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod bench;
 
 // The direct host owns the one `Vitals` and wires `apply_table` and `call`.
 #[allow(unused_imports)]

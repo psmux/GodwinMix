@@ -13,7 +13,8 @@ use serde_json::Value;
 
 use super::show::{lock, Show, Thumb};
 use super::tap::{Tap, PACE};
-use super::work::{Job, Pool};
+use super::pool::Pool;
+use super::work::Job;
 use super::now_ms;
 use crate::hub::Hub;
 
@@ -35,7 +36,7 @@ impl Vitals {
     /// Start the reading thread and `workers` decoding threads. Both stop
     /// when the last handle goes.
     pub fn start(hub: Hub, emit: Emit, workers: usize) -> Arc<Vitals> {
-        let pool = Pool::start(workers, 64);
+        let pool = Pool::start(workers);
         let me = Arc::new(Vitals { hub, pool, taps: Mutex::default(), emit, stopped: AtomicBool::new(false) });
         let weak = Arc::downgrade(&me);
         std::thread::Builder::new().name("vitals-tap".into()).spawn(move || super::ticker::run(weak)).expect("the vitals thread");
@@ -114,9 +115,10 @@ impl Vitals {
         h
     }
 
-    /// Jobs dropped because every worker was busy, and jobs done.
+    /// Jobs a newer one replaced before a worker got to them, and jobs done.
     pub fn counts(&self) -> (u64, u64) {
-        (self.pool.skipped.load(Ordering::Relaxed), self.pool.done.load(Ordering::Relaxed))
+        let q = &self.pool.queue;
+        (q.replaced.load(Ordering::Relaxed), q.done.load(Ordering::Relaxed))
     }
 }
 

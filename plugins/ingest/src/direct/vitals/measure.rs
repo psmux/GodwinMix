@@ -8,9 +8,20 @@ use super::picture::Luma;
 /// How wide a thumbnail is. The height follows the picture's shape.
 pub const THUMB_WIDTH: i32 = 320;
 
-/// The first decoder of these this machine has.
-fn first_of(names: &[&'static str]) -> Option<&'static str> {
-    names.iter().copied().find(|n| gst::ElementFactory::find(n).is_some())
+/// The decoders tried for each video codec, best first: the machine's
+/// hardware decoder behind a parser (which puts the size in the caps a
+/// hardware decoder wants), then libav or dav1d on the CPU.
+fn decoders(kind: &str) -> &'static [&'static [&'static str]] {
+    match kind {
+        "video/x-h264" => &[&["h264parse", "vtdec_hw"], &["h264parse", "vah264dec"], &["h264parse", "nvh264dec"], &["h264parse", "d3d11h264dec"], &["avdec_h264"]],
+        "video/x-h265" => &[&["h265parse", "vtdec_hw"], &["h265parse", "vah265dec"], &["h265parse", "nvh265dec"], &["h265parse", "d3d11h265dec"], &["avdec_h265"]],
+        "video/x-av1" => &[&["av1parse", "vtdec_hw"], &["av1parse", "vaav1dec"], &["dav1ddec"], &["avdec_av1"]],
+        _ => &[],
+    }
+}
+
+fn exists(names: &[&str]) -> bool {
+    names.iter().all(|n| gst::ElementFactory::find(n).is_some())
 }
 
 fn thumb_caps() -> gst::Caps {
@@ -24,18 +35,22 @@ fn thumb_caps() -> gst::Caps {
 /// The chain for one kind of input: a keyframe of each video codec the hub
 /// carries, a frame already decoded, AAC, or a thumbnail to make a JPEG of.
 /// `None` when this machine has no decoder for it, which leaves that show
-/// without pictures and says nothing more.
-pub fn chain_for(kind: &str) -> Option<Chain> {
+/// without pictures and says nothing more. `cpu` skips the hardware
+/// decoders, for a worker whose hardware decoder has refused.
+pub fn chain_for(kind: &str, cpu: bool) -> Option<Chain> {
+    let scale = ["videoscale", "videoconvert"];
+    if let Some(names) = decoders(kind).iter().filter(|d| !cpu || d.len() == 1).find(|d| exists(d)) {
+        let all: Vec<&str> = names.iter().chain(scale.iter()).copied().collect();
+        return Chain::new(&all, thumb_caps()).ok();
+    }
     let built = match kind {
-        "video/x-h264" => Chain::new(first_of(&["avdec_h264"])?, &["videoscale", "videoconvert"], thumb_caps()),
-        "video/x-h265" => Chain::new(first_of(&["avdec_h265"])?, &["videoscale", "videoconvert"], thumb_caps()),
-        "video/x-av1" => Chain::new(first_of(&["dav1ddec", "avdec_av1"])?, &["videoscale", "videoconvert"], thumb_caps()),
-        "video/x-raw" => Chain::new("videoscale", &["videoconvert"], thumb_caps()),
+        "video/x-raw" => Chain::new(&scale, thumb_caps()),
         "audio/mpeg" => {
             let out = gst::Caps::builder("audio/x-raw").field("format", "F32LE").field("layout", "interleaved").build();
-            Chain::new(first_of(&["avdec_aac", "fdkaacdec"])?, &["audioconvert"], out)
+            let dec = ["avdec_aac", "fdkaacdec"].into_iter().find(|d| exists(&[d]))?;
+            Chain::new(&[dec, "audioconvert"], out)
         }
-        "jpeg" => Chain::new("jpegenc", &[], gst::Caps::new_empty_simple("image/jpeg")),
+        "jpeg" => Chain::new(&["jpegenc"], gst::Caps::new_empty_simple("image/jpeg")),
         _ => return None,
     };
     built.ok()
