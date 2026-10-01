@@ -19,7 +19,9 @@
 
 mod edit;
 mod health;
+pub mod inputs;
 mod intake;
+mod mixed;
 pub mod outputs;
 mod plan;
 mod seen;
@@ -28,10 +30,13 @@ mod table;
 mod tests;
 #[cfg(test)]
 mod tests_intake;
+#[cfg(test)]
+mod tests_mixed;
 mod view;
 
 pub use edit::{add as add_output, set as set_output};
 pub use seen::Seen;
+pub use mixed::{hand_alarms, vitals_settings};
 pub use view::{feed_source, INPUT_SOURCE};
 pub use intake::take as take_event;
 

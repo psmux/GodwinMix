@@ -21,6 +21,13 @@ pub struct Seen {
     pub announced: Option<Health>,
     /// A show that composites: the hub path its input source was given.
     pub source_for: Option<String>,
+    /// A show that composites: what it last said of its own programme over
+    /// the link. Dropped when the link closes, so a dead show never reads
+    /// as the last health it sent.
+    pub show_health: Option<Health>,
+    /// A show that composites: when its link closed or its process failed,
+    /// unix milliseconds, until it says hello again or is started afresh.
+    pub lost_ms: Option<u64>,
 }
 
 impl Seen {

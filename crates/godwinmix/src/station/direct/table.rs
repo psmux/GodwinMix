@@ -59,7 +59,7 @@ impl Direct {
         let mut row = json!({
             "id": r.id,
             "name": r.name,
-            "input": serde_json::to_value(&r.input).unwrap_or_default(),
+            "input": serde_json::to_value(r.input.clone().map(|i| super::inputs::unsealed(&r.id, i))).unwrap_or_default(),
             "outputs": rows,
             "monitor": monitor(r),
         });

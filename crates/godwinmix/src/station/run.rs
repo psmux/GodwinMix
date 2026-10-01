@@ -44,6 +44,7 @@ pub async fn run(opts: Options) -> Result<()> {
     let exe = std::env::current_exe().context("finding this program, to start the shows with")?;
     let launch = Launch { exe, common: opts.common.clone(), calibration: Some(runtime.clone()) };
     let st = Station::new(Registry::open(&opts.config)?, events.clone(), tokens, render.clone(), launch);
+    super::direct::inputs::seal_written(&st);
     let addr = link::listen(Arc::new(Linked(st.clone()))).await.context("opening the show link")?;
     let _ = st.link.set(addr);
 
