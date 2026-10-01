@@ -89,7 +89,8 @@ export function openWall(client) {
       }
       data.visible(ids);
       thumbs.width = opts.mode === "tiles" ? 320 : 160;
-      thumbs.visible(ids);
+      // A station without show.stats has no pictures of its shows either.
+      thumbs.visible(data.noStats ? [] : ids);
     },
     close() {
       data.stop();

@@ -7,6 +7,9 @@ const STATS_MS = 1000;
 const GOVERNOR_MS = 3000;
 const HISTORY = 40;
 
+/** A core or station without the method: -32601, or the station's "no method" refusal. */
+export const noMethod = (e) => !!e && (e.code === -32601 || (e.data && e.data.kind === "method"));
+
 export class WallData {
   constructor(client, changed) {
     this.client = client;
@@ -48,7 +51,7 @@ export class WallData {
       this.shows = (got && got.shows) || [];
       this.current = got && got.current;
     } catch (e) {
-      if (e && e.code === -32601) this.missing = true;
+      if (noMethod(e)) this.missing = true;
       else console.debug("show.list", e);
     }
     this.loaded = true;
@@ -63,7 +66,7 @@ export class WallData {
   }
 
   async tick() {
-    if (this.busy || this.stopped || !this.ids.length || document.hidden) return;
+    if (this.busy || this.stopped || this.noStats || !this.ids.length || document.hidden) return;
     this.busy = true;
     const ids = this.ids.slice();
     try {
@@ -71,7 +74,8 @@ export class WallData {
       for (const s of (got && got.shows) || []) this.take(s);
       this.changed();
     } catch (e) {
-      if (e && e.code !== -32601) console.debug("show.stats", e);
+      if (noMethod(e)) (this.noStats = true), this.changed();
+      else console.debug("show.stats", e);
     } finally {
       this.busy = false;
     }
