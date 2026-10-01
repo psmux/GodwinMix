@@ -367,6 +367,8 @@ pub fn rest_transform(method: &str) -> Option<Rest> {
             | "status"
             | "describe"
             | "stats"
+            // `program.thumbnail` is a picture of what is on air.
+            | "thumbnail"
             // The observability reads. Every one of them answers a question
             // and changes nothing, so a browser address bar reaches them.
             | "levels"

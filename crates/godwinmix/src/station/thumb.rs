@@ -5,9 +5,11 @@
 //! host's: the vitals decode keyframes alone, about one a second, and only
 //! for a show someone asked a picture of in the last little while
 //! (`direct.thumbnail`, a `tool.call` the host answers with the JPEG in
-//! base64). A show that composites is asked for its programme snapshot, the
-//! same JPEG `/api/v1/snapshot/program` serves. Nothing here runs unless a
-//! page is looking.
+//! base64). A show that composites is asked over the public protocol, with
+//! `program.thumbnail`, which answers in the same shape from a branch on its
+//! raw programme tee: one frame a second, scaled to 320 wide, for ten
+//! seconds after an ask, and no mosaic. Nothing here runs unless a page is
+//! looking.
 
 use super::state::Station;
 use axum::extract::{Path, Query, State};
@@ -67,29 +69,47 @@ async fn from_host(st: &Arc<Station>, id: &str, width: u32) -> Response {
         Ok(Ok(Err(e))) => return not_yet(id, &format!("the direct host said {e:#}")),
         _ => return not_yet(id, "the direct host did not answer in time"),
     };
+    picture(id, &answer, "the direct host")
+}
+
+/// A `{jpeg, width, height, at_ms}` answer as the JPEG, or the state it is
+/// in: `{pending}` while the first picture is on its way, `{status: 404}` for
+/// a show the host does not run.
+fn picture(id: &str, answer: &Value, who: &str) -> Response {
     if let Some(b64) = answer["jpeg"].as_str() {
         return match base64::engine::general_purpose::STANDARD.decode(b64) {
             Ok(bytes) => jpeg(bytes),
-            Err(_) => not_yet(id, "the direct host sent a picture that would not decode"),
+            Err(_) => not_yet(id, &format!("{who} sent a picture that would not decode")),
         };
     }
     if answer["status"] == 404 {
         let why = answer["why"].as_str().unwrap_or("the direct host does not run it");
         return refusal(StatusCode::NOT_FOUND, RpcError::not_in_state(format!("show {id} has no picture: {why}.")).with("show", id));
     }
-    not_yet(id, "the first keyframe is on its way")
+    not_yet(id, "the first picture is on its way")
 }
 
 async fn from_show(st: &Arc<Station>, id: &str, width: u32) -> Response {
-    let Ok(addr) = st.addr_of(id).await else { return not_yet(id, "it is not running") };
+    // A show that is stopped or failed says so, with the call that starts it;
+    // one still starting is not waited for longer than a picture is.
+    let addr = match tokio::time::timeout(WAIT, st.addr_of(id)).await {
+        Ok(Ok(addr)) => addr,
+        Ok(Err(e)) => return refusal(StatusCode::CONFLICT, e),
+        Err(_) => {
+            let e = RpcError::not_in_state(format!("show {id} has no picture yet: it is still starting. Ask again in a second."))
+                .with("show", id).with("state", "starting").with("retry_after_ms", 1000);
+            return refusal(StatusCode::CONFLICT, e);
+        }
+    };
     let secret = st.procs.lock().get(id).map(|p| p.secret.clone()).unwrap_or_default();
-    let asked = st.http.get(format!("http://{addr}/api/v1/snapshot/program?width={width}")).bearer_auth(secret).timeout(WAIT).send().await;
-    match asked {
-        Ok(r) if r.status().is_success() => match r.bytes().await {
-            Ok(b) => jpeg(b.to_vec()),
-            Err(_) => not_yet(id, "its picture was cut off"),
+    let asked = st.http.get(format!("http://{addr}/api/v1/program/thumbnail?width={width}")).bearer_auth(secret).timeout(WAIT).send().await;
+    let answer: Value = match asked {
+        Ok(r) if r.status().is_success() => match r.json().await {
+            Ok(v) => v,
+            Err(_) => return not_yet(id, "its picture was cut off"),
         },
-        Ok(r) => not_yet(id, &format!("its snapshot answered {}", r.status())),
-        Err(_) => not_yet(id, "it did not answer in time"),
-    }
+        Ok(r) => return not_yet(id, &format!("its program.thumbnail answered {}", r.status())),
+        Err(_) => return not_yet(id, "it did not answer in time"),
+    };
+    picture(id, &answer, "the show")
 }
