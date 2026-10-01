@@ -135,3 +135,7 @@ impl Drop for Sender {
 #[cfg(test)]
 #[path = "tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "interleave_tests.rs"]
+mod interleave_tests;
