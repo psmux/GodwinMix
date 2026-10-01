@@ -101,7 +101,7 @@ stopped, which should be 0.
 | Feeds generator | the generator's own CPU and what it sent | the offered rate, no send errors |
 | Feeds as sent | the checker on the inputs in part one | no CC errors, no PCR jumps, no GOPs dropped |
 | Outputs received | the checker on the outputs in part two | the same, and no stream silent for a second |
-| `show.stats`, once a second | how long one read for every show took, the health states and alarms it reported, what the station counted on the inputs | a read well under a second, alarms only where loss was injected |
+| `show.stats`, once a second | how long one read for every show took, the health states and alarms it reported, what the station counted on the inputs | a read well under a second, alarms only where loss was injected, beside `freeze` on shows that take a still picture and `silence` on `main`, the station's own show, which has no source |
 | Compositing on and off | the longest gap on the first show's output while `--toggle` switched it | a gap short enough not to drop a GOP; the contract asks for the number, not a bar |
 
 The checker counts per stream: datagrams, TS packets, continuity errors and the

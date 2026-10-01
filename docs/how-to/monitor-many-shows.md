@@ -122,6 +122,10 @@ for pictures. A direct show still decodes keyframes and a little sound for
 its black, freeze and silence alarms when they are switched on, which they
 are by default.
 
+A silence alarm on the show called `main` on a fresh station is real: that
+is the station's own show, which composites, and with no source in it its
+programme is digital silence. Its detail reads `Programme peak -350 dBFS`.
+
 ## From a script
 
 The wall uses `show.list`, `show.stats {ids}`, `governor.status`, `show.set`

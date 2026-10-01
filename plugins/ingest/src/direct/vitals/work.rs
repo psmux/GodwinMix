@@ -54,7 +54,7 @@ const BACK_AFTER: Duration = Duration::from_secs(60);
 
 impl Chains {
     fn get(&mut self, caps: &gst::Caps) -> Option<&mut Chain> {
-        let name = caps.structure(0)?.name().to_string();
+        let name = measure::kind(caps)?;
         if self.cpu.get(&name).is_some_and(|t| t.elapsed() >= BACK_AFTER) {
             self.cpu.remove(&name);
             self.built.remove(&name);
@@ -69,8 +69,7 @@ impl Chains {
     /// A chain gave nothing back. After `TRIES` in a row it is built again,
     /// on the CPU.
     fn refused(&mut self, caps: &gst::Caps) {
-        let Some(s) = caps.structure(0) else { return };
-        let name = s.name().to_string();
+        let Some(name) = measure::kind(caps) else { return };
         let fails = self.fails.entry(name.clone()).or_default();
         *fails += 1;
         if *fails >= TRIES {
@@ -81,8 +80,8 @@ impl Chains {
     }
 
     fn answered(&mut self, caps: &gst::Caps) {
-        if let Some(s) = caps.structure(0) {
-            self.fails.remove(s.name().as_str());
+        if let Some(name) = measure::kind(caps) {
+            self.fails.remove(&name);
         }
     }
 }

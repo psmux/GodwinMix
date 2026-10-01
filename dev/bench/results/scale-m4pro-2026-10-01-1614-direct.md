@@ -87,8 +87,12 @@ Things to read correctly:
   padding. The station counted 833 Mbit/s of media in, which matches.
 * The 25 `freeze` alarms are right: those are the shows on the two program
   multiplex taking its second program, which is colour bars that never move.
-  The one `silence` alarm, on a 720p feed whose audio is MPEG layer II, is
-  worth a look.
+  The one `silence` alarm is on `main`, the station's own show, which
+  composites and has no source, so its programme is silent and the alarm is
+  right. It is the 201st show in `show.stats`. A rerun with 8 feeds showed
+  it there, with `Programme peak -350 dBFS`. At the time of this run no
+  direct show with MPEG layer II sound had its sound measured at all, which
+  was fixed afterwards.
 * The station's 629 MiB is the encoder calibration it ran when it started,
   because this run's `GODWINMIX_HOME` is a fresh folder with no stored
   calibration. A fresh station climbs from about 130 MiB to 640 MiB during the
