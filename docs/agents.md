@@ -298,9 +298,10 @@ in front of you can do, and there are two sizes of it:
 | `--profile minimal` | 5 | roughly 1,200 tokens, for a small context |
 
 `minimal` is `agent_state`, `take`, `add_source`, `list_sources` and
-`search_tools`; `standard` adds `status`, `snapshot`, `remove_source`,
-`revert`, `go_live`, `list_outputs` and `add_output`. Everything else, about
-twenty tools covering outputs, media, ad breaks, seeking, audio and codecs, is
+`search_tools`; `standard` adds the shows (`list_shows`, `add_shows`,
+`show_stats`, `set_show`, `set_show_output`), `revert` and `go_live`.
+Everything else (outputs, snapshots, media, ad breaks, seeking, audio, codecs,
+channels, the governor, the project file and the rest of the show tools) is
 still callable by name and is found with `search_tools {"query": "..."}` in
 plain words. The hot list never changes shape at runtime, so adding a source
 or a plugin does not throw away a prompt cache.
