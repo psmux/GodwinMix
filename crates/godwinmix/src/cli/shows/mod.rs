@@ -97,11 +97,15 @@ pub async fn run(base: &str, token: Option<&str>, cmd: Shows) -> Result<()> {
 
 async fn list(api: &crate::ctl::Api) -> Result<()> {
     let answer: Value = api.call("show.list", None, &json!({})).await?;
-    println!("{:<22} {:<9} {:<18} {:>9} {:>6} {:>7}", "SHOW", "STATE", "ON AIR", "OUT KBPS", "CPU", "MEMORY");
+    println!("{:<22} {:<7} {:<9} {:<18} {:>9} {:>6} {:>7}", "SHOW", "KIND", "STATE", "ON AIR", "OUT KBPS", "CPU", "MEMORY");
     for s in answer["shows"].as_array().cloned().unwrap_or_default() {
+        // A show that does not say is one from before compositing was a
+        // property, which always composited.
+        let kind = if s["compositing"] == json!(false) { "direct" } else { "mix" };
         println!(
-            "{:<22} {:<9} {:<18} {:>9} {:>5}% {:>4}MiB",
+            "{:<22} {:<7} {:<9} {:<18} {:>9} {:>5}% {:>4}MiB",
             s["id"].as_str().unwrap_or("-"),
+            kind,
             s["state"].as_str().unwrap_or("-"),
             s["on_air"].as_str().unwrap_or("-"),
             s["programme_kbps"].as_u64().unwrap_or(0),
@@ -151,12 +155,18 @@ fn outcome(answer: &Value, feeds: &[feeds::Feed], dry_run: bool) -> String {
     out
 }
 
+/// The governor's cost in words: `1.2 cores, 340 MiB, 24000 kbps out`.
 fn compact(v: &Value) -> String {
-    match v {
-        Value::Null => "unknown".into(),
-        Value::String(s) => s.clone(),
-        other => other.to_string(),
-    }
+    let Some(map) = v.as_object() else {
+        return v.as_str().map(String::from).unwrap_or_else(|| "unknown".into());
+    };
+    let n = |k: &str| map.get(k).and_then(Value::as_u64).unwrap_or(0);
+    format!(
+        "{:.1} cores, {} MiB, {} kbps out",
+        n("cpu_millicores") as f64 / 1000.0,
+        n("memory_mib"),
+        n("egress_kbps")
+    )
 }
 
 async fn stats(api: &crate::ctl::Api, watch: bool, interval: u64, ids: Vec<String>) -> Result<()> {
@@ -188,11 +198,11 @@ mod tests {
         let answer = json!({
             "added": ["a"],
             "refused": [{ "index": 1, "name": "B", "why": "the port is taken by show a", "data": {} }],
-            "plan": { "cost": { "millicores": 120 }, "fits": true }
+            "plan": { "cost": { "cpu_millicores": 1250, "memory_mib": 300, "egress_kbps": 9000 }, "fits": true }
         });
         let text = outcome(&answer, &feeds, true);
         assert!(text.starts_with("would add 1 of 2 shows"), "{text}");
         assert!(text.contains("line 3 B: the port is taken"), "{text}");
-        assert!(text.contains("fits on this machine"), "{text}");
+        assert!(text.contains("cost 1.2 cores, 300 MiB, 9000 kbps out, fits"), "{text}");
     }
 }
