@@ -34,10 +34,6 @@ pub mod spec {
     }
 
     impl InputSpec {
-        pub fn new(uri: &str) -> InputSpec {
-            InputSpec { uri: uri.to_string(), program: None, params: json!({}), backup: None }
-        }
-
         pub fn from_json(v: &Value) -> Result<InputSpec, InputError> {
             let uri = v.get("uri").and_then(Value::as_str).map(str::trim).unwrap_or_default();
             if uri.is_empty() {
@@ -62,6 +58,7 @@ pub mod spec {
 }
 
 pub mod stats {
+    #[allow(dead_code)]
     #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
     pub enum State {
         #[default]

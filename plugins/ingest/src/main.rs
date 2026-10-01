@@ -19,7 +19,6 @@
 mod channels;
 mod codec;
 mod device;
-#[allow(dead_code)]
 mod direct;
 mod flv;
 mod restream;
@@ -42,7 +41,6 @@ mod rtmp;
 mod sends;
 #[cfg(test)]
 mod testfeed;
-#[allow(dead_code)]
 mod tsmux;
 mod source;
 mod sps;

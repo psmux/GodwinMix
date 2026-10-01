@@ -109,6 +109,7 @@ impl AudioConfig {
         })
     }
 
+    #[cfg(test)]
     pub fn sample_rate(&self) -> u32 {
         const RATES: [u32; 13] = [96_000, 88_200, 64_000, 48_000, 44_100, 32_000, 24_000, 22_050, 16_000, 12_000, 11_025, 8_000, 7_350];
         RATES.get(usize::from(self.rate_index)).copied().unwrap_or(48_000)
