@@ -25,6 +25,9 @@
 #   --title T        the report's title
 #   --note TEXT      a sentence for the top of the report
 #   --no-build       use the binaries already built
+#   --toggle         direct mode: turn compositing on for the first show a third
+#                    of the way through the measured run and off at two thirds,
+#                    and report the longest gap on its output
 #   --keep           leave the run folder (its path is printed) after the run
 #   --machine ID     names the machine in the report's file name. The CPU by
 #                    default, as m4pro or x86_64; never the host name
@@ -37,7 +40,7 @@ set -uo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 FEEDS=200; MEASURE=60; MODE=auto; LEGACY=8; TRANSPORT=unicast; FORMAT=copy
-PORT=18480; TITLE=""; NOTE=""; BUILD=1; KEEP=0; SETTLE=15; WARM=20; MACHINE=""
+PORT=18480; TITLE=""; NOTE=""; BUILD=1; KEEP=0; SETTLE=15; WARM=20; MACHINE=""; TOGGLE=0; TOGGLED=""
 ARGS="$*"
 
 while [[ $# -gt 0 ]]; do
@@ -53,8 +56,9 @@ while [[ $# -gt 0 ]]; do
         --note) NOTE="$2"; shift 2 ;;
         --no-build) BUILD=0; shift ;;
         --keep) KEEP=1; shift ;;
+        --toggle) TOGGLE=1; shift ;;
         --machine) MACHINE="$2"; shift 2 ;;
-        -h|--help) sed -n '2,35p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help) sed -n '2,38p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) echo "unknown argument: $1. dev/bench/scale.sh --help lists them." >&2; exit 2 ;;
     esac
 done
@@ -164,6 +168,20 @@ start_station() {
     fi
 }
 
+# toggle: compositing on for the first show at a third of the run, off at two
+# thirds, in the background, each answer in toggle.log.
+toggle() {
+    local id third=$((MEASURE / 3))
+    id="$(grep -o '"ids":\["[^"]*"' "$RUN/add.json" | head -1 | sed 's/.*\["//; s/"$//')"
+    [[ -z "$id" ]] && { log "no show id in add.json to toggle"; return 0; }
+    TOGGLED="$id"
+    log "turning compositing on for $id at $third s and off at $((third * 2)) s"
+    ( sleep "$third"
+      "$TOOL" call --station "$ADDR" --method show.set --params "{\"id\":\"$id\",\"compositing\":true}" >> "$RUN/toggle.log" 2>&1
+      sleep "$third"
+      "$TOOL" call --station "$ADDR" --method show.set --params "{\"id\":\"$id\",\"compositing\":false}" >> "$RUN/toggle.log" 2>&1 ) &
+}
+
 # Part two: the station with a show per feed, measured.
 station_run() {
     local shows=$FEEDS extra=()
@@ -176,6 +194,7 @@ station_run() {
     log "settling for $SETTLE s, then measuring for $MEASURE s"
     sleep "$SETTLE"
     tmux new-session -d -s gmx-scale-check "exec '$TOOL' check --from $OUT --count $shows --seconds $MEASURE --quiet --json '$RUN/check.json' > '$RUN/check.log' 2>&1"
+    [[ $TOGGLE == 1 && "$MODE" == direct ]] && toggle
     "$TOOL" sample --pid "$STATION_PID" --station "$ADDR" --seconds "$MEASURE" --watch "feeds=$FEEDS_PID" \
         --watch "checker=$(pane_pid gmx-scale-check)" --csv "$RUN/samples.csv" --json "$RUN/sample.json" > /dev/null
     wait_for 30 "the check of the outputs" test -s "$RUN/check.json"
@@ -203,8 +222,8 @@ report() {
     commit="$(cd "$REPO" && git rev-parse --short HEAD 2>/dev/null || echo unknown)"
     version="$("$BIN" --version 2>/dev/null || echo unknown)"
     [[ -z "$TITLE" ]] && TITLE="$FEEDS feeds, $MODE, $TRANSPORT, $FORMAT"
-    printf '{"title":"%s","version":"%s","commit":"%s","date":"%s","mode":"%s","feeds":%s,"seconds":%s,"clips":"hd1080.ts, hd720.ts, sd.ts, mpts.ts","command":"dev/bench/scale.sh %s","note":"%s","load":"%s","orphans":%s}\n' \
-        "$TITLE" "$version" "$commit" "$(date '+%Y-%m-%d %H:%M %Z')" "$MODE ($TRANSPORT)" "$FEEDS" "$MEASURE" "$ARGS" "$NOTE" "$LOAD" "${ORPHANS:-0}" > "$RUN/run.json"
+    printf '{"title":"%s","version":"%s","commit":"%s","date":"%s","mode":"%s","feeds":%s,"seconds":%s,"clips":"hd1080.ts, hd720.ts, sd.ts, mpts.ts","command":"dev/bench/scale.sh %s","note":"%s","load":"%s","orphans":%s,"toggle":"%s","toggle_ok":%s}\n' \
+        "$TITLE" "$version" "$commit" "$(date '+%Y-%m-%d %H:%M %Z')" "$MODE ($TRANSPORT)" "$FEEDS" "$MEASURE" "$ARGS" "$NOTE" "$LOAD" "${ORPHANS:-0}" "$TOGGLED" "$(grep -o '"ok":true' "$RUN/toggle.log" 2>/dev/null | wc -l | tr -d ' ')" > "$RUN/run.json"
     file="$REPO/dev/bench/results/scale-$MACHINE-$STAMP-$MODE.md"
     "$TOOL" report --dir "$RUN" --out "$file" || die "the report could not be written"
     log "wrote $file"

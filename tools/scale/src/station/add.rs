@@ -52,7 +52,7 @@ pub fn show_add(r: &Row) -> Value {
         "name": r.name,
         "compositing": false,
         "input": {"uri": r.input, "program": r.program},
-        "outputs": [{"uri": r.output, "rendition": rendition}],
+        "outputs": [{"id": "out", "uri": r.output, "rendition": rendition}],
     })
 }
 
@@ -72,6 +72,7 @@ fn many(c: &Client, rows: &[Row]) -> Result<Value, String> {
         "method": "show.add_many",
         "plan": dry.body["plan"],
         "added": added,
+        "ids": real.body["added"],
         "refused": real.body["refused"],
         "apply_seconds": (t.elapsed().as_secs_f64() * 100.0).round() / 100.0,
     }))
@@ -79,7 +80,7 @@ fn many(c: &Client, rows: &[Row]) -> Result<Value, String> {
 
 fn one_by_one(c: &Client, rows: &[Row]) -> Value {
     let mut refused = Vec::new();
-    let mut added = 0;
+    let (mut added, mut ids) = (0, Vec::new());
     for (i, r) in rows.iter().enumerate() {
         match c.call("show.add", show_add(r), None) {
             Ok(a) if a.ok() && a.body["compositing"] != json!(false) => {
@@ -87,12 +88,15 @@ fn one_by_one(c: &Client, rows: &[Row]) -> Value {
                 refused.push(json!({"index": i, "name": r.name, "why": why}));
                 break;
             }
-            Ok(a) if a.ok() => added += 1,
+            Ok(a) if a.ok() => {
+                added += 1;
+                ids.push(a.body["id"].clone());
+            }
             Ok(a) => refused.push(json!({"index": i, "name": r.name, "why": a.why()})),
             Err(e) => refused.push(json!({"index": i, "name": r.name, "why": e})),
         }
     }
-    json!({"method": "show.add", "added": added, "refused": refused})
+    json!({"method": "show.add", "added": added, "ids": ids, "refused": refused})
 }
 
 fn legacy(c: &Client, rows: &[Row]) -> Value {

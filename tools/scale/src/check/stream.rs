@@ -3,10 +3,6 @@
 
 use crate::ts::{self, pes, psi, PACKET};
 
-/// A GOP counts as dropped when the keyframes either side of it are this many
-/// typical GOPs apart, or more.
-const GOP_GAP: f64 = 1.5;
-
 #[derive(Default)]
 pub struct Stream {
     pub datagrams: u64,
@@ -135,18 +131,6 @@ impl Stream {
             }
         }
         self.last_key_pts = pts.or(self.last_key_pts);
-    }
-
-    /// The GOP most keyframes are apart, and how many went missing.
-    pub fn gops(&self) -> (f64, u64) {
-        let mut g: Vec<f64> = self.key_gaps_ms.iter().copied().filter(|v| *v > 0.0).collect();
-        if g.is_empty() {
-            return (0.0, 0);
-        }
-        g.sort_by(f64::total_cmp);
-        let typical = g[g.len() / 2];
-        let dropped = g.iter().filter(|v| **v >= typical * GOP_GAP).map(|v| (v / typical).round() as u64 - 1).sum();
-        (typical, dropped)
     }
 
     /// The widest spread of arrival against PCR in any stretch between jumps.
