@@ -965,6 +965,241 @@
       ],
       "type": "object"
     },
+    "BindingAddRequest": {
+      "additionalProperties": false,
+      "description": "`feed.binding.add`: the fields of [`BindingSpec`], with anything else refused.",
+      "properties": {
+        "feed": {
+          "description": "The feed it reads.",
+          "type": "string"
+        },
+        "id": {
+          "description": "A slug. Never changes. Made from the target when absent.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "join": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "limit": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "paused": {
+          "default": false,
+          "type": "boolean"
+        },
+        "select": {
+          "default": "",
+          "description": "A path into the fetched document. See [`BindingSpec`].",
+          "type": "string"
+        },
+        "template": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "to": {
+          "$ref": "#/$defs/BindingTarget"
+        }
+      },
+      "required": [
+        "feed",
+        "to"
+      ],
+      "type": "object"
+    },
+    "BindingSetRequest": {
+      "additionalProperties": false,
+      "description": "`feed.binding.set`: only what is named changes.",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "join": {
+          "description": "An empty string takes the join away.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "limit": {
+          "description": "0 takes the limit away.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "select": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "template": {
+          "description": "An empty string takes the template away.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "to": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BindingTarget"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object"
+    },
+    "BindingStatus": {
+      "description": "A binding with what it last wrote.",
+      "properties": {
+        "feed": {
+          "description": "The feed it reads.",
+          "type": "string"
+        },
+        "id": {
+          "description": "A slug. Never changes.",
+          "type": "string"
+        },
+        "join": {
+          "description": "For a list: join it into one string with this between the elements.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "last_error": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "last_write": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "limit": {
+          "description": "For a list: keep the first this many.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "paused": {
+          "type": "boolean"
+        },
+        "select": {
+          "default": "",
+          "description": "A path into the fetched document: `items[].title`, `data.home.score`,\n`rows[0].Name`, or a JSON pointer starting `/`. Empty is the whole\ndocument. `[]` takes every element of a list.",
+          "type": "string"
+        },
+        "template": {
+          "description": "Words with `{path}` holes filled from what `select` picked (from each\nelement, for a list): `{home} {home_score} : {away_score} {away}`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "to": {
+          "$ref": "#/$defs/BindingTarget"
+        },
+        "value": true,
+        "writes": {
+          "description": "Writes since the core started. A feed that has not changed adds none.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "feed",
+        "to",
+        "writes"
+      ],
+      "type": "object"
+    },
+    "BindingTarget": {
+      "anyOf": [
+        {
+          "description": "A source's param through `source.set`, by a dotted path that starts\nat `params`: `params.text`, `params.items`, `params.fields.headline`.",
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "source": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "source",
+            "path"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A field of an OGraf graphic on a scene, through `scene.apply_graphic`\nwith no play, which is the graphic's update action.",
+          "properties": {
+            "field": {
+              "type": "string"
+            },
+            "graphic": {
+              "type": "string"
+            },
+            "item": {
+              "description": "The item's name, when the graphic is on the canvas twice.",
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "graphic",
+            "field"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A scene parameter through `scene.params.set`, so every `{{name}}`\nin the collection follows it.",
+          "properties": {
+            "scene_param": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "scene_param"
+          ],
+          "type": "object"
+        }
+      ],
+      "description": "Where a binding writes. One of three shapes."
+    },
     "Blend": {
       "description": "OBS's blend enum, so an import carries across unchanged.",
       "enum": [
@@ -2976,6 +3211,431 @@
           "description": "`event/telemetry`: a line of numbers per tick, at 1 to 10 per second.\nThis is what turns the probes on; nothing measures until it is here."
         }
       },
+      "type": "object"
+    },
+    "FeedAddRequest": {
+      "additionalProperties": false,
+      "description": "`feed.add`: the fields of [`FeedSpec`], with anything else refused.",
+      "properties": {
+        "address": {
+          "description": "`http://`, `https://`, `ws://` or `wss://`. Nothing else is fetched.",
+          "type": "string"
+        },
+        "format": {
+          "$ref": "#/$defs/FeedFormat",
+          "default": "auto"
+        },
+        "headers": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Sent with every request, for an API key. Sealed once stored.",
+          "type": "object"
+        },
+        "id": {
+          "description": "A slug: lower case letters, digits and dashes. Never changes.",
+          "type": "string"
+        },
+        "interval_s": {
+          "description": "Seconds between fetches of a polled feed. At least 5; 30 when absent.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "paused": {
+          "default": false,
+          "type": "boolean"
+        },
+        "timeout_s": {
+          "description": "Seconds one fetch may take. 10 when absent.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "address"
+      ],
+      "type": "object"
+    },
+    "FeedFormat": {
+      "description": "How the body is read. `auto` decides from the content type and the first\nbyte; `sse` reads an `http(s)` address as a Server-Sent Events stream.",
+      "oneOf": [
+        {
+          "enum": [
+            "auto",
+            "json"
+          ],
+          "type": "string"
+        },
+        {
+          "const": "rss",
+          "description": "RSS 2.0 or Atom, read as `{title, link, items: [{title, link, summary, published, id, author}]}`.",
+          "type": "string"
+        },
+        {
+          "const": "csv",
+          "description": "Comma separated with a header row, read as `{columns, rows: [{column: value}]}`.",
+          "type": "string"
+        },
+        {
+          "const": "text",
+          "description": "Plain text, read as `{text, lines}`.",
+          "type": "string"
+        },
+        {
+          "const": "sse",
+          "description": "Server-Sent Events: each event's `data` is one document.",
+          "type": "string"
+        }
+      ]
+    },
+    "FeedIdRequest": {
+      "additionalProperties": false,
+      "description": "`feed.remove` and `feed.binding.remove`.",
+      "properties": {
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object"
+    },
+    "FeedList": {
+      "description": "`feed.list`.",
+      "properties": {
+        "bindings": {
+          "items": {
+            "$ref": "#/$defs/BindingStatus"
+          },
+          "type": "array"
+        },
+        "feeds": {
+          "items": {
+            "$ref": "#/$defs/FeedStatus"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "feeds",
+        "bindings"
+      ],
+      "type": "object"
+    },
+    "FeedSetRequest": {
+      "additionalProperties": false,
+      "description": "`feed.set`: only what is named changes.",
+      "properties": {
+        "address": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "format": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FeedFormat"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "headers": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Replaces the headers. A value of `\"__secret__\"` keeps what is stored.",
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "interval_s": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "timeout_s": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object"
+    },
+    "FeedState": {
+      "description": "Where a feed is.",
+      "oneOf": [
+        {
+          "enum": [
+            "paused"
+          ],
+          "type": "string"
+        },
+        {
+          "const": "starting",
+          "description": "Not fetched yet, or connecting.",
+          "type": "string"
+        },
+        {
+          "const": "ok",
+          "description": "The last fetch, message or event was read.",
+          "type": "string"
+        },
+        {
+          "const": "failing",
+          "description": "The last attempt failed; it is tried again with a growing gap.",
+          "type": "string"
+        }
+      ]
+    },
+    "FeedStatus": {
+      "description": "A feed with what it has been doing.",
+      "properties": {
+        "address": {
+          "description": "`http://`, `https://`, `ws://` or `wss://`. Nothing else is fetched.",
+          "type": "string"
+        },
+        "bytes": {
+          "description": "Size of the last body read, in bytes.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "failures": {
+          "description": "Attempts in a row that failed.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "fetches": {
+          "description": "Fetches or messages read since the core started.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "format": {
+          "$ref": "#/$defs/FeedFormat",
+          "default": "auto"
+        },
+        "headers": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Sent with every request, for an API key. Sealed once stored: read\nback as `\"__secret__\"`, and `\"__secret__\"` written back keeps it.",
+          "type": "object"
+        },
+        "id": {
+          "description": "A slug: lower case letters, digits and dashes. Never changes.",
+          "type": "string"
+        },
+        "interval_s": {
+          "description": "Seconds between fetches of a polled feed. At least 5; 30 when absent.\nNot used by a websocket or an event stream, which push.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "kind": {
+          "description": "`polled`, `websocket` or `sse`.",
+          "type": "string"
+        },
+        "last_change": {
+          "description": "When what was read last differed from what came before.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "last_error": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "last_fetch": {
+          "description": "When something was last read, RFC 3339.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "not_modified": {
+          "description": "Fetches the server answered `304 Not Modified`.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "paused": {
+          "description": "Stopped by `feed.pause`: nothing is fetched and nothing is written.",
+          "type": "boolean"
+        },
+        "state": {
+          "$ref": "#/$defs/FeedState"
+        },
+        "timeout_s": {
+          "description": "Seconds one fetch may take before it counts as failed. 10 when absent.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "address",
+        "state",
+        "kind",
+        "failures",
+        "fetches",
+        "not_modified",
+        "bytes"
+      ],
+      "type": "object"
+    },
+    "FeedTestRequest": {
+      "additionalProperties": false,
+      "description": "`feed.test`: fetch once and show what a selection picks.\n\nGive `id` for a feed that exists, or `address` (with `format`, `headers`\nand `timeout_s` if it needs them) for one that does not yet. Nothing is\nstored and nothing is written.",
+      "properties": {
+        "address": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "format": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FeedFormat"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fresh": {
+          "default": false,
+          "description": "Fetch again even when the feed has a document already.",
+          "type": "boolean"
+        },
+        "headers": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object"
+        },
+        "id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "join": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "limit": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "select": {
+          "default": "",
+          "description": "A path to try. See [`BindingSpec`].",
+          "type": "string"
+        },
+        "template": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "timeout_s": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "FeedTestResult": {
+      "description": "What `feed.test` found.",
+      "properties": {
+        "bytes": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "format": {
+          "$ref": "#/$defs/FeedFormat",
+          "description": "The format it was read as."
+        },
+        "keys": {
+          "description": "The keys at the top of the document.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "paths": {
+          "description": "Every path in the document down to a few levels, with `[]` for a\nlist, each with an example value: the paths `select` takes.",
+          "items": {
+            "$ref": "#/$defs/PathExample"
+          },
+          "type": "array"
+        },
+        "preview": {
+          "description": "The document, with long lists cut to their first few elements and\nlong strings shortened, for a person or an agent to read paths from."
+        },
+        "selected": {
+          "description": "What `select` picked, when one was given."
+        },
+        "took_ms": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "value": {
+          "description": "What a binding with this selection would write."
+        }
+      },
+      "required": [
+        "format",
+        "bytes",
+        "took_ms",
+        "keys",
+        "preview",
+        "paths"
+      ],
       "type": "object"
     },
     "Filter": {
@@ -5850,6 +6510,20 @@
       ],
       "type": "object"
     },
+    "PathExample": {
+      "description": "One path `select` would take, with what it picks.",
+      "properties": {
+        "example": true,
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "example"
+      ],
+      "type": "object"
+    },
     "PathListRequest": {
       "properties": {
         "path": {
@@ -5922,6 +6596,24 @@
       "required": [
         "label",
         "path"
+      ],
+      "type": "object"
+    },
+    "PauseRequest": {
+      "additionalProperties": false,
+      "description": "`feed.pause` and `feed.binding.pause`.",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "paused": {
+          "default": true,
+          "description": "False starts it again. True when absent.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id"
       ],
       "type": "object"
     },
@@ -10796,6 +11488,75 @@
     {
       "ext": null,
       "legacy": null,
+      "name": "event/feed.failed",
+      "pattern": "feed.failed",
+      "payload": {
+        "properties": {
+          "binding": {
+            "description": "The binding, when it was a write that failed.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "error": {
+            "description": "What went wrong and what to do about it. Never carries a header value.",
+            "type": "string"
+          },
+          "failures": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "id": {
+            "description": "The feed.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "failures",
+          "error"
+        ],
+        "type": "object"
+      },
+      "since": "1",
+      "summary": "A feed could not be read (a refused connection, a timeout, a body that would not parse, a response over 4 MB), or one of its bindings could not write what it read. `binding` names the binding when it was the write. Sent on the first failure in a row, not on every retry; what was last written stays on air."
+    },
+    {
+      "ext": null,
+      "legacy": null,
+      "name": "event/feed.recovered",
+      "pattern": "feed.recovered",
+      "payload": {
+        "properties": {
+          "binding": {
+            "description": "The binding, when it was a write that failed.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "failures": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "id": {
+            "description": "The feed.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "failures"
+        ],
+        "type": "object"
+      },
+      "since": "1",
+      "summary": "A feed or a binding that was failing works again. `failures` is how many attempts in a row failed before this one."
+    },
+    {
+      "ext": null,
+      "legacy": null,
       "name": "event/health",
       "pattern": "health",
       "payload": {
@@ -12117,6 +12878,294 @@
       "scope": "operate",
       "since": "1",
       "summary": "Ask every device plugin what it can see: cameras, NDI senders, publishers. Each candidate's params are ready for source.add."
+    },
+    {
+      "destructive": false,
+      "idempotent": false,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "add_feed"
+      },
+      "mutating": true,
+      "name": "feed.add",
+      "params": {
+        "$ref": "#/$defs/FeedAddRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/feed/add"
+      },
+      "result": {
+        "$ref": "#/$defs/FeedStatus"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "Add a live data feed: an http(s) address polled every `interval_s` (5 s at least, 30 by default, honouring ETag and Last-Modified), a ws(s) address whose messages are read as they come, or an http(s) event stream with format sse. Header values are sealed."
+    },
+    {
+      "destructive": false,
+      "idempotent": false,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "bind_feed"
+      },
+      "mutating": true,
+      "name": "feed.binding.add",
+      "params": {
+        "$ref": "#/$defs/BindingAddRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/feed/binding/add"
+      },
+      "result": {
+        "$ref": "#/$defs/BindingStatus"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "Bind a value in a feed to a target: a source's param by path (`params.text`, `params.items`, `params.fields.headline`), a graphic's field through its update action, or a scene parameter. It writes at once if the feed has been read, and after that only when the value changes."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "pause_feed_binding"
+      },
+      "mutating": true,
+      "name": "feed.binding.pause",
+      "params": {
+        "$ref": "#/$defs/PauseRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/feed/binding/pause"
+      },
+      "result": {
+        "$ref": "#/$defs/BindingStatus"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "Stop a binding writing, or start it again with paused false. Started again, it writes what the feed holds now."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "remove_feed_binding"
+      },
+      "mutating": true,
+      "name": "feed.binding.remove",
+      "params": {
+        "$ref": "#/$defs/FeedIdRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/feed/binding/remove"
+      },
+      "result": {
+        "type": "object"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "Forget a binding. What it wrote stays on air."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "set_feed_binding"
+      },
+      "mutating": true,
+      "name": "feed.binding.set",
+      "params": {
+        "$ref": "#/$defs/BindingSetRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/feed/binding/set"
+      },
+      "result": {
+        "$ref": "#/$defs/BindingStatus"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "Change a binding's selection or target. Only what is named changes, and the value is written again at once."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": true,
+        "tool": "list_feeds"
+      },
+      "mutating": false,
+      "name": "feed.list",
+      "params": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      },
+      "rest": {
+        "method": "GET",
+        "path": "/api/v1/feed/list"
+      },
+      "result": {
+        "$ref": "#/$defs/FeedList"
+      },
+      "scope": "read",
+      "since": "1",
+      "summary": "Every live data feed with its state (ok, failing with the reason, paused), when it was last read and last changed, and every binding with the value it last wrote."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "pause_feed"
+      },
+      "mutating": true,
+      "name": "feed.pause",
+      "params": {
+        "$ref": "#/$defs/PauseRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/feed/pause"
+      },
+      "result": {
+        "$ref": "#/$defs/FeedStatus"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "Stop reading a feed, or start it again with paused false. While paused nothing is fetched and nothing is written; what was written stays on air."
+    },
+    {
+      "destructive": false,
+      "idempotent": false,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "refresh_feed"
+      },
+      "mutating": true,
+      "name": "feed.refresh",
+      "params": {
+        "$ref": "#/$defs/FeedIdRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/feed/refresh"
+      },
+      "result": {
+        "$ref": "#/$defs/FeedStatus"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "Fetch a polled feed now rather than at the end of its interval. A pushed feed that is waiting to reconnect tries at once."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "remove_feed"
+      },
+      "mutating": true,
+      "name": "feed.remove",
+      "params": {
+        "$ref": "#/$defs/FeedIdRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/feed/remove"
+      },
+      "result": {
+        "type": "object"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "Stop and forget a feed, its sealed headers and every binding that reads it. What they wrote stays on air until something else changes it."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "set_feed"
+      },
+      "mutating": true,
+      "name": "feed.set",
+      "params": {
+        "$ref": "#/$defs/FeedSetRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/feed/set"
+      },
+      "result": {
+        "$ref": "#/$defs/FeedStatus"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "Change a feed's address, format, interval, timeout or headers. Only what is named changes; a header value of \"__secret__\" keeps the stored one."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "test_feed"
+      },
+      "mutating": true,
+      "name": "feed.test",
+      "params": {
+        "$ref": "#/$defs/FeedTestRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/feed/test"
+      },
+      "result": {
+        "$ref": "#/$defs/FeedTestResult"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "Fetch a feed once and show what came back: its top keys, a cut down copy, and every path with an example. With `select` (and `template`, `limit`, `join`) it also shows what that picks and what a binding would write. A path that picks nothing is refused with where it stopped and the keys there. Nothing is stored and nothing is written."
     },
     {
       "destructive": false,
