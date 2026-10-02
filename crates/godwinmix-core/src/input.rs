@@ -231,6 +231,9 @@ pub struct InputPipeline {
     /// Where a layered source's layers sit in time, one per layer. Reset on
     /// restart.
     placement: Vec<Arc<Placement>>,
+    /// Set for a source with an alpha channel, which the overlay board draws
+    /// after the compositor. See `overlay`.
+    layer: Option<Arc<crate::overlay::Layer>>,
     /// Set when the pipeline posts an error; the supervisor restarts it.
     failed: Arc<AtomicBool>,
     /// Set when a restart began with the source failed, until the restart
@@ -260,6 +263,10 @@ pub struct InputPipeline {
     /// A name given after the source was built, by a rename. The config is
     /// what the source was made with, and a rename must not rebuild it.
     renamed: Mutex<Option<String>>,
+    /// Params taken in place by `configure` since the source was built. Like
+    /// a rename, a change the kind applied live must not rebuild it, and must
+    /// still be what a restart or the runtime store sees.
+    reconfigured: Mutex<Option<crate::config::Params>>,
     filters: Mutex<Vec<crate::plugin::FilterSlot>>,
     /// Keeps a restart and a stop, which both run off the mixer thread, in
     /// order. See `lifecycle`.
@@ -814,6 +821,7 @@ impl InputPipeline {
             id: cfg.id.clone(),
             config: cfg.clone(),
             renamed: Mutex::new(None),
+            reconfigured: Mutex::new(None),
             pipeline: ends.pipeline,
             health: ends.health,
             last_video: ends.last_video,
@@ -831,6 +839,7 @@ impl InputPipeline {
             levels: parts.levels,
             counts: parts.layer_counts,
             placement: parts.placement,
+            layer: parts.layer,
             failed: Arc::new(AtomicBool::new(false)),
             retrying: AtomicBool::new(false),
             seekable: Mutex::new(None),
@@ -867,6 +876,39 @@ impl InputPipeline {
     /// client swap, a tool a plugin contributes.
     pub fn call(&self, method: &str, params: serde_json::Value) -> Result<serde_json::Value> {
         self.kind.lock().call(method, params)
+    }
+
+    /// Hand the kind new params while it runs. `Applied` means it took them
+    /// in place, and they are kept as this source's params from now on;
+    /// anything else means it has to be built again to take them.
+    pub fn configure(&self, params: &crate::config::Params) -> Result<crate::plugin::Configure> {
+        let mut effective = params.clone();
+        if !self.config.uri.trim().is_empty() && !effective.contains_key("uri") {
+            effective.insert("uri".into(), toml::Value::String(self.config.uri.clone()));
+        }
+        let outcome = self.kind.lock().configure(&effective)?;
+        if matches!(outcome, crate::plugin::Configure::Applied) {
+            *self.reconfigured.lock() = Some(params.clone());
+        }
+        Ok(outcome)
+    }
+
+    /// The config this source runs with now: what it was built with, with
+    /// any rename and any params taken in place since.
+    pub fn current_config(&self) -> SourceConfig {
+        let mut cfg = self.config.clone();
+        if let Some(name) = self.renamed() {
+            cfg.name = Some(name);
+        }
+        if let Some(params) = self.reconfigured.lock().clone() {
+            cfg.params = params;
+        }
+        cfg
+    }
+
+    /// The layer the overlay board draws, for a source with an alpha channel.
+    pub fn layer(&self) -> Option<Arc<crate::overlay::Layer>> {
+        self.layer.clone()
     }
 
     /// This source's raw video tee and raw audio tee, and the pipeline they

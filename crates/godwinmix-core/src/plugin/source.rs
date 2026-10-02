@@ -113,6 +113,7 @@ static REGISTRY: &[Provide] = &[
     kinds::browser::PROVIDE,
     kinds::layered::PROVIDE,
     kinds::testsrc::PROVIDE,
+    kinds::text::PROVIDE,
 ];
 
 /// The provide named by `type`, if this core has one.
