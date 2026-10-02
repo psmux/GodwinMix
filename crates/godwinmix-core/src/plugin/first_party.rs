@@ -62,7 +62,7 @@ fn places_from(exe_dir: &Path, name: &str) -> Vec<PathBuf> {
 }
 
 /// The source checkout this executable was built in, if it was.
-fn checkout_of(exe_dir: &Path) -> Option<PathBuf> {
+pub fn checkout_of(exe_dir: &Path) -> Option<PathBuf> {
     exe_dir
         .ancestors()
         .skip(1)

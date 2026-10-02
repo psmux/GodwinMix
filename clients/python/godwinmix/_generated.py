@@ -854,6 +854,8 @@ class ErrorAction(TypedDict, total=False):
     # `retry`: how long to wait first.
     applies: Optional[str]
     # `set-config`: what `config.get` says about the key: `live`, `next_source` or `restart`.
+    command: Optional[str]
+    # A command the person runs themselves, for what only the operating system can supply. A client shows it with a copy button, beside the action's own button when the kind is not `copy`.
     dialog: Optional[str]
     # `open`: a dialog, such as `settings`.
     key: Optional[str]
@@ -865,6 +867,8 @@ class ErrorAction(TypedDict, total=False):
     # `install-plugin` and `enable-plugin`: the plugin.
     panel: Optional[str]
     # `open`: a panel by id.
+    piece: Optional[str]
+    # `setup`: the piece to set up, `web` or a plugin's name.
     value: Any
     # `set-config`: the value to send.
 
@@ -2407,6 +2411,29 @@ class SetSourceRequest(TypedDict, total=False):
     transport: Union[BridgeTransport, None]
     # How a remote source's media travels: `rtp`, `srt` or `whip`.
 
+class SetupRequest(TypedDict, total=False):
+    """`setup.start` and `setup.get`: one piece by name."""
+
+    piece: str
+    # `web`, or a first party plugin's name such as `camera`.
+
+class SetupStatus(TypedDict, total=False):
+    """One piece that lives outside the mixer's own program."""
+
+    action: Union[ErrorAction, None]
+    # The button that moves it on, when there is one: try again, or a command to copy.
+    detail: Any
+    # For a developer: where it looked, what it ran, where the log is.
+    message: str
+    # One or two plain sentences: what is happening and what comes next.
+    piece: str
+    # `web` for the browser renderer, otherwise the plugin's name.
+    progress: Optional[float]
+    # 0 to 1 while a download says how far it has got.
+    state: SetupState
+    title: str
+    # What it gives a person, in their words: "Web pages", "Cameras".
+
 class ShedNote(TypedDict, total=False):
     """One thing the governor stopped or slowed, and why."""
 
@@ -3244,6 +3271,9 @@ class TelemetryEvent(TypedDict, total=False):
     ts: int
     # milliseconds since the Unix epoch
 
+class SetupChangedEvent(TypedDict, total=False):
+    setup: SetupStatus
+
 class FeedFailedEvent(TypedDict, total=False):
     binding: Optional[str]
     # The binding, when it was a write that failed.
@@ -3261,7 +3291,7 @@ class FeedRecoveredEvent(TypedDict, total=False):
     # The feed.
 
 # What pressing the button does.
-ActionKind = Literal['set-config', 'install-plugin', 'enable-plugin', 'open', 'retry', 'restart']
+ActionKind = Literal['set-config', 'install-plugin', 'enable-plugin', 'open', 'retry', 'restart', 'setup', 'copy']
 
 # `ext.agent`. `true` takes the default thresholds; an object moves them.
 AgentExt = Union[bool, Dict[str, Any]]
@@ -3354,6 +3384,9 @@ ResponseFormat = Literal['concise', 'detailed']
 
 # How a core that exits gets started again.
 RestartHow = Literal['supervised', 'none']
+
+# Where a piece stands.
+SetupState = Literal['ready', 'missing', 'running', 'failed', 'unavailable']
 
 # How much the reader should care.
 Severity = Literal['error', 'warning', 'info']
@@ -3536,6 +3569,9 @@ METHODS = (
     {"name": "scene.undo", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/undo"), "summary": 'Undo the last change. A drag marked with scene.history.mark undoes as one step.'},
     {"name": "scene.validate", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/scenes/validate"), "summary": 'Overlaps, items off the canvas, safe area breaches and missing sources: what to fix before saying a scene is done.'},
     {"name": "scene.virtual_set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/virtual_set"), "summary": 'A new scene with a presenter keyed in front of a background, and optionally a foreground such as a desk and a lower third area. Pictures from the media library become sources; the key colour is guessed from the camera.'},
+    {"name": "setup.get", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/setup"), "summary": 'Where one piece stands, without starting anything.'},
+    {"name": "setup.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/setup/list"), "summary": 'Where each piece the mixer sets up on first use stands: the browser renderer (`web`) and every first party plugin this copy carries.'},
+    {"name": "setup.start", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/setup/start"), "summary": 'Set a piece up now, or join the set up already running, and answer at once with where it stands. Progress follows as `event/setup.changed`. Sources waiting on the piece start by themselves when it is ready.'},
     {"name": "show.add", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/shows"), "summary": 'Make another show and start it: empty, a copy of a show (without its outputs, so nothing goes out twice), or from a project file.'},
     {"name": "show.add_many", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/shows/add_many"), "summary": 'Make many shows in one call, such as every channel of a headend. The whole batch is checked first. With dry_run (the default) nothing is made: the answer says what would be, what its renditions would cost and whether the governor would admit them. Without it, every show that fits is made and the rest are refused with why; a show is made whole or not at all.'},
     {"name": "show.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/shows"), "summary": 'Every show on this machine: its name, whether it is running, what is on air, what its outputs send and what its process costs. `current` is the show a client reaches when it names none.'},
@@ -3598,6 +3634,7 @@ EVENT_NAMES = (
     "multiview.layout",
     "multiview.frame",
     "preview.frame",
+    "setup.changed",
     "resync",
     "flush",
     "rendition.plan",
@@ -5754,6 +5791,31 @@ class GeneratedMethods:
         if presenter_x is not None:
             params["presenter_x"] = presenter_x
         return await self._call("scene.virtual_set", params)
+
+    async def setup_get(
+        self,
+        piece: str,
+    ) -> SetupStatus:
+        """Where one piece stands, without starting anything."""
+        params: Dict[str, Any] = {}
+        params["piece"] = piece
+        return await self._call("setup.get", params)
+
+    async def setup_list(
+        self,
+    ) -> List[SetupStatus]:
+        """Where each piece the mixer sets up on first use stands: the browser renderer (`web`) and every first party plugin this copy carries."""
+        params: Dict[str, Any] = {}
+        return await self._call("setup.list", params)
+
+    async def setup_start(
+        self,
+        piece: str,
+    ) -> SetupStatus:
+        """Set a piece up now, or join the set up already running, and answer at once with where it stands. Progress follows as `event/setup.changed`. Sources waiting on the piece start by themselves when it is ready."""
+        params: Dict[str, Any] = {}
+        params["piece"] = piece
+        return await self._call("setup.start", params)
 
     async def show_add(
         self,

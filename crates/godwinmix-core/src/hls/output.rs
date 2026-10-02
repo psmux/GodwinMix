@@ -68,13 +68,11 @@ pub struct HlsOutput {
 }
 
 fn check_elements() -> Result<()> {
-    let missing: Vec<&str> = ["cmafmux", "appsink"].into_iter().filter(|e| !crate::probe::exists(e)).collect();
-    anyhow::ensure!(
-        missing.is_empty(),
-        "serving HLS needs the GStreamer elements {}. cmafmux is in gst-plugins-rs (gstreamer1.0-plugins-rs \
-         or the `fmp4` plugin).",
-        missing.join(", ")
-    );
+    let missing = crate::setup::system::absent(&["cmafmux", "appsink"]);
+    if !missing.is_empty() {
+        let what = "Publishing the programme as an HLS stream";
+        return Err(crate::setup::system::missing_error(what, crate::setup::system::RS, &missing));
+    }
     Ok(())
 }
 

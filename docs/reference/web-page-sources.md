@@ -58,9 +58,19 @@ page measures black 16, white 235, exactly what it painted.
 
 The mixer runs it for every `web+` source when it can find it: at
 `browser.sidecar` in the config, else next to its own executable (as
-`godwinmix-browser` on Linux, `godwinmix-browser.app` on macOS), else on
-`PATH`. Without one, `web+` falls back to GStreamer's `wpesrc`, described
-below. `[browser]` also takes extra `args` and `env` for the sidecar.
+`godwinmix-browser` on Linux, `godwinmix-browser.app` on macOS), else where a
+package puts it, else where a source checkout's own build leaves it
+(`browser/target/release`), else on `PATH`. A mixer run from a checkout with
+none of these builds it the first time a web page is added, and the page
+starts by itself when it is ready; [setup.md](setup.md) lists every place and
+every step. With no renderer and nothing to build it from, `web+` falls back
+to GStreamer's `wpesrc`, described below. `[browser]` also takes extra `args`
+and `env` for the sidecar.
+
+On macOS the renderer runs Chromium with a mock keychain. Its profile is
+private to one run, and the login keychain would otherwise raise a dialog
+nobody can answer from a headless process, which holds every http and https
+load until it is answered.
 
 ```toml
 [browser]

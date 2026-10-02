@@ -1,27 +1,28 @@
-// Installing a plugin a preset needs, from the "Nearly there" dialog and the
-// OBS import: one row per plugin, and the call behind its button.
+// Setting up what a preset needs, from the "Nearly there" dialog and the OBS
+// import: one row per missing piece, and the call behind its button. A piece
+// the mixer carries is set up with `setup.start`; anything else is installed
+// with `plugin.add`, the call `gmx plugin add` makes.
 
 import { el } from "../../shell/dom.js";
 import { errorToast } from "../../shell/toast.js";
 import { pluginSourceFor, listPlugins, hasPlugin } from "../../client/kinds.js";
 import { firstSentence } from "../../shell/restart-bar.js";
+import { setUp, notASetupPiece } from "../../client/setup.js";
 
 /**
- * Install one plugin with `plugin.add`, the call `gmx plugin add` makes, then
- * read the listing again so the line says what actually happened.
+ * Set one plugin up, then read the listing again so the line says what
+ * actually happened.
  *
  * @returns {Promise<boolean>} whether it is loaded now
  */
 export async function installPlugin(client, name, button, note) {
   button.disabled = true;
-  note.textContent = " Installing. This can take a minute.";
+  note.textContent = " Setting it up. This happens once and can take a minute.";
   let failed = "";
   try {
-    const source = await pluginSourceFor(client, name);
-    failed = await finished(client, await client.call("plugin.add", { source }));
+    await setUp(client, name, (said) => (note.textContent = " " + said));
   } catch (e) {
-    errorToast(e, `Installing ${name}`);
-    failed = " ";
+    failed = notASetupPiece(e) ? await addByName(client, name) : e.message || " ";
   }
   if (failed) {
     button.disabled = false;
@@ -29,9 +30,20 @@ export async function installPlugin(client, name, button, note) {
     return false;
   }
   const loaded = hasPlugin(await listPlugins(client), name);
-  note.textContent = loaded ? " Installed, and nothing restarted." : " Installed, but the mixer has not picked it up yet.";
+  note.textContent = loaded ? " Ready, and nothing restarted." : " Set up, but the mixer has not picked it up yet. Restart it when the show allows.";
   button.remove();
   return loaded;
+}
+
+/** A plugin the mixer does not carry, installed from a marketplace. */
+async function addByName(client, name) {
+  try {
+    const source = await pluginSourceFor(client, name);
+    return await finished(client, await client.call("plugin.add", { source }));
+  } catch (e) {
+    errorToast(e, "Installing an add on this setup needs");
+    return " ";
+  }
 }
 
 /**
@@ -57,13 +69,13 @@ async function finished(client, answer) {
 /** One missing plugin, and the button that installs it. */
 export function installRow(client, plugin) {
   const note = el("span.sm.dim");
-  const button = el("button.btn.primary", { text: `Install ${plugin.name} support` });
+  const button = el("button.btn.primary", { text: "Set it up" });
   button.onclick = () => installPlugin(client, plugin.name, button, note);
   return el("p.sm", {}, [
     el("span.dot.stalled"),
     " ",
     el("span", {
-      text: `The ${plugin.name} plugin is not installed yet, so anything that needs it stays listed and does not start. `,
+      text: "Something this needs is not set up on this mixer yet, so anything that uses it waits until it is. ",
     }),
     button,
     note,

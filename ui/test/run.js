@@ -1195,22 +1195,22 @@ async function addSourcePickerSuite() {
 
   const bare = stub({
     "plugin.list": { plugins: [] },
-    "plugin.search": { results: [{ name: "camera", source: "./plugins/camera" }] },
-    "plugin.add": { name: "camera", version: "0.1.0" },
+    "setup.start": { piece: "camera", title: "Cameras", state: "ready", message: "Cameras are ready." },
   });
   const missing = await openPicker(bare, "source", { category: "cameras" });
+  await waitFor(() => bare.sent("setup.start"), 2000, "the set up to be asked for");
 
-  test("a category whose plugin is missing still appears, and offers to install it", () => {
-    ok(panelText(missing).includes("Cameras need the camera plugin"), "one plain sentence");
-    ok(buttonSaying(missing, "Install camera support"), "and a button, not a terminal command");
+  test("opening a category whose plugin is missing sets it up, with no install button", () => {
+    eq(bare.sent("setup.start").piece, "camera");
+    ok(!buttonSaying(missing, "Install camera support"), "no separate install step");
+    ok(!/plugin|camera support/.test(panelText(missing)), "and no internal names: " + panelText(missing));
   });
 
-  buttonSaying(missing, "Install camera support").click();
-  await waitFor(() => bare.sent("plugin.add"), 2000, "the install to be sent");
+  await waitFor(() => bare.calls.filter((c) => c[0] === "device.discover").length >= 1, 2000, "a rescan");
 
-  test("Install calls plugin.add with what the marketplace named", () => {
-    eq(bare.sent("plugin.add").source, "./plugins/camera");
-    ok(bare.calls.filter((c) => c[0] === "device.discover").length >= 1, "and it looks for devices again");
+  test("once it is ready the picker looks for devices", () => {
+    ok(bare.calls.filter((c) => c[0] === "device.discover").length >= 1);
+    ok(!bare.sent("plugin.add"), "plugin.add is not the path for a piece the mixer carries");
   });
 
   missing.close();

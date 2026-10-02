@@ -4,6 +4,13 @@ No public installers are published yet. Use the source build instructions in
 [CONTRIBUTING.md](../../CONTRIBUTING.md) for now. The installer instructions
 below apply once a validated release is available.
 
+From a source checkout, `cargo run --release -- --config
+godwinmix.example.toml` is complete. The web page renderer and the first party
+plugins set themselves up the first time a web page or a camera is added; see
+[What the first run sets up by itself](../../CONTRIBUTING.md#what-the-first-run-sets-up-by-itself).
+The renderer's build needs CMake and Ninja: `winget install Kitware.CMake
+Ninja-build.Ninja`.
+
 Download the installer, run it, click past the warning, open the app. There is
 nothing else to install: the media stack travels inside the app.
 
@@ -61,7 +68,11 @@ video mixer will start. So the installer carries a trimmed copy:
 | GStreamer, trimmed to what the codec catalogue and the pipelines name | 85 to 110 MB |
 | the camera, the screen and the microphone, which are plugins | 4 MB |
 
-Those three are installed for you. The app copies them into
+Those three are installed for you. The web page renderer is not in the
+installer yet, because Chromium alone is larger than the 150 MB budget below.
+Until it is, a web page on Windows needs the renderer built from a source
+checkout, which the mixer does by itself the first time a web page is added
+when it runs from one. The app copies them into
 `%APPDATA%\mix.godwin.desktop\plugins` the first time it starts the mixer, so
 a camera is in the add source list from the first launch and nothing has to be
 typed at a command prompt. Anything you add later from the window goes into the

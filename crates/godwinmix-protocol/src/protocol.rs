@@ -452,6 +452,22 @@ fn stream_events() -> Vec<EventDef> {
             },
         },
         EventDef {
+            name: "setup.changed",
+            since: "1",
+            summary: "A piece the mixer sets up on first use moved on: the browser renderer \
+                      or a first party plugin started setting up, got further through its \
+                      download, became ready or stopped. `message` is for a person; \
+                      `detail` names paths and commands for a developer.",
+            ext: None,
+            legacy: None,
+            payload: |g| {
+                json!({
+                    "type": "object",
+                    "properties": { "setup": schema_of::<crate::setup::SetupStatus>(g) }
+                })
+            },
+        },
+        EventDef {
             name: "resync",
             since: "1",
             summary: "This client fell behind and events were dropped. Re-subscribe for a \

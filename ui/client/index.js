@@ -29,6 +29,7 @@ const WANTED_EVENTS = [
   "media.*",
   "adbreak.*",
   "plugin.*",
+  "setup.*",
   "multiview.*",
   "meters",
   "tally",
@@ -352,6 +353,9 @@ export class Client {
       case "multiview.layout":
         this.sheet.setLayout(params);
         s.patch({ layout: params });
+        break;
+      case "setup.changed":
+        this.emit("setup", params.setup);
         break;
       case "alert":
         s.addAlert(params);

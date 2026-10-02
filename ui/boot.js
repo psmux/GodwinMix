@@ -7,7 +7,6 @@
 import { connect, storedToken, storeToken, migrateLegacyKeys } from "./client/index.js";
 import { installGlobal } from "./shell/registry.js";
 import { mountShell } from "./shell/shell.js";
-import { askForToken } from "./shell/firstrun.js";
 import { initTheme } from "./shell/theme.js";
 import { toast, confirmHook } from "./shell/toast.js";
 import { proposeGalleryMode } from "./shell/settings.js";
@@ -24,7 +23,6 @@ const PANELS = [
   "./panels/audio/panel.js",
   "./panels/media/entry.js",
   "./panels/alerts/panel.js",
-  "./panels/welcome/panel.js",
 ];
 
 /**
@@ -52,6 +50,8 @@ async function authorise(base) {
     // A saved token that is refused is worse than none: it fails silently on
     // every reload. Drop it and ask.
     if (attempt > 0) storeToken(null);
+    // The prompt is fetched only by a mixer that asks for a token.
+    const { askForToken } = await import("./shell/firstrun.js");
     const answer = await askForToken(
       attempt === 0
         ? null

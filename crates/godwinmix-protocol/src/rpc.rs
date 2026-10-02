@@ -264,6 +264,7 @@ pub fn event_name_and_payload(event: &Event) -> Option<(&'static str, Value)> {
             "feed.recovered",
             payload(json!({ "id": id, "binding": binding, "failures": failures })),
         ),
+        Event::SetupChanged { setup } => ("setup.changed", payload(json!({ "setup": setup }))),
         Event::AudioLevel { .. } | Event::SourceAudioLevel { .. } => return None,
     })
 }

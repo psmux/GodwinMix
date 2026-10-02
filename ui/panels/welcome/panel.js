@@ -125,8 +125,20 @@ export class WelcomePanel extends HTMLElement {
 
 const LISTENERS = new Set();
 
-/** Settings calls this to put the welcome tiles back up. */
-export function showWelcomeAgain() {
+/**
+ * Settings calls this to put the welcome tiles back up. The panel is not part
+ * of the page a person opens, since it never opens by itself, so the first
+ * call makes one.
+ */
+export function showWelcomeAgain(client = window.gmxClient) {
+  if (!LISTENERS.size && client) {
+    const panel = new WelcomePanel();
+    panel.setClient(client);
+    document.body.appendChild(panel);
+    forgetPreset();
+    panel.open().catch((e) => console.error("welcome", e));
+    return;
+  }
   for (const fn of LISTENERS) fn();
 }
 

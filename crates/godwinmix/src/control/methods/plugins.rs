@@ -624,36 +624,13 @@ async fn add(call: Call, params: Value) -> Result<Value, RpcError> {
     // asks of every method that might take longer than five seconds: a
     // client's own timeout then never leaves the work in an unknown state.
     let spec = req.source.clone();
-    let opts = options(&call);
-    let hooks = call.app.hooks.clone();
-    let supervisor = call.app.plugins.clone();
-    let channels = call.app.channels.clone();
+    let app = call.app.clone();
     Ok(super::tasks::spawn_task(
         &call.app.tasks,
         "plugin.add",
         Some(serde_json::json!({ "source": req.source })),
         move |_ctx| async move {
-            let installed = tokio::task::spawn_blocking(move || loader::install(&spec, &opts))
-                .await
-                .map_err(|e| format!("the install task did not finish: {e}"))?
-                .map_err(|e| format!("{e:#}"))?;
-            // The hook call site: take on whatever the new plugin asked for,
-            // and tell everyone else it arrived.
-            plugin_arrived(&hooks, &installed);
-            // A service, a device or a transition is one instance per plugin
-            // and starts with the core, so a plugin installed while the core
-            // is running starts now rather than at the next restart. Anything
-            // already running is left alone.
-            // Under a station the ingest plugin is the station's to run, with
-            // the channel and direct tables; a show leaves it alone.
-            let failures = tokio::task::spawn_blocking(move || crate::start_singletons(&supervisor))
-                .await
-                .unwrap_or_default();
-            // The channel server just arrived: a mixer with no channels gets
-            // its default one now, as it would have at start.
-            if installed.name() == crate::channels::PLUGIN {
-                let _ = tokio::task::spawn_blocking(move || channels.ensure_default()).await;
-            }
+            let (installed, failures) = install_and_start(&app, spec).await?;
             let mut answer =
                 serde_json::to_value(record(&installed)).map_err(|e| e.to_string())?;
             if let (Some(map), false) = (answer.as_object_mut(), failures.is_empty()) {
@@ -668,6 +645,41 @@ async fn add(call: Call, params: Value) -> Result<Value, RpcError> {
             Ok(answer)
         },
     ))
+}
+
+/// Install a plugin and start what it brings, the way `plugin.add` does.
+///
+/// Also what a source asking for a first party plugin uses (`crate::setup`),
+/// so a plugin set up on first use arrives exactly as one installed by hand.
+/// Answers the install and every singleton that would not start.
+pub(crate) async fn install_and_start(
+    app: &crate::control::AppState,
+    spec: String,
+) -> Result<(loader::Installed, Vec<(String, String)>), String> {
+    let opts = options_of(app);
+    let installed = tokio::task::spawn_blocking(move || loader::install(&spec, &opts))
+        .await
+        .map_err(|e| format!("the install task did not finish: {e}"))?
+        .map_err(|e| format!("{e:#}"))?;
+    // The hook call site: take on whatever the new plugin asked for, and
+    // tell everyone else it arrived.
+    plugin_arrived(&app.hooks, &installed);
+    // A service, a device or a transition is one instance per plugin and
+    // starts with the core, so a plugin installed while the core is running
+    // starts now rather than at the next restart. Anything already running is
+    // left alone. Under a station the ingest plugin is the station's to run,
+    // with the channel and direct tables; a show leaves it alone.
+    let supervisor = app.plugins.clone();
+    let failures = tokio::task::spawn_blocking(move || crate::start_singletons(&supervisor))
+        .await
+        .unwrap_or_default();
+    // The channel server just arrived: a mixer with no channels gets its
+    // default one now, as it would have at start.
+    if installed.name() == crate::channels::PLUGIN {
+        let channels = app.channels.clone();
+        let _ = tokio::task::spawn_blocking(move || channels.ensure_default()).await;
+    }
+    Ok((installed, failures))
 }
 
 /// One line saying what an install would do, for `--dry-run`.
@@ -809,11 +821,11 @@ async fn search(call: Call, params: Value) -> Result<Value, RpcError> {
 
 /// What the operator's config says an install may do.
 fn options(call: &Call) -> loader::InstallOptions {
-    loader::InstallOptions {
-        allow_unsigned: call.app.allow_unsigned,
-        only: call.app.marketplaces_only.clone(),
-        offline: false,
-    }
+    options_of(&call.app)
+}
+
+fn options_of(app: &crate::control::AppState) -> loader::InstallOptions {
+    loader::InstallOptions { allow_unsigned: app.allow_unsigned, only: app.marketplaces_only.clone(), offline: false }
 }
 
 async fn remove(call: Call, params: Value) -> Result<Value, RpcError> {

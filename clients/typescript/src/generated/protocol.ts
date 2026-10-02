@@ -13,7 +13,7 @@ export const API_LEVEL = 1;
 export const API_COMPATIBLE = 1;
 
 /** What pressing the button does. */
-export type ActionKind = "set-config" | "install-plugin" | "enable-plugin" | "open" | "retry" | "restart";
+export type ActionKind = "set-config" | "install-plugin" | "enable-plugin" | "open" | "retry" | "restart" | "setup" | "copy";
 
 /** `adbreak.start`. */
 export interface AdBreakRequest {
@@ -752,12 +752,14 @@ export interface EnrolRequest {
 export interface ErrorAction {
   after_ms?: number | null;
   applies?: string | null;
+  command?: string | null;
   dialog?: string | null;
   key?: string | null;
   kind: ActionKind;
   label: string;
   name?: string | null;
   panel?: string | null;
+  piece?: string | null;
   value?: unknown;
 }
 
@@ -2173,6 +2175,25 @@ export interface SetSourceRequest {
   transport?: BridgeTransport | null;
 }
 
+/** `setup.start` and `setup.get`: one piece by name. */
+export interface SetupRequest {
+  piece: string;
+}
+
+/** Where a piece stands. */
+export type SetupState = "ready" | "missing" | "running" | "failed" | "unavailable";
+
+/** One piece that lives outside the mixer's own program. */
+export interface SetupStatus {
+  action?: ErrorAction | null;
+  detail?: unknown;
+  message: string;
+  piece: string;
+  progress?: number | null;
+  state: SetupState;
+  title: string;
+}
+
 /** How much the reader should care. */
 export type Severity = "error" | "warning" | "info";
 
@@ -2932,6 +2953,10 @@ export interface TelemetryEvent {
   ts: number;
 }
 
+export interface SetupChangedEvent {
+  setup?: SetupStatus;
+}
+
 export interface FeedFailedEvent {
   binding?: string | null;
   error: string;
@@ -3098,6 +3123,9 @@ export interface MethodParams {
   "scene.undo": Record<string, never>;
   "scene.validate": ValidateRequest;
   "scene.virtual_set": VirtualSetRequest;
+  "setup.get": SetupRequest;
+  "setup.list": Record<string, never>;
+  "setup.start": SetupRequest;
   "show.add": ShowAddRequest;
   "show.add_many": ShowAddManyRequest;
   "show.list": Record<string, never>;
@@ -3290,6 +3318,9 @@ export interface MethodResults {
   "scene.undo": HistoryStep;
   "scene.validate": Validation;
   "scene.virtual_set": VirtualSetAnswer;
+  "setup.get": SetupStatus;
+  "setup.list": SetupStatus[];
+  "setup.start": SetupStatus;
   "show.add": Show;
   "show.add_many": ShowAddManyResult;
   "show.list": ShowList;
@@ -3355,6 +3386,7 @@ export interface EventPayloads {
   "multiview.layout": MultiviewLayout;
   "multiview.frame": Uint8Array;
   "preview.frame": Uint8Array;
+  "setup.changed": SetupChangedEvent;
   "resync": Resync;
   "flush": Flush;
   "rendition.plan": RenditionPlanEvent;
@@ -3531,6 +3563,9 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "scene.undo", summary: "Undo the last change. A drag marked with scene.history.mark undoes as one step.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/undo" } },
   { name: "scene.validate", summary: "Overlaps, items off the canvas, safe area breaches and missing sources: what to fix before saying a scene is done.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/scenes/validate" } },
   { name: "scene.virtual_set", summary: "A new scene with a presenter keyed in front of a background, and optionally a foreground such as a desk and a lower third area. Pictures from the media library become sources; the key colour is guessed from the camera.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/virtual_set" } },
+  { name: "setup.get", summary: "Where one piece stands, without starting anything.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/setup" } },
+  { name: "setup.list", summary: "Where each piece the mixer sets up on first use stands: the browser renderer (`web`) and every first party plugin this copy carries.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/setup/list" } },
+  { name: "setup.start", summary: "Set a piece up now, or join the set up already running, and answer at once with where it stands. Progress follows as `event/setup.changed`. Sources waiting on the piece start by themselves when it is ready.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/setup/start" } },
   { name: "show.add", summary: "Make another show and start it: empty, a copy of a show (without its outputs, so nothing goes out twice), or from a project file.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/shows" } },
   { name: "show.add_many", summary: "Make many shows in one call, such as every channel of a headend. The whole batch is checked first. With dry_run (the default) nothing is made: the answer says what would be, what its renditions would cost and whether the governor would admit them. Without it, every show that fits is made and the rest are refused with why; a show is made whole or not at all.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/shows/add_many" } },
   { name: "show.list", summary: "Every show on this machine: its name, whether it is running, what is on air, what its outputs send and what its process costs. `current` is the show a client reaches when it names none.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/shows" } },
@@ -3605,6 +3640,7 @@ export const EVENT_NAMES: readonly EventName[] = [
   "multiview.layout",
   "multiview.frame",
   "preview.frame",
+  "setup.changed",
   "resync",
   "flush",
   "rendition.plan",
@@ -4383,6 +4419,21 @@ export class GeneratedMethods {
   /** A new scene with a presenter keyed in front of a background, and optionally a foreground such as a desk and a lower third area. Pictures from the media library become sources; the key colour is guessed from the camera. */
   sceneVirtualSet(params: VirtualSetRequest): Promise<VirtualSetAnswer> {
     return this._call("scene.virtual_set", params as unknown as Record<string, unknown>) as Promise<VirtualSetAnswer>;
+  }
+
+  /** Where one piece stands, without starting anything. */
+  setupGet(params: SetupRequest): Promise<SetupStatus> {
+    return this._call("setup.get", params as unknown as Record<string, unknown>) as Promise<SetupStatus>;
+  }
+
+  /** Where each piece the mixer sets up on first use stands: the browser renderer (`web`) and every first party plugin this copy carries. */
+  setupList(): Promise<SetupStatus[]> {
+    return this._call("setup.list", {}) as Promise<SetupStatus[]>;
+  }
+
+  /** Set a piece up now, or join the set up already running, and answer at once with where it stands. Progress follows as `event/setup.changed`. Sources waiting on the piece start by themselves when it is ready. */
+  setupStart(params: SetupRequest): Promise<SetupStatus> {
+    return this._call("setup.start", params as unknown as Record<string, unknown>) as Promise<SetupStatus>;
   }
 
   /** Make another show and start it: empty, a copy of a show (without its outputs, so nothing goes out twice), or from a project file. */

@@ -155,6 +155,12 @@ pub fn with_unknown_field(refusal: RpcError, e: &anyhow::Error) -> RpcError {
 /// Lift a button raised deep in the engine (an `Actionable` anywhere in the
 /// chain) into `data.action`.
 pub fn with_found_action(refusal: RpcError, e: &anyhow::Error) -> RpcError {
+    // The developer's half of a plain refusal: program names, paths, the
+    // setting behind it. The message stays the sentence for a person.
+    let refusal = match godwinmix_protocol::Actionable::find_detail(e.as_ref()) {
+        Some(detail) => refusal.with("detail", detail),
+        None => refusal,
+    };
     match ErrorAction::find(e.as_ref()) {
         Some(action) => refusal.with_action(action),
         None => refusal,

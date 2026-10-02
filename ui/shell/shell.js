@@ -120,6 +120,9 @@ export async function mountShell(client, root) {
   restartBar(client);
   // Notifications belong to the window, including when Alerts is closed.
   client.on("alert", a => alertToast(client, a));
+  // Web pages and plugins setting themselves up on first use. The notes are
+  // fetched the first time one is needed.
+  client.on("setup", (s) => import("./setup-note.js").then((m) => m.show(client, s)));
   fileDrop(client);
   applyTileWidth();
   onSettingsChanged((s, key) => {

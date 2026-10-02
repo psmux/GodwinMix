@@ -97,12 +97,11 @@ impl BrowserSource {
     fn start_wpe(&mut self, thumb: bool) -> Result<MediaEnds> {
         let ctx = &self.ctx;
         let id = &ctx.id;
-        anyhow::ensure!(
-            crate::probe::exists("glcolorconvert") && crate::probe::exists("gldownload"),
-            "rendering web pages needs the GStreamer OpenGL elements \
-             (gstreamer1.0-gl on Debian and Ubuntu). wpesrc draws into GL memory, \
-             so there is no software-only path."
-        );
+        // wpesrc draws into GL memory, so there is no software only path.
+        let missing = crate::setup::system::absent(&["glcolorconvert", "gldownload"]);
+        if !missing.is_empty() {
+            return Err(crate::setup::system::missing_error("Showing web pages", crate::setup::system::GL, &missing));
+        }
         let src = make_web_source(id, &ctx.cfg.uri)?;
         let gl_convert = make("glcolorconvert", &format!("{id}-gl-conv"))?;
         let gl_download = make("gldownload", &format!("{id}-gl-dl"))?;

@@ -49,6 +49,14 @@ pub struct ErrorAction {
     /// `retry`: how long to wait first.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub after_ms: Option<u64>,
+    /// `setup`: the piece to set up, `web` or a plugin's name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub piece: Option<String>,
+    /// A command the person runs themselves, for what only the operating
+    /// system can supply. A client shows it with a copy button, beside the
+    /// action's own button when the kind is not `copy`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub command: Option<String>,
 }
 
 /// What pressing the button does.
@@ -68,6 +76,11 @@ pub enum ActionKind {
     Retry,
     /// Call `core.restart`, when `core.info` says a restart is possible.
     Restart,
+    /// Call `setup.start {piece}`: build or install a piece the mixer sets
+    /// up for itself, or try again after one did not finish.
+    Setup,
+    /// Nothing for the client to call: show `command` to copy.
+    Copy,
 }
 
 impl ErrorAction {
@@ -108,6 +121,22 @@ impl ErrorAction {
         Self::new("Restart the mixer", ActionKind::Restart)
     }
 
+    /// Set a piece up, or try again after it did not finish.
+    pub fn setup(label: &str, piece: &str) -> Self {
+        Self { piece: Some(piece.into()), ..Self::new(label, ActionKind::Setup) }
+    }
+
+    /// A command to copy and run, for what only the operating system has.
+    pub fn copy(label: &str, command: &str) -> Self {
+        Self { command: Some(command.into()), ..Self::new(label, ActionKind::Copy) }
+    }
+
+    /// The same action, with a command to show beside it.
+    pub fn with_command(mut self, command: &str) -> Self {
+        self.command = Some(command.into());
+        self
+    }
+
     pub fn to_value(&self) -> Value {
         serde_json::to_value(self).unwrap_or(Value::Null)
     }
@@ -135,6 +164,8 @@ impl ErrorAction {
             ("open", "panel, dialog, key", "show that part of the client"),
             ("retry", "after_ms", "the same call again, after the wait"),
             ("restart", "", "core.restart, when core.info says restart.possible"),
+            ("setup", "piece", "setup.start with that piece, then the same call again once it is ready"),
+            ("copy", "command", "nothing to call: show the command with a copy button"),
         ]
     }
 }
@@ -146,11 +177,36 @@ impl ErrorAction {
 pub struct Actionable {
     pub message: String,
     pub action: ErrorAction,
+    /// What a developer needs and a person does not: paths, element and
+    /// program names, the setting behind it. Lifted into `data.detail`.
+    pub detail: Option<Value>,
 }
 
 impl Actionable {
     pub fn new(message: impl Into<String>, action: ErrorAction) -> Self {
-        Self { message: message.into(), action }
+        Self { message: message.into(), action, detail: None }
+    }
+
+    pub fn with_detail(mut self, detail: Value) -> Self {
+        self.detail = Some(detail);
+        self
+    }
+
+    /// The first one anywhere in an error's chain. See `ErrorAction::find`.
+    pub fn find<'a>(err: &'a (dyn std::error::Error + 'static)) -> Option<&'a Actionable> {
+        let mut at: Option<&(dyn std::error::Error + 'static)> = Some(err);
+        while let Some(e) = at {
+            if let Some(found) = e.downcast_ref::<Actionable>() {
+                return Some(found);
+            }
+            at = e.source();
+        }
+        None
+    }
+
+    /// The first detail anywhere in an error's chain.
+    pub fn find_detail(err: &(dyn std::error::Error + 'static)) -> Option<Value> {
+        Self::find(err).and_then(|a| a.detail.clone())
     }
 }
 
