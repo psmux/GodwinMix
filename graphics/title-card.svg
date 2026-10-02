@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:gmx="https://godwinmix.dev/ns/template" viewBox="0 0 1920 1080" width="1920" height="1080">
+  <metadata>
+    <gmx:template title="Full screen title card" description="A whole frame card: a small kicker, a large title and a line under it, centred"/>
+    <gmx:field name="kicker" label="Kicker" default="SPECIAL REPORT"/>
+    <gmx:field name="title" label="Title" default="The Night of the Count"/>
+    <gmx:field name="subtitle" label="Subtitle" default="Live coverage from every region"/>
+    <gmx:field name="accent" label="Accent colour" type="color" default="#d4202c"/>
+    <gmx:field name="text" label="Text colour" type="color" default="#ffffff"/>
+    <gmx:field name="panel" label="Panel colour" type="color" default="#0f1a2a"/>
+  </metadata>
+  <defs>
+    <linearGradient id="shade" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#000000" stop-opacity="0"/>
+      <stop offset="1" stop-color="#000000" stop-opacity="0.45"/>
+    </linearGradient>
+  </defs>
+  <style>
+    .type { font-family: Inter, 'Helvetica Neue', Helvetica, Arial, 'DejaVu Sans', 'Liberation Sans', sans-serif; }
+  </style>
+  <rect x="0" y="0" width="1920" height="1080" fill="{{panel}}"/>
+  <rect x="0" y="0" width="1920" height="1080" fill="url(#shade)"/>
+  <rect x="0" y="0" width="1920" height="12" fill="{{accent}}"/>
+  <text class="type" x="960" y="430" font-size="34" font-weight="800" letter-spacing="6" text-anchor="middle" fill="{{accent}}" data-fit-width="1500">{{kicker}}</text>
+  <text class="type" x="960" y="560" font-size="112" font-weight="800" text-anchor="middle" fill="{{text}}" data-fit-width="1600">{{title}}</text>
+  <rect x="900" y="604" width="120" height="8" fill="{{accent}}"/>
+  <text class="type" x="960" y="684" font-size="44" font-weight="400" text-anchor="middle" fill="{{text}}" fill-opacity="0.86" data-fit-width="1500">{{subtitle}}</text>
+</svg>

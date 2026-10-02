@@ -247,9 +247,9 @@ enum Command {
 
     /// Install the GodwinMix skills into an AI coding tool's directory.
     ///
-    /// `gmx skill install --for claude` drops `godwinmix-operate` and
-    /// `godwinmix-develop` where that tool reads them. `--print` shows what it
-    /// would write and writes nothing.
+    /// `gmx skill install --for claude` drops `godwinmix-operate`,
+    /// `godwinmix-develop` and `godwinmix-design` where that tool reads them.
+    /// `--print` shows what it would write and writes nothing.
     Skill(cli::skill::SkillArgs),
     /// The session log as an artefact: show a timeline, replay a session
     /// against a test core, diff two runs. See `src/cli/session.rs`.
@@ -778,6 +778,9 @@ pub async fn run() -> Result<()> {
         }));
     }
     let cfg_media = cfg.media.clone();
+    // Before any source is built: a graphic template finds library files and
+    // the station's brand colours through these.
+    godwinmix_core::graphics::configure(&cfg.media.dir, &cfg.graphics);
     // Where the web UI and any plugin panels are read from.
     ui::configure(cfg.control.ui_dir.as_deref(), cfg.control.plugins_dir.as_deref());
     // The same directory the panels are served from is the one plugins are

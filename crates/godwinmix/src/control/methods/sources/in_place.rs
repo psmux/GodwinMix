@@ -34,10 +34,13 @@ pub(super) async fn offer(call: &Call, id: &str, wanted: &SourceConfig, name: Op
         // A source the mixer is not running cannot be changed in place; the
         // rebuild below is how it gets its new params.
         Err(e) if e.to_string().contains("there is no source") => Ok(Offered::Rebuild),
-        Err(e) => Err(RpcError::invalid_params(format!(
-            "{e}. The source is unchanged and still on air as it was; send the params again with that fixed."
-        ))
-        .with("id", id)
-        .with("params", serde_json::to_value(&wanted.params).unwrap_or_default())),
+        Err(e) => Err(crate::control::call::with_unknown_field(
+            RpcError::invalid_params(format!(
+                "{e}. The source is unchanged and still on air as it was; send the params again with that fixed."
+            ))
+            .with("id", id)
+            .with("params", serde_json::to_value(&wanted.params).unwrap_or_default()),
+            &e,
+        )),
     }
 }

@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:gmx="https://godwinmix.dev/ns/template" viewBox="0 0 1920 1080" width="1920" height="1080">
+  <metadata>
+    <gmx:template title="Quote card" description="Three lines of a quote on a large panel, with who said it under them. A template does not wrap words, so split a quote across the three lines"/>
+    <gmx:field name="line1" label="First line" default="We will count every vote,"/>
+    <gmx:field name="line2" label="Second line" default="however long it takes,"/>
+    <gmx:field name="line3" label="Third line" default="and tell you the moment we know."/>
+    <gmx:field name="attribution" label="Who said it" default="ADA LOVELACE, RETURNING OFFICER"/>
+    <gmx:field name="accent" label="Accent colour" type="color" default="#d4202c"/>
+    <gmx:field name="text" label="Text colour" type="color" default="#ffffff"/>
+    <gmx:field name="panel" label="Panel colour" type="color" default="#0f1a2a"/>
+  </metadata>
+  <style>
+    .type { font-family: Inter, 'Helvetica Neue', Helvetica, Arial, 'DejaVu Sans', 'Liberation Sans', sans-serif; }
+    .serif { font-family: Georgia, 'Times New Roman', 'DejaVu Serif', 'Liberation Serif', serif; }
+  </style>
+  <rect x="240" y="230" width="1440" height="620" rx="8" fill="{{panel}}" fill-opacity="0.95"/>
+  <rect x="240" y="230" width="1440" height="10" fill="{{accent}}"/>
+  <text class="serif" x="318" y="470" font-size="240" font-weight="700" fill="{{accent}}">&#8220;</text>
+  <text class="serif" x="460" y="420" font-size="58" font-style="italic" fill="{{text}}" data-fit-width="1120">{{line1}}</text>
+  <text class="serif" x="460" y="500" font-size="58" font-style="italic" fill="{{text}}" data-fit-width="1120">{{line2}}</text>
+  <text class="serif" x="460" y="580" font-size="58" font-style="italic" fill="{{text}}" data-fit-width="1120">{{line3}}</text>
+  <rect x="460" y="660" width="80" height="6" fill="{{accent}}"/>
+  <text class="type" x="460" y="730" font-size="32" font-weight="700" letter-spacing="2" fill="{{text}}" fill-opacity="0.9" data-fit-width="1120">{{attribution}}</text>
+</svg>

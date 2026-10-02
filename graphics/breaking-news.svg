@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:gmx="https://godwinmix.dev/ns/template" viewBox="0 0 1920 1080" width="1920" height="1080">
+  <metadata>
+    <gmx:template title="Breaking news bar" description="A label block in the accent colour and one headline across the bottom of the frame"/>
+    <gmx:field name="label" label="Label" default="BREAKING"/>
+    <gmx:field name="headline" label="Headline" default="Polls close at ten across the whole country"/>
+    <gmx:field name="accent" label="Accent colour" type="color" default="#d4202c"/>
+    <gmx:field name="text" label="Text colour" type="color" default="#ffffff"/>
+    <gmx:field name="panel" label="Panel colour" type="color" default="#0f1a2a"/>
+  </metadata>
+  <style>
+    .type { font-family: Inter, 'Helvetica Neue', Helvetica, Arial, 'DejaVu Sans', 'Liberation Sans', sans-serif; }
+  </style>
+  <rect x="96" y="886" width="330" height="112" fill="{{accent}}"/>
+  <rect x="426" y="886" width="1398" height="112" fill="{{panel}}" fill-opacity="0.95"/>
+  <rect x="96" y="998" width="1728" height="6" fill="{{accent}}"/>
+  <text class="type" x="261" y="958" font-size="44" font-weight="800" letter-spacing="2" text-anchor="middle" fill="{{text}}" data-fit-width="290">{{label}}</text>
+  <text class="type" x="466" y="961" font-size="52" font-weight="700" fill="{{text}}" data-fit-width="1318">{{headline}}</text>
+</svg>

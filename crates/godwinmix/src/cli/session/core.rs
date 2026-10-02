@@ -73,6 +73,7 @@ impl TestCore {
             godwinmix_core::plugin::loader::insert(read);
         }
 
+        godwinmix_core::graphics::configure(&cfg.media.dir, &cfg.graphics);
         let (mut mix, handle, cmd_rx, mut bus_rx) =
             Mixer::build(cfg.clone()).context("building the test core")?;
         mix.start().context("starting the test core")?;

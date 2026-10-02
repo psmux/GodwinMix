@@ -139,6 +139,10 @@ pub struct AddItemRequest {
     /// the live document.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub draft: Option<String>,
+    /// How it comes in and goes out when shown or hidden on air:
+    /// `{type, edge, duration_ms, easing, on_take}`, as on `scene.item.set`.
+    pub enter: Value,
+    pub exit: Value,
     /// What to call it. Left out, a source item is named after its source,
     /// because a model reasons about words.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -147,6 +151,10 @@ pub struct AddItemRequest {
     /// Where it goes. Left out, the next free cell of a grid over what is
     /// already there, so a drop on a scene never needs a dialog.
     pub transform: Value,
+    /// `false` adds it hidden, so a graphic can be put on a scene that is on
+    /// air and shown later with its `enter`. Left out, it is shown.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub visible: Option<bool>,
 }
 
 /// `output.add`. The id and the URL are the whole of it for an RTMP
@@ -1597,6 +1605,36 @@ pub struct FeedTestResult {
     pub took_ms: u64,
     /// What a binding with this selection would write.
     pub value: Value,
+}
+
+/// What a field holds.
+pub type FieldType = String;
+/// The values api_level 1 knows for [`FieldType`].
+pub const FIELD_TYPE_VALUES: &[&str] = &["text", "color"];
+
+/// One field and what it shows now.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct FieldValue {
+    /// What it shows when the source's params do not say. For `accent`,
+    /// `text` and `panel` the station's brand colours come before this.
+    pub default: String,
+    /// The width, in the template's own units, a text holding this field is
+    /// shrunk to fit inside. Absent for a field that is never shrunk.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fit: Option<f64>,
+    /// What a form calls it.
+    pub label: String,
+    /// The name in `{{name}}` and in `params.fields`: lower case letters,
+    /// digits and underscores.
+    pub name: String,
+    /// Whether the source's params set it, rather than a default.
+    pub set: bool,
+    #[serde(rename = "type")]
+    pub r#type: FieldType,
+    /// What is on screen: the source's own value, the brand colour or the
+    /// default, in that order.
+    pub value: String,
 }
 
 /// One filter in an item's chain.
@@ -3718,7 +3756,9 @@ pub struct SetSourceRequest {
     /// client, the tally and an agent read the same name.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
-    /// Params for the source's own kind. Merged over what it has.
+    /// Params for the source's own kind. Merged over what it has, the way a
+    /// JSON merge patch is: a table is merged key by key, and `null` removes
+    /// a key. `{"fields": {"headline": "x"}}` changes one field of a graphic.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub params: Option<BTreeMap<String, Value>>,
     /// Where it runs: `core`, `in-process`, `sidecar` or `node:<name>`.
@@ -4448,6 +4488,133 @@ pub struct TaskView {
 /// or an object naming it.
 pub type TelemetryExt = Value;
 
+/// A template and its SVG.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TemplateDoc {
+    pub description: String,
+    pub fields: Vec<TemplateField>,
+    pub height: u32,
+    /// The name `template:<name>` adds it by: a pack name such as
+    /// `news-lower-third`, or a library file name such as `my-bar.svg`.
+    pub name: String,
+    pub origin: TemplateOrigin,
+    /// The SVG as written, with its `{{field}}` markers in place.
+    pub svg: String,
+    pub title: String,
+    /// The address to give `source.add`.
+    pub uri: String,
+    /// The size the SVG declares, which is the canvas it was designed on.
+    pub width: u32,
+}
+
+/// One named field of a template.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TemplateField {
+    /// What it shows when the source's params do not say. For `accent`,
+    /// `text` and `panel` the station's brand colours come before this.
+    pub default: String,
+    /// The width, in the template's own units, a text holding this field is
+    /// shrunk to fit inside. Absent for a field that is never shrunk.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fit: Option<f64>,
+    /// What a form calls it.
+    pub label: String,
+    /// The name in `{{name}}` and in `params.fields`: lower case letters,
+    /// digits and underscores.
+    pub name: String,
+    #[serde(rename = "type")]
+    pub r#type: FieldType,
+}
+
+/// The answer to `template.fields`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TemplateFields {
+    pub fields: Vec<FieldValue>,
+    pub id: String,
+    /// Where a client sets a field with `source.set`: `params.fields.<name>`.
+    pub path: String,
+    /// The template's name.
+    pub template: String,
+}
+
+/// `template.fields`: the fields of a running graphic.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TemplateFieldsRequest {
+    /// The source id of a `template/source`.
+    pub id: String,
+}
+
+/// `template.get`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TemplateGetRequest {
+    /// A pack name or a library file name, as `template.list` gives it.
+    pub name: String,
+}
+
+/// One template, as `template.list` and `template.get` describe it.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TemplateInfo {
+    pub description: String,
+    pub fields: Vec<TemplateField>,
+    pub height: u32,
+    /// The name `template:<name>` adds it by: a pack name such as
+    /// `news-lower-third`, or a library file name such as `my-bar.svg`.
+    pub name: String,
+    pub origin: TemplateOrigin,
+    pub title: String,
+    /// The address to give `source.add`.
+    pub uri: String,
+    /// The size the SVG declares, which is the canvas it was designed on.
+    pub width: u32,
+}
+
+/// The answer to `template.list`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TemplateList {
+    /// Library files that look like templates and would not read, and why.
+    pub errors: Vec<String>,
+    pub templates: Vec<TemplateInfo>,
+}
+
+/// Where a template comes from.
+pub type TemplateOrigin = String;
+/// The values api_level 1 knows for [`TemplateOrigin`].
+pub const TEMPLATE_ORIGIN_VALUES: &[&str] = &["pack", "library"];
+
+/// `template.save`: check an SVG template and write it into the media
+/// library.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TemplateSaveRequest {
+    /// The file name, ending `.svg` or not (it is added). One segment, no
+    /// slashes.
+    pub name: String,
+    /// Write over a library file of the same name. Every source drawing it
+    /// is drawn again with the new SVG, on air, with no rebuild.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub replace: Option<bool>,
+    /// The whole SVG document.
+    pub svg: String,
+}
+
+/// The answer to `template.save`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TemplateSaved {
+    /// Where it was written on the mixer.
+    pub path: String,
+    /// The sources drawing this template that were drawn again with it.
+    pub redrawn: Vec<String>,
+    pub template: TemplateInfo,
+}
+
 /// `program.thumbnail`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -4954,7 +5121,7 @@ pub struct MethodInfo {
     pub rest: Option<(&'static str, &'static str)>,
 }
 
-pub const METHODS: [MethodInfo; 182] = [
+pub const METHODS: [MethodInfo; 186] = [
     MethodInfo { name: "adbreak.end", summary: "Cut a running ad short, or disarm one that is scheduled.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/end")) },
     MethodInfo { name: "adbreak.start", summary: "Interrupt the programme with a clip, then rejoin live when it ends.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/start")) },
     MethodInfo { name: "agent.state", summary: "The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/agent/state")) },
@@ -5134,6 +5301,10 @@ pub const METHODS: [MethodInfo; 182] = [
     MethodInfo { name: "task.cancel", summary: "Ask a piece of long running work to stop. Cooperative: the answer says the request landed, not that the work has stopped yet.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/tasks/{id}/cancel")) },
     MethodInfo { name: "task.get", summary: "How a piece of long running work is getting on, and its answer once it has one.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/tasks/{id}")) },
     MethodInfo { name: "task.list", summary: "Every background job this core knows about, newest first.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/tasks")) },
+    MethodInfo { name: "template.fields", summary: "A running graphic's fields: each one's label, type, default and what it shows now.", scope: "read", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/template/fields")) },
+    MethodInfo { name: "template.get", summary: "One template, with its SVG as written.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/template")) },
+    MethodInfo { name: "template.list", summary: "The graphic templates: the built in pack and the SVG templates in the media library, each with its fields.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/template/list")) },
+    MethodInfo { name: "template.save", summary: "Check an SVG template and write it into the media library.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/template/save")) },
     MethodInfo { name: "tool.call", summary: "Call one of a plugin's tools, in MCP's shape. The name is `<plugin>/<tool>`, or the bare tool name when only one plugin has it.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/tool/call")) },
     MethodInfo { name: "vitals.get", summary: "This show's health (its state and alarms, null in the first second) and the thresholds they are judged by.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/vitals")) },
     MethodInfo { name: "vitals.set", summary: "Change the alarm thresholds, or whether a mosaic is kept up for the black and freeze checks while nobody is looking. Fields left out keep their defaults; a duration of 0 switches that check off. Applies within a second.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/vitals/set")) },
@@ -6325,6 +6496,26 @@ impl Client {
     /// Every background job this core knows about, newest first.
     pub async fn task_list(&self) -> Result<Vec<TaskView>> {
         self.call("task.list", &serde_json::json!({})).await
+    }
+
+    /// A running graphic's fields: each one's label, type, default and what it shows now.
+    pub async fn template_fields(&self, params: &TemplateFieldsRequest) -> Result<TemplateFields> {
+        self.call("template.fields", params).await
+    }
+
+    /// One template, with its SVG as written.
+    pub async fn template_get(&self, params: &TemplateGetRequest) -> Result<TemplateDoc> {
+        self.call("template.get", params).await
+    }
+
+    /// The graphic templates: the built in pack and the SVG templates in the media library, each with its fields.
+    pub async fn template_list(&self) -> Result<TemplateList> {
+        self.call("template.list", &serde_json::json!({})).await
+    }
+
+    /// Check an SVG template and write it into the media library.
+    pub async fn template_save(&self, params: &TemplateSaveRequest) -> Result<TemplateSaved> {
+        self.call("template.save", params).await
     }
 
     /// Call one of a plugin's tools, in MCP's shape. The name is `<plugin>/<tool>`, or the bare tool name when only one plugin has it.

@@ -4528,7 +4528,7 @@ impl Mixer {
                 // what its editor opens on.
                 if let Some(layer) = s.input.layer() {
                     status.put_extra("alpha", layer.active());
-                    if matches!(kind.as_str(), "text/source" | "ticker/source") {
+                    if matches!(kind.as_str(), "text/source" | "ticker/source" | "template/source") {
                         status.put_extra("params", s.input.current_config().params);
                     }
                 }
@@ -5430,6 +5430,7 @@ mod tests {
             hardware: Default::default(),
             codecs: Default::default(),
             media: Default::default(),
+            graphics: Default::default(),
             security: Default::default(),
             safety: Default::default(),
             browser: Default::default(),
@@ -5469,6 +5470,7 @@ mod tests {
             hardware: Default::default(),
             codecs: Default::default(),
             media: Default::default(),
+            graphics: Default::default(),
             security: Default::default(),
             safety: Default::default(),
             browser: Default::default(),
