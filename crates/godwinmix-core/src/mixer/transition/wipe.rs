@@ -51,7 +51,17 @@ impl Transition for Wipe {
                 Shot::of(&to).clipped(self.split(x.canvas, x.easing.at(t)).0)
             }));
         }
+        // A new scene that covers the canvas hides the old one wherever it
+        // has been revealed, so trimming the old one too would be a second
+        // crop and a second renegotiation a frame for a picture nobody sees.
+        // Measured at 1280x720, that second crop was most of what a wipe cost
+        // over a fade.
+        let covered = x.incoming.iter().any(|leg| covers(leg, x.canvas));
         for leg in &x.out {
+            if covered {
+                curves.push(stay_then_go(leg, x));
+                continue;
+            }
             let from = leg.from;
             curves.extend(leg_curves(leg, x, |t| {
                 Shot::of(&from).clipped(self.split(x.canvas, x.easing.at(t)).1)
@@ -59,6 +69,13 @@ impl Transition for Wipe {
         }
         curves
     }
+}
+
+/// True when this leg draws an opaque picture over the whole canvas.
+fn covers(leg: &super::Leg, canvas: (i32, i32)) -> bool {
+    let full = |r: Rect| r.x <= 0.5 && r.y <= 0.5 && r.w >= canvas.0 as f64 - 0.5 && r.h >= canvas.1 as f64 - 0.5;
+    let picture = leg.crop.as_ref().map(|c| c.picture).unwrap_or_else(|| Rect::of(&leg.to));
+    leg.to.alpha >= 1.0 && full(picture)
 }
 
 /// A box opens out of a point until it is the whole canvas.
