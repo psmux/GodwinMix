@@ -55,13 +55,23 @@ export async function listDevices(md = navigator.mediaDevices) {
   return { cameras: pick("videoinput", "Camera"), mics: pick("audioinput", "Microphone") };
 }
 
-/** What getUserMedia is asked for the picture. `exact` when a person chose it. */
-export function videoConstraints(deviceId, exact) {
+/**
+ * What getUserMedia is asked for the picture. `exact` when a person chose it.
+ *
+ * The size is exact, and the browser crops and scales to it, so every camera
+ * sends the same size and switching cameras on the air changes nothing the
+ * mixer has to be told: a new size is a new H.264 configuration, which the
+ * hop from a channel to the mixer does not carry. `loose` is the fallback for
+ * a camera that cannot make that size at all.
+ */
+export function videoConstraints(deviceId, exact, loose = false) {
+  const size = (n) => (loose ? { ideal: n } : { exact: n });
   const c = {
-    width: { ideal: ENCODER.width },
-    height: { ideal: ENCODER.height },
+    width: size(ENCODER.width),
+    height: size(ENCODER.height),
     frameRate: { ideal: ENCODER.frameRate },
   };
+  if (!loose) c.resizeMode = "crop-and-scale";
   if (deviceId) c.deviceId = exact ? { exact: deviceId } : { ideal: deviceId };
   return c;
 }
@@ -83,12 +93,16 @@ export function audioConstraints(deviceId, exact, processing) {
 /** One track of one kind. Null when `deviceId` is "off". */
 export async function openTrack(kind, deviceId, opts = {}, md = navigator.mediaDevices) {
   if (deviceId === "off") return null;
-  const constraints =
-    kind === "video"
-      ? { video: videoConstraints(deviceId, opts.exact) }
-      : { audio: audioConstraints(deviceId, opts.exact, opts.processing !== false) };
+  if (kind === "video") {
+    const stream = await md.getUserMedia({ video: videoConstraints(deviceId, opts.exact) }).catch((e) => {
+      if (e && e.name !== "OverconstrainedError") throw e;
+      return md.getUserMedia({ video: videoConstraints(deviceId, opts.exact, true) });
+    });
+    return stream.getVideoTracks()[0] || null;
+  }
+  const constraints = { audio: audioConstraints(deviceId, opts.exact, opts.processing !== false) };
   const stream = await md.getUserMedia(constraints);
-  return (kind === "video" ? stream.getVideoTracks() : stream.getAudioTracks())[0] || null;
+  return stream.getAudioTracks()[0] || null;
 }
 
 /** The sentence for a getUserMedia refusal, by its name. */

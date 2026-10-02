@@ -118,9 +118,11 @@ export async function browserDeviceTests(test, eq, ok) {
     eq(audioConstraints("m1", true, false), { echoCancellation: false, noiseSuppression: false, autoGainControl: false, deviceId: { exact: "m1" } });
   });
 
-  test("the camera is asked for 720p at 30, and a remembered one is only a hint", () => {
+  test("the camera is asked for exactly 720p, cropped and scaled, and a remembered one is only a hint", () => {
     const c = videoConstraints("c1", false);
-    eq([c.width.ideal, c.height.ideal, c.frameRate.ideal], [1280, 720, 30]);
+    eq([c.width.exact, c.height.exact, c.frameRate.ideal, c.resizeMode], [1280, 720, 30, "crop-and-scale"]);
+    const loose = videoConstraints("c1", false, true);
+    eq([loose.width.ideal, loose.height.ideal, loose.resizeMode], [1280, 720, undefined]);
     eq(c.deviceId, { ideal: "c1" });
     eq(videoConstraints("c1", true).deviceId, { exact: "c1" });
   });
