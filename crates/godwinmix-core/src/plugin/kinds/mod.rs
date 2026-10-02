@@ -7,6 +7,9 @@
 //! rest to `assemble`. Nothing in `assemble` knows what a kind is.
 
 pub mod browser;
+pub mod clip_alpha;
+pub mod clip_pace;
+pub mod clip_start;
 pub mod exec;
 pub mod file;
 pub mod image;
