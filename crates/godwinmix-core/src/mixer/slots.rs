@@ -1121,11 +1121,12 @@ impl SlotPool {
                 let pad = self.slots[index].pad.clone();
                 // Turned on before the first frame goes through, so a key
                 // never shows a frame flattened over black on its way in.
-                super::keyed::attach(board.as_ref(), filter.board(), &pad, &board_key(index, n));
+                let hook = filter.board();
+                super::keyed::attach(board.as_ref(), hook.clone(), &pad, &board_key(index, n));
                 let at = Insertion::before_pad(&self.program, &upstream, &pad);
                 let placed = crate::plugin::filter::insert(at, spec, filter, &canvas, live);
                 if placed.is_err() {
-                    super::keyed::detach(board.as_ref(), &board_key(index, n));
+                    super::keyed::detach(board.as_ref(), hook, &board_key(index, n));
                 }
                 placed
             });
@@ -1179,8 +1180,8 @@ impl SlotPool {
     fn clear_filters(&mut self, index: usize) {
         let filters = std::mem::take(&mut self.slots[index].filters);
         self.slots[index].filter_shape.clear();
-        for n in 0..filters.len() {
-            super::keyed::detach(self.board.as_ref(), &board_key(index, n));
+        for (n, f) in filters.iter().enumerate() {
+            super::keyed::detach(self.board.as_ref(), f.board(), &board_key(index, n));
         }
         for f in filters.into_iter().rev() {
             let id = f.spec.id.clone();

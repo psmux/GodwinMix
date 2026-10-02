@@ -78,11 +78,6 @@ impl Keyer {
         }
     }
 
-    /// The colour the key found for itself, when it was left to guess.
-    pub fn found(&self) -> Option<Guess> {
-        self.state.lock().found
-    }
-
     /// One frame on its way to the compositor pad.
     pub fn on_buffer(&self, pad: &gst::Pad, info: &mut gst::PadProbeInfo) -> gst::PadProbeReturn {
         let Some(gst::PadProbeData::Buffer(buffer)) = info.data.as_mut() else {
@@ -99,7 +94,8 @@ impl Keyer {
                     self.hook.layer.set_picture(Some(Arc::new(p)));
                 }
             }
-            return gst::PadProbeReturn::Drop;
+            *buffer = gap(buffer);
+            return gst::PadProbeReturn::Ok;
         }
         if st.key.is_some() {
             st.flatten(buffer.make_mut(), &vinfo);
@@ -180,4 +176,23 @@ impl State {
         let [y, u, v, _] = f.planes_data_mut();
         frame::flatten(y, u, v, strides, size, &self.lut, &self.settings.matte);
     }
+}
+
+/// An empty buffer flagged as a gap, in place of the frame the board draws.
+///
+/// Dropping the frame instead would leave the compositor pad with nothing
+/// for its time: a pad that has had buffers and then stops is waited for, a
+/// whole upstream latency of programme at a time. A gap says the time has
+/// passed with nothing to draw, so the compositor neither waits for this pad
+/// nor goes on drawing the last frame it was given.
+fn gap(frame: &gst::BufferRef) -> gst::Buffer {
+    let mut out = gst::Buffer::new();
+    {
+        let b = out.get_mut().expect("a new buffer is writable");
+        b.set_pts(frame.pts());
+        b.set_dts(frame.dts());
+        b.set_duration(frame.duration());
+        b.set_flags(gst::BufferFlags::GAP | gst::BufferFlags::DROPPABLE);
+    }
+    out
 }

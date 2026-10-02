@@ -12,7 +12,7 @@
 //! above it, and stays in front.
 //!
 //! ```text
-//!   slot: gate > q > crop > flip > [identity + probe] -x  vmix pad (fed nothing)
+//!   slot: gate > q > crop > flip > [identity + probe] -> vmix pad (fed gaps)
 //!                                         \
 //!                                          `-> layer -> board, after vmix
 //! ```
@@ -89,7 +89,14 @@ impl Filter for ChromaKey {
 
     fn build(&mut self, _canvas: &CanvasCaps, params: &Params) -> Result<gst::Element> {
         self.keyer.set(Settings::from_params(params)?);
-        let name = params.get("id").and_then(|v| v.as_str()).unwrap_or("chroma").to_string();
+        // Unique whatever the params say: two keyed items in one scene are
+        // two bins in one pipeline, and a bin name is taken only once.
+        static BUILT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let n = BUILT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let name = match params.get("id").and_then(|v| v.as_str()) {
+            Some(id) => id.to_string(),
+            None => format!("chroma-{n}"),
+        };
         let bin = gst::Bin::with_name(&format!("filter-{name}"));
         let key = make("identity", &format!("filter-{name}-key"))?;
         crate::probe::set_bool(&key, "silent", true);

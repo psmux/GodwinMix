@@ -39,6 +39,12 @@ impl Frames {
 
 /// A mixer on a 320x180 canvas at 30 fps, with every programme frame seen.
 pub fn running() -> (MixerHandle, Frames, std::thread::JoinHandle<()>) {
+    let (handle, frames, thread, _) = running_with_pipeline();
+    (handle, frames, thread)
+}
+
+/// The same, and the programme pipeline, for a test that looks inside it.
+pub fn running_with_pipeline() -> (MixerHandle, Frames, std::thread::JoinHandle<()>, gst::Pipeline) {
     gst::init().unwrap();
     let cfg: Config = toml::from_str(
         "[canvas]\nwidth = 320\nheight = 180\nfps = 30\nsample_rate = 48000\nchannels = 2\n\n[control]\nbind = \"127.0.0.1:0\"\n",
@@ -61,8 +67,9 @@ pub fn running() -> (MixerHandle, Frames, std::thread::JoinHandle<()>) {
         gst::PadProbeReturn::Ok
     });
     mix.start().expect("start the mixer");
+    let pipeline = mix.program_pipeline().clone();
     let thread = mixer::spawn(mix, cmd_rx, handle.clone());
-    (handle, frames, thread)
+    (handle, frames, thread, pipeline)
 }
 
 pub async fn add(handle: &MixerHandle, cfg: SourceConfig) {
