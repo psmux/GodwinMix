@@ -36,7 +36,7 @@ export function tester(client, opts) {
     const src = opts.sources.find((s) => s.id === sourcePick.value);
     const wanted = targetsFor(src);
     clear(suggestions).append(...wanted.map((t) => el("option", { value: t.path, text: t.label })));
-    if (wanted.length && !wanted.some((t) => t.path === path.value)) path.value = wanted[0].path;
+    if (wanted.length) path.value = wanted[0].path;
   };
   if (opts.source) sourcePick.value = opts.source.id;
   sourcePick.onchange = fillPaths;
