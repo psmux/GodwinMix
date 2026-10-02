@@ -304,7 +304,9 @@ temporary directory instead, as `gmx-<core pid>/<eight hex digits>`. A plugin
 never has to care: it opens what `GMX_MEDIA` says. If that is too long as well
 the instance is refused, with the two paths and the limit in the message.
 Whatever a core that was killed left at an instance's address is cleared
-before the next one binds.
+before the next one binds. A shared device's or a channel's frame bus socket,
+which lives under `GODWINMIX_HOME`, is given a short address another way,
+through a link; see [the frame bus](frame-bus.md#the-registry).
 
 ## Framing
 
