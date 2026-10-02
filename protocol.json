@@ -13148,10 +13148,10 @@
         "destructiveHint": false,
         "idempotentHint": true,
         "profile": "search",
-        "readOnlyHint": false,
+        "readOnlyHint": true,
         "tool": "test_feed"
       },
-      "mutating": true,
+      "mutating": false,
       "name": "feed.test",
       "params": {
         "$ref": "#/$defs/FeedTestRequest"

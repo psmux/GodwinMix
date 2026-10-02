@@ -913,7 +913,7 @@ MCP tool `set_feed` in the `search` profile: readOnlyHint false, destructiveHint
 
 Fetch a feed once and show what came back: its top keys, a cut down copy, and every path with an example. With `select` (and `template`, `limit`, `join`) it also shows what that picks and what a binding would write. A path that picks nothing is refused with where it stopped and the keys there. Nothing is stored and nothing is written.
 
-MCP tool `test_feed` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+MCP tool `test_feed` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
 
 ```json
 {
