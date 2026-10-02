@@ -323,3 +323,7 @@ fn error_result(message: String) -> ToolResult {
 #[cfg(test)]
 #[path = "device_tests.rs"]
 mod tests;
+
+#[cfg(all(test, unix))]
+#[path = "device_takeover_tests.rs"]
+mod takeover_tests;

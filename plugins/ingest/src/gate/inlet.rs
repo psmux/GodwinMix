@@ -93,8 +93,16 @@ impl Inlet for Channelled {
 impl Drop for Channelled {
     fn drop(&mut self) {
         self.on_air.0.remove(self.on_air.1);
+        // A session a new publisher took over is not the stream leaving: the
+        // name is live again already, and saying idle now would tell the core
+        // the opposite of the truth. See `hub::takeover`.
+        let replaced = self.stream.publication.as_ref().is_some_and(|p| !p.current());
         self.stream.publication = None;
         let Some(r) = &self.stream.gate.reporter else { return };
+        if replaced {
+            r.info(format!("{}/{}: the publisher that went quiet was cut off", self.app, self.name));
+            return;
+        }
         r.info(format!("{}/{} stopped publishing", self.app, self.name));
         r.event(
             "channel.stream",

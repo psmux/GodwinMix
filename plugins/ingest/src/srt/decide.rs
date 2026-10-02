@@ -55,7 +55,7 @@ pub fn decide(table: &Table, hub: &Hub, route: &Route) -> Decision {
     };
     match decided {
         Err((code, why)) => refuse(code, why),
-        Ok((admit, _)) if hub.is_live(&admit.app, &admit.stream) => refuse(
+        Ok((admit, _)) if hub.held(&admit.app, &admit.stream) => refuse(
             CONFLICT,
             format!("{}/{} is already live. Give this encoder another stream name, or stop the other one first.", admit.app, admit.stream),
         ),

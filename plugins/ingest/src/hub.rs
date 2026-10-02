@@ -23,15 +23,19 @@
 mod ends;
 mod meter;
 mod queue;
+mod takeover;
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use serde_json::{json, Value};
 
 pub use ends::{Publication, Reader};
 pub use queue::Recv;
+pub use takeover::STALE;
+#[cfg(test)]
+pub use takeover::HESITATE;
 
 
 type Key = (String, String);
@@ -70,6 +74,9 @@ struct Session {
     /// `rtmp`, `rtmps`, `srt` or `whip`: how it arrived.
     via: &'static str,
     meter: meter::Meter,
+    /// Cuts the publisher off. Set for a publisher the gate let in, and what
+    /// lets a quiet session be taken over; see `takeover`.
+    kick: Option<crate::rtmp::Kick>,
 }
 
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -101,8 +108,9 @@ impl Hub {
         self.publish_via(app, stream, from, key, "rtmp")
     }
 
-    /// Start a session that arrived over `via`. Every protocol ends up here,
-    /// so a stream is a stream to every reader whatever carried it.
+    /// Start a session that arrived over `via`, with no means to cut it off,
+    /// so it is never taken over. Every protocol ends up in `publish_with`, so
+    /// a stream is a stream to every reader whatever carried it.
     pub fn publish_via(
         &self,
         app: &str,
@@ -111,24 +119,7 @@ impl Hub {
         key: Option<String>,
         via: &'static str,
     ) -> Result<Publication, String> {
-        let mut slots = lock(&self.inner.slots);
-        let slot = Hub::slot(&mut slots, app, stream);
-        let mut state = lock(&slot.state);
-        drop(slots);
-        if let Some(live) = &state.session {
-            return Err(format!(
-                "{app}/{stream} is already being published from {}. Give this encoder \
-                 another stream name, or stop the other one first.",
-                live.from
-            ));
-        }
-        let id = self.inner.sessions.fetch_add(1, Ordering::Relaxed) + 1;
-        let session = Session { id, from: from.to_string(), key, via, meter: meter::Meter::new() };
-        state.session = Some(session);
-        state.headers = queue::Headers::default();
-        state.dropped_gops = 0;
-        drop(state);
-        Ok(Publication { inner: self.inner.clone(), slot, id })
+        self.publish_with(app, stream, from, key, via, None)
     }
 
     /// Read a stream: now if it is live, from its next publisher if not.
