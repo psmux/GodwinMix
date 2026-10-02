@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Town News</title>
+    <link>https://news.example/</link>
+    <description>What is happening in town tonight.</description>
+    <item>
+      <title>Polls close at ten &amp; the count starts at once</title>
+      <link>https://news.example/polls</link>
+      <description>&lt;p&gt;Every ward reports by midnight.&lt;/p&gt;</description>
+      <pubDate>Fri, 02 Oct 2026 19:00:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>Rain later, clearing by morning</title>
+      <link>https://news.example/weather</link>
+      <description>Bring a coat to the count.</description>
+      <pubDate>Fri, 02 Oct 2026 18:40:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>Bridge reopens to traffic</title>
+      <link>https://news.example/bridge</link>
+      <description>Six weeks early.</description>
+      <pubDate>Fri, 02 Oct 2026 18:10:00 GMT</pubDate>
+    </item>
+  </channel>
+</rss>

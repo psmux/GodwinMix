@@ -467,6 +467,87 @@ pub struct BindRequest {
     pub scene: String,
 }
 
+/// `feed.binding.add`: the fields of [`BindingSpec`], with anything else refused.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct BindingAddRequest {
+    /// The feed it reads.
+    pub feed: String,
+    /// A slug. Never changes. Made from the target when absent.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub join: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub limit: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub paused: Option<bool>,
+    /// A path into the fetched document. See [`BindingSpec`].
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub select: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub template: Option<String>,
+    pub to: BindingTarget,
+}
+
+/// `feed.binding.set`: only what is named changes.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct BindingSetRequest {
+    pub id: String,
+    /// An empty string takes the join away.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub join: Option<String>,
+    /// 0 takes the limit away.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub limit: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub select: Option<String>,
+    /// An empty string takes the template away.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub template: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub to: Option<BindingTarget>,
+}
+
+/// A binding with what it last wrote.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct BindingStatus {
+    /// The feed it reads.
+    pub feed: String,
+    /// A slug. Never changes.
+    pub id: String,
+    /// For a list: join it into one string with this between the elements.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub join: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_write: Option<String>,
+    /// For a list: keep the first this many.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub limit: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub paused: Option<bool>,
+    /// A path into the fetched document: `items[].title`, `data.home.score`,
+    /// `rows[0].Name`, or a JSON pointer starting `/`. Empty is the whole
+    /// document. `[]` takes every element of a list.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub select: Option<String>,
+    /// Words with `{path}` holes filled from what `select` picked (from each
+    /// element, for a list): `{home} {home_score} : {away_score} {away}`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub template: Option<String>,
+    pub to: BindingTarget,
+    pub value: Value,
+    /// Writes since the core started. A feed that has not changed adds none.
+    pub writes: u64,
+}
+
+/// Where a binding writes. One of three shapes.
+pub type BindingTarget = Value;
+
 /// OBS's blend enum, so an import carries across unchanged.
 pub type Blend = String;
 /// The values api_level 1 knows for [`Blend`].
@@ -1353,6 +1434,169 @@ pub struct Ext {
     /// Anything this build does not know a name for.
     #[serde(flatten)]
     pub extra: BTreeMap<String, Value>,
+}
+
+/// `feed.add`: the fields of [`FeedSpec`], with anything else refused.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct FeedAddRequest {
+    /// `http://`, `https://`, `ws://` or `wss://`. Nothing else is fetched.
+    pub address: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub format: Option<FeedFormat>,
+    /// Sent with every request, for an API key. Sealed once stored.
+    pub headers: BTreeMap<String, Value>,
+    /// A slug: lower case letters, digits and dashes. Never changes.
+    pub id: String,
+    /// Seconds between fetches of a polled feed. At least 5; 30 when absent.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub interval_s: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub paused: Option<bool>,
+    /// Seconds one fetch may take. 10 when absent.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub timeout_s: Option<f64>,
+}
+
+/// How the body is read. `auto` decides from the content type and the first
+/// byte; `sse` reads an `http(s)` address as a Server-Sent Events stream.
+pub type FeedFormat = String;
+/// The values api_level 1 knows for [`FeedFormat`].
+pub const FEED_FORMAT_VALUES: &[&str] = &["rss", "csv", "text", "sse", "auto", "json"];
+
+/// `feed.remove` and `feed.binding.remove`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct FeedIdRequest {
+    pub id: String,
+}
+
+/// `feed.list`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct FeedList {
+    pub bindings: Vec<BindingStatus>,
+    pub feeds: Vec<FeedStatus>,
+}
+
+/// `feed.set`: only what is named changes.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct FeedSetRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub address: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub format: Option<FeedFormat>,
+    /// Replaces the headers. A value of `"__secret__"` keeps what is stored.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub headers: Option<BTreeMap<String, Value>>,
+    pub id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub interval_s: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub timeout_s: Option<f64>,
+}
+
+/// Where a feed is.
+pub type FeedState = String;
+/// The values api_level 1 knows for [`FeedState`].
+pub const FEED_STATE_VALUES: &[&str] = &["starting", "ok", "failing", "paused"];
+
+/// A feed with what it has been doing.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct FeedStatus {
+    /// `http://`, `https://`, `ws://` or `wss://`. Nothing else is fetched.
+    pub address: String,
+    /// Size of the last body read, in bytes.
+    pub bytes: u64,
+    /// Attempts in a row that failed.
+    pub failures: u32,
+    /// Fetches or messages read since the core started.
+    pub fetches: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub format: Option<FeedFormat>,
+    /// Sent with every request, for an API key. Sealed once stored: read
+    /// back as `"__secret__"`, and `"__secret__"` written back keeps it.
+    pub headers: BTreeMap<String, Value>,
+    /// A slug: lower case letters, digits and dashes. Never changes.
+    pub id: String,
+    /// Seconds between fetches of a polled feed. At least 5; 30 when absent.
+    /// Not used by a websocket or an event stream, which push.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub interval_s: Option<f64>,
+    /// `polled`, `websocket` or `sse`.
+    pub kind: String,
+    /// When what was read last differed from what came before.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_change: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_error: Option<String>,
+    /// When something was last read, RFC 3339.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_fetch: Option<String>,
+    /// Fetches the server answered `304 Not Modified`.
+    pub not_modified: u64,
+    /// Stopped by `feed.pause`: nothing is fetched and nothing is written.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub paused: Option<bool>,
+    pub state: FeedState,
+    /// Seconds one fetch may take before it counts as failed. 10 when absent.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub timeout_s: Option<f64>,
+}
+
+/// `feed.test`: fetch once and show what a selection picks.
+///
+/// Give `id` for a feed that exists, or `address` (with `format`, `headers`
+/// and `timeout_s` if it needs them) for one that does not yet. Nothing is
+/// stored and nothing is written.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct FeedTestRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub address: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub format: Option<FeedFormat>,
+    /// Fetch again even when the feed has a document already.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fresh: Option<bool>,
+    pub headers: BTreeMap<String, Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub join: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub limit: Option<u32>,
+    /// A path to try. See [`BindingSpec`].
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub select: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub template: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub timeout_s: Option<f64>,
+}
+
+/// What `feed.test` found.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct FeedTestResult {
+    pub bytes: u64,
+    /// The format it was read as.
+    pub format: FeedFormat,
+    /// The keys at the top of the document.
+    pub keys: Vec<String>,
+    /// Every path in the document down to a few levels, with `[]` for a
+    /// list, each with an example value: the paths `select` takes.
+    pub paths: Vec<PathExample>,
+    /// The document, with long lists cut to their first few elements and
+    /// long strings shortened, for a person or an agent to read paths from.
+    pub preview: Value,
+    /// What `select` picked, when one was given.
+    pub selected: Value,
+    pub took_ms: u64,
+    /// What a binding with this selection would write.
+    pub value: Value,
 }
 
 /// One filter in an item's chain.
@@ -2604,6 +2848,14 @@ pub struct PathEntry {
     pub writable: bool,
 }
 
+/// One path `select` would take, with what it picks.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PathExample {
+    pub example: Value,
+    pub path: String,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct PathListRequest {
@@ -2638,6 +2890,16 @@ pub struct PathRoot {
     /// `Home`, `Media folder` or `Config folder`.
     pub label: String,
     pub path: String,
+}
+
+/// `feed.pause` and `feed.binding.pause`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PauseRequest {
+    pub id: String,
+    /// False starts it again. True when absent.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub paused: Option<bool>,
 }
 
 /// What `pipeline.dot` answers with on `/rpc`. The REST route serves the same
@@ -4657,6 +4919,30 @@ pub struct TelemetryEvent {
     pub ts: i64,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct FeedFailedEvent {
+    /// The binding, when it was a write that failed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub binding: Option<String>,
+    /// What went wrong and what to do about it. Never carries a header value.
+    pub error: String,
+    pub failures: i64,
+    /// The feed.
+    pub id: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct FeedRecoveredEvent {
+    /// The binding, when it was a write that failed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub binding: Option<String>,
+    pub failures: i64,
+    /// The feed.
+    pub id: String,
+}
+
 /// What a method is, for a surface that builds its own menu or its own REST call.
 #[derive(Debug, Clone, Copy)]
 pub struct MethodInfo {
@@ -4668,7 +4954,7 @@ pub struct MethodInfo {
     pub rest: Option<(&'static str, &'static str)>,
 }
 
-pub const METHODS: [MethodInfo; 171] = [
+pub const METHODS: [MethodInfo; 182] = [
     MethodInfo { name: "adbreak.end", summary: "Cut a running ad short, or disarm one that is scheduled.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/end")) },
     MethodInfo { name: "adbreak.start", summary: "Interrupt the programme with a clip, then rejoin live when it ends.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/start")) },
     MethodInfo { name: "agent.state", summary: "The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/agent/state")) },
@@ -4700,6 +4986,17 @@ pub const METHODS: [MethodInfo; 171] = [
     MethodInfo { name: "core.status", summary: "The full state: programme, every source, every output, the multiview grid, the encoder backend and any ad break.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/core/status")) },
     MethodInfo { name: "core.subscribe", summary: "Subscribe to the event stream. WebSocket only: the core answers event/snapshot then deltas, ending every batch with event/flush.", scope: "read", mutating: false, destructive: false, rest: None },
     MethodInfo { name: "device.discover", summary: "Ask every device plugin what it can see: cameras, NDI senders, publishers. Each candidate's params are ready for source.add.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/device/discover")) },
+    MethodInfo { name: "feed.add", summary: "Add a live data feed: an http(s) address polled every `interval_s` (5 s at least, 30 by default, honouring ETag and Last-Modified), a ws(s) address whose messages are read as they come, or an http(s) event stream with format sse. Header values are sealed.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/feed/add")) },
+    MethodInfo { name: "feed.binding.add", summary: "Bind a value in a feed to a target: a source's param by path (`params.text`, `params.items`, `params.fields.headline`), a graphic's field through its update action, or a scene parameter. It writes at once if the feed has been read, and after that only when the value changes.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/feed/binding/add")) },
+    MethodInfo { name: "feed.binding.pause", summary: "Stop a binding writing, or start it again with paused false. Started again, it writes what the feed holds now.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/feed/binding/pause")) },
+    MethodInfo { name: "feed.binding.remove", summary: "Forget a binding. What it wrote stays on air.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/feed/binding/remove")) },
+    MethodInfo { name: "feed.binding.set", summary: "Change a binding's selection or target. Only what is named changes, and the value is written again at once.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/feed/binding/set")) },
+    MethodInfo { name: "feed.list", summary: "Every live data feed with its state (ok, failing with the reason, paused), when it was last read and last changed, and every binding with the value it last wrote.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/feed/list")) },
+    MethodInfo { name: "feed.pause", summary: "Stop reading a feed, or start it again with paused false. While paused nothing is fetched and nothing is written; what was written stays on air.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/feed/pause")) },
+    MethodInfo { name: "feed.refresh", summary: "Fetch a polled feed now rather than at the end of its interval. A pushed feed that is waiting to reconnect tries at once.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/feed/refresh")) },
+    MethodInfo { name: "feed.remove", summary: "Stop and forget a feed, its sealed headers and every binding that reads it. What they wrote stays on air until something else changes it.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/feed/remove")) },
+    MethodInfo { name: "feed.set", summary: "Change a feed's address, format, interval, timeout or headers. Only what is named changes; a header value of \"__secret__\" keeps the stored one.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/feed/set")) },
+    MethodInfo { name: "feed.test", summary: "Fetch a feed once and show what came back: its top keys, a cut down copy, and every path with an example. With `select` (and `template`, `limit`, `join`) it also shows what that picks and what a binding would write. A path that picks nothing is refused with where it stopped and the keys there. Nothing is stored and nothing is written.", scope: "operate", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/feed/test")) },
     MethodInfo { name: "filter.add", summary: "Hang a filter on one source or on the programme, live.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/filters")) },
     MethodInfo { name: "filter.list", summary: "Every filter in place, with what it is and where it sits.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/filters")) },
     MethodInfo { name: "filter.remove", summary: "Take a filter out of the pipeline.", scope: "operate", mutating: true, destructive: true, rest: Some(("DELETE", "/api/v1/filters/{id}")) },
@@ -4842,7 +5139,7 @@ pub const METHODS: [MethodInfo; 171] = [
     MethodInfo { name: "vitals.set", summary: "Change the alarm thresholds, or whether a mosaic is kept up for the black and freeze checks while nobody is looking. Fields left out keep their defaults; a duration of 0 switches that check off. Applies within a second.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/vitals/set")) },
 ];
 
-pub const EVENT_NAMES: [&str; 30] = [
+pub const EVENT_NAMES: [&str; 32] = [
     "snapshot",
     "program.took",
     "scene.patch",
@@ -4872,6 +5169,8 @@ pub const EVENT_NAMES: [&str; 30] = [
     "show.changed",
     "show.removed",
     "show.health",
+    "feed.failed",
+    "feed.recovered",
     "health",
 ];
 
@@ -4950,6 +5249,10 @@ pub enum Event {
     ShowRemoved(ShowRemovedEvent),
     /// A show's health changed state, or an alarm began or ended. Never sent for a number alone: read those with show.stats.
     ShowHealth(ShowHealthEvent),
+    /// A feed could not be read (a refused connection, a timeout, a body that would not parse, a response over 4 MB), or one of its bindings could not write what it read. `binding` names the binding when it was the write. Sent on the first failure in a row, not on every retry; what was last written stays on air.
+    FeedFailed(FeedFailedEvent),
+    /// A feed or a binding that was failing works again. `failures` is how many attempts in a row failed before this one.
+    FeedRecovered(FeedRecoveredEvent),
     /// This show's health changed: its state (ok, warning, alarm, off) or the kinds of its alarms, never a number alone. From a show that composites; the station sends it on to every client as show.health with the show's id. docs/reference/show-health.md says what each alarm watches.
     Health(HealthEvent),
     /// An event name this api_level does not know, with its params as they came.
@@ -5070,6 +5373,14 @@ impl Event {
                 Ok(payload) => Event::ShowHealth(payload),
                 Err(_) => Event::Other { name: pattern.to_string(), params },
             },
+            "feed.failed" => match serde_json::from_value(params.clone()) {
+                Ok(payload) => Event::FeedFailed(payload),
+                Err(_) => Event::Other { name: pattern.to_string(), params },
+            },
+            "feed.recovered" => match serde_json::from_value(params.clone()) {
+                Ok(payload) => Event::FeedRecovered(payload),
+                Err(_) => Event::Other { name: pattern.to_string(), params },
+            },
             "health" => match serde_json::from_value(params.clone()) {
                 Ok(payload) => Event::Health(payload),
                 Err(_) => Event::Other { name: pattern.to_string(), params },
@@ -5110,6 +5421,8 @@ impl Event {
             Event::ShowChanged(_) => "show.changed",
             Event::ShowRemoved(_) => "show.removed",
             Event::ShowHealth(_) => "show.health",
+            Event::FeedFailed(_) => "feed.failed",
+            Event::FeedRecovered(_) => "feed.recovered",
             Event::Health(_) => "health",
             Event::Other { name, .. } => name,
         }
@@ -5272,6 +5585,61 @@ impl Client {
     /// Ask every device plugin what it can see: cameras, NDI senders, publishers. Each candidate's params are ready for source.add.
     pub async fn device_discover(&self, params: &DiscoverRequest) -> Result<BTreeMap<String, Value>> {
         self.call("device.discover", params).await
+    }
+
+    /// Add a live data feed: an http(s) address polled every `interval_s` (5 s at least, 30 by default, honouring ETag and Last-Modified), a ws(s) address whose messages are read as they come, or an http(s) event stream with format sse. Header values are sealed.
+    pub async fn feed_add(&self, params: &FeedAddRequest) -> Result<FeedStatus> {
+        self.call("feed.add", params).await
+    }
+
+    /// Bind a value in a feed to a target: a source's param by path (`params.text`, `params.items`, `params.fields.headline`), a graphic's field through its update action, or a scene parameter. It writes at once if the feed has been read, and after that only when the value changes.
+    pub async fn feed_binding_add(&self, params: &BindingAddRequest) -> Result<BindingStatus> {
+        self.call("feed.binding.add", params).await
+    }
+
+    /// Stop a binding writing, or start it again with paused false. Started again, it writes what the feed holds now.
+    pub async fn feed_binding_pause(&self, params: &PauseRequest) -> Result<BindingStatus> {
+        self.call("feed.binding.pause", params).await
+    }
+
+    /// Forget a binding. What it wrote stays on air.
+    pub async fn feed_binding_remove(&self, params: &FeedIdRequest) -> Result<BTreeMap<String, Value>> {
+        self.call("feed.binding.remove", params).await
+    }
+
+    /// Change a binding's selection or target. Only what is named changes, and the value is written again at once.
+    pub async fn feed_binding_set(&self, params: &BindingSetRequest) -> Result<BindingStatus> {
+        self.call("feed.binding.set", params).await
+    }
+
+    /// Every live data feed with its state (ok, failing with the reason, paused), when it was last read and last changed, and every binding with the value it last wrote.
+    pub async fn feed_list(&self) -> Result<FeedList> {
+        self.call("feed.list", &serde_json::json!({})).await
+    }
+
+    /// Stop reading a feed, or start it again with paused false. While paused nothing is fetched and nothing is written; what was written stays on air.
+    pub async fn feed_pause(&self, params: &PauseRequest) -> Result<FeedStatus> {
+        self.call("feed.pause", params).await
+    }
+
+    /// Fetch a polled feed now rather than at the end of its interval. A pushed feed that is waiting to reconnect tries at once.
+    pub async fn feed_refresh(&self, params: &FeedIdRequest) -> Result<FeedStatus> {
+        self.call("feed.refresh", params).await
+    }
+
+    /// Stop and forget a feed, its sealed headers and every binding that reads it. What they wrote stays on air until something else changes it.
+    pub async fn feed_remove(&self, params: &FeedIdRequest) -> Result<BTreeMap<String, Value>> {
+        self.call("feed.remove", params).await
+    }
+
+    /// Change a feed's address, format, interval, timeout or headers. Only what is named changes; a header value of "__secret__" keeps the stored one.
+    pub async fn feed_set(&self, params: &FeedSetRequest) -> Result<FeedStatus> {
+        self.call("feed.set", params).await
+    }
+
+    /// Fetch a feed once and show what came back: its top keys, a cut down copy, and every path with an example. With `select` (and `template`, `limit`, `join`) it also shows what that picks and what a binding would write. A path that picks nothing is refused with where it stopped and the keys there. Nothing is stored and nothing is written.
+    pub async fn feed_test(&self, params: &FeedTestRequest) -> Result<FeedTestResult> {
+        self.call("feed.test", params).await
     }
 
     /// Hang a filter on one source or on the programme, live.
