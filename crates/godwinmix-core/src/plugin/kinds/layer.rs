@@ -20,7 +20,9 @@ pub fn silence(id: &str, canvas: &CanvasCaps) -> Result<gst::Element> {
     let silence = make("audiotestsrc", &format!("{id}-silence"))?;
     crate::probe::set_enum(&silence, "wave", "silence");
     silence.set_property("is-live", true);
-    crate::probe::set_int(&silence, "samplesperbuffer", i64::from(canvas.sample_rate / 100));
+    // A tenth of a second a buffer: silence has nothing to keep in step, and
+    // ten buffers a second wake the audio path a tenth as often as a hundred.
+    crate::probe::set_int(&silence, "samplesperbuffer", i64::from(canvas.sample_rate / 10));
     Ok(silence)
 }
 

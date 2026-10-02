@@ -3,6 +3,11 @@
 A lower third on air, from nothing, in about twenty minutes. You need a text
 editor and a browser. There is no Rust in a graphic and no build step.
 
+For plain words on screen, a name strap or a crawl along the bottom, the
+mixer's own [text and ticker sources](add-text-and-a-ticker.md) need no
+browser and cost a fraction of a graphic. A graphic is for animation and
+layout a box of words cannot do.
+
 A graphic is an [OGraf](https://ograf.ebu.io/) template: a JSON file saying
 what words go in it and a web component that draws them. GodwinMix hosts the
 format rather than inventing one, so what you write here plays in any OGraf

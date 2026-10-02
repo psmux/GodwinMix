@@ -8,9 +8,51 @@ announcement slides exported as images: each is a picture source.
 1. Upload the picture in the **Media** tab, or drop it on the window.
 2. Press **Add sources**, choose **Video and images**, and pick it.
 
-PNG, JPEG, BMP, WebP and TIFF work, from this machine or from an `https://`
-address. The picture is decoded once and held on screen for as long as the
-source exists; it never runs out the way a clip does. Its sound is silence.
+PNG, JPEG, BMP, WebP, TIFF and SVG work, from this machine or from an
+`https://` address. The picture is decoded once and held on screen for as long
+as the source exists; it never runs out the way a clip does. Its sound is
+silence.
+
+## A logo, or anything with a transparent background
+
+A PNG or WebP with an alpha channel, and any SVG, keeps its transparency: put
+it in a scene over a camera and the camera shows through the clear parts. The
+mixer looks at the file when the source is added and does this by itself;
+there is nothing to switch on.
+
+An SVG is drawn at the size it is placed at, not at the size it declares, so
+it is sharp however large it is made. Resized in the composer, it is drawn
+again at the new size once the item stops moving. A PNG is scaled once to its
+new size, never every frame.
+
+Two things to know:
+
+* A transparent picture is drawn over every opaque item in the scene,
+  whatever its place in the stack. Put a logo above the cameras, which is
+  where a logo goes anyway. Among transparent items the stack order holds.
+* A picture behind an `https://` address is drawn flat unless it is an SVG,
+  because the mixer does not fetch it to look before it decodes it. Upload it
+  to the Media tab instead, or add the source with `alpha = true` in its params.
+
+`alpha = false` draws a transparent picture flat, through the compositor, the
+way every picture was drawn before.
+
+## A clip with a transparent background
+
+A stinger, an animated lower third, a sparkle over the picture: a clip with an
+alpha channel plays over the scene the same way. WebM with VP8 or VP9 alpha,
+ProRes 4444, QuickTime Animation and PNG frames in a MOV all keep their alpha.
+Upload it, add it from **Video and images**, and it plays over whatever is
+under it, looping as a clip does.
+
+HEVC with alpha does not keep it on this build: it plays with its clear parts
+filled in. Export it as ProRes 4444 or WebM VP9 instead. The full list, and
+the decoder each format goes through, is in the [text and transparent sources
+reference](../reference/text-sources.md#formats-that-keep-their-alpha).
+
+Do not press **Convert** on a transparent clip in the Media tab. The converted
+copy is H.264, which has no alpha, and the picker offers the converted copy
+when there is one.
 
 ## A run of pictures
 

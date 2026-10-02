@@ -90,7 +90,7 @@ pub fn still(pic: &Picture, b: &PadBox) -> (Draw, (u32, u32)) {
 /// pixels. Returns one draw per copy of the strip in view, and the box size,
 /// which is what the kind renders the strip's height (or width) for.
 pub fn crawl(pic: &Picture, b: &PadBox, motion: Motion, travelled: f64) -> (Vec<Draw>, (u32, u32)) {
-    let Motion::Crawl { direction, gap, repeat, .. } = motion else { return (Vec::new(), (0, 0)) };
+    let Motion::Crawl { direction, gap, repeat, speed } = motion else { return (Vec::new(), (0, 0)) };
     let (w, h) = (pic.width as i32, pic.height as i32);
     let span = match direction {
         Direction::Up => b.rect.h + h,
@@ -101,7 +101,17 @@ pub fn crawl(pic: &Picture, b: &PadBox, motion: Motion, travelled: f64) -> (Vec<
         _ => w + gap as i32,
     }
     .max(1);
-    let t = travelled.max(0.0) as i64;
+    // Stopped, the strip stands at the near edge of the box, readable, rather
+    // than just outside it where a crawl starts.
+    let t = if speed <= 0.0 {
+        match direction {
+            Direction::Left => b.rect.w as i64,
+            Direction::Right => w as i64,
+            Direction::Up => b.rect.h as i64,
+        }
+    } else {
+        travelled.max(0.0) as i64
+    };
     let at = |offset: i64| -> Rect {
         let o = offset as i32;
         match direction {
@@ -115,7 +125,7 @@ pub fn crawl(pic: &Picture, b: &PadBox, motion: Motion, travelled: f64) -> (Vec<
     // Every copy that has entered so far, newest first: the newest has moved
     // `t % period`, the one before it a period further, and so on until one
     // has gone out of the far side. Without `repeat` there is only the first.
-    let (copies, lead) = if repeat { (t / period as i64 + 1, t % period as i64) } else { (1, t) };
+    let (copies, lead) = if repeat && speed > 0.0 { (t / period as i64 + 1, t % period as i64) } else { (1, t) };
     let draws = (0..copies.min(64))
         .map(|k| lead + k * period as i64)
         .take_while(|offset| *offset < span as i64)

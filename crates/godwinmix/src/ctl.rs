@@ -18,6 +18,9 @@ use godwinmix_protocol::{
 use godwinmix_core::media::MediaListing;
 use anyhow::{bail, Context, Result};
 use clap::Subcommand;
+
+#[path = "ctl_params.rs"]
+mod params;
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -139,6 +142,20 @@ pub enum SourceCmd {
         /// address to hand over, which is the case for YouTube and for DRM.
         #[arg(long, default_value = "off")]
         superimpose: String,
+        /// A param for the kind, as key=value, repeatable: `--param size=44`,
+        /// `--param text="Ada Lovelace"`. What each kind takes is in its
+        /// params schema in `protocol.json`.
+        #[arg(long = "param", value_name = "KEY=VALUE")]
+        params: Vec<String>,
+    },
+    /// Change a running source's name or params. A text or a ticker takes new
+    /// params on air with no rebuild.
+    Set {
+        id: String,
+        #[arg(long)]
+        name: Option<String>,
+        #[arg(long = "param", value_name = "KEY=VALUE")]
+        params: Vec<String>,
     },
     Remove {
         id: String,
@@ -472,7 +489,7 @@ async fn source(api: &Api, cmd: SourceCmd) -> Result<()> {
                 println!("{}", source_line(s));
             }
         }
-        SourceCmd::Add { id, uri, type_id, name, web, superimpose } => {
+        SourceCmd::Add { id, uri, type_id, name, web, superimpose, params: flags } => {
             let type_id = type_id.map(|t| t.trim().to_string()).filter(|t| !t.is_empty());
             // A kind named outright needs no address, but the core still wants
             // a `uri` to key an id off. The type is the honest answer to "what
@@ -485,6 +502,10 @@ async fn source(api: &Api, cmd: SourceCmd) -> Result<()> {
                 ),
             };
             let mut params = serde_json::Map::new();
+            let given = params::parse(&flags)?;
+            if !given.is_empty() {
+                params.insert("params".into(), Value::Object(given));
+            }
             if let Some(t) = type_id {
                 // Rides underneath the fields the core knows, which is the
                 // seam a plugin's `type` reaches its config through.
@@ -502,6 +523,14 @@ async fn source(api: &Api, cmd: SourceCmd) -> Result<()> {
             // answer and nobody has to diff the status to find out.
             let added: SourceStatus = api.call("source.add", None, &req).await?;
             println!("added source {} ({:?})", added.id, added.state);
+        }
+        SourceCmd::Set { id, name, params: flags } => {
+            let mut body = serde_json::json!({ "params": params::parse(&flags)? });
+            if let Some(name) = name {
+                body["name"] = Value::String(name);
+            }
+            let set: SourceStatus = api.call("source.set", Some(&id), &body).await?;
+            println!("set source {} ({:?})", set.id, set.state);
         }
         SourceCmd::Remove { id, dry_run } => {
             let body: Value = api.call_with("source.remove", Some(&id), &(), dry_run).await?;
