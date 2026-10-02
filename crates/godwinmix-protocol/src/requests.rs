@@ -72,26 +72,33 @@ pub enum Transition {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[schemars(description = "How a take gets there. See docs/reference/transitions.md.")]
 pub struct TransitionRequest {
-    /// cut, fade, move, stinger, or a plugin's name.
+    /// cut, fade, move, stinger, wipe, slide, push, zoom, zoom-out, dip, box,
+    /// or a plugin's name.
     #[serde(rename = "type")]
-    #[schemars(description = "cut, fade, move, stinger, or a plugin name.")]
+    #[schemars(description = "fade, wipe, slide, push, zoom, dip... See list_transitions.")]
     pub type_id: String,
     /// How long it takes. 0 is a cut.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[schemars(description = "How long it takes. 0 is a cut.")]
     pub duration_ms: Option<u64>,
-    /// The transition's own settings. A stinger takes `clip` (a source id, a
-    /// path or a URI), `cut_at_ms` (where the scenes swap, half way by
-    /// default) and `luma` (key the clip's black out). A plugin transition
-    /// takes whatever it documents.
+    /// The transition's own settings. Every built in one takes `easing`
+    /// (linear, ease-in, ease-out, ease-in-out). wipe, slide and push take
+    /// `direction` (left, right, up, down); zoom, zoom-out and box take `x`
+    /// and `y` (0 to 1, the centre by default); dip takes `colour` (black,
+    /// white or #rrggbb). A stinger takes `clip` (a source id, a path or a
+    /// URI), `cut_at_ms` (where the scenes swap, half way by default) and
+    /// `luma` (key the clip's black out). A plugin transition takes whatever
+    /// it documents.
     #[serde(default, skip_serializing_if = "Map::is_empty")]
-    #[schemars(description = "A stinger takes clip, cut_at_ms, luma.")]
+    #[schemars(description = "direction, easing, colour, clip... See list_transitions.")]
     pub params: Map<String, Value>,
 }
 
 /// The transitions built into this build. A `transition` plugin adds its own
 /// name to what `program.take` accepts.
-pub const TRANSITIONS: &[&str] = &["cut", "fade", "move", "stinger"];
+pub const TRANSITIONS: &[&str] = &[
+    "cut", "fade", "move", "stinger", "wipe", "slide", "push", "zoom", "zoom-out", "dip", "box",
+];
 
 /// How long a transition runs when the caller named one but not a duration.
 ///
@@ -140,6 +147,15 @@ impl Transition {
     pub fn param_bool(&self, key: &str) -> Option<bool> {
         self.full()?.params.get(key)?.as_bool()
     }
+
+    pub fn param_f64(&self, key: &str) -> Option<f64> {
+        self.full()?.params.get(key)?.as_f64()
+    }
+
+    /// The params as sent, empty for a name on its own.
+    pub fn params(&self) -> Map<String, Value> {
+        self.full().map(|r| r.params.clone()).unwrap_or_default()
+    }
 }
 
 impl TakeRequest {
@@ -159,33 +175,48 @@ impl TakeRequest {
         self.source_id().or_else(|| self.scene_name())
     }
 
-    /// `Ok` for a transition this core can run, or the list of the ones it
-    /// can, with whatever a plugin has added to them.
+    /// `Ok` for a transition this core can run, or a refusal naming the ones
+    /// it can, with whatever a plugin has added to them.
     ///
     /// `extra` is the transition plugins the supervisor has running. A core
-    /// with no plugins passes an empty slice and the message names the four
-    /// built in ones.
-    pub fn check_transition(&self, extra: &[String]) -> Result<(), String> {
+    /// with no plugins passes an empty slice and the message names the built
+    /// in ones. A built in transition's params are checked too, so a wipe
+    /// asked to go sideways is refused with the four directions it has.
+    pub fn check_transition(&self, extra: &[String]) -> Result<(), crate::transitions::Refusal> {
         let Some(transition) = &self.transition else { return Ok(()) };
         let type_id = transition.type_id();
         if type_id.is_empty() {
             return Ok(());
         }
-        let known = TRANSITIONS.contains(&type_id.as_str())
-            || extra.iter().any(|name| name.eq_ignore_ascii_case(&type_id));
-        if !known {
+        let plugin = extra.iter().any(|name| name.eq_ignore_ascii_case(&type_id));
+        let built_in = TRANSITIONS.contains(&type_id.as_str());
+        if !built_in && !plugin {
             let mut names: Vec<String> = TRANSITIONS.iter().map(|s| s.to_string()).collect();
             names.extend(extra.iter().cloned());
-            return Err(format!(
-                "this core has no transition called {type_id:?}. It has: {}. A transition                  plugin adds its own name here once it is installed and enabled.",
-                names.join(", ")
-            ));
+            let mut data = Map::new();
+            data.insert("transitions".into(), Value::from(names.clone()));
+            return Err(crate::transitions::Refusal {
+                message: format!(
+                    "this core has no transition called {type_id:?}. It has: {}. A transition \
+                     plugin adds its own name here once it is installed and enabled.",
+                    names.join(", ")
+                ),
+                data,
+            });
         }
         if type_id == "stinger" && transition.param_str("clip").unwrap_or_default().is_empty() {
-            return Err(
-                "a stinger needs a clip: {\"type\": \"stinger\", \"clip\": \"stinger.mp4\",                  \"duration_ms\": 1000}. The clip is a source already in the mixer, or a file                  the core adds for the length of the transition."
+            return Err(crate::transitions::Refusal {
+                message: "a stinger needs a clip: {\"type\": \"stinger\", \"clip\": \
+                          \"stinger.mp4\", \"duration_ms\": 1000}. The clip is a source already \
+                          in the mixer, or a file the core adds for the length of the transition."
                     .to_string(),
-            );
+                data: Map::new(),
+            });
+        }
+        // An installed plugin of the same name is the one that runs, so its
+        // params are its own and are not held to the built in one's.
+        if built_in && !plugin {
+            crate::transitions::check_params(&type_id, &transition.params())?;
         }
         Ok(())
     }

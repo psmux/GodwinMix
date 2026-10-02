@@ -185,6 +185,12 @@ pub struct Item {
     /// the workaround is a nested scene per placement.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub filters: Vec<Filter>,
+    /// How the item comes on when it is shown on air. See `scene::motion`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub enter: Option<super::motion::ItemTransition>,
+    /// How the item goes off when it is hidden on air.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exit: Option<super::motion::ItemTransition>,
     /// Layout bindings: a geometry path such as `frame.w` against a small
     /// arithmetic expression over the layout's params and `W`, `H`. Present
     /// only in a layout preset; `layout::apply` resolves them and leaves this
@@ -217,6 +223,8 @@ impl Item {
             locked: false,
             audio: Audio::Follow,
             filters: Vec::new(),
+            enter: None,
+            exit: None,
             bind: BTreeMap::new(),
         }
     }

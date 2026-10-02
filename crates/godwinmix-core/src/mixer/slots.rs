@@ -47,7 +47,8 @@
 
 use crate::caps::CanvasCaps;
 use crate::gstutil::{self, make};
-use crate::mixer::transition::Leg;
+use crate::mixer::transition::item::Motion;
+use crate::mixer::transition::{CropTarget, Layering, Leg, Rect};
 use crate::plugin::branch::ProgrammeBranch;
 use crate::plugin::filter::{FilterSide, FilterSlot, FilterSpec, Insertion};
 use crate::scene::id::Id;
@@ -74,6 +75,13 @@ pub const Z_RETIRED_TOP: u32 = 99;
 /// The bottom of the live band. An item's index in the flattened scene is
 /// added to it, so item 0 is at the back.
 pub const Z_LIVE: u32 = 1000;
+/// Where the outgoing scene is put for a transition that draws the new one
+/// over it: above the retired band, below every live item.
+pub const Z_UNDER: u32 = 100;
+/// Where the outgoing scene is put for a transition that draws it over the
+/// new one. Far enough above the live band that no scene reaches it, and
+/// below the stinger's clip, which is at the very top.
+pub const Z_OVER: u32 = Z_LIVE + 100_000;
 
 /// How long to wait for a slot's tee pad to reach an idle point on a cache
 /// miss. The figure the filters and the proxy swaps already use.
@@ -224,6 +232,9 @@ pub struct Placement {
     /// policy leaves room.
     pub align: (f64, f64),
     pub audio: PlacementAudio,
+    /// The item's own `enter` and `exit`, played when it is shown or hidden on
+    /// air. Empty for nearly every item.
+    pub motion: Motion,
 }
 
 impl Placement {
@@ -244,6 +255,7 @@ impl Placement {
             sizing: Sizing::Contain,
             align: (0.5, 0.5),
             audio: PlacementAudio::Follow,
+            motion: Motion::default(),
         }
     }
 
@@ -365,6 +377,19 @@ pub struct Slot {
     /// What those filters were built from, for the comparison that decides
     /// whether to touch the graph at all.
     filter_shape: Vec<ItemFilter>,
+    /// How the last placement drawn here trims and fits its picture, and the
+    /// item's own motions, for a transition that has to reach them.
+    look: Look,
+}
+
+/// The parts of a placement a transition needs after the apply has gone.
+#[derive(Debug, Clone, Copy, Default)]
+struct Look {
+    crop: (f64, f64, f64, f64),
+    sizing: Sizing,
+    align: (f64, f64),
+    rotation: f64,
+    motion: Motion,
 }
 
 /// What a slot's chain is fed from.
@@ -439,6 +464,75 @@ impl Slot {
         self.set_crop(p);
         self.set_rotation(p.rotation);
         Ramp { pad: self.pad.clone(), from, to }
+    }
+
+    fn remember(&mut self, p: &Placement) {
+        self.drawn = p.item;
+        self.look = Look {
+            crop: p.crop,
+            sizing: p.sizing,
+            align: p.align,
+            rotation: p.rotation,
+            motion: p.motion,
+        };
+    }
+
+    /// This slot as a transition sees it: going from `from` to `to`.
+    pub(crate) fn leg(&self, source: SourceId, from: PadState, to: PadState) -> Leg {
+        Leg {
+            pad: self.pad.clone(),
+            item: self.drawn,
+            source,
+            from,
+            to,
+            crop: self.crop_target(&to),
+            motion: self.look.motion,
+        }
+    }
+
+    /// What a wipe needs to trim this slot's picture: the crop element, the
+    /// item's own crop in pixels, and where the picture lands on the canvas.
+    ///
+    /// `None` for a picture that is turned (the crop is before the flip, so
+    /// its axes are not the canvas's) and for a slot that has had no frame
+    /// yet, which has no size to trim against.
+    fn crop_target(&self, at: &PadState) -> Option<CropTarget> {
+        let quarters = (self.look.rotation.rem_euclid(360.0) / 90.0).round() as i64 % 4;
+        if quarters != 0 {
+            return None;
+        }
+        let sink = self.crop.static_pad("sink")?;
+        let (fw, fh) = sink.current_caps().and_then(|c| frame_size(&c))?;
+        let (fw, fh) = (fw as f64, fh as f64);
+        let c = self.look.crop;
+        let base = [
+            (c.0.clamp(0.0, 0.95) * fw).round(),
+            (c.1.clamp(0.0, 0.95) * fh).round(),
+            (c.2.clamp(0.0, 0.95) * fw).round(),
+            (c.3.clamp(0.0, 0.95) * fh).round(),
+        ];
+        let source = ((fw - base[0] - base[2]).max(2.0), (fh - base[1] - base[3]).max(2.0));
+        let boxed = Rect::of(at);
+        let picture = match self.look.sizing {
+            Sizing::Contain => {
+                let s = (boxed.w / source.0).min(boxed.h / source.1);
+                let (w, h) = (source.0 * s, source.1 * s);
+                let (ax, ay) = self.look.align;
+                Rect::new(boxed.x + (boxed.w - w) * ax, boxed.y + (boxed.h - h) * ay, w, h)
+            }
+            _ => boxed,
+        };
+        if picture.w < 1.0 || picture.h < 1.0 {
+            return None;
+        }
+        Some(CropTarget {
+            element: self.crop.clone(),
+            base,
+            picture,
+            scale: (source.0 / picture.w, source.1 / picture.h),
+            source,
+            offset_ns: stream_offset(&sink),
+        })
     }
 
     /// The pad's state right now, for a transition that has to ramp from it.
@@ -626,6 +720,7 @@ impl SlotPool {
             .vmix
             .request_pad_simple("sink_%u")
             .context("the compositor refused another slot pad")?;
+        answer_allocation(&self.vmix, &pad);
         // A slot arrives invisible and full canvas: nothing reaches programme
         // until a scene asks for it.
         set_u32(&pad, "zorder", Z_LIVE + index as u32);
@@ -657,6 +752,7 @@ impl SlotPool {
             drawn: None,
             filters: Vec::new(),
             filter_shape: Vec::new(),
+            look: Look::default(),
         });
         Ok(self.slots.last_mut().expect("just pushed"))
     }
@@ -729,13 +825,7 @@ impl SlotPool {
             .filter(|s| !s.retired && s.showing())
             .map(|s| {
                 let from = s.state();
-                Leg {
-                    pad: s.pad.clone(),
-                    item: s.drawn,
-                    source: s.source().cloned().unwrap_or_default(),
-                    from,
-                    to: PadState { alpha: 0.0, ..from },
-                }
+                s.leg(s.source().cloned().unwrap_or_default(), from, PadState { alpha: 0.0, ..from })
             })
             .collect();
         self.crossing = self
@@ -758,12 +848,9 @@ impl SlotPool {
             .slots
             .iter()
             .zip(placements.iter().filter(|p| branches.iter().any(|(id, _)| *id == &p.source)))
-            .map(|(index, p)| Leg {
-                pad: self.slots[*index].pad.clone(),
-                item: p.item,
-                source: p.source.clone(),
-                from: PadState { alpha: 0.0, ..PadState::of(p) },
-                to: PadState::of(p),
+            .map(|(index, p)| {
+                let to = PadState::of(p);
+                self.slots[*index].leg(p.source.clone(), PadState { alpha: 0.0, ..to }, to)
             })
             .collect();
         Ok(Crossed { out, incoming, applied })
@@ -781,6 +868,54 @@ impl SlotPool {
     /// True while both scenes are on the canvas.
     pub fn crossing(&self) -> bool {
         !self.crossing.is_empty()
+    }
+
+    /// Put the outgoing scene under or over the incoming one for the length
+    /// of a transition. The outgoing slots are held, so no apply touches their
+    /// z order until the transition ends and the next apply claims them.
+    pub fn layer(&self, out: &[Leg], layering: Layering) {
+        let band = match layering {
+            Layering::AsIs => return,
+            Layering::IncomingOver => Z_UNDER,
+            Layering::OutgoingOver => Z_OVER,
+        };
+        for leg in out {
+            let z: u32 = leg.pad.property("zorder");
+            let within = z.saturating_sub(Z_LIVE).min(Z_LIVE - Z_UNDER - 1);
+            leg.pad.set_property("zorder", band + within);
+        }
+    }
+
+    /// Hold the slots drawing these items out of the next apply, so an item
+    /// hidden on air stays on the canvas while it plays its way off. Answers
+    /// a leg per item found, going from where it is to nowhere.
+    pub fn hold_items(&mut self, items: &[Id]) -> Vec<Leg> {
+        let mut legs = Vec::new();
+        for slot in &self.slots {
+            let Some(item) = slot.drawn else { continue };
+            if slot.retired || !slot.showing() || !items.contains(&item) {
+                continue;
+            }
+            let from = slot.state();
+            legs.push(slot.leg(slot.source().cloned().unwrap_or_default(), from, PadState { alpha: 0.0, ..from }));
+            self.crossing.push(slot.index);
+        }
+        legs
+    }
+
+    /// The slots that took these placements in the last apply, as legs
+    /// arriving where each placement says.
+    pub fn legs_of(&self, placements: &[&Placement]) -> Vec<Leg> {
+        placements
+            .iter()
+            .filter_map(|p| {
+                let slot = self.slots.iter().find(|s| {
+                    p.item.is_some() && s.drawn == p.item && !self.crossing.contains(&s.index)
+                })?;
+                let to = PadState::of(p);
+                Some(slot.leg(p.source.clone(), PadState { alpha: slot.state().alpha, ..to }, to))
+            })
+            .collect()
     }
 
     fn apply_move<'a>(
@@ -813,7 +948,7 @@ impl SlotPool {
                     warn!(slot = index, ?e, "a group's filter could not go on");
                 }
                 ramps.push(self.slots[index].draw(p, Z_LIVE + i as u32, write));
-                self.slots[index].drawn = p.item;
+                self.slots[index].remember(p);
                 claimed.push(index);
                 drawn += 1;
                 continue;
@@ -844,7 +979,7 @@ impl SlotPool {
                 self.slots[index].filter_shape = p.filters.to_vec();
             }
             ramps.push(self.slots[index].draw(p, Z_LIVE + i as u32, write));
-            self.slots[index].drawn = p.item;
+            self.slots[index].remember(p);
             claimed.push(index);
             drawn += 1;
         }
@@ -1266,6 +1401,15 @@ impl SlotPool {
     /// The sources whose pads a transition is driving on this property right
     /// now. What a test reads to prove a curve reached the pad rather than
     /// being dropped on the way.
+    /// The slots whose crop a transition is driving right now.
+    pub fn driven_crops(&self) -> Vec<usize> {
+        self.slots
+            .iter()
+            .filter(|s| ["left", "top", "right", "bottom"].iter().any(|p| driven(&s.crop, p)))
+            .map(|s| s.index)
+            .collect()
+    }
+
     pub fn driven_by_a_transition(&self, property: &str) -> Vec<SourceId> {
         self.slots
             .iter()
@@ -1417,6 +1561,12 @@ pub(crate) fn write_pad(
 /// over 34 ms on an idle mixer. Comparing first is the difference between a
 /// late frame every half second and none.
 pub(crate) fn set_sizing(pad: &gst::Pad, sizing: Sizing) {
+    // A pad whose box a transition is trimming has been told to fill it,
+    // because the box is already the shape of the trimmed picture. Putting the
+    // item's own policy back halfway through would letterbox it.
+    if driven(pad, "width") {
+        return;
+    }
     let Some(pspec) = pad.find_property("sizing-policy") else { return };
     let class = glib::EnumClass::with_type(pspec.value_type());
     let held = pad.property_value("sizing-policy");
@@ -1457,8 +1607,54 @@ fn frame_size(caps: &gst::Caps) -> Option<(i32, i32)> {
 /// aggregator is a use after free (`mixer::transition::Controllers` says why),
 /// so a pad that has ever been in a transition holds one for ever and that one
 /// is disabled between transitions.
-fn driven(pad: &gst::Pad, name: &str) -> bool {
+fn driven(pad: &impl IsA<gst::Object>, name: &str) -> bool {
     pad.control_binding(name).is_some_and(|b| !b.is_disabled())
+}
+
+/// Answer the allocation query at a slot's compositor pad, on the software
+/// compositor.
+///
+/// A slot whose picture changes size (a crop changed on air, and a wipe that
+/// changes it every frame) renegotiates, and the flip in front of the pad
+/// then asks the compositor how to allocate. The compositor answers a
+/// serialized query only once the buffer queued ahead of it has been blended,
+/// and the slot's thread waits for that. Measured on the first wipe: the
+/// flip waited 480 ms on one query, the slot got five buffers through in half
+/// a second and the compositor drew stale, wrongly trimmed frames; and the
+/// query that went out when the crop settled back never came back at all, so
+/// that slot drew nothing again until the mixer stopped. `compositor` has no
+/// pool to offer a sink pad anyway, so answering here (video meta, no pool,
+/// which is what the element in front needs to allocate for itself) changes
+/// nothing about where buffers come from and lets the caps go down in order
+/// with the buffers. A probe that sees only queries costs nothing per frame.
+///
+/// Not on a GPU compositor, whose answer carries the context its uploads need.
+fn answer_allocation(vmix: &gst::Element, pad: &gst::Pad) {
+    let software = vmix.factory().is_some_and(|f| f.name() == "compositor");
+    if !software {
+        return;
+    }
+    pad.add_probe(gst::PadProbeType::QUERY_DOWNSTREAM, |_pad, info| {
+        let Some(gst::PadProbeData::Query(query)) = &mut info.data else {
+            return gst::PadProbeReturn::Ok;
+        };
+        let gst::QueryViewMut::Allocation(allocation) = query.view_mut() else {
+            return gst::PadProbeReturn::Ok;
+        };
+        allocation.add_allocation_meta::<gstreamer_video::VideoMeta>(None);
+        gst::PadProbeReturn::Handled
+    });
+}
+
+/// What to add to a running time to get the stream time an element upstream
+/// of the compositor syncs its bindings at: the segment's `time` less its
+/// `base`. Zero for a pad that has had no segment, which is a pad with no
+/// picture to trim.
+fn stream_offset(pad: &gst::Pad) -> i64 {
+    let Some(event) = pad.sticky_event::<gst::event::Segment>(0) else { return 0 };
+    let Some(seg) = event.segment().downcast_ref::<gst::ClockTime>() else { return 0 };
+    let ns = |t: Option<gst::ClockTime>| t.map(|t| t.nseconds() as i64).unwrap_or(0);
+    ns(seg.time()) - ns(seg.base())
 }
 
 /// Property writes that do not fight the element over its own type.
@@ -1487,7 +1683,7 @@ fn set_f64(pad: &gst::Pad, name: &str, v: f64) {
 
 /// The same three, for an element rather than a pad.
 fn set_i32_on(el: &gst::Element, name: &str, v: i32) {
-    if el.property::<i32>(name) != v {
+    if el.property::<i32>(name) != v && !driven(el, name) {
         el.set_property(name, v);
     }
 }

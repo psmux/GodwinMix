@@ -1,8 +1,9 @@
 // The inspector: what the selected item is, and everything about it you can
 // change without touching the canvas.
 //
-// Three parts, top to bottom. The item's own properties, which every item has:
-// name, opacity, fit, blend, sound and the numbers of its box. The plugin's
+// Four parts, top to bottom. The item's own properties, which every item has:
+// name, opacity, fit, blend, sound and the numbers of its box. How it comes on
+// and goes off (`motion.js`), with Show and Hide on air. The plugin's
 // settings, rendered through the fallback chain in the schema kit, so a plugin
 // that ships a data schema and a `designer` block gets a real editor with no
 // HTML anywhere in it. Then its filters, which hang on the item rather than on
@@ -12,6 +13,7 @@ import { el, clear, on } from "../../shell/dom.js";
 import { errorToast } from "../../shell/toast.js";
 import { rectToTransform } from "../../kits/canvas/geometry.js";
 import { itemProps, filters, filterTypes, BLENDS, AUDIO, FITS, undrawnBlend } from "./ops.js";
+import { motionSection } from "./motion.js";
 
 export class Inspector {
   /**
@@ -46,7 +48,12 @@ export class Inspector {
       return;
     }
     this.showing = record.id;
-    this.el.append(this.itemSection(record), el("div.composer-sep"));
+    const motion = motionSection(record, {
+      scenes: this.o.scenes,
+      context: this.o.context,
+      changed: (answer) => this.changed(answer),
+    });
+    this.el.append(this.itemSection(record), el("div.composer-sep"), motion, el("div.composer-sep"));
     await this.pluginSection(record);
     this.el.append(el("div.composer-sep"), await this.filterSection(record));
   }

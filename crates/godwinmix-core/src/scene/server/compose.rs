@@ -203,6 +203,7 @@ fn walk(
                     sizing: Sizing::Fill,
                     align: (0.5, 0.5),
                     audio: PlacementAudio::Never,
+                    motion: motion(item),
                 });
             }
             Content::Children { children } => walk(children, &transform, alpha, doc, canvas, out),
@@ -251,7 +252,16 @@ fn leaf(p: &geometry::Placement<'_>) -> Option<Placement> {
         sizing: sizing(p.transform.fit),
         align: align(p.transform.align),
         audio: audio(p.item.audio),
+        motion: motion(p.item),
     })
+}
+
+/// The item's own entrance and exit, as the mixer plays them.
+fn motion(item: &Item) -> crate::mixer::transition::item::Motion {
+    crate::mixer::transition::item::Motion {
+        enter: item.enter.as_ref().map(|t| t.motion()),
+        exit: item.exit.as_ref().map(|t| t.motion()),
+    }
 }
 
 /// `fit` as the compositor pad spells it.

@@ -48,8 +48,10 @@
 //!
 //! # Who decides the shape
 //!
-//! [`Transition`] does. `cut`, `fade`, `move` and `stinger` are in here; a
-//! `transition` plugin over the sidecar host is sampled once per frame of the
+//! [`Transition`] does. `cut`, `fade`, `move` and `stinger` are in here, and
+//! `wipe`, `box`, `slide`, `push`, `zoom`, `zoom-out` and `dip` are in the
+//! modules below, each written as a shot per leg (`shape`). An item's own
+//! entrance and exit is in `item`. A `transition` plugin over the sidecar host is sampled once per frame of the
 //! transition before it starts and its answers become the same curves, so a
 //! plugin written in any language lands on the frame exactly as a built in
 //! does. See `docs/reference/transitions.md`.
@@ -63,6 +65,21 @@ use gstreamer_controller::prelude::*;
 use gstreamer_controller::{InterpolationControlSource, InterpolationMode};
 use std::time::Duration;
 use tracing::{debug, warn};
+
+mod dip;
+pub mod easing;
+pub mod item;
+pub mod params;
+pub mod shape;
+mod slide;
+mod wipe;
+mod zoom;
+#[cfg(test)]
+mod tests_shapes;
+
+pub use easing::Easing;
+pub use params::{Direction, Point};
+pub use shape::{CropTarget, Rect};
 
 /// How many points a curve is sampled at, per second of transition.
 ///
@@ -95,11 +112,13 @@ pub const DRIVEN: &[&str] = &["alpha", "xpos", "ypos", "width", "height"];
 pub struct TransitionSpec {
     pub kind: Kind,
     pub duration_ms: u64,
+    /// How progress is shaped. `params.easing` on the wire.
+    pub easing: Easing,
 }
 
 impl Default for TransitionSpec {
     fn default() -> Self {
-        TransitionSpec { kind: Kind::Cut, duration_ms: 0 }
+        TransitionSpec { kind: Kind::Cut, duration_ms: 0, easing: Easing::default() }
     }
 }
 
@@ -107,6 +126,11 @@ impl TransitionSpec {
     /// A cut: no curves, no window, nothing to wait for.
     pub fn cut() -> Self {
         TransitionSpec::default()
+    }
+
+    /// A transition at the default easing.
+    pub fn new(kind: Kind, duration_ms: u64) -> Self {
+        TransitionSpec { kind, duration_ms, easing: Easing::default() }
     }
 
     /// True when this is a cut in everything but name. A zero duration is a
@@ -128,7 +152,11 @@ impl From<&godwinmix_protocol::requests::Transition> for TransitionSpec {
     /// hands to the transition renderer; the control layer has already refused
     /// a name that no plugin answers to, so nothing gets here by accident.
     fn from(request: &godwinmix_protocol::requests::Transition) -> Self {
-        let kind = match request.type_id().as_str() {
+        let type_id = request.type_id();
+        let kind = match type_id.as_str() {
+            _ if params::kind_of(&type_id, request).is_some() => {
+                params::kind_of(&type_id, request).unwrap_or(Kind::Cut)
+            }
             "cut" => Kind::Cut,
             "fade" => Kind::Fade,
             "move" => Kind::Move,
@@ -139,13 +167,28 @@ impl From<&godwinmix_protocol::requests::Transition> for TransitionSpec {
             },
             other => Kind::Plugin(other.to_string()),
         };
-        TransitionSpec { kind, duration_ms: request.duration_ms() }
+        let easing = Easing::parse(request.param_str("easing").as_deref());
+        TransitionSpec { kind, duration_ms: request.duration_ms(), easing }
     }
 }
 
 /// The transitions this build runs.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Kind {
+    /// An edge crosses the canvas with the new scene behind it.
+    Wipe { direction: Direction },
+    /// The new scene slides in over the old one.
+    Slide { direction: Direction },
+    /// The new scene pushes the old one off the far edge.
+    Push { direction: Direction },
+    /// The new scene grows out of a point.
+    Zoom { point: Point },
+    /// The old scene shrinks into a point over the new one.
+    ZoomOut { point: Point },
+    /// A box opens out of a point with the new scene inside it.
+    Box { point: Point },
+    /// Out to a colour (`0xAARRGGBB`), then in from it.
+    Dip { colour: u32 },
     /// The next frame is the new scene. What a take has always been.
     Cut,
     /// Both scenes on the canvas, one fading out under the other.
@@ -177,13 +220,20 @@ impl Kind {
             Kind::Fade => "fade",
             Kind::Move => "move",
             Kind::Stinger { .. } => "stinger",
+            Kind::Wipe { .. } => "wipe",
+            Kind::Slide { .. } => "slide",
+            Kind::Push { .. } => "push",
+            Kind::Zoom { .. } => "zoom",
+            Kind::ZoomOut { .. } => "zoom-out",
+            Kind::Box { .. } => "box",
+            Kind::Dip { .. } => "dip",
             Kind::Plugin(name) => name,
         }
     }
 
     /// The built in names, for an error that lists what a caller could have
     /// asked for.
-    pub const BUILT_IN: &'static [&'static str] = &["cut", "fade", "move", "stinger"];
+    pub const BUILT_IN: &'static [&'static str] = godwinmix_protocol::requests::TRANSITIONS;
 }
 
 // ---------------------------------------------------------------------------
@@ -202,6 +252,12 @@ pub struct Leg {
     pub from: PadState,
     /// Where it should be when the transition ends.
     pub to: PadState,
+    /// The slot's crop, for a transition that reveals part of a picture.
+    /// `None` where there is nothing to trim against (a turned picture, a pad
+    /// that has had no frame yet), and such a leg fades instead.
+    pub crop: Option<CropTarget>,
+    /// The item's own entrance and exit, for a take that plays them.
+    pub motion: item::Motion,
 }
 
 impl Leg {
@@ -226,6 +282,10 @@ pub struct Crossing {
     /// timeline, which is what the aggregator samples against.
     pub start: gst::ClockTime,
     pub duration: gst::ClockTime,
+    /// How progress is shaped over the window.
+    pub easing: Easing,
+    /// The canvas, in pixels, for a transition that travels a canvas.
+    pub canvas: (i32, i32),
 }
 
 impl Crossing {
@@ -279,13 +339,23 @@ fn to_index(leg: &Leg, x: &Crossing) -> usize {
 /// One property of one pad, over the window of the transition.
 #[derive(Debug, Clone)]
 pub struct Curve {
-    pub pad: gst::Pad,
+    /// A compositor or audiomixer pad, or a slot's `videocrop`.
+    pub pad: gst::Object,
     pub property: &'static str,
     /// Timed values in running time, in order.
     pub points: Vec<(gst::ClockTime, f64)>,
 }
 
 impl Curve {
+    pub fn on(target: &impl IsA<gst::Object>, property: &'static str, points: Vec<(gst::ClockTime, f64)>) -> Curve {
+        Curve { pad: target.clone().upcast(), property, points }
+    }
+
+    /// True when this curve drives that pad or element.
+    pub fn is_on(&self, target: &impl IsA<gst::Object>) -> bool {
+        &self.pad == target.upcast_ref::<gst::Object>()
+    }
+
     /// The value the property should be left at when the binding is taken off.
     fn settle(&self) -> f64 {
         self.points.last().map(|(_, v)| *v).unwrap_or(0.0)
@@ -301,6 +371,24 @@ impl Curve {
 pub trait Transition: Send + Sync {
     fn name(&self) -> &str;
     fn curves(&self, x: &Crossing) -> Vec<Curve>;
+
+    /// Which scene is drawn on top while it runs. A transition that moves one
+    /// scene over the other has to say which; a dissolve does not care.
+    fn layering(&self) -> Layering {
+        Layering::AsIs
+    }
+}
+
+/// Which scene is drawn on top for the length of a transition.
+///
+/// The one step a transition takes with `zorder`, and the mixer takes it, not
+/// the transition: it moves the outgoing pads into a band of their own
+/// (`slots::Z_UNDER` or `slots::Z_OVER`), which the next apply puts back.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Layering {
+    AsIs,
+    IncomingOver,
+    OutgoingOver,
 }
 
 /// Build the transition a spec names.
@@ -314,6 +402,13 @@ pub fn built_in(kind: &Kind) -> Option<Box<dyn Transition>> {
         Kind::Fade => Some(Box::new(Fade)),
         Kind::Move => Some(Box::new(Move)),
         Kind::Stinger { cut_at_ms, .. } => Some(Box::new(Stinger { cut_at_ms: *cut_at_ms })),
+        Kind::Wipe { direction } => Some(Box::new(wipe::Wipe { direction: *direction })),
+        Kind::Box { point } => Some(Box::new(wipe::BoxReveal { point: *point })),
+        Kind::Slide { direction } => Some(Box::new(slide::Slide { direction: *direction, push: false })),
+        Kind::Push { direction } => Some(Box::new(slide::Slide { direction: *direction, push: true })),
+        Kind::Zoom { point } => Some(Box::new(zoom::Zoom { point: *point, out: false })),
+        Kind::ZoomOut { point } => Some(Box::new(zoom::Zoom { point: *point, out: true })),
+        Kind::Dip { .. } => Some(Box::new(dip::Dip)),
         Kind::Plugin(_) => None,
     }
 }
@@ -426,15 +521,15 @@ impl Transition for Stinger {
             // Up to full by the cut, down again after it. A clip that is keyed
             // carries its own coverage in its luma and this alpha is only what
             // brings it on and takes it away.
-            curves.push(Curve {
-                pad: cover.pad.clone(),
-                property: "alpha",
-                points: vec![
+            curves.push(Curve::on(
+                &cover.pad,
+                "alpha",
+                vec![
                     (x.start, 0.0),
                     (x.start + gst::ClockTime::from_nseconds(cut_ns), 1.0),
                     (x.end(), 0.0),
                 ],
-            });
+            ));
         }
         curves
     }
@@ -452,7 +547,7 @@ pub fn ease(t: f64) -> f64 {
 
 /// A property eased from one value to another over the whole window.
 pub fn ramp(pad: &gst::Pad, property: &'static str, x: &Crossing, from: f64, to: f64) -> Curve {
-    Curve { pad: pad.clone(), property, points: sample(x, |t| from + (to - from) * ease(t)) }
+    Curve::on(pad, property, sample(x, |t| from + (to - from) * x.easing.at(t)))
 }
 
 /// A property that holds `from`, changes on one frame at `at` (a fraction of
@@ -474,11 +569,7 @@ fn step(
             (x.duration.nseconds() as f64 * at.clamp(0.0, 1.0)) as u64,
         );
     let just_before = when.checked_sub(gst::ClockTime::from_useconds(1)).unwrap_or(x.start);
-    Curve {
-        pad: pad.clone(),
-        property,
-        points: vec![(x.start, from), (just_before, from), (when, to), (x.end(), to)],
-    }
+    Curve::on(pad, property, vec![(x.start, from), (just_before, from), (when, to), (x.end(), to)])
 }
 
 /// Every geometry property from one pad state to another, plus the alpha.
@@ -506,7 +597,16 @@ fn travel(pad: &gst::Pad, x: &Crossing, from: &PadState, to: &PadState) -> Vec<C
 /// of frames every frame of the burst had the same geometry: on a loaded
 /// machine the move arrived as a jump.
 pub fn glide(ramps: &[super::slots::Ramp], start: gst::ClockTime, duration: gst::ClockTime) -> Vec<Curve> {
-    let x = Crossing { out: Vec::new(), incoming: Vec::new(), audio: Vec::new(), cover: None, start, duration };
+    let x = Crossing {
+        out: Vec::new(),
+        incoming: Vec::new(),
+        audio: Vec::new(),
+        cover: None,
+        start,
+        duration,
+        easing: Easing::default(),
+        canvas: (0, 0),
+    };
     ramps
         .iter()
         .filter(|r| r.from != r.to)
@@ -543,7 +643,7 @@ pub fn from_samples(x: &Crossing, samples: &[(f64, String, String, f64)]) -> Vec
             .chain(&x.incoming)
             .chain(x.cover.iter())
             .find(|l| l.id() == *pad_name)
-            .map(|l| l.pad.clone())
+            .map(|l| l.pad.clone().upcast::<gst::Object>())
         else {
             continue;
         };
@@ -693,19 +793,11 @@ fn shaped(x: &Crossing, curve: &serde_json::Value) -> Vec<Curve> {
     let mut curves = Vec::new();
     for leg in &x.out {
         let alpha = leg.from.alpha;
-        curves.push(Curve {
-            pad: leg.pad.clone(),
-            property: "alpha",
-            points: sample(x, |t| alpha * (1.0 - at(t))),
-        });
+        curves.push(Curve::on(&leg.pad, "alpha", sample(x, |t| alpha * (1.0 - at(t)))));
     }
     for leg in &x.incoming {
         let alpha = leg.to.alpha;
-        curves.push(Curve {
-            pad: leg.pad.clone(),
-            property: "alpha",
-            points: sample(x, |t| alpha * at(t)),
-        });
+        curves.push(Curve::on(&leg.pad, "alpha", sample(x, |t| alpha * at(t))));
     }
     curves
 }
@@ -719,10 +811,8 @@ pub fn audio_curves(x: &Crossing) -> Vec<Curve> {
     x.audio
         .iter()
         .filter(|(_, from, to)| (from - to).abs() > 1e-6)
-        .map(|(pad, from, to)| Curve {
-            pad: pad.clone(),
-            property: "volume",
-            points: sample(x, |t| from + (to - from) * ease(t)),
+        .map(|(pad, from, to)| {
+            Curve::on(pad, "volume", sample(x, |t| from + (to - from) * x.easing.at(t)))
         })
         .collect()
 }
@@ -770,7 +860,7 @@ pub struct Controllers {
 
 /// One pad, one property, and the two objects that drive it for good.
 struct Entry {
-    pad: gst::Pad,
+    pad: gst::Object,
     property: &'static str,
     binding: gst::ControlBinding,
     source: InterpolationControlSource,
@@ -809,8 +899,8 @@ impl Controllers {
             // frame against half of it, and on once it is whole.
             entry.binding.set_disabled(true);
             entry.source.unset_all();
-            for (at, value) in &curve.points {
-                entry.source.set(*at, *value);
+            for (i, (at, value)) in curve.points.iter().enumerate() {
+                entry.source.set(*at, if i == 0 { nudged(*value) } else { *value });
             }
             entry.binding.set_disabled(false);
             driven.push(Driven {
@@ -835,7 +925,7 @@ impl Controllers {
     /// It is made disabled, with an empty control source, because the pad is
     /// already on a compositor that syncs every binding it holds: an enabled
     /// one would write whatever the empty source said on the very next frame.
-    fn controller(&mut self, pad: &gst::Pad, property: &'static str) -> Option<&Entry> {
+    fn controller(&mut self, pad: &gst::Object, property: &'static str) -> Option<&Entry> {
         if let Some(i) =
             self.entries.iter().position(|e| &e.pad == pad && e.property == property)
         {
@@ -865,6 +955,27 @@ impl Controllers {
     }
 }
 
+/// The first value of a curve, moved by a millionth away from zero.
+///
+/// A `GstDirectControlBinding` remembers the last value it wrote and writes
+/// again only when the curve gives a different one. A binding reused by the
+/// next transition still remembers where the last one ended, while the
+/// property under it has been written by hand since (an apply hid the pad).
+/// A curve that holds that same value, a slide's incoming alpha at 1 from the
+/// first frame, was then never written at all, and the scene slid in at alpha
+/// 0: measured, a slide after a wipe drew nothing. A first value that cannot
+/// equal anything a binding remembers is written on the first frame, and a
+/// millionth is below anything a pad shows: an int property truncates it
+/// away (hence away from zero, so a negative position is not truncated up by
+/// one), and a double is clamped to its range.
+fn nudged(value: f64) -> f64 {
+    if value < 0.0 {
+        value - 1e-6
+    } else {
+        value + 1e-6
+    }
+}
+
 /// A transition that is running: what it drives, and where each property is to
 /// be left when it ends.
 pub struct Bound {
@@ -876,7 +987,7 @@ pub struct Bound {
 
 /// One property this transition owns until it settles.
 struct Driven {
-    pad: gst::Pad,
+    pad: gst::Object,
     property: &'static str,
     binding: gst::ControlBinding,
     source: InterpolationControlSource,
@@ -898,7 +1009,8 @@ impl Bound {
     /// pad it can see. A write to a property under a live binding is undone by
     /// the next sync anyway, but it also makes the picture jump for one frame,
     /// so the tick asks first.
-    pub fn drives(&self, pad: &gst::Pad, property: &str) -> bool {
+    pub fn drives(&self, pad: &impl IsA<gst::Object>, property: &str) -> bool {
+        let pad = pad.upcast_ref::<gst::Object>();
         self.driven.iter().any(|d| &d.pad == pad && d.property == property)
     }
 
@@ -954,9 +1066,10 @@ pub fn write_at(curve: &Curve, t: f64) {
 ///
 /// A compositor pad's `width` is an int and its `alpha` a double, and setting
 /// one with the wrong Rust type panics inside glib rather than failing.
-fn write(pad: &gst::Pad, property: &str, value: f64) {
+fn write(pad: &gst::Object, property: &str, value: f64) {
     match property {
         "alpha" => pad.set_property(property, value.clamp(0.0, 1.0)),
+        "left" | "top" | "right" | "bottom" => pad.set_property(property, (value.round() as i32).max(0)),
         "volume" => pad.set_property(property, value.clamp(0.0, 10.0)),
         "width" | "height" => pad.set_property(property, (value.round() as i32).max(1)),
         _ => pad.set_property(property, value.round() as i32),
@@ -972,7 +1085,7 @@ mod tests {
     }
 
     /// A compositor with two pads, standing in for the slot pool.
-    fn pads(n: usize) -> (gst::Element, Vec<gst::Pad>) {
+    pub(super) fn pads(n: usize) -> (gst::Element, Vec<gst::Pad>) {
         init();
         let comp = crate::gstutil::make("compositor", "tx-test").expect("compositor");
         let pads = (0..n)
@@ -985,7 +1098,7 @@ mod tests {
         PadState { xpos: 0, ypos: 0, width: 1920, height: 1080, alpha }
     }
 
-    fn crossing(out: Vec<gst::Pad>, incoming: Vec<gst::Pad>) -> Crossing {
+    pub(super) fn crossing(out: Vec<gst::Pad>, incoming: Vec<gst::Pad>) -> Crossing {
         Crossing {
             out: out
                 .into_iter()
@@ -995,6 +1108,8 @@ mod tests {
                     source: "cam1".into(),
                     from: state(1.0),
                     to: state(0.0),
+                    crop: None,
+                    motion: Default::default(),
                 })
                 .collect(),
             incoming: incoming
@@ -1005,12 +1120,16 @@ mod tests {
                     source: "cam2".into(),
                     from: state(0.0),
                     to: state(1.0),
+                    crop: None,
+                    motion: Default::default(),
                 })
                 .collect(),
             audio: Vec::new(),
             cover: None,
             start: gst::ClockTime::from_seconds(10),
             duration: gst::ClockTime::from_mseconds(300),
+            easing: Easing::default(),
+            canvas: (1920, 1080),
         }
     }
 
@@ -1067,11 +1186,13 @@ mod tests {
             source: "__stinger__".into(),
             from: state(0.0),
             to: state(0.0),
+            crop: None,
+            motion: Default::default(),
         });
         let curves = Stinger { cut_at_ms: None }.curves(&x);
         let incoming = curves
             .iter()
-            .find(|c| c.pad == pads[1] && c.property == "alpha")
+            .find(|c| c.is_on(&pads[1]) && c.property == "alpha")
             .expect("the incoming scene has a curve");
         // A quarter of the way through it is still nothing: the swap is a
         // step, not a ramp.
@@ -1082,7 +1203,7 @@ mod tests {
         assert_eq!(after, 1.0, "the incoming scene must be up after the cut point");
         let cover = curves
             .iter()
-            .find(|c| c.pad == pads[2])
+            .find(|c| c.is_on(&pads[2]))
             .expect("the clip has a curve");
         assert_eq!(value_at(cover, x.start + x.duration / 2), 1.0, "the clip covers the cut");
         for pad in &pads {
@@ -1092,7 +1213,7 @@ mod tests {
 
     /// Reading a curve the way the aggregator will: the last point at or
     /// before the time asked for, interpolated onto the next.
-    fn value_at(curve: &Curve, at: gst::ClockTime) -> f64 {
+    pub(super) fn value_at(curve: &Curve, at: gst::ClockTime) -> f64 {
         let mut last = curve.points[0];
         for point in &curve.points {
             if point.0 > at {
@@ -1120,7 +1241,7 @@ mod tests {
         let curves = Move.curves(&x);
         let moved: Vec<&str> = curves
             .iter()
-            .filter(|c| c.pad == pads[1])
+            .filter(|c| c.is_on(&pads[1]))
             .map(|c| c.property)
             .collect();
         for property in ["alpha", "xpos", "ypos", "width", "height"] {
@@ -1128,7 +1249,7 @@ mod tests {
         }
         let x_curve = curves
             .iter()
-            .find(|c| c.pad == pads[1] && c.property == "xpos")
+            .find(|c| c.is_on(&pads[1]) && c.property == "xpos")
             .expect("an xpos curve");
         let mid = value_at(x_curve, x.start + x.duration / 2);
         assert!(
@@ -1237,11 +1358,11 @@ mod tests {
 
     #[test]
     fn a_zero_duration_is_a_cut_whatever_the_type_says() {
-        assert!(TransitionSpec { kind: Kind::Fade, duration_ms: 0 }.is_cut());
-        assert!(!TransitionSpec { kind: Kind::Fade, duration_ms: 300 }.is_cut());
+        assert!(TransitionSpec::new(Kind::Fade, 0).is_cut());
+        assert!(!TransitionSpec::new(Kind::Fade, 300).is_cut());
         assert!(TransitionSpec::cut().is_cut());
         assert_eq!(
-            TransitionSpec { kind: Kind::Fade, duration_ms: 99_000 }.duration(),
+            TransitionSpec::new(Kind::Fade, 99_000).duration(),
             Duration::from_millis(MAX_DURATION_MS),
             "a transition longer than the ceiling is held at it"
         );
