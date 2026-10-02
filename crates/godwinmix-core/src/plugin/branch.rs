@@ -75,6 +75,9 @@ impl VideoPads {
     /// flowing changes nothing.
     pub fn attach(&self, pad: &gst::Pad) {
         let mut inner = self.inner.lock();
+        // Pads whose element is gone, such as the tiles of a mosaic that was
+        // taken down and built again, so the list does not grow with each.
+        inner.pads.retain(|p| p.parent().is_some());
         pad.set_offset(inner.offset);
         if !inner.pads.iter().any(|p| p == pad) {
             inner.pads.push(pad.clone());
