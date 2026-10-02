@@ -114,7 +114,10 @@ pub struct SetItemRequest {
     pub scene: String,
     pub item: String,
     /// Any of `name`, `transform`, `crop`, `opacity`, `blend`, `visible`,
-    /// `locked`, `audio`, `content`. A key left out is left alone.
+    /// `locked`, `audio`, `content`, `enter`, `exit`. A key left out is left
+    /// alone. `enter` and `exit` are `{type, edge, duration_ms, easing,
+    /// on_take}` (type: cut, fade, slide, zoom, wipe), or null to clear one;
+    /// an item hidden or shown on air plays them.
     pub props: Map<String, Value>,
     /// How long to take getting there, in milliseconds. 0 is a cut.
     #[serde(default, skip_serializing_if = "Option::is_none")]

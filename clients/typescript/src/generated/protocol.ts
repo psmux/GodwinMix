@@ -1054,6 +1054,8 @@ export interface InstanceRecord {
   state: string;
 }
 
+export type ItemEdge = "left" | "right" | "top" | "bottom";
+
 /** `scene.item.filter.set` and `remove`. */
 export interface ItemFilterRequest {
   draft?: string | null;
@@ -1074,6 +1076,8 @@ export interface ItemProps {
   blend: Blend;
   content: FlatContent;
   crop: Crop;
+  enter?: ItemTransition | null;
+  exit?: ItemTransition | null;
   filters?: Filter[];
   locked: boolean;
   name?: string | null;
@@ -1093,6 +1097,17 @@ export interface ItemRequest {
 export interface ItemSchemaRequest {
   type: string;
 }
+
+/** One way on or off the canvas for one item. */
+export interface ItemTransition {
+  duration_ms?: number;
+  easing?: string | null;
+  edge?: ItemEdge | null;
+  on_take?: boolean;
+  type: ItemTransitionKind;
+}
+
+export type ItemTransitionKind = "cut" | "fade" | "slide" | "zoom" | "wipe";
 
 /**
  * `scene.item.align`, `distribute`, `fit_to_canvas`, `cover_canvas`,
@@ -2427,6 +2442,26 @@ export interface Transition2 {
   type: string;
 }
 
+/** `program.transitions`: every transition a take may name on this core. */
+export interface TransitionCatalogue {
+  default_duration_ms: number;
+  directions: string[];
+  easings: string[];
+  edges: string[];
+  item_transitions: string[];
+  max_duration_ms: number;
+  transitions: TransitionEntry[];
+}
+
+/** One name a take accepts. */
+export interface TransitionEntry {
+  duration_ms?: number | null;
+  name: string;
+  origin: string;
+  params?: string[];
+  type: string;
+}
+
 /** How a take gets there. See docs/reference/transitions.md. */
 export interface TransitionRequest {
   duration_ms?: number | null;
@@ -2703,6 +2738,7 @@ export interface MethodParams {
   "program.revert": Record<string, never>;
   "program.take": TakeRequest;
   "program.thumbnail": ThumbnailRequest;
+  "program.transitions": Record<string, never>;
   "project.export": ExportRequest;
   "project.import": ImportRequest;
   "rendition.plan": PlanRequest;
@@ -2877,6 +2913,7 @@ export interface MethodResults {
   "program.revert": ProgramState;
   "program.take": ProgramState;
   "program.thumbnail": Record<string, unknown>;
+  "program.transitions": TransitionCatalogue;
   "project.export": Record<string, unknown>;
   "project.import": Report;
   "rendition.plan": PlanView;
@@ -3098,6 +3135,7 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "program.revert", summary: "Take back to the shot before this one.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/program/revert" } },
   { name: "program.take", summary: "Put a scene or a source on programme. The cut is instant and the outgoing stream is not disturbed.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/program/take" } },
   { name: "program.thumbnail", summary: "What is on air as a small JPEG in base64, {jpeg, width, height, at_ms}, or {pending: true} while the first picture is on its way. An ask keeps one picture a second coming for ten seconds; nothing runs between asks.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/program/thumbnail" } },
+  { name: "program.transitions", summary: "Every transition a take may name on this core, with the params each reads, and what an item's enter and exit may be.", scope: "read", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/program/transitions" } },
   { name: "project.export", summary: "This mixer as one project file: settings, sources, outputs and renditions, channels, scenes, the page's layout, and its clips by name and size. Keys only with include_secrets.", scope: "admin", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/project/export" } },
   { name: "project.import", summary: "Open a project file: answers with what it would change (dry_run is true unless false is sent), then replaces this mixer's setup or merges beside it. Says which settings wait for a restart.", scope: "admin", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/project/import" } },
   { name: "rendition.plan", summary: "What the planner built for every output that asked for a rendition: each node, what it serves, which encoder and why, and the totals.", scope: "read", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/rendition/plan" } },
@@ -3666,6 +3704,11 @@ export class GeneratedMethods {
   /** What is on air as a small JPEG in base64, {jpeg, width, height, at_ms}, or {pending: true} while the first picture is on its way. An ask keeps one picture a second coming for ten seconds; nothing runs between asks. */
   programThumbnail(params: ThumbnailRequest = {}): Promise<Record<string, unknown>> {
     return this._call("program.thumbnail", params as unknown as Record<string, unknown>) as Promise<Record<string, unknown>>;
+  }
+
+  /** Every transition a take may name on this core, with the params each reads, and what an item's enter and exit may be. */
+  programTransitions(): Promise<TransitionCatalogue> {
+    return this._call("program.transitions", {}) as Promise<TransitionCatalogue>;
   }
 
   /** This mixer as one project file: settings, sources, outputs and renditions, channels, scenes, the page's layout, and its clips by name and size. Keys only with include_secrets. */

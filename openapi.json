@@ -4100,6 +4100,15 @@
         ],
         "type": "object"
       },
+      "ItemEdge": {
+        "enum": [
+          "left",
+          "right",
+          "top",
+          "bottom"
+        ],
+        "type": "string"
+      },
       "ItemFilterRequest": {
         "description": "`scene.item.filter.set` and `remove`.",
         "properties": {
@@ -4158,6 +4167,26 @@
           },
           "crop": {
             "$ref": "#/components/schemas/Crop"
+          },
+          "enter": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ItemTransition"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "exit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ItemTransition"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "filters": {
             "items": {
@@ -4232,6 +4261,59 @@
           "type"
         ],
         "type": "object"
+      },
+      "ItemTransition": {
+        "additionalProperties": false,
+        "description": "One way on or off the canvas for one item.",
+        "properties": {
+          "duration_ms": {
+            "default": 300,
+            "description": "How long it takes, in milliseconds. 300 by default, ten seconds at\nmost.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "easing": {
+            "description": "linear, ease-in, ease-out or ease-in-out (the default).",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "edge": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ItemEdge"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "For slide and wipe, the canvas edge it comes in from or goes out to:\nleft (the default), right, top or bottom."
+          },
+          "on_take": {
+            "description": "Also play it when a scene holding this item is taken, in place of the\nscene's own transition for this item.",
+            "type": "boolean"
+          },
+          "type": {
+            "$ref": "#/components/schemas/ItemTransitionKind",
+            "description": "cut, fade, slide, zoom or wipe."
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "type": "object"
+      },
+      "ItemTransitionKind": {
+        "enum": [
+          "cut",
+          "fade",
+          "slide",
+          "zoom",
+          "wipe"
+        ],
+        "type": "string"
       },
       "ItemsRequest": {
         "description": "`scene.item.align`, `distribute`, `fit_to_canvas`, `cover_canvas`,\n`arrange_grid`, `match_size`, `group`.",
@@ -7230,7 +7312,7 @@
           },
           "props": {
             "additionalProperties": true,
-            "description": "Any of `name`, `transform`, `crop`, `opacity`, `blend`, `visible`,\n`locked`, `audio`, `content`. A key left out is left alone.",
+            "description": "Any of `name`, `transform`, `crop`, `opacity`, `blend`, `visible`,\n`locked`, `audio`, `content`, `enter`, `exit`. A key left out is left\nalone. `enter` and `exit` are `{type, edge, duration_ms, easing,\non_take}` (type: cut, fade, slide, zoom, wipe), or null to clear one;\nan item hidden or shown on air plays them.",
             "type": "object"
           },
           "scene": {
@@ -9099,6 +9181,105 @@
         ],
         "type": "object"
       },
+      "TransitionCatalogue": {
+        "description": "`program.transitions`: every transition a take may name on this core.",
+        "properties": {
+          "default_duration_ms": {
+            "description": "What a name on its own runs for, in milliseconds.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "directions": {
+            "description": "The directions `wipe`, `slide` and `push` take.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "easings": {
+            "description": "The four easings every transition takes as `params.easing`.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "edges": {
+            "description": "The edges an item transition takes.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "item_transitions": {
+            "description": "What an item's `enter` and `exit` may be.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "max_duration_ms": {
+            "description": "The longest a transition may run, in milliseconds.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "transitions": {
+            "items": {
+              "$ref": "#/components/schemas/TransitionEntry"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "transitions",
+          "easings",
+          "directions",
+          "item_transitions",
+          "edges",
+          "max_duration_ms",
+          "default_duration_ms"
+        ],
+        "type": "object"
+      },
+      "TransitionEntry": {
+        "description": "One name a take accepts.",
+        "properties": {
+          "duration_ms": {
+            "description": "The duration a collection stores with it.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "origin": {
+            "description": "`built-in`, `collection` (a named transition the scene collection\nstores) or `plugin`.",
+            "type": "string"
+          },
+          "params": {
+            "description": "The params it reads, for a built in one.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "type": {
+            "description": "The type underneath a collection's name, which is the name itself for\nthe other two.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "origin",
+          "type"
+        ],
+        "type": "object"
+      },
       "TransitionRequest": {
         "description": "How a take gets there. See docs/reference/transitions.md.",
         "properties": {
@@ -9113,11 +9294,11 @@
           },
           "params": {
             "additionalProperties": true,
-            "description": "A stinger takes clip, cut_at_ms, luma.",
+            "description": "easing on all; direction (wipe, slide, push); x, y (zoom, zoom-out, box); colour (dip); clip, cut_at_ms, luma (stinger).",
             "type": "object"
           },
           "type": {
-            "description": "cut, fade, move, stinger, or a plugin name.",
+            "description": "cut, fade, move, stinger, wipe, slide, push, zoom, zoom-out, dip, box, or a plugin name.",
             "type": "string"
           }
         },
@@ -12685,6 +12866,46 @@
           }
         },
         "summary": "What is on air as a small JPEG in base64, {jpeg, width, height, at_ms}, or {pending: true} while the first picture is on its way. An ask keeps one picture a second coming for ten seconds; nothing runs between asks.",
+        "tags": [
+          "program"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
+    "/api/v1/program/transitions": {
+      "post": {
+        "description": "JSON-RPC method `program.transitions`. Needs the `read` scope.",
+        "operationId": "program.transitions",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {},
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransitionCatalogue"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Every transition a take may name on this core, with the params each reads, and what an item's enter and exit may be.",
         "tags": [
           "program"
         ],

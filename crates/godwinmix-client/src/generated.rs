@@ -1862,6 +1862,10 @@ pub struct InstanceRecord {
     pub state: String,
 }
 
+pub type ItemEdge = String;
+/// The values api_level 1 knows for [`ItemEdge`].
+pub const ITEM_EDGE_VALUES: &[&str] = &["left", "right", "top", "bottom"];
+
 /// `scene.item.filter.set` and `remove`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -1888,6 +1892,10 @@ pub struct ItemProps {
     pub blend: Blend,
     pub content: FlatContent,
     pub crop: Crop,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enter: Option<ItemTransition>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub exit: Option<ItemTransition>,
     pub filters: Vec<Filter>,
     pub locked: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1917,6 +1925,34 @@ pub struct ItemSchemaRequest {
     #[serde(rename = "type")]
     pub r#type: String,
 }
+
+/// One way on or off the canvas for one item.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ItemTransition {
+    /// How long it takes, in milliseconds. 300 by default, ten seconds at
+    /// most.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub duration_ms: Option<u32>,
+    /// linear, ease-in, ease-out or ease-in-out (the default).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub easing: Option<String>,
+    /// For slide and wipe, the canvas edge it comes in from or goes out to:
+    /// left (the default), right, top or bottom.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub edge: Option<ItemEdge>,
+    /// Also play it when a scene holding this item is taken, in place of the
+    /// scene's own transition for this item.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub on_take: Option<bool>,
+    /// cut, fade, slide, zoom or wipe.
+    #[serde(rename = "type")]
+    pub r#type: ItemTransitionKind,
+}
+
+pub type ItemTransitionKind = String;
+/// The values api_level 1 knows for [`ItemTransitionKind`].
+pub const ITEM_TRANSITION_KIND_VALUES: &[&str] = &["cut", "fade", "slide", "zoom", "wipe"];
 
 /// `scene.item.align`, `distribute`, `fit_to_canvas`, `cover_canvas`,
 /// `arrange_grid`, `match_size`, `group`.
@@ -3342,7 +3378,10 @@ pub struct SetItemRequest {
     pub easing: Option<String>,
     pub item: String,
     /// Any of `name`, `transform`, `crop`, `opacity`, `blend`, `visible`,
-    /// `locked`, `audio`, `content`. A key left out is left alone.
+    /// `locked`, `audio`, `content`, `enter`, `exit`. A key left out is left
+    /// alone. `enter` and `exit` are `{type, edge, duration_ms, easing,
+    /// on_take}` (type: cut, fade, slide, zoom, wipe), or null to clear one;
+    /// an item hidden or shown on air plays them.
     pub props: BTreeMap<String, Value>,
     pub scene: String,
     /// A client's own sequence number, echoed on the patch so a drag can
@@ -4241,6 +4280,44 @@ pub struct Transition2 {
     pub r#type: String,
 }
 
+/// `program.transitions`: every transition a take may name on this core.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TransitionCatalogue {
+    /// What a name on its own runs for, in milliseconds.
+    pub default_duration_ms: u64,
+    /// The directions `wipe`, `slide` and `push` take.
+    pub directions: Vec<String>,
+    /// The four easings every transition takes as `params.easing`.
+    pub easings: Vec<String>,
+    /// The edges an item transition takes.
+    pub edges: Vec<String>,
+    /// What an item's `enter` and `exit` may be.
+    pub item_transitions: Vec<String>,
+    /// The longest a transition may run, in milliseconds.
+    pub max_duration_ms: u64,
+    pub transitions: Vec<TransitionEntry>,
+}
+
+/// One name a take accepts.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TransitionEntry {
+    /// The duration a collection stores with it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub duration_ms: Option<u64>,
+    pub name: String,
+    /// `built-in`, `collection` (a named transition the scene collection
+    /// stores) or `plugin`.
+    pub origin: String,
+    /// The params it reads, for a built in one.
+    pub params: Vec<String>,
+    /// The type underneath a collection's name, which is the name itself for
+    /// the other two.
+    #[serde(rename = "type")]
+    pub r#type: String,
+}
+
 /// How a take gets there. See docs/reference/transitions.md.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -4248,9 +4325,9 @@ pub struct TransitionRequest {
     /// How long it takes. 0 is a cut.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub duration_ms: Option<u64>,
-    /// A stinger takes clip, cut_at_ms, luma.
+    /// easing on all; direction (wipe, slide, push); x, y (zoom, zoom-out, box); colour (dip); clip, cut_at_ms, luma (stinger).
     pub params: BTreeMap<String, Value>,
-    /// cut, fade, move, stinger, or a plugin name.
+    /// cut, fade, move, stinger, wipe, slide, push, zoom, zoom-out, dip, box, or a plugin name.
     #[serde(rename = "type")]
     pub r#type: String,
 }
@@ -4591,7 +4668,7 @@ pub struct MethodInfo {
     pub rest: Option<(&'static str, &'static str)>,
 }
 
-pub const METHODS: [MethodInfo; 170] = [
+pub const METHODS: [MethodInfo; 171] = [
     MethodInfo { name: "adbreak.end", summary: "Cut a running ad short, or disarm one that is scheduled.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/end")) },
     MethodInfo { name: "adbreak.start", summary: "Interrupt the programme with a clip, then rejoin live when it ends.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/start")) },
     MethodInfo { name: "agent.state", summary: "The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/agent/state")) },
@@ -4677,6 +4754,7 @@ pub const METHODS: [MethodInfo; 170] = [
     MethodInfo { name: "program.revert", summary: "Take back to the shot before this one.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/program/revert")) },
     MethodInfo { name: "program.take", summary: "Put a scene or a source on programme. The cut is instant and the outgoing stream is not disturbed.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/program/take")) },
     MethodInfo { name: "program.thumbnail", summary: "What is on air as a small JPEG in base64, {jpeg, width, height, at_ms}, or {pending: true} while the first picture is on its way. An ask keeps one picture a second coming for ten seconds; nothing runs between asks.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/program/thumbnail")) },
+    MethodInfo { name: "program.transitions", summary: "Every transition a take may name on this core, with the params each reads, and what an item's enter and exit may be.", scope: "read", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/program/transitions")) },
     MethodInfo { name: "project.export", summary: "This mixer as one project file: settings, sources, outputs and renditions, channels, scenes, the page's layout, and its clips by name and size. Keys only with include_secrets.", scope: "admin", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/project/export")) },
     MethodInfo { name: "project.import", summary: "Open a project file: answers with what it would change (dry_run is true unless false is sent), then replaces this mixer's setup or merges beside it. Says which settings wait for a restart.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/project/import")) },
     MethodInfo { name: "rendition.plan", summary: "What the planner built for every output that asked for a rendition: each node, what it serves, which encoder and why, and the totals.", scope: "read", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/rendition/plan")) },
@@ -5464,6 +5542,11 @@ impl Client {
     /// What is on air as a small JPEG in base64, {jpeg, width, height, at_ms}, or {pending: true} while the first picture is on its way. An ask keeps one picture a second coming for ten seconds; nothing runs between asks.
     pub async fn program_thumbnail(&self, params: &ThumbnailRequest) -> Result<BTreeMap<String, Value>> {
         self.call("program.thumbnail", params).await
+    }
+
+    /// Every transition a take may name on this core, with the params each reads, and what an item's enter and exit may be.
+    pub async fn program_transitions(&self) -> Result<TransitionCatalogue> {
+        self.call("program.transitions", &serde_json::json!({})).await
     }
 
     /// This mixer as one project file: settings, sources, outputs and renditions, channels, scenes, the page's layout, and its clips by name and size. Keys only with include_secrets.
