@@ -379,3 +379,73 @@ async fn an_item_that_enters_on_take_plays_its_entrance_on_a_cut() {
     assert_eq!(mix.pool.visible(), 2, "the old scene is gone, the new one whole");
     mix.shutdown();
 }
+
+// ---------------------------------------------------------------------------
+// What each costs
+// ---------------------------------------------------------------------------
+
+/// The programme's CPU while each transition runs back to back, against the
+/// same takes as cuts, at 1280x720 on the software compositor.
+///
+/// Each run is ten takes, 600 ms apart, between two full canvas test
+/// patterns; a transition is 500 ms of each 600, so the window is in a
+/// transition most of the time it is measured. Ignored by default; run it
+/// with `cargo test -p godwinmix-core --lib -- --ignored --nocapture
+/// what_each_transition_costs`.
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "a CPU measurement that takes about a minute"]
+async fn what_each_transition_costs_against_a_cut() {
+    use super::tests::cpu_seconds;
+    use super::transition::{Direction, Point};
+    let mut cfg = super::tests::programme_config(crate::config::Accel::Software);
+    cfg.canvas.width = 1280;
+    cfg.canvas.height = 720;
+    let mut mix = with_sources_cfg(&["cam1", "cam2"], cfg).await;
+    let canvas = mix.canvas.clone();
+    let frame = canvas.frame_duration().nseconds();
+    let gaps = Arc::new(Gaps::default());
+    gaps.watch(&mix.venc_tee.static_pad("sink").expect("the encoder tee has a sink pad"));
+    mix.take_scene(scene("a", vec![full(&canvas, "cam1")]), None).expect("the first scene");
+    tokio::time::sleep(Duration::from_secs(2)).await;
+    let point = Point::default();
+    let kinds: Vec<Option<Kind>> = vec![
+        None,
+        Some(Kind::Fade),
+        Some(Kind::Wipe { direction: Direction::Left }),
+        Some(Kind::Box { point }),
+        Some(Kind::Slide { direction: Direction::Left }),
+        Some(Kind::Push { direction: Direction::Left }),
+        Some(Kind::Zoom { point }),
+        Some(Kind::ZoomOut { point }),
+        Some(Kind::Dip { colour: 0xffff_ffff }),
+    ];
+    let mut cut = 0.0;
+    for kind in kinds {
+        let name = kind.as_ref().map(|k| k.name().to_string()).unwrap_or_else(|| "cut".into());
+        gaps.largest.store(0, std::sync::atomic::Ordering::Relaxed);
+        let start = cpu_seconds();
+        let at = std::time::Instant::now();
+        for i in 0..10 {
+            let (id, source) = if i % 2 == 0 { ("b", "cam2") } else { ("a", "cam1") };
+            let spec = kind.clone().map(|k| TransitionSpec::new(k, 500));
+            mix.take_scene_over(scene(id, vec![full(&canvas, source)]), None, None, spec).expect("a take");
+            tokio::time::sleep(Duration::from_millis(550)).await;
+            if mix.transition_window().is_some() {
+                mix.handle(Command::TransitionEnd { transition: mix.transition_id() }).expect("the end");
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        let cores = (cpu_seconds() - start) / at.elapsed().as_secs_f64();
+        if kind.is_none() {
+            cut = cores;
+        }
+        let largest = gaps.largest.load(std::sync::atomic::Ordering::Relaxed);
+        println!(
+            "transition cost: {name:<9} {cores:.3} cores, {:+6.1} percent against a cut, largest interval {:.1} ms (a frame is {:.1})",
+            if cut > 0.0 { (cores - cut) / cut * 100.0 } else { 0.0 },
+            largest as f64 / 1e6,
+            frame as f64 / 1e6
+        );
+    }
+    mix.shutdown();
+}

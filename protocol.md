@@ -1618,7 +1618,7 @@ What is on air as a small JPEG in base64, {jpeg, width, height, at_ms}, or {pend
 
 Every transition a take may name on this core, with the params each reads, and what an item's enter and exit may be.
 
-MCP tool `list_transitions` in the `standard` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+MCP tool `list_transitions` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
 
 ```json
 {

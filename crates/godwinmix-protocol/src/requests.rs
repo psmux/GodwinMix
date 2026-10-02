@@ -75,9 +75,7 @@ pub struct TransitionRequest {
     /// cut, fade, move, stinger, wipe, slide, push, zoom, zoom-out, dip, box,
     /// or a plugin's name.
     #[serde(rename = "type")]
-    #[schemars(
-        description = "cut, fade, move, stinger, wipe, slide, push, zoom, zoom-out, dip, box, or a plugin name."
-    )]
+    #[schemars(description = "fade, wipe, slide, push, zoom, dip... See list_transitions.")]
     pub type_id: String,
     /// How long it takes. 0 is a cut.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -92,9 +90,7 @@ pub struct TransitionRequest {
     /// `luma` (key the clip's black out). A plugin transition takes whatever
     /// it documents.
     #[serde(default, skip_serializing_if = "Map::is_empty")]
-    #[schemars(
-        description = "easing on all; direction (wipe, slide, push); x, y (zoom, zoom-out, box); colour (dip); clip, cut_at_ms, luma (stinger)."
-    )]
+    #[schemars(description = "direction, easing, colour, clip... See list_transitions.")]
     pub params: Map<String, Value>,
 }
 

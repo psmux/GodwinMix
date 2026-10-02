@@ -2727,9 +2727,9 @@ class TransitionRequest(TypedDict, total=False):
     duration_ms: Optional[int]
     # How long it takes. 0 is a cut.
     params: Dict[str, Any]
-    # easing on all; direction (wipe, slide, push); x, y (zoom, zoom-out, box); colour (dip); clip, cut_at_ms, luma (stinger).
+    # direction, easing, colour, clip... See list_transitions.
     type: str
-    # cut, fade, move, stinger, wipe, slide, push, zoom, zoom-out, dip, box, or a plugin name.
+    # fade, wipe, slide, push, zoom, dip... See list_transitions.
 
 class UiDefaults(TypedDict, total=False):
     """What a surface starts with: the layout, the theme and the gallery mode. Chosen by a preset (`preset.apply`), carried in `core.info` and pushed as `event/ui.changed`. None of it changes what the core does. It exists so the first page a volunteer sees is the one their preset chose rather than the one the last person to use this browser chose. 05 section 3b is where the four gallery modes are defined."""

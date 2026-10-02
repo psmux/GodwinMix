@@ -30,3 +30,16 @@ gmx-program.studio .program.on { box-shadow: none; }
 
 body.producer .tile.armed { border-color: var(--ok); }
 body.producer .scene-tabs button.armed { border-bottom-color: var(--ok); }
+
+/* The transition picker under Take: the kind with its drawing, then the
+   direction or colour, the easing and the length. */
+.transition-picker { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.transition-picker .row { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.transition-picker .row select { flex: 1 1 auto; min-width: 0; }
+.transition-picker select { width: 100%; max-width: none; }
+.transition-picker select[hidden] { display: none; }
+.transition-icon { flex: 0 0 auto; color: var(--text); line-height: 0; }
+@container (max-width: 500px) {
+  .transition-picker { flex-direction: row; flex-wrap: wrap; flex: 1 1 100%; }
+  .transition-picker > * { flex: 1 1 0; }
+}

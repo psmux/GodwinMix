@@ -4325,9 +4325,9 @@ pub struct TransitionRequest {
     /// How long it takes. 0 is a cut.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub duration_ms: Option<u64>,
-    /// easing on all; direction (wipe, slide, push); x, y (zoom, zoom-out, box); colour (dip); clip, cut_at_ms, luma (stinger).
+    /// direction, easing, colour, clip... See list_transitions.
     pub params: BTreeMap<String, Value>,
-    /// cut, fade, move, stinger, wipe, slide, push, zoom, zoom-out, dip, box, or a plugin name.
+    /// fade, wipe, slide, push, zoom, dip... See list_transitions.
     #[serde(rename = "type")]
     pub r#type: String,
 }
