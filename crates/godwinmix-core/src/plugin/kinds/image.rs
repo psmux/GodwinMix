@@ -49,7 +49,13 @@ fn claims(uri: &str) -> Option<u16> {
     image_type(uri).map(|_| MANIFEST.rank)
 }
 
+/// A picture with transparency goes to the overlay board; every other
+/// picture, and every numbered sequence, through the compositor as before.
 fn new(req: SourceRequest<'_>) -> Result<Box<dyn Source>> {
+    let uri = req.cfg.uri.clone();
+    if !is_sequence(&uri) && super::image_alpha::wanted(&uri, &req.cfg.effective_params())? {
+        return super::rendered::make::<super::image_alpha::AlphaStill>(req);
+    }
     Ok(Box::new(ImageSource { ctx: req.ctx(), running: false }))
 }
 
