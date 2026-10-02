@@ -34,7 +34,11 @@ ready. Nothing reaches the audience until you do.
 * Click a scene tab, a scene tile or a source tile and it goes into Preview.
   The number keys do the same for scenes 1 to 9. Nothing goes on air.
 * **Take**, the big button between the monitors, sends Preview to Programme
-  with the transition and length chosen under it (Fade or Move, 0.25 s to 2 s).
+  with the transition chosen under it: any of the built in ones, with its
+  direction (Wipe, Slide, Push) or colour (Dip), an easing and a length from
+  0.25 s to 2 s, plus whatever the scene collection or a plugin adds. A small
+  drawing beside the list shows the one chosen, and the choice is remembered in
+  this browser.
   Space does the same, and so does a double click on the Preview picture.
 * **Cut** sends it at once, with no transition.
 * **Take the preview to programme** and **Cut the preview to programme** are in

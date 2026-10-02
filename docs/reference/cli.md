@@ -29,6 +29,8 @@ godwinmix ctl status
 godwinmix ctl take cam2                 # or: take   (with no id, cuts to black)
 godwinmix ctl take --scene "wide" --transition fade --duration 400
 godwinmix ctl take --scene "half-time" --transition stinger --clip stinger.mp4
+godwinmix ctl take --scene "wide" --transition wipe --direction up --easing ease-out
+godwinmix ctl take --scene "wide" --transition dip --colour white --duration 800
 godwinmix ctl source add hls1 https://host/stream.m3u8 --name "Roof camera"
 godwinmix ctl source remove hls1
 godwinmix ctl output add youtube rtmp://a.rtmp.youtube.com/live2/KEY --policy cdn
@@ -86,10 +88,13 @@ gmx skill install --for claude --project  # into ./.claude/skills rather than ~
 gmx skill list --for gemini               # the skills and where they would go
 ```
 
-`--transition` takes `cut`, `fade`, `move`, `stinger`, a name the scene
-collection knows, or a transition plugin's name; `--duration` is milliseconds
-and defaults to 300; `--clip` is a stinger's. See
-[transitions](transitions.md).
+`--transition` takes `cut`, `fade`, `move`, `stinger`, `wipe`, `slide`,
+`push`, `zoom`, `zoom-out`, `dip`, `box`, a name the scene collection knows, or
+a transition plugin's name; `--duration` is milliseconds and defaults to 300;
+`--clip` is a stinger's; `--direction` (`left`, `right`, `up`, `down`) is a
+wipe's, a slide's or a push's; `--colour` (`black`, `white` or `#rrggbb`) is a
+dip's; `--easing` (`linear`, `ease-in`, `ease-out`, `ease-in-out`) is every
+built in one's. See [transitions](transitions.md).
 
 `godwinmix-operate` is for running a show: the state document, the take, the
 safety rules that will refuse it, what a look costs. `godwinmix-develop` is
