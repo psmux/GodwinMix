@@ -4441,6 +4441,10 @@
       "KeyColorRequest": {
         "additionalProperties": false,
         "properties": {
+          "id": {
+            "description": "The source id.",
+            "type": "string"
+          },
           "screen": {
             "default": null,
             "description": "\"green\" or \"blue\" to look for that screen only. Either when left out.",
@@ -4448,10 +4452,6 @@
               "string",
               "null"
             ]
-          },
-          "source": {
-            "description": "The source id.",
-            "type": "string"
           },
           "x": {
             "default": null,
@@ -4473,7 +4473,7 @@
           }
         },
         "required": [
-          "source"
+          "id"
         ],
         "type": "object"
       },
@@ -14847,6 +14847,44 @@
         "x-scope": "read"
       }
     },
+    "/api/v1/scenes/virtual_set": {
+      "post": {
+        "description": "JSON-RPC method `scene.virtual_set`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "scene.virtual_set",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VirtualSetRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VirtualSetAnswer"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "A new scene with a presenter keyed in front of a background, and optionally a foreground such as a desk and a lower third area. Pictures from the media library become sources; the key colour is guessed from the camera.",
+        "tags": [
+          "scene"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
     "/api/v1/scenes/{id}": {
       "delete": {
         "description": "JSON-RPC method `scene.remove`. Needs the `operate` scope. Destructive: accepts `dry_run: true`, and on a token whose policy is `confirm = required` it is refused once with -32020 and a confirm token. Accepts `idempotency_key`, honoured for 24 hours.",
@@ -15023,55 +15061,6 @@
           }
         },
         "summary": "Change a scene's name, its colour, or both. Names and colours live on the document, so every client, the tally and an agent see the same ones.",
-        "tags": [
-          "scene"
-        ],
-        "x-destructive": false,
-        "x-idempotent": true,
-        "x-scope": "operate"
-      }
-    },
-    "/api/v1/scenes/{id}/virtual_set": {
-      "post": {
-        "description": "JSON-RPC method `scene.virtual_set`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
-        "operationId": "scene.virtual_set",
-        "parameters": [
-          {
-            "description": "The id, as listed by the matching list call.",
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/VirtualSetRequest"
-              }
-            }
-          },
-          "required": false
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/VirtualSetAnswer"
-                }
-              }
-            },
-            "description": "the full resulting object, so no follow up read is needed"
-          },
-          "default": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "summary": "A new scene with a presenter keyed in front of a background, and optionally a foreground such as a desk and a lower third area. Pictures from the media library become sources; the key colour is guessed from the camera.",
         "tags": [
           "scene"
         ],

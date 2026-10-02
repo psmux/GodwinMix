@@ -2011,11 +2011,11 @@ pub struct KeyColor {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct KeyColorRequest {
+    /// The source id.
+    pub id: String,
     /// "green" or "blue" to look for that screen only. Either when left out.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub screen: Option<String>,
-    /// The source id.
-    pub source: String,
     /// 0 to 1 across the source's picture. With `y`, the colour there.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub x: Option<f64>,
@@ -4882,7 +4882,7 @@ pub const METHODS: [MethodInfo; 173] = [
     MethodInfo { name: "scene.transaction.commit", summary: "Apply the batch.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/transaction/commit")) },
     MethodInfo { name: "scene.undo", summary: "Undo the last change. A drag marked with scene.history.mark undoes as one step.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/undo")) },
     MethodInfo { name: "scene.validate", summary: "Overlaps, items off the canvas, safe area breaches and missing sources: what to fix before saying a scene is done.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/scenes/validate")) },
-    MethodInfo { name: "scene.virtual_set", summary: "A new scene with a presenter keyed in front of a background, and optionally a foreground such as a desk and a lower third area. Pictures from the media library become sources; the key colour is guessed from the camera.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/{id}/virtual_set")) },
+    MethodInfo { name: "scene.virtual_set", summary: "A new scene with a presenter keyed in front of a background, and optionally a foreground such as a desk and a lower third area. Pictures from the media library become sources; the key colour is guessed from the camera.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/virtual_set")) },
     MethodInfo { name: "show.add", summary: "Make another show and start it: empty, a copy of a show (without its outputs, so nothing goes out twice), or from a project file.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/shows")) },
     MethodInfo { name: "show.add_many", summary: "Make many shows in one call, such as every channel of a headend. The whole batch is checked first. With dry_run (the default) nothing is made: the answer says what would be, what its renditions would cost and whether the governor would admit them. Without it, every show that fits is made and the rest are refused with why; a show is made whole or not at all.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/shows/add_many")) },
     MethodInfo { name: "show.list", summary: "Every show on this machine: its name, whether it is running, what is on air, what its outputs send and what its process costs. `current` is the show a client reaches when it names none.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/shows")) },

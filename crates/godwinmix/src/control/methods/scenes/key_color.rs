@@ -33,7 +33,7 @@ pub fn register(reg: &mut Registry<Call>) {
         .tool(
             "key_color",
             Tier::Search,
-            "Find the colour to key a camera on. Give `source`, and either `x` and `y` (0 to \
+            "Find the colour to key a camera on. Give the source's `id`, and either `x` and `y` (0 to \
              1 across and down its picture) for the colour at that point, or neither for the \
              screen colour the picture is mostly made of. Put the answer's `color` into the \
              presenter's chroma/filter as `color`.",
@@ -45,7 +45,7 @@ pub fn register(reg: &mut Registry<Call>) {
 #[serde(deny_unknown_fields)]
 pub struct KeyColorRequest {
     /// The source id.
-    pub source: String,
+    pub id: String,
     /// 0 to 1 across the source's picture. With `y`, the colour there.
     #[serde(default)]
     pub x: Option<f64>,
@@ -79,7 +79,7 @@ async fn key_color(call: Call, params: Value) -> Result<Value, RpcError> {
             return Err(RpcError::invalid_params(e).with("field", "screen"));
         }
     };
-    let still = still_of(&call, &req.source).await?;
+    let still = still_of(&call, &req.id).await?;
     let answer = match (req.x, req.y) {
         (Some(x), Some(y)) if (0.0..=1.0).contains(&x) && (0.0..=1.0).contains(&y) => {
             Some(KeyColor { color: to_hex(still::at(&still, x, y)), found: "point".into(), share: None })
@@ -95,9 +95,9 @@ async fn key_color(call: Call, params: Value) -> Result<Value, RpcError> {
         None => Err(RpcError::not_in_state(format!(
             "no green or blue screen fills enough of {}'s picture to key on. Click the screen in \
              the picture (x and y), or give the colour yourself.",
-            req.source
+            req.id
         ))
-        .with("source", req.source)
+        .with("source", req.id)
         .with("min_share", guess::MIN_SHARE)),
     }
 }
@@ -115,6 +115,10 @@ fn screen(still: &RgbImage, family: Family) -> Option<KeyColor> {
 }
 
 /// The source's picture as it is now, from its tile on the mosaic.
+///
+/// A mosaic started by this very ask shows its tiles black for its first
+/// frames, so a black still is asked for again, a few times, before it is
+/// believed.
 async fn still_of(call: &Call, source: &str) -> Result<RgbImage, RpcError> {
     let known = call.source_ids().await?;
     if !known.iter().any(|k| k == source) {
@@ -123,12 +127,24 @@ async fn still_of(call: &Call, source: &str) -> Result<RgbImage, RpcError> {
     if let Some(why) = call.snapshots.disabled_reason() {
         return Err(RpcError::not_in_state(why.message).with_action(why.action).with("source", source));
     }
+    let mut still = tile(call, source).await?;
+    for _ in 0..4 {
+        if !still::is_dark(&still) {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        still = tile(call, source).await?;
+    }
+    Ok(still)
+}
+
+async fn tile(call: &Call, source: &str) -> Result<RgbImage, RpcError> {
     let Some(latest) = call.snapshots.latest_wanted(Duration::from_secs(3)).await else {
         return Err(RpcError::not_in_state("no still yet: the mosaic is being built for you. Ask again in a second.")
             .with("retry_after_ms", 1000));
     };
     let cell = snapshot::find_cell(&latest.cells, &Pick::Source(source.to_string())).cloned().ok_or_else(|| {
-        RpcError::not_in_state(format!("{source} has no tile on the mosaic yet, so there is no still of it. Ask again in a second."))
+        RpcError::not_in_state(format!("{source} has no tile on the mosaic yet. Ask again in a second."))
             .with("source", source)
             .with("retry_after_ms", 1000)
     })?;

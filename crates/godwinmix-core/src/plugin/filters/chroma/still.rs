@@ -6,7 +6,7 @@ use super::guess::{self, Guess};
 use super::params::Family;
 pub use image::RgbImage;
 
-/// The screen in a still: the biggest saturated area of one hue.
+/// The screen in a still: the biggest saturated green or blue area.
 pub fn screen(still: &RgbImage, family: Family) -> Option<Guess> {
     guess::dominant(still.pixels().step_by(3).map(|p| rgb_to_yuv(p.0)), family)
 }
@@ -25,6 +25,13 @@ pub fn at(still: &RgbImage, x: f64, y: f64) -> [u8; 3] {
         }
     }
     sum.map(|s| (s / n.max(1)) as u8)
+}
+
+/// True for a still that is all but black: a tile the mosaic has not drawn
+/// yet, or a camera with its cap on.
+pub fn is_dark(still: &RgbImage) -> bool {
+    let (sum, n) = still.pixels().step_by(7).fold((0u64, 0u64), |(s, n), p| (s + p.0.iter().map(|c| *c as u64).sum::<u64>(), n + 3));
+    n == 0 || sum / n < 24
 }
 
 #[cfg(test)]

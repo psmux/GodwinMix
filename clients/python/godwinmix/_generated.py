@@ -1268,10 +1268,10 @@ class KeyColor(TypedDict, total=False):
     # For a screen, the share of the picture it covers, 0 to 1.
 
 class KeyColorRequest(TypedDict, total=False):
+    id: str
+    # The source id.
     screen: Optional[str]
     # "green" or "blue" to look for that screen only. Either when left out.
-    source: str
-    # The source id.
     x: Optional[float]
     # 0 to 1 across the source's picture. With `y`, the colour there.
     y: Optional[float]
@@ -3209,7 +3209,7 @@ METHODS = (
     {"name": "scene.transaction.commit", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/transaction/commit"), "summary": 'Apply the batch.'},
     {"name": "scene.undo", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/undo"), "summary": 'Undo the last change. A drag marked with scene.history.mark undoes as one step.'},
     {"name": "scene.validate", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/scenes/validate"), "summary": 'Overlaps, items off the canvas, safe area breaches and missing sources: what to fix before saying a scene is done.'},
-    {"name": "scene.virtual_set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/{id}/virtual_set"), "summary": 'A new scene with a presenter keyed in front of a background, and optionally a foreground such as a desk and a lower third area. Pictures from the media library become sources; the key colour is guessed from the camera.'},
+    {"name": "scene.virtual_set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/virtual_set"), "summary": 'A new scene with a presenter keyed in front of a background, and optionally a foreground such as a desk and a lower third area. Pictures from the media library become sources; the key colour is guessed from the camera.'},
     {"name": "show.add", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/shows"), "summary": 'Make another show and start it: empty, a copy of a show (without its outputs, so nothing goes out twice), or from a project file.'},
     {"name": "show.add_many", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/shows/add_many"), "summary": 'Make many shows in one call, such as every channel of a headend. The whole batch is checked first. With dry_run (the default) nothing is made: the answer says what would be, what its renditions would cost and whether the governor would admit them. Without it, every show that fits is made and the rest are refused with why; a show is made whole or not at all.'},
     {"name": "show.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/shows"), "summary": 'Every show on this machine: its name, whether it is running, what is on air, what its outputs send and what its process costs. `current` is the show a client reaches when it names none.'},
@@ -5514,7 +5514,7 @@ class GeneratedMethods:
 
     async def source_key_color(
         self,
-        source: str,
+        id: str,
         *,
         screen: Optional[str] = None,
         x: Optional[float] = None,
@@ -5522,7 +5522,7 @@ class GeneratedMethods:
     ) -> KeyColor:
         """The colour to key a source on: the colour at a point of its picture, or with no point the green or blue screen it stands in front of."""
         params: Dict[str, Any] = {}
-        params["source"] = source
+        params["id"] = id
         if screen is not None:
             params["screen"] = screen
         if x is not None:
