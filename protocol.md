@@ -172,6 +172,9 @@ Keys accepted on every method, handled before a method runs.
 | `scene.transaction.commit` | `POST /api/v1/scenes/transaction/commit` | operate |  | 1 | Apply the batch. |
 | `scene.undo` | `POST /api/v1/scenes/undo` | operate |  | 1 | Undo the last change. A drag marked with scene.history.mark undoes as one step. |
 | `scene.validate` | `GET /api/v1/scenes/validate` | read |  | 1 | Overlaps, items off the canvas, safe area breaches and missing sources: what to fix before saying a scene is done. |
+| `setup.get` | `GET /api/v1/setup` | read |  | 1 | Where one piece stands, without starting anything. |
+| `setup.list` | `GET /api/v1/setup/list` | read |  | 1 | Where each piece the mixer sets up on first use stands: the browser renderer (`web`) and every first party plugin this copy carries. |
+| `setup.start` | `POST /api/v1/setup/start` | operate |  | 1 | Set a piece up now, or join the set up already running, and answer at once with where it stands. Progress follows as `event/setup.changed`. Sources waiting on the piece start by themselves when it is ready. |
 | `show.add` | `POST /api/v1/shows` | admin |  | 1 | Make another show and start it: empty, a copy of a show (without its outputs, so nothing goes out twice), or from a project file. |
 | `show.add_many` | `POST /api/v1/shows/add_many` | admin |  | 1 | Make many shows in one call, such as every channel of a headend. The whole batch is checked first. With dry_run (the default) nothing is made: the answer says what would be, what its renditions would cost and whether the governor would admit them. Without it, every show that fits is made and the rest are refused with why; a show is made whole or not at all. |
 | `show.list` | `GET /api/v1/shows` | read |  | 1 | Every show on this machine: its name, whether it is running, what is on air, what its outputs send and what its process costs. `current` is the show a client reaches when it names none. |
@@ -2488,6 +2491,56 @@ MCP tool `validate_scene` in the `search` profile: readOnlyHint true, destructiv
 }
 ```
 
+#### `setup.get`
+
+Where one piece stands, without starting anything.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/SetupRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/SetupStatus"
+  }
+}
+```
+
+#### `setup.list`
+
+Where each piece the mixer sets up on first use stands: the browser renderer (`web`) and every first party plugin this copy carries.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "items": {
+      "$ref": "#/$defs/SetupStatus"
+    },
+    "type": "array"
+  }
+}
+```
+
+#### `setup.start`
+
+Set a piece up now, or join the set up already running, and answer at once with where it stands. Progress follows as `event/setup.changed`. Sources waiting on the piece start by themselves when it is ready.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/SetupRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/SetupStatus"
+  }
+}
+```
+
 #### `show.add`
 
 Make another show and start it: empty, a copy of a show (without its outputs, so nothing goes out twice), or from a project file.
@@ -3057,6 +3110,7 @@ Subscribe with `core.subscribe`. Patterns match the part after `event/`, so `pro
 | `event/multiview.layout` | `multiview` |  | How to read the binary frames that follow: the cells, and the layout id carried in every frame header. |
 | `event/multiview.frame` | `multiview` | `raw JPEG binary frame` | A mosaic frame, as a binary WebSocket frame rather than JSON: a 16 byte little endian header (seq u32, layout id u32, programme running time in milliseconds u64) then the JPEG. The top bit of seq is the stream and is clear on a mosaic frame; the other 31 bits count. |
 | `event/preview.frame` | `preview` |  | The armed scene as a picture, on the same socket and in the same 16 byte header as a mosaic frame, with the top bit of seq set to say so and the layout id zero because there is no grid to cut up. One picture per frame: draw it whole. |
+| `event/setup.changed` |  |  | A piece the mixer sets up on first use moved on: the browser renderer or a first party plugin started setting up, got further through its download, became ready or stopped. `message` is for a person; `detail` names paths and commands for a developer. |
 | `event/resync` |  |  | This client fell behind and events were dropped. Re-subscribe for a fresh snapshot; nothing between from_seq and the new snapshot arrives. |
 | `event/flush` |  |  | The end of a batch. Render here and not before, so a client never paints half an update. |
 | `event/rendition.plan` |  |  | The programme's rendition plan changed: an output that asks for a rendition was added, changed or removed, or the governor stopped or brought back an encoder. plan is what rendition.plan answers. |
@@ -3154,4 +3208,6 @@ When a client can do the next step for the person, `data.action` says so: an obj
 | `open` | panel, dialog, key | show that part of the client |
 | `retry` | after_ms | the same call again, after the wait |
 | `restart` |  | core.restart, when core.info says restart.possible |
+| `setup` | piece | setup.start with that piece, then the same call again once it is ready |
+| `copy` | command | nothing to call: show the command with a copy button |
 

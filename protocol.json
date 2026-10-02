@@ -32,6 +32,16 @@
           "const": "restart",
           "description": "Call `core.restart`, when `core.info` says a restart is possible.",
           "type": "string"
+        },
+        {
+          "const": "setup",
+          "description": "Call `setup.start {piece}`: build or install a piece the mixer sets\nup for itself, or try again after one did not finish.",
+          "type": "string"
+        },
+        {
+          "const": "copy",
+          "description": "Nothing for the client to call: show `command` to copy.",
+          "type": "string"
         }
       ]
     },
@@ -2817,6 +2827,13 @@
             "null"
           ]
         },
+        "command": {
+          "description": "A command the person runs themselves, for what only the operating\nsystem can supply. A client shows it with a copy button, beside the\naction's own button when the kind is not `copy`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "dialog": {
           "description": "`open`: a dialog, such as `settings`.",
           "type": [
@@ -2847,6 +2864,13 @@
         },
         "panel": {
           "description": "`open`: a panel by id.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "piece": {
+          "description": "`setup`: the piece to set up, `web` or a plugin's name.",
           "type": [
             "string",
             "null"
@@ -7711,6 +7735,98 @@
       ],
       "type": "object"
     },
+    "SetupRequest": {
+      "description": "`setup.start` and `setup.get`: one piece by name.",
+      "properties": {
+        "piece": {
+          "description": "`web`, or a first party plugin's name such as `camera`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "piece"
+      ],
+      "type": "object"
+    },
+    "SetupState": {
+      "description": "Where a piece stands.",
+      "oneOf": [
+        {
+          "const": "ready",
+          "description": "There and usable.",
+          "type": "string"
+        },
+        {
+          "const": "missing",
+          "description": "Not there, and this mixer can set it up when asked.",
+          "type": "string"
+        },
+        {
+          "const": "running",
+          "description": "Being set up now.",
+          "type": "string"
+        },
+        {
+          "const": "failed",
+          "description": "The last attempt did not finish. `action` says what to press.",
+          "type": "string"
+        },
+        {
+          "const": "unavailable",
+          "description": "Not there, and this mixer cannot set it up by itself.",
+          "type": "string"
+        }
+      ]
+    },
+    "SetupStatus": {
+      "description": "One piece that lives outside the mixer's own program.",
+      "properties": {
+        "action": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ErrorAction"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The button that moves it on, when there is one: try again, or a\ncommand to copy."
+        },
+        "detail": {
+          "description": "For a developer: where it looked, what it ran, where the log is."
+        },
+        "message": {
+          "description": "One or two plain sentences: what is happening and what comes next.",
+          "type": "string"
+        },
+        "piece": {
+          "description": "`web` for the browser renderer, otherwise the plugin's name.",
+          "type": "string"
+        },
+        "progress": {
+          "description": "0 to 1 while a download says how far it has got.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "state": {
+          "$ref": "#/$defs/SetupState"
+        },
+        "title": {
+          "description": "What it gives a person, in their words: \"Web pages\", \"Cameras\".",
+          "type": "string"
+        }
+      },
+      "required": [
+        "piece",
+        "title",
+        "state",
+        "message"
+      ],
+      "type": "object"
+    },
     "Severity": {
       "description": "How much the reader should care.",
       "oneOf": [
@@ -10089,6 +10205,16 @@
       "does": "core.restart, when core.info says restart.possible",
       "fields": "",
       "kind": "restart"
+    },
+    {
+      "does": "setup.start with that piece, then the same call again once it is ready",
+      "fields": "piece",
+      "kind": "setup"
+    },
+    {
+      "does": "nothing to call: show the command with a copy button",
+      "fields": "command",
+      "kind": "copy"
     }
   ],
   "api_compatible": 1,
@@ -10715,6 +10841,22 @@
       },
       "since": "1",
       "summary": "The armed scene as a picture, on the same socket and in the same 16 byte header as a mosaic frame, with the top bit of seq set to say so and the layout id zero because there is no grid to cut up. One picture per frame: draw it whole."
+    },
+    {
+      "ext": null,
+      "legacy": null,
+      "name": "event/setup.changed",
+      "pattern": "setup.changed",
+      "payload": {
+        "properties": {
+          "setup": {
+            "$ref": "#/$defs/SetupStatus"
+          }
+        },
+        "type": "object"
+      },
+      "since": "1",
+      "summary": "A piece the mixer sets up on first use moved on: the browser renderer or a first party plugin started setting up, got further through its download, became ready or stopped. `message` is for a person; `detail` names paths and commands for a developer."
     },
     {
       "ext": null,
@@ -14526,6 +14668,68 @@
       "scope": "read",
       "since": "1",
       "summary": "Overlaps, items off the canvas, safe area breaches and missing sources: what to fix before saying a scene is done."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mutating": false,
+      "name": "setup.get",
+      "params": {
+        "$ref": "#/$defs/SetupRequest"
+      },
+      "rest": {
+        "method": "GET",
+        "path": "/api/v1/setup"
+      },
+      "result": {
+        "$ref": "#/$defs/SetupStatus"
+      },
+      "scope": "read",
+      "since": "1",
+      "summary": "Where one piece stands, without starting anything."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mutating": false,
+      "name": "setup.list",
+      "params": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      },
+      "rest": {
+        "method": "GET",
+        "path": "/api/v1/setup/list"
+      },
+      "result": {
+        "items": {
+          "$ref": "#/$defs/SetupStatus"
+        },
+        "type": "array"
+      },
+      "scope": "read",
+      "since": "1",
+      "summary": "Where each piece the mixer sets up on first use stands: the browser renderer (`web`) and every first party plugin this copy carries."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mutating": true,
+      "name": "setup.start",
+      "params": {
+        "$ref": "#/$defs/SetupRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/setup/start"
+      },
+      "result": {
+        "$ref": "#/$defs/SetupStatus"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "Set a piece up now, or join the set up already running, and answer at once with where it stands. Progress follows as `event/setup.changed`. Sources waiting on the piece start by themselves when it is ready."
     },
     {
       "destructive": false,

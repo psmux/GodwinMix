@@ -25,6 +25,7 @@ statuses and whether a retry can help are generated into
 | `needed`, `held` | a missing scope (-32002) | the scope to ask for, and what the token has |
 | `confirm_token`, `expires_in_ms` | a destructive call on a token set to `confirm = "required"` (-32020) | send the same call again with `confirm` set to the token |
 | `action` | the next step is something a client can do | offer it as a button; see below |
+| `detail` | a refusal written for a person, such as a missing piece | the program names, paths, settings and element names behind it, for a developer and the log. The message never carries them |
 
 ## `data.action`
 
@@ -41,6 +42,8 @@ object can ride on an `alert` event, as `action` beside `severity` and
 | `open` | `dialog`, `panel`, `key` | show that part of the client. `dialog: "settings"` with `key` means the setting of that name |
 | `retry` | `after_ms` | the same call again, after the wait |
 | `restart` | none | `core.restart`, when `core.info` says `restart.possible` |
+| `setup` | `piece`, and `command` when the fix is the machine's | `setup.start {piece}`, then the same call again once `setup.changed` says it is ready. See [setup.md](setup.md) |
+| `copy` | `command` | nothing to call: show the command with a copy button. For what only the operating system can supply |
 
 Every action has a `label`, the button's text, short and in the imperative.
 A client that does not know a `kind` shows the message alone; the message
@@ -57,9 +60,12 @@ never depends on the button to make sense. The kinds are listed in
 | `snapshot.get` with snapshots off | -32001 | `set-config` `snapshot.enabled` `true`, restart |
 | `snapshot.get`, or an MJPEG route, with the multiview off | -32001, HTTP 404 | `set-config` `multiview.enabled` `true`, restart |
 | any `node.*` method, or a source placed on a node, with the node bridge off | -32001 | `set-config` `nodes.listen` `"0.0.0.0:8443"`, restart |
-| a source whose plugin is not installed | -32001 | `install-plugin` |
+| a source whose first party plugin is not installed | -32001 | `setup`, with the plugin's name as `piece`. `source.add` itself starts it and answers with the source waiting |
+| a source whose plugin is a third party one and not installed | -32001 | `install-plugin` |
 | a source whose plugin is installed and switched off | -32001 | `enable-plugin` |
-| a web page source with no browser sidecar and no `wpesrc` | -32001 | `open` `settings`, key `browser.sidecar` |
+| a web page source in a checkout with no renderer built yet | -32001 | `setup`, piece `web`. `source.add` itself starts it and answers with the source waiting |
+| a web page source in a package with no renderer and no `wpesrc` | -32001 | `open` `settings`, key `browser.sidecar` |
+| a format or a feature whose GStreamer elements are missing (WebRTC, HLS, SRT, RIST, SVG) | -32001 | `copy`, with this platform's install command |
 | an upload when the media folder cannot be made | -32603 | `open` `settings`, key `media.dir` |
 | a call that waited on a mixer thread held by a named command | -32001 | `restart` |
 | the `alert` sent when the mixer failed while handling a command | event | `restart` |
