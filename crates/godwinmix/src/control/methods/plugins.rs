@@ -588,10 +588,14 @@ async fn add(call: Call, params: Value) -> Result<Value, RpcError> {
     let req: AddPluginRequest = call.params(&params)?;
     let source = godwinmix_host::sources::Source::parse(&req.source)
         .or_else(|direct| {
-            // Not a source form. It may still be a name a marketplace knows,
-            // which is what the docs teach; the loader resolves that. Anything
-            // else keeps the parse error, which lists every form.
-            if godwinmix_host::marketplace::resolve(&req.source, &options(&call).only).is_some() {
+            // Not a source form. It may still be a plugin that ships with this
+            // mixer or a name a marketplace knows, which is what the docs
+            // teach; the loader resolves both. Anything else keeps the parse
+            // error, which lists every form.
+            let shipped = godwinmix_core::plugin::first_party::find(&req.source).is_some();
+            if shipped
+                || godwinmix_host::marketplace::resolve(&req.source, &options(&call).only).is_some()
+            {
                 Ok(godwinmix_host::sources::Source::Path(std::path::PathBuf::new()))
             } else {
                 Err(direct)
@@ -748,23 +752,30 @@ const FORMS: &str = "a GitHub release written owner/repo, a git address ending i
 fn not_a_source(spec: &str, only: &[String], parsed: String) -> RpcError {
     let markets: Vec<String> =
         godwinmix_host::marketplace::documents(only).into_iter().map(|m| m.name).collect();
+    let looked: Vec<String> = godwinmix_core::plugin::first_party::places(spec)
+        .iter()
+        .map(|p| p.display().to_string())
+        .collect();
     let message = if !parsed.contains("`gmx ") {
         parsed
     } else if markets.is_empty() {
         format!(
-            "no marketplace is set up on this mixer, so a plain name like `{spec}` cannot be \
-             looked up. It can install {FORMS}."
+            "no plugin called `{spec}` ships with this mixer, and no marketplace is set up on \
+             it to look the name up in. Put the plugin's folder in {}, add a marketplace, or \
+             install {FORMS}.",
+            looked.first().map(String::as_str).unwrap_or("the plugins folder beside the mixer")
         )
     } else {
         format!(
-            "no plugin called `{spec}` is listed in the marketplaces this mixer knows ({}). \
-             Search them to see what there is, or install {FORMS}.",
+            "no plugin called `{spec}` ships with this mixer or is listed in the marketplaces it \
+             knows ({}). Search them to see what there is, or install {FORMS}.",
             markets.join(", ")
         )
     };
     RpcError::new(ErrorCode::NotFound, message)
         .with("source", spec)
         .with("marketplaces", markets)
+        .with("looked_in", looked)
 }
 
 async fn search(call: Call, params: Value) -> Result<Value, RpcError> {
@@ -1183,5 +1194,19 @@ mod refusal_tests {
         assert!(e.message.contains("nosuchplugin"), "{}", e.message);
         assert_eq!(e.data["source"], "nosuchplugin");
         assert!(e.data["marketplaces"].is_array());
+        assert!(e.data["looked_in"].is_array());
+    }
+
+    /// With no marketplace the sentence names the folder a shipped plugin
+    /// would be in, which is the next step on a mixer that has none.
+    #[test]
+    fn with_no_marketplace_the_refusal_names_the_folder_to_put_a_plugin_in() {
+        let parsed = godwinmix_host::sources::Source::parse("nosuchplugin").unwrap_err();
+        let e = super::not_a_source("nosuchplugin", &["no-such-market".into()], format!("{parsed:#}"));
+        let looked = e.data["looked_in"][0].as_str().unwrap_or_default().to_string();
+        assert!(looked.ends_with("nosuchplugin"), "{looked}");
+        if e.data["marketplaces"].as_array().is_some_and(Vec::is_empty) {
+            assert!(e.message.contains(&looked), "{}", e.message);
+        }
     }
 }

@@ -397,6 +397,7 @@ fn needs_superimposed(page: Option<f64>, media: &[Option<f64>]) -> bool {
 use crate::plugin::branch::{BranchCtx, ProgrammeBranch, VideoPads};
 
 pub mod group;
+mod exited;
 mod generation;
 mod lifecycle;
 mod offload;
@@ -1084,6 +1085,8 @@ pub struct Mixer {
     pending_ad_end: Option<gst::SingleShotClockId>,
     output_attempts: HashMap<OutputId, u32>,
     source_attempts: HashMap<SourceId, u32>,
+    /// Plugin processes that exited by themselves, per source. See `exited.rs`.
+    exits: HashMap<SourceId, crate::plugin::host::exits::Streak>,
     /// The generation the next source added gets. See `mixer::generation`.
     next_generation: u64,
     /// See `REMOVED_KEPT`.
@@ -1747,6 +1750,7 @@ impl Mixer {
             pending_ad_end: None,
             output_attempts: HashMap::new(),
             source_attempts: HashMap::new(),
+            exits: HashMap::new(),
             next_generation: 1,
             removed: Vec::new(),
             unstarted: Default::default(),
@@ -2723,6 +2727,7 @@ impl Mixer {
         // called event-a would be charged to the next one, which is a
         // different page in a different state.
         self.source_attempts.remove(id);
+        self.exits.remove(id);
         self.rebuild_failures.remove(id);
         self.rebuild_not_before.remove(id);
         info!(source = %id, "source removed");
@@ -4006,6 +4011,10 @@ impl Mixer {
         // What the governor says to give up, or that there is room again.
         self.rendition_tick();
 
+
+        // A plugin process that died by itself is restarted now rather than
+        // when the stall timer gives up on it. See `mixer::exited`.
+        self.restart_the_exited();
 
         // Held frames that have run out of time. Before the liveness sweep, so
         // a source that has come back releases its own held frame there rather

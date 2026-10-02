@@ -88,6 +88,14 @@ is back or you press **Stop**. The mixer side does the same thing it does for
 any channel: a source that a scene holds shows its last picture until the
 stream returns.
 
+A tab that was closed, a browser that was killed or a laptop that went to
+sleep sends the mixer nothing on its way out, so its stream stays on the
+channel for a moment. That moment is 2 seconds. A page reloaded, or a browser
+started again, publishes to the same name and takes it over as soon as the old
+stream has been silent that long, so it is back on air at once rather than
+after WebRTC's own 30 second timeout. A second tab sending the same camera
+while the first is still live is refused, as before.
+
 A refusal that waiting will not cure stops at once with the mixer's own
 sentence: a key the channel does not have, a channel that is switched off or
 does not take WHIP, or a browser with no H.264.

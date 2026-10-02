@@ -17,6 +17,7 @@
 pub mod branch;
 pub mod filter;
 pub mod filters;
+pub mod first_party;
 pub mod harness;
 pub mod host;
 pub mod supervisor;

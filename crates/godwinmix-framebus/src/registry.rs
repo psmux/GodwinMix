@@ -10,6 +10,9 @@ use std::path::{Path, PathBuf};
 
 use crate::{BusName, Error};
 
+#[cfg(unix)]
+mod short;
+
 /// The environment variable a station sets for the shows it starts.
 pub const DIR_ENV: &str = "GODWINMIX_BUS_DIR";
 
@@ -70,19 +73,29 @@ impl Registry {
         &self.dir
     }
 
-    /// Where `name`'s socket is, refused if the path is too long to bind.
+    /// The address of `name`'s socket. In the directory itself when that
+    /// fits a socket address; otherwise through a short link to the
+    /// directory (see `short`), so a long `GODWINMIX_HOME` still works.
+    /// Refused only when even that is too long.
     pub fn path(&self, name: &BusName) -> Result<PathBuf, Error> {
         let path = self.dir.join(name.file_name());
         let len = path.as_os_str().len();
-        if len > MAX_SOCKET_PATH {
-            return Err(Error::BadName(format!(
-                "the socket for {name} would be {} ({len} bytes), and a Unix socket path \
-                 can be at most {MAX_SOCKET_PATH}. Use a shorter id, or point {DIR_ENV} \
-                 at a shorter directory",
-                path.display()
-            )));
+        if len <= MAX_SOCKET_PATH {
+            return Ok(path);
         }
-        Ok(path)
+        #[cfg(unix)]
+        {
+            let short = short::alias(&self.dir)?.join(name.file_name());
+            if short.as_os_str().len() <= MAX_SOCKET_PATH {
+                return Ok(short);
+            }
+        }
+        Err(Error::BadName(format!(
+            "the socket for {name} would be {} ({len} bytes), and a Unix socket path \
+             can be at most {MAX_SOCKET_PATH}, even through a short link to the directory. \
+             Use a shorter id, or point {DIR_ENV} at a shorter directory",
+            path.display()
+        )))
     }
 
     /// Every name with a socket in the directory. A socket left by an owner
@@ -116,11 +129,23 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_long_directory_is_refused_with_the_way_out() {
-        let r = Registry {
-            dir: PathBuf::from(format!("/tmp/{}", "d".repeat(100))),
-        };
-        let e = r.path(&BusName::camera("cam").unwrap()).unwrap_err();
+    fn a_long_directory_is_reached_through_a_short_address() {
+        let dir = PathBuf::from(format!("/tmp/fb-long-{}/{}", std::process::id(), "d".repeat(100)));
+        let r = Registry::new(&dir).unwrap();
+        let path = r.path(&BusName::camera("cam").unwrap()).unwrap();
+        assert!(path.as_os_str().len() <= MAX_SOCKET_PATH, "{}", path.display());
+        assert!(!path.starts_with(&dir));
+        let _ = std::fs::remove_file(path.parent().unwrap());
+        let _ = std::fs::remove_dir_all(dir.parent().unwrap());
+    }
+
+    #[test]
+    fn a_name_too_long_even_for_the_short_address_is_refused_with_the_way_out() {
+        let r = Registry { dir: PathBuf::from(format!("/tmp/{}", "d".repeat(100))) };
+        let name = BusName::channel(&"a".repeat(64), &"b".repeat(64)).unwrap();
+        let e = r.path(&name).unwrap_err();
+        #[cfg(unix)]
+        let _ = std::fs::remove_file(short::alias(&r.dir).unwrap());
         assert!(e.to_string().contains(DIR_ENV), "{e}");
     }
 }

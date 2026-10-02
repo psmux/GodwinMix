@@ -13,9 +13,22 @@ pub struct Publication {
     pub(super) inner: Arc<Inner>,
     pub(super) slot: Arc<Slot>,
     pub(super) id: u64,
+    /// Where the quiet publisher this one took the name from was, if it did.
+    pub(super) took_over: Option<String>,
 }
 
 impl Publication {
+    /// The publisher this session replaced because it had gone quiet, if any.
+    pub fn took_over(&self) -> Option<&str> {
+        self.took_over.as_deref()
+    }
+
+    /// Whether this is still the session on its name. False once a new
+    /// publisher has taken a quiet one over.
+    pub fn current(&self) -> bool {
+        lock(&self.slot.state).session.as_ref().is_some_and(|s| s.id == self.id)
+    }
+
     /// Hand one tag to every reader. Returns true when the tag told the meter
     /// something new about the codecs.
     pub fn push(&self, tag: MediaTag) -> bool {

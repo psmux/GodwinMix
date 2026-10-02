@@ -3,6 +3,7 @@
 //!
 //! ```text
 //!   process.rs    spawn, handshake, talk, poll, stop; the control channel
+//!   exits.rs      how soon a plugin that exited by itself comes back
 //!   transport.rs  the media end per transport, and where its sockets live
 //!   source.rs     SidecarSource:  the same MediaEnds every other source makes
 //!   output.rs     SidecarOutput:  the programme, muxed, down a FIFO
@@ -22,6 +23,7 @@
 //! same door `rtmp/source` uses.
 
 pub mod bridged;
+pub mod exits;
 pub mod filter;
 pub mod output;
 pub mod process;
