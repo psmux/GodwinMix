@@ -11,22 +11,15 @@ pub mod compose;
 pub mod glyphs;
 pub mod style;
 
-use super::{layer::assemble_layer, BuildCtx};
-use crate::caps::CanvasCaps;
+use super::rendered::{self, Rendering};
 use crate::config::Params;
-use crate::overlay::carrier::Carrier;
-use crate::overlay::worker::{self, Msg, Rendered};
-use crate::overlay::{Layer, Motion, Picture};
-use crate::plugin::source::{unknown_method, Provide, Source, SourceRequest};
-use crate::plugin::{
-    Capability, CapabilitySet, Configure, Health, Hello, Manifest, MediaDecl, MediaEnds, PluginState, ProvideKind,
-    Ready, StreamMode, Tier, API_LEVEL,
-};
+use crate::overlay::worker::Rendered;
+use crate::overlay::{Motion, Picture};
+use crate::plugin::source::Provide;
+use crate::plugin::{Capability, CapabilitySet, Manifest, MediaDecl, ProvideKind, StreamMode, Tier, API_LEVEL};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::sync::mpsc::Sender;
-use std::sync::Arc;
 use style::Look;
 
 pub const MANIFEST: Manifest = Manifest {
@@ -43,7 +36,7 @@ pub const MANIFEST: Manifest = Manifest {
     tier: Tier::Core,
 };
 
-pub const PROVIDE: Provide = Provide { manifest: MANIFEST, claims, make: new };
+pub const PROVIDE: Provide = Provide { manifest: MANIFEST, claims, make: rendered::make::<TextParams> };
 
 fn claims(uri: &str) -> Option<u16> {
     uri.trim_start().to_ascii_lowercase().starts_with("text:").then_some(MANIFEST.rank)
@@ -69,17 +62,19 @@ const KEYS: &[&str] = &["text", "width", "height"];
 
 /// Check and read `text/source` params.
 pub fn validate(params: &Params) -> Result<TextParams> {
-    let mut keys = KEYS.to_vec();
-    keys.extend(style::LOOK_KEYS);
-    style::known_keys("text/source", params, &keys)?;
+    style::known_keys("text/source", params, &[KEYS, style::LOOK_KEYS].concat())?;
     let mut p: TextParams = style::read("text/source", params)?;
     p.look.check("text/source")?;
     if p.text.is_empty() {
-        if let Some(rest) = params.get("uri").and_then(|v| v.as_str()).and_then(|u| u.trim_start().get(5..)) {
-            p.text = rest.replace("\\n", "\n");
-        }
+        p.text = from_address(params, "text:");
     }
     Ok(p)
+}
+
+/// The words after `scheme` in the source's address, with `\n` as a new line.
+pub fn from_address(params: &Params, scheme: &str) -> String {
+    let uri = params.get("uri").and_then(|v| v.as_str()).unwrap_or("").trim_start();
+    uri.get(scheme.len()..).filter(|_| uri.to_ascii_lowercase().starts_with(scheme)).unwrap_or("").replace("\\n", "\n")
 }
 
 /// The params schema `protocol.json` lists for this kind.
@@ -87,93 +82,34 @@ pub fn schema() -> Value {
     serde_json::to_value(schemars::schema_for!(TextParams)).unwrap_or(Value::Null)
 }
 
-fn new(req: SourceRequest<'_>) -> Result<Box<dyn Source>> {
-    let params = validate(&req.cfg.effective_params())?;
-    Ok(Box::new(TextSource { ctx: req.ctx(), params, layer: Layer::new(true), carrier: None, worker: None }))
-}
-
-pub struct TextSource {
-    ctx: BuildCtx,
-    params: TextParams,
-    layer: Arc<Layer>,
-    carrier: Option<Arc<Carrier>>,
-    worker: Option<Sender<Msg<TextParams>>>,
-}
-
-/// Render `p` at `drawn`, or at its own size when it has not been drawn yet.
-pub fn render(p: &TextParams, drawn: Option<(u32, u32)>) -> Result<Rendered> {
-    let wrap_at = |width: u32, scale: f64| p.width.map(|_| (width as f64 - 2.0 * p.look.padding * scale).max(8.0) as u32);
-    let natural_glyphs = glyphs::render(&glyphs::Ask { text: &p.text, look: &p.look, scale: 1.0, wrap: p.width.and_then(|w| wrap_at(w, 1.0)) })?;
-    let fit = compose::fit(&p.look, natural_glyphs.as_ref(), 1.0);
-    let natural = (p.width.unwrap_or(fit.0), p.height.unwrap_or(fit.1));
-    let (size, scale, glyphs) = match drawn {
-        Some(d) if d != natural && d.0 > 1 && d.1 > 1 => {
-            let scale = d.1 as f64 / natural.1.max(1) as f64;
-            let g = glyphs::render(&glyphs::Ask { text: &p.text, look: &p.look, scale, wrap: wrap_at(d.0, scale) })?;
-            (d, scale, g)
-        }
-        _ => (natural, 1.0, natural_glyphs),
-    };
-    let rgba = compose::compose(&p.look, glyphs.as_ref(), size, scale);
-    let picture = Picture::from_ayuv(compose::to_ayuv(&rgba), rgba.width, rgba.height, natural);
-    Ok(Rendered { picture: Some(picture), motion: Motion::Still })
-}
-
-impl Source for TextSource {
-    fn manifest(&self) -> &Manifest {
+impl Rendering for TextParams {
+    fn manifest() -> &'static Manifest {
         &MANIFEST
     }
 
-    fn initialize(&mut self, hello: Hello) -> Result<Ready> {
-        self.params = validate(&hello.params)?;
-        self.ctx.canvas = hello.canvas;
-        Ok(Ready { manifest: MANIFEST, latency_ms: 0, capabilities: MANIFEST.capabilities })
+    fn validate(params: &Params) -> Result<Self> {
+        validate(params)
     }
 
-    fn start(&mut self, canvas: &CanvasCaps, thumb: bool) -> Result<MediaEnds> {
-        self.ctx.canvas = canvas.clone();
-        let carrier = Arc::new(Carrier::build(&self.ctx.id, canvas)?);
-        let ends = assemble_layer(&self.ctx, thumb, &carrier, &self.layer)?;
-        carrier.show(self.layer.picture().as_deref());
-        if self.worker.is_none() {
-            self.worker = Some(worker::spawn(&self.ctx.id, self.params.clone(), self.layer.clone(), carrier.clone(), render));
-        }
-        self.carrier = Some(carrier);
-        Ok(ends)
-    }
-
-    fn stop(&mut self) -> Result<()> {
-        if let Some(w) = self.worker.take() {
-            let _ = w.send(Msg::Stop);
-        }
-        Ok(())
-    }
-
-    fn configure(&mut self, params: &Params) -> Result<Configure> {
-        let p = validate(params)?;
-        if let Some(w) = &self.worker {
-            let _ = w.send(Msg::Set(p.clone(), false));
-        }
-        self.params = p;
-        Ok(Configure::Applied)
-    }
-
-    fn health(&self) -> Health {
-        Health::of(if self.worker.is_some() { PluginState::Running } else { PluginState::Starting })
-    }
-
-    fn call(&mut self, method: &str, _params: Value) -> Result<Value> {
-        match method {
-            // The pipeline went to NULL and back, which empties the carrier's
-            // freeze: give it the picture again.
-            "restart" => {
-                if let Some(c) = &self.carrier {
-                    c.show(self.layer.picture().as_deref());
-                }
-                Ok(Value::Null)
+    /// At `drawn`, the letters scale with the box's height and the box takes
+    /// the width it is given, so a wider box is more room, not wider letters.
+    fn render(&self, drawn: Option<(u32, u32)>) -> Result<Rendered> {
+        let p = self;
+        let wrap_at = |width: u32, scale: f64| p.width.map(|_| (width as f64 - 2.0 * p.look.padding * scale).max(8.0) as u32);
+        let ask = |scale: f64, wrap: Option<u32>| glyphs::Ask { text: &p.text, look: &p.look, scale, wrap };
+        let natural_glyphs = glyphs::render(&ask(1.0, p.width.and_then(|w| wrap_at(w, 1.0))))?;
+        let fit = compose::fit(&p.look, natural_glyphs.as_ref(), 1.0);
+        let natural = (p.width.unwrap_or(fit.0), p.height.unwrap_or(fit.1));
+        let (size, scale, glyphs) = match drawn {
+            Some(d) if d != natural && d.0 > 1 && d.1 > 1 => {
+                let scale = d.1 as f64 / natural.1.max(1) as f64;
+                (d, scale, glyphs::render(&ask(scale, wrap_at(d.0, scale)))?)
             }
-            other => Err(unknown_method(&MANIFEST, other, &["restart"])),
-        }
+            _ => (natural, 1.0, natural_glyphs),
+        };
+        let rgba = compose::compose(&p.look, glyphs.as_ref(), size, scale);
+        let picture = Picture::from_ayuv(compose::to_ayuv(&rgba), rgba.width, rgba.height, natural);
+        Ok(Rendered { picture: Some(picture), motion: Motion::Still, backdrop: None })
     }
 }
 

@@ -29,7 +29,7 @@ fn a_bad_param_names_itself_and_what_would_do() {
 fn words_render_once_into_a_box_with_room_round_them() {
     let _ = gstreamer::init();
     let p = validate(&params("text = \"Ada Lovelace\\nAnalyst\"\nsize = 40\npadding = 20\nbackground = \"#102030\"")).unwrap();
-    let r = render(&p, None).unwrap();
+    let r = p.render(None).unwrap();
     let pic = r.picture.expect("a picture");
     assert!(pic.width > 200 && pic.height > 80, "{}x{}", pic.width, pic.height);
     assert_eq!(pic.natural, (pic.width, pic.height));
@@ -45,8 +45,8 @@ fn words_render_once_into_a_box_with_room_round_them() {
 fn drawn_larger_it_renders_larger_rather_than_stretching() {
     let _ = gstreamer::init();
     let p = validate(&params("text = \"Score 2 1\"\nsize = 30")).unwrap();
-    let small = render(&p, None).unwrap().picture.unwrap();
-    let big = render(&p, Some((small.width * 2, small.height * 2))).unwrap().picture.unwrap();
+    let small = p.render(None).unwrap().picture.unwrap();
+    let big = p.render(Some((small.width * 2, small.height * 2))).unwrap().picture.unwrap();
     assert_eq!((big.width, big.height), (small.width * 2, small.height * 2));
     assert_eq!(big.natural, small.natural, "the shape it keeps is its own size");
 }

@@ -14,7 +14,8 @@
 //! picture, which is what it looked like a moment ago anyway.
 
 use super::carrier::Carrier;
-use super::picture::{Layer, Motion, Picture};
+use super::layer::Layer;
+use super::picture::{Motion, Picture};
 use anyhow::Result;
 use std::sync::mpsc::{channel, RecvTimeoutError, Sender};
 use std::sync::Arc;
@@ -28,6 +29,8 @@ const SETTLE_MAX: Duration = Duration::from_millis(400);
 pub struct Rendered {
     pub picture: Option<Picture>,
     pub motion: Motion,
+    /// A still drawn under a crawl. See `Layer::set_backdrop`.
+    pub backdrop: Option<Picture>,
 }
 
 /// What the thread can be told.
@@ -98,6 +101,7 @@ fn publish(layer: &Layer, carrier: &Carrier, rendered: Result<Rendered>, content
             if content {
                 carrier.show(picture.as_deref());
             }
+            layer.set_backdrop(r.backdrop.map(Arc::new));
             layer.set_motion(r.motion);
             layer.set_picture(picture);
         }
