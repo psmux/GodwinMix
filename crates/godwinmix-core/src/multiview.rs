@@ -48,6 +48,7 @@
 //! This lives in its own pipeline so that a preview encoder falling over
 //! cannot disturb the program path.
 
+mod arrival;
 pub mod preview;
 
 use crate::caps::{CanvasCaps, Grid};
@@ -808,6 +809,14 @@ impl Multiview {
         // programme's clock and base time (`follow_clock_of`), so the join
         // adds nothing and there is nothing here to negotiate.
         gstutil::answer_latency_here(&src)?;
+        // The programme tile comes out of mixers that may wait out a whole
+        // second for an input that has stopped, and would then reach this
+        // compositor too late for every frame (`arrival`).
+        if source.is_none() {
+            if let Some(pad) = src.static_pad("src") {
+                arrival::stamp_on_arrival(&pad);
+            }
+        }
         let queue = gstutil::queue_preview(&format!("mv-q-{tag}"))?;
         // The mosaic is a compositor too, and its tiles are scaled on its pads.
         gstutil::stop_flushes_here(&queue)?;
