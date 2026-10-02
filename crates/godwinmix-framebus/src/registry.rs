@@ -135,6 +135,7 @@ mod tests {
         let path = r.path(&BusName::camera("cam").unwrap()).unwrap();
         assert!(path.as_os_str().len() <= MAX_SOCKET_PATH, "{}", path.display());
         assert!(!path.starts_with(&dir));
+        let _ = std::fs::remove_file(path.parent().unwrap());
         let _ = std::fs::remove_dir_all(dir.parent().unwrap());
     }
 
@@ -143,6 +144,8 @@ mod tests {
         let r = Registry { dir: PathBuf::from(format!("/tmp/{}", "d".repeat(100))) };
         let name = BusName::channel(&"a".repeat(64), &"b".repeat(64)).unwrap();
         let e = r.path(&name).unwrap_err();
+        #[cfg(unix)]
+        let _ = std::fs::remove_file(short::alias(&r.dir).unwrap());
         assert!(e.to_string().contains(DIR_ENV), "{e}");
     }
 }

@@ -50,8 +50,11 @@ fn find_from(exe_dir: &Path, name: &str) -> Option<PathBuf> {
 }
 
 fn places_from(exe_dir: &Path, name: &str) -> Vec<PathBuf> {
+    // The folder above, named rather than reached with `..`, so the path a
+    // refusal prints is one a person can paste.
+    let prefix = exe_dir.parent().unwrap_or(exe_dir);
     let mut out = vec![
-        exe_dir.join("..").join("share").join("godwinmix").join("plugins").join(name),
+        prefix.join("share").join("godwinmix").join("plugins").join(name),
         exe_dir.join("plugins").join(name),
     ];
     out.extend(checkout_of(exe_dir).map(|c| c.join("plugins").join(name)));

@@ -45,9 +45,13 @@ fn a_bus_under_a_home_path_over_110_bytes_carries_pictures() {
     let frames = (0..10)
         .filter(|_| sink.try_pull_sample(gst::ClockTime::from_seconds(5)).is_some())
         .count();
+    // The socket is in the registry itself, where the listing finds it.
+    let listed = godwinmix_framebus::Registry::new(dir).unwrap().list();
     reader.set_state(gst::State::Null).unwrap();
     owner.set_state(gst::State::Null).unwrap();
-    // The socket is in the registry itself, where the listing finds it.
+    let link = godwinmix_framebus::Registry::new(dir).unwrap().path(&name.parse().unwrap()).unwrap();
+    let _ = std::fs::remove_file(link.parent().unwrap());
     let _ = std::fs::remove_dir_all(&root);
+    assert!(listed.iter().any(|n| n.to_string() == name), "{listed:?}");
     assert_eq!(frames, 10, "the reader got {frames} of 10 frames");
 }
