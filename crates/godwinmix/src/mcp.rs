@@ -390,7 +390,8 @@ impl Server {
         // when the mixer happens to be down too.
         self.check_required(tool, method, &args, &path)?;
         let image = tool == "snapshot";
-        Ok(Plan { verb, path, args, image })
+        let preview = tool == "preview_frame";
+        Ok(Plan { verb, path, args, image, preview })
     }
 
     /// Every required property of the tool's own input schema, present and
@@ -472,6 +473,9 @@ impl Server {
             return Ok(json!({ "content": [{ "type": "image", "data": data, "mimeType": mime }] }));
         }
         let text = resp.text().await.map_err(|e| format!("reading response: {e}"))?;
+        if let Some(picture) = plan.preview.then(|| preview::content(&text)).flatten() {
+            return Ok(picture);
+        }
         Ok(text_result(render_body(&text)))
     }
 }
@@ -509,6 +513,8 @@ struct Plan {
     args: Value,
     /// The answer is a picture, to be returned as MCP image content.
     image: bool,
+    /// The answer is a JSON record with a picture in it. See `mcp_preview`.
+    preview: bool,
 }
 
 /// The mixer's own sentence, out of the one error shape.
@@ -611,6 +617,9 @@ fn text_result(text: String) -> Value {
 fn error_result(text: String) -> Value {
     json!({ "content": [{ "type": "text", "text": text }], "isError": true })
 }
+
+#[path = "mcp_preview.rs"]
+mod preview;
 
 #[cfg(test)]
 #[path = "mcp_shows_tests.rs"]

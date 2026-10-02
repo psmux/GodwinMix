@@ -65,9 +65,12 @@ export interface AddItemFilterRequest {
 export interface AddItemRequest {
   content: unknown;
   draft?: string | null;
+  enter?: unknown;
+  exit?: unknown;
   name?: string | null;
   scene: string;
   transform?: unknown;
+  visible?: boolean | null;
 }
 
 /**

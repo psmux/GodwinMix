@@ -139,6 +139,10 @@ pub struct AddItemRequest {
     /// the live document.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub draft: Option<String>,
+    /// How it comes in and goes out when shown or hidden on air:
+    /// `{type, edge, duration_ms, easing, on_take}`, as on `scene.item.set`.
+    pub enter: Value,
+    pub exit: Value,
     /// What to call it. Left out, a source item is named after its source,
     /// because a model reasons about words.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -147,6 +151,10 @@ pub struct AddItemRequest {
     /// Where it goes. Left out, the next free cell of a grid over what is
     /// already there, so a drop on a scene never needs a dialog.
     pub transform: Value,
+    /// `false` adds it hidden, so a graphic can be put on a scene that is on
+    /// air and shown later with its `enter`. Left out, it is shown.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub visible: Option<bool>,
 }
 
 /// `output.add`. The id and the URL are the whole of it for an RTMP
