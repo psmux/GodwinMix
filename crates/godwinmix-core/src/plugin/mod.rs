@@ -289,6 +289,10 @@ pub struct KindInfo {
     /// URI schemes a bare address is matched against. Empty on a kind that
     /// has to be named outright.
     pub schemes: &'static [&'static str],
+    /// The JSON Schema of the kind's `params`, for a kind that publishes one.
+    /// A client builds its form from this, the same way for every kind.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub params: Option<serde_json::Value>,
 }
 
 impl Manifest {
@@ -298,6 +302,7 @@ impl Manifest {
             id: self.provide_id(),
             description: self.description,
             schemes: self.uri_schemes,
+            params: None,
         }
     }
 

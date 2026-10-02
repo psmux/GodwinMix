@@ -98,6 +98,15 @@ impl VideoPads {
         self.inner.lock().offset
     }
 
+    /// Visit every pad drawing this source. For the overlay board, which reads
+    /// each pad's place once a frame and must not keep a list of its own that
+    /// could fall behind a rebind.
+    pub fn each(&self, mut f: impl FnMut(&gst::Pad)) {
+        for pad in &self.inner.lock().pads {
+            f(pad);
+        }
+    }
+
     /// How many places on the canvas this source is drawn in.
     pub fn count(&self) -> usize {
         self.inner.lock().pads.len()

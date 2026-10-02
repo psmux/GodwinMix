@@ -37,6 +37,9 @@ Words used below:
 | Test pattern and tone | raw | bars, ball, black, snow | sine | `test/source` (built in) | throughout |
 | RIST (Simple Profile), listening | RTP MPEG-TS | any | any | `hls/source` (built in) claims `rist://` as live | `plugin/outputs/rist_tests.rs`: `uridecodebin` on `rist://` decodes what `rist/output` sends |
 | Still picture (PNG, JPEG, BMP, WebP, TIFF), file or HTTP | image | held live with `imagefreeze` | silence | `image/source` (built in) | `plugin/kinds/image_tests.rs`: the conformance harness every kind passes |
+| Still picture with transparency (PNG, WebP with alpha, SVG) | image | decoded once to AYUV and drawn over the programme; an SVG drawn by `rsvgdec` at its placed size | silence | `image/source` (built in) | `tests/overlay_still.rs`: the transparent half shows the colour under it on the programme |
+| Clip with alpha: WebM VP8 or VP9 alpha, ProRes 4444, QuickTime Animation, PNG in MOV | WebM, MOV | the alpha decode bins, `avdec_prores`, `avdec_qtrle`, `pngdec`; drawn over the programme | as the clip has | `file/source` (built in) | `tests/overlay_clip.rs`; HEVC with alpha decodes flat here |
+| Text and ticker | none | rendered once by `textoverlay` (Pango and Cairo), held or moved | silence | `text/source`, `ticker/source` (built in) | `tests/overlay.rs`: the box on the programme, a change applied with no rebuild |
 | Picture sequence (`frame%04d.png`) | images | played at `params.fps`, looping | silence | `image/source` (built in) | `plugin/kinds/image_tests.rs`: the conformance harness |
 | IP camera MJPEG over HTTP or HTTPS, with its login | `multipart/x-mixed-replace` | MJPEG, copy | none | `ipcam/source` (plugin `ipcam`) | `plugins/ipcam/src/tests.rs` against a camera served by the test; by hand through the release core |
 | IP camera snapshot URL, polled 1 to 30 times a second | JPEG | MJPEG, copy | none | `ipcam/source` (plugin `ipcam`) | `plugins/ipcam/src/tests.rs`, behind a basic login |

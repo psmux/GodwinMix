@@ -39,7 +39,7 @@ class MediaPanel extends HTMLElement {
     this.hint = el("div.sm.faint.pad");
     this.cue = el("input", { type: "number", min: "0", max: "600", value: "0", style: { width: "5em" }, title: "Seconds from now" });
     this.custom = el("input", { type: "text", placeholder: "Or a path the mixer can read" });
-    this.file = el("input", { type: "file", accept: "video/*,.mkv,.ts,.flv", multiple: true, hidden: true });
+    this.file = el("input", { type: "file", accept: "video/*,image/*,.mkv,.ts,.flv,.webm,.mov,.svg,.gif", multiple: true, hidden: true });
     on(this.file, "change", () => this.upload(this.file.files));
 
     this.append(

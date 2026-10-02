@@ -16,6 +16,7 @@ const EXTENSIONS: &[(&str, &str)] = &[
     ("webp", "image/webp"),
     ("tif", "image/tiff"),
     ("tiff", "image/tiff"),
+    ("svg", "image/svg+xml"),
 ];
 
 /// The image type an address names by its extension, if it names one.

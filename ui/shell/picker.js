@@ -42,6 +42,7 @@ import { OUTPUT_KINDS } from "../client/destinations.js";
 import { alreadyAdded, sameAddress, easeSchema, unease } from "../client/devices.js";
 import { addChannel } from "../panels/channels/entry.js";
 import { browserEntries } from "../panels/sources/browser-entry.js";
+import { TEXT_PRESETS, addRequest, canvasOf, placementFor } from "../panels/sources/text-presets.js";
 
 const LIST_KEY = "gmx.picker.list";
 
@@ -102,7 +103,7 @@ function openSourcePicker(client, kinds, plugins, opts) {
   const panel = el("div.picker-panel");
   const body = el("div.picker", {}, [
     rail,
-    el("div.picker-main", {}, [el("div.picker-head", {}, [search]), panel]),
+    el("div.picker-main", {}, [el("div.picker-head", {}, [search, ...quickText()]), panel]),
   ]);
 
   const tabs = new Map();
@@ -244,6 +245,8 @@ function openSourcePicker(client, kinds, plugins, opts) {
       rows = state.items.map((item) => mediaEntry(item));
     } else if (cat.patterns) {
       rows = TEST_PATTERNS.map((pattern) => patternEntry(pattern));
+    } else if (cat.text) {
+      rows = TEXT_PRESETS.map((preset) => textEntry(preset));
     }
     return matching(rows, query);
   }
@@ -336,6 +339,47 @@ function openSourcePicker(client, kinds, plugins, opts) {
     };
   }
 
+  /**
+   * A text or a ticker, made from a preset and put where the preset says in
+   * the scene the picker was opened for. Another press makes another one.
+   */
+  function textEntry(preset) {
+    return {
+      icon: "text",
+      name: preset.name,
+      note: preset.note,
+      title: preset.type,
+      params: () => addRequest(preset),
+      placement: async () => placementFor(preset, await canvasOf(client)),
+      added: () => false,
+    };
+  }
+
+  /**
+   * Add text and Add ticker beside the search box, so either is two presses
+   * from the tray: Add sources, then this.
+   */
+  function quickText() {
+    return TEXT_PRESETS.filter((p) => p.key === "lower-third" || p.key === "ticker").map((preset) => {
+      const entry = textEntry(preset);
+      const label = preset.key === "ticker" ? "Add ticker" : "Add text";
+      const button = el("button.btn", { text: label, title: preset.note });
+      button.onclick = async () => {
+        button.disabled = true;
+        try {
+          const answer = { ...(await client.call("source.add", entry.params())), placement: await entry.placement() };
+          if (opts.onAdded) await opts.onAdded(answer);
+          toast({ text: `${preset.name} added. Its words are in its settings.` });
+          m.close();
+        } catch (e) {
+          errorToast(e, label);
+          button.disabled = false;
+        }
+      };
+      return button;
+    });
+  }
+
   /** The kinds that belong to a category, which are the ones with a form. */
   function kindsFor(cat, query) {
     const mine = kinds.filter((k) => categoryOf(k) === cat.id);
@@ -375,6 +419,7 @@ function openSourcePicker(client, kinds, plugins, opts) {
       let answer;
       try {
         answer = reusable ? existing : await client.call("source.add", entry.params());
+        if (entry.placement && !reusable) answer = { ...answer, placement: await entry.placement() };
         state.created.set(key(entry.name), answer);
         if (reusable) await opts.onExisting(answer);
         else if (opts.onAdded) await opts.onAdded(answer);

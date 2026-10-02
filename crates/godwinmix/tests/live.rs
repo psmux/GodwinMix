@@ -430,6 +430,30 @@ async fn a_rename_leaves_a_live_source_running() {
     assert_eq!(listed["name"], "Pulpit", "{listed}");
 }
 
+/// New words for a text on air are taken in place: `source.set` answers with
+/// the source still live, the new params are what it reports, and a bad
+/// colour is refused with the field named and the old words left on air.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn new_words_for_a_text_apply_in_place() {
+    let core = Core::start(godwinmix_core::safety::SafetyConfig::default()).await;
+    let token = desk();
+    core.call(&token, "source.add", json!({ "id": "strap", "uri": "text:Ada", "params": { "size": 30 } })).await.unwrap();
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    while core.call(&token, "source.get", json!({ "id": "strap" })).await.unwrap()["state"] != "live" {
+        assert!(std::time::Instant::now() < deadline, "the text never went live");
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    let set = core.call(&token, "source.set", json!({ "id": "strap", "params": { "text": "Grace Hopper" } })).await.unwrap();
+    assert_eq!(set["state"], "live", "new words must not rebuild the text: {set}");
+    let configs = core.app.mixer.configs().await.unwrap();
+    let strap = configs.sources.iter().find(|s| s.id == "strap").unwrap();
+    assert_eq!(strap.params.get("text").and_then(|v| v.as_str()), Some("Grace Hopper"));
+    assert_eq!(strap.params.get("size").and_then(|v| v.as_integer()), Some(30), "params are merged, not replaced");
+    let bad = core.call(&token, "source.set", json!({ "id": "strap", "params": { "color": "white" } })).await.unwrap_err();
+    assert_eq!(bad.code, -32602, "{bad:?}");
+    assert!(bad.message.contains("params.color") && bad.data["id"] == "strap", "{bad:?}");
+}
+
 /// 09 section 5 item 14, the method half: a core started with `--rehearsal`
 /// will not add an output, so an agent rehearsing cannot put anything on a
 /// real destination by accident. The credential half is in `scope.rs`.

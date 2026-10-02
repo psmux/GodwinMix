@@ -512,6 +512,14 @@ pub enum Command {
         position_ms: u64,
         reply: oneshot::Sender<SeekOutcome>,
     },
+    /// New params for a running source, handed to its kind. Answers whether
+    /// the kind took them in place; a kind that cannot is left as it was, and
+    /// the caller rebuilds it.
+    ConfigureSource {
+        source: SourceId,
+        params: crate::config::Params,
+        reply: oneshot::Sender<Result<crate::plugin::Configure>>,
+    },
     /// Put a filter on a source or on the programme, while live. The insert is
     /// under a pad block, so the programme loses at most the one frame the
     /// block holds.
@@ -729,6 +737,14 @@ impl MixerHandle {
     pub async fn seek(&self, source: SourceId, position_ms: u64) -> Result<SeekOutcome> {
         let (tx, rx) = oneshot::channel();
         self.ask(Command::Seek { source, position_ms, reply: tx }, rx).await
+    }
+
+    /// Give a running source new params. `Applied` when its kind took them in
+    /// place, with no rebuild and no gap; `RestartRequired` when it cannot,
+    /// and nothing has changed.
+    pub async fn configure_source(&self, source: SourceId, params: crate::config::Params) -> Result<crate::plugin::Configure> {
+        let (tx, rx) = oneshot::channel();
+        self.ask(Command::ConfigureSource { source, params, reply: tx }, rx).await?
     }
 
     /// Put a filter on a source or on the programme, live.
@@ -1145,6 +1161,9 @@ pub struct Mixer {
     /// The compositor's slots: where a scene's items are actually drawn. See
     /// `mixer::slots`.
     pool: SlotPool,
+    /// Text, tickers and pictures with alpha, drawn after the compositor.
+    /// Empty, and with no probe installed, until one is added. See `overlay`.
+    overlay: Arc<crate::overlay::Board>,
     /// The scene on air, flattened. `None` is the one item scene a bare source
     /// id means, or the slate when nothing is on.
     program_scene: Option<ProgramScene>,
@@ -1651,6 +1670,7 @@ impl Mixer {
         // The slots every scene is drawn in. Built before the pipeline runs,
         // so the eight the pool starts with cost one pad request each and
         // never another. See `mixer::slots`.
+        let overlay = crate::overlay::Board::new(&vmix, (canvas.width, canvas.height));
         let pool = SlotPool::build(&program, &vmix, &canvas)
             .context("building the compositor slots")?;
 
@@ -1778,6 +1798,7 @@ impl Mixer {
             retired: Vec::new(),
             programme_filters: Vec::new(),
             pool,
+            overlay,
             program_scene: None,
             ramp: None,
             preview_cells: Vec::new(),
@@ -2019,6 +2040,15 @@ impl Mixer {
             if let Err(e) = input.attach_filter(f, &self.canvas, false) {
                 warn!(source = %cfg.id, filter = %f.id, ?e, "could not attach a configured filter");
             }
+        }
+
+        // A source with an alpha channel is drawn by the overlay board, and
+        // its flattened carrier must not reach the compositor. On a GPU
+        // compositor, which takes alpha itself, the board does not draw and
+        // the carrier goes through like any picture.
+        if let Some(layer) = input.layer().filter(|_| !programme_keeps_alpha()) {
+            crate::overlay::board::hold_back(&branch.vtee, layer.clone());
+            self.overlay.attach(&cfg.id, layer, branch.pads.clone());
         }
 
         branch.sync_state();
@@ -2339,7 +2369,7 @@ impl Mixer {
     /// for any dead source.
     fn rebuild_source(&mut self, id: &SourceId) {
         let Some(slot) = self.sources.iter().find(|s| &s.input.id == id) else { return };
-        let mut cfg = slot.input.config.clone();
+        let mut cfg = slot.input.current_config();
         // Carry the desk across. The config this source was built with holds the
         // fader it started at, and a source that comes back an hour later at
         // that value rather than at the one the operator set would jump in level
@@ -2680,6 +2710,7 @@ impl Mixer {
             crate::slow_step!("take off programme", id, self.take(None, None))?;
         }
         let slot = self.sources.remove(pos);
+        self.overlay.detach(id);
         if let Some(mv) = &mut self.multiview {
             crate::slow_step!("multiview remove_tile", id, mv.remove_tile(id).ok());
         }
@@ -2837,10 +2868,7 @@ impl Mixer {
             .iter()
             .filter(|s| s.input.id != AD_ID)
             .map(|s| {
-                let mut cfg = s.input.config.clone();
-                if let Some(name) = s.input.renamed() {
-                    cfg.name = Some(name);
-                }
+                let mut cfg = s.input.current_config();
                 // Taken off the elements rather than from the config the source
                 // was built with. The config is the value it started at; these
                 // are where the operator left the desk, and that is what has to
@@ -3244,6 +3272,11 @@ impl Mixer {
     /// The slot pool, for a test that has to read what is on the pads.
     pub fn pool_for_tests(&self) -> &SlotPool {
         &self.pool
+    }
+
+    /// The overlay board, for a test that wants to know what it draws.
+    pub fn overlay_board(&self) -> &Arc<crate::overlay::Board> {
+        &self.overlay
     }
 
     /// The transition id of the take on air. `event/program.took` carries the
@@ -3727,6 +3760,7 @@ impl Mixer {
             Command::SourceStopped(_) => "source.stopped",
             Command::SetAudio { .. } => "source.audio.set",
             Command::Seek { .. } => "source.seek",
+            Command::ConfigureSource { .. } => "source.set",
             Command::AddFilter(..) => "filter.add",
             Command::SetFilter { .. } => "filter.set",
             Command::RemoveFilter(..) => "filter.remove",
@@ -3850,6 +3884,16 @@ impl Mixer {
             }
             Command::Seek { source, position_ms, reply } => {
                 let _ = reply.send(self.seek(&source, position_ms));
+            }
+            Command::ConfigureSource { source, params, reply } => {
+                let r = match self.sources.iter().find(|s| s.input.id == source) {
+                    Some(s) => s.input.configure(&params),
+                    None => Err(anyhow::anyhow!("there is no source '{source}' to change. Call source.list to see the ids")),
+                };
+                if matches!(r, Ok(crate::plugin::Configure::Applied)) {
+                    self.persist_runtime();
+                }
+                let _ = reply.send(r);
             }
             Command::ReconnectOutput(id, ack) => {
                 let r = match self.outputs.iter().find(|o| o.id() == &id) {
@@ -4478,6 +4522,15 @@ impl Mixer {
                 // camera's address is cut down to an ellipsis, so its settings
                 // opened as the form of whatever kind came first in the list.
                 let kind = s.input.type_id();
+                // A source the overlay board draws says so, and a text or a
+                // ticker says what it shows, which carries no secret and is
+                // what its editor opens on.
+                if let Some(layer) = s.input.layer() {
+                    status.put_extra("alpha", layer.active());
+                    if matches!(kind.as_str(), "text/source" | "ticker/source") {
+                        status.put_extra("params", s.input.current_config().params);
+                    }
+                }
                 if !kind.is_empty() {
                     status.put_extra("type", kind);
                 }
