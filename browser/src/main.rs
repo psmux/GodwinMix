@@ -471,6 +471,15 @@ wrap_app! {
             ] {
                 cl.append_switch(Some(&CefString::from(sw)));
             }
+            // macOS: the cookie store is encrypted with a key Chromium keeps in
+            // the login keychain, and reading it from an app that is not signed
+            // by a known developer raises a keychain dialog. Nobody can answer
+            // it from a headless renderer, and every http and https load waits
+            // on it for ever (file:// pages still draw, which hides it). The
+            // profile is private to one run and deleted after, so a mock
+            // keychain loses nothing.
+            #[cfg(target_os = "macos")]
+            cl.append_switch(Some(&CefString::from("use-mock-keychain")));
             cl.append_switch_with_value(
                 Some(&CefString::from("autoplay-policy")),
                 Some(&CefString::from("no-user-gesture-required")),
