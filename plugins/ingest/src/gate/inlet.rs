@@ -45,6 +45,10 @@ impl Inlet for Stream {
     fn tag(&mut self, tag: MediaTag) {
         self.push(tag);
     }
+
+    fn wants_keyframe(&self) -> bool {
+        self.publication.as_ref().is_some_and(|p| p.wants_keyframe())
+    }
 }
 
 impl Drop for Stream {
@@ -79,6 +83,10 @@ impl Inlet for Channelled {
                 self.stream.gate.live(&self.channel, p);
             }
         }
+    }
+
+    fn wants_keyframe(&self) -> bool {
+        self.stream.wants_keyframe()
     }
 }
 

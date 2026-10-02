@@ -28,6 +28,9 @@ pub struct Shared {
     pub feed: Mutex<Option<Feed>>,
     pub plan: Mutex<Option<Plan>>,
     stop: AtomicBool,
+    /// Set by a restart: close the feed and open the device again from
+    /// nothing on the next tick.
+    reopen: AtomicBool,
     /// Times this source became the owner.
     pub takeovers: AtomicU64,
     /// How long the last takeover took, from finding the claim free to the
@@ -53,6 +56,13 @@ impl Owner {
 
     pub fn is_owner(&self) -> bool {
         self.shared.feed.lock().is_some()
+    }
+
+    /// Close the device and open it again, on the owner thread: what a
+    /// restart means here. Respawning the plugin alone left the feed reading
+    /// the old process's socket, and the source stayed dark for good.
+    pub fn reopen(&self) {
+        self.shared.reopen.store(true, Relaxed);
     }
 }
 
@@ -84,7 +94,10 @@ fn run_loop(shared: &Arc<Shared>, watch: &Watch) {
         // Each lock is taken and let go within its own statement: a feed is
         // dropped (which waits for the plugin to stop) with no lock held, so
         // `health` and `call` on the mixer's side never wait on it.
-        let failed = shared.feed.lock().as_mut().and_then(Feed::failure);
+        let mut failed = shared.feed.lock().as_mut().and_then(Feed::failure);
+        if shared.reopen.swap(false, Relaxed) && failed.is_none() && shared.feed.lock().is_some() {
+            failed = Some("a restart asked for it".into());
+        }
         if let Some(why) = failed {
             let name = shared.plan.lock().as_ref().map(|p| p.name.to_string()).unwrap_or_default();
             warn!(bus = %name, %why, "giving the device up so another source can open it");

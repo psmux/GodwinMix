@@ -83,6 +83,7 @@ pub fn audio_sink(to: Shared, zero: Arc<Zero>) -> gst::Element {
 fn sink(caps: &str, kind: TagKind, cc: Option<&'static [u8; 4]>, to: Shared, zero: Arc<Zero>) -> gst::Element {
     let caps = caps.parse::<gst::Caps>().expect("the caps above parse");
     let header: Mutex<Option<Vec<u8>>> = Mutex::new(None);
+    let asker = crate::keyframe::Asker::default();
     let sink = gst_app::AppSink::builder()
         .caps(&caps)
         .sync(false)
@@ -93,10 +94,18 @@ fn sink(caps: &str, kind: TagKind, cc: Option<&'static [u8; 4]>, to: Shared, zer
                 .new_sample(move |sink| {
                     let sample = sink.pull_sample().map_err(|_| gst::FlowError::Eos)?;
                     let tags = tags(&sample, kind, cc, &header, &zero);
-                    let mut inlet = to.lock().unwrap_or_else(|e| e.into_inner());
-                    let Some(inlet) = inlet.as_mut() else { return Err(gst::FlowError::Eos) };
-                    for tag in tags {
-                        inlet.tag(tag);
+                    let wanted = {
+                        let mut inlet = to.lock().unwrap_or_else(|e| e.into_inner());
+                        let Some(inlet) = inlet.as_mut() else { return Err(gst::FlowError::Eos) };
+                        for tag in tags {
+                            inlet.tag(tag);
+                        }
+                        kind == TagKind::Video && inlet.wants_keyframe()
+                    };
+                    // Asked with the inlet let go: the event goes up through
+                    // the parser and the depayloader to the RTP session.
+                    if wanted {
+                        asker.ask(sink.upcast_ref());
                     }
                     Ok(gst::FlowSuccess::Ok)
                 })

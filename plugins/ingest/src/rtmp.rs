@@ -51,6 +51,12 @@ pub use io::server_config;
 /// Where one publisher's tags go. Dropping it means the publisher has left.
 pub trait Inlet: Send {
     fn tag(&mut self, tag: MediaTag);
+
+    /// Is somebody downstream waiting for a keyframe? Only a publisher that
+    /// can be asked for one (WebRTC) reads it.
+    fn wants_keyframe(&self) -> bool {
+        false
+    }
 }
 
 /// Ends one publisher's connection from outside its thread: the gate keeps
