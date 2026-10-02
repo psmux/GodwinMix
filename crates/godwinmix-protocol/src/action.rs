@@ -192,16 +192,21 @@ impl Actionable {
         self
     }
 
-    /// The first detail anywhere in an error's chain. See `ErrorAction::find`.
-    pub fn find_detail(err: &(dyn std::error::Error + 'static)) -> Option<Value> {
+    /// The first one anywhere in an error's chain. See `ErrorAction::find`.
+    pub fn find<'a>(err: &'a (dyn std::error::Error + 'static)) -> Option<&'a Actionable> {
         let mut at: Option<&(dyn std::error::Error + 'static)> = Some(err);
         while let Some(e) = at {
             if let Some(found) = e.downcast_ref::<Actionable>() {
-                return found.detail.clone();
+                return Some(found);
             }
             at = e.source();
         }
         None
+    }
+
+    /// The first detail anywhere in an error's chain.
+    pub fn find_detail(err: &(dyn std::error::Error + 'static)) -> Option<Value> {
+        Self::find(err).and_then(|a| a.detail.clone())
     }
 }
 

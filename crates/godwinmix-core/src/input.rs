@@ -346,38 +346,29 @@ impl ExecSpec {
     }
 }
 
-/// Where `godwinmix-browser` is: the configured path, else next to this
-/// executable, else on PATH.
+/// Where the browser renderer is, or `None` when `wpesrc` should draw the
+/// page instead. See `setup::web` for every place it is looked for.
+///
+/// With neither, a checkout that can build the renderer is asked to (on a
+/// thread of the binary's, never this one) and the refusal says it is being
+/// set up. A package with no renderer says so plainly.
 fn find_browser_sidecar(browser: &BrowserConfig) -> Result<Option<std::path::PathBuf>> {
-    const NAME: &str = "godwinmix-browser";
-    if let Some(p) = &browser.sidecar {
-        let p = std::path::PathBuf::from(p);
-        anyhow::ensure!(
-            p.is_file(),
-            "browser.sidecar is set to {} but there is no such file",
-            p.display()
-        );
-        return Ok(Some(p));
+    use crate::setup::{names, plain, starter, web};
+    let lookup = web::lookup(browser);
+    if let Some(found) = lookup.found {
+        return Ok(Some(found));
     }
-    if let Some(dir) = std::env::current_exe().ok().and_then(|e| e.parent().map(|d| d.to_path_buf())) {
-        // On macOS CEF only runs from an app bundle, so that is what sits
-        // next to the mixer there.
-        let candidates = [
-            dir.join(format!("{NAME}{}", std::env::consts::EXE_SUFFIX)),
-            dir.join(format!("{NAME}.app")).join("Contents/MacOS").join(NAME),
-        ];
-        if let Some(p) = candidates.into_iter().find(|p| p.is_file()) {
-            return Ok(Some(p));
-        }
+    if lookup.configured_missing.is_some() {
+        return Err(plain::web_configured_missing(&lookup).into());
     }
-    let found = std::env::var_os("PATH")
-        .map(|paths| {
-            std::env::split_paths(&paths)
-                .map(|d| d.join(format!("{NAME}{}", std::env::consts::EXE_SUFFIX)))
-                .find(|p| p.is_file())
-        })
-        .unwrap_or(None);
-    Ok(found)
+    if crate::probe::exists("wpesrc") {
+        return Ok(None);
+    }
+    if lookup.buildable.is_some() {
+        starter::need(names::WEB);
+        return Err(plain::web_setting_up(&lookup).into());
+    }
+    Err(plain::web_unavailable(&lookup).into())
 }
 
 /// What the sidecar found the page playing.
@@ -2493,30 +2484,10 @@ fn exec_refused() -> godwinmix_protocol::Actionable {
     )
 }
 
-/// Why a web page source cannot start: no browser sidecar was found, and
-/// the GStreamer fallback is not here either.
-///
-/// The sidecar is the answer on every platform and the only one on macOS and
-/// Windows, so it leads. The Linux package comes second, for a person who
-/// would rather have the lighter renderer. The button opens the setting that
-/// points the mixer at a sidecar it did not find by itself.
+/// Why a web page source cannot start: no renderer was found, and the
+/// GStreamer fallback is not here either.
 fn no_web_renderer() -> godwinmix_protocol::Actionable {
-    let fallback = if cfg!(target_os = "linux") {
-        " On Linux the lighter GStreamer renderer also works: the gstreamer1.0-wpe package \
-         on Debian and Ubuntu."
-    } else {
-        ""
-    };
-    godwinmix_protocol::Actionable::new(
-        format!(
-            "cannot render web pages: the browser sidecar, godwinmix-browser, is not beside \
-             the mixer or on the PATH, and the setting browser.sidecar does not point at one. \
-             Put godwinmix-browser{} next to the mixer, or set Browser sidecar in Settings to \
-             where it is. It applies to the next web source you add.{fallback}",
-            if cfg!(target_os = "macos") { ".app" } else { std::env::consts::EXE_SUFFIX }
-        ),
-        godwinmix_protocol::ErrorAction::open_setting("Set the browser sidecar", "browser.sidecar"),
-    )
+    crate::setup::plain::web_unavailable(&crate::setup::web::lookup(&BrowserConfig::default()))
 }
 
 /// Build a headless browser rendering a page as a live source.
@@ -2879,12 +2850,9 @@ mod tests {
         }
         let err = make_web_source("s", "web+https://example.com").unwrap_err();
         let msg = format!("{err:#}");
-        assert!(msg.contains("godwinmix-browser"), "should name the sidecar: {msg}");
-        if cfg!(target_os = "linux") {
-            assert!(msg.contains("gstreamer1.0-wpe"), "should name the package: {msg}");
-        } else {
-            assert!(!msg.contains("gstreamer1.0-wpe"), "no Debian package off Linux: {msg}");
-        }
+        assert!(!msg.contains("godwinmix-browser"), "a person is not told program names: {msg}");
+        let detail = godwinmix_protocol::Actionable::find_detail(err.as_ref()).expect("a detail");
+        assert!(detail.to_string().contains("godwinmix-browser"), "the detail names it: {detail}");
         let action = godwinmix_protocol::ErrorAction::find(err.as_ref()).expect("an action");
         assert_eq!(action.to_value()["key"], "browser.sidecar");
         assert_eq!(action.to_value()["kind"], "open");
