@@ -43,7 +43,7 @@ import { stateLabel, dotClass, stalledAdvice, ADVICE_AFTER } from "../panels/out
 import { tagFor } from "../shell/registry.js";
 import * as layout from "../shell/layout.js";
 import { ART } from "../panels/welcome/tiles.js";
-import { WelcomePanel } from "../panels/welcome/panel.js";
+import { WelcomePanel, showWelcomeAgain } from "../panels/welcome/panel.js";
 import { mosaicWanted } from "../panels/multiview/wanted.js";
 import { connect } from "../client/index.js";
 import { shell, panelSection } from "../shell/shell.js";
@@ -1905,9 +1905,16 @@ async function welcomeSuite() {
   const panel = new WelcomePanel();
   panel.setClient(client);
   panel.connectedCallback();
+  for (let i = 0; i < 20; i += 1) await new Promise((r) => setTimeout(r, 10));
+
+  test("the welcome tiles do not open by themselves, even on a core with no sources", () => {
+    ok(!panel.dialog, "they opened unasked");
+  });
+
+  showWelcomeAgain();
   for (let i = 0; i < 100 && !panel.dialog; i += 1) await new Promise((r) => setTimeout(r, 10));
 
-  test("the welcome tiles come up on a core with no sources and no preset", () => {
+  test("Settings' Show the welcome tiles again opens them", () => {
     ok(panel.dialog, "nothing opened");
     const tiles = panel.dialog.el.querySelectorAll(".welcome-tile");
     eq(tiles.length, 5, "five tiles");
