@@ -246,6 +246,56 @@ export interface BindRequest {
   scene: string;
 }
 
+/** `feed.binding.add`: the fields of [`BindingSpec`], with anything else refused. */
+export interface BindingAddRequest {
+  feed: string;
+  id?: string | null;
+  join?: string | null;
+  limit?: number | null;
+  paused?: boolean;
+  select?: string;
+  template?: string | null;
+  to: BindingTarget;
+}
+
+/** `feed.binding.set`: only what is named changes. */
+export interface BindingSetRequest {
+  id: string;
+  join?: string | null;
+  limit?: number | null;
+  select?: string | null;
+  template?: string | null;
+  to?: BindingTarget | null;
+}
+
+/** A binding with what it last wrote. */
+export interface BindingStatus {
+  feed: string;
+  id: string;
+  join?: string | null;
+  last_error?: string | null;
+  last_write?: string | null;
+  limit?: number | null;
+  paused?: boolean;
+  select?: string;
+  template?: string | null;
+  to: BindingTarget;
+  value?: unknown;
+  writes: number;
+}
+
+/** Where a binding writes. One of three shapes. */
+export type BindingTarget = {
+  path: string;
+  source: string;
+} | {
+  field: string;
+  graphic: string;
+  item?: string | null;
+} | {
+  scene_param: string;
+};
+
 /** OBS's blend enum, so an import carries across unchanged. */
 export type Blend = "normal" | "add" | "screen" | "multiply" | "lighten" | "darken" | "subtract";
 
@@ -737,6 +787,99 @@ export interface Ext {
   tally?: boolean;
   telemetry?: TelemetryExt | null;
   [key: string]: unknown;
+}
+
+/** `feed.add`: the fields of [`FeedSpec`], with anything else refused. */
+export interface FeedAddRequest {
+  address: string;
+  format?: FeedFormat;
+  headers?: Record<string, unknown>;
+  id: string;
+  interval_s?: number | null;
+  paused?: boolean;
+  timeout_s?: number | null;
+}
+
+/**
+ * How the body is read. `auto` decides from the content type and the first
+ * byte; `sse` reads an `http(s)` address as a Server-Sent Events stream.
+ */
+export type FeedFormat = "auto" | "json" | "rss" | "csv" | "text" | "sse";
+
+/** `feed.remove` and `feed.binding.remove`. */
+export interface FeedIdRequest {
+  id: string;
+}
+
+/** `feed.list`. */
+export interface FeedList {
+  bindings: BindingStatus[];
+  feeds: FeedStatus[];
+}
+
+/** `feed.set`: only what is named changes. */
+export interface FeedSetRequest {
+  address?: string | null;
+  format?: FeedFormat | null;
+  headers?: Record<string, unknown> | null;
+  id: string;
+  interval_s?: number | null;
+  timeout_s?: number | null;
+}
+
+/** Where a feed is. */
+export type FeedState = "paused" | "starting" | "ok" | "failing";
+
+/** A feed with what it has been doing. */
+export interface FeedStatus {
+  address: string;
+  bytes: number;
+  failures: number;
+  fetches: number;
+  format?: FeedFormat;
+  headers?: Record<string, unknown>;
+  id: string;
+  interval_s?: number | null;
+  kind: string;
+  last_change?: string | null;
+  last_error?: string | null;
+  last_fetch?: string | null;
+  not_modified: number;
+  paused?: boolean;
+  state: FeedState;
+  timeout_s?: number | null;
+}
+
+/**
+ * `feed.test`: fetch once and show what a selection picks.
+ *
+ * Give `id` for a feed that exists, or `address` (with `format`, `headers`
+ * and `timeout_s` if it needs them) for one that does not yet. Nothing is
+ * stored and nothing is written.
+ */
+export interface FeedTestRequest {
+  address?: string | null;
+  format?: FeedFormat | null;
+  fresh?: boolean;
+  headers?: Record<string, unknown>;
+  id?: string | null;
+  join?: string | null;
+  limit?: number | null;
+  select?: string;
+  template?: string | null;
+  timeout_s?: number | null;
+}
+
+/** What `feed.test` found. */
+export interface FeedTestResult {
+  bytes: number;
+  format: FeedFormat;
+  keys: string[];
+  paths: PathExample[];
+  preview: unknown;
+  selected?: unknown;
+  took_ms: number;
+  value?: unknown;
 }
 
 /** One filter in an item's chain. */
@@ -1477,6 +1620,12 @@ export interface PathEntry {
   writable: boolean;
 }
 
+/** One path `select` would take, with what it picks. */
+export interface PathExample {
+  example: unknown;
+  path: string;
+}
+
 export interface PathListRequest {
   path?: string | null;
 }
@@ -1495,6 +1644,12 @@ export interface PathListing {
 export interface PathRoot {
   label: string;
   path: string;
+}
+
+/** `feed.pause` and `feed.binding.pause`. */
+export interface PauseRequest {
+  id: string;
+  paused?: boolean;
 }
 
 /**
@@ -2651,6 +2806,19 @@ export interface TelemetryEvent {
   ts: number;
 }
 
+export interface FeedFailedEvent {
+  binding?: string | null;
+  error: string;
+  failures: number;
+  id: string;
+}
+
+export interface FeedRecoveredEvent {
+  binding?: string | null;
+  failures: number;
+  id: string;
+}
+
 /** The params each method takes, by method name. */
 export interface MethodParams {
   "adbreak.end": Record<string, never>;
@@ -2684,6 +2852,17 @@ export interface MethodParams {
   "core.status": Record<string, never>;
   "core.subscribe": SubscribeRequest;
   "device.discover": DiscoverRequest;
+  "feed.add": FeedAddRequest;
+  "feed.binding.add": BindingAddRequest;
+  "feed.binding.pause": PauseRequest;
+  "feed.binding.remove": FeedIdRequest;
+  "feed.binding.set": BindingSetRequest;
+  "feed.list": Record<string, never>;
+  "feed.pause": PauseRequest;
+  "feed.refresh": FeedIdRequest;
+  "feed.remove": FeedIdRequest;
+  "feed.set": FeedSetRequest;
+  "feed.test": FeedTestRequest;
   "filter.add": AddFilterRequest;
   "filter.list": Record<string, never>;
   "filter.remove": FilterIdRequest;
@@ -2859,6 +3038,17 @@ export interface MethodResults {
   "core.status": MixerStatus;
   "core.subscribe": SubscribeResult;
   "device.discover": Record<string, unknown>;
+  "feed.add": FeedStatus;
+  "feed.binding.add": BindingStatus;
+  "feed.binding.pause": BindingStatus;
+  "feed.binding.remove": Record<string, unknown>;
+  "feed.binding.set": BindingStatus;
+  "feed.list": FeedList;
+  "feed.pause": FeedStatus;
+  "feed.refresh": FeedStatus;
+  "feed.remove": Record<string, unknown>;
+  "feed.set": FeedStatus;
+  "feed.test": FeedTestResult;
   "filter.add": FilterRecord;
   "filter.list": FilterListing;
   "filter.remove": FilterRemoved;
@@ -3034,6 +3224,8 @@ export interface EventPayloads {
   "show.changed": ShowChanged;
   "show.removed": ShowRemovedEvent;
   "show.health": ShowHealthEvent;
+  "feed.failed": FeedFailedEvent;
+  "feed.recovered": FeedRecoveredEvent;
   "health": HealthEvent;
 }
 
@@ -3081,6 +3273,17 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "core.status", summary: "The full state: programme, every source, every output, the multiview grid, the encoder backend and any ad break.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/core/status" } },
   { name: "core.subscribe", summary: "Subscribe to the event stream. WebSocket only: the core answers event/snapshot then deltas, ending every batch with event/flush.", scope: "read", mutating: false, destructive: false },
   { name: "device.discover", summary: "Ask every device plugin what it can see: cameras, NDI senders, publishers. Each candidate's params are ready for source.add.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/device/discover" } },
+  { name: "feed.add", summary: "Add a live data feed: an http(s) address polled every `interval_s` (5 s at least, 30 by default, honouring ETag and Last-Modified), a ws(s) address whose messages are read as they come, or an http(s) event stream with format sse. Header values are sealed.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/feed/add" } },
+  { name: "feed.binding.add", summary: "Bind a value in a feed to a target: a source's param by path (`params.text`, `params.items`, `params.fields.headline`), a graphic's field through its update action, or a scene parameter. It writes at once if the feed has been read, and after that only when the value changes.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/feed/binding/add" } },
+  { name: "feed.binding.pause", summary: "Stop a binding writing, or start it again with paused false. Started again, it writes what the feed holds now.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/feed/binding/pause" } },
+  { name: "feed.binding.remove", summary: "Forget a binding. What it wrote stays on air.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/feed/binding/remove" } },
+  { name: "feed.binding.set", summary: "Change a binding's selection or target. Only what is named changes, and the value is written again at once.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/feed/binding/set" } },
+  { name: "feed.list", summary: "Every live data feed with its state (ok, failing with the reason, paused), when it was last read and last changed, and every binding with the value it last wrote.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/feed/list" } },
+  { name: "feed.pause", summary: "Stop reading a feed, or start it again with paused false. While paused nothing is fetched and nothing is written; what was written stays on air.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/feed/pause" } },
+  { name: "feed.refresh", summary: "Fetch a polled feed now rather than at the end of its interval. A pushed feed that is waiting to reconnect tries at once.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/feed/refresh" } },
+  { name: "feed.remove", summary: "Stop and forget a feed, its sealed headers and every binding that reads it. What they wrote stays on air until something else changes it.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/feed/remove" } },
+  { name: "feed.set", summary: "Change a feed's address, format, interval, timeout or headers. Only what is named changes; a header value of \"__secret__\" keeps the stored one.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/feed/set" } },
+  { name: "feed.test", summary: "Fetch a feed once and show what came back: its top keys, a cut down copy, and every path with an example. With `select` (and `template`, `limit`, `join`) it also shows what that picks and what a binding would write. A path that picks nothing is refused with where it stopped and the keys there. Nothing is stored and nothing is written.", scope: "operate", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/feed/test" } },
   { name: "filter.add", summary: "Hang a filter on one source or on the programme, live.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/filters" } },
   { name: "filter.list", summary: "Every filter in place, with what it is and where it sits.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/filters" } },
   { name: "filter.remove", summary: "Take a filter out of the pipeline.", scope: "operate", mutating: true, destructive: true, rest: { method: "DELETE", path: "/api/v1/filters/{id}" } },
@@ -3265,6 +3468,8 @@ export const EVENT_NAMES: readonly EventName[] = [
   "show.changed",
   "show.removed",
   "show.health",
+  "feed.failed",
+  "feed.recovered",
   "health",
 ];
 
@@ -3434,6 +3639,61 @@ export class GeneratedMethods {
   /** Ask every device plugin what it can see: cameras, NDI senders, publishers. Each candidate's params are ready for source.add. */
   deviceDiscover(params: DiscoverRequest = {}): Promise<Record<string, unknown>> {
     return this._call("device.discover", params as unknown as Record<string, unknown>) as Promise<Record<string, unknown>>;
+  }
+
+  /** Add a live data feed: an http(s) address polled every `interval_s` (5 s at least, 30 by default, honouring ETag and Last-Modified), a ws(s) address whose messages are read as they come, or an http(s) event stream with format sse. Header values are sealed. */
+  feedAdd(params: FeedAddRequest): Promise<FeedStatus> {
+    return this._call("feed.add", params as unknown as Record<string, unknown>) as Promise<FeedStatus>;
+  }
+
+  /** Bind a value in a feed to a target: a source's param by path (`params.text`, `params.items`, `params.fields.headline`), a graphic's field through its update action, or a scene parameter. It writes at once if the feed has been read, and after that only when the value changes. */
+  feedBindingAdd(params: BindingAddRequest): Promise<BindingStatus> {
+    return this._call("feed.binding.add", params as unknown as Record<string, unknown>) as Promise<BindingStatus>;
+  }
+
+  /** Stop a binding writing, or start it again with paused false. Started again, it writes what the feed holds now. */
+  feedBindingPause(params: PauseRequest): Promise<BindingStatus> {
+    return this._call("feed.binding.pause", params as unknown as Record<string, unknown>) as Promise<BindingStatus>;
+  }
+
+  /** Forget a binding. What it wrote stays on air. */
+  feedBindingRemove(params: FeedIdRequest): Promise<Record<string, unknown>> {
+    return this._call("feed.binding.remove", params as unknown as Record<string, unknown>) as Promise<Record<string, unknown>>;
+  }
+
+  /** Change a binding's selection or target. Only what is named changes, and the value is written again at once. */
+  feedBindingSet(params: BindingSetRequest): Promise<BindingStatus> {
+    return this._call("feed.binding.set", params as unknown as Record<string, unknown>) as Promise<BindingStatus>;
+  }
+
+  /** Every live data feed with its state (ok, failing with the reason, paused), when it was last read and last changed, and every binding with the value it last wrote. */
+  feedList(): Promise<FeedList> {
+    return this._call("feed.list", {}) as Promise<FeedList>;
+  }
+
+  /** Stop reading a feed, or start it again with paused false. While paused nothing is fetched and nothing is written; what was written stays on air. */
+  feedPause(params: PauseRequest): Promise<FeedStatus> {
+    return this._call("feed.pause", params as unknown as Record<string, unknown>) as Promise<FeedStatus>;
+  }
+
+  /** Fetch a polled feed now rather than at the end of its interval. A pushed feed that is waiting to reconnect tries at once. */
+  feedRefresh(params: FeedIdRequest): Promise<FeedStatus> {
+    return this._call("feed.refresh", params as unknown as Record<string, unknown>) as Promise<FeedStatus>;
+  }
+
+  /** Stop and forget a feed, its sealed headers and every binding that reads it. What they wrote stays on air until something else changes it. */
+  feedRemove(params: FeedIdRequest): Promise<Record<string, unknown>> {
+    return this._call("feed.remove", params as unknown as Record<string, unknown>) as Promise<Record<string, unknown>>;
+  }
+
+  /** Change a feed's address, format, interval, timeout or headers. Only what is named changes; a header value of "__secret__" keeps the stored one. */
+  feedSet(params: FeedSetRequest): Promise<FeedStatus> {
+    return this._call("feed.set", params as unknown as Record<string, unknown>) as Promise<FeedStatus>;
+  }
+
+  /** Fetch a feed once and show what came back: its top keys, a cut down copy, and every path with an example. With `select` (and `template`, `limit`, `join`) it also shows what that picks and what a binding would write. A path that picks nothing is refused with where it stopped and the keys there. Nothing is stored and nothing is written. */
+  feedTest(params: FeedTestRequest = {}): Promise<FeedTestResult> {
+    return this._call("feed.test", params as unknown as Record<string, unknown>) as Promise<FeedTestResult>;
   }
 
   /** Hang a filter on one source or on the programme, live. */

@@ -227,6 +227,13 @@
           "command": "source.add-kind",
           "arg": "test",
           "title": "Test pattern…"
+        },
+        {
+          "separator": true
+        },
+        {
+          "command": "data.open",
+          "title": "Live data…"
         }
       ]
     },

@@ -256,6 +256,14 @@ pub fn event_name_and_payload(event: &Event) -> Option<(&'static str, Value)> {
         Event::ShowChanged { show } => ("show.changed", payload(json!({ "show": show }))),
         Event::ShowRemoved { id } => ("show.removed", payload(json!({ "id": id }))),
         Event::ShowHealth { id, health } => ("show.health", payload(json!({ "id": id, "health": health }))),
+        Event::FeedFailed { id, binding, error, failures } => (
+            "feed.failed",
+            payload(json!({ "id": id, "binding": binding, "error": error, "failures": failures })),
+        ),
+        Event::FeedRecovered { id, binding, failures } => (
+            "feed.recovered",
+            payload(json!({ "id": id, "binding": binding, "failures": failures })),
+        ),
         Event::AudioLevel { .. } | Event::SourceAudioLevel { .. } => return None,
     })
 }

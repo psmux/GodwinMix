@@ -1,6 +1,6 @@
 ---
 name: godwinmix-operate
-description: Run live shows on a GodwinMix mixer. Use when asked to switch cameras, put something on air, watch a stream for faults, start or stop an output, roll an ad break, check what is live, or add and watch many channels at once (a headend's channel list, one show per feed, copied or transcoded). Covers the agent surface: agent_state, take, revert, add_shows, show_stats, telemetry, snapshots and the safety rules that will refuse you.
+description: Run live shows on a GodwinMix mixer. Use when asked to switch cameras, put something on air, watch a stream for faults, start or stop an output, roll an ad break, check what is live, add and watch many channels at once (a headend's channel list, one show per feed, copied or transcoded), or keep a ticker, a score or a strap current from a live data feed (RSS, JSON, CSV, websocket). Covers the agent surface: agent_state, take, revert, add_shows, show_stats, telemetry, snapshots, test_feed and bind_feed, and the safety rules that will refuse you.
 ---
 
 # Operating a GodwinMix mixer
@@ -107,6 +107,47 @@ refused with the ids that would have worked.
 
 `revert` undoes the last take and puts the shot before back. Use it the moment
 a take turns out wrong rather than working out by hand what was on.
+
+## Live data: a feed on screen
+
+Headlines in a ticker, a score in a score bug, a sheet's rows in a strap.
+The mixer fetches the feed itself and writes a value only when it changes,
+so you set this up once and leave it. Four calls, and the one to lean on is
+`test_feed`, which fetches without storing anything:
+
+```
+test_feed {"address": "https://news.example/rss"}
+```
+
+The answer has `keys` (the top of the document) and `paths`, every path in
+it with an example value. RSS and Atom arrive as `items[]` with `title`,
+`link`, `summary`, `published`; a CSV as `rows[]` keyed by its header row.
+Pick a path and try it, with a `template` to combine fields and `limit` to
+cut a list:
+
+```
+test_feed {"address": "https://news.example/rss", "select": "items[].title", "limit": 10}
+```
+
+`value` in the answer is exactly what a binding would write. A path that
+picks nothing is refused with where it stopped and the keys that were there
+(`data.keys_there`, `data.top_level_keys`), so read those rather than
+guessing again. Then keep it:
+
+```
+add_feed {"id": "news", "address": "https://news.example/rss", "interval_s": 60}
+bind_feed {"feed": "news", "select": "items[].title", "limit": 10, "to": {"source": "crawl", "path": "params.items"}}
+```
+
+`to` is `{source, path}` for a text (`params.text`), a ticker
+(`params.items`) or any other param; `{graphic, field}` for an OGraf
+graphic's field; `{scene_param}` for a `{{name}}` used across the scenes.
+An API key goes in `headers`, never in the address: it is sealed and never
+shown again. `list_feeds` says which feeds are failing and why, and what each
+binding last wrote. A feed that fails leaves what it wrote on screen.
+
+The feed tools are behind `search_tools`; one search for `feed` finds all
+of them.
 
 ## The rules that will refuse you
 

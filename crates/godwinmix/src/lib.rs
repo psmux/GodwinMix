@@ -21,6 +21,7 @@ pub mod channels;
 pub mod cli;
 pub mod control;
 pub mod ctl;
+pub mod feeds;
 pub mod mcp;
 pub mod nodes;
 pub mod mcp_http;

@@ -69,6 +69,7 @@ const ACTIONS = {
   "view.reset-layout": () => workspace()?.reset(),
   "view.theme": (client, id) => applyTheme(id),
   "source.add-kind": (client, category) => openPicker(client, "source", { category }),
+  "data.open": (client) => import("../panels/data/dialog.js").then((m) => m.openLiveData(client)),
   "output.record": (client) => import("../panels/outputs/recording.js").then((m) => m.startRecording(client)),
   "output.resources": async () => {
     await show("core/outputs");

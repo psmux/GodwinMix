@@ -40,6 +40,12 @@ export function openTextEditor(panel, source) {
       el("div.row", {}, [el("strong.grow", { text: nameOf(source) }), el("button.btn.icon", { text: "×", "aria-label": "Close", onclick: () => shell.drawer(null) })]),
       ...rows,
       status,
+      el("button.btn.live-data", {
+        type: "button",
+        text: "Fill from live data…",
+        title: "Keep these words current from an RSS, JSON or CSV feed",
+        onclick: () => import("../data/dialog.js").then((m) => m.openLiveData(client, { source })),
+      }),
     ])
   );
 }
