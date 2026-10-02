@@ -196,6 +196,12 @@ impl ItemFilter {
     }
 }
 
+/// The name a slot's filter is drawn under on the board. Not a slug, so it
+/// can never be mistaken for a source id.
+fn board_key(index: usize, n: usize) -> String {
+    format!("slot {index} filter {n}")
+}
+
 /// What a scene wants drawn in one slot.
 ///
 /// Plain numbers in canvas pixels, worked out from the document by
@@ -661,6 +667,10 @@ pub struct SlotPool {
     /// available for binding and are not hidden by an apply, because both
     /// scenes are on the canvas until the transition ends.
     crossing: Vec<usize>,
+    /// The programme's overlay board, which draws a keyed item's picture
+    /// after the compositor. None in a pool built without one, and its
+    /// keys are then flattened over black. See `filters::chroma`.
+    board: Option<std::sync::Arc<crate::overlay::Board>>,
 }
 
 impl SlotPool {
@@ -677,6 +687,7 @@ impl SlotPool {
             canvas: canvas.clone(),
             misses: 0,
             crossing: Vec::new(),
+            board: None,
         };
         for _ in 0..INITIAL_SLOTS {
             pool.grow()?;
@@ -686,6 +697,11 @@ impl SlotPool {
 
     pub fn len(&self) -> usize {
         self.slots.len()
+    }
+
+    /// Draw keyed items on this board rather than flattening them.
+    pub fn use_board(&mut self, board: std::sync::Arc<crate::overlay::Board>) {
+        self.board = Some(board);
     }
 
     pub fn is_empty(&self) -> bool {
@@ -1083,6 +1099,9 @@ impl SlotPool {
         if same {
             return Ok(());
         }
+        if self.configure_filters(index, want) {
+            return Ok(());
+        }
         self.clear_filters(index);
         let live = self.program.current_state() == gst::State::Playing;
         let canvas = self.canvas.clone();
@@ -1097,10 +1116,18 @@ impl SlotPool {
                 side: FilterSide::SceneItem,
                 params: f.params.clone(),
             };
+            let board = self.board.clone();
             let built = crate::plugin::filter::make(&f.type_id).and_then(|filter| {
                 let pad = self.slots[index].pad.clone();
+                // Turned on before the first frame goes through, so a key
+                // never shows a frame flattened over black on its way in.
+                super::keyed::attach(board.as_ref(), filter.board(), &pad, &board_key(index, n));
                 let at = Insertion::before_pad(&self.program, &upstream, &pad);
-                crate::plugin::filter::insert(at, spec, filter, &canvas, live)
+                let placed = crate::plugin::filter::insert(at, spec, filter, &canvas, live);
+                if placed.is_err() {
+                    super::keyed::detach(board.as_ref(), &board_key(index, n));
+                }
+                placed
             });
             match built {
                 Ok(slot) => self.slots[index].filters.push(slot),
@@ -1116,6 +1143,34 @@ impl SlotPool {
         Ok(())
     }
 
+    /// Change the filters on a slot in place, when the item asks for the
+    /// same filters in the same order with different settings. True when
+    /// every one of them took the change; false leaves the chain to be built
+    /// again, and a filter that took its change already is rebuilt with it.
+    ///
+    /// A slider dragged in the inspector is this path: the key's settings
+    /// change on the running filter, and nothing is relinked.
+    fn configure_filters(&mut self, index: usize, want: &[ItemFilter]) -> bool {
+        let slot = &mut self.slots[index];
+        let same_kinds = slot.filters.len() == want.len()
+            && slot.filter_shape.len() == want.len()
+            && slot.filter_shape.iter().zip(want).all(|(have, want)| have.type_id == want.type_id);
+        if !same_kinds {
+            return false;
+        }
+        for (filter, want) in slot.filters.iter_mut().zip(want) {
+            if filter.spec.params == want.params {
+                continue;
+            }
+            match filter.configure(&want.params) {
+                Ok(crate::plugin::Configure::Applied) => {}
+                _ => return false,
+            }
+        }
+        slot.filter_shape = want.to_vec();
+        true
+    }
+
     /// Take every filter off a slot's chain, newest first.
     ///
     /// Newest first because each insert put itself between the one below it
@@ -1124,6 +1179,9 @@ impl SlotPool {
     fn clear_filters(&mut self, index: usize) {
         let filters = std::mem::take(&mut self.slots[index].filters);
         self.slots[index].filter_shape.clear();
+        for n in 0..filters.len() {
+            super::keyed::detach(self.board.as_ref(), &board_key(index, n));
+        }
         for f in filters.into_iter().rev() {
             let id = f.spec.id.clone();
             if let Err(e) = f.remove() {

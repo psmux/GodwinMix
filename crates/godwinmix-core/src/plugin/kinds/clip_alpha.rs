@@ -144,5 +144,5 @@ fn picture(sample: &gst::Sample) -> Option<Picture> {
     let buffer = sample.buffer_owned()?;
     let stride = buffer.meta::<gst_video::VideoMeta>().map(|m| m.stride()[0]).unwrap_or(info.stride()[0]) as usize;
     let (w, h) = (info.width(), info.height());
-    Some(Picture { buffer, width: w, height: h, stride, natural: (w, h) })
+    Some(Picture { buffer, width: w, height: h, stride, natural: (w, h), within: None })
 }

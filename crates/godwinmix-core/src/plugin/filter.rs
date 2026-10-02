@@ -106,6 +106,58 @@ pub trait Filter: Send {
     fn stream(&self) -> Stream {
         Stream::Video
     }
+
+    /// For a filter whose result has alpha: the layer the overlay board
+    /// draws it from. Where the board can draw it, the caller attaches the
+    /// layer, says which compositor pads it stands for, and turns it on; the
+    /// filter then hands its pictures to the layer and sends nothing to the
+    /// pad. Where it cannot, the layer stays off and the filter flattens its
+    /// result into the frame. See `filters::chroma`.
+    fn board(&self) -> Option<BoardHook> {
+        None
+    }
+}
+
+/// What a filter with alpha shares with whoever places it.
+#[derive(Clone)]
+pub struct BoardHook {
+    pub layer: Arc<crate::overlay::Layer>,
+    /// The compositor pads the filter is drawn at. Set by the caller; the
+    /// filter reads it to skip a frame nobody can see.
+    pub pads: Arc<Mutex<Option<Arc<super::branch::VideoPads>>>>,
+}
+
+impl BoardHook {
+    pub fn new() -> BoardHook {
+        BoardHook { layer: crate::overlay::Layer::new(false), pads: Arc::new(Mutex::new(None)) }
+    }
+
+    /// Draw on the board at `pads`, and stop sending frames down the pipe.
+    pub fn draw_at(&self, pads: Arc<super::branch::VideoPads>) {
+        *self.pads.lock() = Some(pads);
+        self.layer.activate(true);
+    }
+
+    /// Back to flattening into the frame.
+    pub fn flatten(&self) {
+        self.layer.activate(false);
+        self.layer.set_picture(None);
+        *self.pads.lock() = None;
+    }
+
+    /// True when at least one of the pads is drawn this frame.
+    pub fn seen(&self) -> bool {
+        let Some(pads) = self.pads.lock().clone() else { return false };
+        let mut seen = false;
+        pads.each(|pad| seen |= pad.property::<f64>("alpha") > 0.0);
+        seen
+    }
+}
+
+impl Default for BoardHook {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 /// What sits below an insertion point.
@@ -169,6 +221,11 @@ pub struct FilterSlot {
 impl FilterSlot {
     pub fn id(&self) -> &str {
         &self.spec.id
+    }
+
+    /// The filter's board hook, when its result has alpha.
+    pub fn board(&self) -> Option<BoardHook> {
+        self.filter.board()
     }
 
     pub fn configure(&mut self, params: &Params) -> Result<Configure> {
