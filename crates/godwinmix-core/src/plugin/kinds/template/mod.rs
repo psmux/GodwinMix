@@ -30,7 +30,9 @@ pub const MANIFEST: Manifest = Manifest {
     api: API_LEVEL,
     description: "A designed graphic: an SVG with named fields, drawn once per change with no browser",
     uri_schemes: &["template:"],
-    rank: 200,
+    // Above `image/source`, which claims anything ending `.svg`: the scheme
+    // is the stronger word, and `template:/srv/graphics/bar.svg` is a template.
+    rank: 230,
     media: MediaDecl { video: StreamMode::Raw, audio: StreamMode::Raw, alpha: true, thumb: true },
     capabilities: CapabilitySet::new().with(Capability::RestartInPlace).with(Capability::Health).with(Capability::Alpha),
     latency_ms: 0,
