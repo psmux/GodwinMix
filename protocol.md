@@ -172,6 +172,7 @@ Keys accepted on every method, handled before a method runs.
 | `scene.transaction.commit` | `POST /api/v1/scenes/transaction/commit` | operate |  | 1 | Apply the batch. |
 | `scene.undo` | `POST /api/v1/scenes/undo` | operate |  | 1 | Undo the last change. A drag marked with scene.history.mark undoes as one step. |
 | `scene.validate` | `GET /api/v1/scenes/validate` | read |  | 1 | Overlaps, items off the canvas, safe area breaches and missing sources: what to fix before saying a scene is done. |
+| `scene.virtual_set` | `POST /api/v1/scenes/{id}/virtual_set` | operate |  | 1 | A new scene with a presenter keyed in front of a background, and optionally a foreground such as a desk and a lower third area. Pictures from the media library become sources; the key colour is guessed from the camera. |
 | `show.add` | `POST /api/v1/shows` | admin |  | 1 | Make another show and start it: empty, a copy of a show (without its outputs, so nothing goes out twice), or from a project file. |
 | `show.add_many` | `POST /api/v1/shows/add_many` | admin |  | 1 | Make many shows in one call, such as every channel of a headend. The whole batch is checked first. With dry_run (the default) nothing is made: the answer says what would be, what its renditions would cost and whether the governor would admit them. Without it, every show that fits is made and the rest are refused with why; a show is made whole or not at all. |
 | `show.list` | `GET /api/v1/shows` | read |  | 1 | Every show on this machine: its name, whether it is running, what is on air, what its outputs send and what its process costs. `current` is the show a client reaches when it names none. |
@@ -191,6 +192,7 @@ Keys accepted on every method, handled before a method runs.
 | `source.duplicate` | `POST /api/v1/sources/{id}/duplicate` | operate |  | 1 | Add another source like one the mixer has: the same address and settings under a new id. A client cannot do this with source.add, because the address it is shown has everything after the host cut off. |
 | `source.get` | `GET /api/v1/sources/{id}` | read |  | 1 | One source. Refused with the ids that exist when there is no such source. |
 | `source.group` | `POST /api/v1/sources/{id}/group` | operate |  | 1 | Put sources in a tray folder. A tag for finding things, not a group on the canvas. |
+| `source.key_color` | `POST /api/v1/sources/{id}/key_color` | read |  | 1 | The colour to key a source on: the colour at a point of its picture, or with no point the green or blue screen it stands in front of. |
 | `source.list` | `GET /api/v1/sources` | read |  | 1 | Every source, with its state, whether it has video and audio, and its fader. |
 | `source.missing` | `POST /api/v1/sources/{id}/missing` | read |  | 1 | Sources that are not running, and why: failed, could not be started (with the error and the action that fixes it), removed, or unknown. Pass the ids a scene draws, or none for every one the mixer knows about. |
 | `source.remove` | `DELETE /api/v1/sources/{id}` | operate | yes | 1 | Remove a source. If it is on programme the mixer cuts to the slate first. |
@@ -2488,6 +2490,23 @@ MCP tool `validate_scene` in the `search` profile: readOnlyHint true, destructiv
 }
 ```
 
+#### `scene.virtual_set`
+
+A new scene with a presenter keyed in front of a background, and optionally a foreground such as a desk and a lower third area. Pictures from the media library become sources; the key colour is guessed from the camera.
+
+MCP tool `create_virtual_set` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/VirtualSetRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/VirtualSetAnswer"
+  }
+}
+```
+
 #### `show.add`
 
 Make another show and start it: empty, a copy of a show (without its outputs, so nothing goes out twice), or from a project file.
@@ -2803,6 +2822,23 @@ Put sources in a tray folder. A tag for finding things, not a group on the canva
   },
   "result": {
     "type": "object"
+  }
+}
+```
+
+#### `source.key_color`
+
+The colour to key a source on: the colour at a point of its picture, or with no point the green or blue screen it stands in front of.
+
+MCP tool `key_color` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/KeyColorRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/KeyColor"
   }
 }
 ```
