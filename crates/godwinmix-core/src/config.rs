@@ -1304,6 +1304,7 @@ impl SourceConfig {
             "browser" => crate::plugin::kinds::browser::validate(&params),
             "layered" => crate::plugin::kinds::layered::validate(&params),
             "test" => crate::plugin::kinds::testsrc::validate(&params),
+            "text" => crate::plugin::kinds::text::validate(&params).map(|_| ()),
             _ => Ok(()),
         }
     }
