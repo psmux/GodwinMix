@@ -33,10 +33,13 @@
 pub mod blend;
 pub mod board;
 pub mod carrier;
+pub mod clock;
 pub mod draw;
+pub mod layer;
 pub mod picture;
 pub mod place;
 pub mod worker;
 
 pub use board::Board;
-pub use picture::{Direction, Layer, Motion, Picture};
+pub use layer::Layer;
+pub use picture::{Direction, Motion, Picture};

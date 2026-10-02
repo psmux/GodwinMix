@@ -33,6 +33,27 @@ async fn a_text_box_sits_over_the_picture_under_it_and_nowhere_else() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_ticker_moves_across_its_bar_and_stays_inside_it() {
+    let (handle, frames, thread) = running();
+    add(&handle, SourceConfig::bare("bg", "test://blue")).await;
+    let mut ticker = SourceConfig::bare("crawl", "ticker:");
+    ticker.params = toml::from_str("text = \"WWWWWWWWWW\"\nbackground = \"#ff0000\"\nsize = 20\nspeed = 200").unwrap();
+    add(&handle, ticker).await;
+    take(&handle, vec![full("bg"), at("crawl", 0, 140, 320, 40)]).await;
+    settle(1_200).await;
+    let row = |f: &support::Frame| (0..320).map(|x| f.yuv(x, 160).0).collect::<Vec<u8>>();
+    let a = row(&frames.latest().unwrap());
+    settle(300).await;
+    let f = frames.latest().unwrap();
+    let b = row(&f);
+    let above = f.yuv(160, 100);
+    stop(handle, thread);
+    assert!(near(above, (32, 240, 118)), "above the bar is the background: {above:?}");
+    assert!(a.iter().any(|y| *y > 150), "white letters are on the bar");
+    assert_ne!(a, b, "the letters moved between two frames 300 ms apart");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn changing_the_words_applies_in_place_with_no_rebuild_and_no_gap() {
     let (handle, frames, thread) = running();
     add(&handle, SourceConfig::bare("bg", "test://blue")).await;

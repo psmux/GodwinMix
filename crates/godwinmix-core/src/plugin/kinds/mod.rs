@@ -13,10 +13,12 @@ pub mod image;
 pub mod layer;
 pub mod layered;
 pub mod live;
+pub mod rendered;
 pub mod normalise;
 pub mod rtmp;
 pub mod testsrc;
 pub mod text;
+pub mod ticker;
 
 use super::{MediaEnds, Tier};
 use crate::caps::CanvasCaps;

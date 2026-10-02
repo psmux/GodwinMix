@@ -6,7 +6,9 @@
 //! so a show with no text, ticker or transparent picture runs exactly the
 //! graph it ran before this module.
 
-use super::picture::{Layer, Motion};
+use super::clock::Clock;
+use super::layer::Layer;
+use super::picture::Motion;
 use super::place::{self, PadBox};
 use super::draw::{Job, Jobs};
 use crate::plugin::branch::VideoPads;
@@ -14,33 +16,6 @@ use gstreamer as gst;
 use gstreamer::prelude::*;
 use parking_lot::Mutex;
 use std::sync::Arc;
-
-/// Where a crawl has got to, kept per source so a change of speed carries on
-/// from the same place instead of jumping.
-#[derive(Default)]
-struct Clock {
-    epoch: Option<u64>,
-    since: u64,
-    base: f64,
-    speed: f64,
-}
-
-impl Clock {
-    /// Pixels travelled at `now` (nanoseconds of running time).
-    fn travelled(&mut self, now: u64, epoch: u64, speed: f64) -> f64 {
-        if self.epoch != Some(epoch) {
-            *self = Clock { epoch: Some(epoch), since: now, base: 0.0, speed };
-        }
-        let elapsed = now.saturating_sub(self.since) as f64 / 1e9;
-        if (speed - self.speed).abs() > f64::EPSILON {
-            self.base += elapsed * self.speed;
-            self.since = now;
-            self.speed = speed;
-            return self.base;
-        }
-        self.base + elapsed * self.speed
-    }
-}
 
 struct Entry {
     source: String,
@@ -127,7 +102,14 @@ impl Board {
                         let (d, size) = place::still(&pic, &b);
                         (vec![d], size)
                     }
-                    Motion::Crawl { .. } => place::crawl(&pic, &b, motion, travelled),
+                    Motion::Crawl { .. } => {
+                        if let Some(bar) = e.layer.backdrop() {
+                            let filled = PadBox { fit: place::Fit::Fill, ..b };
+                            let (draw, _) = place::still(&bar, &filled);
+                            jobs.0.push(Job { z: b.z, picture: bar, draw });
+                        }
+                        place::crawl(&pic, &b, motion, travelled)
+                    }
                 };
                 biggest = Some(biggest.map_or(size, |s| (s.0.max(size.0), s.1.max(size.1))));
                 jobs.0.extend(draws.into_iter().map(|draw| Job { z: b.z, picture: pic.clone(), draw }));
@@ -136,6 +118,7 @@ impl Board {
                 e.layer.note_drawn(size);
             }
         }
+        // Stable, so a ticker's bar stays under its words.
         jobs.0.sort_by_key(|j| j.z);
         jobs
     }
@@ -158,7 +141,3 @@ pub fn hold_back(vtee: &gst::Element, layer: Arc<Layer>) {
         }
     });
 }
-
-#[cfg(test)]
-#[path = "board_tests.rs"]
-mod tests;
