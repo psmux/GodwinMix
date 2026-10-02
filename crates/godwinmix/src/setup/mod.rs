@@ -35,8 +35,12 @@ pub use registry::{attach, list, start, status, wait};
 pub use resume::waiting_record;
 
 /// What went wrong, for a person and for a developer.
+/// Boxed, because it rides in the `Err` of every step and an action is large.
 #[derive(Debug, Clone)]
-pub struct Failure {
+pub struct Failure(Box<Failed>);
+
+#[derive(Debug, Clone)]
+pub struct Failed {
     pub message: String,
     pub action: Option<godwinmix_protocol::ErrorAction>,
     pub detail: serde_json::Value,
@@ -44,12 +48,16 @@ pub struct Failure {
 
 impl Failure {
     pub fn new(message: impl Into<String>, detail: serde_json::Value) -> Self {
-        Self { message: message.into(), action: None, detail }
+        Self(Box::new(Failed { message: message.into(), action: None, detail }))
     }
 
     pub fn with_action(mut self, action: godwinmix_protocol::ErrorAction) -> Self {
-        self.action = Some(action);
+        self.0.action = Some(action);
         self
+    }
+
+    pub fn into_inner(self) -> Failed {
+        *self.0
     }
 }
 

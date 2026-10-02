@@ -86,16 +86,16 @@ pub fn start(piece: &str) -> Option<watch::Receiver<SetupStatus>> {
 }
 
 /// Wait for `piece` to stop running. Ok when it is ready.
-pub async fn wait(mut rx: watch::Receiver<SetupStatus>) -> Result<(), SetupStatus> {
+pub async fn wait(mut rx: watch::Receiver<SetupStatus>) -> Result<(), Box<SetupStatus>> {
     loop {
         let now = rx.borrow_and_update().clone();
         match now.state {
             SetupState::Ready => return Ok(()),
             SetupState::Running => {}
-            _ => return Err(now),
+            _ => return Err(Box::new(now)),
         }
         if rx.changed().await.is_err() {
-            return Err(rx.borrow().clone());
+            return Err(Box::new(rx.borrow().clone()));
         }
     }
 }
@@ -166,6 +166,7 @@ impl Progress {
                 next.action = Some(godwinmix_protocol::ErrorAction::setup("Try again", &self.piece));
             }
             Err(f) => {
+                let f = f.into_inner();
                 tracing::warn!(piece = %self.piece, why = %f.message, detail = %f.detail, "setting up did not finish");
                 next.state = SetupState::Failed;
                 next.message = f.message;
