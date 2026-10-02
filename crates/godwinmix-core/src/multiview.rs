@@ -791,7 +791,20 @@ impl Multiview {
     }
 
     /// Attach one more tile, fed from a `proxysink` in another pipeline.
-    pub fn add_tile(&mut self, source: Option<SourceId>, proxy: &gst::Element) -> Result<()> {
+    /// Attach one more tile; see `add_tile_with`.
+    pub fn add_tile(&mut self, source: Option<SourceId>, proxy: &gst::Element) -> Result<gst::Pad> {
+        self.add_tile_with(source, proxy, |_| {})
+    }
+
+    /// Attach one more tile, fed from a `proxysink` in another pipeline, and
+    /// hand its entry pad to `prepare` before anything flows through it: the
+    /// place a source's timeline shift goes. Answers with that pad.
+    pub fn add_tile_with(
+        &mut self,
+        source: Option<SourceId>,
+        proxy: &gst::Element,
+        prepare: impl FnOnce(&gst::Pad),
+    ) -> Result<gst::Pad> {
         let tag = source.clone().unwrap_or_else(|| "program".into());
 
         let src = make("proxysrc", &format!("mv-src-{tag}"))?;
@@ -883,6 +896,8 @@ impl Multiview {
         }
         self.shared.fed.lock().push(fed.clone());
 
+        let entry = branch[0].static_pad("src").context("a tile's proxy has no src pad")?;
+        prepare(&entry);
         for el in branch.iter().rev() {
             el.sync_state_with_parent().context("starting a multiview branch")?;
         }
@@ -890,7 +905,7 @@ impl Multiview {
         self.tiles.push(Tile { source, pad, branch, tee, fed });
         self.relayout();
         debug!(%tag, "added multiview tile");
-        Ok(())
+        Ok(entry)
     }
 
     pub fn remove_tile(&mut self, source: &SourceId) -> Result<()> {

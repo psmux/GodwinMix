@@ -931,6 +931,17 @@ pub struct TimelineAligner {
     /// slot bound later gets the offset it missed.
     vpads: Arc<VideoPads>,
     apad: gst::Pad,
+    /// The entry pads of this source's mosaic tiles. The mosaic and the
+    /// preview drawn from it run on the programme's clock too, so they need
+    /// the same shift. Without it a web page, whose frames start at zero, had
+    /// thumbnails hours behind on a mixer that had been up for hours, and the
+    /// mosaic dropped every one: its tile and the scene preview stayed dark
+    /// while the programme showed it.
+    tiles: Arc<VideoPads>,
+    /// The programme's clock and base time, for a tile whose segment arrives
+    /// before either branch's has decided the shift.
+    clock: Option<gst::Clock>,
+    base: Option<gst::ClockTime>,
 }
 
 impl TimelineAligner {
@@ -948,6 +959,9 @@ impl TimelineAligner {
             applied: AtomicBool::new(false),
             vpads,
             apad: apad.clone(),
+            tiles: VideoPads::new(),
+            clock: program.clock(),
+            base: program.base_time(),
         });
         let clock = program.clock();
         let base = program.base_time();
@@ -1008,8 +1022,34 @@ impl TimelineAligner {
         };
         self.vpads.set_offset(offset);
         self.apad.set_offset(offset);
+        self.tiles.set_offset(offset);
         self.applied.store(true, Ordering::Relaxed);
         offset
+    }
+
+    /// Shift one of this source's mosaic tiles with it, now and from here on.
+    ///
+    /// Called before the tile starts. The tile's own segment can pass before
+    /// either programme branch has decided the shift, and a pad offset set
+    /// after its segment changes nothing, so the tile decides it then just as
+    /// a branch would: the first segment anywhere sets it for all of them.
+    pub fn follow_tile(self: &Arc<Self>, pad: &gst::Pad) {
+        self.tiles.attach(pad);
+        let aligner = self.clone();
+        pad.add_probe(gst::PadProbeType::EVENT_DOWNSTREAM, move |_p, info| {
+            let Some(gst::PadProbeData::Event(e)) = &info.data else { return gst::PadProbeReturn::Ok };
+            if !matches!(e.view(), gst::EventView::Segment(_)) {
+                return gst::PadProbeReturn::Ok;
+            }
+            let now = aligner
+                .clock
+                .as_ref()
+                .and_then(|c| c.time().checked_sub(aligner.base.unwrap_or(gst::ClockTime::ZERO)));
+            if let Some(now) = now {
+                aligner.place_at(now.nseconds() as i64, "tile");
+            }
+            gst::PadProbeReturn::Ok
+        });
     }
 
     /// The offset in force, or `None` while the next segment is to decide it.
@@ -2108,7 +2148,12 @@ impl Mixer {
         // operator mid-break, and the program return cell already shows it.
         if in_multiview {
             if let (Some(mv), Some(thumb)) = (&mut self.multiview, input.thumb_proxy()) {
-                mv.add_tile(Some(cfg.id.clone()), &thumb).context("adding multiview tile")?;
+                mv.add_tile_with(Some(cfg.id.clone()), &thumb, |pad| {
+                    if let Some(a) = &aligner {
+                        a.follow_tile(pad);
+                    }
+                })
+                .context("adding multiview tile")?;
             }
         }
 
@@ -4830,8 +4875,12 @@ impl Mixer {
                         .input
                         .attach_thumb_end(&self.canvas, shape.fps)
                         .context("attaching a thumbnail end for the mosaic")?;
-                    mv.add_tile(Some(slot.input.id.clone()), &proxy)
-                        .context("adding multiview tile")?;
+                    mv.add_tile_with(Some(slot.input.id.clone()), &proxy, |pad| {
+                        if let Some(a) = &slot.aligner {
+                            a.follow_tile(pad);
+                        }
+                    })
+                    .context("adding multiview tile")?;
                 }
                 mv.follow_clock_of(&self.program);
                 // Marked built before the first frame can leave it: a
@@ -5410,6 +5459,50 @@ mod tests {
         assert!(needs_superimposed(None, &[None, Some(0.5)]));
     }
 
+    /// A web page's frames start at zero and are shifted onto the programme's
+    /// timeline. Its mosaic tile, which the studio preview cuts a single
+    /// input from, has to be shifted too. On a mixer that had been up for
+    /// hours the tile was not, every thumbnail reached the mosaic hours late
+    /// and was dropped, and the input showed blank in the preview while the
+    /// programme showed it. A tile's own segment, arriving before either
+    /// programme branch's, decides the shift for all of them.
+    #[test]
+    fn a_tile_is_shifted_onto_a_programme_that_has_run_for_hours() {
+        let _ = gst::init();
+        let clock = gst::SystemClock::obtain();
+        let three_hours = gst::ClockTime::from_seconds(3 * 3600);
+        let base = clock.time().checked_sub(three_hours).expect("the clock is past three hours");
+        let aligner = Arc::new(TimelineAligner {
+            id: "yt".into(),
+            offset: Mutex::new(None),
+            applied: AtomicBool::new(false),
+            vpads: VideoPads::new(),
+            apad: gst::Pad::builder(gst::PadDirection::Sink).name("asink").build(),
+            tiles: VideoPads::new(),
+            clock: Some(clock),
+            base: Some(base),
+        });
+        let tile = gst::Pad::builder(gst::PadDirection::Src).name("tile").build();
+        let peer = gst::Pad::builder(gst::PadDirection::Sink)
+            .name("mosaic")
+            .event_function(|_, _, _| true)
+            .build();
+        tile.link(&peer).expect("the tile links to the mosaic");
+        tile.set_active(true).unwrap();
+        peer.set_active(true).unwrap();
+        aligner.follow_tile(&tile);
+        assert_eq!(tile.offset(), 0, "nothing is shifted before a segment");
+
+        let _ = tile.push_event(gst::event::StreamStart::new("yt"));
+        let segment = gst::FormattedSegment::<gst::ClockTime>::new();
+        let _ = tile.push_event(gst::event::Segment::new(&segment));
+
+        let shifted = gst::ClockTime::from_nseconds(tile.offset() as u64);
+        assert!(shifted >= three_hours, "the tile was shifted by {shifted}, not by the programme's age");
+        assert_eq!(aligner.offset(), Some(tile.offset()), "the tile decided the shift for every pad");
+        assert_eq!(aligner.vpads.offset(), tile.offset(), "the programme pads got the same shift");
+    }
+
     /// A seek has to make the aligner work its offset out again.
     ///
     /// The offset is taken from the programme's running time when a segment
@@ -5439,6 +5532,9 @@ mod tests {
             applied: AtomicBool::new(false),
             vpads: vpads.clone(),
             apad: apad.clone(),
+            tiles: VideoPads::new(),
+            clock: None,
+            base: None,
         };
         assert_eq!(aligner.offset(), None, "nothing is placed before a segment arrives");
 
