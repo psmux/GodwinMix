@@ -2072,6 +2072,8 @@ Take a filter off an item.
 
 Change one of an item's filters, or turn it off without taking it out.
 
+MCP tool `set_scene_item_filter` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
 ```json
 {
   "params": {
@@ -2494,7 +2496,7 @@ MCP tool `validate_scene` in the `search` profile: readOnlyHint true, destructiv
 
 A new scene with a presenter keyed in front of a background, and optionally a foreground such as a desk and a lower third area. Pictures from the media library become sources; the key colour is guessed from the camera.
 
-MCP tool `create_virtual_set` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+MCP tool `create_virtual_set` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint false.
 
 ```json
 {
