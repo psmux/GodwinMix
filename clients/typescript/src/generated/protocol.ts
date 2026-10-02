@@ -1132,6 +1132,19 @@ export interface KeyAdded {
   key: NewKey;
 }
 
+export interface KeyColor {
+  color: string;
+  found: string;
+  share?: number | null;
+}
+
+export interface KeyColorRequest {
+  screen?: string | null;
+  source: string;
+  x?: number | null;
+  y?: number | null;
+}
+
 /** How a publisher gives its key. */
 export type KeyMode = "query" | "stream";
 
@@ -2536,6 +2549,24 @@ export interface VideoWant {
   width?: number | null;
 }
 
+export interface VirtualSetAnswer {
+  added: string[];
+  key: string;
+  key_from: string;
+  scene: SceneView;
+}
+
+export interface VirtualSetRequest {
+  background: string;
+  foreground?: string | null;
+  key?: string | null;
+  lower_third?: string | null;
+  name?: string | null;
+  presenter: string;
+  presenter_scale?: number | null;
+  presenter_x?: number | null;
+}
+
 /**
  * `[vitals]`, and what `vitals.set` changes: the thresholds, and whether
  * to keep a mosaic up for the picture alarms while nobody is looking.
@@ -2792,6 +2823,7 @@ export interface MethodParams {
   "scene.transaction.commit": Record<string, never>;
   "scene.undo": Record<string, never>;
   "scene.validate": ValidateRequest;
+  "scene.virtual_set": VirtualSetRequest;
   "show.add": ShowAddRequest;
   "show.add_many": ShowAddManyRequest;
   "show.list": Record<string, never>;
@@ -2811,6 +2843,7 @@ export interface MethodParams {
   "source.duplicate": DuplicateSourceRequest;
   "source.get": IdRequest;
   "source.group": GroupSourcesRequest;
+  "source.key_color": KeyColorRequest;
   "source.list": Record<string, never>;
   "source.missing": MissingRequest;
   "source.remove": IdRequest;
@@ -2967,6 +3000,7 @@ export interface MethodResults {
   "scene.transaction.commit": Record<string, unknown>;
   "scene.undo": HistoryStep;
   "scene.validate": Validation;
+  "scene.virtual_set": VirtualSetAnswer;
   "show.add": Show;
   "show.add_many": ShowAddManyResult;
   "show.list": ShowList;
@@ -2986,6 +3020,7 @@ export interface MethodResults {
   "source.duplicate": SourceStatus;
   "source.get": SourceStatus;
   "source.group": Record<string, unknown>;
+  "source.key_color": KeyColor;
   "source.list": SourceStatus[];
   "source.missing": MissingSource[];
   "source.remove": Record<string, unknown>;
@@ -3189,6 +3224,7 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "scene.transaction.commit", summary: "Apply the batch.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/transaction/commit" } },
   { name: "scene.undo", summary: "Undo the last change. A drag marked with scene.history.mark undoes as one step.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/undo" } },
   { name: "scene.validate", summary: "Overlaps, items off the canvas, safe area breaches and missing sources: what to fix before saying a scene is done.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/scenes/validate" } },
+  { name: "scene.virtual_set", summary: "A new scene with a presenter keyed in front of a background, and optionally a foreground such as a desk and a lower third area. Pictures from the media library become sources; the key colour is guessed from the camera.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/{id}/virtual_set" } },
   { name: "show.add", summary: "Make another show and start it: empty, a copy of a show (without its outputs, so nothing goes out twice), or from a project file.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/shows" } },
   { name: "show.add_many", summary: "Make many shows in one call, such as every channel of a headend. The whole batch is checked first. With dry_run (the default) nothing is made: the answer says what would be, what its renditions would cost and whether the governor would admit them. Without it, every show that fits is made and the rest are refused with why; a show is made whole or not at all.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/shows/add_many" } },
   { name: "show.list", summary: "Every show on this machine: its name, whether it is running, what is on air, what its outputs send and what its process costs. `current` is the show a client reaches when it names none.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/shows" } },
@@ -3208,6 +3244,7 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "source.duplicate", summary: "Add another source like one the mixer has: the same address and settings under a new id. A client cannot do this with source.add, because the address it is shown has everything after the host cut off.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/sources/{id}/duplicate" } },
   { name: "source.get", summary: "One source. Refused with the ids that exist when there is no such source.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/sources/{id}" } },
   { name: "source.group", summary: "Put sources in a tray folder. A tag for finding things, not a group on the canvas.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/sources/{id}/group" } },
+  { name: "source.key_color", summary: "The colour to key a source on: the colour at a point of its picture, or with no point the green or blue screen it stands in front of.", scope: "read", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/sources/{id}/key_color" } },
   { name: "source.list", summary: "Every source, with its state, whether it has video and audio, and its fader.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/sources" } },
   { name: "source.missing", summary: "Sources that are not running, and why: failed, could not be started (with the error and the action that fixes it), removed, or unknown. Pass the ids a scene draws, or none for every one the mixer knows about.", scope: "read", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/sources/{id}/missing" } },
   { name: "source.remove", summary: "Remove a source. If it is on programme the mixer cuts to the slate first.", scope: "operate", mutating: true, destructive: true, rest: { method: "DELETE", path: "/api/v1/sources/{id}" } },
@@ -3976,6 +4013,11 @@ export class GeneratedMethods {
     return this._call("scene.validate", params as unknown as Record<string, unknown>) as Promise<Validation>;
   }
 
+  /** A new scene with a presenter keyed in front of a background, and optionally a foreground such as a desk and a lower third area. Pictures from the media library become sources; the key colour is guessed from the camera. */
+  sceneVirtualSet(params: VirtualSetRequest): Promise<VirtualSetAnswer> {
+    return this._call("scene.virtual_set", params as unknown as Record<string, unknown>) as Promise<VirtualSetAnswer>;
+  }
+
   /** Make another show and start it: empty, a copy of a show (without its outputs, so nothing goes out twice), or from a project file. */
   showAdd(params: ShowAddRequest): Promise<Show> {
     return this._call("show.add", params as unknown as Record<string, unknown>) as Promise<Show>;
@@ -4069,6 +4111,11 @@ export class GeneratedMethods {
   /** Put sources in a tray folder. A tag for finding things, not a group on the canvas. */
   sourceGroup(params: GroupSourcesRequest): Promise<Record<string, unknown>> {
     return this._call("source.group", params as unknown as Record<string, unknown>) as Promise<Record<string, unknown>>;
+  }
+
+  /** The colour to key a source on: the colour at a point of its picture, or with no point the green or blue screen it stands in front of. */
+  sourceKeyColor(params: KeyColorRequest): Promise<KeyColor> {
+    return this._call("source.key_color", params as unknown as Record<string, unknown>) as Promise<KeyColor>;
   }
 
   /** Every source, with its state, whether it has video and audio, and its fader. */
