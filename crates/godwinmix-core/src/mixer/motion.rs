@@ -136,6 +136,7 @@ impl Mixer {
         duration: gst::ClockTime,
         slate: bool,
     ) {
+        fill_trimmed_pads(&curves, self.pool.compositor());
         let bound = self.controllers.bind(curves);
         if !bound.unbound.is_empty() {
             let over = std::time::Duration::from_nanos(duration.nseconds());
@@ -160,4 +161,36 @@ impl Mixer {
             slate,
         });
     }
+}
+
+/// Tell the compositor pad of every slot whose crop a transition trims to
+/// fill its box.
+///
+/// The box is cut to the shape of the trimmed picture, so filling it is
+/// exact. Left on the item's own policy, a crop arriving a frame after its box
+/// letterboxes the picture for that frame: measured on the first wipe, the
+/// outgoing scene lost its top rows to black for the whole of it. The apply
+/// after the transition puts the item's own policy back.
+fn fill_trimmed_pads(curves: &[Curve], vmix: &gst::Element) {
+    for c in curves {
+        let Some(crop) = c.pad.downcast_ref::<gst::Element>() else { continue };
+        if let Some(pad) = compositor_pad_after(crop, vmix) {
+            super::slots::set_sizing(&pad, super::slots::Sizing::Fill);
+        }
+    }
+}
+
+/// The compositor sink pad a slot's chain ends in, followed downstream from
+/// its crop through the flip and any filters. A handful of hops at most.
+fn compositor_pad_after(crop: &gst::Element, vmix: &gst::Element) -> Option<gst::Pad> {
+    let mut element = crop.clone();
+    for _ in 0..16 {
+        let peer = element.static_pad("src")?.peer()?;
+        let next = peer.parent_element()?;
+        if &next == vmix {
+            return Some(peer);
+        }
+        element = next;
+    }
+    None
 }

@@ -720,6 +720,7 @@ impl SlotPool {
             .vmix
             .request_pad_simple("sink_%u")
             .context("the compositor refused another slot pad")?;
+        answer_allocation(&self.vmix, &pad);
         // A slot arrives invisible and full canvas: nothing reaches programme
         // until a scene asks for it.
         set_u32(&pad, "zorder", Z_LIVE + index as u32);
@@ -1400,6 +1401,15 @@ impl SlotPool {
     /// The sources whose pads a transition is driving on this property right
     /// now. What a test reads to prove a curve reached the pad rather than
     /// being dropped on the way.
+    /// The slots whose crop a transition is driving right now.
+    pub fn driven_crops(&self) -> Vec<usize> {
+        self.slots
+            .iter()
+            .filter(|s| ["left", "top", "right", "bottom"].iter().any(|p| driven(&s.crop, p)))
+            .map(|s| s.index)
+            .collect()
+    }
+
     pub fn driven_by_a_transition(&self, property: &str) -> Vec<SourceId> {
         self.slots
             .iter()
@@ -1551,6 +1561,12 @@ pub(crate) fn write_pad(
 /// over 34 ms on an idle mixer. Comparing first is the difference between a
 /// late frame every half second and none.
 pub(crate) fn set_sizing(pad: &gst::Pad, sizing: Sizing) {
+    // A pad whose box a transition is trimming has been told to fill it,
+    // because the box is already the shape of the trimmed picture. Putting the
+    // item's own policy back halfway through would letterbox it.
+    if driven(pad, "width") {
+        return;
+    }
     let Some(pspec) = pad.find_property("sizing-policy") else { return };
     let class = glib::EnumClass::with_type(pspec.value_type());
     let held = pad.property_value("sizing-policy");
@@ -1593,6 +1609,41 @@ fn frame_size(caps: &gst::Caps) -> Option<(i32, i32)> {
 /// is disabled between transitions.
 fn driven(pad: &impl IsA<gst::Object>, name: &str) -> bool {
     pad.control_binding(name).is_some_and(|b| !b.is_disabled())
+}
+
+/// Answer the allocation query at a slot's compositor pad, on the software
+/// compositor.
+///
+/// A slot whose picture changes size (a crop changed on air, and a wipe that
+/// changes it every frame) renegotiates, and the flip in front of the pad
+/// then asks the compositor how to allocate. The compositor answers a
+/// serialized query only once the buffer queued ahead of it has been blended,
+/// and the slot's thread waits for that. Measured on the first wipe: the
+/// flip waited 480 ms on one query, the slot got five buffers through in half
+/// a second and the compositor drew stale, wrongly trimmed frames; and the
+/// query that went out when the crop settled back never came back at all, so
+/// that slot drew nothing again until the mixer stopped. `compositor` has no
+/// pool to offer a sink pad anyway, so answering here (video meta, no pool,
+/// which is what the element in front needs to allocate for itself) changes
+/// nothing about where buffers come from and lets the caps go down in order
+/// with the buffers. A probe that sees only queries costs nothing per frame.
+///
+/// Not on a GPU compositor, whose answer carries the context its uploads need.
+fn answer_allocation(vmix: &gst::Element, pad: &gst::Pad) {
+    let software = vmix.factory().is_some_and(|f| f.name() == "compositor");
+    if !software {
+        return;
+    }
+    pad.add_probe(gst::PadProbeType::QUERY_DOWNSTREAM, |_pad, info| {
+        let Some(gst::PadProbeData::Query(query)) = &mut info.data else {
+            return gst::PadProbeReturn::Ok;
+        };
+        let gst::QueryViewMut::Allocation(allocation) = query.view_mut() else {
+            return gst::PadProbeReturn::Ok;
+        };
+        allocation.add_allocation_meta::<gstreamer_video::VideoMeta>(None);
+        gst::PadProbeReturn::Handled
+    });
 }
 
 /// What to add to a running time to get the stream time an element upstream

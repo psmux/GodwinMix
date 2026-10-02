@@ -180,7 +180,7 @@ impl Transition for Snap {
     }
 
     fn curves(&self, x: &Crossing) -> Vec<Curve> {
-        let at = |leg: &Leg, v: f64| Curve::on(&leg.pad, "alpha", vec![(x.start, v), (x.end(), v)]);
+        let at = |leg: &Leg, v: f64| Curve::on(&leg.pad, "alpha", super::sample(x, |_| v));
         let mut curves: Vec<Curve> = x.out.iter().map(|leg| at(leg, 0.0)).collect();
         curves.extend(x.incoming.iter().map(|leg| at(leg, leg.to.alpha)));
         curves

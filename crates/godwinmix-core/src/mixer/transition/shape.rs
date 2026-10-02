@@ -40,7 +40,7 @@ impl Rect {
         let y0 = self.y.max(o.y);
         let x1 = (self.x + self.w).min(o.x + o.w);
         let y1 = (self.y + self.h).min(o.y + o.h);
-        (x1 - x0 >= 1.0 && y1 - y0 >= 1.0).then(|| Rect::new(x0, y0, x1 - x0, y1 - y0))
+        (x1 - x0 >= 2.0 && y1 - y0 >= 2.0).then(|| Rect::new(x0, y0, x1 - x0, y1 - y0))
     }
 
     fn area(&self) -> f64 {
@@ -204,5 +204,6 @@ pub fn stay_then_go(leg: &Leg, x: &Crossing) -> Curve {
 
 /// A leg that is fully there from the first frame, under one that moves.
 pub fn there_at_once(leg: &Leg, x: &Crossing) -> Curve {
-    Curve::on(&leg.pad, "alpha", vec![(x.start, leg.to.alpha), (x.end(), leg.to.alpha)])
+    let a = leg.to.alpha;
+    Curve::on(&leg.pad, "alpha", super::sample(x, |_| a))
 }
