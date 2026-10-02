@@ -116,3 +116,13 @@ fn a_refusal_a_set_up_fixes_names_the_piece_it_waits_on() {
     plain(&said);
     assert!(detail.unwrap()["chain"].as_str().unwrap().contains("lyrics"));
 }
+
+#[test]
+fn the_verb_agrees_with_the_noun() {
+    assert_eq!(names::be("camera"), "are");
+    assert_eq!(names::be("screen"), "is");
+    assert!(plain::plugin_off("screen").message.starts_with("Screen capture is switched off"));
+    assert!(plain::plugin_off("screen").message.contains("Turn it back on"));
+    assert!(plain::plugin_missing("file-record", "file-record/output", true).message.starts_with("Recording is not set up"));
+    assert_eq!(names::sets_itself("camera"), "They set themselves");
+}

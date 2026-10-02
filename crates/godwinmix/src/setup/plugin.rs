@@ -25,7 +25,7 @@ pub fn look(piece: &str) -> SetupStatus {
     match loader::get(piece) {
         Some(p) if p.enabled => SetupStatus {
             state: SetupState::Ready,
-            message: format!("{} are ready.", names::sentence_start(piece)),
+            message: format!("{} {} ready.", names::sentence_start(piece), names::be(piece)),
             ..base
         },
         Some(_) => {
@@ -35,13 +35,18 @@ pub fn look(piece: &str) -> SetupStatus {
         None => match first_party::find(piece) {
             Some(dir) => SetupStatus {
                 state: SetupState::Missing,
-                message: format!("{} are not set up yet. They set themselves up the first time you pick one.", names::sentence_start(piece)),
+                message: format!(
+                    "{} {} not set up yet. {} up the first time you pick one.",
+                    names::sentence_start(piece),
+                    names::be(piece),
+                    names::sets_itself(piece)
+                ),
                 detail: json!({ "plugin": piece, "from": dir }),
                 ..base
             },
             None => SetupStatus {
                 state: SetupState::Unavailable,
-                message: format!("{} are not part of this copy of the mixer.", names::sentence_start(piece)),
+                message: format!("{} {} not part of this copy of the mixer.", names::sentence_start(piece), names::be(piece)),
                 detail: json!({ "plugin": piece, "looked": first_party::places(piece) }),
                 ..base
             },

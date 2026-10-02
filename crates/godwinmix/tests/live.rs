@@ -326,7 +326,9 @@ async fn every_refusal_carries_data_retryable_and_a_way_forward() {
         // id and says so in the answer, which is better than refusing a call
         // whose intent was clear. An unknown kind is the refusal an agent
         // that guessed at a type actually meets.
-        ("an unknown source kind", "source.add", json!({ "id": "x", "type": "no/such", "uri": "test://smpte" }), &token, "type"),
+        // A person reads the next step; the type and what this build has are
+        // in `data.detail`, for an agent.
+        ("an unknown source kind", "source.add", json!({ "id": "x", "type": "no/such", "uri": "test://smpte" }), &token, "install"),
         ("a scope miss", "program.take", json!({ "source": "cam2" }), &reader, "operate"),
         ("a safety refusal", "program.take", json!({ "source": "cam2" }), &token, "take again"),
         ("confirmation required", "source.remove", json!({ "id": "cam2" }), &careful, "confirm"),

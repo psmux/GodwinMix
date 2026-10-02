@@ -59,9 +59,10 @@ pub fn plugin_missing(name: &str, type_id: &str, shipped: bool) -> Actionable {
     if shipped || super::names::known(name) {
         return Actionable::new(
             format!(
-                "{} are not set up on this mixer yet. Press Set up; it takes about a minute and \
+                "{} {} not set up on this mixer yet. Press Set up; it takes about a minute and \
                  nothing goes off air.",
-                sentence_start(name)
+                sentence_start(name),
+                super::names::be(name)
             ),
             ErrorAction::setup(&format!("Set up {}", noun(name)), name),
         )
@@ -77,9 +78,14 @@ pub fn plugin_missing(name: &str, type_id: &str, shipped: bool) -> Actionable {
 
 /// Installed and switched off.
 pub fn plugin_off(name: &str) -> Actionable {
-    let what = if super::names::known(name) { sentence_start(name) } else { "This kind of source".into() };
+    let (what, be, them) = if super::names::known(name) {
+        let be = super::names::be(name);
+        (sentence_start(name), be, if be == "is" { "it" } else { "them" })
+    } else {
+        ("This kind of source".into(), "is", "it")
+    };
     Actionable::new(
-        format!("{what} are switched off on this mixer. Turn them back on; nothing goes off air."),
+        format!("{what} {be} switched off on this mixer. Turn {them} back on; nothing goes off air."),
         ErrorAction { label: "Turn them on".into(), ..ErrorAction::enable_plugin(name) },
     )
     .with_detail(json!({ "plugin": name, "installed": true, "enabled": false }))

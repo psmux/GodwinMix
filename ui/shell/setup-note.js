@@ -11,12 +11,8 @@ import { toast } from "./toast.js";
 
 const notes = new Map(); // piece -> the running note's close function
 
-/** Wire the notes to a client. Called once by the shell. */
-export function setupNotes(client) {
-  return client.on("setup", (s) => show(client, s));
-}
-
-function show(client, s) {
+/** One `setup.changed`, as the shell hands it over. */
+export function show(client, s) {
   if (!s || !s.piece) return;
   const running = notes.get(s.piece);
   if (s.state === "running") {

@@ -869,6 +869,8 @@ mod tests {
         reachable.extend(closure_of("panels/welcome/after.js"));
         reachable.extend(closure_of("panels/welcome/obs-import.js"));
         reachable.extend(closure_of("shell/error-actions.js"));
+        // The setup notes, the first time a piece sets itself up.
+        reachable.extend(closure_of("shell/setup-note.js"));
         reachable.extend(closure_of("kits/schema/index.js"));
         reachable.extend(closure_of("shell/mixer-settings.js"));
         reachable.extend(closure_of("shell/folder-picker.js"));
