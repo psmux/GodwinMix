@@ -85,8 +85,8 @@ against that baseline, because a tool list is charged for on every call.
 
 ### `gmx skill install`
 
-Drops `godwinmix-operate` and `godwinmix-develop` where an AI coding tool
-reads them.
+Drops `godwinmix-operate`, `godwinmix-develop` and `godwinmix-design` where an
+AI coding tool reads them.
 
 ```sh
 gmx skill install --for claude            # or codex, or gemini
@@ -106,6 +106,22 @@ built in one's. See [transitions](transitions.md).
 `godwinmix-operate` is for running a show: the state document, the take, the
 safety rules that will refuse it, what a look costs. `godwinmix-develop` is
 for building on it: the manifest, the contract and the test loop.
+`godwinmix-design` is for graphics: the template pack, writing an SVG template,
+safe areas, placing and looking at a graphic.
+
+### Graphic templates and any method
+
+```sh
+gmx ctl template list                          # the pack and the library's templates, with fields
+gmx ctl template get news-lower-third --out strap.svg
+gmx ctl template save ours-lower-third strap.svg [--replace]
+gmx ctl template fields strap                  # what each field of a running graphic shows
+gmx ctl source set strap --param fields.title="Engine Research"
+gmx ctl rpc scene.item.add @item.json          # any method, params as JSON or @file
+```
+
+`--param` takes a dotted name, so `fields.title` changes that one field and
+leaves the rest. See [graphic templates](graphic-templates.md).
 
 Requests answer with the mixer's own reason for refusing rather than a bare
 status code:

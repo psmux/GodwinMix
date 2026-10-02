@@ -145,8 +145,9 @@ A person does the same from a terminal with `gmx shows add --from feeds.csv
 
 ## Install the skills first
 
-Two skills ship with the mixer. One is for running a show, one is for building
-on it, and both are written for the tool that will read them.
+Three skills ship with the mixer: one for running a show, one for building on
+it, and one for designing graphics. Each is written for the tool that will
+read it.
 
 ```sh
 gmx skill install --for claude          # or codex, or gemini
@@ -156,6 +157,28 @@ gmx skill install --for claude --print  # see what it would write first
 `godwinmix-operate` covers the state document, the take, the safety rules that
 will refuse you, what a look costs and what to do when something is wrong.
 `godwinmix-develop` covers the manifest, the contract and the test loop.
+`godwinmix-design` covers the graphic template pack, writing an SVG template,
+safe areas, placing a graphic with an enter and an exit, and looking at it.
+
+## Graphics
+
+An agent can design a lower third, a breaking news bar, a score bug or a title
+card and put it on air, drawn by the mixer with no browser. The tools are
+behind `search_tools`: `list_templates`, `get_template`, `save_template`,
+`template_fields`, and `preview_frame`, which answers with the armed preview
+scene as an image the model sees. `add_scene_item` takes `visible`, `enter`
+and `exit`, so a graphic can be placed hidden and brought on with its own
+movement. A field changed with `set_source` reaches the screen on the next
+frame with no rebuild.
+
+```
+add_source {"id": "breaking", "uri": "template:breaking-news",
+            "params": {"fields": {"headline": "Storm warning for the coast tonight"}}}
+set_source {"id": "breaking", "params": {"fields": {"headline": "Coast road closed"}}}
+```
+
+The walk through, with the requests that work and what each costs, is
+[design graphics with an AI agent](design-graphics-with-ai.md).
 
 ## Start with `agent_state`
 
@@ -349,6 +372,7 @@ English.
 * [`docs/reference/agent-state.md`](../reference/agent-state.md): both formats, every field, the sizes.
 * [`docs/reference/safety.md`](../reference/safety.md): the minimum hold, the rate limit, the flash guard, the operator watchdog.
 * [`docs/reference/tasks.md`](../reference/tasks.md): `task.get`, `task.cancel` and the handle pattern.
+* [`docs/reference/graphic-templates.md`](../reference/graphic-templates.md): the template kind, the pack, the methods and tools.
 * `docs/how-to/control-the-mixer.md`: the HTTP and WebSocket surface underneath.
 * `docs/agents.md`: the longer walk through a director loop, with a worked example.
 * `protocol.md`: every method, event and type.
