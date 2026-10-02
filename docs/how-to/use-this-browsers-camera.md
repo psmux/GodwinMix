@@ -64,9 +64,8 @@ It opens out by itself when something goes wrong, so the reason is on screen.
 
 Under the picture, once a second while the bar is open, is what is going
 out: the bit rate, the picture size and frame rate, and the round trip to the
-mixer. The browser starts small and climbs towards 1280x720 at 30 frames a
-second, about 2.5 Mbps, as it finds the bandwidth. On a slow link it keeps the
-frame rate and gives up resolution, which is right for a person talking.
+mixer. It sends 1280x720 at up to 30 frames a second, at most
+2.5 Mbps. On a slow link it keeps the picture size and gives up frame rate.
 
 ## While it is live
 

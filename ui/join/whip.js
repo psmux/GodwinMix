@@ -36,7 +36,7 @@ export async function publish({ url, key, media, fetcher = fetch }) {
     const base = new URL(url, document.baseURI);
     const location = new URL(res.headers.get("Location") || base.href, base).href;
     await pc.setRemoteDescription({ type: "answer", sdp: text });
-    await preferFramerate(senders.video);
+    await preferSteadySize(senders.video);
     return { pc, senders, location };
   } catch (e) {
     pc.close();
@@ -55,7 +55,7 @@ function addTransceivers(pc, media) {
   // refuses an offer with no H.264 in it.
   const video = pc.addTransceiver(media.video || "video", {
     direction: "sendonly",
-    sendEncodings: [{ maxBitrate: ENCODER.maxBitrate, maxFramerate: ENCODER.frameRate }],
+    sendEncodings: [{ maxBitrate: ENCODER.maxBitrate, maxFramerate: ENCODER.frameRate, scaleResolutionDownBy: 1 }],
   });
   preferH264(video);
   const audio = pc.addTransceiver(media.audio || "audio", { direction: "sendonly" });
@@ -88,10 +88,20 @@ export function orderCodecs(codecs) {
     .map(([c]) => c);
 }
 
-async function preferFramerate(sender) {
+/**
+ * Keep the picture size steady and give up frame rate instead when the link
+ * or the computer cannot keep up. A browser left to itself starts small and
+ * raises the size as it finds bandwidth, and every change of size is a new
+ * H.264 configuration, which the hop from a channel to the mixer carries only
+ * once: the mixer's decoder then refuses every frame after the first change,
+ * and the source freezes a few seconds in. A camera feeding a mixer wants one
+ * size anyway.
+ */
+async function preferSteadySize(sender) {
   try {
     const params = sender.getParameters();
-    params.degradationPreference = "maintain-framerate";
+    params.degradationPreference = "maintain-resolution";
+    for (const e of params.encodings || []) e.scaleResolutionDownBy = 1;
     await sender.setParameters(params);
   } catch {
     // Not every browser lets this be set. Its own default is close enough.
