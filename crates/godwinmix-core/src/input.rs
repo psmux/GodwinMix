@@ -539,6 +539,11 @@ const MEDIA_LINE: &str = "[browser] media ";
 /// handed over ends the wait as soon as it says so.
 pub const MEDIA_PROBE_TIMEOUT: Duration = Duration::from_secs(20);
 
+/// How long a page that has said it plays nothing is given for a player to
+/// appear before it is rendered whole. A video element added later than this
+/// is still shown, drawn by the page, at the cost of the page decoding it.
+pub const NO_MEDIA_GRACE: Duration = Duration::from_secs(6);
+
 
 /// The report line's payload, if this is one.
 fn media_report(line: &str) -> Option<MediaReport> {
@@ -595,8 +600,13 @@ pub fn probe_page_media(id: &SourceId, spec: &ExecSpec, timeout: Duration) -> Op
     let started = Instant::now();
     let deadline = started + timeout;
     let mut found = None;
+    // Set when the page says it has no video at all: it gets `NO_MEDIA_GRACE`
+    // for a player to turn up, rather than the whole timeout. A plain page
+    // used to sit as connecting for twenty seconds before it was shown.
+    let mut cut_short: Option<Instant> = None;
     loop {
-        let left = deadline.saturating_duration_since(Instant::now());
+        let end = cut_short.map_or(deadline, |c| c.min(deadline));
+        let left = end.saturating_duration_since(Instant::now());
         if left.is_zero() {
             break;
         }
@@ -620,9 +630,18 @@ pub fn probe_page_media(id: &SourceId, spec: &ExecSpec, timeout: Duration) -> Op
                 );
                 break;
             }
+            // Nothing that plays on the page yet. A player can still arrive
+            // as it loads, so give it a little longer, not the whole timeout.
+            Ok(report) if !report.found && report.media.is_empty() => {
+                cut_short.get_or_insert_with(|| Instant::now() + NO_MEDIA_GRACE);
+                continue;
+            }
             // A page reports as it loads, and the first report is often from
             // before the player has a source. Keep listening until the timeout.
-            Ok(_) => continue,
+            Ok(_) => {
+                cut_short = None;
+                continue;
+            }
             Err(_) => break,
         }
     }
