@@ -135,6 +135,11 @@ impl Meter {
         moved
     }
 
+    /// How long since the last tag, or since the session began if none came.
+    pub fn quiet(&self) -> Duration {
+        self.last_tag.elapsed()
+    }
+
     /// Has any video arrived this session? An audio only publisher never
     /// sends a keyframe, and a reader must not wait for one.
     pub fn has_video(&self) -> bool {

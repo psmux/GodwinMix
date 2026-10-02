@@ -267,6 +267,13 @@ refused with SRT's own access control codes (1401 for a key, 1403 for a
 channel that is off or does not take SRT, 1404 for no such channel, 1409 for a
 stream name already live), which an encoder shows as its reason.
 
+A name counts as taken only while its publisher is sending. An encoder whose
+network dropped, or a browser that was closed without stopping, leaves its
+session behind; once that session has sent nothing for 2 seconds, the next
+publisher with a valid key takes the name over and the old session is cut off.
+One that arrives sooner waits out the 2 seconds rather than being turned away.
+See [the reference](../reference/channels.md#a-publisher-that-went-away-without-hanging-up).
+
 ## Where to go next
 
 * [Send a channel on to YouTube, Facebook or Twitch](restream-a-channel.md)

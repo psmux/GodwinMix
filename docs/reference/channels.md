@@ -324,6 +324,35 @@ Each goes to an RTMP encoder as `NetStream.Publish.Denied`, to an SRT caller as
 its rejection code, to a WHIP client as the body of its refusal, to the log,
 and out as `event/channel.refused`. A wrong key is never repeated in any of them.
 
+### A publisher that went away without hanging up
+
+A name is taken only while its publisher is sending. A publisher with a valid
+key that finds the name held by a session that has sent nothing for 2 seconds
+takes it over, over any of the four protocols: the old session is cut off, its
+readers are told it ended, and the new one is live from its first keyframe.
+One that finds a session quiet for between half a second and 2 seconds waits
+for the rest of the 2 seconds and then takes it, or is refused if the old one
+starts sending again in that time. A session still sending is never taken
+over, and the newcomer gets the sentence above.
+
+This is what lets a reloaded or restarted browser, or an encoder whose network
+dropped, get straight back on air. Before, the old session held the name until
+its protocol's own timeout ended it, about 30 seconds for WebRTC, and every
+publish in between was refused. The two numbers:
+
+* 2 seconds, because every working publisher sends far more often (sound every
+  20 to 40 ms, a picture every frame, and a static screen share still sends one
+  a second), and because it is when the mixer itself judges a source stalled,
+  so a stream that quiet is already off the programme.
+* Half a second, below which a session is treated as live and a newcomer is
+  refused at once, so a second tab on a name that is working is told so
+  without waiting.
+
+The log says `<app>/<stream>: <old address> had sent nothing for 2 s, so <new
+address> took the name over`. The core is not told the stream went idle, since
+it never did. The hub's own publishers (a transcode's output, a direct show's
+input) are never taken over.
+
 ## Where it is kept
 
 Channels are written to `<config stem>.runtime.channels.toml` beside the

@@ -68,7 +68,9 @@ impl Sessions {
             let code = if r.why.contains("no channel called") { 404 } else { 403 };
             (code, self.gate.turn_away(&r.channel, &r.stream, &peer, r.why))
         })?;
-        if self.gate.hub.is_live(&admit.app, &admit.stream) {
+        // A session that has gone quiet is taken over by this one rather than
+        // refused; see `hub::takeover`.
+        if self.gate.hub.held(&admit.app, &admit.stream) {
             let why = format!("{}/{} is already live. Publish under another stream name, or stop the other one first.", admit.app, admit.stream);
             return Err((409, self.gate.turn_away(&admit.channel, &admit.stream, &peer, why)));
         }
