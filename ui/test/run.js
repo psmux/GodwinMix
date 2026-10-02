@@ -3,6 +3,7 @@ import { sourceFileTests } from "./source-files.js";
 import { mixerSettingsTests } from "./mixer-settings.js";
 import { errorActionTests } from "./error-actions.js";
 import { sourceChooserTests } from "./source-chooser.js";
+import { textSourceTests } from "./text-sources.js";
 import { studioTests } from "./studio.js";
 import { transitionTests } from "./transitions.js";
 import { sceneFixTests, sceneFixLoadTests } from "./scene-fix.js";
@@ -1110,6 +1111,7 @@ async function addSourcePickerSuite() {
       "Screens and windows",
       "Microphones and audio",
       "Video and images",
+      "Text and tickers",
       "Web pages",
       "Streams and feeds",
       "Test patterns",
@@ -2733,6 +2735,7 @@ legacySuite()
   })
   .then(scopedSourcesSuite)
   .then(() => sourceChooserTests(test, eq, ok))
+  .then(() => textSourceTests(test, eq, ok))
   .then(() => sourceFileTests(test, eq, ok))
   .then(() => errorActionTests(test, eq, ok))
   .catch((e) => {

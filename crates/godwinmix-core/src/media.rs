@@ -22,7 +22,7 @@ use tracing::{debug, warn};
 const EXTENSIONS: &[&str] = &[
     "mp4", "mov", "m4v", "mkv", "webm", "avi", "ts", "mpg", "mpeg", "flv", "wmv",
     "mp3", "wav", "wave", "flac", "ogg", "oga", "opus", "m4a", "aac", "aiff", "aif",
-    "png", "jpg", "jpeg", "bmp", "gif", "webp", "tif", "tiff",
+    "png", "jpg", "jpeg", "bmp", "gif", "webp", "tif", "tiff", "svg",
 ];
 
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]

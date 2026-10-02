@@ -7,14 +7,25 @@
 //! rest to `assemble`. Nothing in `assemble` knows what a kind is.
 
 pub mod browser;
+pub mod clip_alpha;
+pub mod clip_pace;
+pub mod clip_start;
 pub mod exec;
 pub mod file;
 pub mod image;
+pub mod image_alpha;
+pub mod image_decode;
+pub mod image_probe;
+pub mod layer;
 pub mod layered;
 pub mod live;
+pub mod rendered;
 pub mod normalise;
 pub mod rtmp;
+pub mod schema;
 pub mod testsrc;
+pub mod text;
+pub mod ticker;
 
 use super::{MediaEnds, Tier};
 use crate::caps::CanvasCaps;
@@ -81,6 +92,8 @@ pub struct KindParts {
     pub levels: Option<layered::AudioLevels>,
     /// Where a layered source's layers sit in time, one per layer.
     pub placement: Vec<Arc<layered::Placement>>,
+    /// What the overlay board draws, for a kind whose picture has alpha.
+    pub layer: Option<Arc<crate::overlay::Layer>>,
     /// Whether a video and an audio pad were ever routed. Filled in by
     /// `assemble`, not by the kind.
     pub has_video: Option<Arc<AtomicBool>>,

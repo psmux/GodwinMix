@@ -405,7 +405,8 @@ class SourcesPanel extends HTMLElement {
     const target = scene || this.untouchedScene();
     if (!scenes || !id || !target) return;
     try {
-      await scenes.itemAdd(target.id, { source: id });
+      // A text or a ticker made from a preset says where it goes.
+      await scenes.itemAdd(target.id, { source: id }, status.placement ? { transform: status.placement } : undefined);
     } catch (e) {
       // The source exists and nothing is rolled back for it: undoing an add
       // the operator asked for, because a second call failed, loses their

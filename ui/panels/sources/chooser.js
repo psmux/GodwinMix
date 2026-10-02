@@ -19,7 +19,7 @@ export async function openSceneSources(client, scenes, scene) {
     pending.add(source.id);
     render(true);
     try {
-      await scenes.itemAdd(scene.id, { source: source.id });
+      await scenes.itemAdd(scene.id, { source: source.id }, source.placement ? { transform: source.placement } : undefined);
       added.add(source.id);
       scenes.undo.record(`Added ${nameOf(source)} to ${scene.name}`);
       await scenes.reread([scene.id]);

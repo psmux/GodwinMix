@@ -16,6 +16,8 @@ import { nameOf, setLocal } from "./local.js";
 
 /** @param {object} panel the Sources panel, for its client and its redraw */
 export async function openSourceDrawer(panel, source) {
+  // A text or a ticker gets its own editor, which applies as it is typed.
+  if (["text/source", "ticker/source"].includes(source.type)) return (await import("./text-editor.js")).openTextEditor(panel, source);
   const client = panel.client;
   const id = source.id;
   const kind = SOURCE_KINDS.find((k) => k.id === kindOfSource(source)) || SOURCE_KINDS[0];

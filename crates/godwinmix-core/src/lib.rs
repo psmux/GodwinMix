@@ -57,6 +57,7 @@ pub mod multiview;
 pub mod node;
 pub mod observe;
 pub mod output;
+pub mod overlay;
 pub mod plugin;
 pub mod preview;
 pub mod preset;

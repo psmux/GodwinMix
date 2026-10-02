@@ -1,12 +1,12 @@
 import { el } from './dom.js';
 import { errorToast } from './toast.js';
 
-export const MEDIA_ACCEPT = 'video/*,audio/*,image/*,.mkv,.ts,.mov,.webm,.wav,.flac,.m4a';
+export const MEDIA_ACCEPT = 'video/*,audio/*,image/*,.mkv,.ts,.mov,.webm,.wav,.flac,.m4a,.svg,.gif';
 
 /** Unique ASCII names avoid replacing footage already held by the mixer. */
 export function uploadName(file) {
   const suffix = /\.([a-z0-9]{1,8})$/i.exec(file.name || '');
-  const extensions = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp', 'audio/mpeg': 'mp3', 'audio/wav': 'wav', 'video/mp4': 'mp4' };
+  const extensions = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp', 'image/svg+xml': 'svg', 'image/gif': 'gif', 'audio/mpeg': 'mp3', 'audio/wav': 'wav', 'video/mp4': 'mp4' };
   const extension = suffix?.[1].toLowerCase() || extensions[file.type];
   if (!extension) throw new Error('This file has no media extension. Give it a video, audio or image extension and choose it again.');
   const stem = (file.name || 'media').replace(/\.[^.]*$/, '').normalize('NFKD').replace(/[^a-z0-9]+/gi, '-').replace(/^-+|-+$/g, '').slice(0, 80) || 'media';

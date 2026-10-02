@@ -10,6 +10,7 @@ use crate::control::call::Call;
 use godwinmix_core::mixer::{AudioOutcome, Command, SeekOutcome};
 use serde_json::Value;
 
+mod in_place;
 mod missing;
 
 pub fn register(reg: &mut Registry<Call>) {
@@ -492,6 +493,12 @@ async fn set(call: Call, params: Value) -> Result<Value, RpcError> {
             None => true,
         };
         if renamed {
+            return body(find(&call, &req.id).await?);
+        }
+    }
+    if !moving && req.params.is_some() && req.transport.is_none() && req.latency_ms.is_none() {
+        // New params for a kind that can take them live: a text, a ticker.
+        if let in_place::Offered::Applied = in_place::offer(&call, &req.id, &wanted, req.name.clone()).await? {
             return body(find(&call, &req.id).await?);
         }
     }
