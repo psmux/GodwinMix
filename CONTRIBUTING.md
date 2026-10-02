@@ -52,9 +52,10 @@ Two more crates live beside the mixer and are outside the workspace, because
 they have their own lockfiles and their own heavy dependency trees. They are
 built separately:
 
-* `browser/` is the web page sidecar. It links against CEF and needs the CEF
-  distribution in place first (`browser/dev/install-cef-dist.sh`). Most changes
-  do not touch it and you do not need to build it.
+* `browser/` is the web page renderer. It links against CEF. You do not need
+  to build it by hand: the mixer builds it the first time a web page is added
+  (see below). `browser/dev/install-cef-dist.sh` is for putting a CEF with
+  H.264 and AAC in place of the default download.
 * `tauri-app/` is the desktop shell. It needs the Tauri prerequisites for your
   platform.
 
@@ -65,6 +66,31 @@ cargo run --release -- --probe
 cargo run --release -- --example-config > godwinmix.toml
 cargo run --release -- --config godwinmix.toml
 ```
+
+### What the first run sets up by itself
+
+`cargo run --release -- --config godwinmix.example.toml` is the whole install.
+Nothing else has to be built or installed by hand for the page to offer
+everything it shows. Two kinds of piece are set up the first time somebody
+needs them, in the background, while the programme carries on:
+
+* **Web pages.** The first web page (one in the config counts) starts the
+  renderer's setup: the CEF download (about 124 MB, resumed if the connection
+  drops), `cargo build --release` in `browser/`, and on macOS the app bundle.
+  The page shows "Setting up web pages. This happens once and takes a few
+  minutes", and the web page appears by itself when it is ready. On an Apple
+  silicon Mac with the crates already in the cargo cache it took 2 minutes:
+  28 seconds to download, about 10 to unpack, 35 to build and 45 to bundle.
+  It needs CMake and Ninja (`brew install cmake ninja`); without them the page
+  says so and shows that command with a copy button.
+* **Cameras, screens, microphones, channels and the other first party
+  plugins.** Opening the category in Add a source, or adding a source that
+  needs one, installs it from `plugins/` in about a minute. No Install button.
+
+The build output goes to `~/.godwinmix/logs/setup-web.log` (or under
+`GODWINMIX_HOME`), not to the terminal. If a step does not finish, the page
+says so in a sentence and offers Try again, which carries on from where it
+stopped. [docs/reference/setup.md](docs/reference/setup.md) has the details.
 
 ## Test
 

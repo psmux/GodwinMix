@@ -36,7 +36,7 @@ selected while setup is open.
 | Microphones and audio | Microphones, line inputs, sound cards |
 | Video and images | Browse local files, the media library, or enter a path on the mixer |
 | Existing sources | Reuse and optionally preview a source already on the mixer |
-| Web pages | A URL rendered by the browser sidecar |
+| Web pages | A URL, drawn by the mixer's own browser renderer |
 | Streams and feeds | RTMP, SRT, RTSP and HLS coming in, and NDI when it is installed |
 | Test patterns | Bars and a tone out of the mixer itself |
 | More | Whatever else the plugins on this mixer provide |
@@ -55,19 +55,33 @@ or its specific URI.
 The search box at the top searches everything at once, categories included, so
 typing `bars` finds the colour bars and typing `rtmp` finds the address box.
 
-### When the plugin is missing
+### When the plugin is not set up yet
 
-Cameras, screens and microphones each come from a plugin. If this mixer has not
-got it, the category is still there, with a sentence saying so and a button:
-**Install camera support**, or screen, or audio input. Pressing it installs the
-plugin over the protocol, the same thing `gmx plugin add` does, while the mixer
-runs and with nothing going off air. The picker looks for devices again as soon
-as the install finishes.
+Cameras, screens and microphones each come from a plugin that ships with the
+mixer. If it is not installed yet, opening the category installs it: the
+category says "Setting up cameras. This happens once and takes about a
+minute; nothing goes off air.", and the picker looks for devices as soon as
+it is ready. There is no separate Install button. A plugin that is installed
+and switched off is switched back on the same way. If the install does not
+finish, the sentence says so and a **Try again** button appears.
 
-The mixer looks the plugin up in the marketplaces it knows and installs what it
-finds. A mixer that knows no marketplace falls back to the repository the first
-party plugins live in. See [Install a plugin](install-a-plugin.md) for the
-other six forms `plugin.add` takes.
+The plugin comes from the copy beside the mixer, or from `plugins/` when the
+mixer runs from a source checkout. Plugins that do not ship with the mixer are
+installed as before; see [Install a plugin](install-a-plugin.md).
+
+### The first web page
+
+A web page is drawn by a browser renderer the mixer carries. A mixer run from
+a source checkout builds it the first time a web page is added: **Add** puts
+the source in the list at once, a note says "Setting up web pages. This
+happens once and takes a few minutes.", and the page goes live by itself when
+the renderer is ready. On an Apple silicon Mac that took 2 minutes, most of it
+the build. Later web pages start straight away.
+
+If the download does not finish, the note says so and offers **Try again**,
+which carries on from where the download stopped. If the machine lacks the
+build tools, the note says which command installs them and has a button that
+copies it. [Setup on first use](../reference/setup.md) has every step.
 
 ### Things that have to be typed
 
