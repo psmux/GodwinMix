@@ -458,6 +458,10 @@ pub enum Command {
     /// API. The report is None when the page had nothing to hand over.
     AddSourceProbed(Box<SourceConfig>, Option<MediaReport>, Option<Ack>),
     RemoveSource(SourceId, Option<Ack>),
+    /// Give a source another name without touching its pipeline. A rename
+    /// used to remove and add the source, which put a gap in the programme
+    /// when it was on air.
+    RenameSource(SourceId, String, Option<Ack>),
     ReconnectOutput(OutputId, Option<Ack>),
     AddOutput(Box<OutputConfig>, Option<Ack>),
     /// Change a destination in place. The config carries the id it replaces,
@@ -2819,6 +2823,9 @@ impl Mixer {
             .filter(|s| s.input.id != AD_ID)
             .map(|s| {
                 let mut cfg = s.input.config.clone();
+                if let Some(name) = s.input.renamed() {
+                    cfg.name = Some(name);
+                }
                 // Taken off the elements rather than from the config the source
                 // was built with. The config is the value it started at; these
                 // are where the operator left the desk, and that is what has to
@@ -3688,6 +3695,7 @@ impl Mixer {
             Command::EndAdBreak(_) => "adbreak.end",
             Command::AddSource(..) | Command::AddSourceProbed(..) => "source.add",
             Command::RemoveSource(..) => "source.remove",
+            Command::RenameSource(..) => "source.set",
             Command::ReconnectOutput(..) => "output.reconnect",
             Command::AddOutput(..) => "output.add",
             Command::SetOutput(..) => "output.set",
@@ -3785,6 +3793,18 @@ impl Mixer {
                 let r = self.add_source(&cfg, report);
                 self.finish_rebuild(&cfg, &r);
                 self.note_unstarted(&cfg, &r, ack.is_none());
+                reply(ack, &r);
+                r?;
+            }
+            Command::RenameSource(id, name, ack) => {
+                let r = match self.sources.iter().find(|s| s.input.id == id) {
+                    Some(s) => {
+                        s.input.rename(name);
+                        self.persist_runtime();
+                        Ok(())
+                    }
+                    None => Err(anyhow::anyhow!("there is no source '{id}' to rename")),
+                };
                 reply(ack, &r);
                 r?;
             }
@@ -4405,7 +4425,7 @@ impl Mixer {
                 let at = s.position();
                 let mut status = SourceStatus {
                     id: s.input.id.clone(),
-                    name: s.input.config.display_name().to_string(),
+                    name: s.input.display_name(),
                     uri: safe_uri_label(&s.input.config.display_uri()),
                     state: s.input.observed_state(),
                     has_video: s.input.has_video(),
@@ -6765,6 +6785,7 @@ mod tests {
             Command::Shutdown,
             Command::Status(tx),
             Command::RemoveSource("cam1".into(), None),
+            Command::RenameSource("cam1".into(), "Pulpit".into(), None),
             Command::RemoveFilter("key".into(), None),
         ] {
             let label = Mixer::label(&cmd);

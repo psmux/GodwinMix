@@ -476,6 +476,25 @@ async fn set(call: Call, params: Value) -> Result<Value, RpcError> {
         }
         return Ok(call.dry_run_answer(!diff.is_empty(), diff));
     }
+    if !moving && req.params.is_none() && req.transport.is_none() && req.latency_ms.is_none() {
+        // A name, a colour or both: the document has them already, and the
+        // mixer is told the name in place. Rebuilding the source for a new
+        // label put a gap in the programme when it was on air. A source the
+        // mixer has not got running (one that failed to start) is renamed the
+        // old way below, by building it again under the new name.
+        let renamed = match req.name.clone() {
+            Some(name) => call
+                .app
+                .mixer
+                .request(|ack| Command::RenameSource(req.id.clone(), name, Some(ack)))
+                .await
+                .is_ok(),
+            None => true,
+        };
+        if renamed {
+            return body(find(&call, &req.id).await?);
+        }
+    }
     if !moving && req.params.is_none() && req.name.is_none() {
         // A colour alone is already on the document; answer with the source.
 

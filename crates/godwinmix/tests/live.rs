@@ -411,6 +411,25 @@ async fn a_source_is_copied_and_a_removed_one_restored_without_its_address() {
     assert!(twice.message.contains("already exists"), "{}", twice.message);
 }
 
+/// A rename changes the label and nothing else. It used to remove the source
+/// and add it again, which put a gap in the programme when it was on air, and
+/// the answer came back `connecting` instead of the state it was in.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_rename_leaves_a_live_source_running() {
+    let core = Core::start(godwinmix_core::safety::SafetyConfig::default()).await;
+    let token = desk();
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    while core.call(&token, "source.get", json!({ "id": "cam1" })).await.unwrap()["state"] != "live" {
+        assert!(std::time::Instant::now() < deadline, "cam1 never went live");
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    let renamed = core.call(&token, "source.set", json!({ "id": "cam1", "name": "Pulpit" })).await.unwrap();
+    assert_eq!(renamed["name"], "Pulpit", "{renamed}");
+    assert_eq!(renamed["state"], "live", "a rename must not rebuild the source: {renamed}");
+    let listed = core.call(&token, "source.get", json!({ "id": "cam1" })).await.unwrap();
+    assert_eq!(listed["name"], "Pulpit", "{listed}");
+}
+
 /// 09 section 5 item 14, the method half: a core started with `--rehearsal`
 /// will not add an output, so an agent rehearsing cannot put anything on a
 /// real destination by accident. The credential half is in `scope.rs`.
