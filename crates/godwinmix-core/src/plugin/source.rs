@@ -203,7 +203,10 @@ pub fn available() -> Vec<String> {
 
 /// Every source kind this build carries, with what it is and what it claims.
 pub fn described() -> Vec<super::KindInfo> {
-    let mut all: Vec<super::KindInfo> = registry().iter().map(|p| p.manifest.describe()).collect();
+    let mut all: Vec<super::KindInfo> = registry()
+        .iter()
+        .map(|p| super::KindInfo { params: kinds::schema::params(&p.manifest.provide_id()), ..p.manifest.describe() })
+        .collect();
     // A loaded plugin's provides are in the same table a picker reads, so a
     // build with a plugin installed offers its tile without the page being
     // redeployed.

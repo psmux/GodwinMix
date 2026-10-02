@@ -10747,6 +10747,24 @@
       {
         "description": "A finite clip on disk or over HTTP, scrubbable, ending with EOS",
         "id": "file/source",
+        "params": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "properties": {
+            "alpha": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "const": "auto"
+                }
+              ],
+              "description": "Whether the clip's transparency is kept. `auto` (or left out) keeps it when the file has it; `false` draws the clip flat through the compositor like any other source."
+            }
+          },
+          "title": "file/source params",
+          "type": "object"
+        },
         "schemes": [
           "file://"
         ]
@@ -10754,6 +10772,30 @@
       {
         "description": "A still picture held on screen, or a numbered sequence of pictures played as video",
         "id": "image/source",
+        "params": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "properties": {
+            "alpha": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "const": "auto"
+                }
+              ],
+              "description": "Whether the picture's transparency is kept. `auto` (or left out) keeps it when the file has it; `false` draws the picture flat through the compositor like any other source."
+            },
+            "fps": {
+              "description": "Pictures a second for a numbered sequence such as frames/%04d.png. 1 to 120, 25 when left out.",
+              "maximum": 120,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          "title": "image/source params",
+          "type": "object"
+        },
         "schemes": []
       },
       {
@@ -10783,6 +10825,287 @@
         "id": "test/source",
         "schemes": [
           "test://"
+        ]
+      },
+      {
+        "description": "Words on screen, in a box or on their own, rendered once and held with no browser",
+        "id": "text/source",
+        "params": {
+          "$defs": {
+            "Align": {
+              "description": "How lines sit against each other and against the box.",
+              "enum": [
+                "left",
+                "center",
+                "right"
+              ],
+              "type": "string"
+            },
+            "Valign": {
+              "description": "Where the words sit up and down in a box taller than they are.",
+              "enum": [
+                "top",
+                "middle",
+                "bottom"
+              ],
+              "type": "string"
+            }
+          },
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "description": "The params of `text/source`.",
+          "properties": {
+            "align": {
+              "$ref": "#/$defs/Align",
+              "default": "left"
+            },
+            "background": {
+              "default": "#000000b3",
+              "description": "A box behind the words: a colour with optional alpha\n(`#000000b3`), or empty for no box.",
+              "type": "string"
+            },
+            "color": {
+              "default": "#ffffff",
+              "description": "The letters' colour: `#rgb`, `#rrggbb` or `#rrggbbaa`.",
+              "type": "string"
+            },
+            "font": {
+              "default": "Sans",
+              "description": "A font family installed on the mixer, such as `Sans`, `Serif` or\n`DejaVu Sans`. A name the machine does not have falls back to its\ndefault sans serif.",
+              "type": "string"
+            },
+            "height": {
+              "default": null,
+              "description": "Height of the box in pixels. Left out, it is as tall as the lines.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "italic": {
+              "default": false,
+              "type": "boolean"
+            },
+            "outline": {
+              "default": "",
+              "description": "A colour for an outline round each letter, or empty for none.",
+              "type": "string"
+            },
+            "padding": {
+              "default": 24.0,
+              "description": "Space between the words and the edge of the box, in pixels.",
+              "format": "double",
+              "type": "number"
+            },
+            "radius": {
+              "default": 12.0,
+              "description": "Corner radius of the box, in pixels.",
+              "format": "double",
+              "type": "number"
+            },
+            "shadow": {
+              "default": false,
+              "description": "A soft dark shadow under the letters.",
+              "type": "boolean"
+            },
+            "size": {
+              "default": 48.0,
+              "description": "Height of the letters in canvas pixels, at the item's own size.",
+              "format": "double",
+              "type": "number"
+            },
+            "text": {
+              "default": "",
+              "description": "The words. A new line in them is a new line on screen. Left out, the\npart of the address after `text:` is used.",
+              "type": "string"
+            },
+            "valign": {
+              "$ref": "#/$defs/Valign",
+              "default": "middle"
+            },
+            "weight": {
+              "default": 600,
+              "description": "100 (thin) to 900 (black). 400 is regular, 700 bold.",
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "width": {
+              "default": null,
+              "description": "Width of the box in pixels at the item's own size. Left out, the box\nis as wide as the longest line; given, lines wrap to fit inside it.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "title": "TextParams",
+          "type": "object"
+        },
+        "schemes": [
+          "text:"
+        ]
+      },
+      {
+        "description": "A crawl of words across a bar, or credits rolling up, rendered once and moved each frame",
+        "id": "ticker/source",
+        "params": {
+          "$defs": {
+            "Align": {
+              "description": "How lines sit against each other and against the box.",
+              "enum": [
+                "left",
+                "center",
+                "right"
+              ],
+              "type": "string"
+            },
+            "Valign": {
+              "description": "Where the words sit up and down in a box taller than they are.",
+              "enum": [
+                "top",
+                "middle",
+                "bottom"
+              ],
+              "type": "string"
+            },
+            "Way": {
+              "description": "Which way the words go.",
+              "oneOf": [
+                {
+                  "const": "left",
+                  "description": "Right to left, a news crawl.",
+                  "type": "string"
+                },
+                {
+                  "const": "right",
+                  "description": "Left to right.",
+                  "type": "string"
+                },
+                {
+                  "const": "up",
+                  "description": "Bottom to top, credits.",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "description": "The params of `ticker/source`.",
+          "properties": {
+            "align": {
+              "$ref": "#/$defs/Align",
+              "default": "left"
+            },
+            "background": {
+              "default": "#000000b3",
+              "description": "A box behind the words: a colour with optional alpha\n(`#000000b3`), or empty for no box.",
+              "type": "string"
+            },
+            "color": {
+              "default": "#ffffff",
+              "description": "The letters' colour: `#rgb`, `#rrggbb` or `#rrggbbaa`.",
+              "type": "string"
+            },
+            "direction": {
+              "$ref": "#/$defs/Way",
+              "default": "left"
+            },
+            "font": {
+              "default": "Sans",
+              "description": "A font family installed on the mixer, such as `Sans`, `Serif` or\n`DejaVu Sans`. A name the machine does not have falls back to its\ndefault sans serif.",
+              "type": "string"
+            },
+            "italic": {
+              "default": false,
+              "type": "boolean"
+            },
+            "items": {
+              "default": [],
+              "description": "The items, shown one after another with `separator` between them.\nRolling up, each item is a line.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "loop": {
+              "default": true,
+              "description": "Go round again for ever. Off, the words cross once and the bar\nempties.",
+              "type": "boolean"
+            },
+            "outline": {
+              "default": "",
+              "description": "A colour for an outline round each letter, or empty for none.",
+              "type": "string"
+            },
+            "padding": {
+              "default": 24.0,
+              "description": "Space between the words and the edge of the box, in pixels.",
+              "format": "double",
+              "type": "number"
+            },
+            "radius": {
+              "default": 12.0,
+              "description": "Corner radius of the box, in pixels.",
+              "format": "double",
+              "type": "number"
+            },
+            "separator": {
+              "default": "   •   ",
+              "description": "What goes between items, and between the end of the list and its\nstart again.",
+              "type": "string"
+            },
+            "shadow": {
+              "default": false,
+              "description": "A soft dark shadow under the letters.",
+              "type": "boolean"
+            },
+            "size": {
+              "default": 48.0,
+              "description": "Height of the letters in canvas pixels, at the item's own size.",
+              "format": "double",
+              "type": "number"
+            },
+            "speed": {
+              "default": 120.0,
+              "description": "Pixels a second.",
+              "format": "double",
+              "type": "number"
+            },
+            "text": {
+              "default": "",
+              "description": "One item, for a ticker of a single message. Ignored when `items` is\ngiven. Left out too, the part of the address after `ticker:` is used.",
+              "type": "string"
+            },
+            "valign": {
+              "$ref": "#/$defs/Valign",
+              "default": "middle"
+            },
+            "weight": {
+              "default": 600,
+              "description": "100 (thin) to 900 (black). 400 is regular, 700 bold.",
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "width": {
+              "default": 1920,
+              "description": "Width of the bar at the item's own size, in pixels. The scene's box\nis what it is drawn in; this is only its shape before it is placed.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "title": "TickerParams",
+          "type": "object"
+        },
+        "schemes": [
+          "ticker:"
         ]
       }
     ]

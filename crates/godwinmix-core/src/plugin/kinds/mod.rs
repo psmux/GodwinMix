@@ -22,6 +22,7 @@ pub mod live;
 pub mod rendered;
 pub mod normalise;
 pub mod rtmp;
+pub mod schema;
 pub mod testsrc;
 pub mod text;
 pub mod ticker;
