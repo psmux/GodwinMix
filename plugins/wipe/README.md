@@ -8,6 +8,11 @@ gmx plugin add ./plugins/wipe
 gmx take --scene "wide" --transition wipe --duration 400
 ```
 
+The core has a built in `wipe` as well, which reveals the new scene behind an
+edge by cropping it in place, where this one moves it. While this plugin is
+installed and running, `--transition wipe` is this one: an operator who
+installed it asked for it. Remove it and the name is the built in one again.
+
 It is here as the worked example of the fourth plugin kind, which is the one
 that is hardest to picture: a transition carries no media, opens no socket and
 never touches a pipeline. The core gives it the pads on the way out and the

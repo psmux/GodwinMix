@@ -140,9 +140,20 @@ land twelve pixels out and an agent asked to do the same thing gets the same
 arithmetic.
 
 The panel on the right is the selected item: its name, opacity, fit, blend mode
-and whether its sound is heard, then whatever the plugin behind it offers, then
-its filters. Filters hang on the item and not on the source, so a camera keyed
-in this scene is not keyed in every other one.
+and whether its sound is heard, then how it comes on and goes off, then
+whatever the plugin behind it offers, then its filters. Filters hang on the
+item and not on the source, so a camera keyed in this scene is not keyed in
+every other one.
+
+**Enter** and **Exit** are the item's own transitions: None, Fade, Slide, Zoom
+or Wipe, with the edge a slide or a wipe uses, a length and an easing. **Show
+on air** and **Hide on air** under them show or hide the item on the scene
+itself, not on the draft you are editing, so the programme plays the Enter or
+the Exit; the draft is told the same, so applying it later does not undo the
+button. Tick **Also when a scene holding it is taken** and the item plays its
+Enter and Exit on a take too, in place of the scene's transition. A lower
+third that slides in from the left is Enter: Slide, Left, and Exit: Slide,
+Left. See [change scene with a transition](transitions.md#show-and-hide-an-item-with-a-transition-of-its-own).
 
 ## Studio mode
 
