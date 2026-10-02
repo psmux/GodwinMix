@@ -94,6 +94,8 @@ async function againstTheCore(test, eq, ok) {
   } catch {
     return;
   }
+  for (let i = 0; i < 100 && !client.state.connected; i += 1) await tick(50);
+  if (!client.state.connected) return;
   const address = `${location.origin}/test/live-data-feed.json`;
   await client.call("feed.remove", { id: "ui-test" }).catch(() => {});
   await client.call("source.remove", { id: "ui-test-strap" }).catch(() => {});
