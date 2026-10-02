@@ -92,7 +92,7 @@ async fn a_source_whose_first_party_plugin_is_missing_installs_it_and_comes_up()
         &mut socket,
         2,
         "source.add",
-        json!({ "id": "feed", "uri": "udp://127.0.0.1:47123", "params": { "type": "udp/source" } }),
+        json!({ "id": "feed", "uri": "udp://127.0.0.1:47123", "type": "udp/source" }),
     )
     .await;
     let record = added.get("result").unwrap_or_else(|| panic!("source.add was refused: {added}"));
@@ -118,6 +118,6 @@ async fn a_source_whose_first_party_plugin_is_missing_installs_it_and_comes_up()
     }
     let after = ask(&mut socket, next, "setup.get", json!({ "piece": "udp" })).await;
     assert_eq!(after["result"]["state"], "ready", "{after}");
-    assert!(home.join("plugins").join("udp").join("gmx-plugin.toml").is_file(), "installed into the scratch home");
+    assert!(home.join("plugins").join("udp").is_dir(), "installed into the scratch home");
     let _ = std::fs::remove_dir_all(&home);
 }

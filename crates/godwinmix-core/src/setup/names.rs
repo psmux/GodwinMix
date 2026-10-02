@@ -51,6 +51,28 @@ pub fn sentence_start(piece: &str) -> String {
     }
 }
 
+/// The pieces whose noun is one thing ("screen capture is"), not several.
+const SINGULAR: &[&str] = &["screen", "file-record", "osc", "director", "ograf"];
+
+/// "are" or "is", to agree with `noun`. A piece this table does not know is
+/// "this feature", which is one thing.
+pub fn be(piece: &str) -> &'static str {
+    if SINGULAR.contains(&piece) || !known(piece) {
+        "is"
+    } else {
+        "are"
+    }
+}
+
+/// "They set themselves" or "It sets itself", to agree with `noun`.
+pub fn sets_itself(piece: &str) -> &'static str {
+    if be(piece) == "is" {
+        "It sets itself"
+    } else {
+        "They set themselves"
+    }
+}
+
 /// A plugin that ships with the mixer and has words here.
 pub fn known(piece: &str) -> bool {
     TABLE.iter().any(|(p, ..)| *p == piece)
