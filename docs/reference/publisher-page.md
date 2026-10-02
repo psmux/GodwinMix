@@ -44,7 +44,7 @@ exist, this link carries the channel's key.
 | | |
 |---|---|
 | Offer | Sent once ICE gathering is complete, with every candidate in it. The endpoint takes no trickle |
-| Video | H.264 first in the codec preferences (packetization mode 1, constrained baseline first among those). One encoding, at most 2.5 Mbps and 30 frames a second, from a camera asked for 1280x720 at 30. `degradationPreference` is `maintain-framerate` where the browser lets it be set |
+| Video | H.264 first in the codec preferences (packetization mode 1, constrained baseline first among those). One encoding, at most 2.5 Mbps and 30 frames a second, from a camera asked for 1280x720 at 30. `degradationPreference` is `maintain-resolution` where the browser lets it be set, so the picture keeps one size and gives up frame rate on a slow link: a change of size mid stream is a new H.264 configuration, which the channel's hop to the mixer does not carry yet |
 | Audio | Opus, the browser's own. Echo cancellation, noise suppression and automatic gain are on unless the switch on the page is off |
 | No camera | The video section stays in the offer with no track, because a channel refuses an offer with no H.264. Nothing is sent on it, and the stream has `video: null` |
 | Stop | `DELETE` on the `Location` the `201` gave |
