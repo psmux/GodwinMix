@@ -121,10 +121,7 @@ impl Core {
             scene,
             None,
             None,
-            Some(transition::TransitionSpec {
-                kind: transition::Kind::Plugin("wasm-ease".into()),
-                duration_ms,
-            }),
+            Some(transition::TransitionSpec::new(transition::Kind::Plugin("wasm-ease".into()), duration_ms)),
         )
     }
 

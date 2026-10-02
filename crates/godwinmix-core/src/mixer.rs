@@ -399,6 +399,7 @@ use crate::plugin::branch::{BranchCtx, ProgrammeBranch, VideoPads};
 pub mod group;
 mod generation;
 mod lifecycle;
+mod motion;
 mod offload;
 mod rendered;
 pub mod slots;
@@ -1071,6 +1072,10 @@ pub struct Mixer {
     /// where a transition plugin's name is simply an error that lists the
     /// built in ones.
     transitions: Option<Arc<dyn transition::Renderer>>,
+    /// Items shown on air that are still playing their way on. Drawn at
+    /// nothing by every apply until their transition settles, so the apply
+    /// that binds a slot never shows the item in its place first.
+    entering: Vec<crate::scene::id::Id>,
     /// Where the compositor has got to, from a probe on its own src pad.
     ///
     /// Not the same as the clock's running time. A live aggregator composes
@@ -1192,6 +1197,8 @@ struct RunningTransition {
     end: Option<gst::SingleShotClockId>,
     /// A clip added for a stinger, removed with the transition.
     clip: Option<SourceId>,
+    /// The slate was given a dip's colour and goes back to black after.
+    slate: bool,
 }
 
 /// The numbers `Mixer::timeline_of` gathers. Plain data so that gathering them
@@ -1742,6 +1749,7 @@ impl Mixer {
             running_transition: None,
             controllers: transition::Controllers::default(),
             transitions: None,
+            entering: Vec::new(),
             pgm_out,
             pending_take: None,
             pending_ad_end: None,
@@ -3058,12 +3066,19 @@ impl Mixer {
             return self.schedule_scene_take(scene, ms, duration_ms, transition);
         }
         let ramp = duration_ms.filter(|ms| *ms > 0).map(Duration::from_millis);
-        let crossing = transition.filter(|t| !t.is_cut());
         let name = scene.name.clone();
         // What is on the canvas now, read before the new scene replaces it:
         // a transition needs both, and after this line the old one is gone
         // from everything but the pads.
         let leaving = self.current_placements();
+        // The same scene applied again is an edit on air, not a take: an item
+        // shown or hidden there plays its own enter or exit, and nothing else.
+        let again = self.program_scene.as_ref().is_some_and(|s| s.name == scene.name);
+        let crossing = match transition.filter(|t| !t.is_cut()) {
+            Some(spec) => Some(spec),
+            None if again || ramp.is_some() => None,
+            None => self.motion_take(&leaving, &scene.placements),
+        };
         // A one item full canvas scene is a source take, and saying so keeps
         // the programme state, the tally and `program.revert` reading the same
         // as they did before scenes existed.
@@ -3091,6 +3106,7 @@ impl Mixer {
                     self.apply_visibility(true);
                 }
             },
+            None if again && ramp.is_none() && self.play_items(id, &leaving) => {}
             None => {
                 self.ramp = ramp;
                 self.apply_visibility(true);
@@ -3144,40 +3160,18 @@ impl Mixer {
             cover,
             start: self.compositor_now(),
             duration,
+            easing: spec.easing,
+            canvas: (self.canvas.width, self.canvas.height),
         };
-        let mut curves = match transition::built_in(&spec.kind) {
-            Some(t) => t.curves(&x),
-            None => self.plugin_curves(spec, &x)?,
-        };
-        curves.extend(transition::audio_curves(&x));
-        let bound = self.controllers.bind(curves);
-        if !bound.unbound.is_empty() {
-            // A pad that would not take a binding is driven the old way. One
-            // thread for the whole transition, abandoned the moment a newer
-            // take bumps the id.
-            ramp_curves(bound.unbound.clone(), spec.duration(), self.take_generation.clone());
+        // A pad that would not take a binding is driven the old way, by one
+        // thread for the whole transition, abandoned the moment a newer take
+        // bumps the id; `bind_window` sees to that and arms the end.
+        let (curves, longest) = self.crossing_curves(spec, &x)?;
+        let slate = self.tint_slate(&spec.kind);
+        self.bind_window(id, spec.kind.name(), curves, x.start, longest, slate);
+        if let Some(running) = self.running_transition.as_mut() {
+            running.clip = clip;
         }
-        let window = (x.start, x.end());
-        // The end is armed on the clock, which is a latency ahead of the
-        // picture: the last frame of the window is composed at `start +
-        // duration` on the compositor's timeline and pushed one latency later,
-        // which is `duration` from now.
-        let now = self.running_time().unwrap_or(gst::ClockTime::ZERO);
-        let frame = gst::ClockTime::from_mseconds(1000 / self.canvas.fps.numer().max(1) as u64);
-        let end = self
-            .schedule_command(
-                Command::TransitionEnd { transition: id },
-                (now + duration + frame).mseconds(),
-            )
-            .ok();
-        self.running_transition = Some(RunningTransition {
-            id,
-            kind: spec.kind.name().to_string(),
-            bound,
-            window,
-            end,
-            clip,
-        });
         Ok(())
     }
 
@@ -3194,6 +3188,10 @@ impl Mixer {
         }
         running.bound.settle();
         self.pool.end_transition();
+        self.entering.clear();
+        if running.slate {
+            self.untint_slate();
+        }
         if let Some(clip) = running.clip {
             if let Err(e) = self.remove_source(&clip) {
                 warn!(?e, "the stinger clip could not be taken out");
@@ -3307,7 +3305,15 @@ impl Mixer {
             height: self.canvas.height,
             alpha: 0.0,
         };
-        Some(transition::Leg { pad, item: None, source: clip.clone(), from, to: from })
+        Some(transition::Leg {
+            pad,
+            item: None,
+            source: clip.clone(),
+            from,
+            to: from,
+            crop: None,
+            motion: Default::default(),
+        })
     }
 
     /// Ask a `transition` plugin what every pad should be, once per frame of
@@ -3385,6 +3391,11 @@ impl Mixer {
     /// arithmetic. A source that is not live contributes nothing, which is what
     /// fades a stalled camera to the slate and brings it back on its own.
     fn current_placements(&self) -> Vec<Placement> {
+        self.hold_entering(self.scene_placements())
+    }
+
+    /// What the programme scene draws, before anything a transition holds back.
+    fn scene_placements(&self) -> Vec<Placement> {
         let live = |id: &SourceId| {
             self.sources
                 .iter()
@@ -3514,6 +3525,7 @@ impl Mixer {
             window: (start, start + duration),
             end,
             clip: None,
+            slate: false,
         });
     }
 
@@ -6456,10 +6468,7 @@ mod tests {
             scene("b", vec![Placement::full_canvas("cam2".into(), &canvas)]),
             None,
             None,
-            Some(transition::TransitionSpec {
-                kind: transition::Kind::Fade,
-                duration_ms: 300,
-            }),
+            Some(transition::TransitionSpec::new(transition::Kind::Fade, 300)),
         )
         .expect("a crossfade");
         let window = mix.transition_window().expect("a transition is on the canvas");
@@ -6528,10 +6537,7 @@ mod tests {
                 grid(if i % 2 == 0 { "b" } else { "a" }, if i % 2 == 0 { 20 } else { 0 }),
                 None,
                 None,
-                Some(transition::TransitionSpec {
-                    kind: transition::Kind::Fade,
-                    duration_ms: 300,
-                }),
+                Some(transition::TransitionSpec::new(transition::Kind::Fade, 300)),
             )
             .expect("a crossfade");
             most_visible = most_visible.max(mix.pool.visible());
@@ -6581,10 +6587,7 @@ mod tests {
             scene("b", vec![Placement::full_canvas("cam2".into(), &canvas)]),
             None,
             None,
-            Some(transition::TransitionSpec {
-                kind: transition::Kind::Fade,
-                duration_ms: 2_000,
-            }),
+            Some(transition::TransitionSpec::new(transition::Kind::Fade, 2_000)),
         )
         .expect("a long crossfade");
         assert!(mix.transition_window().is_some(), "the transition is running");
@@ -6625,10 +6628,7 @@ mod tests {
             scene("b", vec![Placement::full_canvas("cam2".into(), &canvas)]),
             None,
             None,
-            Some(transition::TransitionSpec {
-                kind: transition::Kind::Fade,
-                duration_ms: 300,
-            }),
+            Some(transition::TransitionSpec::new(transition::Kind::Fade, 300)),
         )
         .expect("a crossfade");
         assert!(mix.pool.crossing(), "both scenes must be on the canvas");
@@ -6666,7 +6666,7 @@ mod tests {
         let one = |id: &str| scene(id, vec![Placement::full_canvas(id.into(), &canvas)]);
         mix.take_scene(one("cam1"), None).expect("the first scene");
         let fade = |ms| {
-            Some(transition::TransitionSpec { kind: transition::Kind::Fade, duration_ms: ms })
+            Some(transition::TransitionSpec::new(transition::Kind::Fade, ms))
         };
         mix.take_scene_over(one("cam2"), None, None, fade(3000)).expect("a long crossfade");
         let first = mix.transition_id();
@@ -6690,10 +6690,7 @@ mod tests {
             scene("b", vec![Placement::full_canvas("cam2".into(), &canvas)]),
             None,
             None,
-            Some(transition::TransitionSpec {
-                kind: transition::Kind::Plugin("wipe".into()),
-                duration_ms: 300,
-            }),
+            Some(transition::TransitionSpec::new(transition::Kind::Plugin("wipe".into()), 300)),
         )
         .expect("the take must still land");
         assert_eq!(mix.status().program.as_deref(), Some("cam2"));
