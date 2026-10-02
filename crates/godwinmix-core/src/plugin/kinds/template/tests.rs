@@ -36,3 +36,4 @@ fn a_template_passes_the_checks_every_kind_passes() {
     report.lines().iter().for_each(|l| println!("{l}"));
     report.into_result().expect("template/source is conformant");
 }
+
