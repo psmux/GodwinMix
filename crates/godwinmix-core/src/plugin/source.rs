@@ -182,21 +182,24 @@ pub fn resolve_config(cfg: &SourceConfig) -> Result<&'static Provide> {
 /// the refusal carries the button that installs it, or turns it on when it
 /// is here and switched off.
 fn unknown_type(t: &str) -> anyhow::Error {
-    use godwinmix_protocol::{Actionable, ErrorAction};
     let have = available().join(", ");
     let plugin = t.split_once('/').map(|(p, _)| p).filter(|p| !p.is_empty());
     match plugin {
         Some(name) => {
+            // The sentence is for a person; what this build has, and which
+            // plugin would provide the type, ride in the detail.
             let off = super::loader::get(name).is_some_and(|p| !p.enabled);
-            let (how, action) = if off {
-                ("is installed and switched off. Turn it on and try again", ErrorAction::enable_plugin(name))
+            let shipped = super::first_party::find(name).is_some();
+            let mut refusal = if off {
+                crate::setup::plain::plugin_off(name)
             } else {
-                ("would provide it. Install it and try again", ErrorAction::install_plugin(name))
+                crate::setup::plain::plugin_missing(name, t, shipped)
             };
-            anyhow::Error::new(Actionable::new(
-                format!("no source type `{t}` in this build. It has: {have}. The `{name}` plugin {how}."),
-                action,
-            ))
+            if let Some(detail) = refusal.detail.as_mut() {
+                detail["type"] = serde_json::json!(t);
+                detail["available"] = serde_json::json!(have);
+            }
+            anyhow::Error::new(refusal)
         }
         None => anyhow::anyhow!("no source type `{t}` in this build. It has: {have}"),
     }

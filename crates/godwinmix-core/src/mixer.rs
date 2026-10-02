@@ -107,6 +107,8 @@ pub type Ack = oneshot::Sender<Result<(), Refused>>;
 pub struct Refused {
     pub message: String,
     pub action: Option<ErrorAction>,
+    /// The developer's half of a plain refusal, for `data.detail`.
+    pub detail: Option<serde_json::Value>,
     /// A rendition the governor or the planner would not start, with the
     /// code and `data` the caller answers with.
     pub refusal: Option<crate::render::Refusal>,
@@ -128,7 +130,11 @@ impl Refused {
             return anyhow::Error::new(crate::render::Refusal { message: self.message, ..refusal });
         }
         match self.action {
-            Some(action) => anyhow::Error::new(godwinmix_protocol::Actionable::new(self.message, action)),
+            Some(action) => {
+                let mut plain = godwinmix_protocol::Actionable::new(self.message, action);
+                plain.detail = self.detail;
+                anyhow::Error::new(plain)
+            }
             None => anyhow::anyhow!(self.message),
         }
     }
@@ -300,10 +306,14 @@ struct Coalesced {
 
 fn reply(ack: Option<Ack>, outcome: &Result<()>) {
     if let Some(tx) = ack {
-        let _ = tx.send(outcome.as_ref().map(|_| ()).map_err(|e| Refused {
-            message: format!("{e:#}"),
-            action: ErrorAction::find(e.as_ref()),
-            refusal: e.chain().find_map(|c| c.downcast_ref::<crate::render::Refusal>()).cloned(),
+        let _ = tx.send(outcome.as_ref().map(|_| ()).map_err(|e| {
+            let (message, detail) = crate::setup::plain::for_person(e);
+            Refused {
+                message,
+                detail,
+                action: ErrorAction::find(e.as_ref()),
+                refusal: e.chain().find_map(|c| c.downcast_ref::<crate::render::Refusal>()).cloned(),
+            }
         }));
     }
 }

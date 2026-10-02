@@ -730,21 +730,17 @@ pub struct Launched {
 /// and the button installs the missing one by name.
 fn not_installed(name: &str) -> anyhow::Error {
     let have = list().iter().map(|p| p.name().to_string()).collect::<Vec<_>>();
-    anyhow::Error::new(Actionable::new(
-        format!(
-            "no plugin called `{name}` is installed. Installed: {}. Install it and try again.",
-            if have.is_empty() { "none".into() } else { have.join(", ") }
-        ),
-        ErrorAction::install_plugin(name),
-    ))
+    let mut refusal =
+        crate::setup::plain::plugin_missing(name, name, super::first_party::find(name).is_some());
+    if let Some(detail) = refusal.detail.as_mut() {
+        detail["installed_plugins"] = serde_json::json!(have);
+    }
+    anyhow::Error::new(refusal)
 }
 
 /// Installed and switched off: the button turns it back on.
 fn switched_off(name: &str) -> Actionable {
-    Actionable::new(
-        format!("the plugin `{name}` is installed but switched off. Turn it on to use it."),
-        ErrorAction::enable_plugin(name),
-    )
+    crate::setup::plain::plugin_off(name)
 }
 
 /// Build the launch plan for one instance of `type_id`.
