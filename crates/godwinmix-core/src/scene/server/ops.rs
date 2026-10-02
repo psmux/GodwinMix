@@ -531,8 +531,11 @@ pub fn slot_names(preset: &Collection) -> Vec<String> {
     properties
         .iter()
         .filter(|(_, schema)| {
-            schema.get("x-gmx-kind").and_then(|k| k.as_str()) == Some("source")
-                || schema.get("type").and_then(|t| t.as_str()) == Some("string")
+            let kind = schema.get("x-gmx-kind").and_then(|k| k.as_str());
+            // A string marked as text is a setting, such as a key colour,
+            // and never something a source is poured into.
+            kind == Some("source")
+                || (kind != Some("text") && schema.get("type").and_then(|t| t.as_str()) == Some("string"))
         })
         .map(|(name, _)| name.clone())
         .collect()

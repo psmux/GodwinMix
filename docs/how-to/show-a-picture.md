@@ -29,7 +29,10 @@ Two things to know:
 
 * A transparent picture is drawn over every opaque item in the scene,
   whatever its place in the stack. Put a logo above the cameras, which is
-  where a logo goes anyway. Among transparent items the stack order holds.
+  where a logo goes anyway. Among transparent items the stack order holds,
+  and a camera with a chroma key on it is one of them: a desk PNG above a
+  keyed presenter is drawn in front of the presenter. See
+  [put a presenter in a virtual set](virtual-set.md).
 * A picture behind an `https://` address is drawn flat unless it is an SVG,
   because the mixer does not fetch it to look before it decodes it. Upload it
   to the Media tab instead, or add the source with `alpha = true` in its params.

@@ -81,7 +81,7 @@ impl Rendering for AlphaStill {
                 let own = self.own()?;
                 match drawn.filter(|d| *d != (own.width, own.height)) {
                     Some(d) => image_decode::scaled(&own, d)?,
-                    None => Picture { buffer: own.buffer.clone(), ..*own },
+                    None => Picture { buffer: own.buffer.clone(), keyed: own.keyed.clone(), ..*own },
                 }
             }
         };

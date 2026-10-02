@@ -81,6 +81,16 @@ impl VideoPads {
         }
     }
 
+    /// Remember `pad` without touching its offset: for a list that only
+    /// says where something is drawn, such as a keyed item's one slot pad,
+    /// whose offset belongs to the source it is fed from.
+    pub fn track(&self, pad: &gst::Pad) {
+        let mut inner = self.inner.lock();
+        if !inner.pads.iter().any(|p| p == pad) {
+            inner.pads.push(pad.clone());
+        }
+    }
+
     pub fn detach(&self, pad: &gst::Pad) {
         self.inner.lock().pads.retain(|p| p != pad);
     }

@@ -236,6 +236,11 @@ impl<C> Registry<C> {
         if near.is_empty() {
             near = self.methods.keys().copied().filter(|m| m.contains(noun)).collect();
         }
+        // The plain verbs first: a mistyped `source.destroy` means
+        // `source.remove` far more often than anything a noun has grown
+        // since, and only eight are shown.
+        const PLAIN: &[&str] = &["list", "get", "add", "remove", "set"];
+        near.sort_by_key(|m| (m.split('.').count() != 2 || !PLAIN.iter().any(|v| m.ends_with(&format!(".{v}"))), *m));
         near.truncate(8);
         near
     }
@@ -274,6 +279,8 @@ const COLLECTION_LEVEL: &[&str] = &[
     "scene.apply_graphic",
     "scene.validate",
     "scene.export",
+    // Makes a new scene, so there is no member to name yet.
+    "scene.virtual_set",
     // Many shows at once, or every one: no member to name.
     "show.add_many",
     "show.remove_many",

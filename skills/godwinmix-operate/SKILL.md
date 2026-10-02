@@ -191,6 +191,40 @@ and a whole state document with a snapshot URL when something crosses a
 threshold. Over MCP the same push arrives as
 `notifications/gmx/agent.state`; you do not have to ask for it.
 
+## A virtual set from a generated background
+
+A presenter in front of a green or blue screen, put into a studio picture you
+made (with an image tool, say). Five steps, all through tools found with
+`search_tools`:
+
+1. Upload the picture: `POST /api/v1/media/upload?name=newsroom.png` with the
+   file as the body. Make it the canvas shape, 16 by 9. A desk or window frame
+   in front of the presenter is a second upload, a PNG with a transparent
+   background at the canvas size.
+2. `create_virtual_set {"background": "newsroom.png", "presenter": "cam1",
+   "foreground": "desk.png"}`. Files become sources, the key colour is guessed
+   from the camera, and the answer says which colour (`key`) and how
+   (`key_from`). The presenter is the item `presenter`, its key the filter
+   `Key`.
+3. `take {"scene": "Virtual set"}`, or arm it and take it when you are told.
+4. Look: `snapshot {"id": "program", "width": 640}`. At 320 you cannot judge
+   an edge.
+5. Adjust what the picture tells you, with `set_scene_item_filter` on item
+   `presenter`, filter `Key`. `params` merges, so name only what changes:
+   * the screen shows through as a tint or patches: raise `similarity` by 0.05;
+   * the presenter's own colours are going: lower it;
+   * a green line round hair or shoulders: raise `spill`, then `feather`;
+   * the edge of the screen, a light stand or the top of the frame shows:
+     `matte_left`, `matte_right`, `matte_top` or `matte_bottom`, a fraction cut
+     from that edge;
+   * the colour is wrong: `key_color {"id": "cam1"}` for the screen, or with
+     `x` and `y` for the colour at a point you saw in a snapshot of the camera,
+     then set `color`.
+   Size and place the presenter with `set_scene_item` (its `transform`).
+   Look again after each change. One or two rounds is normal.
+
+Every change applies on air with no gap, so tuning during a show is safe.
+
 ## Long calls
 
 Nothing blocks for more than five seconds. A call that would answers at once

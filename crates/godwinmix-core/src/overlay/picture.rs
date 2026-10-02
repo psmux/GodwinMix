@@ -21,12 +21,28 @@ pub struct Picture {
     /// measured it. The board draws only this part, so a lower third laid
     /// out on a whole canvas costs the blend of its panel, not of the frame.
     pub content: Option<Rect>,
+    /// The part of the natural frame this picture covers, in natural pixels,
+    /// when it is not the whole of it: a keyed camera sends only what its
+    /// matte keeps, and is drawn there rather than stretched to the box.
+    pub within: Option<Area>,
+    /// A keyed camera frame, drawn from the frame and its key rather than from
+    /// `buffer`, which is then empty. See `overlay::keyed`.
+    pub keyed: Option<std::sync::Arc<super::keyed::Keyed>>,
+}
+
+/// A rectangle of a picture's natural frame.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Area {
+    pub x: u32,
+    pub y: u32,
+    pub w: u32,
+    pub h: u32,
 }
 
 impl Picture {
     /// A picture from bytes already in AYUV, `width * 4` to a row.
     pub fn from_ayuv(data: Vec<u8>, width: u32, height: u32, natural: (u32, u32)) -> Picture {
-        Picture { buffer: gst::Buffer::from_mut_slice(data), width, height, stride: width as usize * 4, natural, content: None }
+        Picture { buffer: gst::Buffer::from_mut_slice(data), width, height, stride: width as usize * 4, natural, content: None, within: None, keyed: None }
     }
 
     /// The window of this picture to draw and where it lands, when the whole

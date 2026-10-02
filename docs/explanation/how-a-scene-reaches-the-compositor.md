@@ -70,7 +70,16 @@ Two rules make that cheap enough to do on a running programme:
 * **The chain is compared before it is touched.** The visibility tick reapplies
   the scene twice a second; a chain that has not changed takes no pad block. A
   filter renamed is the same filter, because what is compared is the type and
-  the parameters.
+  the parameters. A chain whose filters are the same types in the same order
+  with new parameters is changed in place through each filter's configure,
+  with no pad block either: that is a key's slider dragged on air.
+* **A chroma key does not feed the pad.** Its result has alpha and the
+  compositor's I420 has none, so the key hands the camera frame and its matte
+  to the overlay board, which draws it after the compositor in stacking order
+  with the other transparent items, and sends the pad an empty gap buffer per
+  frame. A gap and not nothing: a pad that has had buffers and then gets none
+  is waited for, a second of programme at a time. See
+  [the chroma key](../reference/chroma-key.md).
 * **A disabled filter is not in the chain at all.** Turning one off costs one
   pad block and then nothing, rather than an element seeing every frame and
   deciding not to act on it.
