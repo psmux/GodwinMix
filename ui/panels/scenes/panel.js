@@ -85,6 +85,7 @@ class ScenesPanel extends HTMLElement {
       this.count,
       el("span.grow"),
       this.viewBtn,
+      el("button.btn", { text: "Virtual set", title: "A presenter keyed in front of a background, with a desk in front if you have one", onclick: () => this.virtualSet() }),
       el("button.btn", { text: "New scene", title: "An empty scene to drag inputs into", onclick: () => this.newScene() }),
     ]);
 
@@ -441,6 +442,20 @@ class ScenesPanel extends HTMLElement {
     }
   }
 
+  /** The Virtual set dialog; the scene it makes becomes the one worked on. */
+  async virtualSet() {
+    // Loaded on the first press: a page that never makes a set never pays for it.
+    const { openVirtualSet } = await import("./virtual-set.js");
+    await openVirtualSet({
+      client: this.client,
+      scenes: this.scenes,
+      onMade: (answer) => {
+        if (answer && answer.scene && answer.scene.id) setFocusedScene(answer.scene.id);
+        this.render();
+      },
+    });
+  }
+
   async newScene() {
     try {
       const made = await this.scenes.add("Scene");
@@ -718,6 +733,7 @@ class ScenesPanel extends HTMLElement {
     const one = () => this.selected()[0] || null;
     return [
       { id: "scenes.new", title: "New scene", group: "Scenes", run: () => this.newScene() },
+      { id: "scenes.virtual-set", title: "Virtual set", group: "Scenes", run: () => this.virtualSet() },
       { id: "scenes.open", title: "Open the composer", group: "Scenes", enabled: () => !!one(), run: () => this.open(one()) },
       // No `enabled`: it finds a scene for itself, and says so in a toast when
       // there is none. A row that reads as available has to do something.
