@@ -395,7 +395,9 @@ impl Sidecar {
             while Instant::now() < deadline {
                 let gone = match child.as_mut() {
                     None => true,
-                    Some(held) => held.finished(),
+                    // Asked without collecting it, so the drop below still
+                    // signals its process group and a helper it left goes too.
+                    Some(held) => held.exited(),
                 };
                 if gone {
                     break;

@@ -87,6 +87,16 @@ fn group_alive(pgid: u32) -> bool {
     unsafe { libc::kill(-(pgid as i32), 0) == 0 }
 }
 
+/// Whether the group is empty within the teardown's own grace: a polite
+/// SIGTERM first, so the helper may take a moment.
+fn gone_within(pgid: u32) -> bool {
+    let end = Instant::now() + Duration::from_secs(5);
+    while group_alive(pgid) && Instant::now() < end {
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    !group_alive(pgid)
+}
+
 /// SIGKILL to the plugin's own process and nothing else.
 fn kill_plugin(pid: u32) {
     // SAFETY: a signal to a process this test's mixer started.
@@ -150,7 +160,7 @@ async fn a_sidecar_whose_process_is_killed_is_restarted_within_a_second_or_two()
     }
     let back = killed.elapsed();
     println!("killed {first}: new process {second} after {respawned:?}, live again after {back:?}");
-    let helper_gone = !group_alive(first);
+    let helper_gone = gone_within(first);
 
     handle.send(Command::Shutdown).ok();
     tokio::task::spawn_blocking(move || thread.join()).await.ok();
@@ -184,7 +194,7 @@ fn a_shared_device_whose_plugin_is_killed_is_opened_again_at_once() {
     println!("the shared device was opened again {took:?} after its plugin was killed");
     let before = cam.frames();
     let flowing = until(Duration::from_secs(5), || cam.frames() > before + 30);
-    let helper_gone = !group_alive(first);
+    let helper_gone = gone_within(first);
     cam.close();
     loader::uninstall("exitshare").ok();
     assert!(reopened && took < Duration::from_secs(1), "reopened {reopened}, after {took:?}");
