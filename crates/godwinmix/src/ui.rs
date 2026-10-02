@@ -189,6 +189,9 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/sources/text-presets.js", include_str!("../../../ui/panels/sources/text-presets.js")),
     ("panels/sources/text-fields.js", include_str!("../../../ui/panels/sources/text-fields.js")),
     ("panels/sources/text-editor.js", include_str!("../../../ui/panels/sources/text-editor.js")),
+    ("panels/sources/graphic-fields.js", include_str!("../../../ui/panels/sources/graphic-fields.js")),
+    ("panels/sources/graphic-pick.js", include_str!("../../../ui/panels/sources/graphic-pick.js")),
+    ("panels/sources/graphic-editor.js", include_str!("../../../ui/panels/sources/graphic-editor.js")),
     ("panels/welcome/after.js", include_str!("../../../ui/panels/welcome/after.js")),
     ("panels/welcome/install.js", include_str!("../../../ui/panels/welcome/install.js")),
     ("panels/welcome/checklist.js", include_str!("../../../ui/panels/welcome/checklist.js")),
@@ -277,6 +280,7 @@ const DEV_ASSETS: &[(&str, &str)] = &[
     ("test/error-actions.js", include_str!("../../../ui/test/error-actions.js")),
     ("test/source-chooser.js", include_str!("../../../ui/test/source-chooser.js")),
     ("test/text-sources.js", include_str!("../../../ui/test/text-sources.js")),
+    ("test/graphics.js", include_str!("../../../ui/test/graphics.js")),
     ("test/studio.js", include_str!("../../../ui/test/studio.js")),
     ("test/transitions.js", include_str!("../../../ui/test/transitions.js")),
     ("test/scene-fix.js", include_str!("../../../ui/test/scene-fix.js")),
@@ -859,6 +863,8 @@ mod tests {
         reachable.extend(closure_of("panels/sources/drawer.js"));
         // The text and ticker editor, which the drawer fetches for one of those.
         reachable.extend(closure_of("panels/sources/text-editor.js"));
+        // A graphic's fields editor, which the drawer fetches for a template source.
+        reachable.extend(closure_of("panels/sources/graphic-editor.js"));
         reachable.extend(closure_of("panels/outputs/destination.js"));
         reachable.extend(closure_of("panels/channels/panel.js"));
         reachable.extend(closure_of("shell/sandbox.js"));

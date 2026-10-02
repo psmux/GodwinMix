@@ -249,6 +249,9 @@ export const CATEGORIES = [
   // Words drawn by the mixer itself, with no browser: a lower third, a title,
   // a ticker, credits. Each row is one press, and the words are typed after.
   { id: "text", title: "Text and tickers", icon: "text", text: true, kinds: [], provides: ["text/source", "ticker/source"] },
+  // Designed graphics the mixer draws from an SVG template: the built in pack
+  // and any template in the media library. A pick asks for the words first.
+  { id: "graphics", title: "Graphics", icon: "graphic", graphics: true, kinds: [], provides: ["template/source"] },
   { id: "web", title: "Web pages", icon: "page", kinds: ["page"], provides: ["browser/source", "layered/source"] },
   {
     id: "streams",
