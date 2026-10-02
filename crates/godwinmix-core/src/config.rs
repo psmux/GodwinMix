@@ -2076,6 +2076,7 @@ sidecar = \"/opt/b\"\n").unwrap();
             hardware: Default::default(),
             codecs: Default::default(),
             media: Default::default(),
+            graphics: Default::default(),
             security: Default::default(),
             safety: Default::default(),
             browser: Default::default(),
