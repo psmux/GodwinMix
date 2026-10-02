@@ -1295,7 +1295,11 @@ impl SourceConfig {
                 // is reported as needing that plugin when it is built. A
                 // preset written for a plugin must load on a core that has
                 // not installed it yet.
-                tracing::warn!(source = %self.id, "{e}; the source will need that plugin installed");
+                // Said quietly: the config is read before the plugins load,
+                // so a plugin that is installed has not been seen yet here,
+                // and a warning saying it is missing was wrong for every
+                // source of an installed plugin at every start.
+                tracing::debug!(source = %self.id, kind = ?self.type_id, error = %e, "a plugin's source type, checked again when the source is built");
                 return Ok(());
             }
             Err(e) => return Err(e),
