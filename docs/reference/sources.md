@@ -17,7 +17,9 @@ from the URL, so there is nothing to configure beyond the address:
 | `rtsp://…`, `srt://…`, `rist://…`, `udp://…`, `rtp://…` | continuous stream |
 | `web+https://host/page`, `web://host/page` | the page rendered by a real Chromium, with its audio, see the browser sidecar |
 | `exec:<command line>` | whatever the process writes to stdout, including `tools/browser-source.sh` |
-| a path or URL ending `.png`, `.jpg`, `.jpeg`, `.bmp`, `.webp`, `.tif` | a still picture, held on screen (`image/source`) |
+| a path or URL ending `.png`, `.jpg`, `.jpeg`, `.bmp`, `.webp`, `.tif`, `.svg` | a still picture, held on screen (`image/source`); with transparency it is drawn over the scene |
+| `text:Some words` | words rendered by the mixer, no browser (`text/source`); see [text sources](text-sources.md) |
+| `ticker:Some words` | words crawling across a bar, or credits rolling up (`ticker/source`) |
 | a numbered pattern, `/slides/f%04d.png` | the pictures played in order at `params.fps` (25), looping (`image/source`) |
 | a path, `file://…`, `https://host/clip.mp4` | file |
 

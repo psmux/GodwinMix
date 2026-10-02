@@ -281,6 +281,48 @@ over 300 ms moves the inset through the middle (a cut would already be at the
 target) with a largest inter frame interval of 33.3 ms, which is one frame, and
 zero relinks.
 
+## Transparent items
+
+A text, a ticker, a PNG or SVG with alpha and a clip with alpha are not drawn
+by the compositor at all, and the reason is the pinned output. The software
+compositor's output is I420, which has no alpha plane, and a `compositor`
+whose output has none refuses every input that has one: linking BGRA into it
+fails with "can't handle caps" on GStreamer 1.28.7. Converting the picture to
+I420 first keeps it linkable and flattens the clear parts to black, which is
+the black box this section exists to prevent. Compositing the whole programme
+in AYUV instead costs 2.6 times the CPU at 1080p30 (`mixer::programme_keeps_alpha`).
+
+So the overlay board draws them, after the compositor:
+
+```text
+ sources =|=> slots => vmix --[board: blend each layer, in place]--> vmix-caps => encoder
+                       ^ a transparent item's own pad: placed by the scene, fed nothing
+```
+
+A transparent source keeps its slot like any other item. The scene binds it,
+writes `xpos`, `ypos`, `width`, `height`, `alpha`, `zorder` and the sizing
+policy, and a transition drives the same properties. What the source sends
+through the ordinary path is a carrier, its picture flattened on grey at the
+canvas size, one frame held by `imagefreeze`, which keeps the supervisor, the
+tile and the thumbnail working; the head of its programme branch drops it, so
+the compositor pad never has a buffer and is skipped. A probe on the
+compositor's src pad reads each such pad's properties back every frame and
+blends the source's held AYUV picture into the I420 frame there.
+
+The blend is the board's own, in `overlay/blend.rs`: a transparent pixel is
+one comparison, an opaque one a copy, and only the edges are mixed, so what a
+layer costs is proportional to the area it covers that is not clear. The
+probe is installed with the first transparent source and taken off with the
+last, so a show with none runs the graph it always ran.
+
+What this cannot do: a transparent item is drawn over every opaque item,
+whatever its place in the scene's stack, because the opaque ones are already
+inside the frame the board draws on. Among transparent items the stack order
+holds. Crop and rotation on the item are not applied, and an item inside a
+group that carries a filter is not drawn, because its pad belongs to the
+group's compositor rather than the programme's. On a GPU graphics entry the
+board does not draw and the carrier goes through the compositor, drawn flat.
+
 ## What the compositor cannot do, and what is said instead
 
 `compositor` has three sizing policies, so the seven `fit` keywords map onto

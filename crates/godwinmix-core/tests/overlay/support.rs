@@ -1,4 +1,7 @@
 //! A small running mixer and a way to read its programme frames back.
+//!
+//! Shared by three test files, each of which uses only some of it.
+#![allow(dead_code)]
 
 use super::*;
 

@@ -44,6 +44,15 @@ pub struct RenderedSource<P: Rendering> {
     worker: Option<Sender<Msg<P>>>,
 }
 
+/// A source dropped without being stopped still lets its render thread go.
+/// The layer keeps a sender for the board's sizes, so the channel alone would
+/// never close.
+impl<P: Rendering> Drop for RenderedSource<P> {
+    fn drop(&mut self) {
+        let _ = self.stop();
+    }
+}
+
 impl<P: Rendering> Source for RenderedSource<P> {
     fn manifest(&self) -> &Manifest {
         P::manifest()

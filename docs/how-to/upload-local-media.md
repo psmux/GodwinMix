@@ -10,7 +10,10 @@ body and the usual operator authentication. The response contains `name`,
 `path` and `size_bytes`. The existing client `upload` helper handles streaming
 and upload progress for browser integrations.
 
-The library accepts common video files, audio files and still images. Decoding
+The library accepts common video files, audio files and still images,
+including SVG. A PNG, WebP or SVG with transparency, and a WebM or MOV clip
+with an alpha channel, keep their transparency when added as a source; see
+[show a picture](show-a-picture.md). Decoding
 uses the installed GStreamer plugins. An accepted filename does not guarantee
 that a damaged file or an unavailable codec can be played.
 

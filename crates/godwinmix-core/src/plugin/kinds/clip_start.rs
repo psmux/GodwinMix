@@ -33,7 +33,7 @@ pub fn wanted(uri: &str, params: &Params) -> bool {
 
 /// Whether raw video caps carry an alpha channel.
 pub fn has_alpha(caps: &gst::CapsRef) -> bool {
-    gst_video::VideoInfo::from_caps(&caps.to_owned()).map(|i| i.has_alpha()).unwrap_or(false)
+    gst_video::VideoInfo::from_caps(caps).map(|i| i.has_alpha()).unwrap_or(false)
 }
 
 /// Open a clip: with an alpha branch standing by when it may hold alpha,

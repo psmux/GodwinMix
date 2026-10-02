@@ -30,6 +30,8 @@ godwinmix ctl take cam2                 # or: take   (with no id, cuts to black)
 godwinmix ctl take --scene "wide" --transition fade --duration 400
 godwinmix ctl take --scene "half-time" --transition stinger --clip stinger.mp4
 godwinmix ctl source add hls1 https://host/stream.m3u8 --name "Roof camera"
+godwinmix ctl source add strap "text:Ada Lovelace" --param size=44
+godwinmix ctl source set strap --param text="Grace Hopper"   # on air, no rebuild
 godwinmix ctl source remove hls1
 godwinmix ctl output add youtube rtmp://a.rtmp.youtube.com/live2/KEY --policy cdn
 godwinmix ctl output list
@@ -37,6 +39,11 @@ godwinmix ctl ad /srv/ads/spot.mp4 --return-to cam1
 godwinmix ctl media
 godwinmix ctl golive https://example.com/event/42 --rtmp rtmp://a.rtmp.youtube.com/live2/KEY --superimpose auto
 ```
+
+`--param key=value` gives a source's kind a param, and repeats. A value that
+reads as JSON is taken as JSON (`size=44`, `shadow=true`, `items=["A","B"]`);
+anything else is a string. `source set` sends only the params it names; a text
+or a ticker takes them in place, and any other kind is built again with them.
 
 `golive` is `POST /api/golive`: the page becomes a web source, the destination
 is added if given, and the mixer takes the page to programme by itself once it
