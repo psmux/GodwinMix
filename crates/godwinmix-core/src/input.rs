@@ -863,6 +863,13 @@ impl InputPipeline {
         self.kind.lock().health()
     }
 
+    /// Whether the process behind this source exited by itself since the last
+    /// tick asked. Never waits: a kind busy in a restart or a call holds its
+    /// lock, and then the answer is the next tick's.
+    pub fn kind_exited(&self) -> Option<String> {
+        self.kind.try_lock()?.exited()
+    }
+
     /// Ask the source for something the core does not model: a restart, a
     /// client swap, a tool a plugin contributes.
     pub fn call(&self, method: &str, params: serde_json::Value) -> Result<serde_json::Value> {
@@ -2139,6 +2146,30 @@ impl ExecChild {
         }
     }
 
+    /// Has it exited, asked without collecting it?
+    ///
+    /// For a watcher that polls a child it did not ask to stop. `finished`
+    /// collects the status, and a collected pid is never signalled again, so
+    /// a plugin that died and left a helper in its process group would have
+    /// had that helper spared by the teardown that follows. On unix this peeks
+    /// with `WNOWAIT` and leaves the zombie, and its group, for `bury_child`
+    /// to signal and reap. Windows has no process group to keep and collects
+    /// as `finished` does.
+    pub fn exited(&mut self) -> bool {
+        #[cfg(unix)]
+        {
+            match self.child.as_ref() {
+                None => true,
+                Some(_) if self.collected => true,
+                Some(child) => !matches!(peek_exit(child.id()), Peek::Running),
+            }
+        }
+        #[cfg(not(unix))]
+        {
+            self.finished()
+        }
+    }
+
     /// Take ownership of a freshly spawned process and its two pipes. Letting
     /// go of the result is what kills the process; see `Drop`.
     pub fn new(
@@ -2395,7 +2426,7 @@ pub fn make_exec_source(id: &str, spec: &ExecSpec) -> Result<(gst::Element, Exec
     let (out, child, stderr) = spawn_exec(id, spec)?;
     // Owned from here on, so that a failure below takes the process with it.
     let mut held =
-        ExecChild { child: Some(child), env: spec.env.clone(), stdout: None, stderr, collected: false };
+        ExecChild::new(child, spec.env.clone(), None, stderr);
     let src = new_exec_source(id)?;
     held.stdout = attach_exec_stdout(id, &src, out);
     Ok((src, held))

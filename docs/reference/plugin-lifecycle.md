@@ -387,6 +387,25 @@ rather than trusting the last thing the plugin said about itself, marks it
 again under the backoff. Before that a service taken by the OOM killer stayed
 `ready` for the life of the mixer.
 
+A source's process is asked the same question on every mixer tick, twice a
+second, and a shared device's on every turn of its share thread, twenty times a
+second. The question is one non blocking wait that does not collect the child,
+so the teardown after it still kills the whole process group, and a helper the
+plugin started (an encoder, a browser) goes with it. A source whose process
+exited is marked `failed` and restarted through the ordinary restart path at
+once, without waiting for the stall timer: a plugin killed with SIGKILL is back
+on air in about a second, where it used to stay dark for about twelve. A shared
+device is closed and opened again by the same source on the next turn.
+
+A plugin that keeps dying is slowed down. Exits less than 30 seconds apart
+count as one streak, and each one in a streak waits longer than the last: for
+a shared device none, then 1, 2, 4 and 8 seconds, then 10 from then on. For a
+source the wait is the restart delay every source has (half a second, 1.8 times
+longer for each attempt, to a ceiling of ten seconds), with the attempt counted
+from the streak, so the few frames a plugin sends between deaths do not reset
+it. An exit 30 seconds or more after
+the last starts again from nothing.
+
 After a stop: no child processes, no open descriptors, no sockets, no temporary
 directories. There is a test that counts each of those before and after, for a
 source and for a singleton.

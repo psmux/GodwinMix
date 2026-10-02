@@ -7,6 +7,7 @@
 //! thread of its own because starting a plugin blocks for as long as the
 //! plugin takes to say hello, and nothing the mixer runs may wait on that.
 
+use super::super::exits::Streak;
 use super::feed::{Feed, Plan};
 use super::reader::Watch;
 use godwinmix_framebus::{Claim, Registry};
@@ -83,6 +84,7 @@ impl Drop for Owner {
 fn run_loop(shared: &Arc<Shared>, watch: &Watch) {
     let mut next_try = Instant::now();
     let mut gaps = 0;
+    let mut exits = Streak::default();
     while !shared.stop.load(Relaxed) {
         // Said here rather than on the streaming thread that measured it,
         // which must not wait on a log file.
@@ -102,8 +104,10 @@ fn run_loop(shared: &Arc<Shared>, watch: &Watch) {
             let name = shared.plan.lock().as_ref().map(|p| p.name.to_string()).unwrap_or_default();
             warn!(bus = %name, %why, "giving the device up so another source can open it");
             let old = shared.feed.lock().take();
+            // A plugin that exited is opened again at once; see `exits`.
+            let exited = old.as_ref().is_some_and(Feed::exited);
+            next_try = Instant::now() + exits.wait_after(exited, BACKOFF);
             drop(old);
-            next_try = Instant::now() + BACKOFF;
         }
         if shared.feed.lock().is_none() && Instant::now() >= next_try {
             if let Err(delay) = try_own(shared) {
