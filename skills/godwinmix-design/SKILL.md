@@ -1,0 +1,233 @@
+---
+name: godwinmix-design
+description: Design on screen graphics for a GodwinMix mixer and put them on air, drawn by the mixer itself with no browser. Use when asked to make, brand, restyle or reword a news lower third, a breaking news bar, a headline strap, a score bug, a logo bug, a title card, a quote card or a location tag, or to choose between a text source, an SVG template and an OGraf page. Covers the built in pack, writing an SVG template with {{fields}} and shrink to fit, safe areas, save_template, placing it on a scene with an enter and an exit, looking at the result with preview_frame, and changing its words on air with set_source.
+---
+
+# Designing graphics for a GodwinMix mixer
+
+A graphic here is an SVG with named fields in it, `{{headline}}`, drawn by the
+mixer at the size it is placed at, once per change, and held. A field changed
+on air is drawn again in a few milliseconds and swapped in on the next frame,
+with no rebuild and no gap. It costs a Raspberry Pi almost nothing while it
+holds still, so it is the default for anything designed.
+
+## Pick the cheapest thing that does the job
+
+| Ask | Use | Why |
+|---|---|---|
+| Plain words in a box, a crawl, credits | `text:` or `ticker:` source | the cheapest there is; see `godwinmix-operate` |
+| A designed graphic: panels, an accent colour, a hierarchy of type, a logo | an SVG template, `template:<name>` | native, cheap, branded, live fields |
+| Something that moves inside itself every frame: a ticking clock face, a particle wipe, a chart that animates | OGraf (`scene.apply_graphic`) | a Chromium page per graphic; too heavy for a Pi |
+
+Movement in and out is not a reason to reach for OGraf. Every scene item has
+an `enter` and an `exit` (fade, slide, wipe, zoom), and they move templates
+like anything else. Do not put `<animate>` or CSS animation in a template:
+it is drawn once, as a still.
+
+## The pack
+
+`list_templates {}` answers with every template and its fields. Eight are
+built in:
+
+| Name | Fields |
+|---|---|
+| `news-lower-third` | `name`, `title` |
+| `breaking-news` | `label`, `headline` |
+| `headline-strap` | `topic`, `headline`, `subhead` |
+| `score-bug` | `home`, `score_home`, `away`, `score_away`, `clock`, `period` |
+| `logo-bug` | `station`, `tag` |
+| `title-card` | `kicker`, `title`, `subtitle` (full screen, opaque) |
+| `quote-card` | `line1`, `line2`, `line3`, `attribution` |
+| `location-tag` | `place`, `detail` |
+
+Every one also has `accent`, `text` and `panel`, three colours. Set them per
+graphic in `fields`, or once for the whole station in the config's
+`[graphics]` section, which every template falls back to.
+
+Each is laid out on a 1920 by 1080 canvas with a transparent background and
+sits inside title safe, so placed over the whole canvas it lands where a
+broadcast graphic belongs. Only the part with something in it costs anything
+to draw.
+
+## Put one on air
+
+Five calls. Names in `code` are MCP tools; the CLI is at the end.
+
+1. Add the graphic as a source, with its words:
+
+   ```
+   add_source {"id": "breaking", "uri": "template:breaking-news",
+               "params": {"fields": {"label": "BREAKING", "headline": "Storm warning for the coast tonight"}}}
+   ```
+
+2. Put it on the scene that is on air, hidden, with its way in and out:
+
+   ```
+   add_scene_item {"scene": "studio", "content": {"source": "breaking"}, "name": "breaking bar",
+     "transform": {"position": {"x": 0, "y": 0}, "frame": {"w": 1920, "h": 1080}},
+     "visible": false,
+     "enter": {"type": "slide", "edge": "left", "duration_ms": 400, "easing": "ease-out"},
+     "exit": {"type": "fade", "duration_ms": 300}}
+   ```
+
+   Use the canvas size `core_info` reports for `frame`. Leave `transform` out
+   and it lands in a grid cell instead, which is wrong for a lower third.
+
+3. Look before it airs (next section).
+4. Show it: `set_scene_item {"scene": "studio", "item": "breaking bar", "props": {"visible": true}}`.
+   It slides in. `false` takes it out the way `exit` says.
+5. Change the words on air:
+
+   ```
+   set_source {"id": "breaking", "params": {"fields": {"headline": "Roads closed on the coast road"}}}
+   ```
+
+   Only the fields you name change; the rest stay. `null` puts one back to its
+   default. A value lives at `params.fields.<name>`, the path any client or
+   data feed sets. `template_fields {"id": "breaking"}` says what each field shows now.
+   A field the template does not have is refused with the ones it does have in
+   `data.fields`.
+
+## Look at your own work
+
+Always look once before you tell anyone it is done.
+
+```
+arm_preview {"scene": "studio"}
+preview_frame {"width": 1280}
+```
+
+`preview_frame` answers with the armed scene as a picture. A hidden item is
+not in it, so show the item on a scene that is not on air, or look at the
+programme after step 4 with `snapshot {"id": "program", "width": 1280}`.
+1280 wide is about 1,200 tokens and is what reading a lower third needs; 320
+is enough to see where things are. Check: are the words inside their panel,
+is anything cut at an edge, does it read against the picture under it. Fix,
+look again, and stop when it is right.
+
+## Write your own template
+
+Start from a pack template rather than a blank page:
+
+```
+get_template {"name": "news-lower-third"}
+```
+
+Change it, then save it into the media library:
+
+```
+save_template {"name": "news24-strap", "svg": "<svg ...>...</svg>"}
+  -> {"template": {"uri": "template:news24-strap.svg", "fields": [...]}, "path": "...", "redrawn": []}
+```
+
+`save_template` checks the SVG renders before it writes anything. With
+`"replace": true` it writes over a template of the same name and every source
+drawing it is drawn again on air, which is how you fix a design you are
+looking at.
+
+The rules a template follows:
+
+* `viewBox="0 0 1920 1080"` and the same `width` and `height`, transparent
+  where there is nothing. Design on the whole canvas and place the item over
+  the whole canvas.
+* A field is `{{name}}`: lower case letters, digits and `_`. It may be in the
+  words of a `<text>` or in an attribute (`fill="{{accent}}"`). Values are
+  escaped for XML, so a headline with `&` or `<` shows those characters.
+* Declare each field in `<metadata>` with a label, a default and, for a
+  colour, `type="color"`. Put `xmlns:gmx="https://godwinmix.dev/ns/template"`
+  on the `<svg>`:
+
+  ```xml
+  <metadata>
+    <gmx:template title="NEWS 24 strap" description="Name and title, bottom left"/>
+    <gmx:field name="headline" label="Headline" default="Polls close at ten"/>
+    <gmx:field name="accent" label="Accent colour" type="color" default="#c8102e"/>
+  </metadata>
+  ```
+
+* Shrink to fit: `data-fit-width="W"` on a `<text>` makes the words smaller,
+  about the text's own `x` and `y`, whenever they come out wider than `W` in
+  canvas units. Give every field that holds a headline or a name one. A
+  template does not wrap words: give a long text two or three fields, one a
+  line, as `quote-card` does.
+* Fonts are the ones installed on the mixer. Write a list that ends in a
+  generic family: `font-family="Inter, 'Helvetica Neue', Helvetica, Arial,
+  'DejaVu Sans', 'Liberation Sans', sans-serif"`. A Raspberry Pi has DejaVu.
+  Write words in capitals yourself; `text-transform` is not drawn.
+* A logo is a data URI (`href="data:image/png;base64,..."`) or the file name
+  of a picture in the media library (`href="logo.png"`). Nothing is fetched
+  from the network, and a template that names an `https://` address is
+  refused.
+* Weight by size and boldness: one large bold line, one smaller regular line,
+  a small capitals label. Leave 28 to 32 units between words and the edge of
+  their panel. Use `accent` for one strong shape, not everything.
+
+### Safe areas, on 1920 by 1080
+
+| Area | Share | x from, to | y from, to |
+|---|---|---|---|
+| Title safe: all words | 90 percent | 96 to 1824 | 54 to 1026 |
+| Action safe: anything that matters | 93 percent | 67 to 1853 | 38 to 1042 |
+
+A full screen background may run to the edges; its words stay in title safe.
+
+## Three requests and the calls that answer them
+
+**"A red breaking news bar for our channel, called NEWS 24."**
+
+```
+add_source {"id": "breaking", "uri": "template:breaking-news",
+  "params": {"fields": {"label": "NEWS 24", "headline": "<the story>", "accent": "#d4202c"}}}
+add_scene_item {... "content": {"source": "breaking"}, "visible": false, "enter": {"type": "wipe", "edge": "left", "duration_ms": 350}, ...}
+set_scene_item {... "props": {"visible": true}}
+snapshot {"id": "program", "width": 1280}
+```
+
+**"Put up the score, Arsenal 2 Chelsea 1, 67 minutes, and keep the clock going."**
+
+```
+add_source {"id": "score", "uri": "template:score-bug",
+  "params": {"fields": {"home": "ARS", "score_home": 2, "away": "CHE", "score_away": 1, "clock": "67:00", "period": "2ND HALF"}}}
+set_source {"id": "score", "params": {"fields": {"clock": "67:01"}}}
+```
+
+A clock changed once a second is one small render a second. For a running
+clock, change it once a second, not more.
+
+**"Our brand is green and gold. Make the lower third ours, with the logo from the media library."**
+
+```
+get_template {"name": "news-lower-third"}
+save_template {"name": "ours-lower-third", "svg": "<the pack SVG with an <image href=\"logo.png\" .../> added beside the name>"}
+add_source {"id": "strap", "uri": "template:ours-lower-third.svg",
+  "params": {"fields": {"name": "Ada Lovelace", "title": "Engine Research", "accent": "#0b6e3d", "panel": "#0d1f16", "text": "#ffffff"}}}
+```
+
+Then place, look and show as above. To make green the whole station's colour,
+set `graphics.accent`, `graphics.text` and `graphics.panel` in Settings; every
+template uses them from the next start.
+
+## From a terminal
+
+```sh
+gmx ctl template list
+gmx ctl template get news-lower-third --out strap.svg
+gmx ctl template save ours-lower-third strap.svg            # --replace to write over it
+gmx ctl source add strap template:ours-lower-third.svg --param fields.name="Ada Lovelace"
+gmx ctl source set strap --param fields.title="Engine Research"
+gmx ctl template fields strap
+gmx ctl rpc scene.item.add @item.json                        # any method, params as JSON or @file
+```
+
+## What goes wrong
+
+* **The graphic draws over a camera that is above it in the scene.** Every
+  transparent item is drawn over every opaque one. Among graphics, the stack
+  order holds.
+* **A long headline is tiny.** It was shrunk to fit. Shorten it, or use the
+  two line strap.
+* **On a GPU compositor** (`[hardware] graphics` set to a GPU entry) a
+  template is drawn flat, its clear parts grey. The software compositor is the
+  default.
+* **`there is no template`**: the error lists the pack; `list_templates` lists
+  the library too.

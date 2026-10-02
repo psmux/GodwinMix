@@ -246,9 +246,9 @@ enum Command {
 
     /// Install the GodwinMix skills into an AI coding tool's directory.
     ///
-    /// `gmx skill install --for claude` drops `godwinmix-operate` and
-    /// `godwinmix-develop` where that tool reads them. `--print` shows what it
-    /// would write and writes nothing.
+    /// `gmx skill install --for claude` drops `godwinmix-operate`,
+    /// `godwinmix-develop` and `godwinmix-design` where that tool reads them.
+    /// `--print` shows what it would write and writes nothing.
     Skill(cli::skill::SkillArgs),
     /// The session log as an artefact: show a timeline, replay a session
     /// against a test core, diff two runs. See `src/cli/session.rs`.
