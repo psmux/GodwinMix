@@ -1110,6 +1110,7 @@ async function addSourcePickerSuite() {
       "Screens and windows",
       "Microphones and audio",
       "Video and images",
+      "Text and tickers",
       "Web pages",
       "Streams and feeds",
       "Test patterns",
