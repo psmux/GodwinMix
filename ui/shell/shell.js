@@ -3,6 +3,7 @@
 // the client's store and renders at flush. What it owns is where things sit,
 // what the keyboard does, the undo stack, the drawer and the file drop zone.
 
+import { setupNotes } from "./setup-note.js";
 import { el, clear, on } from "./dom.js";
 import * as layout from "./layout.js";
 import * as registry from "./registry.js";
@@ -120,6 +121,8 @@ export async function mountShell(client, root) {
   restartBar(client);
   // Notifications belong to the window, including when Alerts is closed.
   client.on("alert", a => alertToast(client, a));
+  // Web pages and plugins setting themselves up on first use.
+  setupNotes(client);
   fileDrop(client);
   applyTileWidth();
   onSettingsChanged((s, key) => {

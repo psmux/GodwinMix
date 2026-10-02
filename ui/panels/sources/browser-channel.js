@@ -76,19 +76,16 @@ export function streamOf(channel, name) {
  * what is happening, because an install can take a minute.
  */
 export async function ensureIngest(client, say = () => {}) {
-  const { listPlugins, pluginState, pluginSourceFor } = await import("../../client/kinds.js");
+  const { listPlugins, pluginState } = await import("../../client/kinds.js");
   const plugins = await listPlugins(client);
   const state = pluginState(plugins, "ingest");
   if (state === "ready") return;
   if (state === "problem") {
     const p = plugins.find((x) => x.name === "ingest");
-    throw new Error(`The ingest plugin, which takes this browser's stream in, is installed but did not start: ${p.problem}. Open Plugins to see why.`);
+    console.warn("the ingest plugin did not start", p.problem);
+    throw new Error("Taking in this browser's camera did not start on the mixer. Restart the mixer, and if it happens again, its log says why.");
   }
-  if (state === "disabled") {
-    say("Switching on the ingest plugin, which takes this browser's stream in.");
-    await client.call("plugin.enable", { name: "ingest" });
-    return;
-  }
-  say("Installing the ingest plugin, which takes this browser's stream in. This can take a minute.");
-  await client.call("plugin.add", { source: await pluginSourceFor(client, "ingest") });
+  // Installed from the copy the mixer carries, or switched back on.
+  const { setUp } = await import("../../client/setup.js");
+  await setUp(client, "ingest", say);
 }

@@ -24,6 +24,14 @@ pub const NICE: Part = Part { brew: "libnice-gstreamer", apt: "gstreamer1.0-nice
 pub const BAD: Part = Part { brew: "gstreamer", apt: "gstreamer1.0-plugins-bad", dnf: "gstreamer1-plugins-bad-free" };
 /// The Rust set: cmafmux, whip, ndi.
 pub const RS: Part = Part { brew: "gstreamer", apt: "gstreamer1.0-plugins-rs", dnf: "gstreamer1-plugins-rs" };
+/// Everything a WebRTC session needs: webrtcbin and libnice's elements.
+pub const WEBRTC: Part = Part {
+    brew: "gstreamer libnice-gstreamer",
+    apt: "gstreamer1.0-plugins-bad gstreamer1.0-nice",
+    dnf: "gstreamer1-plugins-bad-free libnice-gstreamer1",
+};
+/// The OpenGL elements the lighter web page renderer draws through.
+pub const GL: Part = Part { brew: "gstreamer", apt: "gstreamer1.0-gl", dnf: "gstreamer1-plugins-base" };
 /// The "good" set: decoders, muxers, capture on Linux.
 pub const GOOD: Part = Part { brew: "gstreamer", apt: "gstreamer1.0-plugins-good", dnf: "gstreamer1-plugins-good" };
 

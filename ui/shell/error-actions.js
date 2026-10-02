@@ -27,6 +27,10 @@ export async function runAction(action, err) {
         return await again(err, action.label);
       case "restart":
         return await restart(client);
+      case "setup":
+        return await setUp(client, action, err);
+      case "copy":
+        return await copyCommand(action);
       default:
         console.debug("an action this page does not know", action);
     }
@@ -49,7 +53,7 @@ async function setConfig(client, action, err) {
 }
 
 async function installPlugin(client, name, err) {
-  const note = toast({ text: `Installing ${name}. This can take a minute.`, ms: 60000 });
+  const note = toast({ text: "Installing. This can take a minute.", ms: 60000 });
   const source = await pluginSourceFor(client, name);
   try {
     await client.call("plugin.add", { source });
@@ -57,14 +61,36 @@ async function installPlugin(client, name, err) {
     note();
   }
   const state = pluginState(await listPlugins(client), name);
-  if (state === "ready" && err.again) return again(err, `Installed ${name}`);
-  toast({ text: state === "ready" ? `${name} is installed.` : `${name} was installed, but the mixer has not picked it up yet.` });
+  if (state === "ready" && err.again) return again(err, "Installed");
+  toast({ text: state === "ready" ? "Installed." : "Installed, but the mixer has not picked it up yet. Restart it when the show allows." });
+}
+
+/**
+ * Set a piece up (web pages, cameras). Progress shows as its own note
+ * (setup-note.js); a call that was refused goes again once it is ready.
+ */
+async function setUp(client, action, err) {
+  if (action.command) await copyCommand(action);
+  const piece = action.piece;
+  const now = await client.call("setup.start", { piece });
+  if (!err.again) return;
+  if (now && now.state === "ready") return again(err, action.label);
+  const off = client.on("setup", (s) => {
+    if (!s || s.piece !== piece || s.state === "running") return;
+    off();
+    if (s.state === "ready") again(err, action.label);
+  });
+}
+
+async function copyCommand(action) {
+  const { copy } = await import("./setup-note.js");
+  return copy(action.command);
 }
 
 async function enablePlugin(client, name, err) {
   await client.call("plugin.enable", { name });
-  if (err.again) return again(err, `Turned ${name} on`);
-  toast({ text: `${name} is on.` });
+  if (err.again) return again(err, "Turned on");
+  toast({ text: "Turned on." });
 }
 
 /** Settings is the one dialog a core names today; a panel is focused by id. */
