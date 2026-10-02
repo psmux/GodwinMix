@@ -1,9 +1,16 @@
+//! The key, from a frame to the pixels the board draws, on frames whose
+//! answer is known.
+
 use super::colour::rgb_to_yuv;
-use super::frame::{self, Region, Scratch, I420};
+use super::frame::{self, Region, I420};
 use super::lut::Lut;
 use super::params::{Colour, Matte, Settings};
 use super::sample;
 use crate::config::Params;
+use crate::overlay::blend::{self, Draw, Planes, Rect, Source};
+use crate::overlay::keyed::{self, Keyed};
+use gstreamer as gst;
+use gstreamer_video as gst_video;
 
 /// A flat I420 frame of one colour, with an optional square of another.
 fn frame(w: usize, h: usize, rgb: [u8; 3], square: Option<([u8; 3], usize, usize, usize)>) -> Vec<u8> {
@@ -24,17 +31,47 @@ fn view(data: &[u8], w: usize, h: usize) -> I420<'_> {
     I420 { y, u, v, strides: [w, w / 2, w / 2], width: w, height: h }
 }
 
-fn keyed(data: &[u8], w: usize, h: usize, s: &Settings) -> (Region, Vec<u8>) {
-    let key = match s.colour {
-        Colour::Rgb(rgb) => rgb_to_yuv(rgb),
-        Colour::Auto => unreachable!("these tests give the colour"),
-    };
-    let lut = Lut::build((key.1, key.2), s);
-    let r = Region::of(w, h, &s.matte);
-    let mut out = vec![0u8; r.w * r.h * 4];
-    frame::key(&view(data, w, h), r, &lut, s.feather, &mut Scratch::default(), &mut out);
-    (r, out)
+fn planes(canvas: &mut [u8], w: usize, h: usize) -> Planes<'_> {
+    let (y, rest) = canvas.split_at_mut(w * h);
+    let (u, v) = rest.split_at_mut(w * h / 4);
+    Planes { y, u, v, strides: [w, w / 2, w / 2], width: w as i32, height: h as i32 }
 }
+
+/// The key's decision for a frame, as the filter hands it to the board.
+/// Widths here are multiples of 8, so the packed frame and GStreamer's own
+/// strides agree.
+fn decide(data: &[u8], w: usize, h: usize, s: &Settings) -> Keyed {
+    let _ = gst::init();
+    let Colour::Rgb(rgb) = s.colour else { unreachable!("these tests give the colour") };
+    let (_, ku, kv) = rgb_to_yuv(rgb);
+    let r = Region::of(w, h, &s.matte);
+    let (mut alpha, mut chroma) = (Vec::new(), Vec::new());
+    frame::blocks(&view(data, w, h), r, &Lut::build((ku, kv), s), s.feather, &mut alpha, &mut chroma);
+    let info = gst_video::VideoInfo::builder(gst_video::VideoFormat::I420, w as u32, h as u32).build().unwrap();
+    Keyed { frame: gst::Buffer::from_slice(data.to_vec()), info, region: (r.x, r.y, r.w, r.h), alpha, chroma }
+}
+
+/// Key a frame and draw it over a canvas of `under` the way the board does.
+fn composite(data: &[u8], w: usize, h: usize, s: &Settings, under: [u8; 3]) -> Vec<u8> {
+    let k = decide(data, w, h, s);
+    let mut canvas = sample::to_i420(&vec![under; w * h], w, h);
+    let (rx, ry, rw, rh) = k.region;
+    let d = Draw {
+        window: Rect::new(0, 0, rw as i32, rh as i32),
+        to: Rect::new(rx as i32, ry as i32, rw as i32, rh as i32),
+        clip: Rect::new(0, 0, w as i32, h as i32),
+        alpha: 255,
+    };
+    keyed::draw(&mut planes(&mut canvas, w, h), &k, &d);
+    canvas
+}
+
+fn yuv(canvas: &[u8], w: usize, h: usize, x: usize, y: usize) -> (u8, u8, u8) {
+    let c = (y / 2) * (w / 2) + x / 2;
+    (canvas[y * w + x], canvas[w * h + c], canvas[w * h + w * h / 4 + c])
+}
+
+const UNDER: [u8; 3] = [200, 40, 160];
 
 fn green_key() -> Settings {
     Settings { colour: Colour::Rgb([0, 255, 0]), ..Settings::default() }
@@ -44,38 +81,37 @@ fn green_key() -> Settings {
 fn a_pure_green_pixel_keys_to_fully_clear_and_skin_stays_solid() {
     let (w, h) = (64, 64);
     let data = frame(w, h, [0, 255, 0], Some(([224, 172, 140], 16, 16, 32)));
-    let (_, out) = keyed(&data, w, h, &green_key());
-    let alpha = |x: usize, y: usize| out[(y * w + x) * 4];
-    assert_eq!(alpha(2, 2), 0, "the green corner is clear");
-    assert_eq!(alpha(60, 40), 0, "and so is the other side");
-    assert_eq!(alpha(32, 32), 255, "the middle of the skin square is solid");
-    let skin = rgb_to_yuv([224, 172, 140]);
-    assert_eq!(&out[(32 * w + 32) * 4 + 1..(32 * w + 32) * 4 + 4], &[skin.0, skin.1, skin.2], "and keeps its colour");
+    let out = composite(&data, w, h, &green_key(), UNDER);
+    assert_eq!(yuv(&out, w, h, 2, 2), rgb_to_yuv(UNDER), "the green corner shows what is under it");
+    assert_eq!(yuv(&out, w, h, 60, 40), rgb_to_yuv(UNDER), "and so does the other side");
+    assert_eq!(yuv(&out, w, h, 32, 32), rgb_to_yuv([224, 172, 140]), "the skin is solid and keeps its colour");
 }
 
 #[test]
 fn spill_suppression_takes_the_green_out_of_an_edge_pixel() {
     // Grey lit by a green screen: what the edge of a white shirt looks like.
     let (w, h) = (16, 16);
-    let edge = [150, 185, 150];
-    let data = frame(w, h, edge, None);
-    let (_, plain) = keyed(&data, w, h, &Settings { spill: 0.0, ..green_key() });
-    let (_, clean) = keyed(&data, w, h, &Settings { spill: 1.0, ..green_key() });
-    let green = |px: &[u8]| (128 - px[2] as i32) + (128 - px[3] as i32);
-    assert_eq!(plain[0], 255, "a grey that leans green is still solid");
-    assert!(green(&plain[..4]) > 6, "with no suppression the green stays: {:?}", &plain[..4]);
-    assert!(green(&clean[..4]) <= 1, "with suppression it is gone: {:?}", &clean[..4]);
+    let data = frame(w, h, [150, 185, 150], None);
+    let plain = yuv(&composite(&data, w, h, &Settings { spill: 0.0, ..green_key() }, UNDER), w, h, 8, 8);
+    let clean = yuv(&composite(&data, w, h, &Settings { spill: 1.0, ..green_key() }, UNDER), w, h, 8, 8);
+    let green = |p: (u8, u8, u8)| (128 - p.1 as i32) + (128 - p.2 as i32);
+    assert_eq!(plain.0, rgb_to_yuv([150, 185, 150]).0, "a grey that leans green is still solid");
+    assert!(green(plain) > 6, "with no suppression the green stays: {plain:?}");
+    assert!(green(clean) <= 1, "with suppression it is gone: {clean:?}");
 }
 
 #[test]
 fn the_garbage_matte_removes_everything_outside_it() {
-    let (w, h) = (100, 60);
+    let (w, h) = (96, 64);
     // A white frame: nothing in it is green, so only the matte can clear it.
     let data = frame(w, h, [255, 255, 255], None);
-    let matte = Matte { left: 0.2, right: 0.3, top: 0.1, bottom: 0.0 };
-    let (r, out) = keyed(&data, w, h, &Settings { matte, ..green_key() });
-    assert_eq!(r, Region { x: 20, y: 6, w: 50, h: 54 }, "only the kept area is in the picture");
-    assert!(out.chunks(4).all(|px| px[0] == 255), "everything inside the matte is solid");
+    let matte = Matte { left: 0.25, right: 0.25, top: 0.125, bottom: 0.0 };
+    let s = Settings { matte, ..green_key() };
+    assert_eq!(decide(&data, w, h, &s).region, (24, 8, 48, 56), "only the kept area is decided");
+    let out = composite(&data, w, h, &s, UNDER);
+    assert_eq!(yuv(&out, w, h, 10, 30), rgb_to_yuv(UNDER), "left of the matte is gone");
+    assert_eq!(yuv(&out, w, h, 40, 2), rgb_to_yuv(UNDER), "and above it");
+    assert_eq!(yuv(&out, w, h, 40, 30), rgb_to_yuv([255, 255, 255]), "inside it the picture is solid");
 }
 
 #[test]
@@ -95,30 +131,31 @@ fn settings_read_obs_numbers_and_name_a_bad_field() {
 
 #[test]
 fn the_new_key_beats_the_old_one_on_a_shot_with_hair_blur_and_spill() {
-    let shot = sample::studio(640, 360);
-    let under = [200, 40, 160];
-    let g = super::guess::dominant(
-        view(&shot.i420, 640, 360).u.iter().zip(view(&shot.i420, 640, 360).v).map(|(u, v)| (100, *u, *v)),
-        super::params::Family::Green,
-    )
-    .expect("the screen is found");
+    let (w, h) = (640, 360);
+    let shot = sample::studio(w, h);
+    let v = view(&shot.i420, w, h);
+    let g = super::guess::dominant(v.u.iter().zip(v.v).map(|(u, v)| (100, *u, *v)), super::params::Family::Green)
+        .expect("the screen is found");
     let s = Settings { colour: Colour::Rgb(g.rgb), ..Settings::default() };
-    let (_, new) = keyed(&shot.i420, 640, 360, &s);
-    let (new_err, new_fringe) = sample::score(&shot, &new, under);
+    let (new_err, new_fringe) = sample::score(&shot, &composite(&shot.i420, w, h, &s, UNDER), UNDER);
     let Some(old) = old_key(&shot) else {
         println!("skipping the comparison: this GStreamer has no `alpha` element");
         return;
     };
-    let (old_err, old_fringe) = sample::score(&shot, &old, under);
+    // The old key's AYUV, drawn by the board's own blend for a fair match.
+    let mut canvas = sample::to_i420(&vec![UNDER; w * h], w, h);
+    let all = Rect::new(0, 0, w as i32, h as i32);
+    let d = Draw { window: all, to: all, clip: all, alpha: 255 };
+    blend::draw(&mut planes(&mut canvas, w, h), &Source { data: &old, stride: w * 4 }, &d);
+    let (old_err, old_fringe) = sample::score(&shot, &canvas, UNDER);
     println!("luma error new {new_err:.2} old {old_err:.2}; green fringe new {new_fringe:.2} old {old_fringe:.2}");
     assert!(new_err < old_err, "the new key lands nearer the true composite");
     assert!(new_fringe < old_fringe, "and leaves less green on the edges");
 }
 
 /// What GStreamer's `alpha` element, the old key, makes of the same shot,
-/// at its defaults with the screen colour given.
+/// at its defaults with the screen colour given, as AYUV.
 fn old_key(shot: &sample::Shot) -> Option<Vec<u8>> {
-    use gstreamer as gst;
     use gstreamer::prelude::*;
     gst::init().ok()?;
     if !crate::probe::exists("alpha") {
@@ -150,36 +187,28 @@ fn key_cost_per_frame() {
     for (w, h) in [(1280, 720), (1920, 1080)] {
         let shot = sample::studio(w, h);
         let s = Settings { colour: Colour::Rgb(sample::SCREEN), ..Settings::default() };
-        let lut = Lut::build((rgb_to_yuv(sample::SCREEN).1, rgb_to_yuv(sample::SCREEN).2), &s);
-        let mut scratch = Scratch::default();
-        let r = Region::of(w, h, &s.matte);
+        let (_, ku, kv) = rgb_to_yuv(sample::SCREEN);
+        let lut = Lut::build((ku, kv), &s);
         let mut canvas = vec![16u8; w * h * 3 / 2];
+        let k0 = decide(&shot.i420, w, h, &s);
+        let all = Rect::new(0, 0, w as i32, h as i32);
+        let d = Draw { window: all, to: all, clip: all, alpha: 255 };
         let n = 200;
-        let (mut keying, mut drawing) = (0f64, 0f64);
+        let (mut deciding, mut drawing) = (0f64, 0f64);
         for _ in 0..n {
             let t = std::time::Instant::now();
-            let mut out = vec![0u8; r.w * r.h * 4];
-            frame::key(&view(&shot.i420, w, h), r, &lut, s.feather, &mut scratch, &mut out);
-            keying += t.elapsed().as_secs_f64();
+            let (mut a, mut c) = (Vec::new(), Vec::new());
+            frame::blocks(&view(&shot.i420, w, h), Region::of(w, h, &s.matte), &lut, s.feather, &mut a, &mut c);
+            deciding += t.elapsed().as_secs_f64();
             let t = std::time::Instant::now();
-            draw(&mut canvas, w, h, &out);
+            keyed::draw(&mut planes(&mut canvas, w, h), &k0, &d);
             drawing += t.elapsed().as_secs_f64();
         }
         println!(
             "{w}x{h}: key {:.2} ms, board draw {:.2} ms a frame; at 30 fps {:.1} percent of one core",
-            keying * 1000.0 / n as f64,
+            deciding * 1000.0 / n as f64,
             drawing * 1000.0 / n as f64,
-            (keying + drawing) / n as f64 * 30.0 * 100.0
+            (deciding + drawing) / n as f64 * 30.0 * 100.0
         );
     }
-}
-
-/// The board's own blend, onto an I420 canvas the size of the picture.
-fn draw(canvas: &mut [u8], w: usize, h: usize, ayuv: &[u8]) {
-    use crate::overlay::blend::{self, Draw, Planes, Rect, Source};
-    let (y, rest) = canvas.split_at_mut(w * h);
-    let (u, v) = rest.split_at_mut(w * h / 4);
-    let mut planes = Planes { y, u, v, strides: [w, w / 2, w / 2], width: w as i32, height: h as i32 };
-    let all = Rect::new(0, 0, w as i32, h as i32);
-    blend::draw(&mut planes, &Source { data: ayuv, stride: w * 4 }, &Draw { window: all, to: all, clip: all, alpha: 255 });
 }

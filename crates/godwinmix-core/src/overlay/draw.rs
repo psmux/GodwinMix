@@ -72,6 +72,10 @@ pub fn paint_with(info: &gst_video::VideoInfo, buffer: &mut gst::BufferRef, jobs
     let [y, u, v, _] = frame.planes_data_mut();
     let mut planes = Planes { y, u, v, strides, width, height };
     for job in &jobs.0 {
+        if let Some(k) = &job.picture.keyed {
+            super::keyed::draw(&mut planes, k, &clamped(&job.draw, &job.picture));
+            continue;
+        }
         let Ok(map) = job.picture.buffer.map_readable() else { continue };
         let pic = &job.picture;
         let need = pic.stride * (pic.height as usize).saturating_sub(1) + pic.width as usize * 4;
