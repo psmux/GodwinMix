@@ -1195,6 +1195,8 @@ class ItemProps(TypedDict, total=False):
     blend: Blend
     content: FlatContent
     crop: Crop
+    enter: Union[ItemTransition, None]
+    exit: Union[ItemTransition, None]
     filters: List[Filter]
     locked: bool
     name: Optional[str]
@@ -1215,6 +1217,20 @@ class ItemSchemaRequest(TypedDict, total=False):
 
     type: str
     # The item type: a graphic id like `ograf/lower-third`, or a plugin provide like `camera/source`.
+
+class ItemTransition(TypedDict, total=False):
+    """One way on or off the canvas for one item."""
+
+    duration_ms: int
+    # How long it takes, in milliseconds. 300 by default, ten seconds at most.
+    easing: Optional[str]
+    # linear, ease-in, ease-out or ease-in-out (the default).
+    edge: Union[ItemEdge, None]
+    # For slide and wipe, the canvas edge it comes in from or goes out to: left (the default), right, top or bottom.
+    on_take: bool
+    # Also play it when a scene holding this item is taken, in place of the scene's own transition for this item.
+    type: ItemTransitionKind
+    # cut, fade, slide, zoom or wipe.
 
 class ItemsRequest(TypedDict, total=False):
     """`scene.item.align`, `distribute`, `fit_to_canvas`, `cover_canvas`, `arrange_grid`, `match_size`, `group`."""
@@ -2138,7 +2154,7 @@ class SetItemRequest(TypedDict, total=False):
     # `linear` or `ease`. Only meaningful with a duration.
     item: str
     props: Dict[str, Any]
-    # Any of `name`, `transform`, `crop`, `opacity`, `blend`, `visible`, `locked`, `audio`, `content`. A key left out is left alone.
+    # Any of `name`, `transform`, `crop`, `opacity`, `blend`, `visible`, `locked`, `audio`, `content`, `enter`, `exit`. A key left out is left alone. `enter` and `exit` are `{type, edge, duration_ms, easing, on_take}` (type: cut, fade, slide, zoom, wipe), or null to clear one; an item hidden or shown on air plays them.
     scene: str
     seq: Optional[int]
     # A client's own sequence number, echoed on the patch so a drag can discard the echoes of moves it has already drawn past.
@@ -2675,15 +2691,45 @@ class Transition2(TypedDict, total=False):
     params: Any
     type: str
 
+class TransitionCatalogue(TypedDict, total=False):
+    """`program.transitions`: every transition a take may name on this core."""
+
+    default_duration_ms: int
+    # What a name on its own runs for, in milliseconds.
+    directions: List[str]
+    # The directions `wipe`, `slide` and `push` take.
+    easings: List[str]
+    # The four easings every transition takes as `params.easing`.
+    edges: List[str]
+    # The edges an item transition takes.
+    item_transitions: List[str]
+    # What an item's `enter` and `exit` may be.
+    max_duration_ms: int
+    # The longest a transition may run, in milliseconds.
+    transitions: List[TransitionEntry]
+
+class TransitionEntry(TypedDict, total=False):
+    """One name a take accepts."""
+
+    duration_ms: Optional[int]
+    # The duration a collection stores with it.
+    name: str
+    origin: str
+    # `built-in`, `collection` (a named transition the scene collection stores) or `plugin`.
+    params: List[str]
+    # The params it reads, for a built in one.
+    type: str
+    # The type underneath a collection's name, which is the name itself for the other two.
+
 class TransitionRequest(TypedDict, total=False):
     """How a take gets there. See docs/reference/transitions.md."""
 
     duration_ms: Optional[int]
     # How long it takes. 0 is a cut.
     params: Dict[str, Any]
-    # A stinger takes clip, cut_at_ms, luma.
+    # direction, easing, colour, clip... See list_transitions.
     type: str
-    # cut, fade, move, stinger, or a plugin name.
+    # fade, wipe, slide, push, zoom, dip... See list_transitions.
 
 class UiDefaults(TypedDict, total=False):
     """What a surface starts with: the layout, the theme and the gallery mode. Chosen by a preset (`preset.apply`), carried in `core.info` and pushed as `event/ui.changed`. None of it changes what the core does. It exists so the first page a volunteer sees is the one their preset chose rather than the one the last person to use this browser chose. 05 section 3b is where the four gallery modes are defined."""
@@ -2921,6 +2967,10 @@ HealthState = Literal['ok', 'warning', 'alarm', 'off']
 # A UUID in the hyphenated form. Minted ids are version 7 (time ordered); ids derived from a layout are version 8.
 Id = str
 
+ItemEdge = Literal['left', 'right', 'top', 'bottom']
+
+ItemTransitionKind = Literal['cut', 'fade', 'slide', 'zoom', 'wipe']
+
 # How a publisher gives its key.
 KeyMode = Literal['query', 'stream']
 
@@ -3060,6 +3110,7 @@ METHODS = (
     {"name": "program.revert", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/program/revert"), "summary": 'Take back to the shot before this one.'},
     {"name": "program.take", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/program/take"), "summary": 'Put a scene or a source on programme. The cut is instant and the outgoing stream is not disturbed.'},
     {"name": "program.thumbnail", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/program/thumbnail"), "summary": 'What is on air as a small JPEG in base64, {jpeg, width, height, at_ms}, or {pending: true} while the first picture is on its way. An ask keeps one picture a second coming for ten seconds; nothing runs between asks.'},
+    {"name": "program.transitions", "scope": "read", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/program/transitions"), "summary": "Every transition a take may name on this core, with the params each reads, and what an item's enter and exit may be."},
     {"name": "project.export", "scope": "admin", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/project/export"), "summary": "This mixer as one project file: settings, sources, outputs and renditions, channels, scenes, the page's layout, and its clips by name and size. Keys only with include_secrets."},
     {"name": "project.import", "scope": "admin", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/project/import"), "summary": "Open a project file: answers with what it would change (dry_run is true unless false is sent), then replaces this mixer's setup or merges beside it. Says which settings wait for a restart."},
     {"name": "rendition.plan", "scope": "read", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/rendition/plan"), "summary": 'What the planner built for every output that asked for a rendition: each node, what it serves, which encoder and why, and the totals.'},
@@ -4170,6 +4221,13 @@ class GeneratedMethods:
         if width is not None:
             params["width"] = width
         return await self._call("program.thumbnail", params)
+
+    async def program_transitions(
+        self,
+    ) -> TransitionCatalogue:
+        """Every transition a take may name on this core, with the params each reads, and what an item's enter and exit may be."""
+        params: Dict[str, Any] = {}
+        return await self._call("program.transitions", params)
 
     async def project_export(
         self,

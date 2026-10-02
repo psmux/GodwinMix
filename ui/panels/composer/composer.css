@@ -164,3 +164,8 @@
     border-top: var(--border) solid var(--line);
   }
 }
+
+/* An item's Enter and Exit: the kind, the edge, the length, the easing. */
+.composer-motion { flex-wrap: wrap; gap: 4px; }
+.composer-motion select { flex: 1 1 5em; min-width: 0; }
+.composer-motion select[hidden] { display: none; }

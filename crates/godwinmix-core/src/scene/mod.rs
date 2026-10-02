@@ -15,6 +15,7 @@ pub mod geometry;
 pub mod id;
 pub mod layout;
 pub mod migrate;
+pub mod motion;
 pub mod obs_import;
 pub mod order;
 pub mod presets;
@@ -29,6 +30,7 @@ pub use document::{
 };
 pub use flat::{FlatContent, FlatDocument, ItemProps, Props, Record};
 pub use id::Id;
+pub use motion::ItemTransition;
 
 #[cfg(test)]
 mod doc_tests {

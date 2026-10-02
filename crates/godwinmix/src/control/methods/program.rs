@@ -47,6 +47,26 @@ pub fn register(reg: &mut Registry<Call>) {
 
     reg.register(
         MethodDef::new(
+            "program.transitions",
+            Scope::Read,
+            "Every transition a take may name on this core, with the params each reads, \
+             and what an item's enter and exit may be.",
+            handler(|call: Call, _| async move { body(transitions(&call)) }),
+        )
+        .result(schema_of::<godwinmix_protocol::transitions::TransitionCatalogue>)
+        .tool(
+            "list_transitions",
+            Tier::Search,
+            "The transitions `take` accepts on this mixer: the built in ones (cut, fade, \
+             move, stinger, wipe, slide, push, zoom, zoom-out, dip, box), the ones the \
+             scene collection names and the ones a plugin adds, each with the params it \
+             reads (direction, easing, x and y, colour). Also the words an item's \
+             `enter` and `exit` take. Read it before passing `transition` to `take`.",
+        ),
+    );
+
+    reg.register(
+        MethodDef::new(
             "program.revert",
             Scope::Operate,
             "Take back to the shot before this one.",
@@ -187,12 +207,15 @@ async fn take(call: Call, params: Value) -> Result<Value, RpcError> {
 /// A name the collection stores wins over a built in one, so a collection that
 /// calls its house dissolve "fade" gets its own duration rather than the
 /// default. A transition plugin's name is accepted once the supervisor has it
-/// running.
+/// running, and an installed plugin wins over a built in transition of the
+/// same name: `plugins/wipe` was here before the built in `wipe`, and an
+/// operator who installed it asked for it.
 fn resolve_transition(
     call: &Call,
     req: &TakeRequest,
 ) -> Result<Option<TransitionSpec>, RpcError> {
     let Some(asked) = &req.transition else { return Ok(None) };
+    let extra = call.app.transition_names();
     let named = call.app.scenes.transition(&asked.type_id());
     if let Some(stored) = named {
         // The collection's own settings, with anything the call named on top,
@@ -210,18 +233,32 @@ fn resolve_transition(
             }),
             params,
         });
-        let spec = TransitionSpec::from(&request);
+        let spec = spec_of(&request, &extra);
         return Ok(Some(spec).filter(|s| !s.is_cut()));
     }
-    let extra = call.app.transition_names();
-    req.check_transition(&extra).map_err(|e| {
+    req.check_transition(&extra).map_err(|refusal| {
         let mut names: Vec<String> =
             godwinmix_protocol::requests::TRANSITIONS.iter().map(|s| s.to_string()).collect();
         names.extend(call.app.scenes.transition_names());
-        names.extend(extra);
-        RpcError::invalid_params(e).with("transitions", json!(names))
+        names.extend(extra.iter().cloned());
+        let mut error = RpcError::invalid_params(refusal.message).with("transitions", json!(names));
+        for (key, value) in refusal.data {
+            error = error.with(&key, value);
+        }
+        error
     })?;
-    Ok(Some(TransitionSpec::from(asked)).filter(|s| !s.is_cut()))
+    Ok(Some(spec_of(asked, &extra)).filter(|s| !s.is_cut()))
+}
+
+/// The mixer's spec for a request, with a running plugin of the same name
+/// taking the place of the built in transition.
+fn spec_of(request: &godwinmix_protocol::requests::Transition, plugins: &[String]) -> TransitionSpec {
+    let mut spec = TransitionSpec::from(request);
+    let type_id = request.type_id();
+    if let Some(name) = plugins.iter().find(|n| n.eq_ignore_ascii_case(&type_id)) {
+        spec.kind = godwinmix_core::mixer::transition::Kind::Plugin(name.clone());
+    }
+    spec
 }
 
 /// A source taken with a transition: one full canvas item, and the same path
@@ -409,4 +446,42 @@ async fn golive(call: Call, params: Value) -> Result<Value, RpcError> {
         .await
         .map_err(|e| call.mixer_error(e))?;
     body(result)
+}
+
+/// `program.transitions`: the built in names, then the collection's, then
+/// the plugins'. A plugin with a built in name replaces it, as a take would.
+fn transitions(call: &Call) -> godwinmix_protocol::transitions::TransitionCatalogue {
+    use godwinmix_protocol::transitions::{self as t, TransitionCatalogue, TransitionEntry};
+    let plugins = call.app.transition_names();
+    let entry = |name: &str, origin: &str, type_id: &str, duration_ms: Option<u64>| TransitionEntry {
+        name: name.to_string(),
+        origin: origin.to_string(),
+        type_id: type_id.to_string(),
+        params: match origin {
+            "plugin" => Vec::new(),
+            _ => t::params_of(type_id).iter().map(|s| s.to_string()).collect(),
+        },
+        duration_ms,
+    };
+    let mut list: Vec<TransitionEntry> = godwinmix_protocol::requests::TRANSITIONS
+        .iter()
+        .filter(|n| !plugins.iter().any(|p| p.eq_ignore_ascii_case(n)))
+        .map(|n| entry(n, "built-in", n, None))
+        .collect();
+    for name in call.app.scenes.transition_names() {
+        if let Some(stored) = call.app.scenes.transition(&name) {
+            list.push(entry(&name, "collection", &stored.kind, Some(stored.duration_ms as u64)));
+        }
+    }
+    list.extend(plugins.iter().map(|p| entry(p, "plugin", p, None)));
+    let words = |w: &[&str]| w.iter().map(|s| s.to_string()).collect();
+    TransitionCatalogue {
+        transitions: list,
+        easings: words(t::EASINGS),
+        directions: words(t::DIRECTIONS),
+        item_transitions: words(t::ITEM_TRANSITIONS),
+        edges: words(t::EDGES),
+        max_duration_ms: godwinmix_core::mixer::transition::MAX_DURATION_MS,
+        default_duration_ms: godwinmix_protocol::requests::DEFAULT_TRANSITION_MS,
+    }
 }

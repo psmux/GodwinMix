@@ -186,7 +186,34 @@ page.
 | `locked` | boolean | false | the designer will not move it |
 | `audio` | string | `follow` | `follow`, `always`, `never`. A source is audible when any live item of it says so |
 | `filters` | array | empty | this placement's filter chain |
+| `enter` | object | absent | how it comes on when shown on air; see below |
+| `exit` | object | absent | how it goes off when hidden on air |
 | `bind` | object | empty | layout bindings; see below. Empty in a resolved scene |
+
+### `enter` and `exit`
+
+```json
+"enter": {"type": "slide", "edge": "left", "duration_ms": 400, "easing": "ease-out"},
+"exit":  {"type": "fade", "duration_ms": 300, "on_take": true}
+```
+
+| Key | Type | Default | What it is |
+|---|---|---|---|
+| `type` | string | | `cut`, `fade`, `slide`, `zoom` or `wipe` |
+| `duration_ms` | integer | 300 | held at 10000 |
+| `easing` | string | `ease-in-out` | `linear`, `ease-in`, `ease-out`, `ease-in-out` |
+| `edge` | string | `left` | for `slide` and `wipe`: `left`, `right`, `top`, `bottom` |
+| `on_take` | boolean | false | also played when a scene holding the item is taken |
+
+Played when the item is shown or hidden while its scene is on air, and with
+`on_take` on a take. Set with `scene.item.set {props: {enter: {...}}}`, cleared
+with `null`. A wrong `type`, `edge` or `easing` is refused with the words that
+would have worked in `data.transitions`, `data.edges` or `data.easings`.
+`scene.validate` warns about one longer than ten seconds
+(`scene.motion_long`), an easing a stored document carries that this build
+does not know (`scene.motion_easing`), and notes that a group's own is not
+played (`scene.motion_group`). See
+[the transitions reference](transitions.md#item-transitions).
 
 ### `content`
 

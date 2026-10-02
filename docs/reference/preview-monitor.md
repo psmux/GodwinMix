@@ -24,7 +24,11 @@ and its stylesheet), so a page that never uses it does not download it.
 
 Cut sends the same request with no `transition`. Take sends
 `transition: {type, duration_ms}` with the type and length chosen under the
-button, remembered in this browser.
+button, and `params` when there is something in it: `direction` for a wipe,
+slide or push, `colour` for a dip, and `easing` when it is not the default.
+The choice is remembered in this browser. The list is the built in
+transitions plus whatever `program.transitions` adds from the scene collection
+and the plugins, asked once when Studio mode is first switched on.
 
 The core's preview holds scenes only, so a source in Preview is this page's
 own: it is drawn from the source's tile in the mosaic the Programme monitor

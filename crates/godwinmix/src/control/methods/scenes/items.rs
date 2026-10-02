@@ -375,6 +375,7 @@ async fn remove(call: Call, params: Value) -> Result<Value, RpcError> {
 
 async fn set(call: Call, params: Value) -> Result<Value, RpcError> {
     let req: SetItemRequest = call.params(&params)?;
+    check_motions(&req.props)?;
     let props = req.props.clone();
     let (over, easing, seq) = (req.duration_ms, req.easing.clone(), req.seq);
     apply(&call, &req.scene, req.draft.as_deref(), over, easing.as_deref(), seq, move |doc, i| {
@@ -384,6 +385,18 @@ async fn set(call: Call, params: Value) -> Result<Value, RpcError> {
         merge_props(item, &props)
     })
     .await
+}
+
+/// An item's `enter` and `exit`, refused with the words that would have
+/// worked rather than with whatever serde makes of a wrong one.
+fn check_motions(props: &serde_json::Map<String, Value>) -> Result<(), RpcError> {
+    for which in ["enter", "exit"] {
+        let Some(value) = props.get(which) else { continue };
+        if let Err(refusal) = godwinmix_protocol::transitions::check_item(which, value) {
+            return Err(RpcError::invalid_params(refusal.message).with_data(refusal.data));
+        }
+    }
+    Ok(())
 }
 
 /// Assign the keys the caller named onto an item, leaving the rest alone.
@@ -414,7 +427,7 @@ fn merge_props(item: &mut Item, props: &serde_json::Map<String, Value>) -> anyho
     *item = serde_json::from_value(value).map_err(|e| {
         anyhow::anyhow!(
             "{e}. Settable keys are: name, content, transform, crop, opacity, blend, \
-             visible, locked, audio, filters"
+             visible, locked, audio, filters, enter, exit"
         )
     })?;
     Ok(())

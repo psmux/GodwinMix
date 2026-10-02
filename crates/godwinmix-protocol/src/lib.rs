@@ -54,6 +54,7 @@ pub mod rpc;
 pub mod scope;
 pub mod shows;
 pub mod trace;
+pub mod transitions;
 pub mod types;
 
 pub use action::{ActionKind, Actionable, ErrorAction};

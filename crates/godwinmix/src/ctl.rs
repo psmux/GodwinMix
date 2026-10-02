@@ -43,8 +43,9 @@ pub enum Ctl {
         /// Land the cut on this program running time, in milliseconds.
         #[arg(long)]
         at: Option<u64>,
-        /// How to get there: cut, fade, move, stinger, a name the collection
-        /// knows, or a transition plugin's name. A cut by default.
+        /// How to get there: cut, fade, move, stinger, wipe, slide, push,
+        /// zoom, zoom-out, dip, box, a name the collection knows, or a
+        /// transition plugin's name. A cut by default.
         #[arg(long)]
         transition: Option<String>,
         /// How long the transition takes, in milliseconds. 300 by default,
@@ -54,6 +55,16 @@ pub enum Ctl {
         /// A stinger's clip: a source already in the mixer, or a file.
         #[arg(long)]
         clip: Option<String>,
+        /// Which way a wipe, slide or push travels: left, right, up or down.
+        #[arg(long)]
+        direction: Option<String>,
+        /// linear, ease-in, ease-out or ease-in-out (the default).
+        #[arg(long)]
+        easing: Option<String>,
+        /// The colour a dip goes through: black (the default), white or
+        /// #rrggbb.
+        #[arg(long)]
+        colour: Option<String>,
     },
     /// Take back to the shot that was on air before this one.
     Revert,
@@ -335,11 +346,15 @@ pub async fn run(base: &str, token: Option<&str>, cmd: Ctl) -> Result<()> {
     let api = &api;
     match cmd {
         Ctl::Status { json } => status(api, json).await?,
-        Ctl::Take { name, scene, at, transition, duration, clip } => {
+        Ctl::Take { name, scene, at, transition, duration, clip, direction, easing, colour } => {
             let transition = transition.map(|type_id| {
                 let mut params = serde_json::Map::new();
-                if let Some(clip) = clip {
-                    params.insert("clip".into(), serde_json::Value::String(clip));
+                for (key, value) in
+                    [("clip", clip), ("direction", direction), ("easing", easing), ("colour", colour)]
+                {
+                    if let Some(value) = value {
+                        params.insert(key.into(), serde_json::Value::String(value));
+                    }
                 }
                 godwinmix_protocol::requests::Transition::Full(
                     godwinmix_protocol::requests::TransitionRequest {

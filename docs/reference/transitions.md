@@ -33,12 +33,23 @@ The properties a transition may drive:
 | `xpos`, `ypos` | a compositor pad | canvas pixels |
 | `width`, `height` | a compositor pad | canvas pixels |
 | `volume` | an audiomixer pad | 0 to 10, 1 is unity |
+| `left`, `top`, `right`, `bottom` | a slot's `videocrop` (built in transitions only) | source pixels |
 
 Nothing else. `zorder` is deliberately not on the list: a transition that could
 reorder the canvas could put an item somewhere the scene document does not
-say it is.
+say it is. A built in transition says which scene is drawn on top
+(`Layering`), and the mixer moves the outgoing pads into a band of their own
+for the window: 100 and up to go under the new scene, 101000 and up to go
+over it. The next apply puts them back.
 
-## The built in four
+A plugin cannot drive a crop. The four crop properties are on the slot's own
+element rather than on a compositor pad, and a plugin is told pad names only.
+
+## The built in transitions
+
+Every one takes `params.easing`: `linear`, `ease-in` (cubic), `ease-out`
+(cubic) or `ease-in-out` (smoothstep, the default and the curve `fade` has
+always had). A name this build does not know is refused with `data.easings`.
 
 ### `cut`
 
@@ -94,6 +105,148 @@ like two transitions at once.
 The canvas stays I420. Only the clip's own pad carries alpha, which is the
 cheap half of the AYUV price 11 section 3 puts at 3.5 times I420.
 
+### `wipe`
+
+| Param | Default | What it is |
+|---|---|---|
+| `direction` | `left` | `left`, `right`, `up` or `down`: the way the edge travels, the new scene behind it |
+
+The new scene is drawn over the old and trimmed to the part of the canvas the
+edge has crossed. The trim is the slot's own `videocrop`, and the pad is moved
+and narrowed by the same amount, so the picture stays where it is and is
+revealed rather than squashed. When the new scene does not cover the whole
+canvas, the old one is trimmed to the other side of the edge too, so a gap in
+the new scene shows the canvas behind rather than the old scene through it.
+When it does cover the canvas, the old scene is left whole underneath and
+leaves on the last frame, which saves a second crop.
+
+A picture that is turned (a `rotation` of 90, 180 or 270) has its crop before
+the turn, so its axes are not the canvas's; such an item fades by how much of
+it the edge has revealed instead. So does a filtered group.
+
+### `box`
+
+| Param | Default | What it is |
+|---|---|---|
+| `x`, `y` | `0.5`, `0.5` | where the box opens from, as fractions of the canvas |
+
+A rectangle grows from the point to the whole canvas, with the new scene inside
+it, trimmed by the slot crop the way a wipe is. The old scene stays whole
+underneath and leaves on the last frame, because a crop cannot cut a hole.
+There is no circular iris, for the same reason.
+
+### `slide` and `push`
+
+| Param | Default | What it is |
+|---|---|---|
+| `direction` | `left` | the way the new scene travels |
+
+`slide` moves the new scene one canvas along the direction into place, over
+the old scene, which stays where it is and leaves on the last frame. `push`
+moves the old scene out ahead of it by the same distance. Only `xpos` or
+`ypos` is driven.
+
+### `zoom` and `zoom-out`
+
+| Param | Default | What it is |
+|---|---|---|
+| `x`, `y` | `0.5`, `0.5` | the point the scene grows out of or shrinks into |
+
+`zoom` scales every pad of the new scene about the point, from nothing to its
+place, over the old scene. `zoom-out` scales the old scene into the point over
+the new one, which is there from the first frame. A pad smaller than two
+pixels is not drawn rather than drawn as a dot.
+
+### `dip`
+
+| Param | Default | What it is |
+|---|---|---|
+| `colour` | `black` | `black`, `white` or `#rrggbb`; `color` is read too |
+
+The old scene fades out over the first half and the new one in over the
+second. What shows between them is the slate, which is already at the bottom
+of the canvas, full size and opaque. For black that is all there is to it. For
+another colour the mixer tells the slate's `videotestsrc` to draw that colour
+for the length of the dip and puts it back to black when the dip settles: a
+property write on an element that is drawing a frame anyway.
+
+### What a crop costs, and the query that had to be answered
+
+A crop that changes size every frame renegotiates the slot's caps every frame.
+Each renegotiation used to send an allocation query from the slot's flip to
+the compositor, and the compositor answers a serialized query only once the
+buffer queued ahead of it has been blended. The slot's thread waited a frame
+or more per frame and fell behind: on the first wipe the incoming slot got
+five buffers through in half a second, and the query sent as the crop settled
+back never came back at all, so that slot drew nothing again. The software
+compositor offers a sink pad no pool, so each slot's pad now answers the query
+itself (video meta, no pool) with a probe that sees only queries. A GPU
+compositor's pads are left alone, because their answer carries the context an
+upload needs.
+
+A trimmed pad is told to fill its box for the window, because the box is cut
+to the shape of the trimmed picture; on the item's own policy a crop that
+arrived a frame after its box letterboxed it. The next apply puts the item's
+policy back.
+
+### A binding that is reused
+
+`GstDirectControlBinding` remembers the last value it wrote and writes again
+only when the curve gives a different one. A binding reused by a later
+transition still remembers where the last one ended, while the property under
+it has been written by hand since. A curve that holds that same value from the
+first frame, a slide's incoming alpha at 1, was never written, and a slide
+after a wipe drew nothing. The first point of every curve is now moved by a
+millionth away from zero, which no binding can remember and no pad can show.
+
+## Item transitions
+
+An item's `enter` and `exit` (see [the scene document](scene-document.md)) are
+played by the same code as the scene transitions, aimed at one pad:
+
+| `type` | Enter | Exit |
+|---|---|---|
+| `cut` | on the next frame | gone on the next frame |
+| `fade` | alpha from nothing | alpha to nothing |
+| `slide` | from just past `edge` to its place | from its place to just past `edge` |
+| `zoom` | from nothing to its size, about its own centre | to nothing about its centre |
+| `wipe` | revealed from `edge` by its slot crop | trimmed away towards `edge` |
+
+They play when the scene on air is applied again with the item shown or
+hidden, which is what `scene.item.set {props: {visible}}` does to a scene on
+air. An item hidden that way keeps its slot until its exit has finished and is
+then hidden; an item shown that way is bound at nothing and rises from the
+first frame of its entrance, so it is never drawn in its place first. A take
+or a cut during either settles it where it stands, as a take during a scene
+transition does.
+
+With `on_take`, the item's entrance plays when a scene holding it is taken
+and its exit when a scene holding it is taken away, in place of the scene's
+transition for that item. A take that is a cut for the scene and has such an
+item becomes a window as long as the longest of them, with everything else
+changing on its first frame.
+
+## `program.transitions`
+
+Read scope. Every name a take accepts here, in the order a take resolves them:
+
+```json
+{"transitions": [
+   {"name": "fade", "origin": "built-in", "type": "fade", "params": ["easing"]},
+   {"name": "wipe", "origin": "built-in", "type": "wipe", "params": ["direction", "easing"]},
+   {"name": "house", "origin": "collection", "type": "fade", "params": ["easing"], "duration_ms": 400}],
+ "easings": ["linear", "ease-in", "ease-out", "ease-in-out"],
+ "directions": ["left", "right", "up", "down"],
+ "item_transitions": ["cut", "fade", "slide", "zoom", "wipe"],
+ "edges": ["left", "right", "top", "bottom"],
+ "max_duration_ms": 10000,
+ "default_duration_ms": 300}
+```
+
+A running plugin whose name is a built in one replaces it in the list, as it
+does in a take. Over MCP it is `list_transitions`, found through
+`search_tools` rather than in the hot list.
+
 ## `program.take`
 
 ```json
@@ -112,14 +265,19 @@ cheap half of the AYUV price 11 section 3 puts at 3.5 times I420.
 | absent, `"cut"`, or any `duration_ms: 0` | a cut |
 
 `params` is the transition's own: a stinger reads `clip`, `cut_at_ms` and
-`luma`; a plugin reads whatever it documents. The three fields are the three a
+`luma`, a wipe `direction`, a dip `colour`, every built in one `easing`; a
+plugin reads whatever it documents. The three fields are the three a
 collection stores a named transition under, so a transition written into a
 scene collection and one typed into a call are the same thing.
 
-A name a collection knows is resolved first, then the built in four, then the
-transition plugins the supervisor has running. A name nobody knows is
-`-32602`, with `data.transitions` listing every name this core would have
-accepted.
+A name a collection knows is resolved first, then a transition plugin the
+supervisor has running, then the built in ones; a plugin named like a built in
+one (`plugins/wipe` is called `wipe`) is the one that runs. A name nobody knows
+is `-32602`, with `data.transitions` listing every name this core would have
+accepted. A built in transition's params are checked the same way: a
+direction, an easing or a colour this build does not have is `-32602` with
+`data.directions`, `data.easings` or `data.colours`, and a zoom point outside
+0 to 1 with `data.range`.
 
 **Ceiling.** Ten seconds. Both scenes are on the canvas for the whole of a
 transition.
@@ -255,6 +413,11 @@ got to from a probe on its own src pad, adds one frame (the frame the probe saw
 has already been blended), and starts the window there.
 
 ## What it costs
+
+Each transition at 1280x720, against the same takes as cuts, is in
+[the how to page](../how-to/transitions.md#what-it-costs): a slide and a push
+cost under 4 percent more than a cut, a dip and a fade 18 and 29, a wipe 58,
+a zoom 65 and a box 84, and none of them cost the programme a frame.
 
 Both scenes are on the canvas for the length of the transition, so slot
 pressure doubles and the pool grows if it has to. Measured on the software
