@@ -2678,7 +2678,7 @@ class TemplateField(TypedDict, total=False):
     type: FieldType
 
 class TemplateFields(TypedDict, total=False):
-    """The answer to `template.fields`."""
+    """The answer to `source.fields`."""
 
     fields: List[FieldValue]
     id: str
@@ -2688,7 +2688,7 @@ class TemplateFields(TypedDict, total=False):
     # The template's name.
 
 class TemplateFieldsRequest(TypedDict, total=False):
-    """`template.fields`: the fields of a running graphic."""
+    """`source.fields`: the fields of a running graphic."""
 
     id: str
     # The source id of a `template/source`.
@@ -3297,6 +3297,7 @@ METHODS = (
     {"name": "source.add", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/sources"), "summary": 'Add a source while the mixer runs. Answers with the id it got and the whole source record.'},
     {"name": "source.audio.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/sources/{id}/audio"), "summary": "Move a source's audio: the fader, the mute, and for a superimposed page the balance between its own sound and the videos under it."},
     {"name": "source.duplicate", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/sources/{id}/duplicate"), "summary": 'Add another source like one the mixer has: the same address and settings under a new id. A client cannot do this with source.add, because the address it is shown has everything after the host cut off.'},
+    {"name": "source.fields", "scope": "read", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/sources/{id}/fields"), "summary": "A running graphic's fields: each one's label, type, default and what it shows now."},
     {"name": "source.get", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/sources/{id}"), "summary": 'One source. Refused with the ids that exist when there is no such source.'},
     {"name": "source.group", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/sources/{id}/group"), "summary": 'Put sources in a tray folder. A tag for finding things, not a group on the canvas.'},
     {"name": "source.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/sources"), "summary": 'Every source, with its state, whether it has video and audio, and its fader.'},
@@ -3309,7 +3310,6 @@ METHODS = (
     {"name": "task.cancel", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/tasks/{id}/cancel"), "summary": 'Ask a piece of long running work to stop. Cooperative: the answer says the request landed, not that the work has stopped yet.'},
     {"name": "task.get", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/tasks/{id}"), "summary": 'How a piece of long running work is getting on, and its answer once it has one.'},
     {"name": "task.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/tasks"), "summary": 'Every background job this core knows about, newest first.'},
-    {"name": "template.fields", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/sources/{id}/fields"), "summary": "A running graphic's fields: each one's label, type, default and what it shows now."},
     {"name": "template.get", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/templates/{id}"), "summary": 'One template, with its SVG as written.'},
     {"name": "template.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/templates"), "summary": 'The graphic templates: the built in pack and the SVG templates in the media library, each with its fields.'},
     {"name": "template.save", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/templates/{id}/save"), "summary": 'Check an SVG template and write it into the media library.'},
@@ -5533,6 +5533,15 @@ class GeneratedMethods:
             params["new_id"] = new_id
         return await self._call("source.duplicate", params)
 
+    async def source_fields(
+        self,
+        id: str,
+    ) -> TemplateFields:
+        """A running graphic's fields: each one's label, type, default and what it shows now."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        return await self._call("source.fields", params)
+
     async def source_get(
         self,
         id: str,
@@ -5663,15 +5672,6 @@ class GeneratedMethods:
         """Every background job this core knows about, newest first."""
         params: Dict[str, Any] = {}
         return await self._call("task.list", params)
-
-    async def template_fields(
-        self,
-        id: str,
-    ) -> TemplateFields:
-        """A running graphic's fields: each one's label, type, default and what it shows now."""
-        params: Dict[str, Any] = {}
-        params["id"] = id
-        return await self._call("template.fields", params)
 
     async def template_get(
         self,

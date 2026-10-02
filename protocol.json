@@ -9556,7 +9556,7 @@
       "type": "object"
     },
     "TemplateFields": {
-      "description": "The answer to `template.fields`.",
+      "description": "The answer to `source.fields`.",
       "properties": {
         "fields": {
           "items": {
@@ -9586,7 +9586,7 @@
     },
     "TemplateFieldsRequest": {
       "additionalProperties": false,
-      "description": "`template.fields`: the fields of a running graphic.",
+      "description": "`source.fields`: the fields of a running graphic.",
       "properties": {
         "id": {
           "description": "The source id of a `template/source`.",
@@ -11646,7 +11646,7 @@
                   "boolean"
                 ]
               },
-              "description": "The template's field values by name, such as {\"headline\": \"Polls close at ten\"}. A field left out shows the station's brand colour (accent, text, panel) or the template's default. Change one on air with source.set and params.fields.<name>; template.list and template.fields name every field.",
+              "description": "The template's field values by name, such as {\"headline\": \"Polls close at ten\"}. A field left out shows the station's brand colour (accent, text, panel) or the template's default. Change one on air with source.set and params.fields.<name>; template.list and source.fields name every field.",
               "type": "object"
             }
           },
@@ -15335,6 +15335,32 @@
     {
       "destructive": false,
       "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": true,
+        "tool": "source_fields"
+      },
+      "mutating": false,
+      "name": "source.fields",
+      "params": {
+        "$ref": "#/$defs/TemplateFieldsRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/sources/{id}/fields"
+      },
+      "result": {
+        "$ref": "#/$defs/TemplateFields"
+      },
+      "scope": "read",
+      "since": "1",
+      "summary": "A running graphic's fields: each one's label, type, default and what it shows now."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
       "mutating": false,
       "name": "source.get",
       "params": {
@@ -15614,32 +15640,6 @@
       "scope": "read",
       "since": "1",
       "summary": "Every background job this core knows about, newest first."
-    },
-    {
-      "destructive": false,
-      "idempotent": true,
-      "mcp": {
-        "destructiveHint": false,
-        "idempotentHint": true,
-        "profile": "search",
-        "readOnlyHint": true,
-        "tool": "template_fields"
-      },
-      "mutating": false,
-      "name": "template.fields",
-      "params": {
-        "$ref": "#/$defs/TemplateFieldsRequest"
-      },
-      "rest": {
-        "method": "GET",
-        "path": "/api/v1/sources/{id}/fields"
-      },
-      "result": {
-        "$ref": "#/$defs/TemplateFields"
-      },
-      "scope": "read",
-      "since": "1",
-      "summary": "A running graphic's fields: each one's label, type, default and what it shows now."
     },
     {
       "destructive": false,

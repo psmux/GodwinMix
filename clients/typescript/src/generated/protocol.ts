@@ -2419,7 +2419,7 @@ export interface TemplateField {
   type: FieldType;
 }
 
-/** The answer to `template.fields`. */
+/** The answer to `source.fields`. */
 export interface TemplateFields {
   fields: FieldValue[];
   id: string;
@@ -2427,7 +2427,7 @@ export interface TemplateFields {
   template: string;
 }
 
-/** `template.fields`: the fields of a running graphic. */
+/** `source.fields`: the fields of a running graphic. */
 export interface TemplateFieldsRequest {
   id: string;
 }
@@ -2901,6 +2901,7 @@ export interface MethodParams {
   "source.add": AddSourceRequest;
   "source.audio.set": AudioSetParams;
   "source.duplicate": DuplicateSourceRequest;
+  "source.fields": TemplateFieldsRequest;
   "source.get": IdRequest;
   "source.group": GroupSourcesRequest;
   "source.list": Record<string, never>;
@@ -2913,7 +2914,6 @@ export interface MethodParams {
   "task.cancel": TaskRequest;
   "task.get": TaskRequest;
   "task.list": Record<string, never>;
-  "template.fields": TemplateFieldsRequest;
   "template.get": TemplateGetRequest;
   "template.list": Record<string, never>;
   "template.save": TemplateSaveRequest;
@@ -3080,6 +3080,7 @@ export interface MethodResults {
   "source.add": SourceStatus;
   "source.audio.set": SourceAudioState;
   "source.duplicate": SourceStatus;
+  "source.fields": TemplateFields;
   "source.get": SourceStatus;
   "source.group": Record<string, unknown>;
   "source.list": SourceStatus[];
@@ -3092,7 +3093,6 @@ export interface MethodResults {
   "task.cancel": Record<string, unknown>;
   "task.get": TaskView;
   "task.list": TaskView[];
-  "template.fields": TemplateFields;
   "template.get": TemplateDoc;
   "template.list": TemplateList;
   "template.save": TemplateSaved;
@@ -3306,6 +3306,7 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "source.add", summary: "Add a source while the mixer runs. Answers with the id it got and the whole source record.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/sources" } },
   { name: "source.audio.set", summary: "Move a source's audio: the fader, the mute, and for a superimposed page the balance between its own sound and the videos under it.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/sources/{id}/audio" } },
   { name: "source.duplicate", summary: "Add another source like one the mixer has: the same address and settings under a new id. A client cannot do this with source.add, because the address it is shown has everything after the host cut off.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/sources/{id}/duplicate" } },
+  { name: "source.fields", summary: "A running graphic's fields: each one's label, type, default and what it shows now.", scope: "read", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/sources/{id}/fields" } },
   { name: "source.get", summary: "One source. Refused with the ids that exist when there is no such source.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/sources/{id}" } },
   { name: "source.group", summary: "Put sources in a tray folder. A tag for finding things, not a group on the canvas.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/sources/{id}/group" } },
   { name: "source.list", summary: "Every source, with its state, whether it has video and audio, and its fader.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/sources" } },
@@ -3318,7 +3319,6 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "task.cancel", summary: "Ask a piece of long running work to stop. Cooperative: the answer says the request landed, not that the work has stopped yet.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/tasks/{id}/cancel" } },
   { name: "task.get", summary: "How a piece of long running work is getting on, and its answer once it has one.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/tasks/{id}" } },
   { name: "task.list", summary: "Every background job this core knows about, newest first.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/tasks" } },
-  { name: "template.fields", summary: "A running graphic's fields: each one's label, type, default and what it shows now.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/sources/{id}/fields" } },
   { name: "template.get", summary: "One template, with its SVG as written.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/templates/{id}" } },
   { name: "template.list", summary: "The graphic templates: the built in pack and the SVG templates in the media library, each with its fields.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/templates" } },
   { name: "template.save", summary: "Check an SVG template and write it into the media library.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/templates/{id}/save" } },
@@ -4165,6 +4165,11 @@ export class GeneratedMethods {
     return this._call("source.duplicate", params as unknown as Record<string, unknown>) as Promise<SourceStatus>;
   }
 
+  /** A running graphic's fields: each one's label, type, default and what it shows now. */
+  sourceFields(params: TemplateFieldsRequest): Promise<TemplateFields> {
+    return this._call("source.fields", params as unknown as Record<string, unknown>) as Promise<TemplateFields>;
+  }
+
   /** One source. Refused with the ids that exist when there is no such source. */
   sourceGet(params: IdRequest): Promise<SourceStatus> {
     return this._call("source.get", params as unknown as Record<string, unknown>) as Promise<SourceStatus>;
@@ -4223,11 +4228,6 @@ export class GeneratedMethods {
   /** Every background job this core knows about, newest first. */
   taskList(): Promise<TaskView[]> {
     return this._call("task.list", {}) as Promise<TaskView[]>;
-  }
-
-  /** A running graphic's fields: each one's label, type, default and what it shows now. */
-  templateFields(params: TemplateFieldsRequest): Promise<TemplateFields> {
-    return this._call("template.fields", params as unknown as Record<string, unknown>) as Promise<TemplateFields>;
   }
 
   /** One template, with its SVG as written. */
