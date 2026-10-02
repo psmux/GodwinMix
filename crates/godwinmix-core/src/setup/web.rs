@@ -8,6 +8,8 @@
 //!   <exe dir>/godwinmix-browser.app                      the same, on macOS
 //!   <exe dir>/browser/godwinmix-browser[.exe]            a packaged folder with its libraries
 //!   <exe dir>/../Resources/godwinmix-browser.app         inside a macOS app bundle
+//!   <exe dir>/../Resources/browser/godwinmix-browser.app the desktop app's `browser` resource
+//!   <exe dir>/../lib/GodwinMix/browser/godwinmix-browser the desktop app's .deb
 //!   <exe dir>/../lib/godwinmix/browser/godwinmix-browser an install under a prefix
 //!   <checkout>/browser/target/release/...                what the checkout's own build makes
 //!   PATH
@@ -107,13 +109,17 @@ fn packaged_places(exe_dir: &Path) -> Vec<PathBuf> {
         return vec![
             bundle_program(exe_dir),
             bundle_program(&prefix.join("Resources")),
+            bundle_program(&prefix.join("Resources").join("browser")),
             bundle_program(&prefix.join("lib").join("godwinmix")),
         ];
     }
+    // Tauri puts a resource beside the executable on Windows and under
+    // `/usr/lib/<product name>` in a .deb.
     vec![
         exe_dir.join(exe_name()),
         exe_dir.join("browser").join(exe_name()),
         prefix.join("lib").join("godwinmix").join("browser").join(exe_name()),
+        prefix.join("lib").join("GodwinMix").join("browser").join(exe_name()),
     ]
 }
 

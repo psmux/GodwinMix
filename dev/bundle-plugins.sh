@@ -8,7 +8,7 @@
 # `gmx plugin add camera`, which is the one thing a desktop app exists to
 # avoid.
 #
-# This builds the three of them and stages each the way the core expects to
+# This builds them and stages each the way the core expects to
 # find an installed plugin:
 #
 #   <name>/<version>/gmx-plugin.toml
@@ -48,11 +48,13 @@ case "$(uname -s)" in
     *) echo "unknown platform: $(uname -s)" >&2; exit 1 ;;
 esac
 
-# The plugins that make the app usable with no terminal. Not every plugin in
+# The plugins that make the app usable with no terminal: the three devices,
+# and ingest, which takes a phone, OBS or this browser's camera in and runs
+# the RTMP channels the page offers on its first screen. Not every plugin in
 # the tree: NDI needs a runtime that cannot be redistributed, SRT and WHIP are
 # outputs nobody needs on a first launch, and every megabyte here comes out of
 # the installer budget.
-ALL=(camera screen audio-device)
+ALL=(camera screen audio-device ingest)
 
 OUT="$REPO/tauri-app/plugins/$PLATFORM"
 BUILD=1

@@ -63,8 +63,11 @@ fn a_package_is_looked_at_where_each_platform_puts_it() {
     let places = packaged_places(exe_dir);
     if cfg!(target_os = "macos") {
         assert!(places.iter().any(|p| p.starts_with("/opt/gmx/Resources/godwinmix-browser.app")));
+        // Where the desktop app's `browser` resource lands.
+        assert!(places.iter().any(|p| p.starts_with("/opt/gmx/Resources/browser/godwinmix-browser.app")));
     } else {
         assert!(places.iter().any(|p| p.starts_with("/opt/gmx/bin/browser")));
+        assert!(places.iter().any(|p| p.starts_with("/opt/gmx/lib/GodwinMix/browser")));
     }
 }
 

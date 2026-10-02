@@ -241,6 +241,16 @@ jobs:
         shell: bash
         run: ./dev/bundle-plugins.sh --budget-mb "$PLUGINS_BUDGET_MB"
 
+      # The browser renderer, so a web page works in the installed app with
+      # nothing built on the operator's machine. CEF is large: not on Windows
+      # yet, where the installer budget above has no room for it.
+      - name: The browser renderer, inside the app
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          if [ "${{ runner.os }}" = macOS ]; then brew install cmake ninja; else sudo apt-get install -y cmake ninja-build; fi
+          ./dev/bundle-browser.sh
+
       # The trimmed runtime, which tauri.conf.json lists under
       # bundle.resources. Without this step the installers go out expecting
       # the operator to install a 527 MB GStreamer first, which is the thing
