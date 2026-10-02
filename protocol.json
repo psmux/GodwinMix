@@ -14125,6 +14125,13 @@
     {
       "destructive": false,
       "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "set_scene_item_filter"
+      },
       "mutating": true,
       "name": "scene.item.filter.set",
       "params": {
@@ -14690,10 +14697,10 @@
     },
     {
       "destructive": false,
-      "idempotent": true,
+      "idempotent": false,
       "mcp": {
         "destructiveHint": false,
-        "idempotentHint": true,
+        "idempotentHint": false,
         "profile": "search",
         "readOnlyHint": false,
         "tool": "create_virtual_set"
