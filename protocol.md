@@ -2330,6 +2330,8 @@ MCP tool `set_scene_params` in the `search` profile: readOnlyHint false, destruc
 
 A still of the armed scene as base64 JPEG, the floor every client has.
 
+MCP tool `preview_frame` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+
 ```json
 {
   "params": {

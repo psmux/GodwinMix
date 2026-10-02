@@ -92,6 +92,16 @@ pub struct AddItemRequest {
     /// already there, so a drop on a scene never needs a dialog.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub transform: Option<Value>,
+    /// `false` adds it hidden, so a graphic can be put on a scene that is on
+    /// air and shown later with its `enter`. Left out, it is shown.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub visible: Option<bool>,
+    /// How it comes in and goes out when shown or hidden on air:
+    /// `{type, edge, duration_ms, easing, on_take}`, as on `scene.item.set`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub enter: Option<Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exit: Option<Value>,
     /// A draft id from `scene.edit.begin`, to change a working copy instead of
     /// the live document.
     #[serde(default, skip_serializing_if = "Option::is_none")]

@@ -9,6 +9,7 @@ use super::{answered, client, scene_error, server};
 use crate::control::call::Call;
 use crate::control::methods::{body, handler};
 use godwinmix_core::scene::document::{Content, Item, Scene, Transform};
+use godwinmix_core::scene::motion::ItemTransition;
 use godwinmix_core::scene::server::{find, ops, Outcome};
 use godwinmix_core::scene::Collection;
 use godwinmix_protocol::error::{ErrorCode, RpcError};
@@ -36,7 +37,8 @@ pub fn register(reg: &mut Registry<Call>) {
              {\"source\": \"cam1\"} for a source. Leave `transform` out and it is placed in \
              the next free cell of a grid over what is already there. Name it something a \
              person would say, like \"lower third\", because every other command takes that \
-             name.",
+             name. `visible: false` with an `enter` and an `exit` puts a graphic on a scene \
+             that is on air without showing it; show it with `set_scene_item`.",
         ),
     );
 
@@ -271,6 +273,12 @@ async fn add(call: Call, params: Value) -> Result<Value, RpcError> {
         })?),
         None => None,
     };
+    let motion = |v: &Option<Value>, which: &str| -> Result<Option<ItemTransition>, RpcError> {
+        v.as_ref().map(|v| serde_json::from_value(v.clone())).transpose().map_err(|e| {
+            RpcError::invalid_params(format!("`{which}` is {{type, edge, duration_ms, easing, on_take}}: {e}"))
+        })
+    };
+    let (enter, exit, visible) = (motion(&req.enter, "enter")?, motion(&req.exit, "exit")?, req.visible);
     let added = std::sync::Arc::new(std::sync::Mutex::new(None));
     let record = added.clone();
     let answer = apply(&call, &req.scene, req.draft.as_deref(), None, None, None, move |doc, i| {
@@ -285,6 +293,8 @@ async fn add(call: Call, params: Value) -> Result<Value, RpcError> {
         item.transform = transform
             .or_else(|| graphic_frame(&content, doc))
             .unwrap_or_else(|| ops::next_free_cell(doc, &doc.scenes[i]));
+        item.visible = visible.unwrap_or(item.visible);
+        (item.enter, item.exit) = (enter.clone(), exit.clone());
         if let Content::Graphic { graphic, .. } = &item.content {
             *record.lock().expect("a fresh mutex") = Some((graphic.clone(), item.id));
         }

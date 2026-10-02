@@ -94,11 +94,16 @@ class AddItemRequest(TypedDict, total=False):
     # What the item shows: `{"source": "cam1"}`, `{"ref": "<scene id>"}` or `{"graphic": "plugin/id"}`.
     draft: Optional[str]
     # A draft id from `scene.edit.begin`, to change a working copy instead of the live document.
+    enter: Any
+    # How it comes in and goes out when shown or hidden on air: `{type, edge, duration_ms, easing, on_take}`, as on `scene.item.set`.
+    exit: Any
     name: Optional[str]
     # What to call it. Left out, a source item is named after its source, because a model reasons about words.
     scene: str
     transform: Any
     # Where it goes. Left out, the next free cell of a grid over what is already there, so a drop on a scene never needs a dialog.
+    visible: Optional[bool]
+    # `false` adds it hidden, so a graphic can be put on a scene that is on air and shown later with its `enter`. Left out, it is shown.
 
 class AddOutputRequest(TypedDict, total=False):
     """`output.add`. The id and the URL are the whole of it for an RTMP destination; anything else a kind understands rides in `params`."""
@@ -4605,8 +4610,11 @@ class GeneratedMethods:
         scene: str,
         *,
         draft: Optional[str] = None,
+        enter: Any = None,
+        exit: Any = None,
         name: Optional[str] = None,
         transform: Any = None,
+        visible: Optional[bool] = None,
     ) -> Dict[str, Any]:
         """Put something on a scene's canvas. With no transform it lands in the next free cell, so a drop never needs a dialog."""
         params: Dict[str, Any] = {}
@@ -4614,10 +4622,16 @@ class GeneratedMethods:
         params["scene"] = scene
         if draft is not None:
             params["draft"] = draft
+        if enter is not None:
+            params["enter"] = enter
+        if exit is not None:
+            params["exit"] = exit
         if name is not None:
             params["name"] = name
         if transform is not None:
             params["transform"] = transform
+        if visible is not None:
+            params["visible"] = visible
         return await self._call("scene.item.add", params)
 
     async def scene_item_align(
