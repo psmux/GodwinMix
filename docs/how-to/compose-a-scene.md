@@ -145,6 +145,13 @@ whatever the plugin behind it offers, then its filters. Filters hang on the
 item and not on the source, so a camera keyed in this scene is not keyed in
 every other one.
 
+A chroma key shows its controls under its name: the key colour with **Find**
+and **Pick**, similarity, edge softness, spill, feather and the four edges of
+the garbage matte. They apply on air as you drag. The composer's own picture
+does not run item filters, so it shows the camera unkeyed; the programme shows
+the key. A presenter in a designed studio is one step with **Virtual set** in
+the Scenes panel: see [put a presenter in a virtual set](virtual-set.md).
+
 **Enter** and **Exit** are the item's own transitions: None, Fade, Slide, Zoom
 or Wipe, with the edge a slide or a wipe uses, a length and an easing. **Show
 on air** and **Hide on air** under them show or hide the item on the scene
