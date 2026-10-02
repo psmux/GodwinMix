@@ -11,6 +11,8 @@
 //! Nothing in here touches GStreamer. `transport.rs` builds the media end and
 //! the kinds in `source.rs`, `output.rs` and `filter.rs` put the two together.
 
+mod exit;
+
 use crate::input::{ExecChild, ExecSpec, ExecStdout, ExecStdoutHeld, StderrReader};
 use anyhow::{Context, Result};
 use godwinmix_host::channel::{read_line, Channel, LineError};
@@ -393,7 +395,9 @@ impl Sidecar {
             while Instant::now() < deadline {
                 let gone = match child.as_mut() {
                     None => true,
-                    Some(held) => held.finished(),
+                    // Asked without collecting it, so the drop below still
+                    // signals its process group and a helper it left goes too.
+                    Some(held) => held.exited(),
                 };
                 if gone {
                     break;

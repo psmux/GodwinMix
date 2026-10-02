@@ -39,9 +39,18 @@ exclusive `flock` on it is the one that opens the device (`Claim`). The kernel
 lets go of it when the holder's process dies, however it dies. The files stay
 after the owner has gone; they are empty and cost nothing.
 
-A socket path longer than 103 bytes cannot be bound on macOS. A name that would
-make one is refused, naming `GODWINMIX_BUS_DIR` as the way to a shorter
-directory.
+A socket path longer than 103 bytes cannot be bound on macOS (107 on Linux),
+and a long `GODWINMIX_HOME` makes one easily. When the path in the registry
+would be too long, the socket is bound and found through a short symbolic link
+to the registry instead: `/tmp/gmx-<uid>/<16 hex digits>`, or the same under
+`$XDG_RUNTIME_DIR` on Linux, where the digits are a hash of the registry's
+path, so every process finds the same link without being told. The socket
+itself still lands in the registry, beside its lock file, and the listing and
+the claims are unchanged. `gmx-<uid>` is made mode 0700, and one that belongs
+to somebody else or that others can write to is refused rather than used. A
+name too long even for the short address is refused, naming
+`GODWINMIX_BUS_DIR` as the way to a shorter directory. Windows has no frame bus
+transport yet, so none of this applies there.
 
 An owner that finds a socket for its name connects to it first. If something
 answers, the name is taken (`name-taken`). If nothing does, the socket was left

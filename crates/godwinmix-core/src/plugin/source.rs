@@ -46,6 +46,14 @@ pub trait Source: Send {
     /// contributes. Unknown methods answer with an error naming the ones this
     /// source does take.
     fn call(&mut self, method: &str, params: Value) -> Result<Value>;
+
+    /// Whether a process behind this source has exited without being asked
+    /// to, and why. Answers once per exit. Polled by the mixer's tick, so it
+    /// must not wait on anything: a kind with no process of its own keeps
+    /// this default.
+    fn exited(&mut self) -> Option<String> {
+        None
+    }
 }
 
 /// The default answer for a source with nothing to say.

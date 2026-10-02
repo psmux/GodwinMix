@@ -95,10 +95,13 @@ impl ChannelGate {
     pub fn let_in(&self, via: Protocol, admit: Admit, peer: &str, kick: Kick) -> Result<Box<dyn Inlet>, String> {
         let publication = self
             .hub
-            .publish_via(&admit.app, &admit.stream, peer, Some(admit.key.clone()), via.name())
+            .publish_with(&admit.app, &admit.stream, peer, Some(admit.key.clone()), via.name(), Some(kick.clone()))
             .map_err(|why| self.refuse(&admit.channel, &admit.stream, peer, why))?;
         if let Some(r) = &self.reporter {
             let how = via.name();
+            if let Some(old) = publication.took_over() {
+                r.info(format!("{}/{}: {old} had sent nothing for {} s, so {peer} took the name over", admit.app, admit.stream, crate::hub::STALE.as_secs()));
+            }
             r.info(format!("{}/{} from {peer} is live over {how} on key {}", admit.app, admit.stream, admit.key));
         }
         let parts = self.clone_parts();

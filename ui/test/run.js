@@ -1091,7 +1091,7 @@ async function addSourcePickerSuite() {
 
   test("a marketplace decides what plugin.add is sent, and there is a fallback", () => {
     eq(listed, "./plugins/camera");
-    eq(unlisted, "psmux/godwinmix", "a mixer that knows no marketplace still has somewhere to go");
+    eq(unlisted, "camera", "a mixer that knows no marketplace asks for the plugin that ships with it");
   });
 
   // ------------------------------------------------------------ the modal

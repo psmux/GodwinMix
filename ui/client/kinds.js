@@ -499,8 +499,8 @@ export function addRequestFor(candidate) {
  * What to pass `plugin.add` for a first party plugin.
  *
  * The bare name is the form to prefer, and a marketplace answers with exactly
- * what to send. A mixer that knows no marketplace falls back to the
- * repository the first party plugins live in.
+ * what to send. A mixer that knows no marketplace is sent the bare name, which
+ * plugin.add finds among the plugins shipped with the mixer.
  */
 export async function pluginSourceFor(client, name) {
   try {
@@ -510,5 +510,9 @@ export async function pluginSourceFor(client, name) {
   } catch {
     /* no marketplace configured, or no network to reach one */
   }
-  return "psmux/godwinmix";
+  // The bare name. plugin.add looks for a plugin of that name shipped with
+  // the mixer first, beside its binary or in the checkout it was built in,
+  // and only then in the marketplaces, so this installs the first party
+  // plugins with no marketplace and no network.
+  return name;
 }
