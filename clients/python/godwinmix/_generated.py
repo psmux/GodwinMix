@@ -278,6 +278,57 @@ class BindRequest(TypedDict, total=False):
     # A geometry path such as `frame.w` or `position.x`.
     scene: str
 
+class BindingAddRequest(TypedDict, total=False):
+    """`feed.binding.add`: the fields of [`BindingSpec`], with anything else refused."""
+
+    feed: str
+    # The feed it reads.
+    id: Optional[str]
+    # A slug. Never changes. Made from the target when absent.
+    join: Optional[str]
+    limit: Optional[int]
+    paused: bool
+    select: str
+    # A path into the fetched document. See [`BindingSpec`].
+    template: Optional[str]
+    to: BindingTarget
+
+class BindingSetRequest(TypedDict, total=False):
+    """`feed.binding.set`: only what is named changes."""
+
+    id: str
+    join: Optional[str]
+    # An empty string takes the join away.
+    limit: Optional[int]
+    # 0 takes the limit away.
+    select: Optional[str]
+    template: Optional[str]
+    # An empty string takes the template away.
+    to: Union[BindingTarget, None]
+
+class BindingStatus(TypedDict, total=False):
+    """A binding with what it last wrote."""
+
+    feed: str
+    # The feed it reads.
+    id: str
+    # A slug. Never changes.
+    join: Optional[str]
+    # For a list: join it into one string with this between the elements.
+    last_error: Optional[str]
+    last_write: Optional[str]
+    limit: Optional[int]
+    # For a list: keep the first this many.
+    paused: bool
+    select: str
+    # A path into the fetched document: `items[].title`, `data.home.score`, `rows[0].Name`, or a JSON pointer starting `/`. Empty is the whole document. `[]` takes every element of a list.
+    template: Optional[str]
+    # Words with `{path}` holes filled from what `select` picked (from each element, for a list): `{home} {home_score} : {away_score} {away}`.
+    to: BindingTarget
+    value: Any
+    writes: int
+    # Writes since the core started. A feed that has not changed adds none.
+
 class BulkPlan(TypedDict, total=False):
     """What a batch costs, priced by the governor without taking anything."""
 
@@ -848,6 +899,111 @@ class Ext(TypedDict, total=False):
     # `event/tally`.
     telemetry: Union[TelemetryExt, None]
     # `event/telemetry`: a line of numbers per tick, at 1 to 10 per second. This is what turns the probes on; nothing measures until it is here.
+
+class FeedAddRequest(TypedDict, total=False):
+    """`feed.add`: the fields of [`FeedSpec`], with anything else refused."""
+
+    address: str
+    # `http://`, `https://`, `ws://` or `wss://`. Nothing else is fetched.
+    format: FeedFormat
+    headers: Dict[str, Any]
+    # Sent with every request, for an API key. Sealed once stored.
+    id: str
+    # A slug: lower case letters, digits and dashes. Never changes.
+    interval_s: Optional[float]
+    # Seconds between fetches of a polled feed. At least 5; 30 when absent.
+    paused: bool
+    timeout_s: Optional[float]
+    # Seconds one fetch may take. 10 when absent.
+
+class FeedIdRequest(TypedDict, total=False):
+    """`feed.remove` and `feed.binding.remove`."""
+
+    id: str
+
+class FeedList(TypedDict, total=False):
+    """`feed.list`."""
+
+    bindings: List[BindingStatus]
+    feeds: List[FeedStatus]
+
+class FeedSetRequest(TypedDict, total=False):
+    """`feed.set`: only what is named changes."""
+
+    address: Optional[str]
+    format: Union[FeedFormat, None]
+    headers: Optional[Dict[str, Any]]
+    # Replaces the headers. A value of `"__secret__"` keeps what is stored.
+    id: str
+    interval_s: Optional[float]
+    timeout_s: Optional[float]
+
+class FeedStatus(TypedDict, total=False):
+    """A feed with what it has been doing."""
+
+    address: str
+    # `http://`, `https://`, `ws://` or `wss://`. Nothing else is fetched.
+    bytes: int
+    # Size of the last body read, in bytes.
+    failures: int
+    # Attempts in a row that failed.
+    fetches: int
+    # Fetches or messages read since the core started.
+    format: FeedFormat
+    headers: Dict[str, Any]
+    # Sent with every request, for an API key. Sealed once stored: read back as `"__secret__"`, and `"__secret__"` written back keeps it.
+    id: str
+    # A slug: lower case letters, digits and dashes. Never changes.
+    interval_s: Optional[float]
+    # Seconds between fetches of a polled feed. At least 5; 30 when absent. Not used by a websocket or an event stream, which push.
+    kind: str
+    # `polled`, `websocket` or `sse`.
+    last_change: Optional[str]
+    # When what was read last differed from what came before.
+    last_error: Optional[str]
+    last_fetch: Optional[str]
+    # When something was last read, RFC 3339.
+    not_modified: int
+    # Fetches the server answered `304 Not Modified`.
+    paused: bool
+    # Stopped by `feed.pause`: nothing is fetched and nothing is written.
+    state: FeedState
+    timeout_s: Optional[float]
+    # Seconds one fetch may take before it counts as failed. 10 when absent.
+
+class FeedTestRequest(TypedDict, total=False):
+    """`feed.test`: fetch once and show what a selection picks. Give `id` for a feed that exists, or `address` (with `format`, `headers` and `timeout_s` if it needs them) for one that does not yet. Nothing is stored and nothing is written."""
+
+    address: Optional[str]
+    format: Union[FeedFormat, None]
+    fresh: bool
+    # Fetch again even when the feed has a document already.
+    headers: Dict[str, Any]
+    id: Optional[str]
+    join: Optional[str]
+    limit: Optional[int]
+    select: str
+    # A path to try. See [`BindingSpec`].
+    template: Optional[str]
+    timeout_s: Optional[float]
+
+class FeedTestResult(TypedDict, total=False):
+    """What `feed.test` found."""
+
+    bytes: int
+    format: FeedFormat
+    # The format it was read as.
+    keys: List[str]
+    # The keys at the top of the document.
+    paths: List[PathExample]
+    # Every path in the document down to a few levels, with `[]` for a list, each with an example value: the paths `select` takes.
+    preview: Any
+    # The document, with long lists cut to their first few elements and long strings shortened, for a person or an agent to read paths from.
+    selected: Any
+    # What `select` picked, when one was given.
+    took_ms: int
+    value: Any
+    # What a binding with this selection would write.
 
 class Filter(TypedDict, total=False):
     """One filter in an item's chain."""
@@ -1624,6 +1780,12 @@ class PathEntry(TypedDict, total=False):
     writable: bool
     # Whether the mixer can write into it.
 
+class PathExample(TypedDict, total=False):
+    """One path `select` would take, with what it picks."""
+
+    example: Any
+    path: str
+
 class PathListRequest(TypedDict, total=False):
     path: Optional[str]
     # The folder to list. Absent, empty or `~` is the mixer's home folder; a relative path is taken from there.
@@ -1649,6 +1811,13 @@ class PathRoot(TypedDict, total=False):
     label: str
     # `Home`, `Media folder` or `Config folder`.
     path: str
+
+class PauseRequest(TypedDict, total=False):
+    """`feed.pause` and `feed.binding.pause`."""
+
+    id: str
+    paused: bool
+    # False starts it again. True when absent.
 
 class PipelineDot(TypedDict, total=False):
     """What `pipeline.dot` answers with on `/rpc`. The REST route serves the same graph as `text/vnd.graphviz`, so `gmx dot | dot -Tsvg` needs no unwrapping."""
@@ -2915,6 +3084,22 @@ class TelemetryEvent(TypedDict, total=False):
     ts: int
     # milliseconds since the Unix epoch
 
+class FeedFailedEvent(TypedDict, total=False):
+    binding: Optional[str]
+    # The binding, when it was a write that failed.
+    error: str
+    # What went wrong and what to do about it. Never carries a header value.
+    failures: int
+    id: str
+    # The feed.
+
+class FeedRecoveredEvent(TypedDict, total=False):
+    binding: Optional[str]
+    # The binding, when it was a write that failed.
+    failures: int
+    id: str
+    # The feed.
+
 # What pressing the button does.
 ActionKind = Literal['set-config', 'install-plugin', 'enable-plugin', 'open', 'retry', 'restart']
 
@@ -2935,6 +3120,9 @@ Audio = Literal['follow', 'always', 'never']
 
 AudioCodec = Literal['aac', 'opus', 'mp3', 'ac3', 'pcm', 'other']
 
+# Where a binding writes. One of three shapes.
+BindingTarget = Dict[str, Any]
+
 # OBS's blend enum, so an import carries across unchanged.
 Blend = Literal['normal', 'add', 'screen', 'multiply', 'lighten', 'darken', 'subtract']
 
@@ -2954,6 +3142,12 @@ DestinationMode = Literal['copy', 'transcode']
 
 # Where a destination has got to.
 DestinationState = Literal['off', 'waiting', 'connecting', 'live', 'reconnecting', 'failed']
+
+# How the body is read. `auto` decides from the content type and the first byte; `sse` reads an `http(s)` address as a Server-Sent Events stream.
+FeedFormat = Union[Literal['auto', 'json'], Literal['rss'], Literal['csv'], Literal['text'], Literal['sse']]
+
+# Where a feed is.
+FeedState = Union[Literal['paused'], Literal['starting'], Literal['ok'], Literal['failing']]
 
 # How content fills its frame. SVG's vocabulary, which replaces OBS's seven bounds types and maps onto `sizing-policy` on a `glvideomixer` pad.
 Fit = Literal['none', 'contain', 'cover', 'stretch', 'fit-width', 'fit-height', 'max']
@@ -3056,6 +3250,17 @@ METHODS = (
     {"name": "core.status", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/core/status"), "summary": 'The full state: programme, every source, every output, the multiview grid, the encoder backend and any ad break.'},
     {"name": "core.subscribe", "scope": "read", "mutating": False, "destructive": False, "rest": None, "summary": 'Subscribe to the event stream. WebSocket only: the core answers event/snapshot then deltas, ending every batch with event/flush.'},
     {"name": "device.discover", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/device/discover"), "summary": "Ask every device plugin what it can see: cameras, NDI senders, publishers. Each candidate's params are ready for source.add."},
+    {"name": "feed.add", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/feed/add"), "summary": 'Add a live data feed: an http(s) address polled every `interval_s` (5 s at least, 30 by default, honouring ETag and Last-Modified), a ws(s) address whose messages are read as they come, or an http(s) event stream with format sse. Header values are sealed.'},
+    {"name": "feed.binding.add", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/feed/binding/add"), "summary": "Bind a value in a feed to a target: a source's param by path (`params.text`, `params.items`, `params.fields.headline`), a graphic's field through its update action, or a scene parameter. It writes at once if the feed has been read, and after that only when the value changes."},
+    {"name": "feed.binding.pause", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/feed/binding/pause"), "summary": 'Stop a binding writing, or start it again with paused false. Started again, it writes what the feed holds now.'},
+    {"name": "feed.binding.remove", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/feed/binding/remove"), "summary": 'Forget a binding. What it wrote stays on air.'},
+    {"name": "feed.binding.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/feed/binding/set"), "summary": "Change a binding's selection or target. Only what is named changes, and the value is written again at once."},
+    {"name": "feed.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/feed/list"), "summary": 'Every live data feed with its state (ok, failing with the reason, paused), when it was last read and last changed, and every binding with the value it last wrote.'},
+    {"name": "feed.pause", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/feed/pause"), "summary": 'Stop reading a feed, or start it again with paused false. While paused nothing is fetched and nothing is written; what was written stays on air.'},
+    {"name": "feed.refresh", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/feed/refresh"), "summary": 'Fetch a polled feed now rather than at the end of its interval. A pushed feed that is waiting to reconnect tries at once.'},
+    {"name": "feed.remove", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/feed/remove"), "summary": 'Stop and forget a feed, its sealed headers and every binding that reads it. What they wrote stays on air until something else changes it.'},
+    {"name": "feed.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/feed/set"), "summary": 'Change a feed\'s address, format, interval, timeout or headers. Only what is named changes; a header value of "__secret__" keeps the stored one.'},
+    {"name": "feed.test", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/feed/test"), "summary": 'Fetch a feed once and show what came back: its top keys, a cut down copy, and every path with an example. With `select` (and `template`, `limit`, `join`) it also shows what that picks and what a binding would write. A path that picks nothing is refused with where it stopped and the keys there. Nothing is stored and nothing is written.'},
     {"name": "filter.add", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/filters"), "summary": 'Hang a filter on one source or on the programme, live.'},
     {"name": "filter.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/filters"), "summary": 'Every filter in place, with what it is and where it sits.'},
     {"name": "filter.remove", "scope": "operate", "mutating": True, "destructive": True, "rest": ("DELETE", "/api/v1/filters/{id}"), "summary": 'Take a filter out of the pipeline.'},
@@ -3228,6 +3433,8 @@ EVENT_NAMES = (
     "show.changed",
     "show.removed",
     "show.health",
+    "feed.failed",
+    "feed.recovered",
     "health",
 )
 
@@ -3633,6 +3840,211 @@ class GeneratedMethods:
         if timeout_ms is not None:
             params["timeout_ms"] = timeout_ms
         return await self._call("device.discover", params)
+
+    async def feed_add(
+        self,
+        address: str,
+        id: str,
+        *,
+        format: Optional[FeedFormat] = None,
+        headers: Optional[Dict[str, Any]] = None,
+        interval_s: Optional[float] = None,
+        paused: Optional[bool] = None,
+        timeout_s: Optional[float] = None,
+    ) -> FeedStatus:
+        """Add a live data feed: an http(s) address polled every `interval_s` (5 s at least, 30 by default, honouring ETag and Last-Modified), a ws(s) address whose messages are read as they come, or an http(s) event stream with format sse. Header values are sealed."""
+        params: Dict[str, Any] = {}
+        params["address"] = address
+        params["id"] = id
+        if format is not None:
+            params["format"] = format
+        if headers is not None:
+            params["headers"] = headers
+        if interval_s is not None:
+            params["interval_s"] = interval_s
+        if paused is not None:
+            params["paused"] = paused
+        if timeout_s is not None:
+            params["timeout_s"] = timeout_s
+        return await self._call("feed.add", params)
+
+    async def feed_binding_add(
+        self,
+        feed: str,
+        to: BindingTarget,
+        *,
+        id: Optional[str] = None,
+        join: Optional[str] = None,
+        limit: Optional[int] = None,
+        paused: Optional[bool] = None,
+        select: Optional[str] = None,
+        template: Optional[str] = None,
+    ) -> BindingStatus:
+        """Bind a value in a feed to a target: a source's param by path (`params.text`, `params.items`, `params.fields.headline`), a graphic's field through its update action, or a scene parameter. It writes at once if the feed has been read, and after that only when the value changes."""
+        params: Dict[str, Any] = {}
+        params["feed"] = feed
+        params["to"] = to
+        if id is not None:
+            params["id"] = id
+        if join is not None:
+            params["join"] = join
+        if limit is not None:
+            params["limit"] = limit
+        if paused is not None:
+            params["paused"] = paused
+        if select is not None:
+            params["select"] = select
+        if template is not None:
+            params["template"] = template
+        return await self._call("feed.binding.add", params)
+
+    async def feed_binding_pause(
+        self,
+        id: str,
+        *,
+        paused: Optional[bool] = None,
+    ) -> BindingStatus:
+        """Stop a binding writing, or start it again with paused false. Started again, it writes what the feed holds now."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        if paused is not None:
+            params["paused"] = paused
+        return await self._call("feed.binding.pause", params)
+
+    async def feed_binding_remove(
+        self,
+        id: str,
+    ) -> Dict[str, Any]:
+        """Forget a binding. What it wrote stays on air."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        return await self._call("feed.binding.remove", params)
+
+    async def feed_binding_set(
+        self,
+        id: str,
+        *,
+        join: Optional[str] = None,
+        limit: Optional[int] = None,
+        select: Optional[str] = None,
+        template: Optional[str] = None,
+        to: Optional[Union[BindingTarget, None]] = None,
+    ) -> BindingStatus:
+        """Change a binding's selection or target. Only what is named changes, and the value is written again at once."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        if join is not None:
+            params["join"] = join
+        if limit is not None:
+            params["limit"] = limit
+        if select is not None:
+            params["select"] = select
+        if template is not None:
+            params["template"] = template
+        if to is not None:
+            params["to"] = to
+        return await self._call("feed.binding.set", params)
+
+    async def feed_list(
+        self,
+    ) -> FeedList:
+        """Every live data feed with its state (ok, failing with the reason, paused), when it was last read and last changed, and every binding with the value it last wrote."""
+        params: Dict[str, Any] = {}
+        return await self._call("feed.list", params)
+
+    async def feed_pause(
+        self,
+        id: str,
+        *,
+        paused: Optional[bool] = None,
+    ) -> FeedStatus:
+        """Stop reading a feed, or start it again with paused false. While paused nothing is fetched and nothing is written; what was written stays on air."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        if paused is not None:
+            params["paused"] = paused
+        return await self._call("feed.pause", params)
+
+    async def feed_refresh(
+        self,
+        id: str,
+    ) -> FeedStatus:
+        """Fetch a polled feed now rather than at the end of its interval. A pushed feed that is waiting to reconnect tries at once."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        return await self._call("feed.refresh", params)
+
+    async def feed_remove(
+        self,
+        id: str,
+    ) -> Dict[str, Any]:
+        """Stop and forget a feed, its sealed headers and every binding that reads it. What they wrote stays on air until something else changes it."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        return await self._call("feed.remove", params)
+
+    async def feed_set(
+        self,
+        id: str,
+        *,
+        address: Optional[str] = None,
+        format: Optional[Union[FeedFormat, None]] = None,
+        headers: Optional[Dict[str, Any]] = None,
+        interval_s: Optional[float] = None,
+        timeout_s: Optional[float] = None,
+    ) -> FeedStatus:
+        """Change a feed's address, format, interval, timeout or headers. Only what is named changes; a header value of "__secret__" keeps the stored one."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        if address is not None:
+            params["address"] = address
+        if format is not None:
+            params["format"] = format
+        if headers is not None:
+            params["headers"] = headers
+        if interval_s is not None:
+            params["interval_s"] = interval_s
+        if timeout_s is not None:
+            params["timeout_s"] = timeout_s
+        return await self._call("feed.set", params)
+
+    async def feed_test(
+        self,
+        *,
+        address: Optional[str] = None,
+        format: Optional[Union[FeedFormat, None]] = None,
+        fresh: Optional[bool] = None,
+        headers: Optional[Dict[str, Any]] = None,
+        id: Optional[str] = None,
+        join: Optional[str] = None,
+        limit: Optional[int] = None,
+        select: Optional[str] = None,
+        template: Optional[str] = None,
+        timeout_s: Optional[float] = None,
+    ) -> FeedTestResult:
+        """Fetch a feed once and show what came back: its top keys, a cut down copy, and every path with an example. With `select` (and `template`, `limit`, `join`) it also shows what that picks and what a binding would write. A path that picks nothing is refused with where it stopped and the keys there. Nothing is stored and nothing is written."""
+        params: Dict[str, Any] = {}
+        if address is not None:
+            params["address"] = address
+        if format is not None:
+            params["format"] = format
+        if fresh is not None:
+            params["fresh"] = fresh
+        if headers is not None:
+            params["headers"] = headers
+        if id is not None:
+            params["id"] = id
+        if join is not None:
+            params["join"] = join
+        if limit is not None:
+            params["limit"] = limit
+        if select is not None:
+            params["select"] = select
+        if template is not None:
+            params["template"] = template
+        if timeout_s is not None:
+            params["timeout_s"] = timeout_s
+        return await self._call("feed.test", params)
 
     async def filter_add(
         self,

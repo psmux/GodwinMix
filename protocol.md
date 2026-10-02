@@ -64,6 +64,17 @@ Keys accepted on every method, handled before a method runs.
 | `core.status` | `GET /api/v1/core/status` | read |  | 1 | The full state: programme, every source, every output, the multiview grid, the encoder backend and any ad break. |
 | `core.subscribe` | (none) | read |  | 1 | Subscribe to the event stream. WebSocket only: the core answers event/snapshot then deltas, ending every batch with event/flush. |
 | `device.discover` | `POST /api/v1/device/discover` | operate |  | 1 | Ask every device plugin what it can see: cameras, NDI senders, publishers. Each candidate's params are ready for source.add. |
+| `feed.add` | `POST /api/v1/feed/add` | operate |  | 1 | Add a live data feed: an http(s) address polled every `interval_s` (5 s at least, 30 by default, honouring ETag and Last-Modified), a ws(s) address whose messages are read as they come, or an http(s) event stream with format sse. Header values are sealed. |
+| `feed.binding.add` | `POST /api/v1/feed/binding/add` | operate |  | 1 | Bind a value in a feed to a target: a source's param by path (`params.text`, `params.items`, `params.fields.headline`), a graphic's field through its update action, or a scene parameter. It writes at once if the feed has been read, and after that only when the value changes. |
+| `feed.binding.pause` | `POST /api/v1/feed/binding/pause` | operate |  | 1 | Stop a binding writing, or start it again with paused false. Started again, it writes what the feed holds now. |
+| `feed.binding.remove` | `POST /api/v1/feed/binding/remove` | operate |  | 1 | Forget a binding. What it wrote stays on air. |
+| `feed.binding.set` | `POST /api/v1/feed/binding/set` | operate |  | 1 | Change a binding's selection or target. Only what is named changes, and the value is written again at once. |
+| `feed.list` | `GET /api/v1/feed/list` | read |  | 1 | Every live data feed with its state (ok, failing with the reason, paused), when it was last read and last changed, and every binding with the value it last wrote. |
+| `feed.pause` | `POST /api/v1/feed/pause` | operate |  | 1 | Stop reading a feed, or start it again with paused false. While paused nothing is fetched and nothing is written; what was written stays on air. |
+| `feed.refresh` | `POST /api/v1/feed/refresh` | operate |  | 1 | Fetch a polled feed now rather than at the end of its interval. A pushed feed that is waiting to reconnect tries at once. |
+| `feed.remove` | `POST /api/v1/feed/remove` | operate |  | 1 | Stop and forget a feed, its sealed headers and every binding that reads it. What they wrote stays on air until something else changes it. |
+| `feed.set` | `POST /api/v1/feed/set` | operate |  | 1 | Change a feed's address, format, interval, timeout or headers. Only what is named changes; a header value of "__secret__" keeps the stored one. |
+| `feed.test` | `POST /api/v1/feed/test` | operate |  | 1 | Fetch a feed once and show what came back: its top keys, a cut down copy, and every path with an example. With `select` (and `template`, `limit`, `join`) it also shows what that picks and what a binding would write. A path that picks nothing is refused with where it stopped and the keys there. Nothing is stored and nothing is written. |
 | `filter.add` | `POST /api/v1/filters` | operate |  | 1 | Hang a filter on one source or on the programme, live. |
 | `filter.list` | `GET /api/v1/filters` | read |  | 1 | Every filter in place, with what it is and where it sits. |
 | `filter.remove` | `DELETE /api/v1/filters/{id}` | operate | yes | 1 | Take a filter out of the pipeline. |
@@ -722,6 +733,195 @@ MCP tool `discover_sources` in the `search` profile: readOnlyHint false, destruc
   },
   "result": {
     "type": "object"
+  }
+}
+```
+
+#### `feed.add`
+
+Add a live data feed: an http(s) address polled every `interval_s` (5 s at least, 30 by default, honouring ETag and Last-Modified), a ws(s) address whose messages are read as they come, or an http(s) event stream with format sse. Header values are sealed.
+
+MCP tool `add_feed` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint false.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/FeedAddRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/FeedStatus"
+  }
+}
+```
+
+#### `feed.binding.add`
+
+Bind a value in a feed to a target: a source's param by path (`params.text`, `params.items`, `params.fields.headline`), a graphic's field through its update action, or a scene parameter. It writes at once if the feed has been read, and after that only when the value changes.
+
+MCP tool `bind_feed` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint false.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/BindingAddRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/BindingStatus"
+  }
+}
+```
+
+#### `feed.binding.pause`
+
+Stop a binding writing, or start it again with paused false. Started again, it writes what the feed holds now.
+
+MCP tool `pause_feed_binding` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/PauseRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/BindingStatus"
+  }
+}
+```
+
+#### `feed.binding.remove`
+
+Forget a binding. What it wrote stays on air.
+
+MCP tool `remove_feed_binding` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/FeedIdRequest"
+  },
+  "result": {
+    "type": "object"
+  }
+}
+```
+
+#### `feed.binding.set`
+
+Change a binding's selection or target. Only what is named changes, and the value is written again at once.
+
+MCP tool `set_feed_binding` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/BindingSetRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/BindingStatus"
+  }
+}
+```
+
+#### `feed.list`
+
+Every live data feed with its state (ok, failing with the reason, paused), when it was last read and last changed, and every binding with the value it last wrote.
+
+MCP tool `list_feeds` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "$ref": "#/$defs/FeedList"
+  }
+}
+```
+
+#### `feed.pause`
+
+Stop reading a feed, or start it again with paused false. While paused nothing is fetched and nothing is written; what was written stays on air.
+
+MCP tool `pause_feed` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/PauseRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/FeedStatus"
+  }
+}
+```
+
+#### `feed.refresh`
+
+Fetch a polled feed now rather than at the end of its interval. A pushed feed that is waiting to reconnect tries at once.
+
+MCP tool `refresh_feed` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint false.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/FeedIdRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/FeedStatus"
+  }
+}
+```
+
+#### `feed.remove`
+
+Stop and forget a feed, its sealed headers and every binding that reads it. What they wrote stays on air until something else changes it.
+
+MCP tool `remove_feed` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/FeedIdRequest"
+  },
+  "result": {
+    "type": "object"
+  }
+}
+```
+
+#### `feed.set`
+
+Change a feed's address, format, interval, timeout or headers. Only what is named changes; a header value of "__secret__" keeps the stored one.
+
+MCP tool `set_feed` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/FeedSetRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/FeedStatus"
+  }
+}
+```
+
+#### `feed.test`
+
+Fetch a feed once and show what came back: its top keys, a cut down copy, and every path with an example. With `select` (and `template`, `limit`, `join`) it also shows what that picks and what a binding would write. A path that picks nothing is refused with where it stopped and the keys there. Nothing is stored and nothing is written.
+
+MCP tool `test_feed` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/FeedTestRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/FeedTestResult"
   }
 }
 ```
@@ -3064,6 +3264,8 @@ Subscribe with `core.subscribe`. Patterns match the part after `event/`, so `pro
 | `event/show.changed` |  |  | A show was added, renamed, started, stopped, died or came back. Sent by the station to every client, whichever show it is looking at. |
 | `event/show.removed` |  |  | A show was removed. Its process was stopped first. |
 | `event/show.health` |  |  | A show's health changed state, or an alarm began or ended. Never sent for a number alone: read those with show.stats. |
+| `event/feed.failed` |  |  | A feed could not be read (a refused connection, a timeout, a body that would not parse, a response over 4 MB), or one of its bindings could not write what it read. `binding` names the binding when it was the write. Sent on the first failure in a row, not on every retry; what was last written stays on air. |
+| `event/feed.recovered` |  |  | A feed or a binding that was failing works again. `failures` is how many attempts in a row failed before this one. |
 | `event/health` |  |  | This show's health changed: its state (ok, warning, alarm, off) or the kinds of its alarms, never a number alone. From a show that composites; the station sends it on to every client as show.health with the show's id. docs/reference/show-health.md says what each alarm watches. |
 
 ## The routes this replaces
