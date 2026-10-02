@@ -38,6 +38,12 @@ impl Publication {
         news
     }
 
+    /// Is any reader waiting for a keyframe? A WebRTC publisher sends one
+    /// only when asked, so its session asks when this says so.
+    pub fn wants_keyframe(&self) -> bool {
+        lock(&self.slot.state).readers.iter().any(|r| r.wants_keyframe())
+    }
+
     /// The stream as `streams` would describe it.
     pub fn describe(&self) -> Option<Value> {
         describe(&self.slot)

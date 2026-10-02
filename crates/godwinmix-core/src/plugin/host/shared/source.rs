@@ -127,6 +127,14 @@ impl Source for SharedSource {
         match method {
             "share" => Ok(self.report()),
             "restart" if !self.is_owner() => Ok(json!({"respawned": false, "owner": false})),
+            // The owner thread closes the device and opens it again; see
+            // `Owner::reopen` for why respawning the plugin alone is not enough.
+            "restart" => {
+                if let Some(owner) = &self.owner {
+                    owner.reopen();
+                }
+                Ok(json!({"respawned": true, "owner": true}))
+            }
             _ => self.on_plugin(|p| p.call(method, params)),
         }
     }

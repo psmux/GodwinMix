@@ -33,6 +33,7 @@ mod whip;
 // of it are public API this binary does not call itself.
 #[allow(dead_code)]
 mod hub;
+mod keyframe;
 mod media_tag;
 mod relay;
 mod remux;

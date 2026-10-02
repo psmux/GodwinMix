@@ -158,6 +158,11 @@ impl Shared {
         self.lock().dropped_gops
     }
 
+    /// Is this reader waiting for a keyframe before it takes anything more?
+    pub fn wants_keyframe(&self) -> bool {
+        self.lock().skipping
+    }
+
     #[cfg(test)]
     pub fn waiting(&self) -> (usize, usize) {
         let q = self.lock();

@@ -34,7 +34,14 @@ pub fn attach(pipeline: &gst::Pipeline, pad: &gst::Pad, to: &Shared, zero: &Arc<
     let mut elements: Vec<gst::Element> = vec![gst::ElementFactory::make("queue").build().expect("queue is core")];
     for factory in chain(&encoding).unwrap_or(&[]) {
         match gst::ElementFactory::make(factory).build() {
-            Ok(e) => elements.push(e),
+            Ok(e) => {
+                // Ask the browser for a keyframe when packets are lost, so a
+                // gap heals at the next one rather than whenever it chooses.
+                if e.find_property("request-keyframe").is_some() {
+                    e.set_property("request-keyframe", true);
+                }
+                elements.push(e)
+            }
             // Without an AAC encoder the picture still comes through; the
             // sound is left out rather than the whole publisher refused.
             Err(_) => return link_to_nothing(pipeline, pad),
