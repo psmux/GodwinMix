@@ -1,12 +1,10 @@
-//! One I420 frame keyed into an AYUV picture, in one pass over the area the
-//! matte keeps.
+//! One I420 frame keyed: a decision per block of the area the matte keeps.
 //!
 //! The key is decided per 2x2 block, because that is where I420 keeps its
 //! colour: one table lookup per block gives its alpha and its despilled U and
-//! V. The alpha is then spread back to every pixel with the usual 3:1
-//! weights, so an edge is as fine as the luma under it rather than a staircase
-//! of blocks. Nothing outside the matte is read or written, and a block that
-//! is clear on all sides costs a comparison.
+//! V. The board spreads the alpha back to every pixel as it draws (see
+//! `overlay::keyed`), so an edge is as fine as the luma under it rather than
+//! a staircase of blocks. Nothing outside the matte is read.
 
 use super::lut::Lut;
 use super::params::Matte;
@@ -41,68 +39,25 @@ impl Region {
     }
 }
 
-/// Buffers kept between frames, so a frame allocates only its output.
-#[derive(Default)]
-pub struct Scratch {
-    alpha: Vec<u8>,
-    chroma: Vec<[u8; 2]>,
-    blur: Vec<u16>,
-}
-
-/// Key `src` inside `r` into `out`, `r.w * 4` bytes to a row, which must
-/// start zeroed: a clear pixel is not written at all.
-pub fn key(src: &I420<'_>, r: Region, lut: &Lut, feather: u32, scratch: &mut Scratch, out: &mut [u8]) {
+/// The key's decision for every 2x2 block of the region: alpha, and U and V
+/// with the spill taken out. One table lookup a block, then the feather.
+pub fn blocks(src: &I420<'_>, r: Region, lut: &Lut, feather: u32, alpha: &mut Vec<u8>, chroma: &mut Vec<[u8; 2]>) {
     let (bw, bh) = (r.w / 2, r.h / 2);
-    blocks(src, r, lut, scratch);
-    if feather > 0 {
-        super::feather::soften(&mut scratch.alpha, &mut scratch.blur, bw, bh, feather.div_ceil(2) as usize);
-    }
-    let alpha = &scratch.alpha;
-    let chroma = &scratch.chroma;
-    let mut column = vec![0u16; bw];
-    for row in 0..r.h {
-        let b0 = row / 2;
-        let b1 = if row % 2 == 0 { b0.saturating_sub(1) } else { (b0 + 1).min(bh - 1) };
-        let (near, far) = (&alpha[b0 * bw..b0 * bw + bw], &alpha[b1 * bw..b1 * bw + bw]);
-        let mut any = false;
-        for (c, (n, f)) in column.iter_mut().zip(near.iter().zip(far)) {
-            *c = 3 * *n as u16 + *f as u16;
-            any |= *c != 0;
-        }
-        if !any {
-            continue;
-        }
-        let luma = &src.y[(r.y + row) * src.strides[0] + r.x..][..r.w];
-        let line = &mut out[row * r.w * 4..(row + 1) * r.w * 4];
-        let tint = &chroma[b0 * bw..b0 * bw + bw];
-        for (x, px) in line.chunks_exact_mut(4).enumerate() {
-            let c0 = x / 2;
-            let c1 = if x % 2 == 0 { c0.saturating_sub(1) } else { (c0 + 1).min(bw - 1) };
-            let a = (3 * column[c0] as u32 + column[c1] as u32 + 8) >> 4;
-            if a == 0 {
-                continue;
-            }
-            let [u, v] = tint[c0];
-            px.copy_from_slice(&[a.min(255) as u8, luma[x], u, v]);
-        }
-    }
-}
-
-/// The table looked up once per block of the region.
-fn blocks(src: &I420<'_>, r: Region, lut: &Lut, scratch: &mut Scratch) {
-    let (bw, bh) = (r.w / 2, r.h / 2);
-    scratch.alpha.resize(bw * bh, 0);
-    scratch.chroma.resize(bw * bh, [128, 128]);
+    alpha.resize(bw * bh, 0);
+    chroma.resize(bw * bh, [128, 128]);
     for by in 0..bh {
         let row_u = &src.u[(r.y / 2 + by) * src.strides[1] + r.x / 2..][..bw];
         let row_v = &src.v[(r.y / 2 + by) * src.strides[2] + r.x / 2..][..bw];
-        let alpha = &mut scratch.alpha[by * bw..(by + 1) * bw];
-        let chroma = &mut scratch.chroma[by * bw..(by + 1) * bw];
+        let a_row = &mut alpha[by * bw..(by + 1) * bw];
+        let c_row = &mut chroma[by * bw..(by + 1) * bw];
         for i in 0..bw {
             let [a, u, v, _] = lut.get(row_u[i], row_v[i]);
-            alpha[i] = a;
-            chroma[i] = [u, v];
+            a_row[i] = a;
+            c_row[i] = [u, v];
         }
+    }
+    if feather > 0 {
+        super::feather::soften(alpha, bw, bh, feather.div_ceil(2) as usize);
     }
 }
 

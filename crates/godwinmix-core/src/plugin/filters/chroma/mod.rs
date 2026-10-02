@@ -31,6 +31,7 @@ pub mod guess;
 pub mod lut;
 pub mod params;
 mod run;
+pub mod still;
 #[cfg(test)]
 mod sample;
 #[cfg(test)]

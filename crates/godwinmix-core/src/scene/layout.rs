@@ -33,6 +33,7 @@ pub const NAMES: &[&str] = &[
     "l-shape",
     "split",
     "multiview",
+    "virtual-set",
 ];
 
 /// The layout documents, compiled in so a core with no repository beside it
@@ -50,6 +51,7 @@ const FILES: &[(&str, &str)] = &[
     ("l-shape", include_str!("../../../../layouts/l-shape.json")),
     ("split", include_str!("../../../../layouts/split.json")),
     ("multiview", include_str!("../../../../layouts/multiview.json")),
+    ("virtual-set", include_str!("../../../../layouts/virtual-set.json")),
 ];
 
 /// The built in layout by name.
@@ -364,6 +366,12 @@ mod tests {
     fn no_two_items_of_a_layout_cover_each_other_except_the_pip_inside_its_main() {
         for name in NAMES {
             let layout = builtin(name).unwrap();
+            // A layout that says it is layered stacks its items on purpose: a
+            // virtual set is a background, a presenter and a desk, one over
+            // the other.
+            if layout.params.get("x-gmx-layered") == Some(&Value::Bool(true)) {
+                continue;
+            }
             let canvas = Canvas::default();
             let scene = apply(&layout, &all_sources(&layout), canvas).unwrap();
             let placed = flatten(&scene.items, &canvas);

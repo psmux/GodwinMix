@@ -93,27 +93,30 @@ pub fn to_i420(rgb: &[[u8; 3]], w: usize, h: usize) -> Vec<u8> {
     out
 }
 
-/// How far a key's AYUV result, composited over `under`, lands from the true
-/// composite: the mean error in luma, and the mean green left in the chroma
-/// of edge pixels (a fringe), both in 8 bit steps.
-pub fn score(shot: &Shot, ayuv: &[u8], under: [u8; 3]) -> (f32, f32) {
+/// How far a composite of the shot over `under` lands from the true one: the
+/// mean error in luma, and the mean green left in the chroma of edge pixels
+/// (a fringe), both in 8 bit steps. `canvas` is packed I420.
+pub fn score(shot: &Shot, canvas: &[u8], under: [u8; 3]) -> (f32, f32) {
+    let (w, h) = (shot.width, shot.height);
     let (by, bu, bv) = rgb_to_yuv(under);
     let (mut err, mut fringe, mut edges) = (0f64, 0f64, 0u32);
-    for n in 0..shot.width * shot.height {
-        let a = shot.alpha[n];
-        let (fy, fu, fv) = rgb_to_yuv(shot.fg[n]);
-        let truth = a * fy as f32 + (1.0 - a) * by as f32;
-        let k = ayuv[n * 4] as f32 / 255.0;
-        let got = |c: u8, b: u8| k * c as f32 + (1.0 - k) * b as f32;
-        err += (got(ayuv[n * 4 + 1], by) - truth).abs() as f64;
-        if a > 0.05 && a < 0.95 {
-            // Green is low U and low V: how far below the true mix both sit.
-            let tu = a * fu as f32 + (1.0 - a) * bu as f32;
-            let tv = a * fv as f32 + (1.0 - a) * bv as f32;
-            let lean = (tu - got(ayuv[n * 4 + 2], bu)).max(0.0) + (tv - got(ayuv[n * 4 + 3], bv)).max(0.0);
-            fringe += lean as f64;
-            edges += 1;
+    for j in 0..h {
+        for i in 0..w {
+            let n = j * w + i;
+            let a = shot.alpha[n];
+            let (fy, fu, fv) = rgb_to_yuv(shot.fg[n]);
+            let truth = a * fy as f32 + (1.0 - a) * by as f32;
+            err += (canvas[n] as f32 - truth).abs() as f64;
+            if a > 0.05 && a < 0.95 {
+                // Green is low U and low V: how far below the true mix both sit.
+                let c = (j / 2) * (w / 2) + i / 2;
+                let (gu, gv) = (canvas[w * h + c] as f32, canvas[w * h + w * h / 4 + c] as f32);
+                let tu = a * fu as f32 + (1.0 - a) * bu as f32;
+                let tv = a * fv as f32 + (1.0 - a) * bv as f32;
+                fringe += ((tu - gu).max(0.0) + (tv - gv).max(0.0)) as f64;
+                edges += 1;
+            }
         }
     }
-    ((err / (shot.width * shot.height) as f64) as f32, (fringe / edges.max(1) as f64) as f32)
+    ((err / (w * h) as f64) as f32, (fringe / edges.max(1) as f64) as f32)
 }

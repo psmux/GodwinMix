@@ -20,6 +20,9 @@ pub struct Picture {
     /// when it is not the whole of it: a keyed camera sends only what its
     /// matte keeps, and is drawn there rather than stretched to the box.
     pub within: Option<Area>,
+    /// A keyed camera frame, drawn from the frame and its key rather than from
+    /// `buffer`, which is then empty. See `overlay::keyed`.
+    pub keyed: Option<std::sync::Arc<super::keyed::Keyed>>,
 }
 
 /// A rectangle of a picture's natural frame.
@@ -34,7 +37,7 @@ pub struct Area {
 impl Picture {
     /// A picture from bytes already in AYUV, `width * 4` to a row.
     pub fn from_ayuv(data: Vec<u8>, width: u32, height: u32, natural: (u32, u32)) -> Picture {
-        Picture { buffer: gst::Buffer::from_mut_slice(data), width, height, stride: width as usize * 4, natural, within: None }
+        Picture { buffer: gst::Buffer::from_mut_slice(data), width, height, stride: width as usize * 4, natural, within: None, keyed: None }
     }
 }
 

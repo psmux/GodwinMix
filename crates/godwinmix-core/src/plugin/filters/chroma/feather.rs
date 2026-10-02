@@ -8,11 +8,11 @@
 //! takes away the last line of green a hard key leaves round hair.
 
 /// Soften `alpha`, `w` by `h` blocks, over `radius` blocks.
-pub fn soften(alpha: &mut [u8], sums: &mut Vec<u16>, w: usize, h: usize, radius: usize) {
+pub fn soften(alpha: &mut [u8], w: usize, h: usize, radius: usize) {
     if radius == 0 || w == 0 || h == 0 {
         return;
     }
-    sums.resize(w * h, 0);
+    let mut sums = vec![0u16; w * h];
     let span = (2 * radius + 1) as u32;
     // Across each row into `sums`, then down each column back into a blurred
     // value, which is compared with the original in place.
@@ -56,8 +56,7 @@ mod tests {
     fn a_hard_edge_goes_soft_on_the_inside_only() {
         let (w, h) = (8, 1);
         let mut alpha = vec![0, 0, 0, 0, 255, 255, 255, 255];
-        let mut sums = Vec::new();
-        soften(&mut alpha, &mut sums, w, h, 1);
+        soften(&mut alpha, w, h, 1);
         assert_eq!(&alpha[..4], &[0, 0, 0, 0], "nothing outside gained alpha");
         assert!(alpha[4] > 0 && alpha[4] < 255, "the first solid block is now partly clear: {alpha:?}");
         assert_eq!(alpha[7], 255, "the middle is untouched");

@@ -6,10 +6,11 @@
 //! one table lookup per block and one write per pixel the matte keeps; a
 //! settings change builds a new table on the control thread and swaps it in.
 
-use super::frame::{self, Region, Scratch, I420};
+use super::frame::{self, Region, I420};
 use super::guess::{self, Guess};
 use super::lut::Lut;
 use super::params::{Colour, Settings};
+use crate::overlay::keyed::Keyed;
 use crate::overlay::picture::{Area, Picture};
 use crate::plugin::filter::BoardHook;
 use gstreamer as gst;
@@ -32,7 +33,8 @@ struct State {
     key: Option<(u8, u8, u8)>,
     found: Option<Guess>,
     frames: u32,
-    scratch: Scratch,
+    /// Keyed frames handed to the board, newest last.
+    handed: Handed,
     info: Option<(gst::Caps, gst_video::VideoInfo)>,
 }
 
@@ -44,7 +46,7 @@ impl Keyer {
             key: None,
             found: None,
             frames: 0,
-            scratch: Scratch::default(),
+            handed: Handed::default(),
             info: None,
         };
         let keyer = Arc::new(Keyer { hook: BoardHook::new(), state: Mutex::new(state) });
@@ -89,12 +91,13 @@ impl Keyer {
             st.look(buffer, &vinfo);
         }
         if self.hook.layer.active() {
+            let frame = buffer.clone();
+            *buffer = gap(&frame);
             if self.hook.seen() {
-                if let Some(p) = st.picture(buffer, &vinfo) {
+                if let Some(p) = st.picture(&frame, &vinfo) {
                     self.hook.layer.set_picture(Some(Arc::new(p)));
                 }
             }
-            *buffer = gap(buffer);
             return gst::PadProbeReturn::Ok;
         }
         if st.key.is_some() {
@@ -144,9 +147,10 @@ impl State {
         }
     }
 
-    /// The keyed picture of the area the matte keeps.
-    fn picture(&mut self, buffer: &gst::BufferRef, info: &gst_video::VideoInfo) -> Option<Picture> {
-        let f = gst_video::VideoFrameRef::from_buffer_ref_readable(buffer, info).ok()?;
+    /// The frame and the key's decision for it, for the board to draw. The
+    /// frame itself is kept by reference, not copied.
+    fn picture(&mut self, frame: &gst::Buffer, info: &gst_video::VideoInfo) -> Option<Picture> {
+        let f = gst_video::VideoFrameRef::from_buffer_ref_readable(frame.as_ref(), info).ok()?;
         let s = info.stride();
         let (w, h) = (info.width() as usize, info.height() as usize);
         let src = I420 {
@@ -158,14 +162,33 @@ impl State {
             height: h,
         };
         let r = Region::of(w, h, &self.settings.matte);
-        let mut out = vec![0u8; r.w * r.h * 4];
-        let lut = self.lut.clone();
-        frame::key(&src, r, &lut, self.settings.feather, &mut self.scratch, &mut out);
+        let (mut alpha, mut chroma) = self.reuse();
+        frame::blocks(&src, r, &self.lut, self.settings.feather, &mut alpha, &mut chroma);
+        let keyed = Arc::new(Keyed { frame: frame.clone(), info: info.clone(), region: (r.x, r.y, r.w, r.h), alpha, chroma });
+        self.handed.push(keyed.clone());
         let whole = r == Region { x: 0, y: 0, w, h };
         let within = (!whole).then_some(Area { x: r.x as u32, y: r.y as u32, w: r.w as u32, h: r.h as u32 });
-        let mut pic = Picture::from_ayuv(out, r.w as u32, r.h as u32, (w as u32, h as u32));
-        pic.within = within;
-        Some(pic)
+        Some(Picture {
+            buffer: gst::Buffer::new(),
+            width: r.w as u32,
+            height: r.h as u32,
+            stride: 0,
+            natural: (w as u32, h as u32),
+            within,
+            keyed: Some(keyed),
+        })
+    }
+
+    /// The block arrays of a keyed frame the board has finished with, so a
+    /// frame does not allocate its own. The layer holds the newest and the
+    /// board may hold one more while it draws; anything older is free.
+    fn reuse(&mut self) -> (Vec<u8>, Vec<[u8; 2]>) {
+        self.handed.truncate_front(3);
+        let free = self.handed.iter().position(|k| Arc::strong_count(k) == 1);
+        match free.map(|i| self.handed.remove(i)).and_then(|k| Arc::try_unwrap(k).ok()) {
+            Some(k) => (k.alpha, k.chroma),
+            None => (Vec::new(), Vec::new()),
+        }
     }
 
     fn flatten(&mut self, buffer: &mut gst::BufferRef, info: &gst_video::VideoInfo) {
@@ -195,4 +218,28 @@ fn gap(frame: &gst::BufferRef) -> gst::Buffer {
         b.set_flags(gst::BufferFlags::GAP | gst::BufferFlags::DROPPABLE);
     }
     out
+}
+
+/// The last few keyed frames handed out.
+#[derive(Default)]
+struct Handed(Vec<Arc<Keyed>>);
+
+impl Handed {
+    fn push(&mut self, k: Arc<Keyed>) {
+        self.0.push(k);
+    }
+
+    /// Keep only the newest `n`.
+    fn truncate_front(&mut self, n: usize) {
+        let extra = self.0.len().saturating_sub(n);
+        self.0.drain(..extra);
+    }
+
+    fn iter(&self) -> std::slice::Iter<'_, Arc<Keyed>> {
+        self.0.iter()
+    }
+
+    fn remove(&mut self, i: usize) -> Arc<Keyed> {
+        self.0.remove(i)
+    }
 }
