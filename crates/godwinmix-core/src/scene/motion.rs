@@ -94,6 +94,58 @@ impl ItemTransition {
     }
 }
 
+/// What `scene.validate` says about the items' enters and exits. None of it
+/// stops a take: a motion that is too long is held at the ceiling, an easing
+/// nobody knows is the default, and a group's own motion is not played.
+pub fn findings(scene: &super::document::Scene) -> Vec<super::validate::Finding> {
+    use super::validate::{Finding, Severity};
+    let mut out = Vec::new();
+    let max = crate::mixer::transition::MAX_DURATION_MS;
+    for item in scene.walk() {
+        let label = item.name.clone().unwrap_or_else(|| item.id.to_string());
+        let group = matches!(item.content, super::document::Content::Children { .. });
+        for (which, t) in [("enter", &item.enter), ("exit", &item.exit)] {
+            let Some(t) = t else { continue };
+            let mut found = |severity, code: &str, message: String, detail| {
+                out.push(Finding {
+                    severity,
+                    code: code.into(),
+                    scene: Some(scene.id),
+                    items: vec![item.id],
+                    message,
+                    detail,
+                })
+            };
+            if t.duration_ms as u64 > max {
+                found(
+                    Severity::Warning,
+                    "scene.motion_long",
+                    format!("{label}'s {which} runs {} ms; it is held at {max} ms. Shorten it.", t.duration_ms),
+                    serde_json::json!({ "duration_ms": t.duration_ms, "max_ms": max }),
+                );
+            }
+            let easings = godwinmix_protocol::transitions::EASINGS;
+            if let Some(e) = t.easing.as_deref().filter(|e| !easings.contains(e)) {
+                found(
+                    Severity::Warning,
+                    "scene.motion_easing",
+                    format!("{label}'s {which} has no easing called {e:?}; it plays as ease-in-out. Use one of: {}.", easings.join(", ")),
+                    serde_json::json!({ "easings": easings }),
+                );
+            }
+            if group {
+                found(
+                    Severity::Info,
+                    "scene.motion_group",
+                    format!("{label} is a group, and a group's own {which} is not played. Give it to the items inside instead."),
+                    serde_json::Value::Null,
+                );
+            }
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -114,5 +166,22 @@ mod tests {
         }
         let wrong = serde_json::from_str::<ItemTransition>(r#"{"type": "spin"}"#).unwrap_err();
         assert!(wrong.to_string().contains("slide"), "{wrong}");
+    }
+
+    #[test]
+    fn the_validator_names_a_motion_too_long_and_an_easing_nobody_has() {
+        use crate::scene::document::{Content, Item, Scene};
+        let mut item = Item::new(Content::Source { source: "cam".into() });
+        item.enter = Some(ItemTransition {
+            kind: ItemTransitionKind::Fade,
+            duration_ms: 20_000,
+            easing: Some("bounce".into()),
+            edge: None,
+            on_take: false,
+        });
+        let mut scene = Scene::new("show");
+        scene.items.push(item);
+        let codes: Vec<String> = findings(&scene).into_iter().map(|f| f.code).collect();
+        assert_eq!(codes, vec!["scene.motion_long", "scene.motion_easing"]);
     }
 }

@@ -324,6 +324,28 @@
             "top": 0.0
           }
         },
+        "enter": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ItemTransition"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "How the item comes on when it is shown on air. See `scene::motion`."
+        },
+        "exit": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ItemTransition"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "How the item goes off when it is hidden on air."
+        },
         "filters": {
           "description": "Filters belong to the item, not to the source. OBS attaches them to\nsources only, so a camera keyed in one scene is keyed in all of them and\nthe workaround is a nested scene per placement.",
           "items": {
@@ -386,6 +408,68 @@
         "content"
       ],
       "type": "object"
+    },
+    "ItemEdge": {
+      "enum": [
+        "left",
+        "right",
+        "top",
+        "bottom"
+      ],
+      "type": "string"
+    },
+    "ItemTransition": {
+      "additionalProperties": false,
+      "description": "One way on or off the canvas for one item.",
+      "properties": {
+        "duration_ms": {
+          "default": 300,
+          "description": "How long it takes, in milliseconds. 300 by default, ten seconds at\nmost.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "easing": {
+          "description": "linear, ease-in, ease-out or ease-in-out (the default).",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "edge": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ItemEdge"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "For slide and wipe, the canvas edge it comes in from or goes out to:\nleft (the default), right, top or bottom."
+        },
+        "on_take": {
+          "description": "Also play it when a scene holding this item is taken, in place of the\nscene's own transition for this item.",
+          "type": "boolean"
+        },
+        "type": {
+          "$ref": "#/$defs/ItemTransitionKind",
+          "description": "cut, fade, slide, zoom or wipe."
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "type": "object"
+    },
+    "ItemTransitionKind": {
+      "enum": [
+        "cut",
+        "fade",
+        "slide",
+        "zoom",
+        "wipe"
+      ],
+      "type": "string"
     },
     "Override": {
       "additionalProperties": false,

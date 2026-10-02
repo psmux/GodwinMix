@@ -115,6 +115,7 @@ pub fn scene(scene: &Scene, canvas: &Canvas) -> Vec<Finding> {
         }
     }
     out.extend(overlaps(scene, &placed, &canvas_rect));
+    out.extend(super::motion::findings(scene));
     out
 }
 
