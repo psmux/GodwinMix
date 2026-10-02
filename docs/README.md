@@ -97,6 +97,8 @@ Start here if you have never run it.
 * [The desktop app](how-to/desktop-app.md)
 * [Import your scenes from OBS](how-to/import-from-obs.md)
 * [Make a graphic](how-to/make-a-graphic.md)
+* [Write an SVG template](how-to/write-an-svg-template.md)
+* [Design graphics with an AI agent](how-to/design-graphics-with-ai.md)
 * [Use the mixer controls](how-to/preview-monitor.md)
 * [Run on a Raspberry Pi](how-to/run-on-a-raspberry-pi.md)
 * [Share a collection](how-to/share-a-collection.md)
@@ -144,6 +146,7 @@ Start here if you have never run it.
 * [Renditions and the planner: the rules, the plan, the reasons](reference/renditions.md)
 * [The HLS output: params, routes, the viewer key](reference/hls-output.md)
 * [Graphics](reference/graphics.md)
+* [Graphic templates: the SVG kind, the pack, the methods](reference/graphic-templates.md)
 * [Metrics](reference/metrics.md)
 * [Preview monitor status](reference/preview-monitor.md)
 
