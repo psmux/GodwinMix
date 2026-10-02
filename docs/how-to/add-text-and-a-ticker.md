@@ -51,6 +51,9 @@ params that change. Every param is in the [text and ticker
 reference](../reference/text-sources.md), and the schema for each kind is in
 the `kinds` table of `protocol.json`.
 
+To keep the words current from a news feed, a score API or a spreadsheet,
+bind them to a feed: see [Show live data on air](show-live-data.md).
+
 ## What it looks like
 
 | Param | What it does |
