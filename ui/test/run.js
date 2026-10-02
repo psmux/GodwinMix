@@ -3,6 +3,7 @@ import { sourceFileTests } from "./source-files.js";
 import { mixerSettingsTests } from "./mixer-settings.js";
 import { errorActionTests } from "./error-actions.js";
 import { sourceChooserTests } from "./source-chooser.js";
+import { textSourceTests } from "./text-sources.js";
 import { studioTests } from "./studio.js";
 import { sceneFixTests, sceneFixLoadTests } from "./scene-fix.js";
 import { scenePictureTests } from "./scene-pictures.js";
@@ -2731,6 +2732,7 @@ legacySuite()
   })
   .then(scopedSourcesSuite)
   .then(() => sourceChooserTests(test, eq, ok))
+  .then(() => textSourceTests(test, eq, ok))
   .then(() => sourceFileTests(test, eq, ok))
   .then(() => errorActionTests(test, eq, ok))
   .catch((e) => {

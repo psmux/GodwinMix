@@ -4499,6 +4499,15 @@ impl Mixer {
                 // camera's address is cut down to an ellipsis, so its settings
                 // opened as the form of whatever kind came first in the list.
                 let kind = s.input.type_id();
+                // A source the overlay board draws says so, and a text or a
+                // ticker says what it shows, which carries no secret and is
+                // what its editor opens on.
+                if let Some(layer) = s.input.layer() {
+                    status.put_extra("alpha", layer.active());
+                    if matches!(kind.as_str(), "text/source" | "ticker/source") {
+                        status.put_extra("params", s.input.current_config().params);
+                    }
+                }
                 if !kind.is_empty() {
                     status.put_extra("type", kind);
                 }
