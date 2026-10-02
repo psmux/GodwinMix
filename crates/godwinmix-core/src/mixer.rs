@@ -405,6 +405,8 @@ mod rendered;
 pub mod slots;
 pub mod transition;
 pub mod unstarted;
+#[cfg(test)]
+mod transition_tests;
 pub use slots::{Placement, SlotPool};
 
 pub enum Command {
@@ -5583,7 +5585,7 @@ mod tests {
         with_sources_cfg(ids, cfg).await
     }
 
-    async fn with_sources_cfg(ids: &[&str], cfg: crate::config::Config) -> Mixer {
+    pub(super) async fn with_sources_cfg(ids: &[&str], cfg: crate::config::Config) -> Mixer {
         let _ = gst::init();
         let (mut mix, _handle, _cmds, _bus) = Mixer::build(cfg).expect("mixer builds");
         mix.start().expect("the programme starts");
@@ -5610,7 +5612,7 @@ mod tests {
         mix
     }
 
-    fn scene(name: &str, placements: Vec<Placement>) -> ProgramScene {
+    pub(super) fn scene(name: &str, placements: Vec<Placement>) -> ProgramScene {
         ProgramScene { name: name.into(), placements }
     }
 
@@ -5957,14 +5959,14 @@ mod tests {
     /// of one frame means nothing was lost. Watched on the encoder's own sink
     /// pad, which is the last place a gap could still be hidden.
     #[derive(Default)]
-    struct Gaps {
+    pub(super) struct Gaps {
         last: AtomicU64,
-        largest: AtomicU64,
+        pub(super) largest: AtomicU64,
         seen: AtomicU64,
     }
 
     impl Gaps {
-        fn watch(self: &Arc<Self>, pad: &gst::Pad) {
+        pub(super) fn watch(self: &Arc<Self>, pad: &gst::Pad) {
             let me = self.clone();
             pad.add_probe(gst::PadProbeType::BUFFER, move |_p, info| {
                 if let Some(gst::PadProbeData::Buffer(b)) = &info.data {
@@ -5980,7 +5982,7 @@ mod tests {
             });
         }
 
-        async fn wait_for(&self, frames: u64) {
+        pub(super) async fn wait_for(&self, frames: u64) {
             let mark = self.seen.load(Ordering::Relaxed) + frames;
             for _ in 0..600 {
                 if self.seen.load(Ordering::Relaxed) >= mark {
@@ -6754,7 +6756,7 @@ mod tests {
     /// This process's CPU time so far, in seconds. `getrusage` rather than a
     /// crate: it is two lines and it is on every platform this runs on.
     #[cfg(unix)]
-    fn cpu_seconds() -> f64 {
+    pub(super) fn cpu_seconds() -> f64 {
         // SAFETY: `getrusage` writes into a struct we own and reads nothing else.
         unsafe {
             let mut usage: libc::rusage = std::mem::zeroed();
@@ -6767,7 +6769,7 @@ mod tests {
     }
 
     #[cfg(not(unix))]
-    fn cpu_seconds() -> f64 {
+    pub(super) fn cpu_seconds() -> f64 {
         0.0
     }
 

@@ -899,8 +899,8 @@ impl Controllers {
             // frame against half of it, and on once it is whole.
             entry.binding.set_disabled(true);
             entry.source.unset_all();
-            for (at, value) in &curve.points {
-                entry.source.set(*at, *value);
+            for (i, (at, value)) in curve.points.iter().enumerate() {
+                entry.source.set(*at, if i == 0 { nudged(*value) } else { *value });
             }
             entry.binding.set_disabled(false);
             driven.push(Driven {
@@ -952,6 +952,27 @@ impl Controllers {
     /// Drop what belongs to a pad the compositor has taken back.
     fn forget_released_pads(&mut self) {
         self.entries.retain(|e| e.pad.parent().is_some());
+    }
+}
+
+/// The first value of a curve, moved by a millionth away from zero.
+///
+/// A `GstDirectControlBinding` remembers the last value it wrote and writes
+/// again only when the curve gives a different one. A binding reused by the
+/// next transition still remembers where the last one ended, while the
+/// property under it has been written by hand since (an apply hid the pad).
+/// A curve that holds that same value, a slide's incoming alpha at 1 from the
+/// first frame, was then never written at all, and the scene slid in at alpha
+/// 0: measured, a slide after a wipe drew nothing. A first value that cannot
+/// equal anything a binding remembers is written on the first frame, and a
+/// millionth is below anything a pad shows: an int property truncates it
+/// away (hence away from zero, so a negative position is not truncated up by
+/// one), and a double is clamped to its range.
+fn nudged(value: f64) -> f64 {
+    if value < 0.0 {
+        value - 1e-6
+    } else {
+        value + 1e-6
     }
 }
 
