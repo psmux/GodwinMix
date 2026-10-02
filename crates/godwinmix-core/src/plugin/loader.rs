@@ -1588,9 +1588,11 @@ mod tests {
         let err = launch_for("ndi/source", "cam", "t".into(), "r".into()).unwrap_err();
         let msg = format!("{err:#}");
         assert!(!msg.contains("gmx "), "no command in the message: {msg}");
+        // NDI ships with the mixer, so the button sets it up rather than
+        // sending a person to a marketplace.
         let action = ErrorAction::find(err.as_ref()).expect("an action").to_value();
-        assert_eq!(action["kind"], "install-plugin");
-        assert_eq!(action["name"], "ndi");
+        assert_eq!(action["kind"], "setup");
+        assert_eq!(action["piece"], "ndi");
 
         let off = anyhow::Error::from(switched_off("ndi"));
         assert!(!format!("{off:#}").contains("gmx "));
@@ -1840,8 +1842,10 @@ settings = "settings.json"
         let err = launch_for("nope/source", "cam1", "t".into(), "ws://x/rpc".into())
             .expect_err("nothing is installed");
         let text = format!("{err}");
-        assert!(text.contains("Installed: none"), "{text}");
-        assert!(text.contains("Install it"), "{text}");
+        assert!(text.contains("Press Install"), "{text}");
+        assert!(!text.contains("nope"), "the id is for the detail: {text}");
+        let detail = godwinmix_protocol::Actionable::find_detail(err.as_ref()).expect("a detail");
+        assert_eq!(detail["installed_plugins"], serde_json::json!([]));
         let action = ErrorAction::find(err.as_ref()).expect("the install, as a button");
         assert_eq!(action.name.as_deref(), Some("nope"));
         clear();
