@@ -39,18 +39,47 @@ pub async fn to(ctx: &Ctx, target: &BindingTarget, value: &Value) -> Result<(), 
 async fn source_params(ctx: &Ctx, source: &str, path: &str, value: &Value) -> Result<Value, String> {
     let keys = check::param_keys(path).map_err(|e| e.message)?;
     let (first, rest) = keys.split_first().ok_or("the param path is empty")?;
+    let configs = ctx.app.mixer.configs().await.map_err(|e| format!("{e:#}"))?;
+    let config = configs.sources.iter().find(|s| s.id == source);
     if rest.is_empty() {
+        let value = match config.and_then(|c| param_type(c, first)) {
+            Some(kind) => coerce(&kind, value),
+            None => value.clone(),
+        };
         return Ok(json!({ "id": source, "params": { first.as_str(): value } }));
     }
-    let configs = ctx.app.mixer.configs().await.map_err(|e| format!("{e:#}"))?;
-    let current = configs
-        .sources
-        .iter()
-        .find(|s| s.id == source)
+    let current = config
         .and_then(|s| s.params.get(first))
         .and_then(|v| serde_json::to_value(v).ok())
         .unwrap_or(Value::Null);
     Ok(json!({ "id": source, "params": { first.as_str(): set_in(current, rest, value.clone()) } }))
+}
+
+/// The JSON Schema type the source's kind gives `key`, when it publishes one.
+fn param_type(config: &godwinmix_core::config::SourceConfig, key: &str) -> Option<String> {
+    let kinds = godwinmix_core::plugin::source::described();
+    let kind = kinds.iter().find(|k| match &config.type_id {
+        Some(t) => &k.id == t,
+        None => k.schemes.iter().any(|s| config.uri.starts_with(s)),
+    })?;
+    let schema = kind.params.as_ref()?.pointer(&format!("/properties/{key}"))?;
+    match schema.get("type")? {
+        Value::String(t) => Some(t.clone()),
+        Value::Array(ts) => ts.iter().filter_map(Value::as_str).find(|t| *t != "null").map(str::to_string),
+        _ => None,
+    }
+}
+
+/// A number into a words param is its words; a list of numbers into a list
+/// of words, the same. A feed says `3` where a text wants `"3"`.
+fn coerce(kind: &str, value: &Value) -> Value {
+    let words = |v: &Value| Value::String(super::value::words(v));
+    match (kind, value) {
+        ("string", Value::Number(_) | Value::Bool(_)) => words(value),
+        ("array", Value::Array(items)) => Value::Array(items.iter().map(|i| if i.is_string() { i.clone() } else { words(i) }).collect()),
+        ("array", Value::String(_)) => Value::Array(vec![value.clone()]),
+        _ => value.clone(),
+    }
 }
 
 /// `value` at `keys` inside `base`, making objects on the way.
