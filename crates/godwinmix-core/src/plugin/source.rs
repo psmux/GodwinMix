@@ -243,8 +243,10 @@ mod tests {
     fn a_type_from_a_missing_plugin_offers_the_install() {
         let err = unknown_type("zz-not-here/source");
         let msg = format!("{err:#}");
-        assert!(msg.contains("zz-not-here"), "{msg}");
-        assert!(!msg.contains("gmx "), "{msg}");
+        // The sentence is for a person; the id rides in the detail.
+        assert!(!msg.contains("zz-not-here") && !msg.contains("gmx "), "{msg}");
+        let detail = godwinmix_protocol::Actionable::find_detail(err.as_ref()).expect("a detail");
+        assert_eq!(detail["plugin"], "zz-not-here");
         let action = godwinmix_protocol::ErrorAction::find(err.as_ref()).expect("an action").to_value();
         assert_eq!(action["kind"], "install-plugin");
         assert_eq!(action["name"], "zz-not-here");
@@ -282,8 +284,12 @@ mod tests {
             Ok(p) => panic!("this build has no ndi, but {} claimed it", p.manifest.provide_id()),
             Err(e) => e,
         };
+        // NDI ships with the mixer: a person reads plain words and the button
+        // sets it up; the type and what this build has are in the detail.
         let text = format!("{err}");
-        assert!(text.contains("ndi/source"), "{text}");
-        assert!(text.contains("rtmp/source"), "{text}");
+        assert!(text.starts_with("NDI sources are not set up"), "{text}");
+        let detail = godwinmix_protocol::Actionable::find_detail(err.as_ref()).expect("a detail");
+        assert_eq!(detail["type"], "ndi/source");
+        assert!(detail["available"].as_str().unwrap_or_default().contains("rtmp/source"), "{detail}");
     }
 }
