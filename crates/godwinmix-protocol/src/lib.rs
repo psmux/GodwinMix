@@ -21,6 +21,7 @@
 //!   openapi.rs      openapi.json for the REST layer
 //!   rpc.rs          JSON-RPC framing, subscriptions, frame headers
 //!   scope.rs        tokens, scopes, confirmation, rehearsal
+//!   setup.rs        pieces set up on first use: the browser, first party plugins
 //!   shows.rs        the station's show.* methods and events
 //!   health.rs       a show health and its alarms
 //!   idempotency.rs  the 24 hour replay cache
@@ -52,6 +53,7 @@ pub mod protocol;
 pub mod requests;
 pub mod rpc;
 pub mod scope;
+pub mod setup;
 pub mod shows;
 pub mod trace;
 pub mod transitions;

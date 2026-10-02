@@ -386,6 +386,9 @@ pub enum Event {
     ShowRemoved { id: String },
     /// A show's health changed state, or an alarm began or ended.
     ShowHealth { id: String, health: crate::health::Health },
+    /// A piece the mixer sets up on first use moved on: started, got further
+    /// through a download, finished or stopped. See `setup.rs`.
+    SetupChanged { setup: Box<crate::setup::SetupStatus> },
 }
 
 /// What a surface starts with: the layout, the theme and the gallery mode.
