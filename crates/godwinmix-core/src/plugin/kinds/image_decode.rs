@@ -82,7 +82,7 @@ fn picture(sample: &gst::Sample) -> Result<Picture> {
     let info = gst_video::VideoInfo::from_caps(caps).context("a decoded picture that is not video")?;
     let buffer = sample.buffer_owned().context("a decoded picture with no buffer")?;
     let (w, h) = (info.width(), info.height());
-    Ok(Picture { buffer, width: w, height: h, stride: info.stride()[0] as usize, natural: (w, h) })
+    Ok(Picture { buffer, width: w, height: h, stride: info.stride()[0] as usize, natural: (w, h), within: None })
 }
 
 /// `pic` at `size`, scaled once. Keeps the natural size it had.
@@ -109,5 +109,5 @@ pub fn scaled(pic: &Picture, size: (u32, u32)) -> Result<Picture> {
         .map_err(|_| anyhow::anyhow!("mapping the scaled picture"))?;
     conv.frame_ref(&in_frame, &mut out_frame);
     drop(out_frame);
-    Ok(Picture { buffer: out, width: to.width(), height: to.height(), stride: to.stride()[0] as usize, natural: pic.natural })
+    Ok(Picture { buffer: out, width: to.width(), height: to.height(), stride: to.stride()[0] as usize, natural: pic.natural, within: None })
 }

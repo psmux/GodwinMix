@@ -80,9 +80,21 @@ pub fn fitted(boxed: Rect, natural: (u32, u32), fit: Fit, align: (f64, f64)) -> 
 /// How to draw a held picture in a box this frame, and the size it is drawn
 /// at, which is the size the kind should render it at next.
 pub fn still(pic: &Picture, b: &PadBox) -> (Draw, (u32, u32)) {
-    let to = fitted(b.rect, pic.natural, b.fit, b.align);
+    let to = within(fitted(b.rect, pic.natural, b.fit, b.align), pic);
     let draw = Draw { window: Rect::new(0, 0, pic.width as i32, pic.height as i32), to, clip: b.rect, alpha: alpha8(b.alpha) };
     (draw, (to.w as u32, to.h as u32))
+}
+
+/// The part of `to` a picture covering only some of its natural frame
+/// lands in.
+fn within(to: Rect, pic: &Picture) -> Rect {
+    let Some(a) = pic.within else { return to };
+    let (nw, nh) = (pic.natural.0.max(1) as i64, pic.natural.1.max(1) as i64);
+    let x = to.x + (a.x as i64 * to.w as i64 / nw) as i32;
+    let y = to.y + (a.y as i64 * to.h as i64 / nh) as i32;
+    let r = to.x + ((a.x + a.w) as i64 * to.w as i64 / nw) as i32;
+    let bottom = to.y + ((a.y + a.h) as i64 * to.h as i64 / nh) as i32;
+    Rect::new(x, y, (r - x).max(1), (bottom - y).max(1))
 }
 
 /// A crawl: the strip at its own size, moved through the box and cut off at

@@ -16,12 +16,25 @@ pub struct Picture {
     /// SVG's declared size, a text's laid out box. What `contain` and `cover`
     /// keep the shape of, whatever size this one copy happens to be.
     pub natural: (u32, u32),
+    /// The part of the natural frame this picture covers, in natural pixels,
+    /// when it is not the whole of it: a keyed camera sends only what its
+    /// matte keeps, and is drawn there rather than stretched to the box.
+    pub within: Option<Area>,
+}
+
+/// A rectangle of a picture's natural frame.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Area {
+    pub x: u32,
+    pub y: u32,
+    pub w: u32,
+    pub h: u32,
 }
 
 impl Picture {
     /// A picture from bytes already in AYUV, `width * 4` to a row.
     pub fn from_ayuv(data: Vec<u8>, width: u32, height: u32, natural: (u32, u32)) -> Picture {
-        Picture { buffer: gst::Buffer::from_mut_slice(data), width, height, stride: width as usize * 4, natural }
+        Picture { buffer: gst::Buffer::from_mut_slice(data), width, height, stride: width as usize * 4, natural, within: None }
     }
 }
 

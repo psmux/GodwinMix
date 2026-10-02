@@ -399,6 +399,7 @@ use crate::plugin::branch::{BranchCtx, ProgrammeBranch, VideoPads};
 pub mod group;
 mod exited;
 mod generation;
+mod keyed;
 mod lifecycle;
 mod motion;
 mod offload;
@@ -1672,8 +1673,9 @@ impl Mixer {
         // never another. See `mixer::slots`.
         let overlay = crate::overlay::Board::new(&vmix, (canvas.width, canvas.height));
         mv.use_overlay(overlay.clone());
-        let pool = SlotPool::build(&program, &vmix, &canvas)
+        let mut pool = SlotPool::build(&program, &vmix, &canvas)
             .context("building the compositor slots")?;
+        pool.use_board(overlay.clone());
 
         // --- encoder lifecycle: the whole of it, in one block ---------------
         //
