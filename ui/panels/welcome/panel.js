@@ -1,9 +1,9 @@
 // The first five minutes: five tiles, one of which gets this machine streaming.
 //
-// It shows itself when a core has no sources and no preset has been applied,
-// and it never shows itself again once one has. That is the whole of its state
-// machine: the core knows whether a preset was applied (`core.info` carries
-// `ui.preset`), so a new browser on the same mixer does not get asked again.
+// It opens only when asked, from Settings ("Show the welcome tiles again") or
+// the palette. It used to open by itself on any core with no sources and no
+// preset, which on a station meant every new show, and that is not what an
+// operator setting up a show wants in front of them.
 //
 // Picking a tile calls `preset.apply` over the same protocol every other client
 // uses, then shows that preset's own steps as a checklist, each with the
@@ -37,12 +37,9 @@ export class WelcomePanel extends HTMLElement {
     this.offs = [];
   }
 
-  /** Show only on a core nobody has set up yet, or when asked from Settings. */
+  /** Apply the core's defaults, and open only when Settings asks. */
   async decide() {
-    const info = await applyCoreDefaults(this.client);
-    const applied = info && info.ui && info.ui.preset;
-    const sources = (this.client.state.sources || []).length;
-    if (!applied && sources === 0) await this.open();
+    await applyCoreDefaults(this.client);
     this.offs = [
       // Settings has a "Show this again", which fires this.
       onShowAgain(() => {

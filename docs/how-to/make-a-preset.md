@@ -165,9 +165,9 @@ Panels the first party UI ships: `header`, `multiview`, `sources`, `outputs`,
 `<plugin>/<panel id>`.
 
 `welcome` is the first five minutes: the three large tiles a person picks a
-preset from. The shell puts it up on its own when the core has no sources and
-no preset has been applied, so a layout never has to name it. Naming it anyway
-pins it to a slot, which is what a kiosk build wants.
+preset from. It opens from Settings, Show the welcome tiles again, and never
+on its own. Naming it in a layout pins it to a slot, which is what a kiosk
+build wants.
 
 Leave out a slot you do not want to fill.
 

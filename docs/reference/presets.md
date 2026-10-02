@@ -199,7 +199,8 @@ Nothing here restarts the encoder and nothing here touches the programme.
 the one `gmx doctor` proposes from this machine's cores and memory (`live` on
 eight cores with 8 GB, `snapshot` on four with 4, `icon` below that). There is
 no `preset` key, which is what tells a surface that nobody has set this core up
-yet, and is what puts the welcome tiles up in the reference UI.
+yet. The reference UI no longer opens the welcome tiles on its own because of
+it; they open from Settings.
 
 That mode is a first value, not an instruction: a browser that has already been
 told which gallery mode to use keeps it. A preset applied later is a deliberate

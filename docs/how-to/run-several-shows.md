@@ -21,8 +21,9 @@ sideways.
 To add a show, click the `+`, or choose File, New show. Give it a name and pick
 how it starts: empty, a copy of the show you are on (its scenes and sources,
 not its outputs), or a project file saved with File, Save project as. The page
-moves to the new show once it is made. A new empty show opens on the welcome
-tiles, the same as a new mixer does.
+moves to the new show once it is made. A new empty show opens on an empty
+desk; the welcome tiles are under Settings, Show the welcome tiles again, if
+you want a preset.
 
 To switch, click the other show's tab. The page loads again on that show, with
 `?show=<id>` in its address, and your panels stay where you put them. File,

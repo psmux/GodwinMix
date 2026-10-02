@@ -5,7 +5,8 @@ tells you plainly what it could not bring.
 
 ## From the page
 
-On the welcome screen, press Import from OBS. Drop the
+Open the welcome tiles (Settings, Show the welcome tiles again) and press
+Import from OBS. Drop the
 collection file on the dialog, or press the drop area to choose it. The page
 reads the file itself, so it can be on the computer you are using rather than
 the mixer's, and sends it to `scene.import.obs` with `add_sources`. The answer
