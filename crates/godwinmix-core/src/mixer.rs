@@ -1671,6 +1671,7 @@ impl Mixer {
         // so the eight the pool starts with cost one pad request each and
         // never another. See `mixer::slots`.
         let overlay = crate::overlay::Board::new(&vmix, (canvas.width, canvas.height));
+        mv.use_overlay(overlay.clone());
         let pool = SlotPool::build(&program, &vmix, &canvas)
             .context("building the compositor slots")?;
 

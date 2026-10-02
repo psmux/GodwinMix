@@ -899,8 +899,10 @@ impl Controllers {
             // frame against half of it, and on once it is whole.
             entry.binding.set_disabled(true);
             entry.source.unset_all();
+            let range = double_range(&curve.pad, curve.property);
             for (i, (at, value)) in curve.points.iter().enumerate() {
-                entry.source.set(*at, if i == 0 { nudged(*value) } else { *value });
+                let value = fitted(*value, range);
+                entry.source.set(*at, if i == 0 { nudged(value, range) } else { value });
             }
             entry.binding.set_disabled(false);
             driven.push(Driven {
@@ -955,7 +957,7 @@ impl Controllers {
     }
 }
 
-/// The first value of a curve, moved by a millionth away from zero.
+/// The first value of a curve, moved by a millionth.
 ///
 /// A `GstDirectControlBinding` remembers the last value it wrote and writes
 /// again only when the curve gives a different one. A binding reused by the
@@ -965,14 +967,56 @@ impl Controllers {
 /// first frame, was then never written at all, and the scene slid in at alpha
 /// 0: measured, a slide after a wipe drew nothing. A first value that cannot
 /// equal anything a binding remembers is written on the first frame, and a
-/// millionth is below anything a pad shows: an int property truncates it
-/// away (hence away from zero, so a negative position is not truncated up by
-/// one), and a double is clamped to its range.
-fn nudged(value: f64) -> f64 {
-    if value < 0.0 {
-        value - 1e-6
-    } else {
-        value + 1e-6
+/// millionth is below anything a pad shows.
+///
+/// An int property truncates it away, so it goes away from zero (a negative
+/// position is not truncated up by one). A double does not clamp: GObject
+/// refuses a value past the end of its range and logs a critical, which an
+/// alpha of 1 nudged to 1.000001 did for every frame of every transition. So
+/// a double with a range steps inward, down from its top and up from anywhere
+/// else.
+fn nudged(value: f64, range: Option<(f64, f64)>) -> f64 {
+    match range {
+        Some((_, max)) if value + 1e-6 > max => value - 1e-6,
+        Some(_) => value + 1e-6,
+        None if value < 0.0 => value - 1e-6,
+        None => value + 1e-6,
+    }
+}
+
+/// A value kept inside a double property's range, for the easing curves whose
+/// arithmetic can land a hair past 0 or 1.
+fn fitted(value: f64, range: Option<(f64, f64)>) -> f64 {
+    match range {
+        Some((min, max)) => value.clamp(min, max),
+        None => value,
+    }
+}
+
+/// The range of a double property on `pad`, or None for any other type.
+fn double_range(pad: &impl IsA<glib::Object>, property: &str) -> Option<(f64, f64)> {
+    let spec = pad.find_property(property)?;
+    let spec = spec.downcast_ref::<glib::ParamSpecDouble>()?;
+    Some((spec.minimum(), spec.maximum()))
+}
+
+#[cfg(test)]
+mod range_tests {
+    use super::*;
+
+    #[test]
+    fn an_alpha_of_one_is_nudged_down_and_never_past_its_top() {
+        let alpha = Some((0.0, 1.0));
+        assert!(nudged(1.0, alpha) < 1.0);
+        assert!(nudged(0.0, alpha) > 0.0);
+        assert_eq!(fitted(1.0000000002, alpha), 1.0);
+        assert_eq!(fitted(-1e-9, alpha), 0.0);
+    }
+
+    #[test]
+    fn an_int_position_still_goes_away_from_zero() {
+        assert!(nudged(-3.0, None) < -3.0);
+        assert!(nudged(3.0, None) > 3.0);
     }
 }
 

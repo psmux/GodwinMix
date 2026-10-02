@@ -29,11 +29,27 @@ pub struct Board {
     compositor: gst::Element,
     canvas: (i32, i32),
     probe: Mutex<Option<gst::PadProbeId>>,
+    /// Whether the size drawn at goes back to the kind, which renders at it.
+    /// The programme's board does; the preview's does not, or the two would
+    /// ask for different sizes in turn and the text would never stop being
+    /// rendered again.
+    measures: bool,
 }
 
 impl Board {
     pub fn new(compositor: &gst::Element, canvas: (i32, i32)) -> Arc<Board> {
-        Arc::new(Board { entries: Mutex::new(Vec::new()), compositor: compositor.clone(), canvas, probe: Mutex::new(None) })
+        Arc::new(Board { entries: Mutex::new(Vec::new()), compositor: compositor.clone(), canvas, probe: Mutex::new(None), measures: true })
+    }
+
+    /// A board that draws what another one's layers hold without asking them
+    /// to render at its size: the scene preview's, at thumbnail size.
+    pub fn watching(compositor: &gst::Element, canvas: (i32, i32)) -> Arc<Board> {
+        Arc::new(Board { entries: Mutex::new(Vec::new()), compositor: compositor.clone(), canvas, probe: Mutex::new(None), measures: false })
+    }
+
+    /// The layer `source` draws from on this board, if it is a transparent one.
+    pub fn layer_of(&self, source: &str) -> Option<Arc<Layer>> {
+        self.entries.lock().iter().find(|e| e.source == source).map(|e| e.layer.clone())
     }
 
     /// Draw `layer` wherever the scene puts `source`. Installs the probe for
@@ -114,7 +130,7 @@ impl Board {
                 biggest = Some(biggest.map_or(size, |s| (s.0.max(size.0), s.1.max(size.1))));
                 jobs.0.extend(draws.into_iter().map(|draw| Job { z: b.z, picture: pic.clone(), draw }));
             }
-            if let Some(size) = biggest {
+            if let (true, Some(size)) = (self.measures, biggest) {
                 e.layer.note_drawn(size);
             }
         }
@@ -124,20 +140,4 @@ impl Board {
     }
 }
 
-/// Keep a transparent source's flattened picture off the compositor. Its
-/// pad still exists and the scene still writes its place there; the board
-/// reads that and draws the real picture, so the compositor must draw nothing.
-///
-/// On the head of the source's programme branch, so nothing below it in the
-/// programme pipeline sees a buffer, and while `layer` is inactive (a clip
-/// whose decoder turned out to have no alpha) everything passes as before.
-pub fn hold_back(vtee: &gst::Element, layer: Arc<Layer>) {
-    let Some(pad) = vtee.static_pad("sink") else { return };
-    pad.add_probe(gst::PadProbeType::BUFFER | gst::PadProbeType::BUFFER_LIST, move |_, _| {
-        if layer.active() {
-            gst::PadProbeReturn::Drop
-        } else {
-            gst::PadProbeReturn::Ok
-        }
-    });
-}
+pub use super::hold::{hold_back, hold_back_at};
