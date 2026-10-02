@@ -58,6 +58,10 @@ fn register_reads(reg: &mut Registry<Call>) {
         )
         .params(schema_of::<FeedTestRequest>)
         .result(schema_of::<FeedTestResult>)
+        // Operate, because it makes the mixer fetch an address; not
+        // mutating, because it keeps nothing, so it is neither replayed nor
+        // written to the session log.
+        .mutating(false)
         .tool(
             "test_feed",
             Tier::Search,

@@ -11844,7 +11844,7 @@
     },
     "/api/v1/feed/test": {
       "post": {
-        "description": "JSON-RPC method `feed.test`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "description": "JSON-RPC method `feed.test`. Needs the `operate` scope.",
         "operationId": "feed.test",
         "requestBody": {
           "content": {
