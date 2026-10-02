@@ -257,6 +257,9 @@ pub struct InputPipeline {
     /// decoders: whatever it is, it is in here and nothing else sees it.
     kind: Mutex<Box<dyn crate::plugin::Source>>,
     /// Filters inserted per source, on the input side of the proxy boundary.
+    /// A name given after the source was built, by a rename. The config is
+    /// what the source was made with, and a rename must not rebuild it.
+    renamed: Mutex<Option<String>>,
     filters: Mutex<Vec<crate::plugin::FilterSlot>>,
     /// Keeps a restart and a stop, which both run off the mixer thread, in
     /// order. See `lifecycle`.
@@ -690,6 +693,21 @@ pub fn probe_page_media(id: &SourceId, spec: &ExecSpec, timeout: Duration) -> Op
 
 
 impl InputPipeline {
+    /// The name to show: the last rename, or the one it was built with.
+    pub fn display_name(&self) -> String {
+        self.renamed.lock().clone().unwrap_or_else(|| self.config.display_name().to_string())
+    }
+
+    /// Call it something else, in place. Nothing in the pipeline changes.
+    pub fn rename(&self, name: String) {
+        *self.renamed.lock() = Some(name);
+    }
+
+    /// The last rename, if there was one, for the runtime store.
+    pub fn renamed(&self) -> Option<String> {
+        self.renamed.lock().clone()
+    }
+
     /// The sidecar command that would ask this source's page what it plays.
     ///
     /// Some only for a website with `superimpose = "auto"` and a sidecar to
@@ -795,6 +813,7 @@ impl InputPipeline {
         Self {
             id: cfg.id.clone(),
             config: cfg.clone(),
+            renamed: Mutex::new(None),
             pipeline: ends.pipeline,
             health: ends.health,
             last_video: ends.last_video,
