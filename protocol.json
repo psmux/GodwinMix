@@ -2978,6 +2978,66 @@
       },
       "type": "object"
     },
+    "FieldType": {
+      "description": "What a field holds.",
+      "oneOf": [
+        {
+          "const": "text",
+          "description": "Words. Escaped for XML, so `&` and `<` show as themselves.",
+          "type": "string"
+        },
+        {
+          "const": "color",
+          "description": "A colour: `#rgb`, `#rrggbb` or `#rrggbbaa`.",
+          "type": "string"
+        }
+      ]
+    },
+    "FieldValue": {
+      "description": "One field and what it shows now.",
+      "properties": {
+        "default": {
+          "description": "What it shows when the source's params do not say. For `accent`,\n`text` and `panel` the station's brand colours come before this.",
+          "type": "string"
+        },
+        "fit": {
+          "description": "The width, in the template's own units, a text holding this field is\nshrunk to fit inside. Absent for a field that is never shrunk.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "label": {
+          "description": "What a form calls it.",
+          "type": "string"
+        },
+        "name": {
+          "description": "The name in `{{name}}` and in `params.fields`: lower case letters,\ndigits and underscores.",
+          "type": "string"
+        },
+        "set": {
+          "description": "Whether the source's params set it, rather than a default.",
+          "type": "boolean"
+        },
+        "type": {
+          "$ref": "#/$defs/FieldType"
+        },
+        "value": {
+          "description": "What is on screen: the source's own value, the brand colour or the\ndefault, in that order.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "label",
+        "type",
+        "default",
+        "value",
+        "set"
+      ],
+      "type": "object"
+    },
     "Filter": {
       "additionalProperties": false,
       "description": "One filter in an item's chain.",
@@ -7677,7 +7737,7 @@
         },
         "params": {
           "additionalProperties": true,
-          "description": "Params for the source's own kind. Merged over what it has.",
+          "description": "Params for the source's own kind. Merged over what it has, the way a\nJSON merge patch is: a table is merged key by key, and `null` removes\na key. `{\"fields\": {\"headline\": \"x\"}}` changes one field of a graphic.",
           "type": [
             "object",
             "null"
@@ -9404,6 +9464,289 @@
         }
       ],
       "description": "`ext.telemetry`. Accepts `false` to mean off, `true` for the default rate,\nor an object naming it."
+    },
+    "TemplateDoc": {
+      "description": "A template and its SVG.",
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "fields": {
+          "items": {
+            "$ref": "#/$defs/TemplateField"
+          },
+          "type": "array"
+        },
+        "height": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "name": {
+          "description": "The name `template:<name>` adds it by: a pack name such as\n`news-lower-third`, or a library file name such as `my-bar.svg`.",
+          "type": "string"
+        },
+        "origin": {
+          "$ref": "#/$defs/TemplateOrigin"
+        },
+        "svg": {
+          "description": "The SVG as written, with its `{{field}}` markers in place.",
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "uri": {
+          "description": "The address to give `source.add`.",
+          "type": "string"
+        },
+        "width": {
+          "description": "The size the SVG declares, which is the canvas it was designed on.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name",
+        "title",
+        "description",
+        "origin",
+        "uri",
+        "width",
+        "height",
+        "fields",
+        "svg"
+      ],
+      "type": "object"
+    },
+    "TemplateField": {
+      "description": "One named field of a template.",
+      "properties": {
+        "default": {
+          "description": "What it shows when the source's params do not say. For `accent`,\n`text` and `panel` the station's brand colours come before this.",
+          "type": "string"
+        },
+        "fit": {
+          "description": "The width, in the template's own units, a text holding this field is\nshrunk to fit inside. Absent for a field that is never shrunk.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "label": {
+          "description": "What a form calls it.",
+          "type": "string"
+        },
+        "name": {
+          "description": "The name in `{{name}}` and in `params.fields`: lower case letters,\ndigits and underscores.",
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/$defs/FieldType"
+        }
+      },
+      "required": [
+        "name",
+        "label",
+        "type",
+        "default"
+      ],
+      "type": "object"
+    },
+    "TemplateFields": {
+      "description": "The answer to `template.fields`.",
+      "properties": {
+        "fields": {
+          "items": {
+            "$ref": "#/$defs/FieldValue"
+          },
+          "type": "array"
+        },
+        "id": {
+          "type": "string"
+        },
+        "path": {
+          "description": "Where a client sets a field with `source.set`: `params.fields.<name>`.",
+          "type": "string"
+        },
+        "template": {
+          "description": "The template's name.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "template",
+        "fields",
+        "path"
+      ],
+      "type": "object"
+    },
+    "TemplateFieldsRequest": {
+      "additionalProperties": false,
+      "description": "`template.fields`: the fields of a running graphic.",
+      "properties": {
+        "id": {
+          "description": "The source id of a `template/source`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object"
+    },
+    "TemplateGetRequest": {
+      "additionalProperties": false,
+      "description": "`template.get`.",
+      "properties": {
+        "name": {
+          "description": "A pack name or a library file name, as `template.list` gives it.\nThe REST layer puts it in the path as `id`, so both are read.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "TemplateInfo": {
+      "description": "One template, as `template.list` and `template.get` describe it.",
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "fields": {
+          "items": {
+            "$ref": "#/$defs/TemplateField"
+          },
+          "type": "array"
+        },
+        "height": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "name": {
+          "description": "The name `template:<name>` adds it by: a pack name such as\n`news-lower-third`, or a library file name such as `my-bar.svg`.",
+          "type": "string"
+        },
+        "origin": {
+          "$ref": "#/$defs/TemplateOrigin"
+        },
+        "title": {
+          "type": "string"
+        },
+        "uri": {
+          "description": "The address to give `source.add`.",
+          "type": "string"
+        },
+        "width": {
+          "description": "The size the SVG declares, which is the canvas it was designed on.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name",
+        "title",
+        "description",
+        "origin",
+        "uri",
+        "width",
+        "height",
+        "fields"
+      ],
+      "type": "object"
+    },
+    "TemplateList": {
+      "description": "The answer to `template.list`.",
+      "properties": {
+        "errors": {
+          "description": "Library files that look like templates and would not read, and why.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "templates": {
+          "items": {
+            "$ref": "#/$defs/TemplateInfo"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "templates"
+      ],
+      "type": "object"
+    },
+    "TemplateOrigin": {
+      "description": "Where a template comes from.",
+      "oneOf": [
+        {
+          "const": "pack",
+          "description": "The starter pack built into the mixer. Read only: copy one with\n`template.get` and `template.save` to change it.",
+          "type": "string"
+        },
+        {
+          "const": "library",
+          "description": "An SVG in the media library.",
+          "type": "string"
+        }
+      ]
+    },
+    "TemplateSaveRequest": {
+      "additionalProperties": false,
+      "description": "`template.save`: check an SVG template and write it into the media\nlibrary.",
+      "properties": {
+        "name": {
+          "description": "The file name, ending `.svg` or not (it is added). One segment, no\nslashes. `id` in a REST path.",
+          "type": "string"
+        },
+        "replace": {
+          "default": false,
+          "description": "Write over a library file of the same name. Every source drawing it\nis drawn again with the new SVG, on air, with no rebuild.",
+          "type": "boolean"
+        },
+        "svg": {
+          "description": "The whole SVG document.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "svg"
+      ],
+      "type": "object"
+    },
+    "TemplateSaved": {
+      "description": "The answer to `template.save`.",
+      "properties": {
+        "path": {
+          "description": "Where it was written on the mixer.",
+          "type": "string"
+        },
+        "redrawn": {
+          "description": "The sources drawing this template that were drawn again with it.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "template": {
+          "$ref": "#/$defs/TemplateInfo"
+        }
+      },
+      "required": [
+        "template",
+        "path",
+        "redrawn"
+      ],
+      "type": "object"
     },
     "ThumbnailRequest": {
       "description": "`program.thumbnail`.",
@@ -11287,6 +11630,31 @@
         },
         "schemes": [
           "ticker:"
+        ]
+      },
+      {
+        "description": "A designed graphic: an SVG with named fields, drawn once per change with no browser",
+        "id": "template/source",
+        "params": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "properties": {
+            "fields": {
+              "additionalProperties": {
+                "type": [
+                  "string",
+                  "number",
+                  "boolean"
+                ]
+              },
+              "description": "The template's field values by name, such as {\"headline\": \"Polls close at ten\"}. A field left out shows the station's brand colour (accent, text, panel) or the template's default. Change one on air with source.set and params.fields.<name>; template.list and template.fields name every field.",
+              "type": "object"
+            }
+          },
+          "title": "template/source params",
+          "type": "object"
+        },
+        "schemes": [
+          "template:"
         ]
       }
     ]
@@ -15246,6 +15614,112 @@
       "scope": "read",
       "since": "1",
       "summary": "Every background job this core knows about, newest first."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": true,
+        "tool": "template_fields"
+      },
+      "mutating": false,
+      "name": "template.fields",
+      "params": {
+        "$ref": "#/$defs/TemplateFieldsRequest"
+      },
+      "rest": {
+        "method": "GET",
+        "path": "/api/v1/sources/{id}/fields"
+      },
+      "result": {
+        "$ref": "#/$defs/TemplateFields"
+      },
+      "scope": "read",
+      "since": "1",
+      "summary": "A running graphic's fields: each one's label, type, default and what it shows now."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": true,
+        "tool": "get_template"
+      },
+      "mutating": false,
+      "name": "template.get",
+      "params": {
+        "$ref": "#/$defs/TemplateGetRequest"
+      },
+      "rest": {
+        "method": "GET",
+        "path": "/api/v1/templates/{id}"
+      },
+      "result": {
+        "$ref": "#/$defs/TemplateDoc"
+      },
+      "scope": "read",
+      "since": "1",
+      "summary": "One template, with its SVG as written."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": true,
+        "tool": "list_templates"
+      },
+      "mutating": false,
+      "name": "template.list",
+      "params": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      },
+      "rest": {
+        "method": "GET",
+        "path": "/api/v1/templates"
+      },
+      "result": {
+        "$ref": "#/$defs/TemplateList"
+      },
+      "scope": "read",
+      "since": "1",
+      "summary": "The graphic templates: the built in pack and the SVG templates in the media library, each with its fields."
+    },
+    {
+      "destructive": false,
+      "idempotent": false,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "save_template"
+      },
+      "mutating": true,
+      "name": "template.save",
+      "params": {
+        "$ref": "#/$defs/TemplateSaveRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/templates/{id}/save"
+      },
+      "result": {
+        "$ref": "#/$defs/TemplateSaved"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "Check an SVG template and write it into the media library."
     },
     {
       "destructive": false,

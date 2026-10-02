@@ -201,6 +201,10 @@ Keys accepted on every method, handled before a method runs.
 | `task.cancel` | `POST /api/v1/tasks/{id}/cancel` | operate |  | 1 | Ask a piece of long running work to stop. Cooperative: the answer says the request landed, not that the work has stopped yet. |
 | `task.get` | `GET /api/v1/tasks/{id}` | read |  | 1 | How a piece of long running work is getting on, and its answer once it has one. |
 | `task.list` | `GET /api/v1/tasks` | read |  | 1 | Every background job this core knows about, newest first. |
+| `template.fields` | `GET /api/v1/sources/{id}/fields` | read |  | 1 | A running graphic's fields: each one's label, type, default and what it shows now. |
+| `template.get` | `GET /api/v1/templates/{id}` | read |  | 1 | One template, with its SVG as written. |
+| `template.list` | `GET /api/v1/templates` | read |  | 1 | The graphic templates: the built in pack and the SVG templates in the media library, each with its fields. |
+| `template.save` | `POST /api/v1/templates/{id}/save` | operate |  | 1 | Check an SVG template and write it into the media library. |
 | `tool.call` | `POST /api/v1/tool/call` | operate |  | 1 | Call one of a plugin's tools, in MCP's shape. The name is `<plugin>/<tool>`, or the bare tool name when only one plugin has it. |
 | `vitals.get` | `GET /api/v1/vitals` | read |  | 1 | This show's health (its state and alarms, null in the first second) and the thresholds they are judged by. |
 | `vitals.set` | `POST /api/v1/vitals/set` | operate |  | 1 | Change the alarm thresholds, or whether a mosaic is kept up for the black and freeze checks while nobody is looking. Fields left out keep their defaults; a duration of 0 switches that check off. Applies within a second. |
@@ -2978,6 +2982,76 @@ Every background job this core knows about, newest first.
       "$ref": "#/$defs/TaskView"
     },
     "type": "array"
+  }
+}
+```
+
+#### `template.fields`
+
+A running graphic's fields: each one's label, type, default and what it shows now.
+
+MCP tool `template_fields` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/TemplateFieldsRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/TemplateFields"
+  }
+}
+```
+
+#### `template.get`
+
+One template, with its SVG as written.
+
+MCP tool `get_template` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/TemplateGetRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/TemplateDoc"
+  }
+}
+```
+
+#### `template.list`
+
+The graphic templates: the built in pack and the SVG templates in the media library, each with its fields.
+
+MCP tool `list_templates` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "$ref": "#/$defs/TemplateList"
+  }
+}
+```
+
+#### `template.save`
+
+Check an SVG template and write it into the media library.
+
+MCP tool `save_template` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint false.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/TemplateSaveRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/TemplateSaved"
   }
 }
 ```

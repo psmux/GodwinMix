@@ -777,6 +777,9 @@ pub async fn run() -> Result<()> {
         }));
     }
     let cfg_media = cfg.media.clone();
+    // Before any source is built: a graphic template finds library files and
+    // the station's brand colours through these.
+    godwinmix_core::graphics::configure(&cfg.media.dir, &cfg.graphics);
     // Where the web UI and any plugin panels are read from.
     ui::configure(cfg.control.ui_dir.as_deref(), cfg.control.plugins_dir.as_deref());
     // The same directory the panels are served from is the one plugins are

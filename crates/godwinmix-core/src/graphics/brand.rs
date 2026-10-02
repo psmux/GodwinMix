@@ -55,7 +55,14 @@ pub fn configure(media_dir: &str, brand: &BrandConfig) {
     let dir = PathBuf::from(media_dir);
     let dir = dir.canonicalize().unwrap_or(dir);
     *LIBRARY.write() = Some(dir);
-    *BRAND.write() = Some(brand.clone());
+    let brand = match brand.check() {
+        Ok(()) => brand.clone(),
+        Err(e) => {
+            tracing::warn!(error = %e, "the [graphics] brand colours are not colours; every template uses its own until they are fixed");
+            BrandConfig::default()
+        }
+    };
+    *BRAND.write() = Some(brand);
 }
 
 /// The brand colours in force.
