@@ -399,6 +399,7 @@ use crate::plugin::branch::{BranchCtx, ProgrammeBranch, VideoPads};
 pub mod group;
 mod exited;
 mod generation;
+mod keyed;
 mod lifecycle;
 mod motion;
 mod offload;
@@ -1672,8 +1673,9 @@ impl Mixer {
         // never another. See `mixer::slots`.
         let overlay = crate::overlay::Board::new(&vmix, (canvas.width, canvas.height));
         mv.use_overlay(overlay.clone());
-        let pool = SlotPool::build(&program, &vmix, &canvas)
+        let mut pool = SlotPool::build(&program, &vmix, &canvas)
             .context("building the compositor slots")?;
+        pool.use_board(overlay.clone());
 
         // --- encoder lifecycle: the whole of it, in one block ---------------
         //
@@ -2190,6 +2192,11 @@ impl Mixer {
         params
             .entry("id".to_string())
             .or_insert_with(|| toml::Value::String(format!("pgm-{source}-{}", cfg.id)));
+        // A key here is drawn by the board wherever the scene puts this
+        // source, before its first frame goes through.
+        let drawn = format!("filter {}", cfg.id);
+        let hook = filter.board();
+        keyed::attach_at(Some(&self.overlay), hook.clone(), slot.branch.pads.clone(), &drawn);
         let placed = crate::plugin::filter::insert(
             crate::plugin::filter::Insertion {
                 pipeline: &self.program,
@@ -2205,7 +2212,8 @@ impl Mixer {
             filter,
             &self.canvas,
             true,
-        )?;
+        )
+        .inspect_err(|_| keyed::detach(Some(&self.overlay), hook, &drawn))?;
         self.programme_filters.push(placed);
         self.broadcast_status();
         Ok(())
@@ -2283,6 +2291,8 @@ impl Mixer {
     /// Take a filter out, wherever it is.
     fn remove_filter(&mut self, id: &str) -> Result<()> {
         if let Some(pos) = self.programme_filters.iter().position(|f| f.id() == id) {
+            let hook = self.programme_filters[pos].board();
+            keyed::detach(Some(&self.overlay), hook, &format!("filter {id}"));
             self.programme_filters.remove(pos).remove()?;
             self.broadcast_status();
             return Ok(());

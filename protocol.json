@@ -5228,6 +5228,70 @@
       ],
       "type": "object"
     },
+    "KeyColor": {
+      "properties": {
+        "color": {
+          "description": "\"#rrggbb\".",
+          "type": "string"
+        },
+        "found": {
+          "description": "\"point\" for the colour at a point, \"green\" or \"blue\" for a screen.",
+          "type": "string"
+        },
+        "share": {
+          "description": "For a screen, the share of the picture it covers, 0 to 1.",
+          "format": "float",
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "color",
+        "found"
+      ],
+      "type": "object"
+    },
+    "KeyColorRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "description": "The source id.",
+          "type": "string"
+        },
+        "screen": {
+          "default": null,
+          "description": "\"green\" or \"blue\" to look for that screen only. Either when left out.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "x": {
+          "default": null,
+          "description": "0 to 1 across the source's picture. With `y`, the colour there.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "y": {
+          "default": null,
+          "description": "0 to 1 down the source's picture.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object"
+    },
     "KeyMode": {
       "description": "How a publisher gives its key.",
       "oneOf": [
@@ -11023,6 +11087,103 @@
       },
       "type": "object"
     },
+    "VirtualSetAnswer": {
+      "properties": {
+        "added": {
+          "description": "Sources this call added for files it was given.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "key": {
+          "description": "The key colour written on the presenter's key: \"#rrggbb\", or \"auto\"\nwhen no still of the camera could be had and the key finds it on air.",
+          "type": "string"
+        },
+        "key_from": {
+          "description": "\"given\", \"guessed\" or \"auto\".",
+          "type": "string"
+        },
+        "scene": {
+          "$ref": "#/$defs/SceneView"
+        }
+      },
+      "required": [
+        "scene",
+        "key",
+        "key_from",
+        "added"
+      ],
+      "type": "object"
+    },
+    "VirtualSetRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "background": {
+          "description": "What stands behind the presenter: a source id, a file name from the\nmedia library, or a path or URL to a picture or clip.",
+          "type": "string"
+        },
+        "foreground": {
+          "default": null,
+          "description": "A transparent picture in front of the presenter, drawn over the whole\ncanvas: a source id, a media file name, or a path.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "key": {
+          "default": null,
+          "description": "\"auto\" (the default) guesses the colour from the camera; \"#rrggbb\"\ngives it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "lower_third": {
+          "default": null,
+          "description": "A source for the lower third area, in front of everything else.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "default": null,
+          "description": "The new scene's name. \"Virtual set\" when left out, with a number after\nit when that is taken.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "presenter": {
+          "description": "The camera to key: a source id.",
+          "type": "string"
+        },
+        "presenter_scale": {
+          "default": null,
+          "description": "The presenter's picture as a fraction of the canvas, 0.3 to 1. 0.9\nwhen left out.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "presenter_x": {
+          "default": null,
+          "description": "Where the presenter stands across the canvas, 0 to 1. 0.5, the\nmiddle, when left out.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "background",
+        "presenter"
+      ],
+      "type": "object"
+    },
     "VitalsConfig": {
       "description": "`[vitals]`, and what `vitals.set` changes: the thresholds, and whether\nto keep a mosaic up for the picture alarms while nobody is looking.",
       "properties": {
@@ -11973,7 +12134,7 @@
   "kinds": {
     "filter": [
       {
-        "description": "A green, blue or custom colour key",
+        "description": "A green or blue screen key with spill removal, a soft edge and a garbage matte",
         "id": "chroma/filter",
         "schemes": []
       }
@@ -15392,6 +15553,13 @@
     {
       "destructive": false,
       "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "set_scene_item_filter"
+      },
       "mutating": true,
       "name": "scene.item.filter.set",
       "params": {
@@ -15970,6 +16138,32 @@
         "idempotentHint": false,
         "profile": "search",
         "readOnlyHint": false,
+        "tool": "create_virtual_set"
+      },
+      "mutating": true,
+      "name": "scene.virtual_set",
+      "params": {
+        "$ref": "#/$defs/VirtualSetRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/scenes/virtual_set"
+      },
+      "result": {
+        "$ref": "#/$defs/VirtualSetAnswer"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "A new scene with a presenter keyed in front of a background, and optionally a foreground such as a desk and a lower third area. Pictures from the media library become sources; the key colour is guessed from the camera."
+    },
+    {
+      "destructive": false,
+      "idempotent": false,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "profile": "search",
+        "readOnlyHint": false,
         "tool": "add_show"
       },
       "mutating": true,
@@ -16436,6 +16630,32 @@
       "scope": "operate",
       "since": "1",
       "summary": "Put sources in a tray folder. A tag for finding things, not a group on the canvas."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": true,
+        "tool": "key_color"
+      },
+      "mutating": false,
+      "name": "source.key_color",
+      "params": {
+        "$ref": "#/$defs/KeyColorRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/sources/{id}/key_color"
+      },
+      "result": {
+        "$ref": "#/$defs/KeyColor"
+      },
+      "scope": "read",
+      "since": "1",
+      "summary": "The colour to key a source on: the colour at a point of its picture, or with no point the green or blue screen it stands in front of."
     },
     {
       "destructive": false,

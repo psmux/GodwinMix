@@ -194,7 +194,16 @@ fn filters(reg: &mut Registry<Call>) {
             handler(filter_set),
         )
         .params(schema_of::<ItemFilterRequest>)
-        .result(any_object),
+        .result(any_object)
+        .tool(
+            "set_scene_item_filter",
+            Tier::Search,
+            "Change the settings of a filter on a scene item, on air, with no rebuild. For \
+             a chroma key: {scene, item: \"presenter\", filter: \"Key\", params: {color: \
+             \"#30b050\", similarity: 0.4, smoothness: 0.1, spill: 0.6, feather: 1, \
+             matte_left: 0.2, matte_right: 0.2}}. `params` is merged into what the filter \
+             has, so name only what changes. Take a snapshot afterwards to check.",
+        ),
     );
 
     reg.register(

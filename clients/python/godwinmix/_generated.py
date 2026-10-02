@@ -1437,6 +1437,24 @@ class KeyAdded(TypedDict, total=False):
 
     key: NewKey
 
+class KeyColor(TypedDict, total=False):
+    color: str
+    # "#rrggbb".
+    found: str
+    # "point" for the colour at a point, "green" or "blue" for a screen.
+    share: Optional[float]
+    # For a screen, the share of the picture it covers, 0 to 1.
+
+class KeyColorRequest(TypedDict, total=False):
+    id: str
+    # The source id.
+    screen: Optional[str]
+    # "green" or "blue" to look for that screen only. Either when left out.
+    x: Optional[float]
+    # 0 to 1 across the source's picture. With `y`, the colour there.
+    y: Optional[float]
+    # 0 to 1 down the source's picture.
+
 class KeyRevealed(TypedDict, total=False):
     """What `channel.key.reveal` answers: the key itself, and nothing a list would carry."""
 
@@ -3083,6 +3101,33 @@ class VideoWant(TypedDict, total=False):
     # Keyframe interval. Renditions in one ladder share it.
     width: Optional[int]
 
+class VirtualSetAnswer(TypedDict, total=False):
+    added: List[str]
+    # Sources this call added for files it was given.
+    key: str
+    # The key colour written on the presenter's key: "#rrggbb", or "auto" when no still of the camera could be had and the key finds it on air.
+    key_from: str
+    # "given", "guessed" or "auto".
+    scene: SceneView
+
+class VirtualSetRequest(TypedDict, total=False):
+    background: str
+    # What stands behind the presenter: a source id, a file name from the media library, or a path or URL to a picture or clip.
+    foreground: Optional[str]
+    # A transparent picture in front of the presenter, drawn over the whole canvas: a source id, a media file name, or a path.
+    key: Optional[str]
+    # "auto" (the default) guesses the colour from the camera; "#rrggbb" gives it.
+    lower_third: Optional[str]
+    # A source for the lower third area, in front of everything else.
+    name: Optional[str]
+    # The new scene's name. "Virtual set" when left out, with a number after it when that is taken.
+    presenter: str
+    # The camera to key: a source id.
+    presenter_scale: Optional[float]
+    # The presenter's picture as a fraction of the canvas, 0.3 to 1. 0.9 when left out.
+    presenter_x: Optional[float]
+    # Where the presenter stands across the canvas, 0 to 1. 0.5, the middle, when left out.
+
 class VitalsConfig(TypedDict, total=False):
     """`[vitals]`, and what `vitals.set` changes: the thresholds, and whether to keep a mosaic up for the picture alarms while nobody is looking."""
 
@@ -3490,6 +3535,7 @@ METHODS = (
     {"name": "scene.transaction.commit", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/transaction/commit"), "summary": 'Apply the batch.'},
     {"name": "scene.undo", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/undo"), "summary": 'Undo the last change. A drag marked with scene.history.mark undoes as one step.'},
     {"name": "scene.validate", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/scenes/validate"), "summary": 'Overlaps, items off the canvas, safe area breaches and missing sources: what to fix before saying a scene is done.'},
+    {"name": "scene.virtual_set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/virtual_set"), "summary": 'A new scene with a presenter keyed in front of a background, and optionally a foreground such as a desk and a lower third area. Pictures from the media library become sources; the key colour is guessed from the camera.'},
     {"name": "show.add", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/shows"), "summary": 'Make another show and start it: empty, a copy of a show (without its outputs, so nothing goes out twice), or from a project file.'},
     {"name": "show.add_many", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/shows/add_many"), "summary": 'Make many shows in one call, such as every channel of a headend. The whole batch is checked first. With dry_run (the default) nothing is made: the answer says what would be, what its renditions would cost and whether the governor would admit them. Without it, every show that fits is made and the rest are refused with why; a show is made whole or not at all.'},
     {"name": "show.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/shows"), "summary": 'Every show on this machine: its name, whether it is running, what is on air, what its outputs send and what its process costs. `current` is the show a client reaches when it names none.'},
@@ -3509,6 +3555,7 @@ METHODS = (
     {"name": "source.duplicate", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/sources/{id}/duplicate"), "summary": 'Add another source like one the mixer has: the same address and settings under a new id. A client cannot do this with source.add, because the address it is shown has everything after the host cut off.'},
     {"name": "source.get", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/sources/{id}"), "summary": 'One source. Refused with the ids that exist when there is no such source.'},
     {"name": "source.group", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/sources/{id}/group"), "summary": 'Put sources in a tray folder. A tag for finding things, not a group on the canvas.'},
+    {"name": "source.key_color", "scope": "read", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/sources/{id}/key_color"), "summary": 'The colour to key a source on: the colour at a point of its picture, or with no point the green or blue screen it stands in front of.'},
     {"name": "source.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/sources"), "summary": 'Every source, with its state, whether it has video and audio, and its fader.'},
     {"name": "source.missing", "scope": "read", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/sources/{id}/missing"), "summary": 'Sources that are not running, and why: failed, could not be started (with the error and the action that fixes it), removed, or unknown. Pass the ids a scene draws, or none for every one the mixer knows about.'},
     {"name": "source.remove", "scope": "operate", "mutating": True, "destructive": True, "rest": ("DELETE", "/api/v1/sources/{id}"), "summary": 'Remove a source. If it is on programme the mixer cuts to the slate first.'},
@@ -5678,6 +5725,36 @@ class GeneratedMethods:
             params["scene"] = scene
         return await self._call("scene.validate", params)
 
+    async def scene_virtual_set(
+        self,
+        background: str,
+        presenter: str,
+        *,
+        foreground: Optional[str] = None,
+        key: Optional[str] = None,
+        lower_third: Optional[str] = None,
+        name: Optional[str] = None,
+        presenter_scale: Optional[float] = None,
+        presenter_x: Optional[float] = None,
+    ) -> VirtualSetAnswer:
+        """A new scene with a presenter keyed in front of a background, and optionally a foreground such as a desk and a lower third area. Pictures from the media library become sources; the key colour is guessed from the camera."""
+        params: Dict[str, Any] = {}
+        params["background"] = background
+        params["presenter"] = presenter
+        if foreground is not None:
+            params["foreground"] = foreground
+        if key is not None:
+            params["key"] = key
+        if lower_third is not None:
+            params["lower_third"] = lower_third
+        if name is not None:
+            params["name"] = name
+        if presenter_scale is not None:
+            params["presenter_scale"] = presenter_scale
+        if presenter_x is not None:
+            params["presenter_x"] = presenter_x
+        return await self._call("scene.virtual_set", params)
+
     async def show_add(
         self,
         name: str,
@@ -5980,6 +6057,25 @@ class GeneratedMethods:
         if name is not None:
             params["name"] = name
         return await self._call("source.group", params)
+
+    async def source_key_color(
+        self,
+        id: str,
+        *,
+        screen: Optional[str] = None,
+        x: Optional[float] = None,
+        y: Optional[float] = None,
+    ) -> KeyColor:
+        """The colour to key a source on: the colour at a point of its picture, or with no point the green or blue screen it stands in front of."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        if screen is not None:
+            params["screen"] = screen
+        if x is not None:
+            params["x"] = x
+        if y is not None:
+            params["y"] = y
+        return await self._call("source.key_color", params)
 
     async def source_list(
         self,

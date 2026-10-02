@@ -280,6 +280,12 @@ export class Inspector {
           }),
         ])
       );
+      const source = record.content && record.content.source;
+      if (filter.type === "chroma/filter" && source) {
+        // Loaded only for an item that has a key, and put in its place once here.
+        const { keyEditor } = await import("./key.js");
+        list.appendChild(keyEditor({ client: this.o.client, filter, ref: filter.name || filter.type || i, source, set: (ref, params) => api.set(ref, params) }));
+      }
     }
     if (!(record.filters || []).length) {
       list.appendChild(el("div.dim.sm", { text: "No filters on this item." }));

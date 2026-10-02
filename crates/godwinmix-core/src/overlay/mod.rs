@@ -36,6 +36,7 @@ pub mod carrier;
 pub mod clock;
 pub mod draw;
 mod hold;
+pub mod keyed;
 pub mod layer;
 pub mod picture;
 pub mod place;

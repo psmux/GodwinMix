@@ -95,7 +95,7 @@ fn mix(over: u32, under: u8, a: u32) -> u8 {
     ((over * a + under as u32 * (255 - a) + 127) / 255) as u8
 }
 
-fn luma(dst: &mut Planes<'_>, src: &Source<'_>, area: &Rect, cols: &[usize], rows: &[usize], alpha_at: &dyn Fn(usize) -> u32) {
+fn luma(dst: &mut Planes<'_>, src: &Source<'_>, area: &Rect, cols: &[usize], rows: &[usize], alpha_at: &impl Fn(usize) -> u32) {
     for (j, srow) in rows.iter().enumerate() {
         let start = (area.y as usize + j) * dst.strides[0] + area.x as usize;
         let line = &mut dst.y[start..start + area.w as usize];
@@ -111,7 +111,7 @@ fn luma(dst: &mut Planes<'_>, src: &Source<'_>, area: &Rect, cols: &[usize], row
     }
 }
 
-fn chroma(dst: &mut Planes<'_>, src: &Source<'_>, area: &Rect, cols: &[usize], rows: &[usize], alpha_at: &dyn Fn(usize) -> u32) {
+fn chroma(dst: &mut Planes<'_>, src: &Source<'_>, area: &Rect, cols: &[usize], rows: &[usize], alpha_at: &impl Fn(usize) -> u32) {
     for cy in area.y / 2..(area.bottom() + 1) / 2 {
         for cx in area.x / 2..(area.right() + 1) / 2 {
             let (mut sa, mut su, mut sv) = (0u32, 0u32, 0u32);

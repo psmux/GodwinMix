@@ -2278,6 +2278,34 @@ pub struct KeyAdded {
     pub key: NewKey,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct KeyColor {
+    /// "#rrggbb".
+    pub color: String,
+    /// "point" for the colour at a point, "green" or "blue" for a screen.
+    pub found: String,
+    /// For a screen, the share of the picture it covers, 0 to 1.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub share: Option<f32>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct KeyColorRequest {
+    /// The source id.
+    pub id: String,
+    /// "green" or "blue" to look for that screen only. Either when left out.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub screen: Option<String>,
+    /// 0 to 1 across the source's picture. With `y`, the colour there.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub x: Option<f64>,
+    /// 0 to 1 down the source's picture.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub y: Option<f64>,
+}
+
 /// How a publisher gives its key.
 pub type KeyMode = String;
 /// The values api_level 1 knows for [`KeyMode`].
@@ -4874,6 +4902,52 @@ pub struct VideoWant {
     pub width: Option<u32>,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct VirtualSetAnswer {
+    /// Sources this call added for files it was given.
+    pub added: Vec<String>,
+    /// The key colour written on the presenter's key: "#rrggbb", or "auto"
+    /// when no still of the camera could be had and the key finds it on air.
+    pub key: String,
+    /// "given", "guessed" or "auto".
+    pub key_from: String,
+    pub scene: SceneView,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct VirtualSetRequest {
+    /// What stands behind the presenter: a source id, a file name from the
+    /// media library, or a path or URL to a picture or clip.
+    pub background: String,
+    /// A transparent picture in front of the presenter, drawn over the whole
+    /// canvas: a source id, a media file name, or a path.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub foreground: Option<String>,
+    /// "auto" (the default) guesses the colour from the camera; "#rrggbb"
+    /// gives it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub key: Option<String>,
+    /// A source for the lower third area, in front of everything else.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lower_third: Option<String>,
+    /// The new scene's name. "Virtual set" when left out, with a number after
+    /// it when that is taken.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// The camera to key: a source id.
+    pub presenter: String,
+    /// The presenter's picture as a fraction of the canvas, 0.3 to 1. 0.9
+    /// when left out.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub presenter_scale: Option<f64>,
+    /// Where the presenter stands across the canvas, 0 to 1. 0.5, the
+    /// middle, when left out.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub presenter_x: Option<f64>,
+}
+
 /// `[vitals]`, and what `vitals.set` changes: the thresholds, and whether
 /// to keep a mosaic up for the picture alarms while nobody is looking.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -5121,7 +5195,7 @@ pub struct MethodInfo {
     pub rest: Option<(&'static str, &'static str)>,
 }
 
-pub const METHODS: [MethodInfo; 186] = [
+pub const METHODS: [MethodInfo; 188] = [
     MethodInfo { name: "adbreak.end", summary: "Cut a running ad short, or disarm one that is scheduled.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/end")) },
     MethodInfo { name: "adbreak.start", summary: "Interrupt the programme with a clip, then rejoin live when it ends.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/start")) },
     MethodInfo { name: "agent.state", summary: "The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/agent/state")) },
@@ -5272,6 +5346,7 @@ pub const METHODS: [MethodInfo; 186] = [
     MethodInfo { name: "scene.transaction.commit", summary: "Apply the batch.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/transaction/commit")) },
     MethodInfo { name: "scene.undo", summary: "Undo the last change. A drag marked with scene.history.mark undoes as one step.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/undo")) },
     MethodInfo { name: "scene.validate", summary: "Overlaps, items off the canvas, safe area breaches and missing sources: what to fix before saying a scene is done.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/scenes/validate")) },
+    MethodInfo { name: "scene.virtual_set", summary: "A new scene with a presenter keyed in front of a background, and optionally a foreground such as a desk and a lower third area. Pictures from the media library become sources; the key colour is guessed from the camera.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/virtual_set")) },
     MethodInfo { name: "show.add", summary: "Make another show and start it: empty, a copy of a show (without its outputs, so nothing goes out twice), or from a project file.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/shows")) },
     MethodInfo { name: "show.add_many", summary: "Make many shows in one call, such as every channel of a headend. The whole batch is checked first. With dry_run (the default) nothing is made: the answer says what would be, what its renditions would cost and whether the governor would admit them. Without it, every show that fits is made and the rest are refused with why; a show is made whole or not at all.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/shows/add_many")) },
     MethodInfo { name: "show.list", summary: "Every show on this machine: its name, whether it is running, what is on air, what its outputs send and what its process costs. `current` is the show a client reaches when it names none.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/shows")) },
@@ -5291,6 +5366,7 @@ pub const METHODS: [MethodInfo; 186] = [
     MethodInfo { name: "source.duplicate", summary: "Add another source like one the mixer has: the same address and settings under a new id. A client cannot do this with source.add, because the address it is shown has everything after the host cut off.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/sources/{id}/duplicate")) },
     MethodInfo { name: "source.get", summary: "One source. Refused with the ids that exist when there is no such source.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/sources/{id}")) },
     MethodInfo { name: "source.group", summary: "Put sources in a tray folder. A tag for finding things, not a group on the canvas.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/sources/{id}/group")) },
+    MethodInfo { name: "source.key_color", summary: "The colour to key a source on: the colour at a point of its picture, or with no point the green or blue screen it stands in front of.", scope: "read", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/sources/{id}/key_color")) },
     MethodInfo { name: "source.list", summary: "Every source, with its state, whether it has video and audio, and its fader.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/sources")) },
     MethodInfo { name: "source.missing", summary: "Sources that are not running, and why: failed, could not be started (with the error and the action that fixes it), removed, or unknown. Pass the ids a scene draws, or none for every one the mixer knows about.", scope: "read", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/sources/{id}/missing")) },
     MethodInfo { name: "source.remove", summary: "Remove a source. If it is on programme the mixer cuts to the slate first.", scope: "operate", mutating: true, destructive: true, rest: Some(("DELETE", "/api/v1/sources/{id}")) },
@@ -6353,6 +6429,11 @@ impl Client {
         self.call("scene.validate", params).await
     }
 
+    /// A new scene with a presenter keyed in front of a background, and optionally a foreground such as a desk and a lower third area. Pictures from the media library become sources; the key colour is guessed from the camera.
+    pub async fn scene_virtual_set(&self, params: &VirtualSetRequest) -> Result<VirtualSetAnswer> {
+        self.call("scene.virtual_set", params).await
+    }
+
     /// Make another show and start it: empty, a copy of a show (without its outputs, so nothing goes out twice), or from a project file.
     pub async fn show_add(&self, params: &ShowAddRequest) -> Result<Show> {
         self.call("show.add", params).await
@@ -6446,6 +6527,11 @@ impl Client {
     /// Put sources in a tray folder. A tag for finding things, not a group on the canvas.
     pub async fn source_group(&self, params: &GroupSourcesRequest) -> Result<BTreeMap<String, Value>> {
         self.call("source.group", params).await
+    }
+
+    /// The colour to key a source on: the colour at a point of its picture, or with no point the green or blue screen it stands in front of.
+    pub async fn source_key_color(&self, params: &KeyColorRequest) -> Result<KeyColor> {
+        self.call("source.key_color", params).await
     }
 
     /// Every source, with its state, whether it has video and audio, and its fader.

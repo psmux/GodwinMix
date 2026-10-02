@@ -25,10 +25,13 @@ use std::sync::Arc;
 pub(crate) mod edit;
 mod graphics;
 mod items;
+mod key_color;
 mod obs;
 pub(crate) mod layout;
 mod requests;
+mod set_inputs;
 mod share;
+mod virtual_set;
 
 pub use requests::*;
 
@@ -39,6 +42,7 @@ pub fn register(reg: &mut Registry<Call>) {
     graphics::register(reg);
     share::register(reg);
     edit::register(reg);
+    virtual_set::register(reg);
 }
 
 /// `scene.list`, `get`, `add`, `remove`, `rename`, `duplicate`, `validate`.
