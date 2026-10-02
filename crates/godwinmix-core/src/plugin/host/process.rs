@@ -11,6 +11,8 @@
 //! Nothing in here touches GStreamer. `transport.rs` builds the media end and
 //! the kinds in `source.rs`, `output.rs` and `filter.rs` put the two together.
 
+mod exit;
+
 use crate::input::{ExecChild, ExecSpec, ExecStdout, ExecStdoutHeld, StderrReader};
 use anyhow::{Context, Result};
 use godwinmix_host::channel::{read_line, Channel, LineError};

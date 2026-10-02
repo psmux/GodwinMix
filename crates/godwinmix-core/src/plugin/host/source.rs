@@ -477,6 +477,21 @@ impl Source for SidecarSource {
             )),
         }
     }
+
+    fn exited(&mut self) -> Option<String> {
+        self.plugin_exited()
+    }
+}
+
+impl SidecarSource {
+    /// The plugin process went away on its own: say so once, and record it
+    /// where `plugin.list` reads. See `process::exit`.
+    pub fn plugin_exited(&mut self) -> Option<String> {
+        let why = self.child.as_mut()?.exited()?;
+        warn!(source = %self.build.id, %why, "a plugin process went away by itself");
+        crate::plugin::loader::set_state(&self.build.id, InstanceState::Failed.as_str());
+        Some(why)
+    }
 }
 
 impl Drop for SidecarSource {

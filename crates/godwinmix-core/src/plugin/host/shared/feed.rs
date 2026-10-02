@@ -42,6 +42,9 @@ pub struct Feed {
     sidecar: SidecarSource,
     pipeline: gst::Pipeline,
     published: Arc<AtomicU64>,
+    /// The plugin process exited by itself, as against a pipeline error or a
+    /// silent device. Read by the owner to pick how soon to open it again.
+    exited: bool,
     /// From a frame reaching this process from the plugin to its publish.
     pub through: Arc<Samples>,
     /// Held for as long as the feed lives, and dropped after everything else.
@@ -80,6 +83,7 @@ impl Feed {
             sidecar,
             pipeline,
             published,
+            exited: false,
             through,
             _claim: claim,
         })
@@ -98,6 +102,10 @@ impl Feed {
                 }
                 _ => {}
             }
+        }
+        if let Some(why) = self.sidecar.plugin_exited() {
+            self.exited = true;
+            return Some(why);
         }
         if matches!(self.sidecar.instance_state(), InstanceState::Failed | InstanceState::Stopped) {
             return Some("the plugin process stopped".into());
@@ -123,6 +131,11 @@ impl Feed {
 
     pub fn pid(&self) -> Option<u32> {
         self.sidecar.pid()
+    }
+
+    /// Whether the failure `failure` reported was the plugin process exiting.
+    pub fn exited(&self) -> bool {
+        self.exited
     }
 }
 
