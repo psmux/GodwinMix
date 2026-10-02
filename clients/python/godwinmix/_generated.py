@@ -94,11 +94,16 @@ class AddItemRequest(TypedDict, total=False):
     # What the item shows: `{"source": "cam1"}`, `{"ref": "<scene id>"}` or `{"graphic": "plugin/id"}`.
     draft: Optional[str]
     # A draft id from `scene.edit.begin`, to change a working copy instead of the live document.
+    enter: Any
+    # How it comes in and goes out when shown or hidden on air: `{type, edge, duration_ms, easing, on_take}`, as on `scene.item.set`.
+    exit: Any
     name: Optional[str]
     # What to call it. Left out, a source item is named after its source, because a model reasons about words.
     scene: str
     transform: Any
     # Where it goes. Left out, the next free cell of a grid over what is already there, so a drop on a scene never needs a dialog.
+    visible: Optional[bool]
+    # `false` adds it hidden, so a graphic can be put on a scene that is on air and shown later with its `enter`. Left out, it is shown.
 
 class AddOutputRequest(TypedDict, total=False):
     """`output.add`. The id and the URL are the whole of it for an RTMP destination; anything else a kind understands rides in `params`."""
@@ -1004,6 +1009,23 @@ class FeedTestResult(TypedDict, total=False):
     took_ms: int
     value: Any
     # What a binding with this selection would write.
+
+class FieldValue(TypedDict, total=False):
+    """One field and what it shows now."""
+
+    default: str
+    # What it shows when the source's params do not say. For `accent`, `text` and `panel` the station's brand colours come before this.
+    fit: Optional[float]
+    # The width, in the template's own units, a text holding this field is shrunk to fit inside. Absent for a field that is never shrunk.
+    label: str
+    # What a form calls it.
+    name: str
+    # The name in `{{name}}` and in `params.fields`: lower case letters, digits and underscores.
+    set: bool
+    # Whether the source's params set it, rather than a default.
+    type: FieldType
+    value: str
+    # What is on screen: the source's own value, the brand colour or the default, in that order.
 
 class Filter(TypedDict, total=False):
     """One filter in an item's chain."""
@@ -2361,7 +2383,7 @@ class SetSourceRequest(TypedDict, total=False):
     name: Optional[str]
     # What to call it in the UI. Kept on the scene document, so every client, the tally and an agent read the same name.
     params: Optional[Dict[str, Any]]
-    # Params for the source's own kind. Merged over what it has.
+    # Params for the source's own kind. Merged over what it has, the way a JSON merge patch is: a table is merged key by key, and `null` removes a key. `{"fields": {"headline": "x"}}` changes one field of a graphic.
     place: Union[Place, None]
     # Where it runs: `core`, `in-process`, `sidecar` or `node:<name>`.
     transport: Union[BridgeTransport, None]
@@ -2799,6 +2821,99 @@ class TaskView(TypedDict, total=False):
     state: TaskState
     task_id: str
 
+class TemplateDoc(TypedDict, total=False):
+    """A template and its SVG."""
+
+    description: str
+    fields: List[TemplateField]
+    height: int
+    name: str
+    # The name `template:<name>` adds it by: a pack name such as `news-lower-third`, or a library file name such as `my-bar.svg`.
+    origin: TemplateOrigin
+    svg: str
+    # The SVG as written, with its `{{field}}` markers in place.
+    title: str
+    uri: str
+    # The address to give `source.add`.
+    width: int
+    # The size the SVG declares, which is the canvas it was designed on.
+
+class TemplateField(TypedDict, total=False):
+    """One named field of a template."""
+
+    default: str
+    # What it shows when the source's params do not say. For `accent`, `text` and `panel` the station's brand colours come before this.
+    fit: Optional[float]
+    # The width, in the template's own units, a text holding this field is shrunk to fit inside. Absent for a field that is never shrunk.
+    label: str
+    # What a form calls it.
+    name: str
+    # The name in `{{name}}` and in `params.fields`: lower case letters, digits and underscores.
+    type: FieldType
+
+class TemplateFields(TypedDict, total=False):
+    """The answer to `template.fields`."""
+
+    fields: List[FieldValue]
+    id: str
+    path: str
+    # Where a client sets a field with `source.set`: `params.fields.<name>`.
+    template: str
+    # The template's name.
+
+class TemplateFieldsRequest(TypedDict, total=False):
+    """`template.fields`: the fields of a running graphic."""
+
+    id: str
+    # The source id of a `template/source`.
+
+class TemplateGetRequest(TypedDict, total=False):
+    """`template.get`."""
+
+    name: str
+    # A pack name or a library file name, as `template.list` gives it.
+
+class TemplateInfo(TypedDict, total=False):
+    """One template, as `template.list` and `template.get` describe it."""
+
+    description: str
+    fields: List[TemplateField]
+    height: int
+    name: str
+    # The name `template:<name>` adds it by: a pack name such as `news-lower-third`, or a library file name such as `my-bar.svg`.
+    origin: TemplateOrigin
+    title: str
+    uri: str
+    # The address to give `source.add`.
+    width: int
+    # The size the SVG declares, which is the canvas it was designed on.
+
+class TemplateList(TypedDict, total=False):
+    """The answer to `template.list`."""
+
+    errors: List[str]
+    # Library files that look like templates and would not read, and why.
+    templates: List[TemplateInfo]
+
+class TemplateSaveRequest(TypedDict, total=False):
+    """`template.save`: check an SVG template and write it into the media library."""
+
+    name: str
+    # The file name, ending `.svg` or not (it is added). One segment, no slashes.
+    replace: bool
+    # Write over a library file of the same name. Every source drawing it is drawn again with the new SVG, on air, with no rebuild.
+    svg: str
+    # The whole SVG document.
+
+class TemplateSaved(TypedDict, total=False):
+    """The answer to `template.save`."""
+
+    path: str
+    # Where it was written on the mixer.
+    redrawn: List[str]
+    # The sources drawing this template that were drawn again with it.
+    template: TemplateInfo
+
 class ThumbnailRequest(TypedDict, total=False):
     """`program.thumbnail`."""
 
@@ -3149,6 +3264,9 @@ FeedFormat = Union[Literal['auto', 'json'], Literal['rss'], Literal['csv'], Lite
 # Where a feed is.
 FeedState = Union[Literal['paused'], Literal['starting'], Literal['ok'], Literal['failing']]
 
+# What a field holds.
+FieldType = Literal['text', 'color']
+
 # How content fills its frame. SVG's vocabulary, which replaces OBS's seven bounds types and maps onto `sizing-policy` on a `glvideomixer` pad.
 Fit = Literal['none', 'contain', 'cover', 'stretch', 'fit-width', 'fit-height', 'max']
 
@@ -3212,6 +3330,9 @@ TaskState = Literal['running', 'completed', 'failed', 'cancelled']
 
 # `ext.telemetry`. Accepts `false` to mean off, `true` for the default rate, or an object naming it.
 TelemetryExt = Union[bool, Dict[str, Any]]
+
+# Where a template comes from.
+TemplateOrigin = Literal['pack', 'library']
 
 # A name, or an object.
 Transition = Union[str, TransitionRequest]
@@ -3398,6 +3519,10 @@ METHODS = (
     {"name": "task.cancel", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/tasks/{id}/cancel"), "summary": 'Ask a piece of long running work to stop. Cooperative: the answer says the request landed, not that the work has stopped yet.'},
     {"name": "task.get", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/tasks/{id}"), "summary": 'How a piece of long running work is getting on, and its answer once it has one.'},
     {"name": "task.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/tasks"), "summary": 'Every background job this core knows about, newest first.'},
+    {"name": "template.fields", "scope": "read", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/template/fields"), "summary": "A running graphic's fields: each one's label, type, default and what it shows now."},
+    {"name": "template.get", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/template"), "summary": 'One template, with its SVG as written.'},
+    {"name": "template.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/template/list"), "summary": 'The graphic templates: the built in pack and the SVG templates in the media library, each with its fields.'},
+    {"name": "template.save", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/template/save"), "summary": 'Check an SVG template and write it into the media library.'},
     {"name": "tool.call", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/tool/call"), "summary": "Call one of a plugin's tools, in MCP's shape. The name is `<plugin>/<tool>`, or the bare tool name when only one plugin has it."},
     {"name": "vitals.get", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/vitals"), "summary": "This show's health (its state and alarms, null in the first second) and the thresholds they are judged by."},
     {"name": "vitals.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/vitals/set"), "summary": 'Change the alarm thresholds, or whether a mosaic is kept up for the black and freeze checks while nobody is looking. Fields left out keep their defaults; a duration of 0 switches that check off. Applies within a second.'},
@@ -4897,8 +5022,11 @@ class GeneratedMethods:
         scene: str,
         *,
         draft: Optional[str] = None,
+        enter: Any = None,
+        exit: Any = None,
         name: Optional[str] = None,
         transform: Any = None,
+        visible: Optional[bool] = None,
     ) -> Dict[str, Any]:
         """Put something on a scene's canvas. With no transform it lands in the next free cell, so a drop never needs a dialog."""
         params: Dict[str, Any] = {}
@@ -4906,10 +5034,16 @@ class GeneratedMethods:
         params["scene"] = scene
         if draft is not None:
             params["draft"] = draft
+        if enter is not None:
+            params["enter"] = enter
+        if exit is not None:
+            params["exit"] = exit
         if name is not None:
             params["name"] = name
         if transform is not None:
             params["transform"] = transform
+        if visible is not None:
+            params["visible"] = visible
         return await self._call("scene.item.add", params)
 
     async def scene_item_align(
@@ -5955,6 +6089,46 @@ class GeneratedMethods:
         """Every background job this core knows about, newest first."""
         params: Dict[str, Any] = {}
         return await self._call("task.list", params)
+
+    async def template_fields(
+        self,
+        id: str,
+    ) -> TemplateFields:
+        """A running graphic's fields: each one's label, type, default and what it shows now."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        return await self._call("template.fields", params)
+
+    async def template_get(
+        self,
+        name: str,
+    ) -> TemplateDoc:
+        """One template, with its SVG as written."""
+        params: Dict[str, Any] = {}
+        params["name"] = name
+        return await self._call("template.get", params)
+
+    async def template_list(
+        self,
+    ) -> TemplateList:
+        """The graphic templates: the built in pack and the SVG templates in the media library, each with its fields."""
+        params: Dict[str, Any] = {}
+        return await self._call("template.list", params)
+
+    async def template_save(
+        self,
+        name: str,
+        svg: str,
+        *,
+        replace: Optional[bool] = None,
+    ) -> TemplateSaved:
+        """Check an SVG template and write it into the media library."""
+        params: Dict[str, Any] = {}
+        params["name"] = name
+        params["svg"] = svg
+        if replace is not None:
+            params["replace"] = replace
+        return await self._call("template.save", params)
 
     async def tool_call(
         self,

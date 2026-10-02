@@ -255,7 +255,15 @@ fn preview(reg: &mut Registry<Call>) {
             handler(preview_frame),
         )
         .params(schema_of::<PreviewFrameRequest>)
-        .result(any_object),
+        .result(any_object)
+        .tool(
+            "preview_frame",
+            Tier::Search,
+            "Look at the armed scene (the preview) before it goes on air: a JPEG you can view \
+             directly. Arm a scene with `arm_preview` first. `width` is in pixels; ask for \
+             1280 to read the words of a lower third or a score bug. Use it to check a graphic \
+             you just placed, then fix it and look again.",
+        ),
     );
 }
 

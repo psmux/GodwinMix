@@ -132,13 +132,23 @@ impl Call {
                 .with("retry_after_ms", busy.retry_after_ms)
                 .with("retryable", true);
         }
-        with_found_action(RpcError::not_in_state(e.to_string()).with("method", self.method), &e)
+        let refusal = with_unknown_field(RpcError::not_in_state(e.to_string()).with("method", self.method), &e);
+        with_found_action(refusal, &e)
     }
 
     /// A safety rule said no. `-32003` with the time left, which is the one
     /// thing the caller needs to try again (03 section 6's code table).
     pub fn safety_error(&self, refusal: godwinmix_core::safety::Refusal) -> RpcError {
         safety_error(self.method, refusal)
+    }
+}
+
+/// A graphic template refused a field it does not have: name the field and
+/// the ones it does have in `data`, so a caller can pick the right one.
+pub fn with_unknown_field(refusal: RpcError, e: &anyhow::Error) -> RpcError {
+    match e.downcast_ref::<godwinmix_core::graphics::UnknownField>() {
+        Some(u) => refusal.with("field", u.field.clone()).with("fields", u.fields.clone()).with("template", u.template.clone()),
+        None => refusal,
     }
 }
 

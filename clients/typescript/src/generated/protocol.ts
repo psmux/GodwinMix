@@ -65,9 +65,12 @@ export interface AddItemFilterRequest {
 export interface AddItemRequest {
   content: unknown;
   draft?: string | null;
+  enter?: unknown;
+  exit?: unknown;
   name?: string | null;
   scene: string;
   transform?: unknown;
+  visible?: boolean | null;
 }
 
 /**
@@ -880,6 +883,20 @@ export interface FeedTestResult {
   selected?: unknown;
   took_ms: number;
   value?: unknown;
+}
+
+/** What a field holds. */
+export type FieldType = "text" | "color";
+
+/** One field and what it shows now. */
+export interface FieldValue {
+  default: string;
+  fit?: number | null;
+  label: string;
+  name: string;
+  set: boolean;
+  type: FieldType;
+  value: string;
 }
 
 /** One filter in an item's chain. */
@@ -2538,6 +2555,84 @@ export type TelemetryExt = boolean | {
   hz?: number | null;
 };
 
+/** A template and its SVG. */
+export interface TemplateDoc {
+  description: string;
+  fields: TemplateField[];
+  height: number;
+  name: string;
+  origin: TemplateOrigin;
+  svg: string;
+  title: string;
+  uri: string;
+  width: number;
+}
+
+/** One named field of a template. */
+export interface TemplateField {
+  default: string;
+  fit?: number | null;
+  label: string;
+  name: string;
+  type: FieldType;
+}
+
+/** The answer to `template.fields`. */
+export interface TemplateFields {
+  fields: FieldValue[];
+  id: string;
+  path: string;
+  template: string;
+}
+
+/** `template.fields`: the fields of a running graphic. */
+export interface TemplateFieldsRequest {
+  id: string;
+}
+
+/** `template.get`. */
+export interface TemplateGetRequest {
+  name: string;
+}
+
+/** One template, as `template.list` and `template.get` describe it. */
+export interface TemplateInfo {
+  description: string;
+  fields: TemplateField[];
+  height: number;
+  name: string;
+  origin: TemplateOrigin;
+  title: string;
+  uri: string;
+  width: number;
+}
+
+/** The answer to `template.list`. */
+export interface TemplateList {
+  errors?: string[];
+  templates: TemplateInfo[];
+}
+
+/** Where a template comes from. */
+export type TemplateOrigin = "pack" | "library";
+
+/**
+ * `template.save`: check an SVG template and write it into the media
+ * library.
+ */
+export interface TemplateSaveRequest {
+  name: string;
+  replace?: boolean;
+  svg: string;
+}
+
+/** The answer to `template.save`. */
+export interface TemplateSaved {
+  path: string;
+  redrawn: string[];
+  template: TemplateInfo;
+}
+
 /** `program.thumbnail`. */
 export interface ThumbnailRequest {
   width?: number | null;
@@ -3000,6 +3095,10 @@ export interface MethodParams {
   "task.cancel": TaskRequest;
   "task.get": TaskRequest;
   "task.list": Record<string, never>;
+  "template.fields": TemplateFieldsRequest;
+  "template.get": TemplateGetRequest;
+  "template.list": Record<string, never>;
+  "template.save": TemplateSaveRequest;
   "tool.call": ToolCallRequest;
   "vitals.get": Record<string, never>;
   "vitals.set": VitalsConfig;
@@ -3186,6 +3285,10 @@ export interface MethodResults {
   "task.cancel": Record<string, unknown>;
   "task.get": TaskView;
   "task.list": TaskView[];
+  "template.fields": TemplateFields;
+  "template.get": TemplateDoc;
+  "template.list": TemplateList;
+  "template.save": TemplateSaved;
   "tool.call": Record<string, unknown>;
   "vitals.get": Record<string, unknown>;
   "vitals.set": Record<string, unknown>;
@@ -3421,6 +3524,10 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "task.cancel", summary: "Ask a piece of long running work to stop. Cooperative: the answer says the request landed, not that the work has stopped yet.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/tasks/{id}/cancel" } },
   { name: "task.get", summary: "How a piece of long running work is getting on, and its answer once it has one.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/tasks/{id}" } },
   { name: "task.list", summary: "Every background job this core knows about, newest first.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/tasks" } },
+  { name: "template.fields", summary: "A running graphic's fields: each one's label, type, default and what it shows now.", scope: "read", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/template/fields" } },
+  { name: "template.get", summary: "One template, with its SVG as written.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/template" } },
+  { name: "template.list", summary: "The graphic templates: the built in pack and the SVG templates in the media library, each with its fields.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/template/list" } },
+  { name: "template.save", summary: "Check an SVG template and write it into the media library.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/template/save" } },
   { name: "tool.call", summary: "Call one of a plugin's tools, in MCP's shape. The name is `<plugin>/<tool>`, or the bare tool name when only one plugin has it.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/tool/call" } },
   { name: "vitals.get", summary: "This show's health (its state and alarms, null in the first second) and the thresholds they are judged by.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/vitals" } },
   { name: "vitals.set", summary: "Change the alarm thresholds, or whether a mosaic is kept up for the black and freeze checks while nobody is looking. Fields left out keep their defaults; a duration of 0 switches that check off. Applies within a second.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/vitals/set" } },
@@ -4379,6 +4486,26 @@ export class GeneratedMethods {
   /** Every background job this core knows about, newest first. */
   taskList(): Promise<TaskView[]> {
     return this._call("task.list", {}) as Promise<TaskView[]>;
+  }
+
+  /** A running graphic's fields: each one's label, type, default and what it shows now. */
+  templateFields(params: TemplateFieldsRequest): Promise<TemplateFields> {
+    return this._call("template.fields", params as unknown as Record<string, unknown>) as Promise<TemplateFields>;
+  }
+
+  /** One template, with its SVG as written. */
+  templateGet(params: TemplateGetRequest): Promise<TemplateDoc> {
+    return this._call("template.get", params as unknown as Record<string, unknown>) as Promise<TemplateDoc>;
+  }
+
+  /** The graphic templates: the built in pack and the SVG templates in the media library, each with its fields. */
+  templateList(): Promise<TemplateList> {
+    return this._call("template.list", {}) as Promise<TemplateList>;
+  }
+
+  /** Check an SVG template and write it into the media library. */
+  templateSave(params: TemplateSaveRequest): Promise<TemplateSaved> {
+    return this._call("template.save", params as unknown as Record<string, unknown>) as Promise<TemplateSaved>;
   }
 
   /** Call one of a plugin's tools, in MCP's shape. The name is `<plugin>/<tool>`, or the bare tool name when only one plugin has it. */

@@ -81,7 +81,8 @@ pub fn fitted(boxed: Rect, natural: (u32, u32), fit: Fit, align: (f64, f64)) -> 
 /// at, which is the size the kind should render it at next.
 pub fn still(pic: &Picture, b: &PadBox) -> (Draw, (u32, u32)) {
     let to = fitted(b.rect, pic.natural, b.fit, b.align);
-    let draw = Draw { window: Rect::new(0, 0, pic.width as i32, pic.height as i32), to, clip: b.rect, alpha: alpha8(b.alpha) };
+    let (window, dest) = pic.drawn_part(to);
+    let draw = Draw { window, to: dest, clip: b.rect, alpha: alpha8(b.alpha) };
     (draw, (to.w as u32, to.h as u32))
 }
 

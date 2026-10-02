@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:gmx="https://godwinmix.dev/ns/template" viewBox="0 0 1920 1080" width="1920" height="1080">
+  <metadata>
+    <gmx:template title="Score bug" description="Two teams, two scores, a clock and the period, top left inside title safe"/>
+    <gmx:field name="home" label="Home team" default="HOM"/>
+    <gmx:field name="score_home" label="Home score" default="0"/>
+    <gmx:field name="away" label="Away team" default="AWY"/>
+    <gmx:field name="score_away" label="Away score" default="0"/>
+    <gmx:field name="clock" label="Clock" default="00:00"/>
+    <gmx:field name="period" label="Period" default="1ST HALF"/>
+    <gmx:field name="accent" label="Accent colour" type="color" default="#d4202c"/>
+    <gmx:field name="text" label="Text colour" type="color" default="#ffffff"/>
+    <gmx:field name="panel" label="Panel colour" type="color" default="#0f1a2a"/>
+  </metadata>
+  <style>
+    .type { font-family: Inter, 'Helvetica Neue', Helvetica, Arial, 'DejaVu Sans', 'Liberation Sans', sans-serif; }
+  </style>
+  <rect x="96" y="54" width="640" height="68" fill="{{panel}}" fill-opacity="0.95"/>
+  <rect x="266" y="54" width="76" height="68" fill="{{accent}}"/>
+  <rect x="512" y="54" width="76" height="68" fill="{{accent}}"/>
+  <rect x="588" y="54" width="148" height="68" fill="#000000" fill-opacity="0.35"/>
+  <rect x="588" y="122" width="148" height="34" fill="{{accent}}"/>
+  <text class="type" x="181" y="102" font-size="36" font-weight="800" letter-spacing="1" text-anchor="middle" fill="{{text}}" data-fit-width="146">{{home}}</text>
+  <text class="type" x="304" y="104" font-size="42" font-weight="800" text-anchor="middle" fill="{{text}}" data-fit-width="64">{{score_home}}</text>
+  <text class="type" x="427" y="102" font-size="36" font-weight="800" letter-spacing="1" text-anchor="middle" fill="{{text}}" data-fit-width="146">{{away}}</text>
+  <text class="type" x="550" y="104" font-size="42" font-weight="800" text-anchor="middle" fill="{{text}}" data-fit-width="64">{{score_away}}</text>
+  <text class="type" x="662" y="101" font-size="36" font-weight="600" text-anchor="middle" fill="{{text}}" data-fit-width="128">{{clock}}</text>
+  <text class="type" x="662" y="147" font-size="22" font-weight="700" letter-spacing="1" text-anchor="middle" fill="{{text}}" data-fit-width="132">{{period}}</text>
+</svg>

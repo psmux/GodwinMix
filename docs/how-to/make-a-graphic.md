@@ -5,8 +5,9 @@ editor and a browser. There is no Rust in a graphic and no build step.
 
 For plain words on screen, a name strap or a crawl along the bottom, the
 mixer's own [text and ticker sources](add-text-and-a-ticker.md) need no
-browser and cost a fraction of a graphic. A graphic is for animation and
-layout a box of words cannot do.
+browser and cost a fraction of a graphic, and an
+[SVG template](write-an-svg-template.md) gives a designed layout with no
+browser either. An OGraf graphic is for animation inside the graphic itself.
 
 A graphic is an [OGraf](https://ograf.ebu.io/) template: a JSON file saying
 what words go in it and a web component that draws them. GodwinMix hosts the

@@ -1,9 +1,11 @@
 //! `gmx skill install`: drop the skills where an agent tool will find them.
 //!
-//! Two skills ship with the mixer. `godwinmix-operate` is for an agent running
-//! a show: the state document, the take, the safety rules that will refuse it
-//! and what a look costs. `godwinmix-develop` is for one building on it: the
-//! manifest, the contract and the test loop.
+//! Three skills ship with the mixer. `godwinmix-operate` is for an agent
+//! running a show: the state document, the take, the safety rules that will
+//! refuse it and what a look costs. `godwinmix-develop` is for one building on
+//! it: the manifest, the contract and the test loop. `godwinmix-design` is for
+//! one asked to make a graphic: the template pack, writing an SVG template,
+//! putting it on air and looking at it.
 //!
 //! They are read from `skills/` at runtime where a checkout or an install has
 //! one, and from a copy compiled into the binary where it does not, so a
@@ -12,12 +14,13 @@
 use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
 
-/// The two skills, compiled in, so a binary on its own still has them.
+/// The skills, compiled in, so a binary on its own still has them.
 const OPERATE: &str = include_str!("../../../../skills/godwinmix-operate/SKILL.md");
 const DEVELOP: &str = include_str!("../../../../skills/godwinmix-develop/SKILL.md");
+const DESIGN: &str = include_str!("../../../../skills/godwinmix-design/SKILL.md");
 
 /// The names, in the order they are installed.
-pub const SKILLS: [&str; 2] = ["godwinmix-operate", "godwinmix-develop"];
+pub const SKILLS: [&str; 3] = ["godwinmix-operate", "godwinmix-develop", "godwinmix-design"];
 
 #[derive(Debug, Clone, clap::Args)]
 pub struct SkillArgs {
@@ -115,6 +118,7 @@ pub fn skills() -> Vec<(&'static str, String)> {
 fn embedded(name: &str) -> &'static str {
     match name {
         "godwinmix-develop" => DEVELOP,
+        "godwinmix-design" => DESIGN,
         _ => OPERATE,
     }
 }
@@ -198,11 +202,10 @@ fn install(target: &Path, print: bool, tool: Tool) -> Result<()> {
         println!("wrote {}", path.display());
     }
     println!(
-        "\n{} now reads {} and {}. Start a session in a directory with a mixer to hand, or \
+        "\n{} now reads {}. Start a session in a directory with a mixer to hand, or \
          point it at one with GODWINMIX_URL.",
         tool.as_str(),
-        SKILLS[0],
-        SKILLS[1]
+        SKILLS.join(", ")
     );
     Ok(())
 }
@@ -254,6 +257,26 @@ mod tests {
             "rehearsal",
         ] {
             assert!(text.contains(expected), "the operate skill never mentions {expected}");
+        }
+    }
+
+    /// The design skill says the things an agent needs to put a graphic on
+    /// air and check it, by the names the tools carry.
+    #[test]
+    fn the_design_skill_names_the_calls_a_graphic_takes() {
+        let text = skills().into_iter().find(|(n, _)| *n == "godwinmix-design").expect("the design skill").1;
+        for expected in [
+            "list_templates",
+            "save_template",
+            "template_fields",
+            "preview_frame",
+            "data-fit-width",
+            "params.fields",
+            "title safe",
+            "enter",
+            "gmx ctl template",
+        ] {
+            assert!(text.contains(expected), "the design skill never mentions {expected}");
         }
     }
 

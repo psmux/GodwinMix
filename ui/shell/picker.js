@@ -43,6 +43,7 @@ import { alreadyAdded, sameAddress, easeSchema, unease } from "../client/devices
 import { addChannel } from "../panels/channels/entry.js";
 import { browserEntries } from "../panels/sources/browser-entry.js";
 import { TEXT_PRESETS, addRequest, canvasOf, placementFor } from "../panels/sources/text-presets.js";
+import { graphicEntry, loadTemplates } from "../panels/sources/graphic-pick.js";
 
 const LIST_KEY = "gmx.picker.list";
 
@@ -86,6 +87,10 @@ function openSourcePicker(client, kinds, plugins, opts) {
     media: "idle",
     items: [],
     mediaError: "",
+    // The graphic templates, asked for the first time they are wanted.
+    graphics: "idle",
+    templates: [],
+    graphicsError: "",
     // What this picker has added in its own lifetime. The source list arrives
     // over the event stream a moment later, and a row that still said Add the
     // instant after it was pressed reads as a button that did nothing.
@@ -152,6 +157,7 @@ function openSourcePicker(client, kinds, plugins, opts) {
       tab.setAttribute("aria-selected", active ? "true" : "false");
     }
     clear(panel);
+    if (state.graphics === "idle" && (query || state.category === "graphics")) loadGraphics();
     if (query) return drawSearch(query);
     drawCategory(categories.find((c) => c.id === state.category) || CATEGORIES[0]);
   }
@@ -223,6 +229,10 @@ function openSourcePicker(client, kinds, plugins, opts) {
       if (state.media === "failed") return state.mediaError || "The media library could not be read.";
       return "Nothing in the media library yet. Browse files or drop a file on the window to upload one.";
     }
+    if (cat.graphics) {
+      if (state.graphics === "failed") return state.graphicsError || "The mixer could not list its templates.";
+      return state.graphics === "done" ? "This mixer has no graphic templates." : "Reading the templates.";
+    }
     return "";
   }
 
@@ -247,6 +257,8 @@ function openSourcePicker(client, kinds, plugins, opts) {
       rows = TEST_PATTERNS.map((pattern) => patternEntry(pattern));
     } else if (cat.text) {
       rows = TEXT_PRESETS.map((preset) => textEntry(preset));
+    } else if (cat.graphics) {
+      rows = state.templates.map((template) => graphicEntry(client, template, opts));
     }
     return matching(rows, query);
   }
@@ -537,6 +549,19 @@ function openSourcePicker(client, kinds, plugins, opts) {
       state.items = [];
       state.media = "failed";
       state.mediaError = e && e.message ? e.message : String(e);
+    }
+    draw();
+  }
+
+  async function loadGraphics() {
+    state.graphics = "looking";
+    try {
+      state.templates = await loadTemplates(client);
+      state.graphics = "done";
+    } catch (e) {
+      state.templates = [];
+      state.graphics = "failed";
+      state.graphicsError = e && e.message ? e.message : String(e);
     }
     draw();
   }

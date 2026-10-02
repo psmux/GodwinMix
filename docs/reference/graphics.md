@@ -5,6 +5,10 @@ bug, a title card. GodwinMix does not define a template format. It hosts
 [OGraf](https://ograf.ebu.io/), the EBU's open graphics format, so a template
 written for another OGraf host plays here and one written here plays there.
 
+For a designed graphic that holds still between changes, the mixer also draws
+SVG templates itself with no browser, which costs a fraction of a page per
+graphic; see [graphic templates](graphic-templates.md).
+
 A graphic reaches the programme as an ordinary source. The graphics host
 serves each placement as its own web page, a browser source renders that page,
 and the slot pool draws it like a camera. Nothing in the compositor knows what

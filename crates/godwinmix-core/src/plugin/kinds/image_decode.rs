@@ -43,6 +43,21 @@ pub fn svg(uri: &str, size: (u32, u32)) -> Result<Picture> {
     run(&[src, typed, dec], &[convert], ayuv(Some(size)), None)
 }
 
+/// Render SVG held in memory at `size`: a template filled with its fields.
+/// The same `rsvgdec` as a file, given the bytes through an `appsrc`.
+pub fn svg_data(svg: &str, size: (u32, u32)) -> Result<Picture> {
+    anyhow::ensure!(crate::probe::exists("rsvgdec"), "this build of GStreamer has no rsvgdec (gst-plugins-bad, built with librsvg), so it cannot draw an SVG template. Install it");
+    let caps = gst::Caps::builder("image/svg+xml").build();
+    let src = gst_app::AppSrc::builder().caps(&caps).format(gst::Format::Time).build();
+    let mut buffer = gst::Buffer::from_slice(svg.as_bytes().to_vec());
+    buffer.get_mut().context("new buffer")?.set_pts(gst::ClockTime::ZERO);
+    let _ = src.push_buffer(buffer);
+    let _ = src.end_of_stream();
+    let dec = make("rsvgdec", "svg-decode")?;
+    let convert = make("videoconvert", "svg-convert")?;
+    run(&[src.upcast(), dec], &[convert], ayuv(Some(size)), None)
+}
+
 /// Build `head`, then `tail`, then a capsfilter and an appsink, link them
 /// (the decodebin pair by its pad when there is one), run until one frame
 /// arrives.
@@ -82,7 +97,7 @@ fn picture(sample: &gst::Sample) -> Result<Picture> {
     let info = gst_video::VideoInfo::from_caps(caps).context("a decoded picture that is not video")?;
     let buffer = sample.buffer_owned().context("a decoded picture with no buffer")?;
     let (w, h) = (info.width(), info.height());
-    Ok(Picture { buffer, width: w, height: h, stride: info.stride()[0] as usize, natural: (w, h) })
+    Ok(Picture { buffer, width: w, height: h, stride: info.stride()[0] as usize, natural: (w, h), content: None })
 }
 
 /// `pic` at `size`, scaled once. Keeps the natural size it had.
@@ -109,5 +124,5 @@ pub fn scaled(pic: &Picture, size: (u32, u32)) -> Result<Picture> {
         .map_err(|_| anyhow::anyhow!("mapping the scaled picture"))?;
     conv.frame_ref(&in_frame, &mut out_frame);
     drop(out_frame);
-    Ok(Picture { buffer: out, width: to.width(), height: to.height(), stride: to.stride()[0] as usize, natural: pic.natural })
+    Ok(Picture { buffer: out, width: to.width(), height: to.height(), stride: to.stride()[0] as usize, natural: pic.natural, content: None })
 }

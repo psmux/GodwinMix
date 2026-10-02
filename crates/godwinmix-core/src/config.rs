@@ -48,6 +48,11 @@ pub struct Config {
     pub safety: crate::safety::SafetyConfig,
     #[serde(default)]
     pub browser: BrowserConfig,
+    /// The station's brand colours, which every graphic template's
+    /// `accent`, `text` and `panel` fields take unless a source sets its
+    /// own. See `crate::graphics` and `docs/reference/template-sources.md`.
+    #[serde(default)]
+    pub graphics: crate::graphics::BrandConfig,
     #[serde(default)]
     pub stall: StallConfig,
     /// The resource governor. Nothing needs setting: it measures this
@@ -2071,6 +2076,7 @@ sidecar = \"/opt/b\"\n").unwrap();
             hardware: Default::default(),
             codecs: Default::default(),
             media: Default::default(),
+            graphics: Default::default(),
             security: Default::default(),
             safety: Default::default(),
             browser: Default::default(),
