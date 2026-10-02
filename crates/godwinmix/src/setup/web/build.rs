@@ -99,6 +99,9 @@ pub async fn bundle(browser: &Path, engine_root: &Path, log: &Path) -> Result<()
 /// `Release` as the folder, the build files beside it, and on Linux and
 /// Windows the resources too; then the `archive.json` the build checks.
 pub fn unpack(archive: &Path, versioned: &Path, os_arch: &str, record: &Value, log: &Path) -> Result<(), String> {
+    if let Some(dir) = log.parent() {
+        std::fs::create_dir_all(dir).map_err(|e| format!("creating {}: {e}", dir.display()))?;
+    }
     let scratch = versioned.join("unpacking");
     let _ = std::fs::remove_dir_all(&scratch);
     std::fs::create_dir_all(&scratch).map_err(|e| e.to_string())?;

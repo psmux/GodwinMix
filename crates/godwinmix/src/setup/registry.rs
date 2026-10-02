@@ -73,7 +73,8 @@ pub fn start(piece: &str) -> Option<watch::Receiver<SetupStatus>> {
         publish(tx, now);
         return Some(tx.subscribe());
     }
-    let running = SetupStatus { state: SetupState::Running, message: plain::setting_up(piece), ..now };
+    // No button while it runs: pressing it would only join this same job.
+    let running = SetupStatus { state: SetupState::Running, message: plain::setting_up(piece), action: None, ..now };
     publish(tx, running);
     let progress = Progress { tx: tx.clone(), piece: piece.to_string() };
     let app = reg.app.clone();
