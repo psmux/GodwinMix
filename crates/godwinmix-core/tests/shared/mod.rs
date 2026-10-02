@@ -3,6 +3,8 @@
 
 #![allow(dead_code)]
 
+pub mod exit;
+
 use godwinmix_core::config::{BrowserConfig, SourceConfig};
 use godwinmix_core::plugin::source::{Source, SourceRequest};
 use godwinmix_core::plugin::{harness, loader, Hello, MediaEnds, Tier, API_LEVEL};
