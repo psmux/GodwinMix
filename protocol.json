@@ -9556,7 +9556,7 @@
       "type": "object"
     },
     "TemplateFields": {
-      "description": "The answer to `source.fields`.",
+      "description": "The answer to `template.fields`.",
       "properties": {
         "fields": {
           "items": {
@@ -9586,7 +9586,7 @@
     },
     "TemplateFieldsRequest": {
       "additionalProperties": false,
-      "description": "`source.fields`: the fields of a running graphic.",
+      "description": "`template.fields`: the fields of a running graphic.",
       "properties": {
         "id": {
           "description": "The source id of a `template/source`.",
@@ -9603,7 +9603,7 @@
       "description": "`template.get`.",
       "properties": {
         "name": {
-          "description": "A pack name or a library file name, as `template.list` gives it.\nThe REST layer puts it in the path as `id`, so both are read.",
+          "description": "A pack name or a library file name, as `template.list` gives it.",
           "type": "string"
         }
       },
@@ -9704,7 +9704,7 @@
       "description": "`template.save`: check an SVG template and write it into the media\nlibrary.",
       "properties": {
         "name": {
-          "description": "The file name, ending `.svg` or not (it is added). One segment, no\nslashes. `id` in a REST path.",
+          "description": "The file name, ending `.svg` or not (it is added). One segment, no\nslashes.",
           "type": "string"
         },
         "replace": {
@@ -11646,7 +11646,7 @@
                   "boolean"
                 ]
               },
-              "description": "The template's field values by name, such as {\"headline\": \"Polls close at ten\"}. A field left out shows the station's brand colour (accent, text, panel) or the template's default. Change one on air with source.set and params.fields.<name>; template.list and source.fields name every field.",
+              "description": "The template's field values by name, such as {\"headline\": \"Polls close at ten\"}. A field left out shows the station's brand colour (accent, text, panel) or the template's default. Change one on air with source.set and params.fields.<name>; template.list and template.fields name every field.",
               "type": "object"
             }
           },
@@ -15335,32 +15335,6 @@
     {
       "destructive": false,
       "idempotent": true,
-      "mcp": {
-        "destructiveHint": false,
-        "idempotentHint": true,
-        "profile": "search",
-        "readOnlyHint": true,
-        "tool": "source_fields"
-      },
-      "mutating": false,
-      "name": "source.fields",
-      "params": {
-        "$ref": "#/$defs/TemplateFieldsRequest"
-      },
-      "rest": {
-        "method": "POST",
-        "path": "/api/v1/sources/{id}/fields"
-      },
-      "result": {
-        "$ref": "#/$defs/TemplateFields"
-      },
-      "scope": "read",
-      "since": "1",
-      "summary": "A running graphic's fields: each one's label, type, default and what it shows now."
-    },
-    {
-      "destructive": false,
-      "idempotent": true,
       "mutating": false,
       "name": "source.get",
       "params": {
@@ -15649,6 +15623,32 @@
         "idempotentHint": true,
         "profile": "search",
         "readOnlyHint": true,
+        "tool": "template_fields"
+      },
+      "mutating": false,
+      "name": "template.fields",
+      "params": {
+        "$ref": "#/$defs/TemplateFieldsRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/template/fields"
+      },
+      "result": {
+        "$ref": "#/$defs/TemplateFields"
+      },
+      "scope": "read",
+      "since": "1",
+      "summary": "A running graphic's fields: each one's label, type, default and what it shows now."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": true,
         "tool": "get_template"
       },
       "mutating": false,
@@ -15658,7 +15658,7 @@
       },
       "rest": {
         "method": "GET",
-        "path": "/api/v1/templates/{id}"
+        "path": "/api/v1/template"
       },
       "result": {
         "$ref": "#/$defs/TemplateDoc"
@@ -15686,7 +15686,7 @@
       },
       "rest": {
         "method": "GET",
-        "path": "/api/v1/templates"
+        "path": "/api/v1/template/list"
       },
       "result": {
         "$ref": "#/$defs/TemplateList"
@@ -15712,7 +15712,7 @@
       },
       "rest": {
         "method": "POST",
-        "path": "/api/v1/templates/{id}/save"
+        "path": "/api/v1/template/save"
       },
       "result": {
         "$ref": "#/$defs/TemplateSaved"

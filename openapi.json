@@ -9138,7 +9138,7 @@
         "type": "object"
       },
       "TemplateFields": {
-        "description": "The answer to `source.fields`.",
+        "description": "The answer to `template.fields`.",
         "properties": {
           "fields": {
             "items": {
@@ -9168,7 +9168,7 @@
       },
       "TemplateFieldsRequest": {
         "additionalProperties": false,
-        "description": "`source.fields`: the fields of a running graphic.",
+        "description": "`template.fields`: the fields of a running graphic.",
         "properties": {
           "id": {
             "description": "The source id of a `template/source`.",
@@ -9185,7 +9185,7 @@
         "description": "`template.get`.",
         "properties": {
           "name": {
-            "description": "A pack name or a library file name, as `template.list` gives it.\nThe REST layer puts it in the path as `id`, so both are read.",
+            "description": "A pack name or a library file name, as `template.list` gives it.",
             "type": "string"
           }
         },
@@ -9286,7 +9286,7 @@
         "description": "`template.save`: check an SVG template and write it into the media\nlibrary.",
         "properties": {
           "name": {
-            "description": "The file name, ending `.svg` or not (it is added). One segment, no\nslashes. `id` in a REST path.",
+            "description": "The file name, ending `.svg` or not (it is added). One segment, no\nslashes.",
             "type": "string"
           },
           "replace": {
@@ -16073,55 +16073,6 @@
         "x-scope": "operate"
       }
     },
-    "/api/v1/sources/{id}/fields": {
-      "post": {
-        "description": "JSON-RPC method `source.fields`. Needs the `read` scope.",
-        "operationId": "source.fields",
-        "parameters": [
-          {
-            "description": "The id, as listed by the matching list call.",
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/TemplateFieldsRequest"
-              }
-            }
-          },
-          "required": false
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TemplateFields"
-                }
-              }
-            },
-            "description": "the full resulting object, so no follow up read is needed"
-          },
-          "default": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "summary": "A running graphic's fields: each one's label, type, default and what it shows now.",
-        "tags": [
-          "source"
-        ],
-        "x-destructive": false,
-        "x-idempotent": true,
-        "x-scope": "read"
-      }
-    },
     "/api/v1/sources/{id}/group": {
       "post": {
         "description": "JSON-RPC method `source.group`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
@@ -16538,7 +16489,73 @@
         "x-scope": "operate"
       }
     },
-    "/api/v1/templates": {
+    "/api/v1/template": {
+      "get": {
+        "description": "JSON-RPC method `template.get`. Needs the `read` scope.",
+        "operationId": "template.get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemplateDoc"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "One template, with its SVG as written.",
+        "tags": [
+          "template"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
+    "/api/v1/template/fields": {
+      "post": {
+        "description": "JSON-RPC method `template.fields`. Needs the `read` scope.",
+        "operationId": "template.fields",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TemplateFieldsRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemplateFields"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "A running graphic's fields: each one's label, type, default and what it shows now.",
+        "tags": [
+          "template"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
+    "/api/v1/template/list": {
       "get": {
         "description": "JSON-RPC method `template.list`. Needs the `read` scope.",
         "operationId": "template.list",
@@ -16566,60 +16583,10 @@
         "x-scope": "read"
       }
     },
-    "/api/v1/templates/{id}": {
-      "get": {
-        "description": "JSON-RPC method `template.get`. Needs the `read` scope.",
-        "operationId": "template.get",
-        "parameters": [
-          {
-            "description": "The id, as listed by the matching list call.",
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TemplateDoc"
-                }
-              }
-            },
-            "description": "the full resulting object, so no follow up read is needed"
-          },
-          "default": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "summary": "One template, with its SVG as written.",
-        "tags": [
-          "template"
-        ],
-        "x-destructive": false,
-        "x-idempotent": true,
-        "x-scope": "read"
-      }
-    },
-    "/api/v1/templates/{id}/save": {
+    "/api/v1/template/save": {
       "post": {
         "description": "JSON-RPC method `template.save`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
         "operationId": "template.save",
-        "parameters": [
-          {
-            "description": "The id, as listed by the matching list call.",
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
         "requestBody": {
           "content": {
             "application/json": {

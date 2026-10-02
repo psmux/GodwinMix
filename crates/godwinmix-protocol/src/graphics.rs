@@ -76,8 +76,6 @@ pub struct TemplateList {
 #[serde(deny_unknown_fields)]
 pub struct TemplateGetRequest {
     /// A pack name or a library file name, as `template.list` gives it.
-    /// The REST layer puts it in the path as `id`, so both are read.
-    #[serde(alias = "id")]
     pub name: String,
 }
 
@@ -96,8 +94,7 @@ pub struct TemplateDoc {
 #[serde(deny_unknown_fields)]
 pub struct TemplateSaveRequest {
     /// The file name, ending `.svg` or not (it is added). One segment, no
-    /// slashes. `id` in a REST path.
-    #[serde(alias = "id")]
+    /// slashes.
     pub name: String,
     /// The whole SVG document.
     pub svg: String,
@@ -117,7 +114,7 @@ pub struct TemplateSaved {
     pub redrawn: Vec<String>,
 }
 
-/// `source.fields`: the fields of a running graphic.
+/// `template.fields`: the fields of a running graphic.
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct TemplateFieldsRequest {
@@ -137,7 +134,7 @@ pub struct FieldValue {
     pub set: bool,
 }
 
-/// The answer to `source.fields`.
+/// The answer to `template.fields`.
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct TemplateFields {
     pub id: String,

@@ -4258,7 +4258,7 @@ pub struct TemplateField {
     pub r#type: FieldType,
 }
 
-/// The answer to `source.fields`.
+/// The answer to `template.fields`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct TemplateFields {
@@ -4270,7 +4270,7 @@ pub struct TemplateFields {
     pub template: String,
 }
 
-/// `source.fields`: the fields of a running graphic.
+/// `template.fields`: the fields of a running graphic.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct TemplateFieldsRequest {
@@ -4283,7 +4283,6 @@ pub struct TemplateFieldsRequest {
 #[serde(default)]
 pub struct TemplateGetRequest {
     /// A pack name or a library file name, as `template.list` gives it.
-    /// The REST layer puts it in the path as `id`, so both are read.
     pub name: String,
 }
 
@@ -4325,7 +4324,7 @@ pub const TEMPLATE_ORIGIN_VALUES: &[&str] = &["pack", "library"];
 #[serde(default)]
 pub struct TemplateSaveRequest {
     /// The file name, ending `.svg` or not (it is added). One segment, no
-    /// slashes. `id` in a REST path.
+    /// slashes.
     pub name: String,
     /// Write over a library file of the same name. Every source drawing it
     /// is drawn again with the new SVG, on air, with no rebuild.
@@ -4985,7 +4984,6 @@ pub const METHODS: [MethodInfo; 175] = [
     MethodInfo { name: "source.add", summary: "Add a source while the mixer runs. Answers with the id it got and the whole source record.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/sources")) },
     MethodInfo { name: "source.audio.set", summary: "Move a source's audio: the fader, the mute, and for a superimposed page the balance between its own sound and the videos under it.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/sources/{id}/audio")) },
     MethodInfo { name: "source.duplicate", summary: "Add another source like one the mixer has: the same address and settings under a new id. A client cannot do this with source.add, because the address it is shown has everything after the host cut off.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/sources/{id}/duplicate")) },
-    MethodInfo { name: "source.fields", summary: "A running graphic's fields: each one's label, type, default and what it shows now.", scope: "read", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/sources/{id}/fields")) },
     MethodInfo { name: "source.get", summary: "One source. Refused with the ids that exist when there is no such source.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/sources/{id}")) },
     MethodInfo { name: "source.group", summary: "Put sources in a tray folder. A tag for finding things, not a group on the canvas.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/sources/{id}/group")) },
     MethodInfo { name: "source.list", summary: "Every source, with its state, whether it has video and audio, and its fader.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/sources")) },
@@ -4998,9 +4996,10 @@ pub const METHODS: [MethodInfo; 175] = [
     MethodInfo { name: "task.cancel", summary: "Ask a piece of long running work to stop. Cooperative: the answer says the request landed, not that the work has stopped yet.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/tasks/{id}/cancel")) },
     MethodInfo { name: "task.get", summary: "How a piece of long running work is getting on, and its answer once it has one.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/tasks/{id}")) },
     MethodInfo { name: "task.list", summary: "Every background job this core knows about, newest first.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/tasks")) },
-    MethodInfo { name: "template.get", summary: "One template, with its SVG as written.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/templates/{id}")) },
-    MethodInfo { name: "template.list", summary: "The graphic templates: the built in pack and the SVG templates in the media library, each with its fields.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/templates")) },
-    MethodInfo { name: "template.save", summary: "Check an SVG template and write it into the media library.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/templates/{id}/save")) },
+    MethodInfo { name: "template.fields", summary: "A running graphic's fields: each one's label, type, default and what it shows now.", scope: "read", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/template/fields")) },
+    MethodInfo { name: "template.get", summary: "One template, with its SVG as written.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/template")) },
+    MethodInfo { name: "template.list", summary: "The graphic templates: the built in pack and the SVG templates in the media library, each with its fields.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/template/list")) },
+    MethodInfo { name: "template.save", summary: "Check an SVG template and write it into the media library.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/template/save")) },
     MethodInfo { name: "tool.call", summary: "Call one of a plugin's tools, in MCP's shape. The name is `<plugin>/<tool>`, or the bare tool name when only one plugin has it.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/tool/call")) },
     MethodInfo { name: "vitals.get", summary: "This show's health (its state and alarms, null in the first second) and the thresholds they are judged by.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/vitals")) },
     MethodInfo { name: "vitals.set", summary: "Change the alarm thresholds, or whether a mosaic is kept up for the black and freeze checks while nobody is looking. Fields left out keep their defaults; a duration of 0 switches that check off. Applies within a second.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/vitals/set")) },
@@ -6063,11 +6062,6 @@ impl Client {
         self.call("source.duplicate", params).await
     }
 
-    /// A running graphic's fields: each one's label, type, default and what it shows now.
-    pub async fn source_fields(&self, params: &TemplateFieldsRequest) -> Result<TemplateFields> {
-        self.call("source.fields", params).await
-    }
-
     /// One source. Refused with the ids that exist when there is no such source.
     pub async fn source_get(&self, params: &IdRequest) -> Result<SourceStatus> {
         self.call("source.get", params).await
@@ -6126,6 +6120,11 @@ impl Client {
     /// Every background job this core knows about, newest first.
     pub async fn task_list(&self) -> Result<Vec<TaskView>> {
         self.call("task.list", &serde_json::json!({})).await
+    }
+
+    /// A running graphic's fields: each one's label, type, default and what it shows now.
+    pub async fn template_fields(&self, params: &TemplateFieldsRequest) -> Result<TemplateFields> {
+        self.call("template.fields", params).await
     }
 
     /// One template, with its SVG as written.

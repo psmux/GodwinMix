@@ -2678,7 +2678,7 @@ class TemplateField(TypedDict, total=False):
     type: FieldType
 
 class TemplateFields(TypedDict, total=False):
-    """The answer to `source.fields`."""
+    """The answer to `template.fields`."""
 
     fields: List[FieldValue]
     id: str
@@ -2688,7 +2688,7 @@ class TemplateFields(TypedDict, total=False):
     # The template's name.
 
 class TemplateFieldsRequest(TypedDict, total=False):
-    """`source.fields`: the fields of a running graphic."""
+    """`template.fields`: the fields of a running graphic."""
 
     id: str
     # The source id of a `template/source`.
@@ -2697,7 +2697,7 @@ class TemplateGetRequest(TypedDict, total=False):
     """`template.get`."""
 
     name: str
-    # A pack name or a library file name, as `template.list` gives it. The REST layer puts it in the path as `id`, so both are read.
+    # A pack name or a library file name, as `template.list` gives it.
 
 class TemplateInfo(TypedDict, total=False):
     """One template, as `template.list` and `template.get` describe it."""
@@ -2725,7 +2725,7 @@ class TemplateSaveRequest(TypedDict, total=False):
     """`template.save`: check an SVG template and write it into the media library."""
 
     name: str
-    # The file name, ending `.svg` or not (it is added). One segment, no slashes. `id` in a REST path.
+    # The file name, ending `.svg` or not (it is added). One segment, no slashes.
     replace: bool
     # Write over a library file of the same name. Every source drawing it is drawn again with the new SVG, on air, with no rebuild.
     svg: str
@@ -3297,7 +3297,6 @@ METHODS = (
     {"name": "source.add", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/sources"), "summary": 'Add a source while the mixer runs. Answers with the id it got and the whole source record.'},
     {"name": "source.audio.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/sources/{id}/audio"), "summary": "Move a source's audio: the fader, the mute, and for a superimposed page the balance between its own sound and the videos under it."},
     {"name": "source.duplicate", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/sources/{id}/duplicate"), "summary": 'Add another source like one the mixer has: the same address and settings under a new id. A client cannot do this with source.add, because the address it is shown has everything after the host cut off.'},
-    {"name": "source.fields", "scope": "read", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/sources/{id}/fields"), "summary": "A running graphic's fields: each one's label, type, default and what it shows now."},
     {"name": "source.get", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/sources/{id}"), "summary": 'One source. Refused with the ids that exist when there is no such source.'},
     {"name": "source.group", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/sources/{id}/group"), "summary": 'Put sources in a tray folder. A tag for finding things, not a group on the canvas.'},
     {"name": "source.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/sources"), "summary": 'Every source, with its state, whether it has video and audio, and its fader.'},
@@ -3310,9 +3309,10 @@ METHODS = (
     {"name": "task.cancel", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/tasks/{id}/cancel"), "summary": 'Ask a piece of long running work to stop. Cooperative: the answer says the request landed, not that the work has stopped yet.'},
     {"name": "task.get", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/tasks/{id}"), "summary": 'How a piece of long running work is getting on, and its answer once it has one.'},
     {"name": "task.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/tasks"), "summary": 'Every background job this core knows about, newest first.'},
-    {"name": "template.get", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/templates/{id}"), "summary": 'One template, with its SVG as written.'},
-    {"name": "template.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/templates"), "summary": 'The graphic templates: the built in pack and the SVG templates in the media library, each with its fields.'},
-    {"name": "template.save", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/templates/{id}/save"), "summary": 'Check an SVG template and write it into the media library.'},
+    {"name": "template.fields", "scope": "read", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/template/fields"), "summary": "A running graphic's fields: each one's label, type, default and what it shows now."},
+    {"name": "template.get", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/template"), "summary": 'One template, with its SVG as written.'},
+    {"name": "template.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/template/list"), "summary": 'The graphic templates: the built in pack and the SVG templates in the media library, each with its fields.'},
+    {"name": "template.save", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/template/save"), "summary": 'Check an SVG template and write it into the media library.'},
     {"name": "tool.call", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/tool/call"), "summary": "Call one of a plugin's tools, in MCP's shape. The name is `<plugin>/<tool>`, or the bare tool name when only one plugin has it."},
     {"name": "vitals.get", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/vitals"), "summary": "This show's health (its state and alarms, null in the first second) and the thresholds they are judged by."},
     {"name": "vitals.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/vitals/set"), "summary": 'Change the alarm thresholds, or whether a mosaic is kept up for the black and freeze checks while nobody is looking. Fields left out keep their defaults; a duration of 0 switches that check off. Applies within a second.'},
@@ -5533,15 +5533,6 @@ class GeneratedMethods:
             params["new_id"] = new_id
         return await self._call("source.duplicate", params)
 
-    async def source_fields(
-        self,
-        id: str,
-    ) -> TemplateFields:
-        """A running graphic's fields: each one's label, type, default and what it shows now."""
-        params: Dict[str, Any] = {}
-        params["id"] = id
-        return await self._call("source.fields", params)
-
     async def source_get(
         self,
         id: str,
@@ -5672,6 +5663,15 @@ class GeneratedMethods:
         """Every background job this core knows about, newest first."""
         params: Dict[str, Any] = {}
         return await self._call("task.list", params)
+
+    async def template_fields(
+        self,
+        id: str,
+    ) -> TemplateFields:
+        """A running graphic's fields: each one's label, type, default and what it shows now."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        return await self._call("template.fields", params)
 
     async def template_get(
         self,
