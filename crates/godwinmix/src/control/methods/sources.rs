@@ -204,7 +204,12 @@ pub(super) async fn add(call: Call, params: Value) -> Result<Value, RpcError> {
         .await
         .map_err(|e| call.mixer_error(e))?;
     // The whole resulting object, so no follow up read is needed (AIP-134).
-    let record = find(&call, &id).await?;
+    // One waiting on a piece being set up is not live yet; it is answered
+    // as connecting, with the set up under `setup`.
+    let record = match find(&call, &id).await {
+        Ok(r) => r,
+        Err(e) => crate::setup::waiting_record(&call.app, &id).await.ok_or(e)?,
+    };
     // The hook call site. Nothing waits on it; see `control/hooks/`.
     call.app.hooks.fire(godwinmix_core::hooks::name::SOURCE_ADDED, || {
         serde_json::json!({ "source": record.id, "uri": record.uri, "state": record.state })

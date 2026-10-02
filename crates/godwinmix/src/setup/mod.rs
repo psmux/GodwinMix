@@ -19,14 +19,12 @@
 //!
 //! ```text
 //!   registry.rs  one job a piece, the watch channel, the event
-//!   needs.rs     what a source.add needs that is not here yet
 //!   plugin.rs    install or switch on a first party plugin
 //!   resume.rs    sources that could not start, started again once ready
 //!   run.rs       a child process with its output in the log
-//!   web/         the browser renderer: find, download, build, bundle
+//!   web/         the browser renderer: look, download, unpack, build, bundle
 //! ```
 
-pub mod needs;
 mod plugin;
 pub mod registry;
 mod resume;
@@ -34,6 +32,7 @@ mod run;
 pub mod web;
 
 pub use registry::{attach, list, start, status, wait};
+pub use resume::waiting_record;
 
 /// What went wrong, for a person and for a developer.
 #[derive(Debug, Clone)]

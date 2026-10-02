@@ -25,6 +25,7 @@ pub mod mcp;
 pub mod nodes;
 pub mod mcp_http;
 pub mod observe;
+pub mod setup;
 pub mod station;
 pub mod tls;
 pub mod ui;
@@ -1034,6 +1035,9 @@ pub async fn run() -> Result<()> {
         },
         args.rehearsal,
     );
+    // Pieces set up on first use: the browser renderer and the first party
+    // plugins. Sources from the config waiting on one ask for it now.
+    setup::attach(state.clone(), cfg_for_control.browser.clone());
     // After the control plane, because the channel registry it holds is what
     // hands the RTMP listener its channels and keys: a listener started before
     // that would take any publisher for the moment until it was told.

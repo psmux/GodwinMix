@@ -27,7 +27,8 @@ static REGISTRY: OnceLock<Registry> = OnceLock::new();
 /// Called once with the running core. Registers the engine's hook (a web
 /// page from the config asks for the renderer through it) and looks at the
 /// sources that could not start before this ran.
-pub fn attach(app: AppState) {
+pub fn attach(app: AppState, browser: godwinmix_core::config::BrowserConfig) {
+    super::web::configure(browser);
     let runtime = tokio::runtime::Handle::current();
     let fresh = Registry { app: app.clone(), runtime, pieces: Mutex::new(BTreeMap::new()) };
     if REGISTRY.set(fresh).is_err() {
@@ -42,14 +43,14 @@ pub fn attach(app: AppState) {
 
 /// Where `piece` stands now, without starting anything.
 pub fn status(piece: &str) -> SetupStatus {
-    let Some(reg) = REGISTRY.get() else { return look(piece, None) };
+    let Some(reg) = REGISTRY.get() else { return look(piece) };
     if let Some(tx) = reg.pieces.lock().get(piece) {
         let now = tx.borrow().clone();
         if matches!(now.state, SetupState::Running | SetupState::Failed) {
             return now;
         }
     }
-    look(piece, Some(&reg.app))
+    look(piece)
 }
 
 /// Every piece this mixer knows about: the renderer and the first party plugins.
@@ -63,11 +64,11 @@ pub fn list() -> Vec<SetupStatus> {
 pub fn start(piece: &str) -> Option<watch::Receiver<SetupStatus>> {
     let reg = REGISTRY.get()?;
     let mut pieces = reg.pieces.lock();
-    let tx = pieces.entry(piece.to_string()).or_insert_with(|| watch::channel(look(piece, None)).0);
+    let tx = pieces.entry(piece.to_string()).or_insert_with(|| watch::channel(look(piece)).0);
     if tx.borrow().state == SetupState::Running {
         return Some(tx.subscribe());
     }
-    let now = look(piece, Some(&reg.app));
+    let now = look(piece);
     if now.state != SetupState::Missing && now.state != SetupState::Failed {
         publish(tx, now);
         return Some(tx.subscribe());
@@ -101,16 +102,16 @@ pub async fn wait(mut rx: watch::Receiver<SetupStatus>) -> Result<(), SetupStatu
 
 async fn work(app: &AppState, piece: &str, progress: &Progress) -> Result<(), Failure> {
     if piece == names::WEB {
-        super::web::run(app, progress).await
+        super::web::run(progress).await
     } else {
         super::plugin::ensure(app, piece, progress).await
     }
 }
 
 /// The piece as it is on disk, with nothing running.
-fn look(piece: &str, app: Option<&AppState>) -> SetupStatus {
+fn look(piece: &str) -> SetupStatus {
     if piece == names::WEB {
-        return super::web::look(app);
+        return super::web::look();
     }
     super::plugin::look(piece)
 }
@@ -150,10 +151,13 @@ impl Progress {
     }
 
     fn finish(&self, outcome: Result<(), Failure>) {
-        let mut next = look(&self.piece, REGISTRY.get().map(|r| &r.app));
+        let mut next = look(&self.piece);
         match outcome {
             Ok(()) if next.state == SetupState::Ready => {
                 tracing::info!(piece = %self.piece, "set up and ready");
+                if let Some(reg) = REGISTRY.get() {
+                    super::resume::ready(reg.app.clone(), self.piece.clone());
+                }
             }
             Ok(()) => {
                 tracing::warn!(piece = %self.piece, detail = %next.detail, "set up, but still not found");

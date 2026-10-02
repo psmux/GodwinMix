@@ -2906,9 +2906,14 @@ impl Mixer {
     /// A source nobody is waiting on an answer for (one from the config at
     /// boot, or a rebuild) that failed: kept with its error, so a page can say
     /// why and put it back. A caller with an ack hears the error itself.
+    ///
+    /// One waiting on a piece being set up (the browser renderer, a first
+    /// party plugin) is kept even when a caller asked: it starts by itself
+    /// once the piece is ready, so one press of Add is the whole job.
     fn note_unstarted(&mut self, cfg: &SourceConfig, r: &Result<()>, unheard: bool) {
         if let Err(e) = r {
-            if unheard && cfg.id != AD_ID {
+            let waits = crate::setup::waits_on(e).is_some();
+            if (unheard || waits) && cfg.id != AD_ID {
                 self.unstarted.note(cfg, e);
                 // Written now, or a restart before the next add or remove
                 // would read a list without it and forget it for good.

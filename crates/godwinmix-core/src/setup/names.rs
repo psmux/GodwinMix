@@ -55,3 +55,9 @@ pub fn sentence_start(piece: &str) -> String {
 pub fn known(piece: &str) -> bool {
     TABLE.iter().any(|(p, ..)| *p == piece)
 }
+
+/// Every first party plugin with words here, which is every one the mixer
+/// may set up by itself.
+pub fn plugins() -> impl Iterator<Item = &'static str> {
+    TABLE.iter().map(|(p, ..)| *p).filter(|p| *p != WEB)
+}

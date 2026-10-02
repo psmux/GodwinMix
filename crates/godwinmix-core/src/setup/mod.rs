@@ -30,3 +30,14 @@ pub mod web;
 
 #[cfg(test)]
 mod tests;
+
+/// The piece an error waits on, when it is a refusal that a set up fixes:
+/// its button is `setup`. The source asked for is then kept and started by
+/// itself once that piece is ready.
+pub fn waits_on(err: &anyhow::Error) -> Option<String> {
+    let action = godwinmix_protocol::ErrorAction::find(err.as_ref())?;
+    match action.kind {
+        godwinmix_protocol::ActionKind::Setup => action.piece,
+        _ => None,
+    }
+}

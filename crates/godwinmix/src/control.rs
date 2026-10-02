@@ -719,7 +719,16 @@ async fn create_source(
         match app.mixer.request(|ack| Command::AddSource(Box::new(cfg), Some(ack))).await {
             Ok(()) => return Ok(id),
             Err(e) if e.to_string().contains("already exists") => continue,
-            Err(e) => return Err(e),
+            // Waiting on a piece the mixer sets up for itself: the mixer
+            // keeps the source and starts it when the piece is ready, so the
+            // add has done its job.
+            Err(e) => match godwinmix_core::setup::waits_on(&e) {
+                Some(piece) => {
+                    crate::setup::start(&piece);
+                    return Ok(id);
+                }
+                None => return Err(e),
+            },
         }
     }
     anyhow::bail!("could not find a free id for {base_id}")
