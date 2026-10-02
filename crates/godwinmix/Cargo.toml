@@ -55,7 +55,9 @@ gstreamer-app = { workspace = true }
 
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "sync", "signal", "time", "io-std", "io-util", "fs", "process"] }
 axum = { workspace = true, features = ["ws"] }
-tokio-tungstenite = { workspace = true }
+# `rustls-tls-webpki-roots` so a feed can read a wss:// address (src/feeds/).
+# Already compiled for godwinmix-tui, so nothing new is built.
+tokio-tungstenite = { workspace = true, features = ["rustls-tls-webpki-roots"] }
 # HTTPS on the control port (src/tls.rs). Already in the tree under the node
 # bridge and the core, so nothing new to compile.
 tokio-rustls = { workspace = true }

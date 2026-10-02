@@ -139,6 +139,9 @@ pub struct AppState {
     /// RTMP channels: the core's half of the channel server. See
     /// `crate::channels`.
     pub channels: Arc<crate::channels::Channels>,
+    /// Live data feeds and what they are bound to. Empty, with no task and
+    /// no client, until somebody adds a feed. See `crate::feeds`.
+    pub feeds: Arc<crate::feeds::Feeds>,
 }
 
 /// The handles onto one running engine, gathered so `AppState::new` takes a
@@ -234,6 +237,7 @@ impl AppState {
             hooks,
             channels,
             plugins,
+            feeds: crate::feeds::Feeds::open(&cfg.source_path),
         }
     }
 
@@ -1578,6 +1582,7 @@ pub async fn serve_with(
     let snapshots =
         Tracker::new(state.snapshot.clone(), state.multiview.clone(), state.mixer.clone());
     spawn_background(state.clone());
+    state.feeds.start(crate::feeds::Ctx { app: state.clone(), snapshots: snapshots.clone() });
     godwinmix_core::vitals::spawn(state.mixer.clone(), snapshots.clone());
     let observe = crate::observe::router(observe_state(&state));
     // Connect info so the snapshot rate limit can tell one client from

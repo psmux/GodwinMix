@@ -21,6 +21,7 @@ use std::sync::Arc;
 pub mod agent;
 pub mod channel_destinations;
 mod channels;
+mod feeds;
 mod shows;
 pub mod config;
 mod filters;
@@ -86,6 +87,7 @@ pub fn registry() -> Registry<Call> {
     shows::register(&mut reg);
     config::register(&mut reg);
     vitals::register(&mut reg);
+    feeds::register(&mut reg);
     crate::observe::register(&mut reg);
     // Last, so it sees every method: the station's tools and a tool for
     // everything else that has none.
