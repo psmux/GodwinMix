@@ -178,7 +178,21 @@ Measured with `crates/godwinmix-core/tests/template_cost.rs` on a 1280 by 720,
 30 fps programme of colour bars with the encoder off, as process CPU over ten
 seconds in percent of one core:
 
-COST_TABLE
+| Case, on an Apple M4 Pro, release build | CPU | Over the programme alone |
+|---|---|---|
+| programme alone | 3.6 % | |
+| a news lower third, held | 5.1 % | 1.5 points |
+| a news lower third, its name changed every second | 8.2 % | 4.6 points |
+| a breaking news bar, held | 4.8 % | 1.2 points |
+| a breaking news bar, its headline changed every second | 6.2 % | 2.6 points |
+
+Run it on the machine you are asking about:
+
+```sh
+cargo test --release -p godwinmix-core --test template_cost -- --ignored --nocapture --test-threads=1
+```
+
+A Raspberry Pi has not been measured yet.
 
 A field change draws the SVG once, a few milliseconds of one overlay worker
 thread, and nothing else changes. Between changes the board blends only the
