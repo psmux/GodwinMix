@@ -159,15 +159,16 @@ fn a_take_naming_a_plugin_transition_drives_the_pads() {
                 one("cam2"),
                 None,
                 None,
-                Some(godwinmix_core::mixer::transition::TransitionSpec {
-                    kind: godwinmix_core::mixer::transition::Kind::Plugin("wipe".into()),
-                    duration_ms: 400,
-                }),
+                Some(godwinmix_core::mixer::transition::TransitionSpec::new(
+                    godwinmix_core::mixer::transition::Kind::Plugin("wipe".into()),
+                    400,
+                )),
             )
             .expect("a wipe");
 
         // The proof: the incoming scene's pad is being driven on `xpos`, which
-        // is what a wipe moves and what no built in transition touches.
+        // is what this plugin moves and what the fade it would otherwise
+        // have fallen back to never touches.
         let driven = mixer.pool_for_tests().driven_by_a_transition("xpos");
         assert!(
             driven.contains(&"cam2".to_string()),

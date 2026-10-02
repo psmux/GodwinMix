@@ -89,6 +89,10 @@ pub struct ItemProps {
     pub audio: Audio,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub filters: Vec<Filter>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub enter: Option<super::motion::ItemTransition>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exit: Option<super::motion::ItemTransition>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub bind: BTreeMap<String, String>,
 }
@@ -254,6 +258,8 @@ fn push_items(items: &[Item], parent: Id, out: &mut Vec<Record>) {
                 locked: item.locked,
                 audio: item.audio,
                 filters: item.filters.clone(),
+                enter: item.enter.clone(),
+                exit: item.exit.clone(),
                 bind: item.bind.clone(),
             }),
         });
@@ -405,6 +411,8 @@ fn build_items(
             locked: props.locked,
             audio: props.audio,
             filters: props.filters.clone(),
+            enter: props.enter.clone(),
+            exit: props.exit.clone(),
             bind: props.bind.clone(),
         });
     }
