@@ -91,7 +91,7 @@ impl Engine {
         download::resume(&client, &url, &part, size, say)
             .await
             .map_err(|e| not_downloaded(json!({ "url": url, "error": e, "part": part })))?;
-        if digest(&part).await != sha1 {
+        if super::check::digest(&part).await != sha1 {
             let _ = std::fs::remove_file(&part);
             return Err(not_downloaded(json!({ "url": url, "error": "the digest did not match; removed to download again" })));
         }
@@ -130,27 +130,6 @@ fn default_root() -> PathBuf {
     home.unwrap_or_else(std::env::temp_dir).join(".cache").join("gmx-cef")
 }
 
-/// SHA-1 of a file, off the runtime's threads.
-async fn digest(path: &Path) -> String {
-    let path = path.to_path_buf();
-    tokio::task::spawn_blocking(move || {
-        use sha1::{Digest, Sha1};
-        use std::io::Read;
-        let Ok(mut f) = std::fs::File::open(&path) else { return String::new() };
-        let mut h = Sha1::new();
-        let mut buf = vec![0u8; 1 << 20];
-        while let Ok(n) = f.read(&mut buf) {
-            if n == 0 {
-                break;
-            }
-            h.update(&buf[..n]);
-        }
-        h.finalize().iter().map(|b| format!("{b:02x}")).collect()
-    })
-    .await
-    .unwrap_or_default()
-}
-
 /// The download did not finish, in a person's words.
 pub fn not_downloaded(detail: Value) -> Failure {
     tracing::warn!(%detail, "the web page engine download did not finish");
@@ -163,18 +142,5 @@ pub fn not_downloaded(detail: Value) -> Failure {
 }
 
 #[cfg(test)]
-mod tests {
-    #[test]
-    fn the_pinned_version_is_the_lock_files_metadata() {
-        let lock = "[[package]]\nname = \"cef-dll-sys\"\nversion = \"150.0.0+150.0.10\"\nsource = \"x\"\n";
-        assert_eq!(super::pinned(lock).as_deref(), Some("150.0.10"));
-        assert_eq!(super::pinned("name = \"cef\"\nversion = \"1\"\n"), None);
-    }
-
-    #[test]
-    fn this_machine_has_a_folder_name_the_build_looks_for() {
-        if let Some((key, dir)) = super::platform() {
-            assert!(dir.starts_with("cef_") && !key.is_empty());
-        }
-    }
-}
+#[path = "cef_tests.rs"]
+mod tests;

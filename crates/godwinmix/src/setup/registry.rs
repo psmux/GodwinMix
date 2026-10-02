@@ -16,13 +16,15 @@ use std::collections::BTreeMap;
 use std::sync::OnceLock;
 use tokio::sync::watch;
 
-struct Registry {
-    app: AppState,
+pub use super::progress::Progress;
+
+pub(super) struct Registry {
+    pub(super) app: AppState,
     runtime: tokio::runtime::Handle,
     pieces: Mutex<BTreeMap<String, watch::Sender<SetupStatus>>>,
 }
 
-static REGISTRY: OnceLock<Registry> = OnceLock::new();
+pub(super) static REGISTRY: OnceLock<Registry> = OnceLock::new();
 
 /// Called once with the running core. Registers the engine's hook (a web
 /// page from the config asks for the renderer through it) and looks at the
@@ -110,7 +112,7 @@ async fn work(app: &AppState, piece: &str, progress: &Progress) -> Result<(), Fa
 }
 
 /// The piece as it is on disk, with nothing running.
-fn look(piece: &str) -> SetupStatus {
+pub(super) fn look(piece: &str) -> SetupStatus {
     if piece == names::WEB {
         return super::web::look();
     }
@@ -118,63 +120,12 @@ fn look(piece: &str) -> SetupStatus {
 }
 
 /// Send a status to everyone waiting and to every page.
-fn publish(tx: &watch::Sender<SetupStatus>, status: SetupStatus) {
+pub(super) fn publish(tx: &watch::Sender<SetupStatus>, status: SetupStatus) {
     let changed = *tx.borrow() != status;
     tx.send_replace(status.clone());
     if changed {
         if let Some(reg) = REGISTRY.get() {
             reg.app.mixer.emit(Event::SetupChanged { setup: Box::new(status) });
         }
-    }
-}
-
-/// What a job says as it goes.
-pub struct Progress {
-    tx: watch::Sender<SetupStatus>,
-    piece: String,
-}
-
-impl Progress {
-    /// A new step, in a person's words, and how far through a download it
-    /// is. Sent when the words change or the fraction moves a percent.
-    pub fn say(&self, message: &str, fraction: Option<f64>) {
-        let mut next = self.tx.borrow().clone();
-        let moved = match (next.progress, fraction) {
-            (Some(a), Some(b)) => (a - b).abs() >= 0.01,
-            (a, b) => a.is_some() != b.is_some(),
-        };
-        if next.message == message && !moved {
-            return;
-        }
-        next.message = message.to_string();
-        next.progress = fraction;
-        publish(&self.tx, next);
-    }
-
-    fn finish(&self, outcome: Result<(), Failure>) {
-        let mut next = look(&self.piece);
-        match outcome {
-            Ok(()) if next.state == SetupState::Ready => {
-                tracing::info!(piece = %self.piece, "set up and ready");
-                if let Some(reg) = REGISTRY.get() {
-                    super::resume::ready(reg.app.clone(), self.piece.clone());
-                }
-            }
-            Ok(()) => {
-                tracing::warn!(piece = %self.piece, detail = %next.detail, "set up, but still not found");
-                next.state = SetupState::Failed;
-                next.message = format!("{} did not finish setting up. Press Try again.", names::title(&self.piece));
-                next.action = Some(godwinmix_protocol::ErrorAction::setup("Try again", &self.piece));
-            }
-            Err(f) => {
-                let f = f.into_inner();
-                tracing::warn!(piece = %self.piece, why = %f.message, detail = %f.detail, "setting up did not finish");
-                next.state = SetupState::Failed;
-                next.message = f.message;
-                next.action = f.action.or(Some(godwinmix_protocol::ErrorAction::setup("Try again", &self.piece)));
-                next.detail = f.detail;
-            }
-        }
-        publish(&self.tx, next);
     }
 }
