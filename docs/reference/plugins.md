@@ -2,7 +2,10 @@
 
 Everything in `plugins/` in this repository: one directory per plugin, each a
 Rust crate on `godwinmix-sdk`, each installable with
-`gmx plugin add ./plugins/<name>`.
+`gmx plugin add ./plugins/<name>`, or by its name alone (`gmx plugin add
+camera`) on a mixer built from the checkout or installed with its plugins
+beside it. See [Install a plugin](../how-to/install-a-plugin.md#install-it) for
+the folders a bare name is looked for in.
 
 They use only the public sidecar contract. Nothing here is reachable by this
 repository's code that is not reachable by yours, which is the rule that keeps
@@ -129,11 +132,17 @@ gmx plugin list
 gmx plugin remove <name>
 ```
 
-`./build` is needed because these are members of the repository's cargo
-workspace, so their binaries land in the workspace target directory, and
+`./build` stages the binary because these are members of the repository's
+cargo workspace, so their binaries land in the workspace target directory, and
 `gmx plugin add` copies the plugin directory while skipping anything called
 `target`. The manifest points at `bin/<binary>`, and `./build` is what puts it
-there. `gmx plugin add` does not run `[build]` itself today.
+there. When it is not there yet, `gmx plugin add` runs the manifest's `[build]`
+section, which is the same `./build`, so the first step is optional.
+
+A mixer that ships these plugins puts each one, built, in
+`<folder of the godwinmix binary>/../share/godwinmix/plugins/<name>` or in
+`<folder of the godwinmix binary>/plugins/<name>`, and `plugin.add` with the
+bare name installs it from there.
 
 Remove a source before removing the plugin that provides it: removing a plugin
 does not stop instances that are using it.

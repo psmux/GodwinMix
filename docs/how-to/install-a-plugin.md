@@ -10,6 +10,7 @@ This page takes about five minutes.
 
 `gmx plugin add` takes seven forms. Reach for the first one:
 
+    gmx plugin add camera                  a plugin that ships with the mixer
     gmx plugin add ndi                     a name a marketplace knows
     gmx plugin add psmux/gmx-ndi           a GitHub release, @1.2.0 to pin
     gmx plugin add https://x/y.git         a git clone, built here
@@ -18,9 +19,29 @@ This page takes about five minutes.
     gmx plugin add pypi:gmx-director       a PyPI package
     gmx plugin add ./my-plugin             a directory you are working in
 
-A bare name is looked up in the marketplaces this mixer knows, which is why it
-is the form to teach: it does not change when an author moves their repository.
-Add the community index once and names start working:
+A bare name is first looked for among the plugins that ship with this mixer,
+on its own disk, with no network. These are the places, in order:
+
+    <folder of the godwinmix binary>/../share/godwinmix/plugins/<name>
+    <folder of the godwinmix binary>/plugins/<name>
+    <checkout>/plugins/<name>
+
+The first is an install under a prefix (`/usr/local/bin/godwinmix` and
+`/usr/local/share/godwinmix/plugins/camera`). The second is everything in one
+folder, the way a Windows install or an unpacked archive is laid out. The third
+is a mixer built from a source checkout and run from its `target` folder: the
+checkout is the first folder up to four levels above the binary that has both
+a `Cargo.toml` and a `plugins` folder. A plugin there is taken when its binary
+for this machine is built, or when its manifest has a `[build]` section, which
+the install then runs. This is what the Install buttons in the source picker
+use, so the camera, screen and ingest plugins install on a mixer with no
+marketplace set up. What is installed this way is recorded the way a folder
+install is, as custom and unreviewed.
+
+A name found in none of those is looked up in the marketplaces this mixer
+knows, which is why a bare name is the form to teach: it does not change when
+an author moves their repository. Add the community index once and names
+start working:
 
     gmx marketplace add psmux/godwinmix-plugins
     gmx plugin search ndi
@@ -189,6 +210,11 @@ published at `/plugins/<name>/ui/`, which is how a plugin adds a page to the web
 UI. See [write-a-panel.md](write-a-panel.md).
 
 ## When something goes wrong
+
+A name found nowhere is refused with the places it was looked for. With no
+marketplace set up, the sentence names the first folder a shipped plugin would
+be in, and the error's `data` carries `source`, `marketplaces` and `looked_in`,
+the full list, for a page to show.
 
 `gmx plugin list` first: it says whether the plugin loaded, whether it is
 enabled, and what each instance is doing.

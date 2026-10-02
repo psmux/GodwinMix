@@ -1087,10 +1087,15 @@ fn resolve(
     Option<String>,
 )> {
     use godwinmix_host::sources::Source;
-    // A name with no slash and no scheme is a marketplace lookup, and it is
-    // the form the docs teach because it is the one that does not change when
-    // an author moves their repository.
+    // A name with no slash and no scheme is first a plugin that ships with
+    // this mixer, found on disk with no network (see `first_party`), and
+    // then a marketplace lookup, the form the docs teach because it is the
+    // one that does not change when an author moves their repository.
     if Source::parse(spec).is_err() {
+        if let Some(dir) = super::first_party::find(spec) {
+            let note = format!("{spec} ships with this mixer, at {}", dir.display());
+            return Ok((Source::Path(dir), None, Some(note)));
+        }
         if let Some((market, listing)) = godwinmix_host::marketplace::resolve(spec, &opts.only) {
             let source = listing.source()?;
             let note = format!(
