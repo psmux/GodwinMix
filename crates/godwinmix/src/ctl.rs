@@ -21,6 +21,10 @@ use clap::Subcommand;
 
 #[path = "ctl_params.rs"]
 mod params;
+#[path = "ctl_rpc.rs"]
+mod ctl_rpc;
+#[path = "ctl_template.rs"]
+mod ctl_template;
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -90,6 +94,18 @@ pub enum Ctl {
     /// Graphics: what templates there are, and putting words in one.
     #[command(subcommand)]
     Graphic(GraphicCmd),
+    /// Graphic templates drawn by the mixer itself: list, get, save, and a
+    /// running graphic's fields.
+    #[command(subcommand)]
+    Template(ctl_template::TemplateCmd),
+    /// Call any method by name, with its params as JSON or @file. The same
+    /// door the web UI and the MCP server use.
+    Rpc {
+        /// A method name from protocol.md, such as scene.item.set.
+        method: String,
+        /// Its params as JSON, or @path to read them from a file.
+        params: Option<String>,
+    },
     /// Interrupt the programme with a clip, then rejoin live.
     Ad {
         /// Path or URI of the clip.
@@ -410,6 +426,8 @@ pub async fn run(base: &str, token: Option<&str>, cmd: Ctl) -> Result<()> {
         Ctl::Output(cmd) => output(api, cmd).await?,
         Ctl::Scene(cmd) => scene(api, cmd).await?,
         Ctl::Graphic(cmd) => graphic(api, cmd).await?,
+        Ctl::Template(cmd) => ctl_template::run(api, cmd).await?,
+        Ctl::Rpc { method, params } => ctl_rpc::run(api, &method, ctl_rpc::params(params.as_deref())?).await?,
         Ctl::Ad { uri, at, return_to } => {
             let req = AdBreakRequest { uri: uri.clone(), at_running_time_ms: at, return_to };
             let _: Value = api.call("adbreak.start", None, &req).await?;
