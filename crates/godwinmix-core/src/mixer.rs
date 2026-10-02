@@ -230,20 +230,22 @@ pub struct Wedged {
 }
 
 impl std::fmt::Display for Wedged {
+    /// A sentence a person reads. What held the loop, for how long, and that
+    /// asking again is safe, are in `data` and the watchdog's log line, which
+    /// is where a developer looks; this used to say "the command loop is
+    /// between commands, so the answer was lost", to an operator.
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "the mixer has not answered in {} s", self.waited_ms / 1000)?;
-        match (self.command, self.held_ms) {
-            (Some(command), Some(held_ms)) => write!(
+        match self.command {
+            Some(_) => write!(
                 f,
-                "; the command loop is held by {command} since {held_ms} ms. The programme \
-                 is still on air, and this request was not cancelled: it runs when the loop \
-                 comes back. The log carries a mixer watchdog line naming the same command. \
-                 Ask again, and restart the core if it does not clear."
+                "The mixer is busy with another change and did not answer in time. What is \
+                 on air is not affected, and this request still runs when it is free; if \
+                 nothing has happened in a few seconds, try again."
             ),
-            _ => write!(
+            None => write!(
                 f,
-                "; the command loop is between commands, so the answer was lost rather \
-                 than held. Ask again."
+                "The mixer did not answer in time. What is on air is not affected. Try \
+                 again."
             ),
         }
     }
@@ -1260,6 +1262,27 @@ struct SourceTimeline {
     layers: Option<[u64; 5]>,
 }
 
+/// What `status` says of a source whose page is still being probed.
+fn pending_status(cfg: &SourceConfig) -> SourceStatus {
+    SourceStatus {
+        id: cfg.id.clone(),
+        name: cfg.display_name().to_string(),
+        uri: safe_uri_label(&cfg.display_uri()),
+        state: SourceState::Connecting,
+        has_video: false,
+        has_audio: false,
+        cell: None,
+        video_idle_ms: None,
+        audio_idle_ms: None,
+        extra: Default::default(),
+        gain: cfg.gain,
+        muted: cfg.muted,
+        seekable: false,
+        position_ms: None,
+        duration_ms: None,
+    }
+}
+
 /// How long a frozen frame may stay on air.
 ///
 /// A rebuild of a superimposed source is a page probe (up to
@@ -1913,17 +1936,32 @@ impl Mixer {
             reply(ack, &r);
             return r;
         };
+        // The same page asked for again while its probe runs: a person who
+        // pressed Add twice, or a client that retried. One probe, and the
+        // second ask is answered as the first was.
+        if self.pending.iter().any(|c| c.id == cfg.id) {
+            reply(ack, &Ok(()));
+            return Ok(());
+        }
         let handle = self.handle.clone();
         let id = cfg.id.clone();
         info!(source = %id, "asking the page what it plays before building the source");
         self.pending.push(cfg.clone());
+        // Answered now, not when the probe ends. The probe can take its whole
+        // `MEDIA_PROBE_TIMEOUT` (a page whose video the mixer cannot take,
+        // YouTube for one, always does), and a caller waiting on it was told
+        // the mixer had stopped answering, asked again, and got a duplicate.
+        // Until the probe comes back the source is listed as connecting
+        // (`status`), and a build that then fails is kept as unstarted with
+        // its reason, which is where a caller looks for it.
+        reply(ack, &Ok(()));
         let spawned = std::thread::Builder::new()
             .name(format!("probe-{id}"))
             .spawn(move || {
                 let report =
                     crate::input::probe_page_media(&id, &spec, crate::input::MEDIA_PROBE_TIMEOUT);
                 // A send fails only when the mixer has already gone.
-                let _ = handle.send(Command::AddSourceProbed(Box::new(cfg), report, ack));
+                let _ = handle.send(Command::AddSourceProbed(Box::new(cfg), report, None));
             });
         match spawned {
             Ok(_) => Ok(()),
@@ -4509,7 +4547,7 @@ impl Mixer {
             })
             .unwrap_or_default();
 
-        let sources = self
+        let sources: Vec<SourceStatus> = self
             .sources
             .iter()
             .map(|s| {
@@ -4575,6 +4613,15 @@ impl Mixer {
                 status
             })
             .collect();
+        // A page still being probed is a source the operator added: listed
+        // as connecting so it appears at once, rather than twenty seconds
+        // later with nothing in between.
+        let mut sources = sources;
+        for p in &self.pending {
+            if !sources.iter().any(|s: &SourceStatus| s.id == p.id) {
+                sources.push(pending_status(p));
+            }
+        }
 
         MixerStatus {
             scene: self.program_scene.as_ref().map(|s| s.name.clone()),
@@ -6922,9 +6969,11 @@ mod tests {
         assert_eq!(wedged.request, "core.status");
         assert_eq!(wedged.command, Some("program.take"));
         assert!(wedged.held_ms.is_some(), "the refusal has to say how long");
+        // The sentence is for a person: plain, with no command or loop in it.
+        // What holds the loop is in `data`, below, and in the watchdog's log.
         let said = wedged.to_string();
-        assert!(said.contains("program.take"), "{said}");
-        assert!(said.contains("5 s"), "{said}");
+        assert!(!said.contains("program.take") && !said.contains("loop"), "{said}");
+        assert!(said.contains("on air is not affected"), "{said}");
         // Rule 4: a `data` object a caller can act on.
         assert_eq!(wedged.data()["command"], "program.take");
         assert_eq!(wedged.data()["retryable"], true);
