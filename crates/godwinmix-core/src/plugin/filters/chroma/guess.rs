@@ -2,7 +2,7 @@
 //! area of one hue in the picture, so find that hue and average it.
 //!
 //! The same guess serves the filter, which looks at its own first frames
-//! when no colour was given, and `source.key_colour`, which looks at a still
+//! when no colour was given, and `source.key_color`, which looks at a still
 //! of the source. Both hand it Y, U and V samples; neither needs every pixel,
 //! and a few thousand are plenty.
 
@@ -24,8 +24,21 @@ pub struct Guess {
 pub const MIN_SHARE: f32 = 0.08;
 const BINS: usize = 72;
 
-/// The dominant screen colour among `samples`, if there is one.
+/// The dominant screen colour among `samples`, if there is one. Asked for
+/// any, it is the bigger of a green screen and a blue one: a screen is one or
+/// the other, and a magenta wall is not a screen.
 pub fn dominant(samples: impl Iterator<Item = (u8, u8, u8)>, family: Family) -> Option<Guess> {
+    if family != Family::Any {
+        return of_family(samples, family);
+    }
+    let all: Vec<_> = samples.collect();
+    match (of_family(all.iter().copied(), Family::Green), of_family(all.iter().copied(), Family::Blue)) {
+        (Some(g), Some(b)) => Some(if b.share > g.share { b } else { g }),
+        (g, b) => g.or(b),
+    }
+}
+
+fn of_family(samples: impl Iterator<Item = (u8, u8, u8)>, family: Family) -> Option<Guess> {
     let mut bins = [(0u32, 0u64, 0u64, 0u64); BINS];
     let mut total = 0u32;
     for (y, u, v) in samples {
@@ -53,27 +66,16 @@ pub fn dominant(samples: impl Iterator<Item = (u8, u8, u8)>, family: Family) -> 
     }
     let mean = |s: u64| (s / n as u64) as u8;
     let yuv = (mean(sy), mean(su), mean(sv));
-    let found = if (yuv.1 as i32) < 128 && (yuv.2 as i32) < 128 { Family::Green } else { Family::Blue };
-    let family = if family == Family::Any { found } else { family };
     Some(Guess { yuv, rgb: yuv_to_rgb(yuv.0, yuv.1, yuv.2), share, family })
 }
 
-/// The colour at one place, as the mean of the samples given for it.
-pub fn mean(samples: impl Iterator<Item = (u8, u8, u8)>) -> Option<(u8, u8, u8)> {
-    let (mut n, mut sy, mut su, mut sv) = (0u32, 0u32, 0u32, 0u32);
-    for (y, u, v) in samples {
-        (n, sy, su, sv) = (n + 1, sy + y as u32, su + u as u32, sv + v as u32);
-    }
-    (n > 0).then(|| ((sy / n) as u8, (su / n) as u8, (sv / n) as u8))
-}
-
 /// Whether a chroma direction belongs to the family looked for. Green has
-/// both U and V under the middle; blue has U well over it.
+/// both U and V under the middle; blue has U well over it and V at or
+/// under it, which keeps magenta out.
 fn fits(family: Family, cx: f32, cy: f32) -> bool {
     match family {
         Family::Green => cx < -6.0 && cy < -6.0,
-        Family::Blue => cx > 12.0 && cx > cy.abs() * 0.6,
-        Family::Any => true,
+        Family::Blue | Family::Any => cx > 12.0 && cy < cx * 0.3,
     }
 }
 

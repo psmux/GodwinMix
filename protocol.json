@@ -4525,6 +4525,10 @@
     "KeyColorRequest": {
       "additionalProperties": false,
       "properties": {
+        "id": {
+          "description": "The source id.",
+          "type": "string"
+        },
         "screen": {
           "default": null,
           "description": "\"green\" or \"blue\" to look for that screen only. Either when left out.",
@@ -4532,10 +4536,6 @@
             "string",
             "null"
           ]
-        },
-        "source": {
-          "description": "The source id.",
-          "type": "string"
         },
         "x": {
           "default": null,
@@ -4557,7 +4557,7 @@
         }
       },
       "required": [
-        "source"
+        "id"
       ],
       "type": "object"
     },
@@ -14705,7 +14705,7 @@
       },
       "rest": {
         "method": "POST",
-        "path": "/api/v1/scenes/{id}/virtual_set"
+        "path": "/api/v1/scenes/virtual_set"
       },
       "result": {
         "$ref": "#/$defs/VirtualSetAnswer"
