@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:gmx="https://godwinmix.dev/ns/template" viewBox="0 0 1920 1080" width="1920" height="1080">
+  <metadata>
+    <gmx:template title="Logo bug" description="The station's name in a corner badge with a live tag under it, top right inside title safe"/>
+    <gmx:field name="station" label="Station" default="NEWS 24"/>
+    <gmx:field name="tag" label="Tag" default="LIVE"/>
+    <gmx:field name="accent" label="Accent colour" type="color" default="#d4202c"/>
+    <gmx:field name="text" label="Text colour" type="color" default="#ffffff"/>
+    <gmx:field name="panel" label="Panel colour" type="color" default="#0f1a2a"/>
+  </metadata>
+  <style>
+    .type { font-family: Inter, 'Helvetica Neue', Helvetica, Arial, 'DejaVu Sans', 'Liberation Sans', sans-serif; }
+  </style>
+  <rect x="1584" y="54" width="240" height="84" rx="6" fill="{{panel}}" fill-opacity="0.9"/>
+  <rect x="1584" y="54" width="8" height="84" fill="{{accent}}"/>
+  <text class="type" x="1712" y="111" font-size="40" font-weight="800" letter-spacing="1" text-anchor="middle" fill="{{text}}" data-fit-width="196">{{station}}</text>
+  <rect x="1716" y="146" width="108" height="34" rx="4" fill="{{accent}}"/>
+  <circle cx="1734" cy="163" r="6" fill="{{text}}"/>
+  <text class="type" x="1782" y="171" font-size="22" font-weight="800" letter-spacing="1.5" text-anchor="middle" fill="{{text}}" data-fit-width="66">{{tag}}</text>
+</svg>

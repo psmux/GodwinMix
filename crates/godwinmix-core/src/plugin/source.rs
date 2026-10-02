@@ -123,6 +123,7 @@ static REGISTRY: &[Provide] = &[
     kinds::testsrc::PROVIDE,
     kinds::text::PROVIDE,
     kinds::ticker::PROVIDE,
+    kinds::template::PROVIDE,
 ];
 
 /// The provide named by `type`, if this core has one.

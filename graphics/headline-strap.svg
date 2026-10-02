@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:gmx="https://godwinmix.dev/ns/template" viewBox="0 0 1920 1080" width="1920" height="1080">
+  <metadata>
+    <gmx:template title="Two line headline strap" description="A topic tab, a headline and a second line under it, across the lower part of the frame"/>
+    <gmx:field name="topic" label="Topic" default="ELECTION 2026"/>
+    <gmx:field name="headline" label="Headline" default="Turnout is the highest in thirty years"/>
+    <gmx:field name="subhead" label="Second line" default="Counting starts in every region as polls close at ten"/>
+    <gmx:field name="accent" label="Accent colour" type="color" default="#d4202c"/>
+    <gmx:field name="text" label="Text colour" type="color" default="#ffffff"/>
+    <gmx:field name="panel" label="Panel colour" type="color" default="#0f1a2a"/>
+  </metadata>
+  <style>
+    .type { font-family: Inter, 'Helvetica Neue', Helvetica, Arial, 'DejaVu Sans', 'Liberation Sans', sans-serif; }
+  </style>
+  <rect x="96" y="784" width="380" height="54" fill="{{accent}}"/>
+  <rect x="96" y="838" width="1728" height="170" fill="{{panel}}" fill-opacity="0.95"/>
+  <rect x="96" y="838" width="14" height="170" fill="{{accent}}"/>
+  <text class="type" x="124" y="822" font-size="30" font-weight="800" letter-spacing="2" fill="{{text}}" data-fit-width="328">{{topic}}</text>
+  <text class="type" x="142" y="917" font-size="60" font-weight="700" fill="{{text}}" data-fit-width="1640">{{headline}}</text>
+  <text class="type" x="142" y="973" font-size="34" font-weight="400" fill="{{text}}" fill-opacity="0.86" data-fit-width="1640">{{subhead}}</text>
+</svg>

@@ -23,6 +23,7 @@ pub mod rendered;
 pub mod normalise;
 pub mod rtmp;
 pub mod schema;
+pub mod template;
 pub mod testsrc;
 pub mod text;
 pub mod ticker;

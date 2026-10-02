@@ -22,6 +22,7 @@
 //!   rpc.rs          JSON-RPC framing, subscriptions, frame headers
 //!   scope.rs        tokens, scopes, confirmation, rehearsal
 //!   shows.rs        the station's show.* methods and events
+//!   graphics.rs     graphic templates and their fields
 //!   health.rs       a show health and its alarms
 //!   idempotency.rs  the 24 hour replay cache
 //!   trace.rs        one trace id per call
@@ -41,6 +42,7 @@ pub mod rendition;
 pub mod channels;
 pub mod channel_ingest;
 pub mod error;
+pub mod graphics;
 pub mod health;
 pub mod idempotency;
 pub mod mcp_bindings;
