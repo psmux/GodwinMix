@@ -72,13 +72,11 @@ impl Output for WhepOutput {
             Some(k) => k.clone(),
             None => crate::hls::key::viewer_key(&self.id)?,
         };
-        let missing: Vec<&str> = NEEDED.iter().copied().filter(|e| !crate::probe::exists(e)).collect();
-        anyhow::ensure!(
-            missing.is_empty(),
-            "serving WHEP needs the GStreamer elements {}. webrtcbin is in gst-plugins-bad and nicesrc in the \
-             libnice GStreamer plugin (gstreamer1.0-nice, or brew install libnice-gstreamer).",
-            missing.join(", ")
-        );
+        let missing = crate::setup::system::absent(NEEDED);
+        if !missing.is_empty() {
+            let what = "Sending the programme to browsers over WebRTC";
+            return Err(crate::setup::system::missing_error(what, crate::setup::system::WEBRTC, &missing));
+        }
         Ok(Ready { manifest: MANIFEST, latency_ms: 0, capabilities: MANIFEST.capabilities })
     }
 

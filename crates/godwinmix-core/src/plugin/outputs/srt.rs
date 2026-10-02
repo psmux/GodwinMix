@@ -74,11 +74,10 @@ impl Output for SrtOutput {
 
     fn initialize(&mut self, hello: Hello) -> Result<Ready> {
         validate(&hello.params)?;
-        anyhow::ensure!(
-            crate::probe::exists("srtsink") && crate::probe::exists("mpegtsmux"),
-            "sending over SRT needs the GStreamer `srtsink` and `mpegtsmux` elements \
-             (gstreamer1.0-plugins-bad on Debian and Ubuntu, gst-plugins-bad elsewhere)"
-        );
+        let missing = crate::setup::system::absent(&["srtsink", "mpegtsmux"]);
+        if !missing.is_empty() {
+            return Err(crate::setup::system::missing_error("Sending over SRT", crate::setup::system::BAD, &missing));
+        }
         if let Some(u) = hello.params.get("uri").and_then(|v| v.as_str()) {
             self.uri = u.to_string();
         }

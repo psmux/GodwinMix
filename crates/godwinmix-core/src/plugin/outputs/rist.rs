@@ -87,11 +87,10 @@ impl Output for RistOutput {
             let n = v.as_integer().filter(|n| (50..=30_000).contains(n));
             self.buffer_ms = n.context("rist/output params.buffer_ms must be 50 to 30000")? as u32;
         }
-        anyhow::ensure!(
-            ["ristsink", "rtpmp2tpay", "mpegtsmux"].iter().all(|e| crate::probe::exists(e)),
-            "sending over RIST needs the GStreamer `ristsink`, `rtpmp2tpay` and `mpegtsmux` elements \
-             (gstreamer1.0-plugins-bad and -good on Debian and Ubuntu, gst-plugins-bad elsewhere)"
-        );
+        let missing = crate::setup::system::absent(&["ristsink", "rtpmp2tpay", "mpegtsmux"]);
+        if !missing.is_empty() {
+            return Err(crate::setup::system::missing_error("Sending over RIST", crate::setup::system::BAD, &missing));
+        }
         Ok(Ready { manifest: MANIFEST, latency_ms: self.buffer_ms, capabilities: MANIFEST.capabilities })
     }
 

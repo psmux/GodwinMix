@@ -59,24 +59,13 @@ pub fn available() -> bool {
 /// Names the package for the platform the core is running on, because "install
 /// libnice" is not something anybody can act on directly.
 pub fn missing_message() -> String {
+    tracing::warn!(elements = %format!("{ELEMENT} {NICE}"), "WHEP preview refused: elements missing");
+    let command = crate::setup::system::install_command(crate::setup::system::WEBRTC);
     format!(
-        "WHEP is not available on this core: it needs the GStreamer elements '{ELEMENT}' \
-         and '{NICE}'. Install {}, restart the core, and POST here again. Until then use \
-         /mjpeg/program for picture and /pcm/program or /opus/program for sound, which \
-         need nothing extra.",
-        package()
+        "Live preview over WebRTC needs a part of GStreamer this machine does not have. Install it \
+         with this command, then restart the mixer: {command}. The picture and sound previews \
+         work meanwhile."
     )
-}
-
-/// The packages that carry webrtcbin and libnice's elements on this platform.
-fn package() -> &'static str {
-    if cfg!(target_os = "macos") {
-        "the GStreamer 1.28 runtime from gstreamer.freedesktop.org, or `brew install gstreamer libnice-gstreamer`"
-    } else if cfg!(target_os = "windows") {
-        "the GStreamer 1.28 MSI from gstreamer.freedesktop.org, which carries both"
-    } else {
-        "`gstreamer1.0-plugins-bad` and `gstreamer1.0-nice` (Debian and Ubuntu)"
-    }
 }
 
 /// What a `/whep/*` stream is showing.
@@ -144,13 +133,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_refusal_names_the_element_the_package_and_the_next_step() {
+    fn the_refusal_is_plain_and_names_the_one_command() {
         let m = missing_message();
-        assert!(m.contains(ELEMENT), "{m}");
-        assert!(m.contains("restart the core"), "{m}");
-        // And it offers what does work today rather than leaving a dead end.
-        assert!(m.contains("/mjpeg/program"), "{m}");
-        assert!(m.contains("/pcm/program"), "{m}");
+        assert!(!m.contains(ELEMENT) && !m.contains(NICE), "element names stay in the log: {m}");
+        assert!(m.contains("restart the mixer"), "{m}");
+        let command = crate::setup::system::install_command(crate::setup::system::WEBRTC);
+        assert!(m.contains(&command), "{m}");
+        // And it says what does work today rather than leaving a dead end.
+        assert!(m.contains("previews work meanwhile"), "{m}");
     }
 
     #[test]

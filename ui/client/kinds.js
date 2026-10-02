@@ -205,8 +205,8 @@ export const CATEGORIES = [
     provides: ["camera/source", "decklink/source"],
     plugin: {
       name: "camera",
-      label: "Install camera support",
-      line: "Cameras need the camera plugin. It installs into this mixer while it runs, and nothing goes off air.",
+      label: "Set up cameras",
+      line: "Setting up cameras. This happens once and takes about a minute; nothing goes off air.",
     },
     nothing: "No camera answered. Check it is plugged in and that nothing else has it open, then rescan.",
   },
@@ -219,8 +219,8 @@ export const CATEGORIES = [
     provides: ["screen/source"],
     plugin: {
       name: "screen",
-      label: "Install screen capture",
-      line: "Capturing a screen needs the screen plugin. It installs into this mixer while it runs.",
+      label: "Set up screen capture",
+      line: "Setting up screen capture. This happens once and takes about a minute; nothing goes off air.",
     },
     nothing: "Nothing to capture was offered. Rescan after granting this machine's screen recording permission.",
   },
@@ -233,8 +233,8 @@ export const CATEGORIES = [
     provides: ["audio-device/source"],
     plugin: {
       name: "audio-device",
-      label: "Install audio input support",
-      line: "Microphones and sound cards need the audio-device plugin. It installs into this mixer while it runs.",
+      label: "Set up microphones and audio",
+      line: "Setting up microphones and sound cards. This happens once and takes about a minute; nothing goes off air.",
     },
     nothing: "No sound input answered. Check the machine can hear it, then rescan.",
   },
