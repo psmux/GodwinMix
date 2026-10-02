@@ -43,6 +43,7 @@ pub fn events() -> Vec<EventDef> {
     all.extend(stream_events());
     all.extend(crate::rendition::events());
     all.extend(crate::shows::events());
+    all.extend(crate::feeds::events());
     all.push(health_event());
     all
 }

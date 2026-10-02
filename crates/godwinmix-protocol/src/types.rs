@@ -386,6 +386,11 @@ pub enum Event {
     ShowRemoved { id: String },
     /// A show's health changed state, or an alarm began or ended.
     ShowHealth { id: String, health: crate::health::Health },
+    /// A feed could not be read, or a binding could not write what it read.
+    /// Sent on the first failure in a row and not again until it recovers.
+    FeedFailed { id: String, binding: Option<String>, error: String, failures: u32 },
+    /// A feed or a binding that was failing works again.
+    FeedRecovered { id: String, binding: Option<String>, failures: u32 },
 }
 
 /// What a surface starts with: the layout, the theme and the gallery mode.
