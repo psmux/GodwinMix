@@ -4,8 +4,11 @@
 //! output is I420 and takes no alpha, so a keyed picture fed to its pad would
 //! arrive with its clear parts black. The board draws after the compositor
 //! and does take alpha, so the key hands it the picture instead and sends the
-//! pad nothing; the pad keeps its place, size, z order and fades, and the
-//! board reads them off it each frame like it does for a text or a PNG.
+//! pad an empty gap buffer for each frame; the pad keeps its place, size, z
+//! order and fades, and the board reads them off it each frame like it does
+//! for a text or a PNG. A gap rather than nothing, because a compositor pad
+//! that has had frames and then gets none is waited for, and the programme
+//! stalls a second while it does.
 //!
 //! That also settles the stacking. The board draws every transparent item
 //! over the opaque ones, in z order among themselves, and a keyed presenter
@@ -40,9 +43,12 @@ pub fn attach_at(board: Option<&Arc<Board>>, hook: Option<BoardHook>, pads: Arc<
     board.attach(key, hook.layer.clone(), pads);
 }
 
-/// Stop drawing what was attached under `key`.
-pub fn detach(board: Option<&Arc<Board>>, key: &str) {
+/// Stop drawing what was attached under `key`, and give its pads back.
+pub fn detach(board: Option<&Arc<Board>>, hook: Option<BoardHook>, key: &str) {
     if let Some(board) = board {
         board.detach(key);
+    }
+    if let Some(hook) = hook {
+        hook.release();
     }
 }

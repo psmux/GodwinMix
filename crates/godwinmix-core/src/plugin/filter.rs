@@ -110,8 +110,7 @@ pub trait Filter: Send {
     /// For a filter whose result has alpha: the layer the overlay board
     /// draws it from. Where the board can draw it, the caller attaches the
     /// layer, says which compositor pads it stands for, and turns it on; the
-    /// filter then hands its pictures to the layer and sends nothing to the
-    /// pad. Where it cannot, the layer stays off and the filter flattens its
+    /// filter then hands its pictures to the layer and sends the pad gaps. Where it cannot, the layer stays off and the filter flattens its
     /// result into the frame. See `filters::chroma`.
     fn board(&self) -> Option<BoardHook> {
         None
@@ -139,13 +138,14 @@ impl BoardHook {
     }
 
     /// Back to flattening into the frame.
-    pub fn flatten(&self) {
+    pub fn release(&self) {
         self.layer.activate(false);
         self.layer.set_picture(None);
         *self.pads.lock() = None;
     }
 
-    /// True when at least one of the pads is drawn this frame.
+    /// True when at least one of the pads is drawn this frame, so a key
+    /// whose item is off air skips the work.
     pub fn seen(&self) -> bool {
         let Some(pads) = self.pads.lock().clone() else { return false };
         let mut seen = false;
