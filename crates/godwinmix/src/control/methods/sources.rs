@@ -11,6 +11,7 @@ use godwinmix_core::mixer::{AudioOutcome, Command, SeekOutcome};
 use serde_json::Value;
 
 mod in_place;
+mod merge;
 mod missing;
 
 pub fn register(reg: &mut Registry<Call>) {
@@ -361,7 +362,9 @@ pub struct SetSourceRequest {
     /// The latency budget in milliseconds, answered on the LATENCY query.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub latency_ms: Option<u32>,
-    /// Params for the source's own kind. Merged over what it has.
+    /// Params for the source's own kind. Merged over what it has, the way a
+    /// JSON merge patch is: a table is merged key by key, and `null` removes
+    /// a key. `{"fields": {"headline": "x"}}` changes one field of a graphic.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub params: Option<std::collections::BTreeMap<String, Value>>,
 }
@@ -443,16 +446,7 @@ async fn set(call: Call, params: Value) -> Result<Value, RpcError> {
     }
     if let Some(extra) = &req.params {
         for (key, value) in extra {
-            match toml::Value::try_from(value) {
-                Ok(v) => {
-                    wanted.params.insert(key.clone(), v);
-                }
-                Err(e) => {
-                    return Err(RpcError::invalid_params(format!(
-                        "`params.{key}` is not something a config can hold: {e}"
-                    )))
-                }
-            }
+            merge::merge(&mut wanted.params, key, value, "")?;
         }
     }
     let moving = wanted.placement() != current.placement();

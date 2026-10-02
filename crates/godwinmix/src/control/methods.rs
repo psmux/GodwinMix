@@ -39,6 +39,7 @@ pub(crate) mod scenes;
 mod sources;
 pub mod task_request;
 mod tasks;
+mod templates;
 mod vitals;
 
 /// Wrap an async function as a handler, so a registration reads as one thing.
@@ -71,6 +72,7 @@ pub fn registry() -> Registry<Call> {
     outputs::register(&mut reg);
     channel_destinations::register(&mut reg);
     media::register(&mut reg);
+    templates::register(&mut reg);
     tasks::register(&mut reg);
     agent::register(&mut reg);
     filters::register(&mut reg);

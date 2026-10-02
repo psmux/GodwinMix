@@ -1,8 +1,4 @@
-//! Graphic templates: SVG pictures with named fields, drawn by the mixer
-//! itself through `template/source`. The `template.*` methods list them, read
-//! one, save one into the media library, and say what a running graphic's
-//! fields hold.
-//!
+//! Graphic templates: SVGs with named fields, drawn by `template/source`.
 //! A field's value lives in the source's params at `params.fields.<name>`,
 //! which is what any client, a data feed included, sets with `source.set`.
 
@@ -70,8 +66,7 @@ pub struct TemplateInfo {
 #[derive(Debug, Clone, Default, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct TemplateList {
     pub templates: Vec<TemplateInfo>,
-    /// Library files that look like templates and could not be read, each
-    /// with the reason.
+    /// Library files that look like templates and would not read, and why.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub errors: Vec<String>,
 }
@@ -81,6 +76,8 @@ pub struct TemplateList {
 #[serde(deny_unknown_fields)]
 pub struct TemplateGetRequest {
     /// A pack name or a library file name, as `template.list` gives it.
+    /// The REST layer puts it in the path as `id`, so both are read.
+    #[serde(alias = "id")]
     pub name: String,
 }
 
@@ -99,7 +96,8 @@ pub struct TemplateDoc {
 #[serde(deny_unknown_fields)]
 pub struct TemplateSaveRequest {
     /// The file name, ending `.svg` or not (it is added). One segment, no
-    /// slashes.
+    /// slashes. `id` in a REST path.
+    #[serde(alias = "id")]
     pub name: String,
     /// The whole SVG document.
     pub svg: String,
@@ -107,6 +105,16 @@ pub struct TemplateSaveRequest {
     /// is drawn again with the new SVG, on air, with no rebuild.
     #[serde(default)]
     pub replace: bool,
+}
+
+/// The answer to `template.save`.
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct TemplateSaved {
+    pub template: TemplateInfo,
+    /// Where it was written on the mixer.
+    pub path: String,
+    /// The sources drawing this template that were drawn again with it.
+    pub redrawn: Vec<String>,
 }
 
 /// `template.fields`: the fields of a running graphic.
@@ -136,7 +144,6 @@ pub struct TemplateFields {
     /// The template's name.
     pub template: String,
     pub fields: Vec<FieldValue>,
-    /// Where a client sets a field: `params.fields.<name>` through
-    /// `source.set`.
+    /// Where a client sets a field with `source.set`: `params.fields.<name>`.
     pub path: String,
 }
