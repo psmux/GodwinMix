@@ -90,6 +90,16 @@
             "const": "restart",
             "description": "Call `core.restart`, when `core.info` says a restart is possible.",
             "type": "string"
+          },
+          {
+            "const": "setup",
+            "description": "Call `setup.start {piece}`: build or install a piece the mixer sets\nup for itself, or try again after one did not finish.",
+            "type": "string"
+          },
+          {
+            "const": "copy",
+            "description": "Nothing for the client to call: show `command` to copy.",
+            "type": "string"
           }
         ]
       },
@@ -2823,6 +2833,13 @@
               "null"
             ]
           },
+          "command": {
+            "description": "A command the person runs themselves, for what only the operating\nsystem can supply. A client shows it with a copy button, beside the\naction's own button when the kind is not `copy`.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "dialog": {
             "description": "`open`: a dialog, such as `settings`.",
             "type": [
@@ -2853,6 +2870,13 @@
           },
           "panel": {
             "description": "`open`: a panel by id.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "piece": {
+            "description": "`setup`: the piece to set up, `web` or a plugin's name.",
             "type": [
               "string",
               "null"
@@ -7460,6 +7484,98 @@
         },
         "required": [
           "id"
+        ],
+        "type": "object"
+      },
+      "SetupRequest": {
+        "description": "`setup.start` and `setup.get`: one piece by name.",
+        "properties": {
+          "piece": {
+            "description": "`web`, or a first party plugin's name such as `camera`.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "piece"
+        ],
+        "type": "object"
+      },
+      "SetupState": {
+        "description": "Where a piece stands.",
+        "oneOf": [
+          {
+            "const": "ready",
+            "description": "There and usable.",
+            "type": "string"
+          },
+          {
+            "const": "missing",
+            "description": "Not there, and this mixer can set it up when asked.",
+            "type": "string"
+          },
+          {
+            "const": "running",
+            "description": "Being set up now.",
+            "type": "string"
+          },
+          {
+            "const": "failed",
+            "description": "The last attempt did not finish. `action` says what to press.",
+            "type": "string"
+          },
+          {
+            "const": "unavailable",
+            "description": "Not there, and this mixer cannot set it up by itself.",
+            "type": "string"
+          }
+        ]
+      },
+      "SetupStatus": {
+        "description": "One piece that lives outside the mixer's own program.",
+        "properties": {
+          "action": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorAction"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The button that moves it on, when there is one: try again, or a\ncommand to copy."
+          },
+          "detail": {
+            "description": "For a developer: where it looked, what it ran, where the log is."
+          },
+          "message": {
+            "description": "One or two plain sentences: what is happening and what comes next.",
+            "type": "string"
+          },
+          "piece": {
+            "description": "`web` for the browser renderer, otherwise the plugin's name.",
+            "type": "string"
+          },
+          "progress": {
+            "description": "0 to 1 while a download says how far it has got.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "state": {
+            "$ref": "#/components/schemas/SetupState"
+          },
+          "title": {
+            "description": "What it gives a person, in their words: \"Web pages\", \"Cameras\".",
+            "type": "string"
+          }
+        },
+        "required": [
+          "piece",
+          "title",
+          "state",
+          "message"
         ],
         "type": "object"
       },
@@ -14864,6 +14980,103 @@
         "summary": "Change a scene's name, its colour, or both. Names and colours live on the document, so every client, the tally and an agent see the same ones.",
         "tags": [
           "scene"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/setup": {
+      "get": {
+        "description": "JSON-RPC method `setup.get`. Needs the `read` scope.",
+        "operationId": "setup.get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SetupStatus"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Where one piece stands, without starting anything.",
+        "tags": [
+          "setup"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
+    "/api/v1/setup/list": {
+      "get": {
+        "description": "JSON-RPC method `setup.list`. Needs the `read` scope.",
+        "operationId": "setup.list",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SetupStatus"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Where each piece the mixer sets up on first use stands: the browser renderer (`web`) and every first party plugin this copy carries.",
+        "tags": [
+          "setup"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
+    "/api/v1/setup/start": {
+      "post": {
+        "description": "JSON-RPC method `setup.start`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "setup.start",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetupRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SetupStatus"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Set a piece up now, or join the set up already running, and answer at once with where it stands. Progress follows as `event/setup.changed`. Sources waiting on the piece start by themselves when it is ready.",
+        "tags": [
+          "setup"
         ],
         "x-destructive": false,
         "x-idempotent": true,

@@ -80,3 +80,39 @@ fn setting_up_says_how_long() {
     assert_eq!(names::title("audio-device"), "Microphones and audio");
     assert_eq!(names::noun("nothing-known"), "this feature");
 }
+
+#[test]
+fn every_part_of_gstreamer_is_said_plainly_with_its_command() {
+    use system::{BAD, GL, GOOD, NICE, RS, WEBRTC};
+    for (what, part) in [
+        ("Sending the programme to browsers over WebRTC", WEBRTC),
+        ("Publishing the programme as an HLS stream", RS),
+        ("Sending over SRT", BAD),
+        ("Showing web pages", GL),
+        ("Decoding", GOOD),
+        ("Connecting", NICE),
+    ] {
+        let a = system::missing(what, part, &["someelement"]);
+        plain(&a.message);
+        assert!(a.message.starts_with(what));
+        assert_eq!(a.action.command.as_deref(), Some(system::install_command(part).as_str()));
+        assert!(!a.message.contains("someelement"), "element names stay in the detail");
+    }
+}
+
+#[test]
+fn a_refusal_a_set_up_fixes_names_the_piece_it_waits_on() {
+    let l = lookup();
+    let waiting = anyhow::Error::new(plain::web_setting_up(&l)).context("adding source lyrics");
+    assert_eq!(waits_on(&waiting).as_deref(), Some("web"));
+    let cams = anyhow::Error::new(plain::plugin_missing("camera", "camera/source", true));
+    assert_eq!(waits_on(&cams).as_deref(), Some("camera"));
+    // A third party plugin is installed by hand, and a package with no
+    // renderer cannot set one up: neither waits.
+    assert_eq!(waits_on(&anyhow::Error::new(plain::plugin_missing("x-thing", "x-thing/source", false))), None);
+    assert_eq!(waits_on(&anyhow::Error::new(plain::web_unavailable(&l))), None);
+    // What a person reads for one of these is the sentence alone.
+    let (said, detail) = plain::for_person(&waiting);
+    plain(&said);
+    assert!(detail.unwrap()["chain"].as_str().unwrap().contains("lyrics"));
+}
