@@ -4528,7 +4528,7 @@ impl Mixer {
                 // what its editor opens on.
                 if let Some(layer) = s.input.layer() {
                     status.put_extra("alpha", layer.active());
-                    if matches!(kind.as_str(), "text/source" | "ticker/source") {
+                    if matches!(kind.as_str(), "text/source" | "ticker/source" | "template/source") {
                         status.put_extra("params", s.input.current_config().params);
                     }
                 }

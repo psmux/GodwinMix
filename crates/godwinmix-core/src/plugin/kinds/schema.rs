@@ -8,6 +8,7 @@ pub fn params(type_id: &str) -> Option<Value> {
     match type_id {
         "text/source" => Some(super::text::schema()),
         "ticker/source" => Some(super::ticker::schema()),
+        "template/source" => Some(super::template::schema()),
         "image/source" => Some(image()),
         "file/source" => Some(file()),
         _ => None,

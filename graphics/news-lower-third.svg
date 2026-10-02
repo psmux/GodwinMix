@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:gmx="https://godwinmix.dev/ns/template" viewBox="0 0 1920 1080" width="1920" height="1080">
+  <metadata>
+    <gmx:template title="News lower third" description="A name on a panel and a title on the accent strip under it, bottom left inside title safe"/>
+    <gmx:field name="name" label="Name" default="Ada Lovelace"/>
+    <gmx:field name="title" label="Title" default="Analyst, Engine Research"/>
+    <gmx:field name="accent" label="Accent colour" type="color" default="#d4202c"/>
+    <gmx:field name="text" label="Text colour" type="color" default="#ffffff"/>
+    <gmx:field name="panel" label="Panel colour" type="color" default="#0f1a2a"/>
+  </metadata>
+  <style>
+    .type { font-family: Inter, 'Helvetica Neue', Helvetica, Arial, 'DejaVu Sans', 'Liberation Sans', sans-serif; }
+  </style>
+  <rect x="96" y="836" width="12" height="134" fill="{{accent}}"/>
+  <rect x="108" y="836" width="1000" height="84" fill="{{panel}}" fill-opacity="0.94"/>
+  <rect x="108" y="920" width="1000" height="50" fill="{{accent}}"/>
+  <text class="type" x="140" y="894" font-size="52" font-weight="700" fill="{{text}}" data-fit-width="936">{{name}}</text>
+  <text class="type" x="140" y="955" font-size="30" font-weight="500" letter-spacing="0.5" fill="{{text}}" data-fit-width="936">{{title}}</text>
+</svg>

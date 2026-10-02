@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:gmx="https://godwinmix.dev/ns/template" viewBox="0 0 1920 1080" width="1920" height="1080">
+  <metadata>
+    <gmx:template title="Location and weather tag" description="Where the picture is from, with a line for the weather or the local time, top left inside title safe"/>
+    <gmx:field name="place" label="Place" default="LONDON"/>
+    <gmx:field name="detail" label="Detail" default="Light rain, 14°C"/>
+    <gmx:field name="accent" label="Accent colour" type="color" default="#d4202c"/>
+    <gmx:field name="text" label="Text colour" type="color" default="#ffffff"/>
+    <gmx:field name="panel" label="Panel colour" type="color" default="#0f1a2a"/>
+  </metadata>
+  <style>
+    .type { font-family: Inter, 'Helvetica Neue', Helvetica, Arial, 'DejaVu Sans', 'Liberation Sans', sans-serif; }
+  </style>
+  <rect x="96" y="54" width="88" height="96" fill="{{accent}}"/>
+  <path d="M140 76 C127 76 117 86 117 99 C117 116 140 134 140 134 C140 134 163 116 163 99 C163 86 153 76 140 76 Z M140 90 C145 90 149 94 149 99 C149 104 145 108 140 108 C135 108 131 104 131 99 C131 94 135 90 140 90 Z" fill="{{text}}" fill-rule="evenodd"/>
+  <rect x="184" y="54" width="460" height="96" fill="{{panel}}" fill-opacity="0.94"/>
+  <text class="type" x="212" y="99" font-size="36" font-weight="800" letter-spacing="1.5" fill="{{text}}" data-fit-width="404">{{place}}</text>
+  <text class="type" x="212" y="134" font-size="26" font-weight="400" fill="{{text}}" fill-opacity="0.86" data-fit-width="404">{{detail}}</text>
+</svg>
