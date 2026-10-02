@@ -127,6 +127,8 @@ pub struct ScenePreview {
     /// The pad the preview takes on the mosaic, so the operator sees it beside
     /// the cameras. `None` until the mosaic makes room for it.
     tile_pad: Option<gst::Pad>,
+    /// Transparent sources, drawn as the programme draws them (`transparent`).
+    transparent: super::transparent::Transparent,
 }
 
 impl ScenePreview {
@@ -202,7 +204,13 @@ impl ScenePreview {
             el.sync_state_with_parent().context("starting the preview branch")?;
         }
         info!(?shape, "preview compositor built");
-        Ok(ScenePreview { pipeline: pipeline.clone(), comp, chain, slots: Vec::new(), shape, tile_pad: None })
+        let transparent = super::transparent::Transparent::new(&comp, (shape.width, shape.height));
+        Ok(ScenePreview { pipeline: pipeline.clone(), comp, chain, slots: Vec::new(), shape, tile_pad: None, transparent })
+    }
+
+    /// Draw transparent sources from the programme's board's layers.
+    pub fn borrow_layers(&mut self, layers: Option<Arc<crate::overlay::Board>>) {
+        self.transparent.borrow(layers);
     }
 
     pub fn shape(&self) -> PreviewShape {
@@ -323,6 +331,7 @@ impl ScenePreview {
             }
             return Err(e.into());
         }
+        self.transparent.bind(source, &pad);
         self.slots.push(Slot {
             source: source.clone(),
             tee_pad,
@@ -353,6 +362,7 @@ impl ScenePreview {
             return;
         }
         let slot = self.slots.remove(index);
+        self.transparent.unbind(&slot.source);
         if let Some(sink) = slot.queue.static_pad("sink") {
             let _ = slot.tee_pad.unlink(&sink);
         }

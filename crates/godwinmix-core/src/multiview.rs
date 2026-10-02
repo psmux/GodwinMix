@@ -50,6 +50,7 @@
 
 mod arrival;
 pub mod preview;
+mod transparent;
 
 use crate::caps::{CanvasCaps, Grid};
 use crate::config::MultiviewConfig;
@@ -161,6 +162,9 @@ pub struct MultiviewStats {
 
 struct Shared {
     cfg: MultiviewConfig,
+    /// The programme's board, so the scene preview can draw a transparent
+    /// source's real picture rather than its grey carrier. Set by the mixer.
+    overlay: Mutex<Option<Arc<crate::overlay::Board>>>,
     /// Stable across rebuilds, so a client holding a receiver keeps it when
     /// the mosaic is torn down and built again at another size.
     frames: broadcast::Sender<Arc<[u8]>>,
@@ -323,6 +327,11 @@ impl MultiviewHandle {
     /// A handle attached to nothing: it counts subscribers and hands out
     /// receivers, but no pipeline is ever asked for. Used by `gmx bench` for
     /// the disabled rows and by tests.
+    /// Give the scene preview the programme's board to borrow layers from.
+    pub fn use_overlay(&self, board: Arc<crate::overlay::Board>) {
+        *self.shared.overlay.lock() = Some(board);
+    }
+
     pub fn detached(cfg: MultiviewConfig, rt: tokio::runtime::Handle) -> Self {
         Self::with_sink(cfg, rt, None)
     }
@@ -337,6 +346,7 @@ impl MultiviewHandle {
         Self {
             shared: Arc::new(Shared {
                 cfg,
+                overlay: Mutex::new(None),
                 frames,
                 preview_frames,
                 preview_subs: Mutex::new(Vec::new()),
@@ -952,6 +962,7 @@ impl Multiview {
         self.preview_off();
         let mut built =
             preview::ScenePreview::build(&self.pipeline, shape, publish, self.cfg.jpeg_quality as i32)?;
+        built.borrow_layers(self.shared.overlay.lock().clone());
         // A tile of its own on the mosaic, so an operator watching the sheet
         // sees what is armed beside what is live without a second stream.
         match self.attach_preview_tile(&built) {
