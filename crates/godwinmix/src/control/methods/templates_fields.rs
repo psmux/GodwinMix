@@ -1,4 +1,4 @@
-//! `source.fields`: what each field of a running graphic shows, and where
+//! `template.fields`: what each field of a running graphic shows, and where
 //! a client sets it.
 
 use super::super::{body, handler};
@@ -13,11 +13,11 @@ use serde_json::Value;
 
 pub(super) fn register(reg: &mut Registry<Call>) {
     reg.register(
-        MethodDef::new("source.fields", Scope::Read, "A running graphic's fields: each one's label, type, default and what it shows now.", handler(fields))
+        MethodDef::new("template.fields", Scope::Read, "A running graphic's fields: each one's label, type, default and what it shows now.", handler(fields))
             .params(schema_of::<TemplateFieldsRequest>)
             .result(schema_of::<TemplateFields>)
             .tool(
-                "source_fields",
+                "template_fields",
                 Tier::Search,
                 "What each field of a graphic on this mixer shows now, with its label, type and default, \
                  and whether the source set it. Change one on air with `set_source` and \
