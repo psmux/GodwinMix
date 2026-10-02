@@ -41,10 +41,7 @@ pub fn register(reg: &mut Registry<Call>) {
             Tier::Minimal,
             "Put a scene or a source on programme. The cut is instant and the stream is \
              not disturbed. Pass `source` with an id from `agent_state`, or `scene` with \
-             a name, or neither to take the armed scene. `transition` is a name (fade, \
-             wipe, slide, push, zoom, zoom-out, dip, box, move, stinger) or {type, \
-             duration_ms, params}; `list_transitions` has the params. Returns the \
-             programme state.",
+             a name, or neither to take the armed scene. Returns the programme state.",
         ),
     );
 
@@ -59,7 +56,7 @@ pub fn register(reg: &mut Registry<Call>) {
         .result(schema_of::<godwinmix_protocol::transitions::TransitionCatalogue>)
         .tool(
             "list_transitions",
-            Tier::Standard,
+            Tier::Search,
             "The transitions `take` accepts on this mixer: the built in ones (cut, fade, \
              move, stinger, wipe, slide, push, zoom, zoom-out, dip, box), the ones the \
              scene collection names and the ones a plugin adds, each with the params it \

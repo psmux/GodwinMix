@@ -4,6 +4,7 @@ import { mixerSettingsTests } from "./mixer-settings.js";
 import { errorActionTests } from "./error-actions.js";
 import { sourceChooserTests } from "./source-chooser.js";
 import { studioTests } from "./studio.js";
+import { transitionTests } from "./transitions.js";
 import { sceneFixTests, sceneFixLoadTests } from "./scene-fix.js";
 import { scenePictureTests } from "./scene-pictures.js";
 import { dockTests } from "./dock.js";
@@ -2660,6 +2661,7 @@ legacySuite()
     console.error(e);
   })
   .then(() => studioTests(test, eq, ok))
+  .then(() => transitionTests(test, eq, ok))
   .then(() => sceneFixTests(test, eq, ok))
   .then(() => sceneFixLoadTests(test, eq, ok))
   .then(() => scenePictureTests(test, eq, ok))
