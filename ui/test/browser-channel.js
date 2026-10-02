@@ -51,6 +51,22 @@ export async function browserChannelTests(test, eq, ok) {
     eq(reused.key, "again");
   });
 
+  test("a key the secret store has lost is replaced by a new one rather than failing", async () => {
+    const calls = [];
+    const client = {
+      call: async (m, p) => {
+        calls.push(m);
+        if (m === "channel.get") return { id: "browser", app: "browser", enabled: true, auto_source: true, key_mode: "query", protocols: ["whip"], keys: [{ id: "key-1" }] };
+        if (m === "channel.key.reveal") throw Object.assign(new Error("not in the secret store"), { code: -32010, data: { reason: "unsealed" } });
+        if (m === "channel.key.add") return { key: { secret: "new" } };
+        throw new Error("unexpected " + m);
+      },
+    };
+    const got = await ensureBrowserChannel(client);
+    eq(got.key, "new");
+    eq(calls, ["channel.get", "channel.key.reveal", "channel.key.add"]);
+  });
+
   test("the add source picker offers this browser under Cameras and under Microphones only", () => {
     const none = { cameras: [], mics: [] };
     eq(browserEntries({}, "cameras", {}, none).map((e) => e.name), ["This browser's camera"]);
