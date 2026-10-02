@@ -19,6 +19,7 @@
 //!
 //! ```text
 //!   registry.rs  one job a piece, the watch channel, the event
+//!   progress.rs  what a job says as it goes, and how it ends
 //!   plugin.rs    install or switch on a first party plugin
 //!   resume.rs    sources that could not start, started again once ready
 //!   run.rs       a child process with its output in the log
@@ -26,6 +27,7 @@
 //! ```
 
 mod plugin;
+mod progress;
 pub mod registry;
 mod resume;
 mod run;

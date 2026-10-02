@@ -15,6 +15,7 @@
 
 mod build;
 mod cef;
+mod check;
 mod download;
 
 use super::registry::Progress;
