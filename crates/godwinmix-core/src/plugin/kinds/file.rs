@@ -6,7 +6,7 @@
 //! at zero while the programme's running time is minutes in, so livesync judged
 //! every early frame late and an eight second ad lost its first 1.4 seconds.
 
-use super::{uridecode, BuildCtx};
+use super::BuildCtx;
 use crate::caps::CanvasCaps;
 use crate::config::Params;
 use crate::plugin::source::{unknown_method, Provide, Source, SourceRequest};
@@ -84,7 +84,7 @@ impl Source for FileSource {
         if let Some(missing) = missing_file(&self.ctx.cfg.uri) {
             return Err(missing.into());
         }
-        let ends = uridecode(&self.ctx, thumb, false)?;
+        let ends = super::clip_start::open(&self.ctx, thumb)?;
         self.pipeline = Some(ends.pipeline.clone());
         Ok(ends)
     }
