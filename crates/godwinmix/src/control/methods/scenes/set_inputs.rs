@@ -29,8 +29,9 @@ pub async fn source_for(
                                or upload the picture with media.upload first."))
         }
     };
-    let status = call.app.mixer.status().await.map_err(|e| call.mixer_error(e))?;
-    if let Some(same) = status.sources.iter().find(|s| s.uri == uri) {
+    // The configs rather than the status: a listing shortens a path.
+    let configs = call.app.mixer.configs().await.map_err(|e| call.mixer_error(e))?;
+    if let Some(same) = configs.sources.iter().find(|s| same_file(&s.uri, &uri)) {
         return Ok(same.id.clone());
     }
     let stem = std::path::Path::new(&uri).file_stem().map(|s| s.to_string_lossy().into_owned());
@@ -72,4 +73,11 @@ pub fn check_ranges(scale: Option<f64>, x: Option<f64>) -> Result<(), RpcError> 
         .with("field", "presenter_x"));
     }
     Ok(())
+}
+
+/// Two addresses for one file: equal, or the same file once a `file://` is
+/// taken off and the paths are made canonical.
+fn same_file(a: &str, b: &str) -> bool {
+    let real = |s: &str| std::fs::canonicalize(s.strip_prefix("file://").unwrap_or(s)).ok();
+    a == b || real(a).is_some_and(|p| Some(p) == real(b))
 }
