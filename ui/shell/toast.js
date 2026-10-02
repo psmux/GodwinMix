@@ -56,11 +56,14 @@ export function toast(opts) {
   node.appendChild(el("button.btn.icon", { text: "×", title: "Dismiss", onclick: close, "aria-label": "Dismiss" }));
   stack().appendChild(node);
   timer = setTimeout(close, opts.ms === undefined ? DEFAULT_MS : opts.ms);
+  // A note that changes as work goes on (a download's progress) keeps its
+  // place and changes its words.
+  close.setText = (text) => (node.firstChild.textContent = text);
   return close;
 }
 
 /** The action kinds this page can carry out. Anything else is left to the message. */
-const KNOWN = new Set(["set-config", "install-plugin", "enable-plugin", "open", "retry", "restart"]);
+const KNOWN = new Set(["set-config", "install-plugin", "enable-plugin", "open", "retry", "restart", "setup", "copy"]);
 
 /**
  * What an error toast says: the heading from the call site, or the code's

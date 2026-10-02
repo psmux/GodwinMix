@@ -78,6 +78,9 @@ futures-util = { workspace = true, features = ["sink", "std"] }
 reqwest = { workspace = true, features = ["json", "rustls-tls", "stream"] }
 libc = { workspace = true }
 base64 = { workspace = true }
+# Checks the web page engine download against the digest its index publishes.
+# Already in the tree under tungstenite, so it adds nothing to a build.
+sha1 = "0.10"
 
 [features]
 default = []

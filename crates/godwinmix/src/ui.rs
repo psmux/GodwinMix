@@ -42,6 +42,7 @@ const ASSETS: &[(&str, &str)] = &[
     ("client/rpc.js", include_str!("../../../ui/client/rpc.js")),
     ("client/sandbox-client.js", include_str!("../../../ui/client/sandbox-client.js")),
     ("client/schema-form.js", include_str!("../../../ui/client/schema-form.js")),
+    ("client/setup.js", include_str!("../../../ui/client/setup.js")),
     ("client/store.js", include_str!("../../../ui/client/store.js")),
     ("client/transport-legacy.js", include_str!("../../../ui/client/transport-legacy.js")),
     ("client/transport-rpc.js", include_str!("../../../ui/client/transport-rpc.js")),
@@ -246,6 +247,8 @@ const ASSETS: &[(&str, &str)] = &[
     ("shell/source-files.js", include_str!("../../../ui/shell/source-files.js")),
     ("shell/picker-loader.js", include_str!("../../../ui/shell/picker-loader.js")),
     ("shell/picker.js", include_str!("../../../ui/shell/picker.js")),
+    ("shell/picker-setup.js", include_str!("../../../ui/shell/picker-setup.js")),
+    ("shell/setup-note.js", include_str!("../../../ui/shell/setup-note.js")),
     ("shell/pointer.js", include_str!("../../../ui/shell/pointer.js")),
     ("shell/registry.js", include_str!("../../../ui/shell/registry.js")),
     ("shell/sandbox.js", include_str!("../../../ui/shell/sandbox.js")),
@@ -873,6 +876,11 @@ mod tests {
         reachable.extend(closure_of("panels/sources/drawer.js"));
         // The text and ticker editor, which the drawer fetches for one of those.
         reachable.extend(closure_of("panels/sources/text-editor.js"));
+        // The welcome tiles, made by Settings when asked, and the token prompt,
+        // fetched only by a mixer that answers 401. Neither is on the page a
+        // person opens.
+        reachable.extend(closure_of("panels/welcome/panel.js"));
+        reachable.extend(closure_of("shell/firstrun.js"));
         // Sources > Live data, and the button in that editor.
         reachable.extend(closure_of("panels/data/dialog.js"));
         // A graphic's fields editor, which the drawer fetches for a template source.
@@ -888,6 +896,8 @@ mod tests {
         reachable.extend(closure_of("panels/welcome/after.js"));
         reachable.extend(closure_of("panels/welcome/obs-import.js"));
         reachable.extend(closure_of("shell/error-actions.js"));
+        // The setup notes, the first time a piece sets itself up.
+        reachable.extend(closure_of("shell/setup-note.js"));
         reachable.extend(closure_of("kits/schema/index.js"));
         reachable.extend(closure_of("shell/mixer-settings.js"));
         reachable.extend(closure_of("shell/folder-picker.js"));

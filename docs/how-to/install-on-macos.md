@@ -4,6 +4,13 @@ No public installers are published yet. Use the source build instructions in
 [CONTRIBUTING.md](../../CONTRIBUTING.md) for now. The installer instructions
 below apply once a validated release is available.
 
+From a source checkout, `cargo run --release -- --config
+godwinmix.example.toml` is complete. The web page renderer and the first party
+plugins set themselves up the first time a web page or a camera is added. The
+first web page on an Apple silicon Mac took 2 minutes, then started by itself;
+see [What the first run sets up by itself](../../CONTRIBUTING.md#what-the-first-run-sets-up-by-itself).
+The renderer's build needs CMake and Ninja: `brew install cmake ninja`.
+
 Open the disk image, drag the app to Applications, right click it the first
 time. The media stack travels inside the app, so there is nothing else to
 install.
@@ -75,7 +82,11 @@ with its library paths rewritten so it runs wherever the app is put.
 | the camera, screen and microphone plugins | 4.0 MB |
 | `GodwinMix.app` altogether | 112 MB |
 
-The camera, the screen and the microphone are plugins, and all three travel in
+The web page renderer travels in `Contents/Resources/browser`, where the mixer
+looks for it. It is 310 MB unpacked, nearly all of it Chromium, and the
+measured sizes above were taken before it was added.
+
+The camera, the screen, the microphone and the ingest plugin travel in
 `Contents/Resources/plugins/macos`. The app copies them into
 `~/Library/Application Support/mix.godwin.desktop/plugins` the first time it
 starts the mixer, so they are installed and ready before the window opens and

@@ -4,6 +4,13 @@ No public installers are published yet. Use the source build instructions in
 [CONTRIBUTING.md](../../CONTRIBUTING.md) for now. The installer instructions
 below apply once a validated release is available.
 
+From a source checkout, `cargo run --release -- --config
+godwinmix.example.toml` is complete. The web page renderer and the first party
+plugins set themselves up the first time a web page or a camera is added; see
+[What the first run sets up by itself](../../CONTRIBUTING.md#what-the-first-run-sets-up-by-itself).
+The renderer's build needs CMake and Ninja: `sudo apt install cmake
+ninja-build`.
+
 Three ways in, depending on what you are doing: the `.deb` on a desktop that
 runs Debian or Ubuntu, the AppImage on anything else, and the plain binary or
 the container on a server with no screen.
@@ -58,8 +65,9 @@ MB rather than 110, and the plugins on the machine are the ones the machine's
 own applications use. It is also why the `.deb` needs no permission dialog and
 no unpacking step.
 
-What the package does carry is the camera, the screen and the microphone.
-Those three are GodwinMix plugins rather than GStreamer plugins, they add
+What the package does carry is the camera, the screen, the microphone and
+the ingest plugin, and the web page renderer under
+`/usr/lib/GodwinMix/browser`, where the mixer looks for it. The plugins add
 about 4 MB, and the app copies them into
 `~/.local/share/mix.godwin.desktop/plugins` the first time it starts the
 mixer. So a webcam is in the add source list from the first launch with

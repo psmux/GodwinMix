@@ -37,6 +37,7 @@ pub mod renditions;
 pub(crate) mod program;
 pub mod project;
 pub(crate) mod scenes;
+mod setup;
 mod sources;
 pub mod task_request;
 mod tasks;
@@ -90,6 +91,7 @@ pub fn registry() -> Registry<Call> {
     config::register(&mut reg);
     vitals::register(&mut reg);
     feeds::register(&mut reg);
+    setup::register(&mut reg);
     crate::observe::register(&mut reg);
     // Last, so it sees every method: the station's tools and a tool for
     // everything else that has none.

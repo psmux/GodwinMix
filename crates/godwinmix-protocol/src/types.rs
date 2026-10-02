@@ -391,6 +391,9 @@ pub enum Event {
     FeedFailed { id: String, binding: Option<String>, error: String, failures: u32 },
     /// A feed or a binding that was failing works again.
     FeedRecovered { id: String, binding: Option<String>, failures: u32 },
+    /// A piece the mixer sets up on first use moved on: started, got further
+    /// through a download, finished or stopped. See `setup.rs`.
+    SetupChanged { setup: Box<crate::setup::SetupStatus> },
 }
 
 /// What a surface starts with: the layout, the theme and the gallery mode.

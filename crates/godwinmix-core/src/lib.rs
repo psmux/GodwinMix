@@ -67,6 +67,7 @@ pub mod render;
 pub mod safety;
 pub mod scene;
 pub mod secrets;
+pub mod setup;
 pub mod snapshot;
 pub mod telemetry;
 pub mod whep;

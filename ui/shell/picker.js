@@ -15,6 +15,7 @@
 // and a key, there is no hardware to find, and a rail of one category would be
 // a rail for its own sake.
 
+import { setupBlock } from "./picker-setup.js";
 import { el, clear, svg, on, fmtBytes } from "./dom.js";
 import { sourceFiles } from "./source-files.js";
 import { modal } from "./modal.js";
@@ -460,52 +461,14 @@ function openSourcePicker(client, kinds, plugins, opts) {
   }
 
   /**
-   * A category whose plugin this mixer has not got.
-   *
-   * One sentence and one button. The button installs the plugin over the
-   * protocol, the same call `gmx plugin add` makes, because telling an
-   * operator to open a terminal is telling them the answer is somewhere else.
+   * A category whose plugin this mixer has not got. Opening it sets the
+   * plugin up; see picker-setup.js.
    */
   function installBlock(cat) {
-    const note = el("p.sm.dim", { text: "" });
-    // Installed and switched off is a different offer: installing again
-    // answers ok, changes nothing, and redraws this same block for ever.
-    const off = pluginState(state.plugins, cat.plugin.name) === "disabled";
-    const button = el("button.btn.primary", { text: off ? `Turn ${cat.plugin.name} support back on` : cat.plugin.label });
-    button.onclick = async () => {
-      button.disabled = true;
-      note.textContent = off ? "Turning it on." : "Installing. It is fetched, checked and started; this can take a minute.";
-      try {
-        if (off) await client.call("plugin.enable", { name: cat.plugin.name });
-        else await client.call("plugin.add", { source: await pluginSourceFor(client, cat.plugin.name) });
-      } catch (e) {
-        errorToast(e, cat.plugin.label);
-        button.disabled = false;
-        note.textContent = "";
-        return;
-      }
-      note.textContent = off ? "On. Looking for devices." : "Installed. Looking for devices.";
+    return setupBlock(client, cat, async () => {
       state.plugins = await listPlugins(client);
-      if (!hasPlugin(state.plugins, cat.plugin.name)) {
-        // The install answered, so something is on disk, but the core has not
-        // registered it. Saying so beats redrawing the same offer with no
-        // word about what just happened.
-        toast({
-          kind: "warning",
-          text: `${cat.plugin.name} was installed, but the mixer has not picked it up yet.`,
-        });
-      }
       await rescan();
-    };
-    const line = off
-      ? `This needs the ${cat.plugin.name} plugin, which is on this mixer and switched off. Turning it on takes nothing off air.`
-      : cat.plugin.line;
-    return el("div.col", {}, [
-      el("p.dim", { text: line, style: { marginTop: "0" } }),
-      // In a row rather than loose in the column, which would stretch a
-      // primary button the whole width of the modal.
-      el("div.row", {}, [button, note, el("span.grow")]),
-    ]);
+    });
   }
 
   function icon(name) {

@@ -33,7 +33,9 @@ pub fn raster(uri: &str) -> Result<Picture> {
 /// Render the SVG at `uri` at `size`: `rsvgdec` draws it at that size, so a
 /// logo placed small is drawn small and one placed large is drawn sharp.
 pub fn svg(uri: &str, size: (u32, u32)) -> Result<Picture> {
-    anyhow::ensure!(crate::probe::exists("rsvgdec"), "this build of GStreamer has no rsvgdec (gst-plugins-bad, built with librsvg), so it cannot draw an SVG. Install it, or export the SVG as a PNG");
+    if !crate::probe::exists("rsvgdec") {
+        return Err(crate::setup::system::missing_error("Drawing SVG pictures", crate::setup::system::BAD, &["rsvgdec"]));
+    }
     let src = gst::Element::make_from_uri(gst::URIType::Src, uri, None).with_context(|| format!("nothing in this build reads {uri}"))?;
     // A file source says nothing about what it reads, and `rsvgdec` will not
     // take bytes with no caps on them.

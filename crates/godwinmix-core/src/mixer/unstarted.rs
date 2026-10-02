@@ -34,7 +34,7 @@ impl UnstartedList {
         self.forget(&config.id);
         self.0.push(Unstarted {
             config: config.clone(),
-            error: format!("{error:#}"),
+            error: crate::setup::plain::for_person(error).0,
             action: ErrorAction::find(error.as_ref()),
         });
     }

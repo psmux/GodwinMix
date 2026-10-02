@@ -27,7 +27,7 @@ pub const API_COMPATIBLE: u32 = 1;
 /// What pressing the button does.
 pub type ActionKind = String;
 /// The values api_level 1 knows for [`ActionKind`].
-pub const ACTION_KIND_VALUES: &[&str] = &["set-config", "install-plugin", "enable-plugin", "open", "retry", "restart"];
+pub const ACTION_KIND_VALUES: &[&str] = &["set-config", "install-plugin", "enable-plugin", "open", "retry", "restart", "setup", "copy"];
 
 /// `adbreak.start`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -1352,6 +1352,11 @@ pub struct ErrorAction {
     /// `next_source` or `restart`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub applies: Option<String>,
+    /// A command the person runs themselves, for what only the operating
+    /// system can supply. A client shows it with a copy button, beside the
+    /// action's own button when the kind is not `copy`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub command: Option<String>,
     /// `open`: a dialog, such as `settings`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub dialog: Option<String>,
@@ -1367,6 +1372,9 @@ pub struct ErrorAction {
     /// `open`: a panel by id.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub panel: Option<String>,
+    /// `setup`: the piece to set up, `web` or a plugin's name.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub piece: Option<String>,
     /// `set-config`: the value to send.
     pub value: Value,
 }
@@ -3797,6 +3805,41 @@ pub struct SetSourceRequest {
     pub transport: Option<BridgeTransport>,
 }
 
+/// `setup.start` and `setup.get`: one piece by name.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SetupRequest {
+    /// `web`, or a first party plugin's name such as `camera`.
+    pub piece: String,
+}
+
+/// Where a piece stands.
+pub type SetupState = String;
+/// The values api_level 1 knows for [`SetupState`].
+pub const SETUP_STATE_VALUES: &[&str] = &["ready", "missing", "running", "failed", "unavailable"];
+
+/// One piece that lives outside the mixer's own program.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SetupStatus {
+    /// The button that moves it on, when there is one: try again, or a
+    /// command to copy.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub action: Option<ErrorAction>,
+    /// For a developer: where it looked, what it ran, where the log is.
+    pub detail: Value,
+    /// One or two plain sentences: what is happening and what comes next.
+    pub message: String,
+    /// `web` for the browser renderer, otherwise the plugin's name.
+    pub piece: String,
+    /// 0 to 1 while a download says how far it has got.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub progress: Option<f64>,
+    pub state: SetupState,
+    /// What it gives a person, in their words: "Web pages", "Cameras".
+    pub title: String,
+}
+
 /// How much the reader should care.
 pub type Severity = String;
 /// The values api_level 1 knows for [`Severity`].
@@ -5162,6 +5205,13 @@ pub struct TelemetryEvent {
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
+pub struct SetupChangedEvent {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub setup: Option<SetupStatus>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct FeedFailedEvent {
     /// The binding, when it was a write that failed.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -5195,7 +5245,7 @@ pub struct MethodInfo {
     pub rest: Option<(&'static str, &'static str)>,
 }
 
-pub const METHODS: [MethodInfo; 188] = [
+pub const METHODS: [MethodInfo; 191] = [
     MethodInfo { name: "adbreak.end", summary: "Cut a running ad short, or disarm one that is scheduled.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/end")) },
     MethodInfo { name: "adbreak.start", summary: "Interrupt the programme with a clip, then rejoin live when it ends.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/start")) },
     MethodInfo { name: "agent.state", summary: "The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/agent/state")) },
@@ -5347,6 +5397,9 @@ pub const METHODS: [MethodInfo; 188] = [
     MethodInfo { name: "scene.undo", summary: "Undo the last change. A drag marked with scene.history.mark undoes as one step.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/undo")) },
     MethodInfo { name: "scene.validate", summary: "Overlaps, items off the canvas, safe area breaches and missing sources: what to fix before saying a scene is done.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/scenes/validate")) },
     MethodInfo { name: "scene.virtual_set", summary: "A new scene with a presenter keyed in front of a background, and optionally a foreground such as a desk and a lower third area. Pictures from the media library become sources; the key colour is guessed from the camera.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/virtual_set")) },
+    MethodInfo { name: "setup.get", summary: "Where one piece stands, without starting anything.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/setup")) },
+    MethodInfo { name: "setup.list", summary: "Where each piece the mixer sets up on first use stands: the browser renderer (`web`) and every first party plugin this copy carries.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/setup/list")) },
+    MethodInfo { name: "setup.start", summary: "Set a piece up now, or join the set up already running, and answer at once with where it stands. Progress follows as `event/setup.changed`. Sources waiting on the piece start by themselves when it is ready.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/setup/start")) },
     MethodInfo { name: "show.add", summary: "Make another show and start it: empty, a copy of a show (without its outputs, so nothing goes out twice), or from a project file.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/shows")) },
     MethodInfo { name: "show.add_many", summary: "Make many shows in one call, such as every channel of a headend. The whole batch is checked first. With dry_run (the default) nothing is made: the answer says what would be, what its renditions would cost and whether the governor would admit them. Without it, every show that fits is made and the rest are refused with why; a show is made whole or not at all.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/shows/add_many")) },
     MethodInfo { name: "show.list", summary: "Every show on this machine: its name, whether it is running, what is on air, what its outputs send and what its process costs. `current` is the show a client reaches when it names none.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/shows")) },
@@ -5386,7 +5439,7 @@ pub const METHODS: [MethodInfo; 188] = [
     MethodInfo { name: "vitals.set", summary: "Change the alarm thresholds, or whether a mosaic is kept up for the black and freeze checks while nobody is looking. Fields left out keep their defaults; a duration of 0 switches that check off. Applies within a second.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/vitals/set")) },
 ];
 
-pub const EVENT_NAMES: [&str; 32] = [
+pub const EVENT_NAMES: [&str; 33] = [
     "snapshot",
     "program.took",
     "scene.patch",
@@ -5409,6 +5462,7 @@ pub const EVENT_NAMES: [&str; 32] = [
     "multiview.layout",
     "multiview.frame",
     "preview.frame",
+    "setup.changed",
     "resync",
     "flush",
     "rendition.plan",
@@ -5482,6 +5536,8 @@ pub enum Event {
     MultiviewFrame(crate::frames::Frame),
     /// 16 byte header then JPEG, decoded by [`crate::frames::parse_frame`].
     PreviewFrame(crate::frames::Frame),
+    /// A piece the mixer sets up on first use moved on: the browser renderer or a first party plugin started setting up, got further through its download, became ready or stopped. `message` is for a person; `detail` names paths and commands for a developer.
+    SetupChanged(SetupChangedEvent),
     /// This client fell behind and events were dropped. Re-subscribe for a fresh snapshot; nothing between from_seq and the new snapshot arrives.
     Resync(Resync),
     /// The end of a batch. Render here and not before, so a client never paints half an update.
@@ -5592,6 +5648,10 @@ impl Event {
                 Ok(payload) => Event::MultiviewLayout(payload),
                 Err(_) => Event::Other { name: pattern.to_string(), params },
             },
+            "setup.changed" => match serde_json::from_value(params.clone()) {
+                Ok(payload) => Event::SetupChanged(payload),
+                Err(_) => Event::Other { name: pattern.to_string(), params },
+            },
             "resync" => match serde_json::from_value(params.clone()) {
                 Ok(payload) => Event::Resync(payload),
                 Err(_) => Event::Other { name: pattern.to_string(), params },
@@ -5661,6 +5721,7 @@ impl Event {
             Event::MultiviewLayout(_) => "multiview.layout",
             Event::MultiviewFrame(_) => "multiview.frame",
             Event::PreviewFrame(_) => "preview.frame",
+            Event::SetupChanged(_) => "setup.changed",
             Event::Resync(_) => "resync",
             Event::Flush(_) => "flush",
             Event::RenditionPlan(_) => "rendition.plan",
@@ -6432,6 +6493,21 @@ impl Client {
     /// A new scene with a presenter keyed in front of a background, and optionally a foreground such as a desk and a lower third area. Pictures from the media library become sources; the key colour is guessed from the camera.
     pub async fn scene_virtual_set(&self, params: &VirtualSetRequest) -> Result<VirtualSetAnswer> {
         self.call("scene.virtual_set", params).await
+    }
+
+    /// Where one piece stands, without starting anything.
+    pub async fn setup_get(&self, params: &SetupRequest) -> Result<SetupStatus> {
+        self.call("setup.get", params).await
+    }
+
+    /// Where each piece the mixer sets up on first use stands: the browser renderer (`web`) and every first party plugin this copy carries.
+    pub async fn setup_list(&self) -> Result<Vec<SetupStatus>> {
+        self.call("setup.list", &serde_json::json!({})).await
+    }
+
+    /// Set a piece up now, or join the set up already running, and answer at once with where it stands. Progress follows as `event/setup.changed`. Sources waiting on the piece start by themselves when it is ready.
+    pub async fn setup_start(&self, params: &SetupRequest) -> Result<SetupStatus> {
+        self.call("setup.start", params).await
     }
 
     /// Make another show and start it: empty, a copy of a show (without its outputs, so nothing goes out twice), or from a project file.
