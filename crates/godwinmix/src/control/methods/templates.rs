@@ -1,8 +1,9 @@
 //! Graphic templates: list them, read one, save one, and read a running
-//! graphic's fields. Drawing one is `source.add` with a `template:` address,
-//! and changing a field on air is `source.set` with `params.fields`, so
-//! nothing here touches the programme except `template.save` with
-//! `replace`, which asks every source drawing the file to draw it again.
+//! graphic's fields (`source.fields`). Drawing one is `source.add` with a
+//! `template:` address, and changing a field on air is `source.set` with
+//! `params.fields`, so nothing here touches the programme except
+//! `template.save` with `replace`, which asks every source drawing the file
+//! to draw it again.
 
 use super::{body, handler};
 use crate::control::call::Call;

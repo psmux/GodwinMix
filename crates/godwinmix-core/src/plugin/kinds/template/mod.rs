@@ -107,7 +107,7 @@ pub fn schema() -> Value {
         "type": "object",
         "properties": {
             "fields": {
-                "description": "The template's field values by name, such as {\"headline\": \"Polls close at ten\"}. A field left out shows the station's brand colour (accent, text, panel) or the template's default. Change one on air with source.set and params.fields.<name>; template.list and template.fields name every field.",
+                "description": "The template's field values by name, such as {\"headline\": \"Polls close at ten\"}. A field left out shows the station's brand colour (accent, text, panel) or the template's default. Change one on air with source.set and params.fields.<name>; template.list and source.fields name every field.",
                 "type": "object",
                 "additionalProperties": { "type": ["string", "number", "boolean"] }
             }

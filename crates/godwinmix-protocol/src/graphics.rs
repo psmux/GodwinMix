@@ -117,7 +117,7 @@ pub struct TemplateSaved {
     pub redrawn: Vec<String>,
 }
 
-/// `template.fields`: the fields of a running graphic.
+/// `source.fields`: the fields of a running graphic.
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct TemplateFieldsRequest {
@@ -137,7 +137,7 @@ pub struct FieldValue {
     pub set: bool,
 }
 
-/// The answer to `template.fields`.
+/// The answer to `source.fields`.
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct TemplateFields {
     pub id: String,

@@ -9138,7 +9138,7 @@
         "type": "object"
       },
       "TemplateFields": {
-        "description": "The answer to `template.fields`.",
+        "description": "The answer to `source.fields`.",
         "properties": {
           "fields": {
             "items": {
@@ -9168,7 +9168,7 @@
       },
       "TemplateFieldsRequest": {
         "additionalProperties": false,
-        "description": "`template.fields`: the fields of a running graphic.",
+        "description": "`source.fields`: the fields of a running graphic.",
         "properties": {
           "id": {
             "description": "The source id of a `template/source`.",
@@ -16074,9 +16074,9 @@
       }
     },
     "/api/v1/sources/{id}/fields": {
-      "get": {
-        "description": "JSON-RPC method `template.fields`. Needs the `read` scope.",
-        "operationId": "template.fields",
+      "post": {
+        "description": "JSON-RPC method `source.fields`. Needs the `read` scope.",
+        "operationId": "source.fields",
         "parameters": [
           {
             "description": "The id, as listed by the matching list call.",
@@ -16088,6 +16088,16 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TemplateFieldsRequest"
+              }
+            }
+          },
+          "required": false
+        },
         "responses": {
           "200": {
             "content": {
@@ -16105,7 +16115,7 @@
         },
         "summary": "A running graphic's fields: each one's label, type, default and what it shows now.",
         "tags": [
-          "template"
+          "source"
         ],
         "x-destructive": false,
         "x-idempotent": true,
