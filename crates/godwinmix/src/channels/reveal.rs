@@ -48,4 +48,5 @@ fn unsealed(channel: &str, key: &str) -> RpcError {
     ))
     .with("channel", channel)
     .with("key", key)
+    .with("reason", "unsealed")
 }

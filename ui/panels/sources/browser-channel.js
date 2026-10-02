@@ -32,12 +32,18 @@ export async function ensureBrowserChannel(client) {
   const fix = repairFor(channel);
   if (fix) channel = await client.call("channel.set", fix);
   const first = (channel.keys || [])[0];
-  if (!first) {
+  const fresh = async () => {
     const added = await client.call("channel.key.add", { id: channel.id, label: "This browser" });
     return { channel, key: added.key.secret };
-  }
-  const revealed = await client.call("channel.key.reveal", { id: channel.id, key: first.id });
-  return { channel, key: revealed.secret };
+  };
+  if (!first) return fresh();
+  // A key the secret store no longer has (a moved or reset mixer home) cannot
+  // be shown, and nothing can publish with it, so this browser makes its own.
+  const revealed = await client.call("channel.key.reveal", { id: channel.id, key: first.id }).catch((e) => {
+    if (e && e.data && e.data.reason === "unsealed") return null;
+    throw e;
+  });
+  return revealed ? { channel, key: revealed.secret } : fresh();
 }
 
 /**
