@@ -18,6 +18,7 @@ export const ICONS = {
   mic: "M12 3a3 3 0 013 3v5a3 3 0 01-6 0V6a3 3 0 013-3zM6 11a6 6 0 0012 0M12 17v4",
   pattern: "M4 4h16v16H4V4zm5.3 0v16m5.4-16v16M4 9.3h16M4 14.7h16",
   more: "M5 12h.01M12 12h.01M19 12h.01",
+  text: "M5 5h14v3h-1.5V6.5h-4.75V17H15v1.5H9V17h2.25V6.5H6.5V8H5V5z",
 };
 
 /**
@@ -174,6 +175,7 @@ export const KIND_COLOUR = {
   pattern: "var(--kind-other)",
   media: "var(--kind-file)",
   more: "var(--kind-other)",
+  text: "var(--kind-graphic)",
 };
 
 /**
@@ -244,6 +246,9 @@ export const CATEGORIES = [
     kinds: ["file"],
     provides: ["file/source", "image/source"],
   },
+  // Words drawn by the mixer itself, with no browser: a lower third, a title,
+  // a ticker, credits. Each row is one press, and the words are typed after.
+  { id: "text", title: "Text and tickers", icon: "text", text: true, kinds: [], provides: ["text/source", "ticker/source"] },
   { id: "web", title: "Web pages", icon: "page", kinds: ["page"], provides: ["browser/source", "layered/source"] },
   {
     id: "streams",
@@ -291,7 +296,7 @@ const KIND_OF_TYPE = {
   camera: "camera", screen: "screen", "audio-device": "mic", test: "pattern", image: "media",
   browser: "page", layered: "page", ndi: "stream", srt: "stream", rtmp: "stream", hls: "stream",
   rtsp: "stream", rtp: "stream", udp: "stream", ingest: "stream", ipcam: "camera", decklink: "camera",
-  icecast: "mic", file: "file", exec: "exec",
+  icecast: "mic", file: "file", exec: "exec", text: "text", ticker: "text",
 };
 
 export function kindOfSource(source) {

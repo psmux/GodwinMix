@@ -82,7 +82,7 @@ pub fn flatten(info: &gst_video::VideoInfo, picture: Option<&Picture>) -> Result
         if let Some(pic) = picture {
             let map = pic.buffer.map_readable().context("reading the picture")?;
             let canvas = Rect::new(0, 0, w, h);
-            let to = fitted(canvas, pic.natural, Fit::Contain);
+            let to = fitted(canvas, pic.natural, Fit::Contain, (0.5, 0.5));
             let draw = Draw { window: Rect::new(0, 0, pic.width as i32, pic.height as i32), to, clip: canvas, alpha: 255 };
             let mut planes = Planes { y, u, v, strides, width: w, height: h };
             blend::draw(&mut planes, &Source { data: &map, stride: pic.stride }, &draw);

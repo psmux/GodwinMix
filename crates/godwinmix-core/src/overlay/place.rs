@@ -20,6 +20,8 @@ pub struct PadBox {
     pub alpha: f64,
     pub z: u32,
     pub fit: Fit,
+    /// Where a picture that does not fill the box sits in it, 0 to 1 each.
+    pub align: (f64, f64),
 }
 
 /// The three sizing policies a compositor pad has.
@@ -44,7 +46,8 @@ pub fn read(pad: &gst::Pad, canvas: (i32, i32)) -> Option<PadBox> {
         if w > 0 { w } else { canvas.0 },
         if h > 0 { h } else { canvas.1 },
     );
-    Some(PadBox { rect, alpha: alpha.min(1.0), z: pad.property("zorder"), fit: fit_of(pad) })
+    let align = |name: &str| if pad.has_property(name) { pad.property::<f64>(name) } else { 0.5 };
+    Some(PadBox { rect, alpha: alpha.min(1.0), z: pad.property("zorder"), fit: fit_of(pad), align: (align("xalign"), align("yalign")) })
 }
 
 fn fit_of(pad: &gst::Pad) -> Fit {
@@ -59,8 +62,9 @@ fn fit_of(pad: &gst::Pad) -> Fit {
     }
 }
 
-/// The rectangle a picture of shape `natural` takes inside `boxed`.
-pub fn fitted(boxed: Rect, natural: (u32, u32), fit: Fit) -> Rect {
+/// The rectangle a picture of shape `natural` takes inside `boxed`, placed
+/// by `align` where it does not fill it.
+pub fn fitted(boxed: Rect, natural: (u32, u32), fit: Fit, align: (f64, f64)) -> Rect {
     let (nw, nh) = (natural.0.max(1) as f64, natural.1.max(1) as f64);
     let (bw, bh) = (boxed.w as f64, boxed.h as f64);
     let scale = match fit {
@@ -69,13 +73,14 @@ pub fn fitted(boxed: Rect, natural: (u32, u32), fit: Fit) -> Rect {
         Fit::Cover => (bw / nw).max(bh / nh),
     };
     let (w, h) = ((nw * scale).round() as i32, (nh * scale).round() as i32);
-    Rect::new(boxed.x + (boxed.w - w) / 2, boxed.y + (boxed.h - h) / 2, w.max(1), h.max(1))
+    let at = |room: i32, a: f64| (room as f64 * a.clamp(0.0, 1.0)).round() as i32;
+    Rect::new(boxed.x + at(boxed.w - w, align.0), boxed.y + at(boxed.h - h, align.1), w.max(1), h.max(1))
 }
 
 /// How to draw a held picture in a box this frame, and the size it is drawn
 /// at, which is the size the kind should render it at next.
 pub fn still(pic: &Picture, b: &PadBox) -> (Draw, (u32, u32)) {
-    let to = fitted(b.rect, pic.natural, b.fit);
+    let to = fitted(b.rect, pic.natural, b.fit, b.align);
     let draw = Draw { window: Rect::new(0, 0, pic.width as i32, pic.height as i32), to, clip: b.rect, alpha: alpha8(b.alpha) };
     (draw, (to.w as u32, to.h as u32))
 }
