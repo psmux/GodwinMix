@@ -1,0 +1,11 @@
+# The browser renderer that travels inside the app is build output and never
+# source. Its source is browser/ at the top of the repository:
+#
+#   dev/bundle-browser.sh
+#
+# tauri.conf.json lists browser/ under bundle.resources. The mixer looks for
+# it there (Contents/Resources/browser/godwinmix-browser.app on macOS,
+# browser/ beside the executable on Windows, /usr/lib/GodwinMix/browser in a
+# .deb); see crates/godwinmix-core/src/setup/web.rs.
+*
+!.gitignore
