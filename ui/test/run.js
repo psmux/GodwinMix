@@ -8,6 +8,7 @@ import { studioTests } from "./studio.js";
 import { transitionTests } from "./transitions.js";
 import { sceneFixTests, sceneFixLoadTests } from "./scene-fix.js";
 import { scenePictureTests } from "./scene-pictures.js";
+import { virtualSetTests } from "./virtual-set.js";
 import { dockTests } from "./dock.js";
 import { welcomeStepTests } from "./welcome.js";
 import { channelTests } from "./channels.js";
@@ -2667,6 +2668,7 @@ legacySuite()
   .then(() => sceneFixTests(test, eq, ok))
   .then(() => sceneFixLoadTests(test, eq, ok))
   .then(() => scenePictureTests(test, eq, ok))
+  .then(() => virtualSetTests(test, eq, ok))
   .catch((e) => {
     failed += 1;
     line("fail", "the scene fix suite threw: " + e.message);

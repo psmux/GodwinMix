@@ -105,6 +105,7 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/composer/composer.css", include_str!("../../../ui/panels/composer/composer.css")),
     ("panels/composer/composer.js", include_str!("../../../ui/panels/composer/composer.js")),
     ("panels/composer/inspector.js", include_str!("../../../ui/panels/composer/inspector.js")),
+    ("panels/composer/key.js", include_str!("../../../ui/panels/composer/key.js")),
     ("panels/composer/ops.js", include_str!("../../../ui/panels/composer/ops.js")),
     ("panels/composer/motion.js", include_str!("../../../ui/panels/composer/motion.js")),
     ("panels/header/panel.js", include_str!("../../../ui/panels/header/panel.js")),
@@ -167,6 +168,7 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/scenes/fix.js", include_str!("../../../ui/panels/scenes/fix.js")),
     ("panels/scenes/fix-row.js", include_str!("../../../ui/panels/scenes/fix-row.js")),
     ("panels/scenes/fix-note.js", include_str!("../../../ui/panels/scenes/fix-note.js")),
+    ("panels/scenes/virtual-set.js", include_str!("../../../ui/panels/scenes/virtual-set.js")),
     ("panels/scenes/fix.css", include_str!("../../../ui/panels/scenes/fix.css")),
     ("panels/scenes/marks.js", include_str!("../../../ui/panels/scenes/marks.js")),
     ("panels/scenes/pictures.js", include_str!("../../../ui/panels/scenes/pictures.js")),
@@ -280,6 +282,7 @@ const DEV_ASSETS: &[(&str, &str)] = &[
     ("test/studio.js", include_str!("../../../ui/test/studio.js")),
     ("test/transitions.js", include_str!("../../../ui/test/transitions.js")),
     ("test/scene-fix.js", include_str!("../../../ui/test/scene-fix.js")),
+    ("test/virtual-set.js", include_str!("../../../ui/test/virtual-set.js")),
     ("test/scene-pictures.js", include_str!("../../../ui/test/scene-pictures.js")),
     ("test/monitor-resize.js", include_str!("../../../ui/test/monitor-resize.js")),
     ("test/dock.js", include_str!("../../../ui/test/dock.js")),
@@ -859,6 +862,10 @@ mod tests {
         reachable.extend(closure_of("panels/sources/drawer.js"));
         // The text and ticker editor, which the drawer fetches for one of those.
         reachable.extend(closure_of("panels/sources/text-editor.js"));
+        // The Virtual set dialog, on its first press, and the key editor the
+        // composer fetches for an item with a key.
+        reachable.extend(closure_of("panels/scenes/virtual-set.js"));
+        reachable.extend(closure_of("panels/composer/key.js"));
         reachable.extend(closure_of("panels/outputs/destination.js"));
         reachable.extend(closure_of("panels/channels/panel.js"));
         reachable.extend(closure_of("shell/sandbox.js"));

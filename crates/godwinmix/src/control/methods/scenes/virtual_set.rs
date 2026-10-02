@@ -38,6 +38,7 @@ pub fn register(reg: &mut Registry<Call>) {
         )
         .params(schema_of::<VirtualSetRequest>)
         .result(schema_of::<VirtualSetAnswer>)
+        .not_idempotent()
         .tool(
             "create_virtual_set",
             Tier::Search,
