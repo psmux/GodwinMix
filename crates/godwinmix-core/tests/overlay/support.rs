@@ -98,6 +98,38 @@ pub fn stop(handle: MixerHandle, thread: std::thread::JoinHandle<()>) {
     let _ = thread.join();
 }
 
+/// Write a PNG whose left half is opaque red and right half fully clear.
+pub fn half_red_png(path: &std::path::Path, w: u32, h: u32) {
+    gst::init().unwrap();
+    let mut rgba = Vec::with_capacity((w * h * 4) as usize);
+    for _ in 0..h {
+        for x in 0..w {
+            rgba.extend(if x < w / 2 { [255, 0, 0, 255] } else { [0, 0, 0, 0] });
+        }
+    }
+    let pipe = gst::parse::launch(&format!(
+        "appsrc name=s caps=video/x-raw,format=RGBA,width={w},height={h},framerate=1/1 ! pngenc ! filesink location=\"{}\"",
+        path.display()
+    ))
+    .unwrap()
+    .downcast::<gst::Pipeline>()
+    .unwrap();
+    let src = pipe.by_name("s").unwrap().downcast::<gstreamer_app::AppSrc>().unwrap();
+    pipe.set_state(gst::State::Playing).unwrap();
+    src.push_buffer(gst::Buffer::from_mut_slice(rgba)).unwrap();
+    src.end_of_stream().unwrap();
+    pipe.bus().unwrap().timed_pop_filtered(gst::ClockTime::from_seconds(5), &[gst::MessageType::Eos]);
+    pipe.set_state(gst::State::Null).unwrap();
+}
+
+/// A scratch directory for one test.
+pub fn scratch(name: &str) -> std::path::PathBuf {
+    let dir = std::env::temp_dir().join(format!("gmx-overlay-{name}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    dir
+}
+
 /// Within a few steps of each other on every component.
 pub fn near(a: (u8, u8, u8), b: (u8, u8, u8)) -> bool {
     let d = |x: u8, y: u8| (x as i32 - y as i32).abs() <= 6;
