@@ -12,6 +12,9 @@
 //! encoder is off (nothing reads it), so what is measured is the sources and
 //! the compositing, the same as `overlay_cost`.
 
+// Process CPU is read with getrusage, which Windows does not have.
+#![cfg(unix)]
+
 use godwinmix_core::config::{Config, Params, SourceConfig};
 use godwinmix_core::mixer::slots::{Placement, Sizing};
 use godwinmix_core::mixer::{self, Command, Mixer, ProgramScene};
