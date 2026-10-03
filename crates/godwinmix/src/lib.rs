@@ -1113,6 +1113,7 @@ pub async fn run() -> Result<()> {
         _ = quit.notified() => {}
     }
     info!("shutting down");
+    station.stop_calibrating();
     // The other half. Fired before the mixer stops, so a hook that wants to
     // read the state one last time still can, and given a moment to leave.
     session_hooks.fire(godwinmix_core::hooks::name::SESSION_END, || {

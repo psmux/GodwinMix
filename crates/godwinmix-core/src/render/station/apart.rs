@@ -12,7 +12,9 @@ use godwinmix_govern::calibrate::fingerprint_for;
 use godwinmix_govern::store::Store;
 use godwinmix_govern::Profile;
 use std::path::{Path, PathBuf};
-use std::process::{Command, ExitStatus, Stdio};
+use std::process::{Child, Command, ExitStatus, Stdio};
+use std::sync::atomic::Ordering;
+use std::time::Duration;
 use tracing::{info, warn};
 
 /// How many times a calibration that died is started again before the
@@ -45,11 +47,25 @@ impl Station {
         st.measure_here()
     }
 
+    /// Kill a calibration that is running and start no more. Called when the
+    /// station stops: Windows does not end a child with its parent, so a
+    /// calibration left behind would hold the GPU for seconds after.
+    pub fn stop_calibrating(&self) {
+        self.inner.halted.store(true, Ordering::SeqCst);
+        if let Some(mut child) = self.inner.child.lock().take() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+    }
+
     pub(super) fn measure_apart(&self, apart: &Apart) {
         let Some(dir) = self.inner.store.clone() else { return };
         let fp = fingerprint_for(&candidates::candidates(&crate::catalogue::global(), self.inner.pin));
         for attempt in 1..=ATTEMPTS {
-            match run(apart, &dir) {
+            if self.inner.halted.load(Ordering::SeqCst) {
+                return;
+            }
+            match self.run(apart, &dir) {
                 Ok(()) => {
                     let store = Store::new(&dir);
                     match store.load(&fp).or_else(|| store.latest()) {
@@ -68,21 +84,41 @@ impl Station {
     }
 }
 
-fn run(apart: &Apart, dir: &Path) -> Result<(), String> {
-    let status = Command::new(&apart.exe)
+impl Station {
+    /// Start the child and wait for it, holding it where `stop_calibrating`
+    /// can reach it.
+    fn run(&self, apart: &Apart, dir: &Path) -> Result<(), String> {
+        *self.inner.child.lock() = Some(start(apart, dir)?);
+        loop {
+            let mut held = self.inner.child.lock();
+            let Some(child) = held.as_mut() else { return Err("stopped with the station".into()) };
+            match child.try_wait() {
+                Ok(Some(status)) => {
+                    *held = None;
+                    return if status.success() { Ok(()) } else { Err(describe(status)) };
+                }
+                Ok(None) => {}
+                Err(e) => {
+                    *held = None;
+                    return Err(format!("could not wait for the calibration process: {e}"));
+                }
+            }
+            drop(held);
+            std::thread::sleep(Duration::from_millis(200));
+        }
+    }
+}
+
+fn start(apart: &Apart, dir: &Path) -> Result<Child, String> {
+    Command::new(&apart.exe)
         .args(&apart.args)
         .arg(CALIBRATE_FLAG)
         .arg(dir)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
-        .status()
-        .map_err(|e| format!("could not start {}: {e}", apart.exe.display()))?;
-    match status.success() {
-        true => Ok(()),
-        false => Err(describe(status)),
-    }
+        .spawn()
+        .map_err(|e| format!("could not start {}: {e}", apart.exe.display()))
 }
-
 /// An exit code as Windows writes its crash codes (`0xc0000374` is heap
 /// corruption), or the signal on Unix.
 fn describe(status: ExitStatus) -> String {
@@ -106,7 +142,7 @@ mod tests {
     #[test]
     fn a_child_that_fails_is_reported_and_not_fatal() {
         let apart = Apart { exe: PathBuf::from("this-program-does-not-exist-anywhere"), args: vec![] };
-        let why = run(&apart, Path::new(".")).unwrap_err();
+        let why = start(&apart, Path::new(".")).unwrap_err();
         assert!(why.contains("could not start"), "{why}");
     }
 }
