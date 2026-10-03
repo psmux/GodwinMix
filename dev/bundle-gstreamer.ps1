@@ -62,9 +62,13 @@ if (-not $Out) { $Out = Join-Path $repo "tauri-app\gstreamer\windows" }
 $arch = if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64") { "arm64" } else { "x86_64" }
 
 function Find-Python {
+    # Windows can have a python3 that is only the Microsoft Store's stand in:
+    # it is on PATH and fails when run. So a name counts only if it answers.
     foreach ($name in @("python3", "python", "py")) {
-        $found = Get-Command $name -ErrorAction SilentlyContinue
-        if ($found) { return $found.Source }
+        foreach ($found in @(Get-Command $name -All -ErrorAction SilentlyContinue)) {
+            & $found.Source --version *> $null
+            if ($LASTEXITCODE -eq 0) { return $found.Source }
+        }
     }
     throw "no Python on PATH; dev/gst_trim.py needs one (3.9 or newer)"
 }
