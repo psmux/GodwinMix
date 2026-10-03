@@ -1342,6 +1342,7 @@ name = "gmx-ndi"
 version = "0.2.0"
 dependencies = [
  "gmx-netkit",
+ "godwinmix-capture-common",
  "godwinmix-sdk",
  "gstreamer",
  "libloading",
@@ -1439,6 +1440,7 @@ version = "0.2.0"
 dependencies = [
  "glib",
  "gmx-netkit",
+ "godwinmix-capture-common",
  "godwinmix-sdk",
  "gstreamer",
  "serde_json",

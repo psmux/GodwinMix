@@ -1,10 +1,12 @@
 //! Finding the NDI runtime without linking against it.
 //!
-//! NDI's runtime is not ours to ship. Its licence forbids redistribution and
-//! the NDI trademark belongs to Vizrt, so the plugin must work on a machine
-//! where the runtime is absent: it says where to get it and stops, rather than
-//! failing to load or taking the mixer down with it. That is what `dlopen`
-//! buys, and it is why this crate links nothing NDI at build time.
+//! The desktop installer carries NDI's runtime beside this plugin's binary,
+//! as the NDI SDK licence allows an application to (in its own folder, with
+//! `Processing.NDI.Lib.Licenses.txt` beside it). A plugin installed some other
+//! way may still be on a machine without it, so it must work where the runtime
+//! is absent: it says where to get it and stops, rather than failing to load or
+//! taking the mixer down with it. That is what `dlopen` buys, and it is why
+//! this crate links nothing NDI at build time.
 //!
 //! This module only ever opens the library and asks whether one known symbol is
 //! there. The media path is GStreamer's `ndisrc` and `ndisink`, which do their
@@ -43,6 +45,19 @@ fn file_names() -> &'static [&'static str] {
         &["libndi.dylib", "libndi.4.dylib"]
     } else {
         &["libndi.so.6", "libndi.so.5", "libndi.so.4", "libndi.so"]
+    }
+}
+
+/// Point GStreamer's NDI elements, which load the runtime themselves, at the
+/// copy beside this binary when there is one. Called before GStreamer starts.
+/// A runtime the machine has installed is left to its own variable.
+pub fn prefer_bundled() {
+    let Some(dir) = std::env::current_exe().ok().and_then(|e| e.parent().map(PathBuf::from)) else { return };
+    if !file_names().iter().any(|name| dir.join(name).is_file()) {
+        return;
+    }
+    if ENV_DIRS.iter().all(|key| std::env::var_os(key).is_none()) {
+        std::env::set_var(ENV_DIRS[0], &dir);
     }
 }
 

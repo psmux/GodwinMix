@@ -48,6 +48,10 @@ struct Shared {
     /// The live pipeline, replaced on every reconnect.
     pipe: Mutex<Option<Pipe>>,
     reconnects: AtomicU32,
+    /// Windows: the pump that serves the core's pipe for the life of this
+    /// sender. Each reconnect builds a new pipeline, and the pipe has to stay
+    /// the one the core opened, so the pump follows the pipelines instead.
+    pump: Option<godwinmix_capture_common::fifo::Pump>,
 }
 
 impl Sender {
@@ -72,6 +76,12 @@ impl Sender {
             reporter: reporter.clone(),
             pipe: Mutex::new(None),
             reconnects: AtomicU32::new(0),
+            pump: match cfg!(windows) {
+                true => Some(godwinmix_capture_common::fifo::Pump::start_following(
+                    godwinmix_capture_common::fifo::open_read(std::path::Path::new(fifo))?,
+                )),
+                false => None,
+            },
         });
         // The first build is done here so `start` fails loudly when the
         // pipeline cannot be assembled at all, rather than looking healthy and
@@ -151,8 +161,18 @@ fn build(shared: &Arc<Shared>) -> Result<Pipe, String> {
     let s = &shared.settings;
     let pipeline = gst::Pipeline::with_name("gmx-whip-output");
 
-    let src = make("filesrc", "fifo")?;
-    src.set_property("location", &shared.fifo);
+    let src = match &shared.pump {
+        Some(_) => {
+            let src = make("appsrc", "fifo")?;
+            src.set_property_from_str("format", "bytes");
+            src
+        }
+        None => {
+            let src = make("filesrc", "fifo")?;
+            src.set_property("location", &shared.fifo);
+            src
+        }
+    };
     let demux = make("matroskademux", "demux")?;
 
     let sink = make("whipclientsink", "whip")?;
@@ -186,6 +206,9 @@ fn build(shared: &Arc<Shared>) -> Result<Pipe, String> {
         }
     });
 
+    if let Some(pump) = &shared.pump {
+        pump.feed(Some(src.clone()));
+    }
     let mut pipe = Pipe::wrap(pipeline);
     pipe.play(shared.reporter.clone())?;
     Ok(pipe)

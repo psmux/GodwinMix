@@ -6,16 +6,14 @@ description = "Record the programme to a file: fragmented MP4 so a crash leaves 
 license = "Apache-2.0"
 authors = ["GodwinMix"]
 repository = "https://github.com/psmux/godwinmix"
-# No Windows triple. An output plugin receives the programme on a FIFO and
-# Windows has none, so the core refuses a sidecar output there before it starts
-# one. Claiming the platform would mean installing cleanly and then failing at
-# the first record. See the README and docs/reference/plugin-lifecycle.md.
-platforms = ["linux-x86_64", "linux-aarch64", "linux-armv7", "macos-aarch64", "macos-x86_64"]
+# Windows too: there the programme arrives on a named pipe the plugin makes,
+# rather than a FIFO. See docs/reference/plugin-lifecycle.md.
+platforms = ["linux-x86_64", "linux-aarch64", "linux-armv7", "macos-aarch64", "macos-x86_64", "windows-x86_64"]
 placements = ["sidecar"]
 process = "per-instance"
 
 [run]
-bin = { "linux-x86_64" = "bin/gmx-file-record", "linux-aarch64" = "bin/gmx-file-record", "linux-armv7" = "bin/gmx-file-record", "macos-aarch64" = "bin/gmx-file-record", "macos-x86_64" = "bin/gmx-file-record" }
+bin = { "linux-x86_64" = "bin/gmx-file-record", "linux-aarch64" = "bin/gmx-file-record", "linux-armv7" = "bin/gmx-file-record", "macos-aarch64" = "bin/gmx-file-record", "macos-x86_64" = "bin/gmx-file-record", "windows-x86_64" = "bin/gmx-file-record.exe" }
 
 # `gmx plugin add ./plugins/file-record` runs this when bin/gmx-file-record is not there.
 # The command runs in the directory you named, not in the installed copy:

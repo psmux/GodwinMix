@@ -13,6 +13,7 @@ name = "gmx-ndi"
 path = "src/main.rs"
 
 [dependencies]
+godwinmix-capture-common = { path = "../capture-common" }
 godwinmix-sdk = { path = "../../crates/godwinmix-sdk" }
 gmx-netkit = { path = "../netkit" }
 

@@ -5,7 +5,8 @@
 //! as the handshake and no further; everything past that, which is all of the
 //! recording, is checked here.
 //!
-//! What it does is exactly what the core does: make a FIFO, start the plugin
+//! What it does is exactly what the core does: make a FIFO (on Windows, name a
+//! pipe the plugin makes), start the plugin
 //! with `GMX_MEDIA` pointing at it, answer the handshake, call `start`, and
 //! write streamable Matroska carrying H.264 and AAC into the FIFO. Then it
 //! stops the plugin the way the core does and plays the file back with
@@ -26,23 +27,8 @@ const FPS: u32 = 30;
 
 #[test]
 fn ten_seconds_of_programme_are_recorded_and_the_file_plays() {
-    // Unix only, and not because of `mkfifo`. An output plugin receives the
-    // programme on a FIFO, Windows has none, and the core refuses a sidecar
-    // output there before it ever starts one; `capture-common`'s `fifo.rs`
-    // says the same thing to anybody who gets past it. Running this on
-    // Windows would test that refusal by way of an empty folder. The named
-    // pipe that would fix it is the open question in
-    // docs/reference/plugin-lifecycle.md; until it lands, record on Windows
-    // with a first party output (rtmp/output, srt/output).
-    if !cfg!(unix) {
-        eprintln!(
-            "skipping: an output plugin receives the programme on a FIFO and this platform \
-             has none, so the core refuses a sidecar output here"
-        );
-        return;
-    }
     gst::init().expect("GStreamer starts");
-    let Some(encoder) = ["x264enc", "vtenc_h264", "avenc_h264_videotoolbox"]
+    let Some(encoder) = ["x264enc", "vtenc_h264", "avenc_h264_videotoolbox", "openh264enc"]
         .into_iter()
         .find(|e| gst::ElementFactory::find(e).is_some())
     else {
@@ -51,7 +37,12 @@ fn ten_seconds_of_programme_are_recorded_and_the_file_plays() {
     };
 
     let work = temp_dir("gmx-record");
-    let fifo = work.join("media.programme");
+    // On Windows a named pipe, which the plugin makes as it initializes.
+    let fifo = if cfg!(windows) {
+        std::path::PathBuf::from(format!(r"\\.\pipe\gmx-record-test-{}", std::process::id()))
+    } else {
+        work.join("media.programme")
+    };
     make_fifo(&fifo);
     let recordings = work.join("recordings");
 
@@ -150,14 +141,19 @@ fn write_programme(fifo: &std::path::Path, encoder: &str) {
     let description = format!(
         "videotestsrc num-buffers={frames} ! video/x-raw,width=640,height=360,framerate={FPS}/1 \
          ! videoconvert ! {encoder} ! h264parse ! queue ! matroskamux name=mux streamable=true \
-         ! filesink location={path} sync=false async=false {audio}",
+         ! filesink name=sink sync=false async=false {audio}",
         frames = SECONDS * FPS,
-        path = fifo.display(),
     );
     let pipeline = gst::parse::launch(&description)
         .expect("the programme pipeline parses")
         .downcast::<gst::Pipeline>()
         .expect("a pipeline");
+    // Set here rather than in the description, whose parser would read the
+    // backslashes of a Windows pipe name as escapes.
+    pipeline
+        .by_name("sink")
+        .expect("the sink is named")
+        .set_property("location", fifo.to_string_lossy().to_string());
     pipeline
         .set_state(gst::State::Playing)
         .expect("the programme plays");
@@ -292,6 +288,9 @@ fn temp_dir(prefix: &str) -> std::path::PathBuf {
 }
 
 fn make_fifo(path: &std::path::Path) {
+    if cfg!(windows) {
+        return;
+    }
     let status = Command::new("mkfifo")
         .arg(path)
         .status()
