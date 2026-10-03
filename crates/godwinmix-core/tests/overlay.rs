@@ -83,3 +83,39 @@ async fn changing_the_words_applies_in_place_with_no_rebuild_and_no_gap() {
     assert!(!rebuilt, "the source was not rebuilt: it never went back through connecting");
     assert!(worst < 34.0 * 2.0 * godwinmix_core::plugin::harness::timing_slack(), "no gap: worst interval {worst:.1} ms");
 }
+
+/// A slot that drew a text item and is then given to an opaque source must
+/// stop drawing the text. The slot's pad stayed in the text source's list of
+/// pads, so the board went on drawing the old words into the new item's box:
+/// seen on air as a large "Name Title" over a web page in the next scene. The
+/// second scene has more sources than the pool keeps warm, so the text's
+/// slot has to be given to one of them.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_slot_given_to_another_source_stops_drawing_the_old_text() {
+    let (handle, frames, thread) = running();
+    add(&handle, SourceConfig::bare("bg", "test://blue")).await;
+    let mut text = SourceConfig::bare("strap", "text:");
+    text.params = toml::from_str("text = \"\"\nbackground = \"#ff0000\"\nradius = 0\nwidth = 100\nheight = 40").unwrap();
+    add(&handle, text).await;
+    take(&handle, vec![full("bg"), at("strap", 40, 100, 100, 40)]).await;
+    settle(1_200).await;
+    let red = frames.latest().expect("programme frames").yuv(90, 120);
+    // Twelve green tiles, a grid of 4 by 3 over the whole canvas: more than
+    // the pool's slots, so every slot is bound again, the text's included.
+    let mut next = vec![full("bg")];
+    for i in 0..12 {
+        let id = format!("g{i}");
+        add(&handle, SourceConfig::bare(&id, "test://green")).await;
+        next.push(at(&id, (i % 4) * 80, (i / 4) * 60, 80, 60));
+    }
+    take(&handle, next).await;
+    settle(1_500).await;
+    let f = frames.latest().expect("programme frames");
+    let reds: Vec<(usize, usize)> = (0..32)
+        .flat_map(|x| (0..18).map(move |y| (x * 10 + 5, y * 10 + 5)))
+        .filter(|&(x, y)| near(f.yuv(x, y), (63, 102, 240)))
+        .collect();
+    stop(handle, thread);
+    assert!(near(red, (63, 102, 240)), "the text box was on air first: {red:?}");
+    assert!(reds.is_empty(), "the old text box is still drawn on the next scene at {reds:?}");
+}

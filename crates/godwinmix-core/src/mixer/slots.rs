@@ -401,7 +401,16 @@ struct Look {
 /// What a slot's chain is fed from.
 enum Bound {
     /// A source's programme tee, which is every ordinary item.
-    Source { source: SourceId, tee_pad: gst::Pad },
+    Source {
+        source: SourceId,
+        tee_pad: gst::Pad,
+        /// The source's list of pads drawing it, which this slot's pad joined
+        /// at bind and must leave at unbind. Left in it, the slot reused for
+        /// another source was still the old source's: the overlay board drew
+        /// the old text into the new item's box, on air, and the old source's
+        /// timeline shift could land on the new one's pad.
+        pads: std::sync::Arc<crate::plugin::branch::VideoPads>,
+    },
     /// A group composited on its own, because a filter over it cannot be
     /// expressed by flattening. See `mixer::group`.
     Group { item: Id, sub: Box<super::group::SubCompositor> },
@@ -1239,7 +1248,7 @@ impl SlotPool {
             el.sync_state_with_parent().ok();
         }
         self.slots[index].bound =
-            Some(Bound::Source { source: branch.id.clone(), tee_pad });
+            Some(Bound::Source { source: branch.id.clone(), tee_pad, pads: branch.pads.clone() });
         debug!(slot = index, source = %branch.id, "slot bound");
         Ok(())
     }
@@ -1357,7 +1366,8 @@ impl SlotPool {
         slot.hide();
         let sink = slot.gate.static_pad("sink");
         match bound {
-            Bound::Source { tee_pad, .. } => {
+            Bound::Source { tee_pad, pads, .. } => {
+                pads.detach(&self.slots[index].pad);
                 if let Some(sink) = sink {
                     crate::slow_step!("slot unlink from the source tee", index, {
                         let _ = tee_pad.unlink(&sink);
