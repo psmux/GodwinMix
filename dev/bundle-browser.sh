@@ -42,6 +42,10 @@ case "$(uname -s)" in
             [[ -e "$f" ]] && cp "$f" "$OUT/"
         done
         [[ -d "$REL/locales" ]] && cp -R "$REL/locales" "$OUT/"
+        # The renderer draws pages offscreen and shows no Chromium menus of its
+        # own, so its interface strings are never seen: one language is enough,
+        # and Chromium falls back to en-US for the rest. 49 MB off on Windows.
+        [[ -d "$OUT/locales" ]] && find "$OUT/locales" -type f ! -name 'en-US*' -delete
         ;;
     *) echo "unknown platform: $(uname -s)" >&2; exit 1 ;;
 esac
