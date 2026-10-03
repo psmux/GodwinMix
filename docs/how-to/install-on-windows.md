@@ -78,13 +78,18 @@ themselves, in a moment and with nothing downloaded, the first time you pick
 something that needs one; until then nothing of theirs runs. NDI works the
 same way: the NDI® runtime travels in the ndi plugin's folder, under the NDI
 end user terms the installer shows with GodwinMix's own licence. NDI® is a
-registered trademark of Vizrt NDI AB; see <https://ndi.video/>. Anything you add later from the window goes into the
-same folder and survives an update.
+registered trademark of Vizrt NDI AB; see <https://ndi.video/>.
+
+An update brings these plugins with it. The four device plugins, and any of
+the others you have used, are replaced by the new installer's copies the next
+time the app starts. A plugin you installed yourself from somewhere else is
+left as it is, and so is anything else you add from the window: it goes into
+the same folder and survives an update.
 
 Web pages work from the first launch too. Add a page with its address and it
 renders in the bundled Chromium, sound included.
 
-All of that comes to an installer of about 160 MB for the `.exe` and 225 MB for
+All of that comes to an installer of about 165 MB for the `.exe` and 236 MB for
 the `.msi`, whose compression suits Chromium less well. The budget is 250 MB,
 checked by the release workflow, which will not publish an installer over it.
 OBS Studio, for comparison, ships about 160 MB with everything inside it.
