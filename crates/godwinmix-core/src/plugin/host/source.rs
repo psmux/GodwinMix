@@ -310,6 +310,40 @@ impl SidecarSource {
     }
 }
 
+/// What the mixer may assume of this source's timestamps, given the transport
+/// it came over.
+///
+/// `programme-timeline` holds over a socket, where the core's own source
+/// element stamps each frame from the programme's clock and base time. Over
+/// the container the frames keep the plugin's timestamps, which start at zero
+/// where the plugin's pipeline started. Trusting the claim there left every
+/// frame of a camera on Windows looking minutes old, so the programme showed
+/// one in fifteen of them and the mosaic and the scene preview showed the
+/// first one for good. Without it the mixer shifts them onto the programme's
+/// timeline, as it does a web page.
+fn capabilities_over(declared: crate::plugin::CapabilitySet, transport: Option<Transport>) -> crate::plugin::CapabilitySet {
+    let mut caps = declared;
+    if matches!(transport, Some(Transport::Container)) {
+        caps.set(crate::plugin::Capability::ProgrammeTimeline, false);
+    }
+    caps
+}
+
+#[cfg(test)]
+mod timeline_tests {
+    use super::*;
+    use crate::plugin::{Capability, CapabilitySet};
+
+    #[test]
+    fn a_container_never_claims_the_programme_timeline() {
+        let declared = CapabilitySet::new().with(Capability::ProgrammeTimeline).with(Capability::Health);
+        let over = capabilities_over(declared, Some(Transport::Container));
+        assert!(!over.has(Capability::ProgrammeTimeline));
+        assert!(over.has(Capability::Health), "only the timeline claim goes");
+        assert!(capabilities_over(declared, Some(Transport::Unixfd)).has(Capability::ProgrammeTimeline));
+    }
+}
+
 /// What has to be linked once everything is in one pipeline.
 enum Wire {
     Container { src: gst::Element, decode: gst::Element, download: Option<gst::Element> },
@@ -325,10 +359,11 @@ impl Source for SidecarSource {
         self.build.canvas = hello.canvas;
         self.build.cfg.params = hello.params.clone();
         self.handshake()?;
+        let transport = self.child.as_ref().and_then(Sidecar::transport);
         Ok(Ready {
             manifest: self.spec.manifest,
             latency_ms: self.latency_ms,
-            capabilities: self.spec.manifest.capabilities,
+            capabilities: capabilities_over(self.spec.manifest.capabilities, transport),
         })
     }
 
