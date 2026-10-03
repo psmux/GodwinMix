@@ -377,18 +377,24 @@ fn intern_all() {
         for plugin in &plugins {
             for decl in &plugin.manifest.provides {
                 let id = format!("{}/{}", plugin.name(), decl.id);
-                if let Some(existing) = reg.manifests.get(&id) {
-                    // Same id, same rank: reuse rather than leak a second.
-                    if existing.rank == decl.rank.unwrap_or(128) as u16 {
-                        manifests.insert(id.clone(), *existing);
-                        if let Some(provide) = reg.interned.get(&id) {
-                            made.insert(id, *provide);
-                        }
-                        continue;
+                // Same id, same rank: reuse rather than leak a second. An
+                // output goes on to its own table below; it used to stop here
+                // too, and every plugin install after the first dropped the
+                // output types of the plugins already loaded.
+                let reused = reg
+                    .manifests
+                    .get(&id)
+                    .copied()
+                    .filter(|m| m.rank == decl.rank.unwrap_or(128) as u16);
+                if let (Some(existing), false) = (reused, decl.kind == "output") {
+                    manifests.insert(id.clone(), existing);
+                    if let Some(provide) = reg.interned.get(&id) {
+                        made.insert(id, *provide);
                     }
+                    continue;
                 }
                 let manifest: &'static Manifest =
-                    Box::leak(Box::new(manifest_of(plugin, decl)));
+                    reused.unwrap_or_else(|| Box::leak(Box::new(manifest_of(plugin, decl))));
                 manifests.insert(id.clone(), manifest);
                 if decl.kind == "output" {
                     outputs.insert(
@@ -1562,6 +1568,8 @@ pub fn clear() {
     let mut reg = registry().write();
     reg.plugins.clear();
     reg.interned.clear();
+    reg.manifests.clear();
+    reg.outputs.clear();
     reg.stats.clear();
     reg.pids.clear();
     reg.watches.clear();
@@ -1734,6 +1742,35 @@ settings = "settings.json"
         assert!(get("toggle").is_some(), "and it is still installed");
         set_enabled("toggle", true).expect("it is installed");
         assert!(source_provide("toggle/source").is_some(), "on brings it back");
+        clear();
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// An output provide, for `write_plugin`'s `extra`.
+    const AN_OUTPUT: &str = r#"
+[[provides]]
+kind = "output"
+id = "output"
+uri_schemes = []
+rank = 200
+media = { video = "container", audio = "container", alpha = false, thumb = false }
+capabilities = ["restart-in-place", "health"]
+settings = "settings.json"
+"#;
+
+    #[test]
+    fn installing_a_second_plugin_keeps_the_first_ones_output() {
+        let _lock = exclusive();
+        let root = temp("outputs");
+        insert(read(&write_plugin(&root, "first", "0.1.0", AN_OUTPUT), &BTreeMap::new()));
+        assert!(output_provide("first/output").is_some(), "the first output registered");
+        insert(read(&write_plugin(&root, "second", "0.1.0", AN_OUTPUT), &BTreeMap::new()));
+        // It used to be dropped here: the second install re-registered every
+        // plugin and skipped an output it had seen before.
+        assert!(output_provide("first/output").is_some(), "the first output is still there");
+        assert!(output_provide("second/output").is_some(), "and the second is there too");
+        insert(read(&write_plugin(&root, "second", "0.1.0", AN_OUTPUT), &BTreeMap::new()));
+        assert!(output_provide("second/output").is_some(), "a reinstall keeps its own output");
         clear();
         let _ = std::fs::remove_dir_all(&root);
     }
