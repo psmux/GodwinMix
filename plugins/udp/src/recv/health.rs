@@ -94,7 +94,10 @@ fn verdict(i: &Inputs<'_>, mbps: f64, lost: u64, share: f64) -> Health {
 /// A bus error, said in terms of what to do about it.
 pub fn explain(failure: &str, address: &str) -> String {
     let lower = failure.to_ascii_lowercase();
-    if lower.contains("address already in use") || lower.contains("could not bind") {
+    // Linux and macOS say "address already in use"; Windows says "only one usage
+    // of each socket address", inside GStreamer's "error binding to address".
+    let taken = ["address already in use", "could not bind", "error binding to address", "only one usage of each socket address"];
+    if taken.iter().any(|w| lower.contains(w)) {
         return format!(
             "{address} is already taken on this machine: another source or program is \
              receiving on that port. Choose another port, or remove the other source. ({failure})"
@@ -132,6 +135,12 @@ mod tests {
         let (h, _) = assess(&inputs(&n, &c, Some("Could not bind: Address already in use")), Reading::default());
         assert_eq!(h.state, HealthState::Failing);
         assert!(h.detail.unwrap().contains("Choose another port"));
+    }
+
+    #[test]
+    fn a_port_in_use_on_windows_says_so_too() {
+        let windows = "bind failed: Error binding to address 0.0.0.0:5000: Only one usage of each socket address (protocol/network address/port) is normally permitted.";
+        assert!(explain(windows, "udp://0.0.0.0:5000").contains("Choose another port"));
     }
 
     #[test]
