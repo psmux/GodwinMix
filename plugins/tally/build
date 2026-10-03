@@ -20,6 +20,9 @@ export CARGO_TARGET_DIR
 
 cargo build --release -p gmx-tally
 mkdir -p bin
-cp "$CARGO_TARGET_DIR/release/gmx-tally" bin/gmx-tally
-chmod +x bin/gmx-tally
+# Windows writes the binary with .exe after its name.
+exe=""
+[ -f "$CARGO_TARGET_DIR/release/gmx-tally.exe" ] && exe=.exe
+cp "$CARGO_TARGET_DIR/release/gmx-tally$exe" "bin/gmx-tally$exe"
+chmod +x "bin/gmx-tally$exe"
 echo "staged bin/gmx-tally from $CARGO_TARGET_DIR/release"

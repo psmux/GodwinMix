@@ -20,6 +20,9 @@ export CARGO_TARGET_DIR
 
 cargo build --release -p gmx-camera
 mkdir -p bin
-cp "$CARGO_TARGET_DIR/release/gmx-camera" bin/gmx-camera
-chmod +x bin/gmx-camera
+# Windows writes the binary with .exe after its name.
+exe=""
+[ -f "$CARGO_TARGET_DIR/release/gmx-camera.exe" ] && exe=.exe
+cp "$CARGO_TARGET_DIR/release/gmx-camera$exe" "bin/gmx-camera$exe"
+chmod +x "bin/gmx-camera$exe"
 echo "staged bin/gmx-camera from $CARGO_TARGET_DIR/release"

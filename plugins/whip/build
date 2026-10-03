@@ -20,6 +20,9 @@ export CARGO_TARGET_DIR
 
 cargo build --release -p gmx-whip
 mkdir -p bin
-cp "$CARGO_TARGET_DIR/release/gmx-whip" bin/gmx-whip
-chmod +x bin/gmx-whip
+# Windows writes the binary with .exe after its name.
+exe=""
+[ -f "$CARGO_TARGET_DIR/release/gmx-whip.exe" ] && exe=.exe
+cp "$CARGO_TARGET_DIR/release/gmx-whip$exe" "bin/gmx-whip$exe"
+chmod +x "bin/gmx-whip$exe"
 echo "staged bin/gmx-whip from $CARGO_TARGET_DIR/release"

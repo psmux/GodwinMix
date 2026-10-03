@@ -20,6 +20,9 @@ export CARGO_TARGET_DIR
 
 cargo build --release -p gmx-ndi
 mkdir -p bin
-cp "$CARGO_TARGET_DIR/release/gmx-ndi" bin/gmx-ndi
-chmod +x bin/gmx-ndi
+# Windows writes the binary with .exe after its name.
+exe=""
+[ -f "$CARGO_TARGET_DIR/release/gmx-ndi.exe" ] && exe=.exe
+cp "$CARGO_TARGET_DIR/release/gmx-ndi$exe" "bin/gmx-ndi$exe"
+chmod +x "bin/gmx-ndi$exe"
 echo "staged bin/gmx-ndi from $CARGO_TARGET_DIR/release"

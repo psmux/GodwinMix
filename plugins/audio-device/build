@@ -20,6 +20,9 @@ export CARGO_TARGET_DIR
 
 cargo build --release -p gmx-audio-device
 mkdir -p bin
-cp "$CARGO_TARGET_DIR/release/gmx-audio-device" bin/gmx-audio-device
-chmod +x bin/gmx-audio-device
+# Windows writes the binary with .exe after its name.
+exe=""
+[ -f "$CARGO_TARGET_DIR/release/gmx-audio-device.exe" ] && exe=.exe
+cp "$CARGO_TARGET_DIR/release/gmx-audio-device$exe" "bin/gmx-audio-device$exe"
+chmod +x "bin/gmx-audio-device$exe"
 echo "staged bin/gmx-audio-device from $CARGO_TARGET_DIR/release"

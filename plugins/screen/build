@@ -20,6 +20,9 @@ export CARGO_TARGET_DIR
 
 cargo build --release -p gmx-screen
 mkdir -p bin
-cp "$CARGO_TARGET_DIR/release/gmx-screen" bin/gmx-screen
-chmod +x bin/gmx-screen
+# Windows writes the binary with .exe after its name.
+exe=""
+[ -f "$CARGO_TARGET_DIR/release/gmx-screen.exe" ] && exe=.exe
+cp "$CARGO_TARGET_DIR/release/gmx-screen$exe" "bin/gmx-screen$exe"
+chmod +x "bin/gmx-screen$exe"
 echo "staged bin/gmx-screen from $CARGO_TARGET_DIR/release"

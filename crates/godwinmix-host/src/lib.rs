@@ -32,6 +32,7 @@
 //! See `README.md` beside this file.
 
 pub mod budget;
+pub mod build;
 pub mod channel;
 pub mod handshake;
 pub mod home;

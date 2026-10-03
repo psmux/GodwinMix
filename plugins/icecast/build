@@ -20,6 +20,9 @@ export CARGO_TARGET_DIR
 
 cargo build --release -p gmx-icecast
 mkdir -p bin
-cp "$CARGO_TARGET_DIR/release/gmx-icecast" bin/gmx-icecast
-chmod +x bin/gmx-icecast
+# Windows writes the binary with .exe after its name.
+exe=""
+[ -f "$CARGO_TARGET_DIR/release/gmx-icecast.exe" ] && exe=.exe
+cp "$CARGO_TARGET_DIR/release/gmx-icecast$exe" "bin/gmx-icecast$exe"
+chmod +x "bin/gmx-icecast$exe"
 echo "staged bin/gmx-icecast from $CARGO_TARGET_DIR/release"

@@ -91,6 +91,8 @@ fn paths_are_told_from_repositories_by_the_leading_dot_or_slash() {
     assert!(matches!(parse("/opt/gmx/clock"), Source::Path(_)));
     assert!(matches!(parse("~/clock"), Source::Path(_)));
     assert!(matches!(parse("C:\\plugins\\clock"), Source::Path(_)));
+    assert!(matches!(parse(r"\\?\C:\plugins\clock"), Source::Path(_)));
+    assert!(matches!(parse(r"\\server\plugins\clock"), Source::Path(_)));
     // Two segments with no dot is a repository, which is the whole ambiguity.
     assert!(matches!(parse("psmux/clock"), Source::GitHub { .. }));
 }
