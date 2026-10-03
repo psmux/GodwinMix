@@ -480,6 +480,13 @@ wrap_app! {
             // keychain loses nothing.
             #[cfg(target_os = "macos")]
             cl.append_switch(Some(&CefString::from("use-mock-keychain")));
+            // Windows: a Chromium started as administrator starts itself again
+            // without it and returns. The new copy has no stdout to the mixer
+            // and loses every value on the command line (`--url` with nothing
+            // after it), so a mixer run as administrator got no page and a
+            // renderer that never exited. Stay as started.
+            #[cfg(windows)]
+            cl.append_switch(Some(&CefString::from("do-not-de-elevate")));
             cl.append_switch_with_value(
                 Some(&CefString::from("autoplay-policy")),
                 Some(&CefString::from("no-user-gesture-required")),
