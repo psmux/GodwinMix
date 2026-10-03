@@ -141,8 +141,9 @@ except Exception as e:  # noqa: BLE001
 
 # --- WHEP -------------------------------------------------------------------
 #
-# Either an SDP answer where whepserversink is installed, or a 501 naming the
-# package where it is not. Both are a pass; a 500 or a hang is not.
+# An SDP answer where a WHEP output exists, a 404 saying to add one where the
+# element is installed but no output is, or a 501 naming the package where it
+# is not. All three are a pass; a 500 or a hang is not.
 
 try:
     info = urllib.request.urlopen(authed("/api/v1/core/info"), timeout=10).read().decode()
@@ -159,11 +160,17 @@ try:
     check("WHEP POST /whep/program", resp.status in (200, 201), f"HTTP {resp.status}")
 except urllib.error.HTTPError as e:
     body = e.read().decode()
-    named = "mjpeg" in body.lower() or "install" in body.lower()
+    lower = body.lower()
+    if has_whep:
+        # The element is there but the smoke core has no whep/output, so the
+        # answer is a 404 that says to add one.
+        ok = e.code == 404 and "add one in outputs" in lower
+    else:
+        ok = e.code == 501 and ("mjpeg" in lower or "install" in lower)
     check(
         "WHEP POST /whep/program says what to do"
         + (" (element present)" if has_whep else " (element absent)"),
-        e.code == 501 and named,
+        ok,
         f"HTTP {e.code}: {body[:140]}",
     )
 except Exception as e:  # noqa: BLE001
