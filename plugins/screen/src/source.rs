@@ -3,6 +3,8 @@
 use std::time::Duration;
 
 use godwinmix_capture_common::{capture, Capture};
+
+use crate::opening::Opening;
 use godwinmix_sdk::prelude::*;
 use serde_json::Value;
 
@@ -29,7 +31,7 @@ pub struct ScreenSource {
     settings: Settings,
     reporter: Option<Reporter>,
     last_start: Option<StartParams>,
-    capture: Option<Capture>,
+    opening: Option<Opening>,
 }
 
 impl ScreenSource {
@@ -38,7 +40,7 @@ impl ScreenSource {
             settings: Settings::default(),
             reporter: None,
             last_start: None,
-            capture: None,
+            opening: None,
         }
     }
 
@@ -54,42 +56,42 @@ impl ScreenSource {
         }
     }
 
+    /// Start opening the capture and return. See `opening` for why it does
+    /// not wait.
     fn open(&mut self, params: &StartParams) -> Result<(), RpcError> {
         let settings = self.settings.clone();
         let params = params.clone();
         let reporter = self.reporter.clone();
-        let capture = capture::open_with_retry(
-            OPEN_ATTEMPTS,
-            OPEN_GAP,
-            FIRST_FRAME_WITHIN,
-            reporter.as_ref(),
-            || {
-                let pipeline =
-                    pipeline::build(&settings, params.canvas, params.transport, &params.media)?;
-                Capture::start(pipeline, Some("gmx-video-queue"), reporter.clone())
-            },
-        )
-        .map_err(|why| internal(format!("the screen capture would not start: {why}")))?;
-        if capture.buffers() == 0 {
-            if let Some(r) = &self.reporter {
-                r.warn(format!(
-                    "{} has not sent a frame yet. On macOS the system is probably asking for \
-                     screen recording permission; answer it and the picture appears.",
-                    self.what()
+        let what = self.what();
+        let start = params.clone();
+        self.opening = Some(Opening::start(move || {
+            let capture = capture::open_with_retry(
+                OPEN_ATTEMPTS,
+                OPEN_GAP,
+                FIRST_FRAME_WITHIN,
+                reporter.as_ref(),
+                || {
+                    let pipeline =
+                        pipeline::build(&settings, start.canvas, start.transport, &start.media)?;
+                    Capture::start(pipeline, Some("gmx-video-queue"), reporter.clone())
+                },
+            )?;
+            if let Some(r) = &reporter {
+                if capture.buffers() == 0 {
+                    r.warn(format!(
+                        "{what} has not sent a frame yet. On macOS the system is probably                          asking for screen recording permission; answer it and the picture appears."
+                    ));
+                }
+                r.info(format!(
+                    "{what} is running at {}x{}@{} over {}",
+                    start.canvas.width,
+                    start.canvas.height,
+                    start.canvas.fps,
+                    start.transport.as_str()
                 ));
             }
-        }
-        if let Some(r) = &self.reporter {
-            r.info(format!(
-                "{} is running at {}x{}@{} over {}",
-                self.what(),
-                params.canvas.width,
-                params.canvas.height,
-                params.canvas.fps,
-                params.transport.as_str()
-            ));
-        }
-        self.capture = Some(capture);
+            Ok(capture)
+        }));
         self.last_start = Some(params);
         Ok(())
     }
@@ -98,8 +100,14 @@ impl ScreenSource {
         let Some(params) = self.last_start.clone() else {
             return Ok(());
         };
-        self.capture = None;
+        self.close();
         self.open(&params)
+    }
+
+    fn close(&mut self) {
+        if let Some(opening) = self.opening.take() {
+            opening.stop(Duration::from_millis(100));
+        }
     }
 }
 
@@ -128,10 +136,7 @@ impl Source for ScreenSource {
     }
 
     fn stop(&mut self) -> Result<(), RpcError> {
-        if let Some(capture) = self.capture.as_ref() {
-            capture.drain(Duration::from_millis(100));
-        }
-        self.capture = None;
+        self.close();
         Ok(())
     }
 
@@ -139,15 +144,15 @@ impl Source for ScreenSource {
         let next = Settings::from(&params);
         let restart = self.settings.needs_restart(&next);
         self.settings = next;
-        if restart && self.capture.is_some() {
+        if restart && self.opening.is_some() {
             self.reopen()?;
         }
         Ok(Configure::applied())
     }
 
     fn health(&mut self) -> Health {
-        match self.capture.as_ref() {
-            Some(capture) => capture.health(&self.what()),
+        match self.opening.as_ref() {
+            Some(opening) => opening.health(&self.what()),
             None => Health::ok(),
         }
     }
@@ -155,10 +160,6 @@ impl Source for ScreenSource {
     fn call(&mut self, method: &str, params: Value) -> Result<Value, RpcError> {
         tools::dispatch(method, params)
     }
-}
-
-fn internal(message: String) -> RpcError {
-    RpcError::new(codes::INTERNAL_ERROR, message).with_data(serde_json::json!({"retryable": true}))
 }
 
 #[cfg(test)]
@@ -205,7 +206,7 @@ mod tests {
             .configure(json!({"monitor": 1, "show_cursor": false}))
             .unwrap();
         assert!(answer.applied);
-        assert!(source.capture.is_none());
+        assert!(source.opening.is_none());
     }
 
     #[test]
