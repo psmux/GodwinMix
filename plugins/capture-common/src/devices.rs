@@ -190,7 +190,29 @@ pub fn list(classes: &[&str]) -> Result<Vec<Found>, String> {
     }
     let devices = monitor.devices();
     monitor.stop();
-    Ok(devices.into_iter().map(describe).collect())
+    let found: Vec<Found> = devices.into_iter().map(describe).collect();
+    let keys: Vec<(String, Option<String>)> = found.iter().map(|f| (f.name.clone(), f.api.clone())).collect();
+    let keep = once_each(&keys);
+    Ok(found.into_iter().zip(keep).filter_map(|(f, k)| k.then_some(f)).collect())
+}
+
+/// Windows reports one camera twice, through Media Foundation and through the
+/// older kernel streaming provider, so a picker showed every webcam twice
+/// under the same name. Where one name comes from more than one provider only
+/// the best provider's entries stay; two cameras of one model through the same
+/// provider are two cameras and both stay.
+fn once_each(keys: &[(String, Option<String>)]) -> Vec<bool> {
+    let rank = |api: &Option<String>| match api.as_deref() {
+        Some("mediafoundation") => 0,
+        Some(_) => 1,
+        None => 2,
+    };
+    keys.iter()
+        .map(|(name, api)| {
+            let best = keys.iter().filter(|(n, _)| n == name).map(|(_, a)| rank(a)).min().unwrap_or(2);
+            rank(api) == best
+        })
+        .collect()
 }
 
 fn describe(device: gst::Device) -> Found {
@@ -323,6 +345,19 @@ mod tests {
         // No mode of the canvas's shape: the right way up, and enough of it.
         assert_eq!(pick_size(&[(1080, 1920), (1600, 1200), (640, 480)], (1280, 720)), Some((1600, 1200)));
         assert_eq!(pick_size(&[], (1920, 1080)), None);
+    }
+
+    #[test]
+    fn a_camera_two_providers_report_is_listed_once() {
+        let key = |n: &str, a: Option<&str>| (n.to_string(), a.map(String::from));
+        let keys = [
+            key("USB2.0 FHD UVC WebCam", None),
+            key("USB2.0 FHD UVC WebCam", Some("mediafoundation")),
+            key("OBS Virtual Camera", None),
+            key("Twin", Some("mediafoundation")),
+            key("Twin", Some("mediafoundation")),
+        ];
+        assert_eq!(once_each(&keys), vec![false, true, true, true, true]);
     }
 
     #[test]
