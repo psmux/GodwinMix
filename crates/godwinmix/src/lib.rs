@@ -22,6 +22,7 @@ pub mod cli;
 pub mod control;
 pub mod ctl;
 pub mod feeds;
+mod job;
 pub mod mcp;
 pub mod nodes;
 pub mod mcp_http;
@@ -716,6 +717,10 @@ pub async fn run() -> Result<()> {
     // inherits every orphan on the box, and a sidecar's grandchildren are
     // orphaned the moment their parent is killed. See `reap_orphans_if_init`.
     input::reap_orphans_if_init();
+    // Windows ends no child with its parent; this makes it so (see job.rs).
+    if !job::contain_children() {
+        warn!("Windows would not let this process hold its children; a plugin or show may outlive it if it is killed");
+    }
 
     {
         let _stage = core_observe::introspect::stage("gstreamer init");
