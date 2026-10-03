@@ -180,7 +180,9 @@ jobs:
       # for the .msi, whose cabinet compresses Chromium less well. A release
       # that breaks this does not get published.
       WINDOWS_INSTALLER_BUDGET_MB: 250
-      RUNTIME_BUDGET_MB: 130
+      # 133.5 MB on Windows on 2026-10-03 once every first party plugin's
+      # elements were kept (WHIP, NDI and DeckLink had been trimmed away).
+      RUNTIME_BUDGET_MB: 160
       # The three device plugins together, measured at 4 MB on macOS. A
       # tripwire rather than a tight budget: what fills the installer is
       # GStreamer, and these three have no business growing to twenty.

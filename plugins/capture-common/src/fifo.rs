@@ -29,6 +29,13 @@ use gstreamer::prelude::*;
 #[derive(Debug)]
 pub struct Fifo {
     fd: i32,
+    /// The pipe this process made, on Windows.
+    #[cfg(windows)]
+    handle: isize,
+    /// Whether the core has its end open, on Windows: a pipe is connected to
+    /// once per writer.
+    #[cfg(windows)]
+    connected: bool,
     path: String,
 }
 
@@ -40,6 +47,13 @@ impl Fifo {
 
     pub fn path(&self) -> &str {
         &self.path
+    }
+}
+
+#[cfg(windows)]
+impl Drop for Fifo {
+    fn drop(&mut self) {
+        win::close(self.handle);
     }
 }
 
@@ -85,19 +99,17 @@ pub fn open_read(path: &Path) -> Result<Fifo, String> {
     Ok(Fifo { fd, path: display })
 }
 
-/// Windows has no FIFO, and the core refuses a sidecar output there before it
-/// gets this far. The message is here so a build that somehow reaches it says
-/// the same thing the core does.
-#[cfg(not(unix))]
+/// Windows: the core names a pipe (`\\.\pipe\...`) rather than a file, and
+/// this end makes it. A named pipe has a server that makes it and a client
+/// that opens it by name, and the core's `filesink` can only open, so this is
+/// the server: made here at `initialize`, the same moment a Unix plugin opens
+/// its FIFO, and connected to in the pump once the core's sink opens its end.
+#[cfg(windows)]
 pub fn open_read(path: &Path) -> Result<Fifo, String> {
-    Err(format!(
-        "an output plugin receives the programme on a FIFO and {} has none. The core refuses \
-         a sidecar output on this platform for the same reason; a first party output \
-         (rtmp/output, srt/output) works everywhere. The named pipe that would fix it is an \
-         open question in docs/reference/plugin-lifecycle.md. (wanted {})",
-        std::env::consts::OS,
-        path.display()
-    ))
+    let display = path.display().to_string();
+    let handle = win::serve(&display)
+        .map_err(|e| format!("could not make the programme pipe at {display}: {e}. The core names it when it starts this plugin, so this usually means another copy of this output is still running."))?;
+    Ok(Fifo { fd: 0, handle, connected: false, path: display })
 }
 
 /// How much to ask for in one read. Big enough that a megabyte of programme is
@@ -139,9 +151,10 @@ impl Pump {
         let handle = std::thread::Builder::new()
             .name("gmx-fifo-pump".into())
             .spawn(move || {
+                let mut fifo = fifo;
                 let mut chunk = vec![0u8; CHUNK];
                 while !thread_stop.load(Ordering::Relaxed) {
-                    let read = read_some(fifo.fd(), &mut chunk);
+                    let read = fifo.read_some(&mut chunk);
                     match read {
                         // A read of nothing means no writer has the other end.
                         // Before the first byte that is the core not having
@@ -202,28 +215,131 @@ impl Drop for Pump {
     }
 }
 
-/// One read, with `EINTR` treated as "nothing happened, go round again".
-#[cfg(unix)]
-fn read_some(fd: i32, into: &mut [u8]) -> Result<usize, std::io::Error> {
-    loop {
-        // SAFETY: reading into a buffer we own, from a descriptor the `Fifo`
-        // owns and keeps alive for the length of this call.
-        let n = unsafe { libc::read(fd, into.as_mut_ptr().cast(), into.len()) };
-        if n >= 0 {
-            return Ok(n as usize);
+impl Fifo {
+    /// One read. `Ok(0)` means no writer has the other end: not yet, or not
+    /// any more, which the pump tells apart by whether anything came first.
+    #[cfg(unix)]
+    fn read_some(&mut self, into: &mut [u8]) -> Result<usize, std::io::Error> {
+        loop {
+            // SAFETY: reading into a buffer we own, from a descriptor this
+            // `Fifo` owns and keeps alive for the length of this call.
+            let n = unsafe { libc::read(self.fd, into.as_mut_ptr().cast(), into.len()) };
+            if n >= 0 {
+                return Ok(n as usize);
+            }
+            let error = std::io::Error::last_os_error();
+            if error.kind() != std::io::ErrorKind::Interrupted {
+                return Err(error);
+            }
         }
-        let error = std::io::Error::last_os_error();
-        if error.kind() != std::io::ErrorKind::Interrupted {
-            return Err(error);
+    }
+
+    /// The same on Windows: wait for the core's sink to open the pipe, then
+    /// read. The core closing its end reads as `Ok(0)`, and the pipe is made
+    /// ready for the next writer in case it was the first open of two.
+    #[cfg(windows)]
+    fn read_some(&mut self, into: &mut [u8]) -> Result<usize, std::io::Error> {
+        if !self.connected {
+            win::accept(self.handle)?;
+            self.connected = true;
+        }
+        match win::read(self.handle, into)? {
+            0 => {
+                self.connected = false;
+                win::disconnect(self.handle);
+                Ok(0)
+            }
+            n => Ok(n),
         }
     }
 }
 
-#[cfg(not(unix))]
-fn read_some(_fd: i32, _into: &mut [u8]) -> Result<usize, std::io::Error> {
-    Ok(0)
-}
+/// The named pipe calls, declared here rather than pulled in with a bindings
+/// crate for five of them.
+#[cfg(windows)]
+mod win {
+    use std::io::Error;
 
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn CreateNamedPipeW(
+            name: *const u16,
+            open_mode: u32,
+            pipe_mode: u32,
+            max_instances: u32,
+            out_buffer: u32,
+            in_buffer: u32,
+            timeout_ms: u32,
+            security: *const core::ffi::c_void,
+        ) -> isize;
+        fn ConnectNamedPipe(pipe: isize, overlapped: *mut core::ffi::c_void) -> i32;
+        fn DisconnectNamedPipe(pipe: isize) -> i32;
+        fn ReadFile(file: isize, buffer: *mut u8, len: u32, read: *mut u32, overlapped: *mut core::ffi::c_void) -> i32;
+        fn CloseHandle(handle: isize) -> i32;
+    }
+
+    const PIPE_ACCESS_INBOUND: u32 = 0x1;
+    const FILE_FLAG_FIRST_PIPE_INSTANCE: u32 = 0x0008_0000;
+    /// Byte mode, blocking, and nobody from another machine.
+    const PIPE_MODE: u32 = 0x8;
+    const ERROR_PIPE_CONNECTED: i32 = 535;
+    const ERROR_BROKEN_PIPE: i32 = 109;
+    const ERROR_NO_DATA: i32 = 232;
+    /// A megabyte each way, which is a few frames of an HD programme.
+    const BUFFER: u32 = 1 << 20;
+
+    pub fn serve(name: &str) -> Result<isize, Error> {
+        let wide: Vec<u16> = name.encode_utf16().chain(std::iter::once(0)).collect();
+        // SAFETY: a NUL terminated name that outlives the call; the handle is
+        // checked before it is used.
+        let h = unsafe {
+            CreateNamedPipeW(wide.as_ptr(), PIPE_ACCESS_INBOUND | FILE_FLAG_FIRST_PIPE_INSTANCE, PIPE_MODE, 1, BUFFER, BUFFER, 0, std::ptr::null())
+        };
+        if h == -1 {
+            return Err(Error::last_os_error());
+        }
+        Ok(h)
+    }
+
+    /// Block until a writer opens the pipe. One that opened it before this
+    /// was called is already connected, which is not an error.
+    pub fn accept(pipe: isize) -> Result<(), Error> {
+        // SAFETY: a pipe handle this module made.
+        if unsafe { ConnectNamedPipe(pipe, std::ptr::null_mut()) } != 0 {
+            return Ok(());
+        }
+        let e = Error::last_os_error();
+        match e.raw_os_error() {
+            Some(ERROR_PIPE_CONNECTED) => Ok(()),
+            _ => Err(e),
+        }
+    }
+
+    pub fn read(pipe: isize, into: &mut [u8]) -> Result<usize, Error> {
+        let mut got = 0u32;
+        let len = u32::try_from(into.len()).unwrap_or(u32::MAX);
+        // SAFETY: reading into a buffer we own, from a handle this module made.
+        if unsafe { ReadFile(pipe, into.as_mut_ptr(), len, &mut got, std::ptr::null_mut()) } != 0 {
+            return Ok(got as usize);
+        }
+        let e = Error::last_os_error();
+        match e.raw_os_error() {
+            // The writer closed its end: the same as a FIFO's end of file.
+            Some(ERROR_BROKEN_PIPE) | Some(ERROR_NO_DATA) => Ok(0),
+            _ => Err(e),
+        }
+    }
+
+    pub fn disconnect(pipe: isize) {
+        // SAFETY: a pipe handle this module made.
+        unsafe { DisconnectNamedPipe(pipe) };
+    }
+
+    pub fn close(pipe: isize) {
+        // SAFETY: closed once, from `Fifo::drop`.
+        unsafe { CloseHandle(pipe) };
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -313,6 +429,54 @@ mod tests {
         pump.stop();
         let _ = pipeline.set_state(gst::State::Null);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The Windows shape of the test above: the pump starts on a pipe nobody
+    /// has opened, and the writer opens it by name as the core's `filesink`
+    /// does.
+    #[cfg(windows)]
+    #[test]
+    fn the_pump_carries_what_a_writer_wrote_down_a_named_pipe() {
+        use std::io::Write;
+        gst::init().unwrap();
+        let path = format!(r"\\.\pipe\gmx-pump-test-{}", std::process::id());
+        let pipeline = gst::parse::launch(
+            "appsrc name=in format=bytes is-live=false ! fakesink name=out sync=false",
+        )
+        .unwrap()
+        .downcast::<gst::Pipeline>()
+        .unwrap();
+        let src = pipeline.by_name("in").unwrap();
+        let sink = pipeline.by_name("out").unwrap();
+        let seen = Arc::new(AtomicU64::new(0));
+        let counter = Arc::clone(&seen);
+        sink.static_pad("sink")
+            .unwrap()
+            .add_probe(gst::PadProbeType::BUFFER, move |_, info| {
+                if let Some(gst::PadProbeData::Buffer(b)) = &info.data {
+                    counter.fetch_add(b.size() as u64, Ordering::Relaxed);
+                }
+                gst::PadProbeReturn::Ok
+            })
+            .unwrap();
+        let fifo = open_read(Path::new(&path)).expect("the pipe is made");
+        let mut pump = Pump::start(fifo, src);
+        pipeline.set_state(gst::State::Playing).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(100));
+
+        let mut writer = std::fs::OpenOptions::new().write(true).open(&path).unwrap();
+        writer.write_all(&vec![7u8; 300_000]).unwrap();
+        writer.flush().unwrap();
+        drop(writer);
+
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while seen.load(Ordering::Relaxed) < 300_000 && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        assert_eq!(seen.load(Ordering::Relaxed), 300_000, "the pump lost bytes");
+        assert_eq!(pump.bytes(), 300_000);
+        pump.stop();
+        let _ = pipeline.set_state(gst::State::Null);
     }
 
     #[test]

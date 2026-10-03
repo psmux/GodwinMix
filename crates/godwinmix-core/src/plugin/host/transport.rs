@@ -33,6 +33,9 @@ use std::path::{Path, PathBuf};
 /// behind. The leak counting test checks exactly that.
 pub struct MediaDir {
     path: PathBuf,
+    /// Different on every start, so a Windows pipe name never meets the one
+    /// an output's previous plugin may still be closing.
+    nonce: u64,
 }
 
 /// The longest base address a socket can be bound under.
@@ -64,7 +67,9 @@ impl MediaDir {
         let _ = std::fs::remove_dir_all(&path);
         std::fs::create_dir_all(&path)
             .with_context(|| format!("making the media directory {}", path.display()))?;
-        Ok(Self { path })
+        static STARTS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let nonce = STARTS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        Ok(Self { path, nonce })
     }
 
     fn place(runtime: &Path, instance: &str) -> Result<PathBuf> {
@@ -109,7 +114,16 @@ impl MediaDir {
 
     /// The FIFO an output plugin reads the programme from. See `output.rs`
     /// for why an output's media does not travel on stdin.
+    /// Where an output plugin reads the programme: a FIFO in this directory,
+    /// or on Windows a named pipe the plugin makes, named for this directory,
+    /// this process and this start (see `capture_common::fifo`).
     pub fn programme(&self) -> String {
+        if cfg!(windows) {
+            use std::hash::{Hash, Hasher};
+            let mut h = std::collections::hash_map::DefaultHasher::new();
+            self.path.hash(&mut h);
+            return format!(r"\\.\pipe\godwinmix-{}-{:016x}-{}", std::process::id(), h.finish(), self.nonce);
+        }
         format!("{}.programme", self.base())
     }
 
