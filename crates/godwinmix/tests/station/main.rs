@@ -10,6 +10,9 @@ mod health_main;
 mod hls_direct;
 #[cfg(unix)]
 mod hls_isolation;
+// Its one test installs examples/zero-dep, a shell plugin whose platforms
+// leave Windows out, which Windows refuses, as it should.
+#[cfg(unix)]
 mod home;
 #[cfg(unix)]
 mod isolation;

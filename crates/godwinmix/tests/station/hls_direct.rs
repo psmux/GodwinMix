@@ -73,7 +73,7 @@ fn init_of(playlist: &str) -> String {
 
 /// What gst-discoverer-1.0 says of a file, with `-v` for the codecs.
 pub fn discover(file: &Path) -> String {
-    let out = Command::new("gst-discoverer-1.0").arg("-v").arg(file).output().expect("gst-discoverer-1.0 is installed with GStreamer");
+    let out = Command::new(format!("gst-discoverer-1.0{}", std::env::consts::EXE_SUFFIX)).arg("-v").arg(file).output().expect("gst-discoverer-1.0 is installed with GStreamer");
     format!("{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr))
 }
 
