@@ -34,7 +34,7 @@ use tauri::{AppHandle, Manager};
 /// of the bundled copy it was made from. Its presence is also what marks a
 /// directory as this app's to replace: a plugin the operator installed has no
 /// such file and is never touched.
-const STAMP: &str = ".gmx-bundled";
+pub(crate) const STAMP: &str = ".gmx-bundled";
 
 /// The plugins directory the mixer should be started against, with the
 /// bundled plugins in it.
@@ -50,6 +50,13 @@ pub fn ensure(app: &AppHandle) -> Option<PathBuf> {
         // Not fatal. The mixer starts either way, and a mixer with no camera
         // plugin is a great deal better than a mixer that would not start.
         eprintln!("[desktop] could not put the bundled plugins in place: {e}");
+    }
+    // The plugins installed on first use, from the flat folder beside the
+    // device plugins, follow the app too. See `shipped`.
+    if let Some(root) = app.path().resource_dir().ok().map(|d| d.join("plugins")) {
+        if let Err(e) = crate::shipped::refresh(&root, &dest) {
+            eprintln!("[desktop] could not bring the installed plugins up to date: {e}");
+        }
     }
     Some(dest)
 }
@@ -125,7 +132,7 @@ fn seed(bundled: &Path, dest: &Path) -> io::Result<()> {
 /// Not a hash. This runs at every launch on a few megabytes of binary, and the
 /// question it answers is "is this the copy I made last time", which sizes and
 /// modification times answer at the cost of a directory walk.
-fn stamp_of(root: &Path) -> String {
+pub(crate) fn stamp_of(root: &Path) -> String {
     let (mut files, mut bytes, mut newest) = (0u64, 0u64, 0u64);
     let mut stack = vec![root.to_path_buf()];
     while let Some(dir) = stack.pop() {
@@ -172,7 +179,7 @@ fn retire_older(name_dir: &Path, keep: &str) -> io::Result<()> {
 
 /// A directory, recursively, with the permission bits kept: the plugin's
 /// binary has to arrive executable or the core cannot run it.
-fn copy_tree(from: &Path, to: &Path) -> io::Result<()> {
+pub(crate) fn copy_tree(from: &Path, to: &Path) -> io::Result<()> {
     fs::create_dir_all(to)?;
     for entry in fs::read_dir(from)? {
         let entry = entry?;

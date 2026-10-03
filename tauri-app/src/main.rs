@@ -30,6 +30,7 @@ mod page_menu;
 mod plugins;
 mod restart;
 mod settings;
+mod shipped;
 mod sidecar;
 mod ui;
 
