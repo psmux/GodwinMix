@@ -20,6 +20,9 @@ export CARGO_TARGET_DIR
 
 cargo build --release -p gmx-decklink
 mkdir -p bin
-cp "$CARGO_TARGET_DIR/release/gmx-decklink" bin/gmx-decklink
-chmod +x bin/gmx-decklink
+# Windows writes the binary with .exe after its name.
+exe=""
+[ -f "$CARGO_TARGET_DIR/release/gmx-decklink.exe" ] && exe=.exe
+cp "$CARGO_TARGET_DIR/release/gmx-decklink$exe" "bin/gmx-decklink$exe"
+chmod +x "bin/gmx-decklink$exe"
 echo "staged bin/gmx-decklink from $CARGO_TARGET_DIR/release"

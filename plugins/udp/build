@@ -20,6 +20,9 @@ export CARGO_TARGET_DIR
 
 cargo build --release -p gmx-udp
 mkdir -p bin
-cp "$CARGO_TARGET_DIR/release/gmx-udp" bin/gmx-udp
-chmod +x bin/gmx-udp
+# Windows writes the binary with .exe after its name.
+exe=""
+[ -f "$CARGO_TARGET_DIR/release/gmx-udp.exe" ] && exe=.exe
+cp "$CARGO_TARGET_DIR/release/gmx-udp$exe" "bin/gmx-udp$exe"
+chmod +x "bin/gmx-udp$exe"
 echo "staged bin/gmx-udp from $CARGO_TARGET_DIR/release"

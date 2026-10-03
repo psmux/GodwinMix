@@ -77,15 +77,17 @@ pub fn fetch(url: &str, reference: Option<&str>, ctx: &FetchCtx) -> Result<Fetch
 
 /// Run the manifest's build command with the platform's shell.
 fn build_it(dir: &Path, command: &str) -> Result<String> {
-    let (shell, flag) = if cfg!(windows) { ("cmd", "/C") } else { ("sh", "-c") };
-    run("the plugin's [build] command", shell, &[flag, command], dir)
+    let mut c = crate::build::command(command).map_err(|why| anyhow::anyhow!("{why}"))?;
+    let out = c.current_dir(dir).output().with_context(|| format!("starting the plugin's [build] command `{command}`"))?;
+    let text = format!("{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
+    anyhow::ensure!(out.status.success(), "the plugin's [build] command `{command}` failed:\n\n{text}");
+    Ok(text)
 }
 
 /// The build said what it would produce. Check it did.
 fn check_output(dir: &Path, output: &str) -> Result<()> {
-    let produced = dir.join(output);
     anyhow::ensure!(
-        produced.exists(),
+        crate::build::output(dir, output).is_some() || dir.join(output).exists(),
         "the build ran but `{output}` is not there. `[build] output` names what the command \
          produces, relative to the plugin's root; fix it in gmx-plugin.toml or fix the \
          command."

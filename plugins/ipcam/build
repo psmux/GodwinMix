@@ -20,6 +20,9 @@ export CARGO_TARGET_DIR
 
 cargo build --release -p gmx-ipcam
 mkdir -p bin
-cp "$CARGO_TARGET_DIR/release/gmx-ipcam" bin/gmx-ipcam
-chmod +x bin/gmx-ipcam
+# Windows writes the binary with .exe after its name.
+exe=""
+[ -f "$CARGO_TARGET_DIR/release/gmx-ipcam.exe" ] && exe=.exe
+cp "$CARGO_TARGET_DIR/release/gmx-ipcam$exe" "bin/gmx-ipcam$exe"
+chmod +x "bin/gmx-ipcam$exe"
 echo "staged bin/gmx-ipcam from $CARGO_TARGET_DIR/release"

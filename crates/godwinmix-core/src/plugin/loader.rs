@@ -962,22 +962,21 @@ fn build_if_missing(manifest: &PluginManifest, source: &Path, target: &Path) -> 
     let Some(build) = manifest.build.as_ref() else { return Ok(()) };
     let name = &manifest.plugin.name;
     info!(plugin = %name, "building: {} (in {})", build.command, source.display());
-    let (shell, flag) = if cfg!(windows) { ("cmd", "/C") } else { ("sh", "-c") };
-    let out = std::process::Command::new(shell)
-        .arg(flag)
-        .arg(&build.command)
+    let started = |why: String| {
+        anyhow::anyhow!(
+            "`{name}` declares run.bin.{} = \"{rel}\", that file is not in the plugin \
+             directory, and its [build] command could not be started:\n\n  {}\n\n{why}\n\nBuild \
+             it yourself in {} and add the plugin again.",
+            launch::this_platform(),
+            build.command,
+            source.display()
+        )
+    };
+    let out = godwinmix_host::build::command(&build.command)
+        .map_err(started)?
         .current_dir(source)
         .output()
-        .with_context(|| {
-            format!(
-                "`{name}` declares run.bin.{} = \"{rel}\", that file is not in the plugin \
-                 directory, and its [build] command could not be started with `{shell}`:\n\n  \
-                 {}\n\nBuild it yourself in {} and add the plugin again.",
-                launch::this_platform(),
-                build.command,
-                source.display()
-            )
-        })?;
+        .map_err(|e| started(e.to_string()))?;
     if !out.status.success() {
         anyhow::bail!(
             "building `{name}` failed. `{}` in {} exited {}.\n\n{}\n\nFix the build, or build \
@@ -988,17 +987,17 @@ fn build_if_missing(manifest: &PluginManifest, source: &Path, target: &Path) -> 
             tail(&out, 12),
         );
     }
-    let produced = source.join(&build.output);
-    anyhow::ensure!(
-        produced.is_file(),
-        "building `{name}` ran `{}` in {} and it reported success, but [build] output names \
-         `{}` and there is no file there.\n\n{}\n\nFix `output` in gmx-plugin.toml, or fix the \
-         command so that it puts the binary where `output` says.",
-        build.command,
-        source.display(),
-        build.output,
-        tail(&out, 12),
-    );
+    let Some(produced) = godwinmix_host::build::output(source, &build.output) else {
+        anyhow::bail!(
+            "building `{name}` ran `{}` in {} and it reported success, but [build] output names \
+             `{}` and there is no file there.\n\n{}\n\nFix `output` in gmx-plugin.toml, or fix the \
+             command so that it puts the binary where `output` says.",
+            build.command,
+            source.display(),
+            build.output,
+            tail(&out, 12),
+        );
+    };
     let landed = target.join(&rel);
     if let Some(parent) = landed.parent() {
         std::fs::create_dir_all(parent)
@@ -1815,7 +1814,8 @@ settings = "settings.json"
     #[test]
     fn a_build_that_produced_nothing_names_the_output_it_promised() {
         let (root, source, target) = source_and_copy("build-nothing");
-        let manifest = buildable("true", "bin/thing");
+        // `exit 0` succeeds under sh and under cmd alike; `true` is not a cmd command.
+        let manifest = buildable("exit 0", "bin/thing");
         let err = build_if_missing(&manifest, &source, &target).expect_err("nothing was built");
         let text = format!("{err}");
         assert!(text.contains("bin/thing"), "{text}");

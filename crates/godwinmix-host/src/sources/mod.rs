@@ -186,6 +186,9 @@ fn looks_like_a_path(spec: &str) -> bool {
         || spec.starts_with("..\\")
         || spec.starts_with('/')
         || spec.starts_with('~')
+        // \\server\plugins\clock, and \\?\C:\plugins\clock, the form Windows
+        // gives a path it has canonicalised.
+        || spec.starts_with("\\\\")
         // C:\plugins\clock. One letter before the colon is a drive, not a scheme.
         || (spec.len() > 2
             && spec.as_bytes()[1] == b':'

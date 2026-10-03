@@ -20,6 +20,9 @@ export CARGO_TARGET_DIR
 
 cargo build --release -p gmx-ograf
 mkdir -p bin
-cp "$CARGO_TARGET_DIR/release/gmx-ograf" bin/gmx-ograf
-chmod +x bin/gmx-ograf
+# Windows writes the binary with .exe after its name.
+exe=""
+[ -f "$CARGO_TARGET_DIR/release/gmx-ograf.exe" ] && exe=.exe
+cp "$CARGO_TARGET_DIR/release/gmx-ograf$exe" "bin/gmx-ograf$exe"
+chmod +x "bin/gmx-ograf$exe"
 echo "staged bin/gmx-ograf from $CARGO_TARGET_DIR/release"
