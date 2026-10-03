@@ -850,7 +850,10 @@ pub fn install(spec: &str, opts: &InstallOptions) -> Result<Installed> {
     );
     ctx.offline = opts.offline;
     ctx.identity = identity;
-    let fetched = godwinmix_host::sources::fetch(&source, &ctx)?;
+    let mut fetched = godwinmix_host::sources::fetch(&source, &ctx)?;
+    if godwinmix_host::sources::Source::parse(spec).is_err() && super::first_party::find(spec).is_some() {
+        fetched.trust = godwinmix_host::verify::Trust::shipped_with(fetched.dir.display().to_string());
+    }
     for line in note.into_iter().chain(fetched.notes.iter().cloned()) {
         info!(plugin = %spec, "{line}");
     }
@@ -883,7 +886,7 @@ fn place(fetched: &godwinmix_host::sources::Fetched, opts: &InstallOptions) -> R
         launch::this_platform(),
         manifest.plugin.platforms.join(", ")
     );
-    if !fetched.trust.is_signed() && !opts.allow_unsigned {
+    if !fetched.trust.is_signed() && !fetched.trust.shipped && !opts.allow_unsigned {
         anyhow::bail!(
             "`{name}` is unsigned ({}) and this mixer is configured to install signed \
              plugins only. Either install a signed release of it, or add this to your \
