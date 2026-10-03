@@ -53,6 +53,7 @@ picture and sound, with no gap over 70 ms in 30 seconds; before three fixes it
 carried one or the other, and the receiver panicked on its bandwidth setting.
 Icecast fed a stand in server 87 seconds of stereo 128 kbit/s MP3 that
 decodes. RTSP served 1080p30 H.264 that `rtspsrc` played back, 261 frames.
+UDP sent MPEG-TS that decoded to 186 frames in ten seconds.
 Three things were wrong in the core and are fixed. Installing a plugin dropped
 the output types of every plugin installed before it, so after adding NDI the
 UDP, Icecast and RTSP outputs were refused as not in this build. A plugin the
@@ -61,6 +62,15 @@ failed was never restarted again: the screen capture, whose start took up to
 ten seconds because Direct3D 11 takes five to load on this GPU, sat on
 connecting until it was restarted by hand. It now answers `start` at once and
 opens behind it.
+
+An upgrade now carries the plugins with it. The app had replaced its own copies
+of the four device plugins, but a plugin the mixer installed on first use, NDI
+or Icecast say, stayed at the version it was installed from. The app now
+compares each copy that came from its own folder with what it carries and
+replaces the ones that differ; a plugin installed from anywhere else is left
+alone. Checked by installing over the previous build: all five came up to the
+new one at launch, every output type was registered, and the webcam, the
+screen and the YouTube page came back live.
 
 Still open on that machine. A VPN client there drops loopback UDP and resets
 loopback TCP once a client starts streaming, so the SRT, RIST, RTP, ONVIF and
