@@ -1034,6 +1034,7 @@ impl TimelineAligner {
     /// after its segment changes nothing, so the tile decides it then just as
     /// a branch would: the first segment anywhere sets it for all of them.
     pub fn follow_tile(self: &Arc<Self>, pad: &gst::Pad) {
+        self.tiles.prune();
         self.tiles.attach(pad);
         let aligner = self.clone();
         pad.add_probe(gst::PadProbeType::EVENT_DOWNSTREAM, move |_p, info| {
