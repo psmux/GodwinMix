@@ -6,10 +6,13 @@
 // only when retyped), `x-gmx-labels` (names for an enum's options, in its
 // order), `x-gmx-unit` (a suffix beside the control) and
 // `x-gmx-group` (a collapsible section, so common fields sit above advanced
-// ones without a second schema).
+// ones without a second schema) and `x-gmx-notice` (a line above the fields,
+// see schema-notice.js).
 //
 // Not covered, on purpose: $ref beyond `#/$defs/...`, oneOf discrimination,
 // tuple arrays. A plugin needing those ships its own editor.
+
+import { schemaNotice } from "./schema-notice.js";
 
 const SECRET_KEPT = "••••••••";
 
@@ -68,6 +71,8 @@ export class SchemaForm {
   // ---------------------------------------------------------------- build
 
   _build() {
+    const notice = schemaNotice(this.schema);
+    if (notice) this.el.appendChild(notice);
     const props = this.schema.properties || {};
     const groups = new Map();
     for (const [name, raw] of Object.entries(props)) {

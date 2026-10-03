@@ -1,20 +1,22 @@
 # Use NDI
 
-NDI is how a camera, a graphics machine and a mixer talk to each other on a
+NDI® is how a camera, a graphics machine and a mixer talk to each other on a
 studio network without a capture card. A sender announces itself, a receiver
-picks it by name, and nothing has an address to type.
+picks it by name, and nothing has an address to type. NDI® is a registered
+trademark of Vizrt NDI AB, and GodwinMix is not affiliated with, endorsed by,
+or sponsored by Vizrt. More about NDI: <https://ndi.video/>.
 
-This page takes about ten minutes, most of it installing the runtime.
+This page takes about ten minutes.
 
-## Install the NDI runtime first
+## The NDI runtime
 
-GodwinMix does not ship it and cannot: the NDI runtime's licence does not permit
-redistribution. Download it from
-<https://ndi.video/for-developers/ndi-sdk/>. The runtime alone is enough; the
-full SDK is not needed.
+On Windows there is nothing to install. The GodwinMix installer carries the
+runtime in the ndi plugin's folder, under the NDI end user terms it shows
+before installing, and the plugin uses that copy.
 
-NDI is a registered trademark of Vizrt Group. GodwinMix is not affiliated with,
-endorsed by, or sponsored by Vizrt.
+On Linux and macOS, and when you run a build from a checkout, install the
+runtime from <https://ndi.video/for-developers/ndi-sdk/>. The runtime alone is
+enough; the full SDK is not needed.
 
 The plugin loads the runtime at run time and never links against it, so it
 builds and runs on a machine that has never seen NDI and tells you where to get

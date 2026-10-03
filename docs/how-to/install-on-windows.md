@@ -75,10 +75,10 @@ The first four plugins are installed for you: the app copies them into
 camera is in the add source list from the first launch and nothing has to be
 typed at a command prompt. The others wait in the install folder and install
 themselves, in a moment and with nothing downloaded, the first time you pick
-something that needs one; until then nothing of theirs runs. NDI is the one
-exception to "nothing downloaded": its plugin is here, and it also needs NDI's
-own free runtime, whose licence does not let anyone pass it on. The plugin
-says where to get it. Anything you add later from the window goes into the
+something that needs one; until then nothing of theirs runs. NDI works the
+same way: the NDI® runtime travels in the ndi plugin's folder, under the NDI
+end user terms the installer shows with GodwinMix's own licence. NDI® is a
+registered trademark of Vizrt NDI AB; see <https://ndi.video/>. Anything you add later from the window goes into the
 same folder and survives an update.
 
 Web pages work from the first launch too. Add a page with its address and it

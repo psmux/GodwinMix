@@ -46,6 +46,16 @@ case "$(uname -s)" in
         # own, so its interface strings are never seen: one language is enough,
         # and Chromium falls back to en-US for the rest. 49 MB off on Windows.
         [[ -d "$OUT/locales" ]] && find "$OUT/locales" -type f ! -name 'en-US*' -delete
+        # Chromium's licence and the notices of everything inside it travel
+        # with the binaries they cover. The cef crate unpacks CREDITS.html and
+        # leaves LICENSE.txt in the archive it downloaded, so that is read too.
+        for credits in "$CEF_PATH"/*/cef_*/CREDITS.html; do
+            [[ -f "$credits" ]] && cp "$credits" "$OUT/"
+        done
+        for archive in "$CEF_PATH"/*/cef_binary_*.tar.bz2; do
+            [[ -f "$archive" ]] || continue
+            tar -xjf "$archive" -O --wildcards '*/LICENSE.txt' >"$OUT/LICENSE.txt" 2>/dev/null || rm -f "$OUT/LICENSE.txt"
+        done
         ;;
     *) echo "unknown platform: $(uname -s)" >&2; exit 1 ;;
 esac

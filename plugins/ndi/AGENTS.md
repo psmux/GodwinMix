@@ -29,11 +29,14 @@ plugins/ndi/bin/gmx-ndi                      # run by hand: says what it can see
 ## The rules that matter, in order
 
 1. **Never link NDI.** Not a build script, not a `-sys` crate, not a feature
-   flag. The runtime's licence forbids redistribution and the trademark belongs
-   to Vizrt. This plugin must build and run on a machine that has never seen
-   NDI. `libloading` is in `Cargo.toml` for exactly this and for nothing else.
-2. **Keep the attribution.** `README.md` carries the trademark notice and the
-   download page. Both stay.
+   flag. This plugin must build and run on a machine that has never seen NDI.
+   `libloading` is in `Cargo.toml` for exactly this and for nothing else. The
+   Windows installer ships the runtime DLL beside the binary, loaded the same
+   way; `README.md` says which terms that relies on.
+2. **Keep the attribution.** `README.md` carries the trademark line ("NDI® is
+   a registered trademark of Vizrt NDI AB") and the ndi.video link, and every
+   schema in `schemas/` carries them as `x-gmx-notice`. All of them stay, and a
+   new schema gets the same notice.
 3. **An absent runtime is a refusal, not a crash.** `library::missing()` is the
    one message, it names the download page and the reason it is not shipped, and
    every path that needs the runtime goes through `check_ready_for_ndi`. The

@@ -14,19 +14,33 @@ picks it by name, and nothing has an address to type.
 
 ## Attribution and the licence
 
-NDI is a registered trademark of Vizrt Group. GodwinMix is not affiliated with,
-endorsed by, or sponsored by Vizrt.
+NDI® is a registered trademark of Vizrt NDI AB. GodwinMix is not a product of
+Vizrt and is not affiliated with, endorsed by, or sponsored by it. More about
+NDI, and NDI's own tools: <https://ndi.video/>.
 
-The NDI runtime is **not shipped with this plugin and cannot be**: its licence
-does not permit redistribution. Download it from
-<https://ndi.video/for-developers/ndi-sdk/> (the runtime alone is enough, the
-SDK is not needed) and install it before adding an NDI source or output.
+The Windows installer carries the NDI runtime, `Processing.NDI.Lib.x64.dll`,
+in this plugin's `bin` folder with `Processing.NDI.Lib.Licenses.txt` beside it.
+The NDI SDK licence lets an application ship the runtime on three conditions,
+and GodwinMix meets each of them:
 
-This is why the plugin `dlopen`s the runtime instead of linking against it. It
-builds on a machine that has never seen NDI, runs on one, and refuses with the
-download page rather than failing to load. DistroAV, formerly obs-ndi,
-documented the licence and packaging friction this design avoids, and their
-experience is the reason it is done this way.
+* the DLL stays in the application's own folder, never a system one, so it
+  cannot clash with another program's copy;
+* the application's licence carries the NDI end user terms, which the Windows
+  installer shows before it installs (`tauri-app/windows-licence.txt`);
+* a link to ndi.video, with the trademark line, sits wherever NDI is picked.
+  The settings schemas carry it as `x-gmx-notice`, and every form shows it.
+
+`bin/gmx-ndi` sets `NDI_RUNTIME_DIR_V6` to its own folder when the DLL is
+there, so `ndisrc` and `ndisink` load the copy that came with it.
+
+On Linux and macOS, and in a build from a checkout, nothing is bundled. Install
+the runtime from <https://ndi.video/for-developers/ndi-sdk/> (the runtime alone
+is enough). The release job fetches the SDK on its Windows runner only.
+
+The plugin `dlopen`s the runtime instead of linking against it. It builds on a
+machine that has never seen NDI, runs on one, and refuses with the download
+page rather than failing to load. DistroAV, formerly obs-ndi, documented the
+packaging friction this design avoids.
 
 ## In four minutes
 

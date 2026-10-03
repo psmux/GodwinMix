@@ -2,6 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "NDI discovery",
   "description": "Listening for NDI senders on the network. There is nothing to configure: NDI announces itself over mDNS and this listens.",
+  "x-gmx-notice": { "text": "NDI® is a registered trademark of Vizrt NDI AB.", "link": "https://ndi.video/", "label": "ndi.video" },
   "type": "object",
   "additionalProperties": false,
   "properties": {}

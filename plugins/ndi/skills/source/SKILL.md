@@ -52,8 +52,8 @@ multiview or a picture in picture. It is a real saving, not a small one.
 
 ## When there is no runtime
 
-NDI's runtime is not ours to ship: its licence forbids redistribution. Without
-it this source refuses to start and the message carries the download page,
+The Windows installer carries NDI's runtime beside this plugin. Linux, macOS
+and a build from a checkout need it installed. Without it this source refuses to start and the message carries the download page,
 https://ndi.video/for-developers/ndi-sdk/. The runtime alone is enough; the SDK
 is not needed. An installer that put it somewhere unusual is found through
 `NDI_RUNTIME_DIR_V6`.

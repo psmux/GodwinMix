@@ -130,9 +130,9 @@ pub fn missing() -> String {
     format!(
         "the NDI runtime is not on this machine, so NDI sources and outputs cannot work. \
          It is a free download from https://ndi.video/for-developers/ndi-sdk/ (the \
-         runtime alone is enough; the SDK is not needed). GodwinMix does not ship it: \
-         its licence does not allow redistribution. Install it, or set one of {} to the \
-         directory holding {}, and start the plugin again.",
+         runtime alone is enough; the SDK is not needed). The Windows installer carries \
+         it beside this plugin; a build from a checkout, Linux and macOS do not. Install \
+         it, or set one of {} to the directory holding {}, and start the plugin again.",
         ENV_DIRS.join(", "),
         file_names().join(" or ")
     )
@@ -179,10 +179,10 @@ mod tests {
     }
 
     #[test]
-    fn the_message_for_a_missing_runtime_names_the_download_and_the_reason() {
+    fn the_message_for_a_missing_runtime_names_the_download_and_where_it_ships() {
         let message = missing();
         assert!(message.contains("ndi.video"), "{message}");
-        assert!(message.contains("redistribution"), "{message}");
+        assert!(message.contains("Windows installer"), "{message}");
         assert!(message.contains("NDI_RUNTIME_DIR_V6"), "{message}");
     }
 

@@ -667,6 +667,12 @@ def build(args: argparse.Namespace) -> int:
     for path in again:
         copy(path, lib_out / path.name)
 
+    # The licence texts of everything above. GStreamer is LGPL and so are
+    # most of the libraries under it, which have to travel with their terms.
+    licences = prefix / "share" / "licenses"
+    if licences.is_dir():
+        shutil.copytree(licences, out / "share" / "licenses", dirs_exist_ok=True)
+
     for path in list(out.rglob("*")):
         if path.is_file() and (path.suffix in NEVER_SUFFIX
                                or any(part in NEVER for part in path.parts)):
