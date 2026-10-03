@@ -1,14 +1,14 @@
 //! `ndi/source`, `ndi/output` and `ndi/discover`.
 //!
 //! NDI is how a camera, a graphics machine and a mixer talk to each other on a
-//! studio network without a capture card. It is also the one thing in this
-//! repository that cannot be shipped: the runtime's licence forbids
-//! redistribution, so this plugin links nothing NDI at build time, `dlopen`s
-//! the runtime to see whether it is there, and refuses with the download page
-//! when it is not.
+//! studio network without a capture card. The plugin links nothing NDI at
+//! build time: it `dlopen`s the runtime to see whether it is there, and
+//! refuses with the download page when it is not. The Windows installer
+//! carries the runtime beside this binary, which `library::prefer_bundled`
+//! points GStreamer's NDI elements at.
 //!
-//! NDI is a trademark of Vizrt Group. This plugin is not affiliated with or
-//! endorsed by Vizrt. See README.md.
+//! NDI® is a registered trademark of Vizrt NDI AB. This plugin is not
+//! affiliated with or endorsed by Vizrt. See README.md.
 
 mod library;
 mod media;

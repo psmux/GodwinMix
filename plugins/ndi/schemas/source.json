@@ -2,6 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "NDI source",
   "description": "Which sender on the network to receive from.",
+  "x-gmx-notice": { "text": "NDI® is a registered trademark of Vizrt NDI AB.", "link": "https://ndi.video/", "label": "ndi.video" },
   "type": "object",
   "additionalProperties": false,
   "properties": {

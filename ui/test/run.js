@@ -686,6 +686,17 @@ test("the two policies are named rather than spelled own and cdn", () => {
   eq(editing.enum.length, editing["x-gmx-labels"].length, "every choice on an edit is named too");
 });
 
+test("a plugin's notice sits above its fields, and only a web link is a link", () => {
+  const notice = { text: "NDI® is a registered trademark of Vizrt NDI AB.", link: "https://ndi.video/", label: "ndi.video" };
+  const form = new SchemaForm({ type: "object", "x-gmx-notice": notice, properties: { name: { type: "string" } } }, {});
+  const p = form.el.firstElementChild;
+  ok(p.classList.contains("notice") && p.textContent.includes("Vizrt NDI AB"), p.outerHTML);
+  eq(p.querySelector("a").getAttribute("href"), "https://ndi.video/");
+  const bad = new SchemaForm({ type: "object", "x-gmx-notice": { text: "hi", link: "javascript:alert(1)" }, properties: {} }, {});
+  ok(!bad.el.querySelector("a"), "a script link is dropped, the text kept");
+  ok(!new SchemaForm({ type: "object", properties: {} }, {}).el.querySelector(".notice"));
+});
+
 test("an SRT destination has an address and no key at all", () => {
   const srt = PLATFORMS.find((p) => p.id === "srt");
   const form = new SchemaForm(schemaFor(srt, null), {});

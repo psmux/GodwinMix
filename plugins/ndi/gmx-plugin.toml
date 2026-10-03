@@ -1,9 +1,9 @@
-# ndi. The one plugin whose runtime cannot be shipped.
+# ndi. NDI® sources and outputs; NDI® is a registered trademark of Vizrt NDI AB.
 #
-# The NDI runtime's licence forbids redistribution and NDI is a trademark of
-# Vizrt Group, so this plugin links nothing NDI at build time, dlopens the
-# runtime to see whether it is there, and refuses with the download page when it
-# is not. The attribution is in README.md.
+# This plugin links nothing NDI at build time, dlopens the runtime to see
+# whether it is there, and refuses with the download page when it is not. The
+# Windows installer carries the runtime beside the binary. The attribution, and
+# the terms that shipping rests on, are in README.md.
 #
 # Note on the core as it stands: ndi/output and ndi/discover are written to the
 # contract and not reachable yet. The output registry in
@@ -15,7 +15,7 @@
 name = "ndi"
 version = "0.1.0"
 api = 1
-description = "NDI sources and outputs, with mDNS discovery of every NDI sender on the network. The NDI runtime is loaded at run time and never linked, so the plugin builds and runs on a machine that has never had it and says where to get it."
+description = "NDI® sources and outputs, with mDNS discovery of every NDI sender on the network (https://ndi.video/). The NDI runtime is loaded at run time and never linked: the Windows installer carries it beside the plugin, and elsewhere the plugin says where to get it. NDI® is a registered trademark of Vizrt NDI AB."
 license = "Apache-2.0"
 authors = ["GodwinMix"]
 repository = "https://github.com/psmux/godwinmix"

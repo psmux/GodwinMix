@@ -214,10 +214,11 @@ Annotations: `readOnlyHint = false`, `destructiveHint = false`,
 
 ## `ndi/source`, `ndi/output` and `ndi/discover`
 
-The NDI runtime is `dlopen`ed and never linked. Its licence forbids
-redistribution; NDI is a registered trademark of Vizrt Group and GodwinMix is
-not affiliated with or endorsed by Vizrt. Download the runtime from
-<https://ndi.video/for-developers/ndi-sdk/>.
+The NDI® runtime is `dlopen`ed and never linked. The Windows installer carries
+it beside the plugin under the NDI end user terms; elsewhere, download it from
+<https://ndi.video/for-developers/ndi-sdk/>. NDI® is a registered trademark of
+Vizrt NDI AB, and GodwinMix is not affiliated with or endorsed by Vizrt. See
+<https://ndi.video/>.
 
 `ndi/source`:
 

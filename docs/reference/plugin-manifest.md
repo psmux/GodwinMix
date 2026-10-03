@@ -366,12 +366,13 @@ web, TUI and agent. Conditional visibility uses `if` and `then`.
 Give every property a `description`, a `default` and at least one entry in
 `examples`. The conformance harness feeds each example to `configure`.
 
-Two GodwinMix extensions:
+Three GodwinMix extensions:
 
 | Extension | Meaning |
 |---|---|
 | `"format": "secret"` | stored encrypted and never returned by `plugin.settings.get` |
 | `"x-gmx-unit"` | `"db"`, `"ms"` or `"kbit"`; the surface renders the unit |
+| `"x-gmx-notice"` | on the schema itself: `{ "text", "link", "label" }`, a line shown above the fields with an optional `https` link. For a notice a licence asks for where the feature is picked, such as NDI's trademark line and ndi.video |
 
 ```json
 "gain_db": {

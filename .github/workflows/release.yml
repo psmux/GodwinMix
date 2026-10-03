@@ -242,6 +242,22 @@ jobs:
             cp target/release/godwinmix "tauri-app/binaries/godwinmix-${triple}"
           fi
 
+      # The NDI SDK, for the one file of it the installer carries: the runtime
+      # DLL and its licence notices, copied beside the ndi plugin by
+      # bundle-plugins.sh. The SDK's terms allow that when the application's
+      # own licence carries the NDI end user terms, which windows-licence.txt
+      # does, and a link to ndi.video sits wherever NDI is picked.
+      - name: NDI SDK (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $exe = "$env:RUNNER_TEMP\ndi-sdk.exe"
+          Invoke-WebRequest "https://downloads.ndi.tv/SDK/NDI_SDK/NDI%206%20SDK.exe" -OutFile $exe
+          $dir = "$env:RUNNER_TEMP\ndi-sdk"
+          Start-Process $exe -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/DIR=`"$dir`"" -Wait
+          if (-not (Test-Path "$dir\Bin\x64\Processing.NDI.Lib.x64.dll")) { throw "the NDI SDK did not install to $dir" }
+          "NDI_SDK_DIR=$dir" | Out-File -FilePath $env:GITHUB_ENV -Append
+
       # The camera, the screen and the microphone, staged the way the core
       # expects to find an installed plugin. Without this step the app goes out
       # with no way to add a source that is not a file or a URL, and the
