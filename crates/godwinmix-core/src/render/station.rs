@@ -31,6 +31,10 @@ struct Inner {
     /// Set by the binary: measure in a child process, so a driver that
     /// crashes while it loads costs that child and not this process.
     apart: parking_lot::Mutex<Option<Apart>>,
+    /// The calibrating child while one runs, and whether the station has
+    /// stopped and wants no more.
+    child: parking_lot::Mutex<Option<std::process::Child>>,
+    halted: AtomicBool,
 }
 
 /// What a show tells its station when something starts or stops going out.
@@ -72,6 +76,8 @@ impl Station {
                 wanted: AtomicBool::new(false),
                 on_air_told: parking_lot::Mutex::new(None),
                 apart: parking_lot::Mutex::new(None),
+                child: parking_lot::Mutex::new(None),
+                halted: AtomicBool::new(false),
             }),
         }
     }

@@ -77,6 +77,7 @@ pub async fn run(opts: Options) -> Result<()> {
     }
     info!("station shutting down; stopping every show");
     st.stopping.store(true, Ordering::SeqCst);
+    render.stop_calibrating();
     let ids = st.registry.lock().ids();
     futures_util::future::join_all(ids.iter().map(|id| supervise::stop(&st, id))).await;
     let _ = tokio::task::spawn_blocking(move || ingest.shutdown()).await;
