@@ -207,6 +207,12 @@ if ($LASTEXITCODE -ne 0) {
 
 Remove-Item $registry -ErrorAction SilentlyContinue
 
+# gst-inspect makes share\gstreamer-1.0\presets on its first run. An empty
+# folder in the installer is one the uninstaller never removes, so it goes.
+Get-ChildItem $Out -Recurse -Directory | Sort-Object { $_.FullName.Length } -Descending |
+    Where-Object { -not (Get-ChildItem $_.FullName -Force) } |
+    ForEach-Object { Remove-Item $_.FullName }
+
 if ($failed -ne 0) {
     Write-Host ""
     throw "the trimmed tree is missing something the mixer needs"

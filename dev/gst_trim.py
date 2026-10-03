@@ -625,6 +625,12 @@ def build(args: argparse.Namespace) -> int:
         if path.is_file() and (path.suffix in NEVER_SUFFIX
                                or any(part in NEVER for part in path.parts)):
             path.unlink()
+    # A folder emptied above is left out too. An installer creates an empty
+    # folder and then has no file to remove it by, so the Windows uninstaller
+    # left share\gstreamer-1.0\presets behind in Program Files.
+    for path in sorted(out.rglob("*"), key=lambda p: len(p.parts), reverse=True):
+        if path.is_dir() and not any(path.iterdir()):
+            path.rmdir()
 
     if platform == "macos":
         relocate_macos(out)
