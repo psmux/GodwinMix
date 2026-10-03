@@ -75,9 +75,6 @@ impl VideoPads {
     /// flowing changes nothing.
     pub fn attach(&self, pad: &gst::Pad) {
         let mut inner = self.inner.lock();
-        // Pads whose element is gone, such as the tiles of a mosaic that was
-        // taken down and built again, so the list does not grow with each.
-        inner.pads.retain(|p| p.parent().is_some());
         pad.set_offset(inner.offset);
         if !inner.pads.iter().any(|p| p == pad) {
             inner.pads.push(pad.clone());
@@ -92,6 +89,13 @@ impl VideoPads {
         if !inner.pads.iter().any(|p| p == pad) {
             inner.pads.push(pad.clone());
         }
+    }
+
+    /// Forget pads whose element is gone. For a list of mosaic tiles, which
+    /// are built again with every mosaic; not for the programme's, where a
+    /// pad can be held before its element is placed.
+    pub fn prune(&self) {
+        self.inner.lock().pads.retain(|p| p.parent().is_some());
     }
 
     pub fn detach(&self, pad: &gst::Pad) {
