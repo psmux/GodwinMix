@@ -8,11 +8,14 @@
 //! Linux reads `/proc`, which is two small files and no process spawn. Other
 //! Unixes ask `ps` once per sample for every pid at a time, because `ps`
 //! accepts a list and starting it once a second for eight plugins is one
-//! process, not eight. Windows has neither and reports memory only, from
-//! `tasklist`, with cpu left as `None` rather than invented.
+//! process, not eight. Windows asks the kernel for each pid's times and
+//! working set directly (`sampler/win.rs`), with no process started.
 
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
+
+#[cfg(windows)]
+mod win;
 
 /// What one process cost at the last sample.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
@@ -39,13 +42,12 @@ impl Sampler {
     pub fn sample(&mut self, pids: &[u32]) -> HashMap<u32, Sample> {
         #[allow(unused_mut)]
         let mut out = read_all(pids);
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", windows))]
         for (pid, sample) in out.iter_mut() {
-            if let Some(ticks) = linux_ticks(*pid) {
+            if let Some((ticks, hz)) = cpu_ticks(*pid) {
                 let now = Instant::now();
                 if let Some((then, before)) = self.last.get(pid) {
                     let elapsed = now.duration_since(*then).as_secs_f64();
-                    let hz = clock_ticks_per_second();
                     if elapsed > 0.0 && ticks >= *before {
                         let seconds = (ticks - before) as f64 / hz;
                         sample.cpu_percent = Some(100.0 * seconds / elapsed);
@@ -65,9 +67,15 @@ impl Sampler {
     }
 }
 
+/// Cumulative CPU time for a pid, and how many of its units make a second.
 #[cfg(target_os = "linux")]
-fn clock_ticks_per_second() -> f64 {
-    100.0
+fn cpu_ticks(pid: u32) -> Option<(u64, f64)> {
+    linux_ticks(pid).map(|t| (t, 100.0))
+}
+
+#[cfg(windows)]
+fn cpu_ticks(pid: u32) -> Option<(u64, f64)> {
+    win::read(pid).map(|(t, _)| (t, 10_000_000.0))
 }
 
 #[cfg(target_os = "linux")]
@@ -136,30 +144,17 @@ fn read_all(pids: &[u32]) -> HashMap<u32, Sample> {
     out
 }
 
-/// Windows: memory from `tasklist`, and cpu left unanswered rather than
-/// guessed. A percentage that means nothing is worse than a blank.
-#[cfg(not(unix))]
+/// Windows: the working set, from the kernel. CPU is filled in by `sample`.
+#[cfg(windows)]
 fn read_all(pids: &[u32]) -> HashMap<u32, Sample> {
-    let mut out = HashMap::new();
-    for pid in pids {
-        let Ok(result) = std::process::Command::new("tasklist")
-            .args(["/FI", &format!("PID eq {pid}"), "/FO", "CSV", "/NH"])
-            .output()
-        else {
-            continue;
-        };
-        let text = String::from_utf8_lossy(&result.stdout);
-        // The row is `"name","pid","session","session#","7,168 K"`: the
-        // memory column is last and carries a thousands separator inside its
-        // quotes, so splitting on the bare comma read `"7` and answered seven
-        // kilobytes for every process. Take the last quoted field instead.
-        let Some(field) = text.trim_end().rsplit("\",\"").next() else { continue };
-        let digits: String = field.chars().filter(char::is_ascii_digit).collect();
-        if let Ok(kb) = digits.parse::<u64>() {
-            out.insert(*pid, Sample { cpu_percent: None, rss_bytes: Some(kb * 1024) });
-        }
-    }
-    out
+    pids.iter()
+        .filter_map(|pid| win::read(*pid).map(|(_, rss)| (*pid, Sample { cpu_percent: None, rss_bytes: Some(rss) })))
+        .collect()
+}
+
+#[cfg(not(any(unix, windows)))]
+fn read_all(_pids: &[u32]) -> HashMap<u32, Sample> {
+    HashMap::new()
 }
 
 /// How often the numbers are refreshed. 03 section 6: every second.
@@ -182,6 +177,21 @@ mod tests {
         };
         let rss = sample.rss_bytes.expect("a running process has a resident size");
         assert!(rss > 1024 * 1024, "{rss} bytes is too small to be a real process");
+    }
+
+    #[cfg(any(target_os = "linux", windows))]
+    #[test]
+    fn a_busy_process_shows_its_cpu_on_the_second_sample() {
+        let mut sampler = Sampler::new();
+        let me = std::process::id();
+        sampler.sample(&[me]);
+        let until = Instant::now() + Duration::from_millis(300);
+        let mut spin = 0u64;
+        while Instant::now() < until {
+            spin = spin.wrapping_add(1);
+        }
+        let cpu = sampler.sample(&[me])[&me].cpu_percent.expect("a cpu reading");
+        assert!(cpu > 10.0, "{cpu}% after spinning ({spin})");
     }
 
     #[test]
