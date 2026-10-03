@@ -41,6 +41,9 @@ pub async fn run(opts: Options) -> Result<()> {
         cfg.hardware.encode,
         &runtime,
     );
+    if let Some(apart) = super::calibrate::apart(&opts.config, opts.codecs.as_deref()) {
+        render.measure_apart_with(apart);
+    }
     let exe = std::env::current_exe().context("finding this program, to start the shows with")?;
     let launch = Launch { exe, common: opts.common.clone(), calibration: Some(runtime.clone()) };
     let st = Station::new(Registry::open(&opts.config)?, events.clone(), tokens, render.clone(), launch);
