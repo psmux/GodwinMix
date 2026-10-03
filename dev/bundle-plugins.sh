@@ -193,13 +193,14 @@ for i in "${!WANTED[@]}"; do
     done
 
     # Where this copy came from, in the words `gmx plugin list` and the window
-    # print. Nothing signed it: it was built from the tree the app was built
-    # from, which is a different claim from a signature and is written as one.
+    # print: "ships with GodwinMix". Nothing signed it; it was built from the
+    # tree the app was built from, which is a different claim from a signature
+    # and is written as one.
     cat > "$dest/.gmx-trust.json" <<JSON
 {
   "source": "the GodwinMix desktop app",
   "resolved": "built from plugins/${WANTED[$i]} and staged into the app bundle",
-  "unsigned_because": "it was built from the same source tree as the app it travels in, and nothing signed either of them"
+  "shipped": true
 }
 JSON
 
