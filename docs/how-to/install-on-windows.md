@@ -66,21 +66,28 @@ video mixer will start. So the installer carries a trimmed copy:
 | the desktop shell | 9 MB |
 | the mixer itself | 8 MB |
 | GStreamer, trimmed to what the codec catalogue and the pipelines name | 85 to 110 MB |
-| the camera, the screen and the microphone, which are plugins | 4 MB |
+| the camera, the screen, the microphone and the RTMP and SRT ingest, which are plugins | 9 MB |
+| every other plugin that runs on Windows (SRT, WHIP, UDP, IP cameras, NDI, DeckLink, graphics, OSC, tally and more) | 33 MB |
+| the web page renderer, Chromium, for a YouTube page or a scoreboard as a source | 340 MB, much less once compressed |
 
-Those three are installed for you. The web page renderer is not in the
-installer yet, because Chromium alone is larger than the 150 MB budget below.
-Until it is, a web page on Windows needs the renderer built from a source
-checkout, which the mixer does by itself the first time a web page is added
-when it runs from one. The app copies them into
-`%APPDATA%\mix.godwin.desktop\plugins` the first time it starts the mixer, so
-a camera is in the add source list from the first launch and nothing has to be
-typed at a command prompt. Anything you add later from the window goes into the
+The first four plugins are installed for you: the app copies them into
+`%APPDATA%\mix.godwin.desktop\plugins` the first time it starts the mixer, so a
+camera is in the add source list from the first launch and nothing has to be
+typed at a command prompt. The others wait in the install folder and install
+themselves, in a moment and with nothing downloaded, the first time you pick
+something that needs one; until then nothing of theirs runs. NDI is the one
+exception to "nothing downloaded": its plugin is here, and it also needs NDI's
+own free runtime, whose licence does not let anyone pass it on. The plugin
+says where to get it. Anything you add later from the window goes into the
 same folder and survives an update.
 
-The budget for the whole installer is 150 MB, measured on every push by the
-`platforms` job in CI, which fails if it is exceeded. OBS Studio, for
-comparison, ships about 160 MB with everything inside it.
+Web pages work from the first launch too. Add a page with its address and it
+renders in the bundled Chromium, sound included.
+
+All of that comes to an installer of about 160 MB for the `.exe` and 225 MB for
+the `.msi`, whose compression suits Chromium less well. The budget is 250 MB,
+checked by the release workflow, which will not publish an installer over it.
+OBS Studio, for comparison, ships about 160 MB with everything inside it.
 
 What travels: the core and base plugins, the good plugins the containers and
 the multiview mosaic need, `rtmp2` and `srt` for the two ways a programme

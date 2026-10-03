@@ -1,6 +1,8 @@
 # The device plugins that travel inside the app, one directory per platform,
 # are build output and never source. The plugins themselves are in plugins/ at
-# the top of the repository; what lands here is a built copy of three of them:
+# the top of the repository; what lands here is built copies of them: the
+# ones seeded at launch under <platform>/, and every other one this platform
+# runs under <name>/, installed on first use:
 #
 #   dev/bundle-plugins.sh
 #
@@ -9,7 +11,5 @@
 # into the application data directory at launch. With nothing here the app
 # leaves the mixer's own plugins directory alone, which is how a developer
 # build and a bare `godwinmix` keep working.
-macos/
-windows/
-linux/
+/*
 !.gitignore
