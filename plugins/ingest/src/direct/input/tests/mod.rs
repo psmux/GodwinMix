@@ -97,7 +97,9 @@ pub fn eventually(secs: u64, mut done: impl FnMut() -> bool) -> bool {
 }
 
 pub fn which(tool: &str) -> bool {
-    let found = std::env::var_os("PATH").is_some_and(|p| std::env::split_paths(&p).any(|d| d.join(tool).is_file()));
+    // `gst-launch-1.0` has a dot in it, so Windows never adds the .exe itself.
+    let exe = format!("{tool}{}", std::env::consts::EXE_SUFFIX);
+    let found = std::env::var_os("PATH").is_some_and(|p| std::env::split_paths(&p).any(|d| d.join(&exe).is_file()));
     if !found {
         eprintln!("skipping: needs {tool} on PATH");
     }
@@ -115,7 +117,7 @@ impl Drop for Sender {
 }
 
 pub fn spawn(tool: &str, args: &[&str]) -> Sender {
-    let child = Command::new(tool).args(args).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).spawn();
+    let child = Command::new(format!("{tool}{}", std::env::consts::EXE_SUFFIX)).args(args).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).spawn();
     Sender(child.unwrap_or_else(|e| panic!("{tool} would not start: {e}")))
 }
 
