@@ -150,7 +150,7 @@ for i in "${!WANTED[@]}"; do
     cp "$manifest" "$dest/gmx-plugin.toml"
     cp "$built" "$dest/bin/$binary"
     chmod +x "$dest/bin/$binary"
-    for extra in schemas skills ui; do
+    for extra in schemas skills ui designer; do
         if [[ -d "$dir/$extra" ]]; then
             cp -R "$dir/$extra" "$dest/$extra"
         fi
