@@ -22,7 +22,7 @@ def strip_tool(platform: str) -> str | None:
                 return str(candidate)
     if platform == "windows" and shutil.which("rustc"):
         root = subprocess.run(["rustc", "--print", "sysroot"], check=True,
-                              capture_output=True, text=True).stdout.strip()
+                              capture_output=True, text=True, encoding="utf-8", errors="replace").stdout.strip()
         tools = sorted(Path(root).glob("lib/rustlib/*/bin/llvm-objcopy.exe"))
         if tools:
             return str(tools[0])
@@ -47,7 +47,7 @@ def strip_debug(root: Path, platform: str) -> None:
             continue
         before = path.stat().st_size
         result = subprocess.run([tool, "--strip-debug", str(path)],
-                                capture_output=True, text=True)
+                                capture_output=True, text=True, encoding="utf-8", errors="replace")
         if result.returncode:
             raise RuntimeError(f"cannot strip debug sections from {path}: {result.stderr.strip()}")
         saved += before - path.stat().st_size

@@ -179,8 +179,10 @@ def inspect(prefix: Path, plugins: Path, registry: Path, args: list[str]) -> str
     if libdir.is_dir():
         for var in ("DYLD_LIBRARY_PATH", "LD_LIBRARY_PATH"):
             env[var] = str(libdir) + os.pathsep + env.get(var, "")
+    # UTF-8 by name: a Windows console decodes with its code page otherwise,
+    # and one plugin description outside it left stdout as None.
     out = subprocess.run([str(exe), *args], env=env, capture_output=True,
-                         text=True)
+                         text=True, encoding="utf-8", errors="replace")
     return out.stdout
 
 
@@ -235,7 +237,7 @@ def plugin_file(prefix: Path, plugins: Path, registry: Path,
 
 def imports_macho(path: Path) -> list[str]:
     out = subprocess.run(["otool", "-L", str(path)], capture_output=True,
-                         text=True).stdout
+                         text=True, encoding="utf-8", errors="replace").stdout
     names = []
     for line in out.splitlines()[1:]:
         line = line.strip()
@@ -246,10 +248,10 @@ def imports_macho(path: Path) -> list[str]:
 
 def imports_elf(path: Path) -> list[str]:
     out = subprocess.run(["objdump", "-p", str(path)], capture_output=True,
-                         text=True).stdout
+                         text=True, encoding="utf-8", errors="replace").stdout
     if not out:
         out = subprocess.run(["readelf", "-d", str(path)], capture_output=True,
-                             text=True).stdout
+                             text=True, encoding="utf-8", errors="replace").stdout
     return re.findall(r"NEEDED\s+\[?([^\s\]]+)", out)
 
 
