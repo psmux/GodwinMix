@@ -341,10 +341,19 @@ impl EncodeChain {
     /// Bring the chain up and join it to the tee.
     ///
     /// The lock on each element's state is lifted first, then the chain is
-    /// linked, then it is brought up to whatever the pipeline is doing. The
-    /// last act is a force-key-unit event upstream, so the first frame out of
-    /// a freshly started encoder is an IDR and an output that arrived at an
-    /// idle core is not waiting a GOP for a picture.
+    /// brought up to whatever the pipeline is doing, and only then joined to
+    /// the tee. The last act is a force-key-unit event upstream, so the first
+    /// frame out of a freshly started encoder is an IDR and an output that
+    /// arrived at an idle core is not waiting a GOP for a picture.
+    ///
+    /// Up first, linked second, the order `Source::attach_thumb_end` uses and
+    /// for the same reason. This used to link first, so the tee handed frames
+    /// to a chain still on its way up, whose pads answer `GST_FLOW_FLUSHING`
+    /// until they are active. A software encoder is up in microseconds and
+    /// nearly always won. A hardware one opens its session on the way up, a
+    /// second for Quick Sync and Media Foundation on Windows, and lost three
+    /// starts in five: the encoder never saw a frame and every output, a
+    /// stream or a recording, sat at zero bytes for good.
     pub fn attach(&mut self) -> Result<()> {
         if self.pad.is_some() {
             return Ok(());
@@ -357,16 +366,20 @@ impl EncodeChain {
         for el in &self.chain {
             el.set_locked_state(false);
         }
+        // Tail first, so every element downstream of the encoder is ready to
+        // take a buffer before the encoder can produce one, and all of it is
+        // up before the tee can hand the head a frame.
+        for el in self.chain.iter().rev() {
+            el.sync_state_with_parent()
+                .with_context(|| format!("{} encode chain would not start", self.tag))?;
+        }
         let pad = self
             .tee
             .request_pad_simple("src_%u")
             .context("the raw programme tee refused a pad for the encoder")?;
-        pad.link(&sink).context("linking the encoder onto the raw programme tee")?;
-        // Tail first, so every element downstream of the encoder is ready to
-        // take a buffer before the encoder can produce one.
-        for el in self.chain.iter().rev() {
-            el.sync_state_with_parent()
-                .with_context(|| format!("{} encode chain would not start", self.tag))?;
+        if let Err(e) = pad.link(&sink) {
+            self.tee.release_request_pad(&pad);
+            return Err(anyhow::Error::from(e).context("linking the encoder onto the raw programme tee"));
         }
         gstutil::force_keyframe(&pad);
         self.pad = Some(pad);
