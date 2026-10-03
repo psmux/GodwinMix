@@ -8,6 +8,7 @@
 //! `GMX_PROVIDE` says which.
 
 mod handlers;
+mod mount;
 mod radio;
 mod send;
 mod settings;

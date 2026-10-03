@@ -83,7 +83,11 @@ impl Output for IcecastOutput {
         if let Some(f) = s.pipe.failure() {
             return Health::failing(format!("sending to {} failed: {f}", self.settings.describe()));
         }
-        let sent = s.bytes.load(std::sync::atomic::Ordering::Relaxed);
+        let sent = s.sent();
+        let refused = s.state.last_error.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        if let (Some(why), false) = (refused, s.state.connected.load(std::sync::atomic::Ordering::Relaxed)) {
+            return Health::degraded(format!("{why} Trying again."));
+        }
         if sent == 0 {
             return Health::degraded(format!("connected to {}, waiting for the programme's sound", self.settings.describe()));
         }
@@ -94,7 +98,7 @@ impl Output for IcecastOutput {
 
     fn call(&mut self, method: &str, _params: Value) -> Result<Value, RpcError> {
         match method {
-            "stats" => Ok(json!({"address": self.settings.describe(), "bytes_sent": self.sender.as_ref().map(|s| s.bytes.load(std::sync::atomic::Ordering::Relaxed))})),
+            "stats" => Ok(json!({"address": self.settings.describe(), "bytes_sent": self.sender.as_ref().map(Sender::sent)})),
             other => Err(no_method("icecast/output", other)),
         }
     }
