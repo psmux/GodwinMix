@@ -92,9 +92,9 @@ fn write_one_second(path: &std::path::Path, with_audio: bool) -> usize {
 fn decode(path: &std::path::Path, media: &str) -> (gst::Caps, usize) {
     gst::init().expect("GStreamer would not start");
     let description = format!(
-        "filesrc location={} ! decodebin name=d ! queue ! {media}convert ! \
+        "filesrc location=\"{}\" ! decodebin name=d ! queue ! {media}convert ! \
          appsink name=out sync=false max-buffers=0",
-        path.display()
+        path.display().to_string().replace('\\', "/")
     );
     let pipeline = gst::parse::launch(&description)
         .expect("could not build the reading pipeline")

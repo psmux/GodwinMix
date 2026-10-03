@@ -18,7 +18,9 @@
 use std::net::Ipv4Addr;
 
 use gstreamer as gst;
+#[cfg(unix)]
 use gstreamer::glib;
+#[cfg(unix)]
 use gstreamer::prelude::*;
 
 /// The IPv4 address of `iface`: itself if it is one, else the first IPv4
@@ -107,11 +109,10 @@ pub fn send_multicast_out(_sink: &gst::Element, _iface: &str) -> Result<(), Stri
     Ok(())
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
 
-    #[cfg(unix)]
     #[test]
     fn the_loopback_is_found_by_name_and_by_address() {
         let lo = interfaces().into_iter().find(|(_, a)| a.is_loopback()).expect("a loopback interface");

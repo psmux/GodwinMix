@@ -43,10 +43,10 @@ fn core_like_writer(gst: &Path, fifo: &Path, reference: &Path, frames: u32) -> C
     let line = format!(
         "videotestsrc is-live=true num-buffers={frames} pattern=ball ! \
          video/x-raw,width=320,height=240,framerate=30/1 ! x264enc tune=zerolatency key-int-max=30 ! \
-         h264parse ! tee name=t ! queue ! matroskamux streamable=true ! filesink location={} \
-         t. ! queue ! matroskamux ! filesink location={}",
-        fifo.display(),
-        reference.display()
+         h264parse ! tee name=t ! queue ! matroskamux streamable=true ! filesink location=\"{}\" \
+         t. ! queue ! matroskamux ! filesink location=\"{}\"",
+        fifo.display().to_string().replace('\\', "/"),
+        reference.display().to_string().replace('\\', "/")
     );
     Command::new(gst)
         .arg("-q")

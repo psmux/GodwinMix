@@ -36,6 +36,7 @@ impl Drop for Running {
 }
 
 impl Running {
+    #[cfg(unix)]
     pub fn pid(&self) -> u32 {
         self.child.id()
     }

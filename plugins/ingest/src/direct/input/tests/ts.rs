@@ -1,5 +1,6 @@
 //! MPEG-TS over UDP, RTP, SRT and RIST.
 
+#[cfg(target_os = "macos")]
 use gstreamer::prelude::*;
 use serde_json::json;
 

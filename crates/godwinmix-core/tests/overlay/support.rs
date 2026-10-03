@@ -119,7 +119,7 @@ pub fn half_red_png(path: &std::path::Path, w: u32, h: u32) {
     }
     let pipe = gst::parse::launch(&format!(
         "appsrc name=s caps=video/x-raw,format=RGBA,width={w},height={h},framerate=1/1 ! pngenc ! filesink location=\"{}\"",
-        path.display()
+        path.display().to_string().replace('\\', "/")
     ))
     .unwrap()
     .downcast::<gst::Pipeline>()

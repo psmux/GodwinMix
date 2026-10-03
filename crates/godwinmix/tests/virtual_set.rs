@@ -64,7 +64,7 @@ fn png(path: &std::path::Path, rgba: [u8; 4]) {
     let _ = gstreamer::init();
     let pipe = gstreamer::parse::launch(&format!(
         "appsrc name=s caps=video/x-raw,format=RGBA,width=32,height=18,framerate=1/1 ! pngenc ! filesink location=\"{}\"",
-        path.display()
+        path.display().to_string().replace('\\', "/")
     ))
     .unwrap()
     .downcast::<gstreamer::Pipeline>()

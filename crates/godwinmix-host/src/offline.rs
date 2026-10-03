@@ -194,6 +194,7 @@ fn one_line(value: &Value) -> String {
 mod tests {
     use super::*;
 
+    #[cfg(unix)]
     const TRANSCRIPT: &str = r#"
 # The handshake, and nothing else.
 {"plugin": {"method": "initialize", "params": {"plugin": "echo"}}}

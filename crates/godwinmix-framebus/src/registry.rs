@@ -128,6 +128,9 @@ fn user_id() -> String {
 mod tests {
     use super::*;
 
+    // The short address is a Unix socket path under /tmp; Windows has no bus
+    // transport yet (see CROSS_PROCESS).
+    #[cfg(unix)]
     #[test]
     fn a_long_directory_is_reached_through_a_short_address() {
         let dir = PathBuf::from(format!("/tmp/fb-long-{}/{}", std::process::id(), "d".repeat(100)));

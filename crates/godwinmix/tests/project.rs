@@ -44,7 +44,7 @@ async fn start(dir: &Path, text: &str) -> Core {
     let _ = gstreamer::init();
     std::fs::create_dir_all(dir).unwrap();
     let path = dir.join("godwinmix.toml");
-    std::fs::write(&path, format!("{text}\n[media]\ndir = \"{}\"\n", dir.join("media").display())).unwrap();
+    std::fs::write(&path, format!("{text}\n[media]\ndir = '{}'\n", dir.join("media").display())).unwrap();
     let cfg = Config::load(&path).expect("the test config loads");
     let (mut mix, handle, cmd_rx, mut bus_rx) = Mixer::build(cfg.clone()).expect("building");
     mix.start().expect("starting the mixer");

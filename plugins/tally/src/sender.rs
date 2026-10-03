@@ -99,7 +99,10 @@ mod tests {
         sender.send(&tsl::encode(0, &display, false)).await.unwrap();
 
         let mut buffer = [0u8; 256];
-        let (length, _) = listener.recv_from(&mut buffer).await.unwrap();
+        let (length, _) = tokio::time::timeout(std::time::Duration::from_secs(5), listener.recv_from(&mut buffer))
+            .await
+            .expect("no packet within five seconds; is loopback UDP blocked on this machine?")
+            .unwrap();
         let read = tsl::decode(&buffer[..length]).expect("a packet");
         assert_eq!(read.displays, vec![display]);
     }
