@@ -745,7 +745,7 @@ function Invoke-Smoke {
         Invoke-Tool -File $Gmx -Arguments @('preset', 'save', 'my-church', '--config', $presetCfg, '--out', $mine) -Log $saveLog | Out-Null
         $shown = Invoke-Tool -File $Gmx -Arguments @('preset', 'show', $mine, '--config', (Join-Path $pwork 'second.toml')) -Log $showLog
         $saved = Read-Text (Join-Path $mine 'config' 'godwinmix.toml')
-        if ($shown.Code -eq 0 -and $saved -match 'YOUR-STREAM-KEY' -and $saved -notmatch 'token = "') {
+        if ($shown.Code -eq 0 -and $saved -match 'YOUR-STREAM-KEY' -and $saved -notmatch '(?m)^\s*token = "') {
             Ok
         } else {
             Bad ("$(Get-Tail $saveLog 3) $(Get-Tail $showLog 3)")

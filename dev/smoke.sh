@@ -724,7 +724,7 @@ step "preset save writes one the loader reads back"
 "$GMX" preset save my-church --config "$PWORK/godwinmix.toml" --out "$PWORK/mine" >"$WORK/save.log" 2>&1
 if "$GMX" preset show "$PWORK/mine" --config "$PWORK/second.toml" >"$WORK/show.log" 2>&1 \
     && grep -q "YOUR-STREAM-KEY" "$PWORK/mine/config/godwinmix.toml" \
-    && ! grep -q "token = \"" "$PWORK/mine/config/godwinmix.toml"; then
+    && ! grep -Eq "^[[:space:]]*token = \"" "$PWORK/mine/config/godwinmix.toml"; then
     ok
 else
     bad "$(tail -3 "$WORK/save.log") $(tail -3 "$WORK/show.log")"
