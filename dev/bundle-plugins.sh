@@ -63,10 +63,18 @@ BUILD=1
 # tight budget: the 150 MB installer has 130 MB of it spoken for by GStreamer.
 BUDGET=20
 WANTED=()
+# --on-demand: every other plugin this platform can run, staged flat as
+# tauri-app/plugins/<name>, which is where the mixer looks for a copy shipped
+# beside it (plugin::first_party). The app does not seed these, so nothing of
+# theirs runs until somebody picks the feature; then it installs in a moment
+# with nothing to build or download.
+ONDEMAND=0
+OUT_SET=0
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --out) OUT="$2"; shift 2 ;;
+        --out) OUT="$2"; OUT_SET=1; shift 2 ;;
+        --on-demand) ONDEMAND=1; shift ;;
         --no-build) BUILD=0; shift ;;
         --budget-mb) BUDGET="$2"; shift 2 ;;
         --no-budget) BUDGET=0; shift ;;
@@ -76,7 +84,22 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-if [[ ${#WANTED[@]} -eq 0 ]]; then
+# The manifest key for this machine, as run.bin spells it.
+case "$(uname -m)" in arm64|aarch64) ARCH=aarch64 ;; *) ARCH=x86_64 ;; esac
+KEY="$PLATFORM-$ARCH"
+
+if [[ $ONDEMAND -eq 1 ]]; then
+    [[ $OUT_SET -eq 1 ]] || OUT="$REPO/tauri-app/plugins"
+    if [[ ${#WANTED[@]} -eq 0 ]]; then
+        for dir in "$REPO"/plugins/*/; do
+            name="$(basename "$dir")"
+            [[ -f "$dir/Cargo.toml" && -f "$dir/gmx-plugin.toml" ]] || continue
+            [[ " ${ALL[*]} " == *" $name "* ]] && continue
+            grep -q "\"$KEY\" *=" "$dir/gmx-plugin.toml" || continue
+            WANTED+=("$name")
+        done
+    fi
+elif [[ ${#WANTED[@]} -eq 0 ]]; then
     WANTED=("${ALL[@]}")
 fi
 
@@ -145,12 +168,13 @@ for i in "${!WANTED[@]}"; do
     fi
 
     dest="$OUT/$name/$version"
+    [[ $ONDEMAND -eq 1 ]] && dest="$OUT/$name"
     rm -rf "$dest"
     mkdir -p "$dest/bin"
     cp "$manifest" "$dest/gmx-plugin.toml"
     cp "$built" "$dest/bin/$binary"
     chmod +x "$dest/bin/$binary"
-    for extra in schemas skills ui designer; do
+    for extra in schemas skills ui designer examples; do
         if [[ -d "$dir/$extra" ]]; then
             cp -R "$dir/$extra" "$dest/$extra"
         fi

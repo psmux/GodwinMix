@@ -171,16 +171,23 @@ jobs:
             platform: windows
             bundles: msi,nsis
     env:
-      # 09-builders: at most 150 MB for the Windows installer, against the
-      # 527 MB the stock GStreamer runtime installer costs on its own and the
-      # 160 MB OBS ships self contained. A release that breaks this does not
-      # get published.
-      WINDOWS_INSTALLER_BUDGET_MB: 150
+      # The Windows installer. 09-builders set 150 MB, against the 527 MB the
+      # stock GStreamer runtime installer costs on its own and the 160 MB OBS
+      # ships self contained. That was before web pages and every plugin
+      # travelled inside it: a person who installs GodwinMix must be able to
+      # add a YouTube page or an SRT feed without fetching anything. Measured
+      # on 2026-10-03 with all of it in: 158 MB for the NSIS .exe and 224 MB
+      # for the .msi, whose cabinet compresses Chromium less well. A release
+      # that breaks this does not get published.
+      WINDOWS_INSTALLER_BUDGET_MB: 250
       RUNTIME_BUDGET_MB: 130
       # The three device plugins together, measured at 4 MB on macOS. A
       # tripwire rather than a tight budget: what fills the installer is
       # GStreamer, and these three have no business growing to twenty.
       PLUGINS_BUDGET_MB: 20
+      # Every other plugin this platform runs, installed on first use. 33 MB
+      # on Windows on 2026-10-03; the same tripwire kind of number.
+      ON_DEMAND_PLUGINS_BUDGET_MB: 80
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -239,16 +246,28 @@ jobs:
       # operator is back in a terminal running `gmx plugin add camera`.
       - name: The device plugins, inside the app
         shell: bash
-        run: ./dev/bundle-plugins.sh --budget-mb "$PLUGINS_BUDGET_MB"
+        run: |
+          ./dev/bundle-plugins.sh --budget-mb "$PLUGINS_BUDGET_MB"
+          # The rest, staged as plugins/<name> beside the mixer, where it finds
+          # a first party plugin the first time somebody picks its feature.
+          # Nothing of theirs runs until then.
+          ./dev/bundle-plugins.sh --on-demand --budget-mb "$ON_DEMAND_PLUGINS_BUDGET_MB"
 
       # The browser renderer, so a web page works in the installed app with
-      # nothing built on the operator's machine. CEF is large: not on Windows
-      # yet, where the installer budget above has no room for it.
+      # nothing built on the operator's machine. On every platform: on Windows
+      # too since the renderer carries the manifest Chromium needs there, and
+      # the budget above was measured with it in.
       - name: The browser renderer, inside the app
-        if: runner.os != 'Windows'
         shell: bash
         run: |
-          if [ "${{ runner.os }}" = macOS ]; then brew install cmake ninja; else sudo apt-get install -y cmake ninja-build; fi
+          case "${{ runner.os }}" in
+            macOS) brew install cmake ninja ;;
+            # choco puts cmake on the machine PATH, which this step does not
+            # see until the next one.
+            Windows) choco install -y --no-progress cmake ninja
+                     export PATH="/c/Program Files/CMake/bin:$PATH" ;;
+            *) sudo apt-get install -y cmake ninja-build ;;
+          esac
           ./dev/bundle-browser.sh
 
       # The trimmed runtime, which tauri.conf.json lists under
