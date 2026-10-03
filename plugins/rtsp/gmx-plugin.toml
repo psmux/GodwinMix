@@ -10,12 +10,12 @@ description = "Serve the programme over RTSP for decoders, recorders, NVRs and p
 license = "Apache-2.0"
 authors = ["GodwinMix"]
 repository = "https://github.com/psmux/godwinmix"
-platforms = ["linux-x86_64", "linux-aarch64", "macos-aarch64", "macos-x86_64"]
+platforms = ["linux-x86_64", "linux-aarch64", "macos-aarch64", "macos-x86_64", "windows-x86_64"]
 placements = ["sidecar", "node"]
 process = "per-instance"
 
 [run]
-bin = { "linux-x86_64" = "bin/gmx-rtsp", "linux-aarch64" = "bin/gmx-rtsp", "macos-aarch64" = "bin/gmx-rtsp", "macos-x86_64" = "bin/gmx-rtsp" }
+bin = { "linux-x86_64" = "bin/gmx-rtsp", "linux-aarch64" = "bin/gmx-rtsp", "macos-aarch64" = "bin/gmx-rtsp", "macos-x86_64" = "bin/gmx-rtsp", "windows-x86_64" = "bin/gmx-rtsp.exe" }
 
 [[provides]]
 kind = "output"

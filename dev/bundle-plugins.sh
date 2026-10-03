@@ -174,6 +174,18 @@ for i in "${!WANTED[@]}"; do
     cp "$manifest" "$dest/gmx-plugin.toml"
     cp "$built" "$dest/bin/$binary"
     chmod +x "$dest/bin/$binary"
+    # NDI's runtime travels with its plugin, as the NDI SDK licence lets an
+    # application ship it: in the application's own folder, never a system
+    # one, with Vizrt's third party licences beside it. From the SDK the
+    # release job installs (NDI_SDK_DIR). Without it the plugin still ships
+    # and says where to get the runtime.
+    if [[ "$name" == ndi && "$PLATFORM" == windows && -n "${NDI_SDK_DIR:-}" ]]; then
+        ndi_bin="$NDI_SDK_DIR/Bin/x64"
+        for f in Processing.NDI.Lib.x64.dll Processing.NDI.Lib.Licenses.txt; do
+            [[ -f "$ndi_bin/$f" ]] || { echo "FAIL (no $f in $ndi_bin)"; failed=1; continue 2; }
+            cp "$ndi_bin/$f" "$dest/bin/"
+        done
+    fi
     for extra in schemas skills ui designer examples; do
         if [[ -d "$dir/$extra" ]]; then
             cp -R "$dir/$extra" "$dest/$extra"

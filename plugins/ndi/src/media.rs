@@ -229,6 +229,9 @@ impl OutputSettings {
 /// A running NDI sender: the programme announced on the network.
 pub struct Announcer {
     pipe: Pipe,
+    /// Reads the core's pipe into the pipeline on Windows; nothing on Unix,
+    /// where `filesrc` reads the FIFO itself.
+    _pump: Option<godwinmix_capture_common::fifo::Pump>,
     settings: OutputSettings,
     stop: Arc<AtomicBool>,
     poller: Option<std::thread::JoinHandle<()>>,
@@ -251,8 +254,7 @@ impl Announcer {
         }
 
         let pipeline = gst::Pipeline::with_name("gmx-ndi-output");
-        let src = make("filesrc", "fifo")?;
-        src.set_property("location", fifo);
+        let (src, pump) = godwinmix_capture_common::fifo::programme_source(fifo, "fifo")?;
         let demux = make("matroskademux", "demux")?;
         let combiner = make("ndisinkcombiner", "combine")?;
         let sink = make("ndisink", "ndi")?;
@@ -295,7 +297,7 @@ impl Announcer {
             reporter,
             Arc::clone(&stop),
         );
-        Ok(Announcer { pipe, settings: settings.clone(), stop, poller })
+        Ok(Announcer { pipe, _pump: pump, settings: settings.clone(), stop, poller })
     }
 
     pub fn health(&self) -> Health {

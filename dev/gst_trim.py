@@ -540,6 +540,15 @@ PLUGIN_EXTRA = [
 ]
 
 
+# Libraries first party plugin binaries link directly: gmx-rtsp serves with
+# gst-rtsp-server, which no GStreamer plugin here depends on.
+PLUGIN_LIBRARIES = {
+    "windows": ["gstrtspserver-1.0-0.dll"],
+    "linux": ["libgstrtspserver-1.0.so.0"],
+    "macos": ["libgstrtspserver-1.0.0.dylib"],
+}
+
+
 def plugin_elements(plugins: Path) -> set[str]:
     """Every element a first party plugin says it needs.
 
@@ -639,6 +648,16 @@ def build(args: argparse.Namespace) -> int:
                     seeds.append(out / "lib" / "gio" / "modules" / mod.name)
 
     dirs = library_dirs(prefix, platform)
+    # Libraries a first party plugin links itself, not through any GStreamer
+    # plugin, so nothing above reaches them. Seeded by name, with their own
+    # dependencies following through the closure.
+    for lib in PLUGIN_LIBRARIES.get(platform, []):
+        found = next((d / lib for d in dirs if (d / lib).is_file()), None)
+        if found is None:
+            warn(f"a plugin links {lib}, which is not in the source prefix")
+            continue
+        copy(found, lib_out / lib)
+        seeds.append(lib_out / lib)
     libs = closure(seeds, dirs, platform)
     for path in libs:
         copy(path, lib_out / path.name)

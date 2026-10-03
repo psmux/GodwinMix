@@ -112,6 +112,28 @@ pub fn open_read(path: &Path) -> Result<Fifo, String> {
     Ok(Fifo { fd: 0, handle, connected: false, path: display })
 }
 
+/// The element a pipeline reads the programme from, and the pump behind it
+/// when there is one. `filesrc` on the path on Unix, as the plugins have
+/// always done; on Windows an `appsrc` fed by a pump, because the path is a
+/// pipe this process must make and serve (see `open_read`).
+pub fn programme_source(path: &str, name: &str) -> Result<(gst::Element, Option<Pump>), String> {
+    if cfg!(windows) {
+        let src = gst::ElementFactory::make("appsrc")
+            .name(name)
+            .property_from_str("format", "bytes")
+            .build()
+            .map_err(|e| format!("could not make an appsrc for the programme: {e}"))?;
+        let pump = Pump::start(open_read(Path::new(path))?, src.clone());
+        return Ok((src, Some(pump)));
+    }
+    let src = gst::ElementFactory::make("filesrc")
+        .name(name)
+        .property("location", path)
+        .build()
+        .map_err(|e| format!("could not make a filesrc for the programme: {e}"))?;
+    Ok((src, None))
+}
+
 /// How much to ask for in one read. Big enough that a megabyte of programme is
 /// a handful of syscalls, small enough that it is not a page of memory per
 /// instance sitting idle.
@@ -133,6 +155,9 @@ const WAIT_FOR_WRITER: std::time::Duration = std::time::Duration::from_millis(20
 /// The pump blocks when the `appsrc` is full, which is the backpressure that
 /// makes a slow disk slow the recording rather than losing the middle of it.
 pub struct Pump {
+    /// Where the bytes go. Swapped by `feed` when the reader rebuilds its
+    /// pipeline and the pipe has to stay the one the core is writing into.
+    target: Arc<std::sync::Mutex<Option<gst::Element>>>,
     stop: Arc<AtomicBool>,
     bytes: Arc<AtomicU64>,
     handle: Option<std::thread::JoinHandle<()>>,
@@ -144,6 +169,25 @@ impl Pump {
     /// The pump owns the descriptor from here: it is closed when the pump
     /// stops, which is what lets the core see the far end go away.
     pub fn start(fifo: Fifo, src: gst::Element) -> Pump {
+        Self::run(fifo, Some(src), false)
+    }
+
+    /// The same, for a reader that rebuilds its pipeline: the pump outlives
+    /// each one, `feed` points it at the next `appsrc`, and bytes that arrive
+    /// while there is none, or while one is being taken down, are dropped
+    /// rather than ending the read.
+    pub fn start_following(fifo: Fifo) -> Pump {
+        Self::run(fifo, None, true)
+    }
+
+    /// Send what is read to `src` from now on, or nowhere.
+    pub fn feed(&self, src: Option<gst::Element>) {
+        *self.target.lock().unwrap_or_else(|e| e.into_inner()) = src;
+    }
+
+    fn run(fifo: Fifo, src: Option<gst::Element>, following: bool) -> Pump {
+        let target = Arc::new(std::sync::Mutex::new(src));
+        let thread_target = Arc::clone(&target);
         let stop = Arc::new(AtomicBool::new(false));
         let bytes = Arc::new(AtomicU64::new(0));
         let thread_stop = Arc::clone(&stop);
@@ -169,20 +213,26 @@ impl Pump {
                         Ok(0) => break,
                         Ok(n) => {
                             thread_bytes.fetch_add(n as u64, Ordering::Relaxed);
+                            let src = thread_target.lock().unwrap_or_else(|e| e.into_inner()).clone();
+                            let Some(src) = src else { continue };
                             let buffer = gst::Buffer::from_slice(chunk[..n].to_vec());
                             let flow: gst::FlowReturn = src.emit_by_name("push-buffer", &[&buffer]);
-                            if flow != gst::FlowReturn::Ok {
+                            if flow != gst::FlowReturn::Ok && !following {
                                 break;
                             }
                         }
                         Err(_) => break,
                     }
                 }
-                let _: gst::FlowReturn = src.emit_by_name("end-of-stream", &[]);
+                let last = thread_target.lock().unwrap_or_else(|e| e.into_inner()).clone();
+                if let Some(src) = last {
+                    let _: gst::FlowReturn = src.emit_by_name("end-of-stream", &[]);
+                }
                 drop(fifo);
             })
             .expect("could not start the FIFO reader");
         Pump {
+            target,
             stop,
             bytes,
             handle: Some(handle),

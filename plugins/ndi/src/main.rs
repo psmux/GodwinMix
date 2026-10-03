@@ -333,6 +333,8 @@ fn no_method(provide: &str, method: &str, has: &str) -> RpcError {
 }
 
 fn main() {
+    // Before anything starts GStreamer, whose NDI elements read this.
+    library::prefer_bundled();
     let env = PluginEnv::from_env();
     if !env.started_by_core() {
         // Run by hand, this is the most useful thing it can do: say whether the
