@@ -143,6 +143,10 @@ Write-Host "out:      $Out"
 Write-Host ""
 
 $python = Find-Python
+# GSTREAMER_1_0_ROOT_MSVC_X86_64 ends in a backslash, and Windows PowerShell 5
+# quotes such an argument so that the backslash escapes the closing quote: the
+# trimmer then saw one long --from and no --out or --platform.
+$From = $From.TrimEnd('\')
 $trimArgs = @(
     (Join-Path $repo "dev\gst_trim.py"),
     "--from", $From,
