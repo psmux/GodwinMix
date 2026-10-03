@@ -4,30 +4,22 @@
 //! arrives is decoded by GStreamer and measured.
 
 use crate::radio::{Radio, Sink};
-#[cfg(unix)]
 use crate::send::Sender;
-#[cfg(unix)]
 use crate::settings::Settings;
-#[cfg(unix)]
 use base64::Engine;
 use gstreamer as gst;
 use gstreamer::prelude::*;
-#[cfg(unix)]
 use serde_json::json;
 use std::io::{Read, Write};
 use std::net::TcpListener;
-#[cfg(unix)]
-use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 /// An Icecast server: answers a source that logs in as `source:hackme` and
 /// keeps every byte it is sent; refuses anyone else.
 /// The port, what the mount was sent, and the source's request.
-#[cfg(unix)]
 type Server = (u16, Arc<Mutex<Vec<u8>>>, Arc<Mutex<String>>);
 
-#[cfg(unix)]
 fn icecast() -> Server {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port();
@@ -42,7 +34,6 @@ fn icecast() -> Server {
     (port, got, head)
 }
 
-#[cfg(unix)]
 fn take(mut conn: std::net::TcpStream, got: &Mutex<Vec<u8>>, head: &Mutex<String>) {
     let mut raw = Vec::new();
     let mut buf = vec![0u8; 8192];
@@ -95,42 +86,72 @@ fn seconds_of(bytes: &[u8], demux: &str) -> f64 {
     n as f64 / 44_100.0
 }
 
-/// The core's side: 4 s of live H.264 and AAC in streamable Matroska on a FIFO.
-#[cfg(unix)]
-fn programme_into(fifo: &std::path::Path) -> std::process::Child {
-    let line = format!(
-        "videotestsrc is-live=true num-buffers=120 ! video/x-raw,width=320,height=240,framerate=30/1 ! x264enc tune=zerolatency ! h264parse ! queue ! mux. \
-         audiotestsrc is-live=true num-buffers=172 ! audio/x-raw,rate=44100 ! avenc_aac ! aacparse ! queue ! mux. \
-         matroskamux name=mux streamable=true ! filesink location=\"{}\"",
-        fifo.display().to_string().replace('\\', "/")
-    );
-    Command::new("gst-launch-1.0").arg("-q").args(line.split_whitespace()).stdout(Stdio::null()).stderr(Stdio::null()).spawn().unwrap()
+/// The core's side: 4 s of live AAC in streamable Matroska, written to the
+/// programme FIFO or, on Windows, the named pipe the plugin made. The location
+/// is set in code, since the launch parser reads a pipe name's backslashes as
+/// escapes. Unbuffered, as the core writes it, or the 4 s arrive at the end.
+fn programme_into(fifo: &std::path::Path) -> gst::Element {
+    let line = "audiotestsrc is-live=true num-buffers=172 ! audio/x-raw,rate=44100 ! avenc_aac ! aacparse ! queue ! matroskamux streamable=true ! filesink name=out buffer-mode=unbuffered";
+    let p = gst::parse::launch(line).unwrap();
+    p.downcast_ref::<gst::Bin>().unwrap().by_name("out").unwrap().set_property("location", fifo.to_string_lossy().to_string());
+    p.set_state(gst::State::Playing).unwrap();
+    p
 }
 
-// The programme arrives on a FIFO made with mkfifo, which Windows does not have.
 #[cfg(unix)]
+fn programme_path(dir: &std::path::Path, _: &str) -> std::path::PathBuf {
+    let fifo = dir.join("programme");
+    let _ = std::fs::remove_file(&fifo);
+    assert!(std::process::Command::new("mkfifo").arg(&fifo).status().unwrap().success());
+    fifo
+}
+
+#[cfg(windows)]
+fn programme_path(_: &std::path::Path, test: &str) -> std::path::PathBuf {
+    std::path::PathBuf::from(format!(r"\\.\pipe\gmx-icecast-{test}-{}", std::process::id()))
+}
+
 #[test]
 fn the_programmes_sound_reaches_an_icecast_mount_as_mp3_behind_the_source_login() {
     gmx_netkit::init().unwrap();
     let (port, got, head) = icecast();
     let dir = std::env::temp_dir().join(format!("gmx-icecast-out-{}", std::process::id()));
     let _ = std::fs::create_dir_all(&dir);
-    let fifo = dir.join("programme");
-    let _ = std::fs::remove_file(&fifo);
-    assert!(Command::new("mkfifo").arg(&fifo).status().unwrap().success());
+    let fifo = programme_path(&dir, "mp3");
     let s = Settings::from_params(&json!({"uri": format!("icecast://source:hackme@127.0.0.1:{port}/church.mp3"), "name": "Sunday"})).unwrap();
     let fd = godwinmix_capture_common::fifo::open_read(&fifo).unwrap();
     let sender = Sender::start(&s, fd, None).expect("the sender starts");
-    let mut core = programme_into(&fifo);
-    let _ = core.wait();
+    let core = programme_into(&fifo);
+    let _ = core.bus().unwrap().timed_pop_filtered(gst::ClockTime::from_seconds(15), &[gst::MessageType::Eos, gst::MessageType::Error]);
+    let _ = core.set_state(gst::State::Null);
     std::thread::sleep(Duration::from_millis(800));
     drop(sender);
     let _ = std::fs::remove_dir_all(&dir);
     let request = head.lock().unwrap().clone();
     assert!(request.contains("/church.mp3"), "the mount: {request}");
     assert!(request.to_lowercase().contains("audio/mpeg"), "the type: {request}");
+    let n = got.lock().unwrap().len();
     let secs = seconds_of(&got.lock().unwrap(), "mpegaudioparse ! mpg123audiodec");
-    assert!(secs >= 3.0, "the mount got {secs:.2} s of MP3 from 4 s of programme");
+    assert!(secs >= 3.0, "the mount got {n} bytes, {secs:.2} s of MP3 from 4 s of programme");
+}
+
+#[test]
+fn a_wrong_password_is_named_and_the_sender_keeps_trying() {
+    gmx_netkit::init().unwrap();
+    let (port, _, _) = icecast();
+    let s = Settings::from_params(&json!({"uri": format!("icecast://source:wrong@127.0.0.1:{port}/a.mp3")})).unwrap();
+    let dir = std::env::temp_dir().join(format!("gmx-icecast-refused-{}", std::process::id()));
+    let _ = std::fs::create_dir_all(&dir);
+    let fifo = programme_path(&dir, "refused");
+    let fd = godwinmix_capture_common::fifo::open_read(&fifo).unwrap();
+    let sender = Sender::start(&s, fd, None).expect("the sender starts");
+    let core = programme_into(&fifo);
+    std::thread::sleep(Duration::from_secs(2));
+    let why = sender.state.last_error.lock().unwrap().clone().unwrap_or_default();
+    let _ = core.set_state(gst::State::Null);
+    drop(sender);
+    let _ = std::fs::remove_dir_all(&dir);
+    assert!(why.contains("refused the source login") && why.contains("password"), "{why}");
 }
 
 /// A station: MP3 with an ICY title every 8 KB, for ever.

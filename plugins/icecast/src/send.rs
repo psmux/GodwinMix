@@ -2,15 +2,18 @@
 //! mount.
 //!
 //! ```text
-//!   FIFO ─pump─► appsrc ─► matroskademux ─┬─► audio: decodebin ─► convert ─► resample ─► encoder ─► shout2send
+//!   FIFO ─pump─► appsrc ─► matroskademux ─┬─► audio: decodebin ─► convert ─► resample ─► encoder ─► appsink ─► mount.rs
 //!                                         └─► video: fakesink
 //! ```
 //!
 //! This is the one output that has to encode: Icecast players want MP3 or
 //! Ogg, and the programme's sound is AAC. An audio encode is a few percent of
 //! one core. The picture is dropped at the demuxer and never decoded.
+//!
+//! The encoded bytes leave through an `appsink` to our own source client in
+//! `mount.rs`, not `shout2send`, which GStreamer for Windows does not have.
 
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use gmx_netkit::pipe::Pipe;
@@ -18,15 +21,33 @@ use godwinmix_capture_common::fifo::{Fifo, Pump};
 use godwinmix_sdk::plugin::Reporter;
 use gstreamer as gst;
 use gstreamer::prelude::*;
+use gstreamer_app as gst_app;
 
+use crate::mount::{self, State};
 use crate::settings::{Format, Settings};
 
-pub const NEEDED: &[&str] = &["appsrc", "matroskademux", "decodebin", "shout2send"];
+pub const NEEDED: &[&str] = &["appsrc", "matroskademux", "decodebin", "appsink"];
+/// Every format's encoder, listed so the trimmed runtime an installer carries
+/// keeps them all; `start` checks only the one the settings pick.
+// Read by dev/gst_trim.py, not by the code.
+#[allow(dead_code)]
+pub const ENCODERS_NEEDED: &[&str] = &["lamemp3enc", "mpegaudioparse", "vorbisenc", "opusenc", "oggmux"];
 
 pub struct Sender {
     pub pipe: Pipe,
     pump: Option<Pump>,
-    pub bytes: Arc<AtomicU64>,
+    pub state: Arc<State>,
+    stop: Arc<AtomicBool>,
+    sending: Option<std::thread::JoinHandle<()>>,
+}
+
+/// The elements one format's encoder is made of.
+fn encoder_elements(format: Format) -> &'static [&'static str] {
+    match format {
+        Format::Mp3 => &["lamemp3enc", "mpegaudioparse"],
+        Format::OggVorbis => &["vorbisenc", "oggmux"],
+        Format::OggOpus => &["opusenc", "oggmux"],
+    }
 }
 
 /// The encoder for a format, as a launch fragment.
@@ -41,7 +62,7 @@ pub fn encoder(s: &Settings) -> String {
 /// The audio half: decode, encode, send, in one bin whose sink pad takes the
 /// demuxer's audio. The decoder's pad is linked when it appears.
 fn audio_bin(s: &Settings) -> Result<gst::Bin, String> {
-    let desc = format!("audioconvert name=head ! audioresample ! {} ! shout2send name=out sync=false async=false", encoder(s));
+    let desc = format!("audioconvert name=head ! audioresample ! {} ! appsink name=out sync=false async=false max-buffers=256 drop=true", encoder(s));
     let bin = gst::parse::bin_from_description(&desc, false).map_err(|e| format!("could not build the encoder: {e}"))?;
     let queue = gst::ElementFactory::make("queue").build().map_err(|e| e.to_string())?;
     let decode = gst::ElementFactory::make("decodebin").build().map_err(|e| e.to_string())?;
@@ -55,18 +76,6 @@ fn audio_bin(s: &Settings) -> Result<gst::Bin, String> {
     });
     let ghost = gst::GhostPad::with_target(&queue.static_pad("sink").ok_or("no queue pad")?).map_err(|e| e.to_string())?;
     bin.add_pad(&ghost).map_err(|e| e.to_string())?;
-    let out = bin.by_name("out").ok_or("no shout2send")?;
-    out.set_property("ip", &s.host);
-    out.set_property("port", i32::from(s.port));
-    out.set_property("mount", &s.mount);
-    out.set_property("username", &s.user);
-    out.set_property("password", &s.password);
-    out.set_property("streamname", &s.name);
-    out.set_property("public", s.public);
-    out.set_property_from_str("protocol", "http");
-    // The programme's tags are not song titles; a title update is also an
-    // admin request most source logins may not make.
-    out.set_property("send-title-info", false);
     Ok(bin)
 }
 
@@ -74,6 +83,7 @@ impl Sender {
     pub fn start(s: &Settings, fifo: Fifo, reporter: Option<Reporter>) -> Result<Sender, String> {
         gmx_netkit::init()?;
         gmx_netkit::elements::require(NEEDED)?;
+        gmx_netkit::elements::require(encoder_elements(s.format))?;
         let pipeline = gst::Pipeline::with_name("gmx-icecast-output");
         let src = gst::ElementFactory::make("appsrc").name("in").build().map_err(|e| e.to_string())?;
         src.set_property("caps", gst::Caps::new_empty_simple("video/x-matroska"));
@@ -85,12 +95,17 @@ impl Sender {
         src.link(&demux).map_err(|e| e.to_string())?;
         let audio = audio_bin(s)?;
         pipeline.add(&audio).map_err(|e| e.to_string())?;
-        let bytes = Arc::new(AtomicU64::new(0));
-        count_into(&audio, &bytes);
+        let sink = audio.by_name("out").and_then(|o| o.downcast::<gst_app::AppSink>().ok()).ok_or("no appsink")?;
         route(&demux, &pipeline, audio);
+        let (state, stop) = (Arc::new(State::default()), Arc::new(AtomicBool::new(false)));
+        let sending = mount::spawn(s, sink, stop.clone(), state.clone());
         let mut pipe = Pipe::wrap(pipeline);
         pipe.play(reporter)?;
-        Ok(Sender { pipe, pump: Some(Pump::start(fifo, src)), bytes })
+        Ok(Sender { pipe, pump: Some(Pump::start(fifo, src)), state, stop, sending: Some(sending) })
+    }
+
+    pub fn sent(&self) -> u64 {
+        self.state.sent.load(Ordering::Relaxed)
     }
 }
 
@@ -100,19 +115,11 @@ impl Drop for Sender {
             p.stop();
         }
         self.pipe.stop();
-    }
-}
-
-/// Count what reaches the sink, for health.
-fn count_into(audio: &gst::Bin, bytes: &Arc<AtomicU64>) {
-    let Some(pad) = audio.by_name("out").and_then(|o| o.static_pad("sink")) else { return };
-    let b = bytes.clone();
-    pad.add_probe(gst::PadProbeType::BUFFER, move |_, info| {
-        if let Some(buf) = info.buffer() {
-            b.fetch_add(buf.size() as u64, Ordering::Relaxed);
+        self.stop.store(true, Ordering::Relaxed);
+        if let Some(t) = self.sending.take() {
+            let _ = t.join();
         }
-        gst::PadProbeReturn::Ok
-    });
+    }
 }
 
 /// The first audio stream to the encoder; anything else to a fakesink.
