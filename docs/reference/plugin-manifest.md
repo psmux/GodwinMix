@@ -162,6 +162,14 @@ a cargo workspace has path dependencies that only resolve where it was checked
 out. What comes back into the installed copy is the one file `output` names,
 placed at the path `[run] bin` gives, with its executable bit set.
 
+The command is a line, not an argv. On Linux and macOS it goes to `sh -c`. On
+Windows a command that starts with `sh` or `bash` runs with the shell Git for
+Windows installs (found on `PATH`, or beside `git` itself), and any other
+command goes to `cmd /C`. A build there writes `bin\gmx-camera.exe` where the
+manifest says `bin/gmx-camera`, so `output` is also looked for with `.exe` on
+the end. Without Git for Windows the install stops and says to install it or
+to build the plugin yourself.
+
 So this, in `plugins/camera/gmx-plugin.toml`:
 
 ```toml
