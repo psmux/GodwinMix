@@ -181,8 +181,8 @@ fn write_programme(fifo: &std::path::Path, encoder: &str) {
 /// Play the recording back. Frames out and how long it turned out to be.
 fn play(file: &std::path::Path) -> (u64, f64) {
     let description = format!(
-        "filesrc location={} ! decodebin ! videoconvert ! fakesink name=out sync=false",
-        file.display()
+        "filesrc location=\"{}\" ! decodebin ! videoconvert ! fakesink name=out sync=false",
+        file.display().to_string().replace('\\', "/")
     );
     let pipeline = gst::parse::launch(&description)
         .expect("the playback pipeline parses")

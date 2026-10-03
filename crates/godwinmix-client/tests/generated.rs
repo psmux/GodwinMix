@@ -12,6 +12,13 @@ fn repo_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join("..")
 }
 
+/// The first of python3 and python that answers. On Windows `python3` can be
+/// the Microsoft Store's stand-in, which exists and fails, so a name that
+/// merely starts is not enough.
+fn python() -> Option<&'static str> {
+    ["python3", "python"].into_iter().find(|p| Command::new(p).arg("--version").output().is_ok_and(|o| o.status.success()))
+}
+
 #[test]
 fn generated_rust_matches_protocol_json() {
     let root = repo_root();
@@ -21,7 +28,11 @@ fn generated_rust_matches_protocol_json() {
         eprintln!("no clients/gen/generate.py here, so there is nothing to check against");
         return;
     }
-    let run = Command::new("python3")
+    let Some(python) = python() else {
+        eprintln!("no Python answered, so the drift check was skipped");
+        return;
+    };
+    let run = Command::new(python)
         .arg(&generator)
         .arg("--check")
         .arg("--lang")
@@ -31,7 +42,7 @@ fn generated_rust_matches_protocol_json() {
     let out = match run {
         Ok(out) => out,
         Err(e) => {
-            eprintln!("python3 did not run ({e}), so the drift check was skipped");
+            eprintln!("{python} did not run ({e}), so the drift check was skipped");
             return;
         }
     };

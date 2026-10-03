@@ -34,7 +34,7 @@ use serde_json::{json, Value};
 pub use ends::{Publication, Reader};
 pub use queue::Recv;
 pub use takeover::STALE;
-#[cfg(test)]
+#[cfg(all(test, unix))]
 pub use takeover::HESITATE;
 
 

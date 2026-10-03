@@ -54,7 +54,7 @@ fn a_still_passes_the_checks_every_kind_passes() {
     let _ = gst::init();
     let dir = scratch("still");
     let png = dir.join("title.png");
-    if !draw(&format!("videotestsrc num-buffers=1 ! video/x-raw,width=640,height=360 ! pngenc ! filesink location={}", png.display())) {
+    if !draw(&format!("videotestsrc num-buffers=1 ! video/x-raw,width=640,height=360 ! pngenc ! filesink location=\"{}\"", png.display().to_string().replace('\\', "/"))) {
         println!("skipping: could not draw a PNG to check against");
         return;
     }
@@ -69,7 +69,7 @@ fn a_sequence_passes_them_too() {
     let _ = gst::init();
     let dir = scratch("sequence");
     let pattern = dir.join("f%03d.jpg");
-    let desc = format!("videotestsrc num-buffers=10 pattern=ball ! video/x-raw,width=640,height=360 ! jpegenc ! multifilesink location={}", pattern.display());
+    let desc = format!("videotestsrc num-buffers=10 pattern=ball ! video/x-raw,width=640,height=360 ! jpegenc ! multifilesink location=\"{}\"", pattern.display().to_string().replace('\\', "/"));
     if !draw(&desc) {
         println!("skipping: could not draw a sequence to check against");
         return;

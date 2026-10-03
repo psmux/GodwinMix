@@ -2928,7 +2928,8 @@ mod tests {
 
     /// End to end against a stand-in sidecar: the probe must return on the
     /// first usable report rather than on its timeout, and it must leave
-    /// nothing running behind it.
+    /// nothing running behind it. The stand-in is a shell loop, so Unix only.
+    #[cfg(unix)]
     #[test]
     fn the_probe_returns_on_the_first_usable_report() {
         let spec = ExecSpec::from_uri(

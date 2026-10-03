@@ -78,7 +78,7 @@ fn pictures_from(params: serde_json::Value, secs: u64) -> usize {
     let cam = Camera::start(&s, Sink::File(out.clone()), None).expect("the camera starts");
     std::thread::sleep(Duration::from_secs(secs));
     drop(cam);
-    let line = format!("filesrc location={} ! matroskademux ! jpegdec ! fakesink name=end sync=false", out.display());
+    let line = format!("filesrc location=\"{}\" ! matroskademux ! jpegdec ! fakesink name=end sync=false", out.display().to_string().replace('\\', "/"));
     let p = gst::parse::launch(&line).unwrap();
     let count = Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let c = count.clone();

@@ -24,7 +24,7 @@ pub fn staged_ingest(dir: &Path) -> PathBuf {
         cargo.arg("--release");
     }
     assert!(cargo.status().unwrap().success(), "gmx-ingest did not build");
-    let built = Path::new(BIN).with_file_name("gmx-ingest");
+    let built = Path::new(BIN).with_file_name(format!("gmx-ingest{}", std::env::consts::EXE_SUFFIX));
     let to = dir.join("ingest-src");
     let from = Path::new(REPO).join("plugins/ingest");
     std::fs::create_dir_all(to.join("bin")).unwrap();
@@ -34,7 +34,7 @@ pub fn staged_ingest(dir: &Path) -> PathBuf {
     for d in ["schemas", "skills", "designer"] {
         copy_dir(&from.join(d), &to.join(d));
     }
-    std::fs::copy(built, to.join("bin/gmx-ingest")).unwrap();
+    std::fs::copy(built, to.join(format!("bin/gmx-ingest{}", std::env::consts::EXE_SUFFIX))).unwrap();
     to
 }
 

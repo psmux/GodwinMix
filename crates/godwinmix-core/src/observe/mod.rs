@@ -179,7 +179,8 @@ mod tests {
     #[test]
     fn the_runtime_directory_sits_beside_the_config() {
         let dir = runtime_dir(Path::new("/etc/godwinmix/godwinmix.toml"));
-        assert_eq!(dir, Path::new("/etc/godwinmix/.godwinmix"));
+        // Windows makes it absolute under the current drive, C:\etc\....
+        assert!(dir.ends_with("etc/godwinmix/.godwinmix"), "{}", dir.display());
         // A bare file name, which is how a mixer is started from the folder
         // its config is in, answers an absolute path: a plugin is handed
         // socket addresses under here and does not stand where the mixer does.

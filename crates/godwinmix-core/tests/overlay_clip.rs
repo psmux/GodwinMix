@@ -25,7 +25,7 @@ fn half_red_clip(path: &std::path::Path, alpha: bool) -> bool {
          ! videobox right=-32 border-alpha=0 ! videoconvert ! video/x-raw,format={} ! pngenc snapshot=false \
          ! qtmux ! filesink location=\"{}\"",
         if alpha { "RGBA" } else { "RGB" },
-        path.display()
+        path.display().to_string().replace('\\', "/")
     );
     let Ok(p) = gst::parse::launch(&desc) else { return false };
     p.set_state(gst::State::Playing).ok();

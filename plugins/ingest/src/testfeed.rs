@@ -65,7 +65,7 @@ pub fn live(inlet: Box<dyn Inlet>) -> gst::Pipeline {
 /// Decode an MPEG-TS file and count the pictures and the sound frames.
 pub fn decode_ts(path: &std::path::Path) -> (u32, u32) {
     gmx_netkit::init().unwrap();
-    let line = format!("filesrc location={} ! decodebin name=d", path.display());
+    let line = format!("filesrc location=\"{}\" ! decodebin name=d", path.display().to_string().replace('\\', "/"));
     let p = gst::parse::launch(&line).unwrap().downcast::<gst::Pipeline>().unwrap();
     let counts = [Arc::new(Mutex::new(0u32)), Arc::new(Mutex::new(0u32))];
     let (weak, c) = (p.downgrade(), counts.clone());

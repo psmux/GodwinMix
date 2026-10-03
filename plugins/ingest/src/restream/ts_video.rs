@@ -86,13 +86,13 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let (flv, ts) = (dir.join("in.flv"), dir.join("out.ts"));
         std::fs::write(&flv, hevc_flv()).unwrap();
-        let line = format!("filesrc location={} ! flvdemux name=d mpegtsmux name=mux ! filesink location={}", flv.display(), ts.display());
+        let line = format!("filesrc location=\"{}\" ! flvdemux name=d mpegtsmux name=mux ! filesink location=\"{}\"", flv.display().to_string().replace('\\', "/"), ts.display().to_string().replace('\\', "/"));
         let p = gst::parse::launch(&line).unwrap().downcast::<gst::Pipeline>().unwrap();
         video_by_codec(&p);
         p.set_state(gst::State::Playing).unwrap();
         let _ = p.bus().unwrap().timed_pop_filtered(gst::ClockTime::from_seconds(10), &[gst::MessageType::Eos, gst::MessageType::Error]);
         let _ = p.set_state(gst::State::Null);
-        let check = format!("filesrc location={} ! tsdemux ! h265parse ! avdec_h265 ! fakesink name=end", ts.display());
+        let check = format!("filesrc location=\"{}\" ! tsdemux ! h265parse ! avdec_h265 ! fakesink name=end", ts.display().to_string().replace('\\', "/"));
         let c = gst::parse::launch(&check).unwrap().downcast::<gst::Pipeline>().unwrap();
         let frames = Arc::new(Mutex::new(0u32));
         let f = frames.clone();

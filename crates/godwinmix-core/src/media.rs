@@ -481,13 +481,18 @@ mod tests {
     #[test]
     fn a_missing_library_reports_why_rather_than_looking_empty() {
         let _ = gst::init();
+        // A folder inside a file cannot be made on any platform, even by an
+        // administrator, which a path at the root of the disk can be.
+        let file = std::env::temp_dir().join(format!("gmx-media-not-a-dir-{}", std::process::id()));
+        std::fs::write(&file, b"x").unwrap();
         let lib = MediaLibrary::new(MediaConfig {
-            dir: "/definitely/not/here".into(),
+            dir: file.join("library").display().to_string(),
             ..Default::default()
         });
         let listing = lib.list_with(None);
         assert!(listing.items.is_empty());
         assert!(listing.error.is_some(), "an unreadable directory must say so");
+        let _ = std::fs::remove_file(&file);
     }
 
     #[test]

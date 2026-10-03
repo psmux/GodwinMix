@@ -43,6 +43,7 @@ impl Sidecar {
 mod tests {
     use super::*;
     use crate::input::ExecSpec;
+    #[cfg(unix)]
     use std::time::{Duration, Instant};
 
     fn sleeper() -> Sidecar {

@@ -47,7 +47,7 @@ fn rist_reaches_a_rist_receiver() {
     // An even port, as RIST wants, with RTCP on the one above.
     let port = UdpSocket::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port() & !1;
     let path = std::env::temp_dir().join(format!("gmx-direct-rist-{}.ts", std::process::id()));
-    let line = format!("ristsrc address=127.0.0.1 port={port} ! rtpmp2tdepay ! filesink location={}", path.display());
+    let line = format!("ristsrc address=127.0.0.1 port={port} ! rtpmp2tdepay ! filesink location=\"{}\"", path.display().to_string().replace('\\', "/"));
     let receiver = gst::parse::launch(&line).unwrap();
     receiver.set_state(gst::State::Playing).unwrap();
     let url = format!("rist://127.0.0.1:{port}");
@@ -73,7 +73,7 @@ fn srt_reaches_an_srt_listener_through_the_same_muxer() {
     let (host, _) = host(&hub);
     let port = UdpSocket::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
     let path = std::env::temp_dir().join(format!("gmx-direct-srt-{}.ts", std::process::id()));
-    let line = format!("srtsrc uri=srt://127.0.0.1:{port}?mode=listener ! filesink location={}", path.display());
+    let line = format!("srtsrc uri=srt://127.0.0.1:{port}?mode=listener ! filesink location=\"{}\"", path.display().to_string().replace('\\', "/"));
     let receiver = gst::parse::launch(&line).unwrap();
     receiver.set_state(gst::State::Playing).unwrap();
     let url = format!("srt://127.0.0.1:{port}?mode=caller");

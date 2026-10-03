@@ -59,13 +59,13 @@ fn core_like_writer(fifo: &Path, reference: &Path, frames: u32) -> Child {
     let line = format!(
         "videotestsrc is-live=true num-buffers={frames} pattern=ball ! \
          video/x-raw,format=I420,width=320,height=240,framerate=30/1 ! x264enc tune=zerolatency key-int-max=30 ! \
-         h264parse ! tee name=t ! queue ! mux. t. ! queue ! matroskamux ! filesink location={} \
+         h264parse ! tee name=t ! queue ! mux. t. ! queue ! matroskamux ! filesink location=\"{}\" \
          audiotestsrc is-live=true num-buffers={} ! avenc_aac ! aacparse ! queue ! mux. \
-         matroskamux name=mux streamable=true ! filesink location={}",
-        reference.display(),
+         matroskamux name=mux streamable=true ! filesink location=\"{}\"",
+        reference.display().to_string().replace('\\', "/"),
         // As long as the video: 1024 samples a buffer at 44.1 kHz.
         frames * 44_100 / 1024 / 30,
-        fifo.display()
+        fifo.display().to_string().replace('\\', "/")
     );
     Command::new("gst-launch-1.0").arg("-q").args(line.split_whitespace()).stdout(Stdio::null()).stderr(Stdio::null()).spawn().unwrap()
 }

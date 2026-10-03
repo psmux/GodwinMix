@@ -455,7 +455,7 @@ fn test_clip(args: &BenchArgs) -> Result<PathBuf> {
          video/x-raw,width={BENCH_WIDTH},height={BENCH_HEIGHT},framerate={BENCH_FPS}/1 ! \
          x264enc speed-preset=veryfast bitrate=2500 key-int-max={BENCH_FPS} ! h264parse ! \
          mp4mux ! filesink location={}",
-        path.display()
+        launch_path(&path)
     );
     run_pipeline_to_end(&desc).with_context(|| format!("writing {}", path.display()))?;
     Ok(path)
@@ -705,7 +705,7 @@ async fn file_source_row(args: &BenchArgs, clip: &Path) -> Result<Row> {
     let with_file = format!(
         "{base} filesrc location={} ! decodebin ! videoconvert ! videoscale ! \
          videorate ! {caps} ! comp.",
-        clip.display()
+        launch_path(clip)
     );
     let baseline = measure_pipeline(args, &base).await?;
     let loaded = measure_pipeline(args, &with_file).await?;
@@ -1149,9 +1149,22 @@ pub async fn run(args: BenchArgs) -> Result<()> {
     Ok(())
 }
 
+/// A file path as a launch description can carry it. The parser reads a
+/// backslash as an escape, so a Windows path loses its separators unless they
+/// are written forward, which Windows accepts; the quotes keep a space.
+fn launch_path(path: &Path) -> String {
+    format!("\"{}\"", path.display().to_string().replace('\\', "/"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_windows_path_survives_a_launch_description() {
+        let p = Path::new(r"C:\Users\a b\clip.mp4");
+        assert_eq!(launch_path(p), "\"C:/Users/a b/clip.mp4\"");
+    }
 
     #[test]
     fn this_process_can_be_sampled_on_this_platform() {

@@ -135,8 +135,10 @@ fn parse_hello(line: &str) -> Option<Initialize> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(unix)]
     use std::collections::BTreeMap;
 
+    #[cfg(unix)]
     fn launch_of(argv: Vec<String>) -> Launch {
         Launch {
             argv,

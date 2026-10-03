@@ -117,7 +117,7 @@ fn write_png(path: &std::path::Path, w: u32, h: u32) {
         "videotestsrc num-buffers=1 pattern=smpte ! video/x-raw,format=AYUV,width={},height={h} ! videobox right=-{} border-alpha=0 ! videoconvert ! pngenc ! filesink location=\"{}\"",
         w / 2,
         w - w / 2,
-        path.display()
+        path.display().to_string().replace('\\', "/")
     );
     let p = gst::parse::launch(&desc).unwrap();
     use gstreamer::prelude::*;

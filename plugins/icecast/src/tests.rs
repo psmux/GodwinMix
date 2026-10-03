@@ -4,14 +4,19 @@
 //! arrives is decoded by GStreamer and measured.
 
 use crate::radio::{Radio, Sink};
+#[cfg(unix)]
 use crate::send::Sender;
+#[cfg(unix)]
 use crate::settings::Settings;
+#[cfg(unix)]
 use base64::Engine;
 use gstreamer as gst;
 use gstreamer::prelude::*;
+#[cfg(unix)]
 use serde_json::json;
 use std::io::{Read, Write};
 use std::net::TcpListener;
+#[cfg(unix)]
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -19,8 +24,10 @@ use std::time::Duration;
 /// An Icecast server: answers a source that logs in as `source:hackme` and
 /// keeps every byte it is sent; refuses anyone else.
 /// The port, what the mount was sent, and the source's request.
+#[cfg(unix)]
 type Server = (u16, Arc<Mutex<Vec<u8>>>, Arc<Mutex<String>>);
 
+#[cfg(unix)]
 fn icecast() -> Server {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port();
@@ -35,6 +42,7 @@ fn icecast() -> Server {
     (port, got, head)
 }
 
+#[cfg(unix)]
 fn take(mut conn: std::net::TcpStream, got: &Mutex<Vec<u8>>, head: &Mutex<String>) {
     let mut raw = Vec::new();
     let mut buf = vec![0u8; 8192];
@@ -68,7 +76,7 @@ fn take(mut conn: std::net::TcpStream, got: &Mutex<Vec<u8>>, head: &Mutex<String
 fn seconds_of(bytes: &[u8], demux: &str) -> f64 {
     let path = std::env::temp_dir().join(format!("gmx-icecast-{}-{}.bin", std::process::id(), bytes.len()));
     std::fs::write(&path, bytes).unwrap();
-    let line = format!("filesrc location={} ! {demux} ! audioconvert ! audio/x-raw,format=F32LE ! fakesink name=end sync=false", path.display());
+    let line = format!("filesrc location=\"{}\" ! {demux} ! audioconvert ! audio/x-raw,format=F32LE ! fakesink name=end sync=false", path.display().to_string().replace('\\', "/"));
     let p = gst::parse::launch(&line).unwrap();
     let samples = Arc::new(Mutex::new(0u64));
     let (s, pad) = (samples.clone(), p.downcast_ref::<gst::Bin>().unwrap().by_name("end").unwrap().static_pad("sink").unwrap());
@@ -88,16 +96,19 @@ fn seconds_of(bytes: &[u8], demux: &str) -> f64 {
 }
 
 /// The core's side: 4 s of live H.264 and AAC in streamable Matroska on a FIFO.
+#[cfg(unix)]
 fn programme_into(fifo: &std::path::Path) -> std::process::Child {
     let line = format!(
         "videotestsrc is-live=true num-buffers=120 ! video/x-raw,width=320,height=240,framerate=30/1 ! x264enc tune=zerolatency ! h264parse ! queue ! mux. \
          audiotestsrc is-live=true num-buffers=172 ! audio/x-raw,rate=44100 ! avenc_aac ! aacparse ! queue ! mux. \
-         matroskamux name=mux streamable=true ! filesink location={}",
-        fifo.display()
+         matroskamux name=mux streamable=true ! filesink location=\"{}\"",
+        fifo.display().to_string().replace('\\', "/")
     );
     Command::new("gst-launch-1.0").arg("-q").args(line.split_whitespace()).stdout(Stdio::null()).stderr(Stdio::null()).spawn().unwrap()
 }
 
+// The programme arrives on a FIFO made with mkfifo, which Windows does not have.
+#[cfg(unix)]
 #[test]
 fn the_programmes_sound_reaches_an_icecast_mount_as_mp3_behind_the_source_login() {
     gmx_netkit::init().unwrap();
