@@ -9,19 +9,29 @@
 //! Every process measures its own CPU over the same window, [t0, t1] on the
 //! system monotonic clock, and prints one `BENCH key=value ...` line.
 
+#[cfg(unix)]
 use std::collections::HashMap;
 
+#[cfg(unix)]
 mod clip;
+#[cfg(unix)]
 mod matrix;
+#[cfg(unix)]
 mod measure;
+#[cfg(unix)]
 mod owner;
+#[cfg(unix)]
 mod procs;
+#[cfg(unix)]
 mod reader;
+#[cfg(unix)]
 mod table;
 
 /// `--key value` pairs.
+#[cfg(unix)]
 pub struct Args(HashMap<String, String>);
 
+#[cfg(unix)]
 impl Args {
     fn parse(list: &[String]) -> Args {
         let mut m = HashMap::new();
@@ -49,6 +59,7 @@ impl Args {
     }
 }
 
+#[cfg(unix)]
 fn main() {
     let argv: Vec<String> = std::env::args().collect();
     let role = argv.get(1).cloned().unwrap_or_default();
@@ -65,4 +76,13 @@ fn main() {
             std::process::exit(2);
         }
     }
+}
+
+
+/// The bus has no transport on this platform yet (see the crate's
+/// `CROSS_PROCESS`), so there is nothing to measure.
+#[cfg(not(unix))]
+fn main() {
+    eprintln!("framebus-bench needs the frame bus's Unix transport; it runs on Linux and macOS");
+    std::process::exit(2);
 }
