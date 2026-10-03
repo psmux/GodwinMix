@@ -17,7 +17,8 @@
 //! there is taken only when it can run: its binary for this platform is built,
 //! or its manifest has a `[build]` section the install runs, or it declares no
 //! binary at all (a script). Whatever is found is installed as a folder is,
-//! with the same "custom, unreviewed" trust record.
+//! and labelled "ships with GodwinMix" rather than "custom, unreviewed": it
+//! came with the mixer, from the same tree.
 
 use godwinmix_host::launch;
 use godwinmix_protocol::plugin::manifest::Manifest;

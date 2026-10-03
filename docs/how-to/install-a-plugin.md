@@ -253,9 +253,11 @@ a show.
 
 `signed` is a signature cosign verified. `signed, digest only` is a signature
 whose digest matches the bytes that arrived, on a machine with no cosign
-installed to check who made it. `custom, unreviewed` is everything nobody
-signed, which includes every path install and everything from cargo, npm and
-PyPI.
+installed to check who made it. `ships with GodwinMix` is a first party plugin
+that came with the mixer, from the installer or the checkout it was built in,
+installed by its name; a locked down mixer accepts it like a signed one.
+`custom, unreviewed` is everything else nobody signed, which includes every
+path install and everything from cargo, npm and PyPI.
 
 `gmx plugin describe <name>` prints the sentence behind the label. A mixer that
 should install signed releases only sets this in its config:

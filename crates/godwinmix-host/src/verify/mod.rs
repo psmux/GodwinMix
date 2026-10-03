@@ -69,6 +69,11 @@ pub struct Trust {
     /// Why there is no signature, when there is not.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub unsigned_because: Option<String>,
+    /// It came with this mixer: a first party plugin the installer carried,
+    /// built from the same tree as the mixer and signed with it, so it is not
+    /// "custom, unreviewed" whatever a directory install would say.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub shipped: bool,
 }
 
 impl Trust {
@@ -80,6 +85,7 @@ impl Trust {
             resolved: String::new(),
             signature: None,
             unsigned_because: Some(why.into()),
+            shipped: false,
         }
     }
 
@@ -89,7 +95,13 @@ impl Trust {
             resolved: String::new(),
             signature: Some(signature),
             unsigned_because: None,
+            shipped: false,
         }
+    }
+
+    /// A first party plugin that ships with this mixer, from where it lies.
+    pub fn shipped_with(source: impl Into<String>) -> Self {
+        Self { source: source.into(), shipped: true, ..Self::default() }
     }
 
     /// Record what the source turned out to be, keeping what was asked for.
@@ -116,6 +128,7 @@ impl Trust {
         match &self.signature {
             Some(s) if s.level == Level::Cosign => "signed",
             Some(_) => "signed, digest only",
+            None if self.shipped => "ships with GodwinMix",
             None => "custom, unreviewed",
         }
     }
@@ -136,6 +149,10 @@ impl Trust {
                  check.",
                 &s.digest[..s.digest.len().min(16)],
                 "<name>"
+            ),
+            None if self.shipped => format!(
+                "first party: it came with this copy of GodwinMix, from {}.",
+                self.source
             ),
             None => format!(
                 "unreviewed: {}. It runs with the permissions you give it.",

@@ -209,3 +209,17 @@ fn a_trust_record_survives_a_round_trip_to_disk() {
     assert_eq!(Trust::read(&dir), Some(trust));
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn a_plugin_that_came_with_the_mixer_says_so_and_survives_a_restart() {
+    let trust = Trust::shipped_with(r"C:\Program Files\GodwinMix\plugins\ndi");
+    assert_eq!(trust.label(), "ships with GodwinMix");
+    assert!(trust.explanation().contains("came with this copy of GodwinMix"), "{}", trust.explanation());
+    let dir = temp("shipped");
+    trust.write(&dir).expect("it writes");
+    assert_eq!(Trust::read(&dir), Some(trust));
+    let _ = std::fs::remove_dir_all(&dir);
+    // A record from before the field existed reads as not shipped.
+    let old: Trust = serde_json::from_str(r#"{"source":"./clock","unsigned_because":"a local path"}"#).unwrap();
+    assert!(!old.shipped);
+}
