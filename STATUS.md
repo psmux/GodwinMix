@@ -8,8 +8,8 @@ and decode by itself. `dev/smoke.ps1` passes every step it runs; the five
 plugin steps skip because Windows refuses shell plugins.
 
 The installers build from `release.yml`'s steps and stay well inside the
-budget: the `.msi` is 59 MB and the NSIS `.exe` 39 MB, against 150. The trimmed
-runtime is 117 MB. Each installs, passes `--headless-check` with the system
+budget: the `.msi` was 59 MB and the NSIS `.exe` 39 MB before the renderer
+and the plugins went in. The trimmed runtime was 117 MB. Each installs, passes `--headless-check` with the system
 GStreamer taken off `PATH`, loads its four device plugins, installs over an
 older copy as an upgrade, and uninstalls leaving nothing in Program Files.
 
@@ -24,12 +24,35 @@ sampler never read CPU there, so the governor counted a mixing show as free.
 explained on Windows. `cargo test --workspace` did not compile on Windows, and
 many tests wrote Windows paths into launch descriptions.
 
+Later the same day. The installers now carry the web page renderer and every
+first party plugin that runs on Windows. The four device plugins install on
+first launch; the rest install themselves, in a moment and with nothing
+downloaded, the first time somebody picks their feature. A YouTube page went
+live in the installed app in about two seconds, with sound. The webcam's tile,
+the scene preview and the programme all move; before the timeline fix the
+programme showed one camera frame in fifteen. A camera is listed once, not
+once per Windows capture API, and a second source of the same camera is
+refused with the name of the source that has it.
+
+Output plugins run on Windows. The core serves the programme to them on a
+named pipe where Unix uses a FIFO. file-record wrote a seven minute H.264 and
+AAC recording through it. WHIP, NDI and RTSP read the same pipe. Hardware
+encoders sent nothing on an output started on demand, because the encode chain
+was joined to the tee before it was running: 3 in 5 starts failed, and after
+the fix 8 in 8 worked. Icecast no longer needs `shout2send`, which GStreamer
+for Windows does not have; the plugin speaks the source protocol itself.
+
+The NDI runtime ships in the Windows installer, beside the ndi plugin, on the
+NDI SDK's terms. The installer's licence carries the NDI end user terms and
+every NDI form links ndi.video with the trademark line. The GStreamer and
+Chromium licence files travel with them now; before, neither did.
+
 Still open on that machine. A VPN client there drops loopback UDP and resets
-some loopback TCP, so the SRT, RIST, RTP, ONVIF and two HTTP hook tests cannot
-pass on it. Test binaries that load Quick Sync sometimes end with
-`0xc0000374` after their tests pass. The desktop window was opened and closed
-but not clicked through. The web page renderer is still not in the Windows
-installer.
+loopback TCP once a client starts streaming, so the SRT, RIST, RTP, ONVIF and
+two HTTP hook tests cannot pass on it, and the Icecast output test passes only
+when pointed at the LAN address. Test binaries that load Quick Sync sometimes
+end with `0xc0000374` after their tests pass. The UI's browser test harness
+did not finish under Edge on Windows. NDI was not received from a real sender.
 
 ## Current implementation, 2026-09-20
 
