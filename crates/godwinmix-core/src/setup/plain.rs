@@ -12,7 +12,14 @@ use serde_json::json;
 
 /// What a person reads while a piece is being set up for them.
 pub fn setting_up(piece: &str) -> String {
-    let how_long = if piece == WEB { "a few minutes" } else { "about a minute" };
+    let how_long = if piece == WEB {
+        "a few minutes"
+    } else if crate::plugin::first_party::ships_built(piece) {
+        // The installer carried it built: a copy, not a build.
+        "a moment"
+    } else {
+        "about a minute"
+    };
     format!(
         "Setting up {}. This happens once and takes {how_long}; it starts by itself when it is ready.",
         noun(piece)

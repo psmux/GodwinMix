@@ -41,6 +41,17 @@ pub fn find(name: &str) -> Option<PathBuf> {
     find_from(&exe_dir, name)
 }
 
+/// Whether the copy found is ready to install as it is: shipped beside the
+/// mixer, as an installer puts it, rather than in a checkout where it may have
+/// to be built first. Says how long a person waits.
+pub fn ships_built(name: &str) -> bool {
+    let Some(exe_dir) = std::env::current_exe().ok().and_then(|e| e.parent().map(Path::to_path_buf)) else {
+        return false;
+    };
+    let checkout = checkout_of(&exe_dir);
+    find_from(&exe_dir, name).is_some_and(|dir| !checkout.as_ref().is_some_and(|c| dir.starts_with(c)))
+}
+
 fn find_from(exe_dir: &Path, name: &str) -> Option<PathBuf> {
     let checkout = checkout_of(exe_dir);
     places_from(exe_dir, name).into_iter().find(|dir| {
