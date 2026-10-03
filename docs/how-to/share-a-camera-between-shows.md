@@ -66,6 +66,9 @@ taken.
 
 * On Windows every show opens its own camera, as before. The frame bus has no
   Windows transport yet. Two shows asking for one camera there will find the
-  second one cannot open it on most machines.
+  second one cannot open it on most machines. Inside one show the mixer says
+  so straight away: adding a camera that is already a source is refused with
+  the id of the source that has it (`data.source`), and the way to show that
+  camera in a second scene is to add that source to it.
 * A source placed on another machine (a node) opens its own device on that
   machine.

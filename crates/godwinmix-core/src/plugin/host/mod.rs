@@ -23,6 +23,7 @@
 //! same door `rtmp/source` uses.
 
 pub mod bridged;
+pub mod device_key;
 pub mod exits;
 pub mod filter;
 pub mod output;
