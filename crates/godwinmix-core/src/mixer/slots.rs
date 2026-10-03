@@ -1204,6 +1204,7 @@ impl SlotPool {
     /// that touches the graph, and the reason `reserve` exists.
     fn bind(&mut self, index: usize, branch: &ProgrammeBranch, miss: bool) -> Result<()> {
         self.unbind(index);
+        self.clear_eos(index);
         let slot = &mut self.slots[index];
         let sink = slot.gate.static_pad("sink").context("a slot's valve has no sink pad")?;
         let tee_pad = branch
@@ -1251,6 +1252,30 @@ impl SlotPool {
             Some(Bound::Source { source: branch.id.clone(), tee_pad, pads: branch.pads.clone() });
         debug!(slot = index, source = %branch.id, "slot bound");
         Ok(())
+    }
+
+    /// Take back the end of stream `unbind` left on an empty slot.
+    ///
+    /// `unbind` ends an empty slot's input so the live compositor stops
+    /// waiting on it, and counted on the next source's stream start to clear
+    /// that. It does not when the stream start is one the pad has already
+    /// seen, a source coming back to a slot it had before: the pad kept its
+    /// EOS, the compositor treated the input as finished, and the source was
+    /// in the scene, on its slot, at full opacity, and not drawn. Seen on air
+    /// with a test source. A flush always clears it, and is safe here: the
+    /// slot is hidden and holds no frame, and it waits for one compositor
+    /// frame first as `unbind` does.
+    fn clear_eos(&mut self, index: usize) {
+        let slot = &self.slots[index];
+        if !slot.pad.pad_flags().contains(gst::PadFlags::EOS) {
+            return;
+        }
+        let Some(chain) = slot.queue.static_pad("sink") else { return };
+        set_f64(&slot.pad, "alpha", 0.0);
+        crate::slow_step!("slot frame barrier", index, gstutil::after_next_frame(&slot.pad));
+        gstutil::wake_chain(&chain);
+        gstutil::resume_chain(&chain);
+        debug!(slot = index, "cleared the end of stream an empty slot was left with");
     }
 
     /// Bind a slot to a group composited on its own.
