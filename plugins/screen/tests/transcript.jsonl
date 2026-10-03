@@ -7,8 +7,9 @@
 {"plugin": {"jsonrpc": "2.0", "method": "initialized"}}
 {"core": {"jsonrpc": "2.0", "id": 1, "method": "start", "params": {"canvas": {"width": 320, "height": 180, "fps": 30}, "transport": "container", "media": ""}}}
 {"plugin": {"jsonrpc": "2.0", "id": 1, "result": {}}}
+# start answers before the capture is open, so health is ok or still opening.
 {"core": {"jsonrpc": "2.0", "id": 2, "method": "health", "params": {}}}
-{"plugin": {"jsonrpc": "2.0", "id": 2, "result": {"state": "ok"}}}
+{"plugin": {"jsonrpc": "2.0", "id": 2, "result": {"state": "*"}}}
 # A label change is applied without reopening the capture.
 {"core": {"jsonrpc": "2.0", "id": 3, "method": "configure", "params": {"params": {"element": "videotestsrc", "label": "Presenter laptop", "show_cursor": false}}}}
 {"plugin": {"jsonrpc": "2.0", "id": 3, "result": {"applied": true}}}

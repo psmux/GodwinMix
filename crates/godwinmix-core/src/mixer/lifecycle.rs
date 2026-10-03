@@ -71,7 +71,15 @@ impl Mixer {
         // The ticks it spent restarting were not a stall.
         slot.stalled_ticks = 0;
         match failed {
-            Some(e) => error!(source = %id, e, "restart failed"),
+            Some(e) => {
+                error!(source = %id, e, "restart failed");
+                // Armed again, with the backoff every restart has. A source
+                // whose restart failed is connecting, not stalled, so the
+                // stall sweep never asked again: a screen capture whose start
+                // ran past five seconds on 2026-10-03 sat on connecting for
+                // twenty minutes until somebody restarted it by hand.
+                self.arm_source_restart(id.clone(), "its last restart failed");
+            }
             None => debug!(source = %id, "restart finished"),
         }
         self.broadcast_status();
