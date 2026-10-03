@@ -13,6 +13,7 @@ use serde_json::Value;
 mod in_place;
 mod merge;
 mod missing;
+mod one_camera;
 
 pub fn register(reg: &mut Registry<Call>) {
     missing::register(reg);
@@ -201,6 +202,7 @@ async fn find(call: &Call, id: &str) -> Result<SourceStatus, RpcError> {
 /// source arrives exactly as one added by hand.
 pub(super) async fn add(call: Call, params: Value) -> Result<Value, RpcError> {
     let req: AddSourceRequest = call.params(&params)?;
+    one_camera::refuse_a_second_open(&call, &req).await?;
     let id = crate::control::add_source_now(&call.app, req)
         .await
         .map_err(|e| call.mixer_error(e))?;
