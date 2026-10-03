@@ -106,8 +106,15 @@ fn seed(bundled: &Path, dest: &Path) -> io::Result<()> {
         let stamp = stamp_of(&from);
         let into = dest.join(&name).join(&version);
         match fs::read_to_string(into.join(STAMP)) {
-            // The copy already there is the one in this bundle.
-            Ok(there) if there.trim() == stamp.trim() => continue,
+            // The copy already there is the one in this bundle. One seeded
+            // before the trust record was written gets it now.
+            Ok(there) if there.trim() == stamp.trim() => {
+                let trust = into.join(".gmx-trust.json");
+                if !trust.is_file() {
+                    fs::write(trust, crate::shipped::trust_record(&from))?;
+                }
+                continue;
+            }
             // This app's copy from an older bundle, or from a rebuild of the
             // same version, which is what a developer does all day.
             Ok(_) => fs::remove_dir_all(&into)?,
@@ -120,6 +127,9 @@ fn seed(bundled: &Path, dest: &Path) -> io::Result<()> {
         }
         copy_tree(&from, &into)?;
         fs::write(into.join(STAMP), &stamp)?;
+        // It came with the app, so the mixer says so rather than calling it
+        // custom and unreviewed. The same record the mixer writes itself.
+        fs::write(into.join(".gmx-trust.json"), crate::shipped::trust_record(&from))?;
         retire_older(&dest.join(&name), &version)?;
         eprintln!("[desktop] put {name} {version} in {}", dest.display());
     }
@@ -256,6 +266,23 @@ mod tests {
             !dest.join("camera/0.1.0").exists(),
             "two versions of one plugin is a coin toss at every start"
         );
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_seeded_plugin_is_recorded_as_shipped_with_the_app() {
+        let root = fixture("trust");
+        let (bundle, dest) = (root.join("bundle"), root.join("dest"));
+        write(&bundle.join("camera/0.1.0/gmx-plugin.toml"), "[plugin]
+name = \"camera\"
+");
+        seed(&bundle, &dest).unwrap();
+        let trust = dest.join("camera/0.1.0/.gmx-trust.json");
+        assert!(fs::read_to_string(&trust).unwrap().contains("\"shipped\":true"));
+        // An older seed with no record gets one without being copied again.
+        fs::remove_file(&trust).unwrap();
+        seed(&bundle, &dest).unwrap();
+        assert!(trust.is_file());
         let _ = fs::remove_dir_all(&root);
     }
 

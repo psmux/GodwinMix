@@ -79,7 +79,7 @@ fn same_place(a: &Path, b: &Path) -> bool {
 }
 
 /// The record the mixer writes for a plugin that ships with it.
-fn trust_record(from: &Path) -> String {
+pub(crate) fn trust_record(from: &Path) -> String {
     serde_json::json!({ "source": from.display().to_string(), "shipped": true }).to_string()
 }
 
