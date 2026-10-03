@@ -47,12 +47,31 @@ NDI SDK's terms. The installer's licence carries the NDI end user terms and
 every NDI form links ndi.video with the trademark line. The GStreamer and
 Chromium licence files travel with them now; before, neither did.
 
+Each output was then driven from the installed app, against the LAN address
+because of the loopback problem below. NDI out and back in as a source carried
+picture and sound, with no gap over 70 ms in 30 seconds; before three fixes it
+carried one or the other, and the receiver panicked on its bandwidth setting.
+Icecast fed a stand in server 87 seconds of stereo 128 kbit/s MP3 that
+decodes. RTSP served 1080p30 H.264 that `rtspsrc` played back, 261 frames.
+Three things were wrong in the core and are fixed. Installing a plugin dropped
+the output types of every plugin installed before it, so after adding NDI the
+UDP, Icecast and RTSP outputs were refused as not in this build. A plugin the
+installer shipped was labelled custom, unreviewed. And a source whose restart
+failed was never restarted again: the screen capture, whose start took up to
+ten seconds because Direct3D 11 takes five to load on this GPU, sat on
+connecting until it was restarted by hand. It now answers `start` at once and
+opens behind it.
+
 Still open on that machine. A VPN client there drops loopback UDP and resets
 loopback TCP once a client starts streaming, so the SRT, RIST, RTP, ONVIF and
 two HTTP hook tests cannot pass on it, and the Icecast output test passes only
 when pointed at the LAN address. Test binaries that load Quick Sync sometimes
 end with `0xc0000374` after their tests pass. The UI's browser test harness
-did not finish under Edge on Windows. NDI was not received from a real sender.
+did not finish under Edge on Windows. NDI was not received from a real sender,
+only from the mixer's own. The screen source drifts behind the programme over
+long idle stretches, minutes in half an hour, until it is judged stalled and
+restarted; the restart now comes back, but the cause is not found. The
+transition frame rate test fails on a loaded run and passes alone.
 
 ## Current implementation, 2026-09-20
 
