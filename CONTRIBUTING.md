@@ -21,11 +21,44 @@ development headers.
 ```sh
 brew install gstreamer                  # macOS
 # Linux: your distro's gstreamer plus plugins base, good, bad, ugly, libav, rs
-# Windows: the MSVC runtime and development MSIs from gstreamer.freedesktop.org
+# Windows: the MSVC installer from gstreamer.freedesktop.org, see below
 
 cargo build
 cargo build --release
 ```
+
+### On Windows
+
+GStreamer 1.28 for Windows is one installer, `gstreamer-1.0-msvc-x86_64-1.28.x.exe`,
+and the full type brings the development files cargo needs. From an
+administrator PowerShell:
+
+```powershell
+.\gstreamer-1.0-msvc-x86_64-1.28.6.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /TYPE=full
+```
+
+It sets `GSTREAMER_1_0_ROOT_MSVC_X86_64` and nothing else. Add the other two
+yourself, once:
+
+```powershell
+$g = "C:\Program Files\gstreamer\1.0\msvc_x86_64"
+[Environment]::SetEnvironmentVariable("PKG_CONFIG_PATH", "$g\lib\pkgconfig", "User")
+[Environment]::SetEnvironmentVariable("Path", [Environment]::GetEnvironmentVariable("Path", "User") + ";$g\bin", "User")
+```
+
+Git for Windows has to be installed too, because a first party plugin builds
+with `sh build` and the mixer runs that with Git's `sh`. Building the desktop
+installer also wants `rustup component add llvm-tools` and `cargo install
+tauri-cli --version "^2.0"`; the steps are the ones in
+`.github/workflows/release.yml`, and they run in that order on a desk as well.
+
+Two things on a Windows machine are not the mixer's fault and will fail tests
+that look like they are. A VPN client can drop UDP on the loopback address,
+which takes the SRT, RIST, RTP and ONVIF tests with it; send a datagram to
+`127.0.0.1` from Python to see whether yours does. And Intel's Quick Sync
+runtime on some Arc GPUs corrupts the heap of the process that loads it, about
+one load in four (exit code `0xc0000374`), which can end a test binary after
+every test in it has passed.
 
 ### The crates
 
