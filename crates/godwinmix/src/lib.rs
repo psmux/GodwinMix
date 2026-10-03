@@ -146,6 +146,12 @@ struct Args {
     #[arg(long, hide = true)]
     hls_packager: bool,
 
+    /// Calibrate this machine's encoders into this directory and exit. Not
+    /// for a person to type: a station starts it, so a driver that crashes
+    /// while it loads takes this process and not the station.
+    #[arg(long, value_name = "DIR", hide = true)]
+    calibrate_into: Option<PathBuf>,
+
     #[command(subcommand)]
     command: Option<Command>,
 }
@@ -720,6 +726,10 @@ pub async fn run() -> Result<()> {
         return station::packager::run().await;
     }
 
+    if let Some(dir) = &args.calibrate_into {
+        return station::calibrate::run(&config::path_in_force(&args.config), args.codecs.as_deref(), dir);
+    }
+
     if args.test_core {
         return run_test_core();
     }
@@ -850,6 +860,11 @@ pub async fn run() -> Result<()> {
             &core_observe::runtime_dir(&config_path),
         ),
     };
+    // A single process core measures in a child too: here a driver that dies
+    // while it loads would take the programme with it.
+    if let Some(apart) = station::calibrate::apart(&config_path, args.codecs.as_deref()) {
+        station.measure_apart_with(apart);
+    }
     mix.set_station(station.clone());
     let quit = Arc::new(tokio::sync::Notify::new());
     // A show under a station binds the loopback port it was given, tells the

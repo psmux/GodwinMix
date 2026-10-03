@@ -1511,6 +1511,7 @@ impl Mixer {
         // function.
         let sel = crate::catalogue::select(&cfg, None)?;
         crate::catalogue::log_selection(&sel);
+        crate::catalogue::preload::selected(&sel);
         let vars = encoder_vars(&cfg);
         let backends = Backends::from_selection(&sel);
         backends.apply_decoder_ranks();

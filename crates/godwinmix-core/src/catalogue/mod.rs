@@ -26,6 +26,7 @@
 pub mod apply;
 pub mod check;
 pub mod model;
+pub mod preload;
 pub mod select;
 pub mod update;
 
