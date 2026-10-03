@@ -1,5 +1,36 @@
 # Where GodwinMix stands
 
+## Windows, 2026-10-03
+
+Built, run and installed on a Windows 11 laptop (Intel Arc 140T, driver
+32.0.101.8860) with GStreamer 1.28.6. The mixer picks Quick Sync for encode
+and decode by itself. `dev/smoke.ps1` passes every step it runs; the five
+plugin steps skip because Windows refuses shell plugins.
+
+The installers build from `release.yml`'s steps and stay well inside the
+budget: the `.msi` is 59 MB and the NSIS `.exe` 39 MB, against 150. The trimmed
+runtime is 117 MB. Each installs, passes `--headless-check` with the system
+GStreamer taken off `PATH`, loads its four device plugins, installs over an
+older copy as an upgrade, and uninstalls leaving nothing in Program Files.
+
+What this found and fixed. The Quick Sync runtime on this GPU corrupts the heap
+of the process that loads it in about one load in four, and calibration loaded
+it inside the station, which then died with every show; calibration now runs
+in a child the station can lose and retry, and a show loads its codec plugins
+before anything is on air, so the same crash costs one restart at start up.
+First party plugins could not build from a checkout on Windows. The process
+sampler never read CPU there, so the governor counted a mixing show as free.
+`bundle-plugins.sh` refused ingest on every platform. A busy UDP port was not
+explained on Windows. `cargo test --workspace` did not compile on Windows, and
+many tests wrote Windows paths into launch descriptions.
+
+Still open on that machine. A VPN client there drops loopback UDP and resets
+some loopback TCP, so the SRT, RIST, RTP, ONVIF and two HTTP hook tests cannot
+pass on it. Test binaries that load Quick Sync sometimes end with
+`0xc0000374` after their tests pass. The desktop window was opened and closed
+but not clicked through. The web page renderer is still not in the Windows
+installer.
+
 ## Current implementation, 2026-09-20
 
 The broadcast workspace now has draggable split panes, grouped tabs, keyboard
