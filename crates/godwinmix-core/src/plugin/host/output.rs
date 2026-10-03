@@ -16,9 +16,9 @@
 //! protocol, one channel, and the media on the transport that was negotiated,
 //! which is the rule everywhere else too.
 //!
-//! A FIFO is a Unix thing. On Windows an output sidecar is refused with a
-//! message naming the limitation rather than half working; the named pipe that
-//! would fix it is `docs/reference/plugin-lifecycle.md`'s open question.
+//! A FIFO is a Unix thing. On Windows the address is a named pipe instead,
+//! `\\.\pipe\godwinmix-...`: the plugin makes it when it initializes, as a
+//! Unix plugin opens its FIFO then, and the core's `filesink` opens it by name.
 
 use super::process::Sidecar;
 use super::source::{canvas_of, params_json, state_of, SidecarSpec};
@@ -61,13 +61,6 @@ impl SidecarOutput {
     }
 
     fn handshake(&mut self, instance: &str, params: &Params) -> Result<()> {
-        anyhow::ensure!(
-            cfg!(unix),
-            "an output plugin needs a FIFO to receive the programme on, and this is {}. \
-             Sidecar outputs are Unix only for now; a first party output (rtmp/output, \
-             srt/output) works everywhere.",
-            std::env::consts::OS
-        );
         let dir = MediaDir::create(&self.spec.runtime, instance)?;
         let fifo = dir.programme();
         make_fifo(&fifo)?;
@@ -133,9 +126,11 @@ fn make_fifo(path: &str) -> Result<()> {
     Ok(())
 }
 
+/// Windows: the plugin makes the named pipe, because the side that makes one
+/// is its server and the core's `filesink` can only open a pipe by name.
 #[cfg(not(unix))]
 fn make_fifo(_path: &str) -> Result<()> {
-    anyhow::bail!("this platform has no FIFO; a sidecar output needs one")
+    Ok(())
 }
 
 impl Output for SidecarOutput {

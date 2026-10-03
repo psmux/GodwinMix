@@ -533,11 +533,38 @@ def megabytes(path: Path) -> float:
     return total / (1024 * 1024)
 
 
+# Elements first party plugins make without listing them in a NEEDED array.
+PLUGIN_EXTRA = [
+    "decklinkvideosrc", "decklinkaudiosrc", "decklinkvideosink", "decklinkaudiosink",
+    "jpegparse", "jpegdec",
+]
+
+
+def plugin_elements(plugins: Path) -> set[str]:
+    """Every element a first party plugin says it needs.
+
+    Each plugin checks its elements at start against a `NEEDED` list in its
+    source. Read from there, so a plugin the installer carries always finds
+    them: WHIP, NDI and DeckLink were trimmed away before this, and the
+    installed app could not run them.
+    """
+    import re
+    found = set(PLUGIN_EXTRA)
+    if not plugins.is_dir():
+        return found
+    for source in plugins.glob("*/src/**/*.rs"):
+        text = source.read_text(encoding="utf-8", errors="replace")
+        for block in re.findall(r"NEEDED[^=]*=\s*&?\[(.*?)\];", text, re.S):
+            found.update(re.findall(r'"([a-z0-9_]+)"', block))
+    return found
+
+
 def wanted_plugins(prefix: Path, plugins: Path, registry: Path,
                    platform: str, codecs: Path) -> tuple[list[str], list[str]]:
     """The plugins to keep, and the elements that asked for them."""
     elements = sorted(catalogue_elements(codecs)
-                      | set(PIPELINE) | set(PLATFORM.get(platform, [])))
+                      | set(PIPELINE) | set(PLATFORM.get(platform, []))
+                      | plugin_elements(codecs.parent / "plugins"))
     where = element_map(prefix, plugins, registry)
     keep = set(ALWAYS_PLUGINS)
     absent = []
