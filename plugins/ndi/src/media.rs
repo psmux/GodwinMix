@@ -124,7 +124,7 @@ impl Receiver {
         let src = make("ndisrc", "ndi")?;
         set_string(&src, "ndi-name", &settings.name);
         set_string(&src, "url-address", &settings.address);
-        set_enum(&src, "bandwidth", &settings.bandwidth);
+        set_bandwidth(&src, &settings.bandwidth);
         set_enum(&src, "timestamp-mode", &settings.timestamp_mode);
 
         let demux = make("ndisrcdemux", "demux")?;
@@ -156,16 +156,17 @@ impl Receiver {
         gst::Element::link(&mux, &sink)
             .map_err(|e| format!("could not link the muxer to the pipe: {e}"))?;
 
-        let weak = pipeline.downgrade();
+        // Sound and picture are linked together once both have come, since
+        // the muxer takes no stream after its first. See gather.rs.
         let for_pads = reporter.clone();
-        demux.connect_pad_added(move |_, pad| {
-            let Some(pipeline) = weak.upgrade() else { return };
-            if let Err(e) = attach(&pipeline, pad, "mux") {
+        let into_mux = std::sync::Arc::new(move |pipeline: &gst::Pipeline, pad: &gst::Pad| {
+            if let Err(e) = attach(pipeline, pad, "mux") {
                 if let Some(r) = &for_pads {
                     r.error(format!("an NDI stream could not be muxed: {e}"));
                 }
             }
         });
+        crate::gather::connect(&demux, &pipeline, into_mux);
 
         let mut pipe = Pipe::wrap(pipeline);
         pipe.play(reporter.clone()).map_err(|e| {
@@ -344,11 +345,14 @@ fn decode_into_combiner(pipeline: &gst::Pipeline, pad: &gst::Pad) -> Result<(), 
     let queue = make("queue", "")?;
     let decode = make("decodebin", "")?;
     let convert = make("videoconvert", "")?;
+    // By the caps when they are set, else by the pad's name: matroskademux
+    // can add a pad before its caps, and the sound then went down a
+    // videoconvert and never reached the combiner.
     let name = pad
         .current_caps()
         .and_then(|c| c.structure(0).map(|s| s.name().to_string()))
-        .unwrap_or_default();
-    let convert = if name.starts_with("audio/") {
+        .unwrap_or_else(|| pad.name().to_string());
+    let convert = if name.starts_with("audio") {
         make("audioconvert", "")?
     } else {
         convert
@@ -435,6 +439,23 @@ fn set_string(element: &gst::Element, name: &str, value: &str) {
 
 /// Set an enum property from its printed name, quietly doing nothing when this
 /// build spells the value differently.
+/// `high`, `low` or `audio-only` on `ndisrc`. GStreamer 1.28's `bandwidth` is
+/// an integer (100 the full picture, 0 the lowest, 10 sound only), an older
+/// one's an enum with nicks; a name set on the integer panicked.
+fn set_bandwidth(element: &gst::Element, value: &str) {
+    let Some(spec) = element.find_property("bandwidth") else { return };
+    let (number, nick) = match value {
+        "low" => (0i32, "lowest"),
+        "audio-only" => (10, "audio-only"),
+        _ => (100, "highest"),
+    };
+    if spec.value_type() == i32::static_type() {
+        element.set_property("bandwidth", number);
+    } else {
+        set_enum(element, "bandwidth", nick);
+    }
+}
+
 fn set_enum(element: &gst::Element, name: &str, value: &str) {
     if value.is_empty() || element.find_property(name).is_none() {
         return;
@@ -454,6 +475,21 @@ mod tests {
         let s = SourceSettings::from_params(&json!({}));
         assert!(s.malformed().is_none());
         assert!(s.problem().expect("no sender").contains("list_senders"));
+    }
+
+    #[test]
+    fn each_bandwidth_lands_on_ndisrc_whatever_type_its_property_is() {
+        gst::init().unwrap();
+        let Ok(src) = gst::ElementFactory::make("ndisrc").build() else {
+            eprintln!("skipped: no ndisrc in this GStreamer");
+            return;
+        };
+        for (name, number) in [("high", 100i32), ("low", 0), ("audio-only", 10)] {
+            set_bandwidth(&src, name);
+            if src.find_property("bandwidth").unwrap().value_type() == i32::static_type() {
+                assert_eq!(src.property::<i32>("bandwidth"), number, "{name}");
+            }
+        }
     }
 
     #[test]

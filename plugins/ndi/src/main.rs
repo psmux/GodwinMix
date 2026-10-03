@@ -10,6 +10,7 @@
 //! NDI® is a registered trademark of Vizrt NDI AB. This plugin is not
 //! affiliated with or endorsed by Vizrt. See README.md.
 
+mod gather;
 mod library;
 mod media;
 mod senders;
