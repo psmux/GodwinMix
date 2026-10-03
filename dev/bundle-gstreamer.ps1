@@ -66,7 +66,9 @@ function Find-Python {
     # it is on PATH and fails when run. So a name counts only if it answers.
     foreach ($name in @("python3", "python", "py")) {
         foreach ($found in @(Get-Command $name -All -ErrorAction SilentlyContinue)) {
-            & $found.Source --version *> $null
+            # Windows PowerShell 5 turns the stand in's complaint on stderr
+            # into a terminating error under "Stop", so it is caught here.
+            try { & $found.Source --version *> $null } catch { continue }
             if ($LASTEXITCODE -eq 0) { return $found.Source }
         }
     }
