@@ -229,6 +229,7 @@ const ASSETS: &[(&str, &str)] = &[
     // The menu bar's contents, for the page and for the desktop app's native
     // menu. Data, fetched when a menu first opens.
     ("shell/menus.json", include_str!("../../../ui/shell/menus.json")),
+    ("shell/agents.js", include_str!("../../../ui/shell/agents.js")),
     ("shell/menu-actions.js", include_str!("../../../ui/shell/menu-actions.js")),
     ("shell/project.js", include_str!("../../../ui/shell/project.js")),
     ("shell/project-open.js", include_str!("../../../ui/shell/project-open.js")),
@@ -891,6 +892,8 @@ mod tests {
         reachable.extend(closure_of("panels/scenes/green-screen.js"));
         reachable.extend(closure_of("panels/composer/key.js"));
         reachable.extend(closure_of("panels/composer/cutout.js"));
+        // Help > Connect an AI agent, on its first press.
+        reachable.extend(closure_of("shell/agents.js"));
         reachable.extend(closure_of("panels/outputs/destination.js"));
         reachable.extend(closure_of("panels/channels/panel.js"));
         reachable.extend(closure_of("shell/sandbox.js"));

@@ -657,6 +657,8 @@ class CoreInfo(TypedDict, total=False):
     canvas: CanvasInfo
     core: str
     # Always "godwinmix".
+    executable: Optional[str]
+    # The mixer's own executable on the machine it runs on. What a surface writes into an AI agent's configuration, so the command works there whether or not the binary is on the PATH.
     features: List[str]
     # Feature strings a client can branch on: multiview, snapshot, uploads, mcp, browser, exec-sources, rehearsal, tokens.
     limits: Limits

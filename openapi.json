@@ -2341,6 +2341,13 @@
             "description": "Always \"godwinmix\".",
             "type": "string"
           },
+          "executable": {
+            "description": "The mixer's own executable on the machine it runs on. What a surface\nwrites into an AI agent's configuration, so the command works there\nwhether or not the binary is on the PATH.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "features": {
             "description": "Feature strings a client can branch on: multiview, snapshot, uploads,\nmcp, browser, exec-sources, rehearsal, tokens.",
             "items": {

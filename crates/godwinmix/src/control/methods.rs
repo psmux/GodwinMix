@@ -123,6 +123,7 @@ fn register_core(reg: &mut Registry<Call>) {
                     supervised: lifecycle::supervised(),
                     restart: lifecycle::restart_info(),
                     tls: crate::tls::info(),
+                    executable: std::env::current_exe().ok().map(|p| p.display().to_string()),
                 })
             }),
         )
