@@ -337,7 +337,9 @@ jobs:
         working-directory: tauri-app
         env:
           CI: "true"
-        run: cargo tauri build --bundles dmg
+        # `app` as well, or tauri-bundler deletes the .app it made the disk
+        # image from, and the check below and the collect step find nothing.
+        run: cargo tauri build --bundles app,dmg
 
       # An installer with no media stack inside it is the failure this release
       # is meant to make impossible, so the bundle is opened and looked at.
