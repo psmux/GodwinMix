@@ -2,3 +2,5 @@
 //! same trait a third party filter uses.
 
 pub mod chroma;
+#[cfg(feature = "matte")]
+pub mod matte;

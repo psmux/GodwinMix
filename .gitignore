@@ -98,3 +98,6 @@ ui/test/vendor/
 # config it was started with. The running station's, not source.
 /shows.json
 /shows/
+
+# The cutout models and ONNX Runtime, fetched by dev/fetch-models.sh.
+/models/

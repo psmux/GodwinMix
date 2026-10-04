@@ -83,7 +83,11 @@ base64 = { workspace = true }
 sha1 = "0.10"
 
 [features]
-default = []
+default = ["matte"]
+# The person cutout with no green screen. On by default: the model and the
+# runtime are loaded only when somebody adds the filter. See
+# godwinmix-core/src/plugin/filters/matte/.
+matte = ["godwinmix-core/matte"]
 # Run `service` and `transition` plugins as WebAssembly components inside the
 # core (tier W). Off by default: it adds 11.9 MB to a release binary on
 # macos-aarch64 and takes the whole binary to 30.4 MB, and 09 section 4 item 4

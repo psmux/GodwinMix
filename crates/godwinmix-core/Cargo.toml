@@ -71,6 +71,27 @@ rustls-pki-types = { workspace = true }
 rcgen = { workspace = true }
 ring = { workspace = true }
 
+# The person cutout (`matte/filter`), when the `matte` feature is on. Loaded
+# at run time and never linked: the binary starts on a machine with no ONNX
+# Runtime, and the filter says where to get one. API 20 is ONNX Runtime 1.20,
+# so any runtime from 1.20 on serves it. See `plugin/filters/matte/`.
+ort = { version = "=2.0.0-rc.13", default-features = false, features = ["std", "load-dynamic", "api-20", "cuda", "openvino"], optional = true }
+
+# The platform's own accelerator for the cutout: registration code only, the
+# runtime that carries it is still found at run time.
+[target.'cfg(windows)'.dependencies]
+ort = { version = "=2.0.0-rc.13", default-features = false, features = ["directml"], optional = true }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+ort = { version = "=2.0.0-rc.13", default-features = false, features = ["coreml"], optional = true }
+
+[features]
+default = []
+# A person cut out of the camera picture with no green screen, by a matting
+# model on whatever the machine has: DirectML, CoreML, CUDA, OpenVINO or the
+# CPU. Adds the `ort` bindings and no native code.
+matte = ["dep:ort"]
+
 [dev-dependencies]
 # Paused time, so the multiview linger tests assert on two seconds without
 # waiting two seconds. Test only: the shipped binary does not carry it.
