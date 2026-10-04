@@ -9,10 +9,15 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
+// Each `scene` in this file also answers to `id`, which is what a REST path
+// such as `DELETE /api/v1/scenes/{id}` captures. Without it every scene route
+// that put the scene in its path refused with "missing field `scene`".
+
 /// Anything that names one scene.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct SceneRequest {
     /// The scene's name or its id.
+    #[serde(alias = "id")]
     pub scene: String,
 }
 
@@ -72,6 +77,7 @@ pub struct CreateFromAnswer {
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct RenameSceneRequest {
+    #[serde(alias = "id")]
     pub scene: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
@@ -81,6 +87,7 @@ pub struct RenameSceneRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct DuplicateSceneRequest {
+    #[serde(alias = "id")]
     pub scene: String,
     /// What to call the copy. A name already in use gets a number after it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -107,6 +114,7 @@ pub struct ImportObsRequest {
 /// `scene.item.add`.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct AddItemRequest {
+    #[serde(alias = "id")]
     pub scene: String,
     /// What the item shows: `{"source": "cam1"}`, `{"ref": "<scene id>"}` or
     /// `{"graphic": "plugin/id"}`.
@@ -138,6 +146,7 @@ pub struct AddItemRequest {
 /// Anything that names one item.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct ItemRequest {
+    #[serde(alias = "id")]
     pub scene: String,
     /// The item's name or its id.
     pub item: String,
@@ -148,6 +157,7 @@ pub struct ItemRequest {
 /// `scene.item.set`: a state assignment. Only the keys named move.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct SetItemRequest {
+    #[serde(alias = "id")]
     pub scene: String,
     pub item: String,
     /// Any of `name`, `transform`, `crop`, `opacity`, `blend`, `visible`,
@@ -174,6 +184,7 @@ pub struct SetItemRequest {
 /// `arrange_grid`, `match_size`, `group`.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct ItemsRequest {
+    #[serde(alias = "id")]
     pub scene: String,
     /// Item names or ids.
     pub items: Vec<String>,
@@ -207,6 +218,7 @@ pub struct ItemsRequest {
 /// `scene.item.reorder`.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct ReorderRequest {
+    #[serde(alias = "id")]
     pub scene: String,
     pub item: String,
     /// Put it behind this one.
@@ -225,6 +237,7 @@ pub struct ReorderRequest {
 /// `scene.item.move` and `scene.item.copy`.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct MoveItemRequest {
+    #[serde(alias = "id")]
     pub scene: String,
     pub item: String,
     /// The scene it is going to.
@@ -234,6 +247,7 @@ pub struct MoveItemRequest {
 /// `scene.item.filter.add`.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct AddItemFilterRequest {
+    #[serde(alias = "id")]
     pub scene: String,
     pub item: String,
     /// A filter type id, as `plugin.list` reports them.
@@ -250,6 +264,7 @@ pub struct AddItemFilterRequest {
 /// `scene.item.filter.set` and `remove`.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct ItemFilterRequest {
+    #[serde(alias = "id")]
     pub scene: String,
     pub item: String,
     /// The filter's name, or its position in the item's chain from 0.
@@ -266,6 +281,7 @@ pub struct ItemFilterRequest {
 /// `scene.item.bind`.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct BindRequest {
+    #[serde(alias = "id")]
     pub scene: String,
     pub item: String,
     /// A geometry path such as `frame.w` or `position.x`.
@@ -311,6 +327,7 @@ pub struct ApplyLayoutRequest {
 /// `scene.layout.copy` and `paste`.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct LayoutClipboardRequest {
+    #[serde(alias = "id")]
     pub scene: String,
     /// What `scene.layout.copy` answered with.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -345,6 +362,7 @@ pub struct PreviewFrameRequest {
 /// `scene.edit.begin`.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct EditBeginRequest {
+    #[serde(alias = "id")]
     pub scene: String,
     /// True to edit the scene that is on air as you go. The default is off
     /// air: the draft is applied on the next take or on an explicit apply.

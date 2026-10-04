@@ -466,6 +466,22 @@ mod tests {
         assert_eq!(params["id"], "cam 2");
     }
 
+    /// A scene named in the path reaches a handler that reads `scene`. The
+    /// path captures `id`, and every scene route refused with "missing field
+    /// `scene`" until the requests took `id` as well.
+    #[test]
+    fn a_scene_in_the_path_is_the_scene_the_handler_reads() {
+        use crate::control::methods::scenes::{RenameSceneRequest, SceneRequest};
+        let routes = routes_for_test();
+        let (route, captures) = resolve(&routes, &Method::DELETE, "/api/v1/scenes/Late%20cutout").unwrap();
+        assert_eq!(route.method, "scene.remove");
+        let params = params_from(Value::Null, "", captures);
+        let req: SceneRequest = serde_json::from_value(params).expect("the path names the scene");
+        assert_eq!(req.scene, "Late cutout");
+        let req: RenameSceneRequest = serde_json::from_value(json!({ "id": "a", "name": "b" })).unwrap();
+        assert_eq!(req.scene, "a");
+    }
+
     #[test]
     fn percent_encoded_ids_survive_the_path() {
         assert_eq!(decode("cam%201"), "cam 1");
