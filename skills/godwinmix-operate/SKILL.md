@@ -203,7 +203,10 @@ made (with an image tool, say). Five steps, all through tools found with
    background at the canvas size.
 2. `create_scene_from {"sources": ["newsroom.png", "cam1", "desk.png"],
    "layout": "virtual-set", "name": "Presenter"}`. The sources are in slot
-   order: background, camera, then what stands in front. Files become sources,
+   order: background, camera, then what stands in front. With no green
+   screen behind the presenter, add `"settings": {"screen": "none"}` and the
+   person is cut out by a model instead (`matte/filter`); `"blue"` is for a
+   blue screen. Files become sources,
    the key colour is guessed from the camera, and the answer says which colour
    (`key`) and how (`key_from`). The presenter is the item `presenter`, its key
    the filter `Key`.

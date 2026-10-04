@@ -20,8 +20,11 @@ You need three things in the mixer first:
 It is a scene like any other, started from a layout made for it.
 
 1. In the Scenes panel press the **▾** beside **New scene** and choose
-   **Presenter on a green screen**. The right click menu and the command
-   palette have it too, as **New scene: presenter on a green screen**.
+   **Presenter in front of a new background**. The right click menu and the
+   command palette have it too, as **New scene: presenter in front of a new
+   background**. Leave **Behind the presenter** at **A green screen**, or
+   choose **A blue screen**. With no screen at all, see [replace the
+   background behind a person](replace-the-background.md).
 2. Pick the **Background**, the **Presenter** camera and, if you have one, the
    **Foreground**. Library files are listed with "(library)" after the name.
 3. Press **Make the scene**.

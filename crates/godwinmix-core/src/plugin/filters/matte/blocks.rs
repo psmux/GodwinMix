@@ -104,6 +104,28 @@ mod tests {
         assert_eq!(out[0..4], out[4..8], "both rows the same");
     }
 
+    /// What a 1080p frame costs on its own thread: the mask laid over it and
+    /// the frame's chroma copied. `cargo test --release -- --ignored cost`.
+    #[test]
+    #[ignore]
+    fn cost_per_1080p_frame() {
+        let (w, h) = (1920usize, 1080usize);
+        let mask: Vec<u8> = (0..512 * 288).map(|i| (i % 256) as u8).collect();
+        let (u, v) = (vec![100u8; (w / 2) * (h / 2)], vec![150u8; (w / 2) * (h / 2)]);
+        let r = Region { x: 0, y: 0, w, h };
+        let (mut a, mut c) = (Vec::new(), Vec::new());
+        let curve = identity();
+        let n = 200;
+        let t = std::time::Instant::now();
+        for _ in 0..n {
+            alpha(&mask, (512, 288), (w, h), r, &curve, &mut a);
+            chroma(&u, &v, [w, w / 2, w / 2], r, &mut c);
+        }
+        let ms = t.elapsed().as_secs_f64() * 1000.0 / n as f64;
+        eprintln!("cutout blocks at 1080p: {ms:.2} ms a frame");
+        assert!(ms < 8.0, "{ms} ms");
+    }
+
     #[test]
     fn no_mask_yet_shows_the_whole_picture() {
         let r = Region { x: 0, y: 0, w: 4, h: 4 };
