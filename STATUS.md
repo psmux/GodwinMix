@@ -1,5 +1,49 @@
 # Where GodwinMix stands
 
+## Backgrounds, agents and releases, 2026-10-04
+
+**A new background with or without a screen.** `matte/filter` cuts a person
+out of the camera with no green or blue screen, by a matting model through
+ONNX Runtime loaded at run time: DirectML on Windows, CoreML on macOS, CUDA or
+OpenVINO where a runtime carries them, and the CPU on any machine, a Raspberry
+Pi included. Two Apache 2.0 models ship. MediaPipe selfie segmentation took
+5.6 ms a frame on this laptop's CPU and MODNet 29 ms on its GPU; `auto` picks
+by what the machine has. The model runs on a thread of its own and the
+frame's thread spends about 2 ms on a 1080p frame laying the newest mask over
+it, so the programme never waits for the model. A cutout is drawn by the board
+exactly as the chroma key is. Tested through a real pipeline on the CPU and on
+DirectML. The presenter layout now takes `screen`: green, blue or none, and
+New scene offers it. The installers and the server image carry the models
+and the runtime; `dev/fetch-models.sh` fetches them pinned and checked.
+Robust Video Matting, from StudioBackground, is finer still but GPL 3.0, so it
+is not shipped; its recurrent form is not read yet.
+
+Virtual set is no longer an option of its own. It was a layout behind a
+button beside New scene; it is now a way to start a new scene, and
+`scene.virtual_set` folded into `scene.create_from`.
+
+**Agents.** Help > Connect an AI agent shows the lines for Claude Code,
+opencode, pi, Codex, Gemini CLI and any MCP client, written with the mixer's
+own path. `godwinmix mcp` and every `gmx` command find the desktop app's
+mixer and its token by themselves. `gmx tool NAME JSON` runs any MCP tool
+from a shell, for pi, which has no MCP, and `gmx ctl upload` puts an agent's
+own pictures and templates in the library. `gmx skill install` writes for
+opencode and pi too.
+
+**Found and fixed on the way.** The installed `godwinmix.exe` could not start
+outside the app at all, its GStreamer DLLs being nowhere Windows looks; they
+are delay loaded now and the binary points itself at the bundled copy, and the
+macOS release does the same with install names. Every media upload in the
+desktop app failed with access denied, the relative media folder having been
+resolved against the install folder. The release's macOS job deleted its own
+`.app` before checking it, its Windows job ran the NDI SDK installer for two
+hours until it timed out, and its Linux jobs lacked the RTSP server's
+development package. The docs index had 29 pages missing.
+
+Still open: the station link test and the transition frame rate test fail on
+a loaded run here and pass alone. A real person was not in front of the camera
+for the cutout's test; the empty room was cut out to black, which is right.
+
 ## Windows, 2026-10-03
 
 Built, run and installed on a Windows 11 laptop (Intel Arc 140T, driver
