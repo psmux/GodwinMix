@@ -191,7 +191,7 @@ and a whole state document with a snapshot URL when something crosses a
 threshold. Over MCP the same push arrives as
 `notifications/gmx/agent.state`; you do not have to ask for it.
 
-## A virtual set from a generated background
+## A presenter on a green screen, in front of a generated background
 
 A presenter in front of a green or blue screen, put into a studio picture you
 made (with an image tool, say). Five steps, all through tools found with
@@ -201,12 +201,13 @@ made (with an image tool, say). Five steps, all through tools found with
    file as the body. Make it the canvas shape, 16 by 9. A desk or window frame
    in front of the presenter is a second upload, a PNG with a transparent
    background at the canvas size.
-2. `create_virtual_set {"background": "newsroom.png", "presenter": "cam1",
-   "foreground": "desk.png"}`. Files become sources, the key colour is guessed
-   from the camera, and the answer says which colour (`key`) and how
-   (`key_from`). The presenter is the item `presenter`, its key the filter
-   `Key`.
-3. `take {"scene": "Virtual set"}`, or arm it and take it when you are told.
+2. `create_scene_from {"sources": ["newsroom.png", "cam1", "desk.png"],
+   "layout": "virtual-set", "name": "Presenter"}`. The sources are in slot
+   order: background, camera, then what stands in front. Files become sources,
+   the key colour is guessed from the camera, and the answer says which colour
+   (`key`) and how (`key_from`). The presenter is the item `presenter`, its key
+   the filter `Key`.
+3. `take {"scene": "Presenter"}`, or arm it and take it when you are told.
 4. Look: `snapshot {"id": "program", "width": 640}`. At 320 you cannot judge
    an edge.
 5. Adjust what the picture tells you, with `set_scene_item_filter` on item

@@ -1,4 +1,5 @@
-//! `scene.virtual_set` and `source.key_color` over `/rpc`, the way an agent
+//! A presenter keyed into a designed studio with `scene.create_from`, and
+//! `source.key_color`, over `/rpc`, the way an agent
 //! reaches them: a real server, real GStreamer, a test pattern for a camera
 //! and two pictures in the media library.
 
@@ -78,7 +79,7 @@ fn png(path: &std::path::Path, rgba: [u8; 4]) {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn a_virtual_set_is_made_in_one_call_from_a_camera_and_two_library_pictures() {
+async fn a_presenter_scene_is_made_in_one_call_from_a_camera_and_two_library_pictures() {
     let media = std::env::temp_dir().join(format!("gmx-virtual-set-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&media);
     std::fs::create_dir_all(&media).unwrap();
@@ -87,25 +88,32 @@ async fn a_virtual_set_is_made_in_one_call_from_a_camera_and_two_library_picture
     let url = serve(&media).await;
     let (mut socket, _) = tokio_tungstenite::connect_async(&url).await.expect("connecting to /rpc");
 
-    let made = ask(&mut socket, 1, "scene.virtual_set", json!({
-        "background": "newsroom.png", "presenter": "cam", "foreground": "desk.png", "key": "#00ff00"
+    let made = ask(&mut socket, 1, "scene.create_from", json!({
+        "sources": ["newsroom.png", "cam", "desk.png"], "layout": "virtual-set", "settings": {"key": "#00ff00"}
     }))
     .await;
-    let made = made.get("result").unwrap_or_else(|| panic!("scene.virtual_set failed: {made}"));
+    let made = made.get("result").unwrap_or_else(|| panic!("scene.create_from failed: {made}"));
     assert_eq!(made["key"], "#00ff00");
     assert_eq!(made["key_from"], "given");
     assert_eq!(made["added"], json!(["newsroom", "desk"]), "both pictures became sources");
-    let paths: Vec<&str> = made["scene"]["geometry"].as_array().unwrap().iter().filter_map(|g| g["path"].as_str()).collect();
+    let paths: Vec<&str> = made["geometry"].as_array().unwrap().iter().filter_map(|g| g["path"].as_str()).collect();
     assert_eq!(paths, ["set", "presenter", "foreground"], "back to front, with no empty lower third");
-    let presenter = made["scene"]["geometry"].as_array().unwrap().iter().find(|g| g["path"] == "presenter").unwrap();
+    let presenter = made["geometry"].as_array().unwrap().iter().find(|g| g["path"] == "presenter").unwrap();
     assert_eq!(presenter["y"].as_f64().unwrap() + presenter["height"].as_f64().unwrap(), 180.0, "standing on the bottom edge");
 
-    let again = ask(&mut socket, 2, "scene.virtual_set", json!({"background": "newsroom.png", "presenter": "cam"})).await;
-    assert_eq!(again["result"]["added"], json!([]), "a picture already on the desk is not added twice");
+    let again = ask(&mut socket, 2, "scene.create_from", json!({"sources": ["newsroom.png", "cam"], "layout": "virtual-set"})).await;
+    assert!(again["result"].get("added").is_none(), "a picture already on the desk is not added twice: {again}");
+    assert!(again["result"]["key_from"].is_string(), "a keyed layout always says where its key came from: {again}");
 
-    let refused = ask(&mut socket, 3, "scene.virtual_set", json!({"background": "nowhere.png", "presenter": "cam"})).await;
-    assert_eq!(refused["error"]["data"]["field"], "background", "{refused}");
+    let refused = ask(&mut socket, 3, "scene.create_from", json!({"sources": ["nowhere.png", "cam"], "layout": "virtual-set"})).await;
+    assert_eq!(refused["error"]["data"]["field"], "sources[0]", "{refused}");
     assert!(refused["error"]["data"]["next"].as_str().unwrap().contains("media.upload"), "{refused}");
+
+    // A plain layout has no key, and says nothing about one.
+    let plain = ask(&mut socket, 5, "scene.create_from", json!({"sources": ["cam"]})).await;
+    assert!(plain["result"].get("key").is_none(), "{plain}");
+    let wrong = ask(&mut socket, 6, "scene.create_from", json!({"sources": ["cam"], "layout": "full", "settings": {"key": "auto"}})).await;
+    assert!(wrong["error"]["message"].as_str().unwrap_or_default().contains("no setting"), "{wrong}");
 
     // The green bar of the bars, a little under halfway across.
     let point = ask(&mut socket, 4, "source.key_color", json!({"id": "cam", "x": 0.5, "y": 0.3})).await;

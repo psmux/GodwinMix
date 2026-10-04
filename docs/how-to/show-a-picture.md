@@ -32,7 +32,7 @@ Two things to know:
   where a logo goes anyway. Among transparent items the stack order holds,
   and a camera with a chroma key on it is one of them: a desk PNG above a
   keyed presenter is drawn in front of the presenter. See
-  [put a presenter in a virtual set](virtual-set.md).
+  [put a presenter on a green screen into a designed studio](green-screen-presenter.md).
 * A picture behind an `https://` address is drawn flat unless it is an SVG,
   because the mixer does not fetch it to look before it decodes it. Upload it
   to the Media tab instead, or add the source with `alpha = true` in its params.

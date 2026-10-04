@@ -1,4 +1,4 @@
-# Put a presenter in a virtual set
+# Put a presenter on a green screen into a designed studio
 
 A presenter stands in front of a green or blue screen, and the programme shows
 them in a designed studio: a picture or a looping clip behind, the presenter
@@ -17,10 +17,14 @@ You need three things in the mixer first:
 
 ## From the page
 
-1. In the Scenes panel press **Virtual set**.
+It is a scene like any other, started from a layout made for it.
+
+1. In the Scenes panel press the **▾** beside **New scene** and choose
+   **Presenter on a green screen**. The right click menu and the command
+   palette have it too, as **New scene: presenter on a green screen**.
 2. Pick the **Background**, the **Presenter** camera and, if you have one, the
    **Foreground**. Library files are listed with "(library)" after the name.
-3. Press **Create the set**.
+3. Press **Make the scene**.
 
 The scene appears with the presenter standing on the bottom edge, in the
 middle, at nine tenths of the canvas height. The toast says the key colour and
@@ -56,24 +60,26 @@ and size the presenter on the canvas like any other item.
 
 ## Over the API, or from an agent
 
-The same scene is one call, `scene.virtual_set`. Over HTTP:
+The same scene is one call, `scene.create_from` with the `virtual-set` layout
+and the sources in its slot order: background, presenter, then what stands in
+front. Over HTTP:
 
 ```sh
-curl -X POST http://your-mixer:8080/api/v1/scenes/virtual_set \
+curl -X POST http://your-mixer:8080/api/v1/scenes/create_from \
   -H 'content-type: application/json' \
-  -d '{"background": "newsroom.png", "presenter": "cam1", "foreground": "desk.png"}'
+  -d '{"sources": ["newsroom.png", "cam1", "desk.png"], "layout": "virtual-set", "name": "Presenter"}'
 ```
 
 Add `-H 'authorization: Bearer <token>'` to this and the calls below when the
-mixer has a token. An agent on MCP calls the tool `create_virtual_set` with the
+mixer has a token. An agent on MCP calls the tool `create_scene_from` with the
 same body.
 
-`background` and `foreground` take a media library file name, a path, or a
-source id. A file becomes a source the first time; asking again with the same
-file uses that source. Give `"key": "#30b050"` to set the colour yourself,
-`presenter_scale` (0.3 to 1) and `presenter_x` (0 to 1) to place the presenter,
-and `name` for the scene. The answer carries the scene with every item's box in
-pixels, the `key` it wrote, `key_from` (`given`, `guessed` or `auto`) and the
+A source may be a source id, a media library file name or a path; a file
+becomes a source the first time, and asking again with the same file uses that
+source. The layout's own settings go in `settings`: `"key": "#30b050"` sets the
+colour yourself, and `presenter_scale` (0.3 to 1) and `presenter_x` (0 to 1)
+place the presenter. The answer is the scene with every item's box in pixels,
+plus the `key` it wrote, `key_from` (`given`, `guessed` or `auto`) and the
 sources it `added`.
 
 The key is the item's filter, named `Key`. Change it with
@@ -82,7 +88,7 @@ The key is the item's filter, named `Key`. Change it with
 ```sh
 curl -X POST http://your-mixer:8080/api/v1/scenes/item/filter/set \
   -H 'content-type: application/json' \
-  -d '{"scene": "Virtual set", "item": "presenter", "filter": "Key", "params": {"spill": 0.8, "matte_left": 0.15}}'
+  -d '{"scene": "Presenter", "item": "presenter", "filter": "Key", "params": {"spill": 0.8, "matte_left": 0.15}}'
 ```
 
 `params` is merged into what the key already has. To read a key colour off
@@ -94,17 +100,12 @@ curl -X POST http://your-mixer:8080/api/v1/sources/cam1/key_color \
   -H 'content-type: application/json' -d '{"x": 0.1, "y": 0.2}'
 ```
 
-The scene is the built in `virtual-set` layout, so `scene.create_from` with
-`"layout": "virtual-set"` and the sources in the order background, presenter,
-foreground makes the same scene without the colour guess. Its key then finds
-its own colour from the first frames it sees.
-
 ## When it does not look right
 
 * **The presenter is on black.** The programme is composited on a GPU
   graphics entry, which this key does not draw on yet. It falls back to the
   old behaviour, keyed areas black. Use the software graphics entry for a
-  virtual set.
+  keyed scene.
 * **The whole camera shows, green and all.** The key has not found a colour
   yet: the camera may have been black when it looked. Press **Find** or
   **Pick** once the camera shows the screen.

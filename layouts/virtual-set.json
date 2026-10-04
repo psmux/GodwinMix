@@ -49,7 +49,8 @@
         "default": "auto",
         "title": "Key colour",
         "description": "\"auto\" to find the screen colour in the picture, or a colour such as \"#30b050\".",
-        "x-gmx-kind": "text"
+        "x-gmx-kind": "text",
+        "x-gmx-key-of": "b"
       },
       "presenter_scale": {
         "type": "number",
@@ -72,7 +73,7 @@
   "scenes": [
     {
       "id": "0199b000-0000-7041-8000-de5157ed0041",
-      "name": "Virtual set",
+      "name": "Presenter",
       "items": [
         {
           "id": "0199b000-0000-7042-8000-de5157ed0042",

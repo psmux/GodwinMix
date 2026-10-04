@@ -607,9 +607,24 @@ export interface CpuUse {
   used_millicores: number;
 }
 
+/** The scene `scene.create_from` made, and what it did on the way. */
+export interface CreateFromAnswer {
+  added?: string[];
+  canvas: Canvas;
+  color?: string | null;
+  findings?: Finding[];
+  geometry: Geometry[];
+  id: Id;
+  key?: string | null;
+  key_from?: string | null;
+  name: string;
+  records: ProtocolRecord[];
+}
+
 export interface CreateFromRequest {
   layout?: string | null;
   name?: string | null;
+  settings?: Record<string, unknown>;
   sources: string[];
 }
 
@@ -2820,24 +2835,6 @@ export interface VideoWant {
   width?: number | null;
 }
 
-export interface VirtualSetAnswer {
-  added: string[];
-  key: string;
-  key_from: string;
-  scene: SceneView;
-}
-
-export interface VirtualSetRequest {
-  background: string;
-  foreground?: string | null;
-  key?: string | null;
-  lower_third?: string | null;
-  name?: string | null;
-  presenter: string;
-  presenter_scale?: number | null;
-  presenter_x?: number | null;
-}
-
 /**
  * `[vitals]`, and what `vitals.set` changes: the thresholds, and whether
  * to keep a mosaic up for the picture alarms while nobody is looking.
@@ -3122,7 +3119,6 @@ export interface MethodParams {
   "scene.transaction.commit": Record<string, never>;
   "scene.undo": Record<string, never>;
   "scene.validate": ValidateRequest;
-  "scene.virtual_set": VirtualSetRequest;
   "setup.get": SetupRequest;
   "setup.list": Record<string, never>;
   "setup.start": SetupRequest;
@@ -3271,7 +3267,7 @@ export interface MethodResults {
   "scene.add": SceneView;
   "scene.apply_graphic": Record<string, unknown>;
   "scene.apply_layout": Record<string, unknown>;
-  "scene.create_from": SceneView;
+  "scene.create_from": CreateFromAnswer;
   "scene.duplicate": SceneView;
   "scene.edit.apply": Record<string, unknown>;
   "scene.edit.begin": DraftRecord;
@@ -3317,7 +3313,6 @@ export interface MethodResults {
   "scene.transaction.commit": Record<string, unknown>;
   "scene.undo": HistoryStep;
   "scene.validate": Validation;
-  "scene.virtual_set": VirtualSetAnswer;
   "setup.get": SetupStatus;
   "setup.list": SetupStatus[];
   "setup.start": SetupStatus;
@@ -3516,7 +3511,7 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "scene.add", summary: "Make an empty scene, or one built from a set of sources.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes" } },
   { name: "scene.apply_graphic", summary: "Fill a graphic that is on a scene, by field name, and optionally play it on or take it off. Answers with the records and, if asked, a still.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/apply_graphic" } },
   { name: "scene.apply_layout", summary: "Apply a layout, making a scene or reshaping one that exists. Applying onto an existing scene keeps the item ids, so the change is a ramp and not a cut.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/apply_layout" } },
-  { name: "scene.create_from", summary: "A scene from a set of sources, laid out by the built in layout for that count (full, two-box, three-box, quad, then a grid) or by a named one.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/create_from" } },
+  { name: "scene.create_from", summary: "A scene from a set of sources, laid out by the built in layout for that count (full, two-box, three-box, quad, then a grid) or by a named one. Pictures from the media library become sources, and a keyed layout such as virtual-set guesses its key colour from the camera.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/create_from" } },
   { name: "scene.duplicate", summary: "A copy of a scene with new ids throughout, so editing the copy cannot touch the original.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/{id}/duplicate" } },
   { name: "scene.edit.apply", summary: "Write a draft back into the live document.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/edit/apply" } },
   { name: "scene.edit.begin", summary: "Take a working copy of a scene. Editing is off air by default: the draft is written back on the next take of that scene, or when you apply it.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/edit/begin" } },
@@ -3562,7 +3557,6 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "scene.transaction.commit", summary: "Apply the batch.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/transaction/commit" } },
   { name: "scene.undo", summary: "Undo the last change. A drag marked with scene.history.mark undoes as one step.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/undo" } },
   { name: "scene.validate", summary: "Overlaps, items off the canvas, safe area breaches and missing sources: what to fix before saying a scene is done.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/scenes/validate" } },
-  { name: "scene.virtual_set", summary: "A new scene with a presenter keyed in front of a background, and optionally a foreground such as a desk and a lower third area. Pictures from the media library become sources; the key colour is guessed from the camera.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/virtual_set" } },
   { name: "setup.get", summary: "Where one piece stands, without starting anything.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/setup" } },
   { name: "setup.list", summary: "Where each piece the mixer sets up on first use stands: the browser renderer (`web`) and every first party plugin this copy carries.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/setup/list" } },
   { name: "setup.start", summary: "Set a piece up now, or join the set up already running, and answer at once with where it stands. Progress follows as `event/setup.changed`. Sources waiting on the piece start by themselves when it is ready.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/setup/start" } },
@@ -4186,9 +4180,9 @@ export class GeneratedMethods {
     return this._call("scene.apply_layout", params as unknown as Record<string, unknown>) as Promise<Record<string, unknown>>;
   }
 
-  /** A scene from a set of sources, laid out by the built in layout for that count (full, two-box, three-box, quad, then a grid) or by a named one. */
-  sceneCreateFrom(params: CreateFromRequest): Promise<SceneView> {
-    return this._call("scene.create_from", params as unknown as Record<string, unknown>) as Promise<SceneView>;
+  /** A scene from a set of sources, laid out by the built in layout for that count (full, two-box, three-box, quad, then a grid) or by a named one. Pictures from the media library become sources, and a keyed layout such as virtual-set guesses its key colour from the camera. */
+  sceneCreateFrom(params: CreateFromRequest): Promise<CreateFromAnswer> {
+    return this._call("scene.create_from", params as unknown as Record<string, unknown>) as Promise<CreateFromAnswer>;
   }
 
   /** A copy of a scene with new ids throughout, so editing the copy cannot touch the original. */
@@ -4414,11 +4408,6 @@ export class GeneratedMethods {
   /** Overlaps, items off the canvas, safe area breaches and missing sources: what to fix before saying a scene is done. */
   sceneValidate(params: ValidateRequest = {}): Promise<Validation> {
     return this._call("scene.validate", params as unknown as Record<string, unknown>) as Promise<Validation>;
-  }
-
-  /** A new scene with a presenter keyed in front of a background, and optionally a foreground such as a desk and a lower third area. Pictures from the media library become sources; the key colour is guessed from the camera. */
-  sceneVirtualSet(params: VirtualSetRequest): Promise<VirtualSetAnswer> {
-    return this._call("scene.virtual_set", params as unknown as Record<string, unknown>) as Promise<VirtualSetAnswer>;
   }
 
   /** Where one piece stands, without starting anything. */

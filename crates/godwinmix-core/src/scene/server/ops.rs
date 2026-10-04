@@ -464,10 +464,26 @@ pub fn create_from(
     layout: Option<&str>,
     name: Option<&str>,
 ) -> Result<Scene> {
+    create_from_with(doc, sources, layout, name, &crate::scene::layout::Values::new())
+}
+
+/// `create_from`, with values for the layout's own settings as well as its
+/// source slots: the key colour and the presenter's size in `virtual-set`.
+/// A setting the layout does not have is refused by name.
+pub fn create_from_with(
+    doc: &Collection,
+    sources: &[String],
+    layout: Option<&str>,
+    name: Option<&str>,
+    settings: &crate::scene::layout::Values,
+) -> Result<Scene> {
     if sources.is_empty() {
         bail!("scene.create_from needs at least one source");
     }
     let wanted = layout.unwrap_or_else(|| layout_for(sources.len()));
+    if wanted == "grid" && !settings.is_empty() {
+        bail!("the grid has no settings; leave `settings` out or name a layout");
+    }
     let mut scene = if wanted == "grid" {
         grid_scene(doc, sources)
     } else {
@@ -482,11 +498,20 @@ pub fn create_from(
                 sources.len()
             );
         }
-        let values: crate::scene::layout::Values = slots
+        let mut values: crate::scene::layout::Values = slots
             .iter()
             .zip(sources)
             .map(|(slot, source)| (slot.clone(), serde_json::Value::from(source.clone())))
             .collect();
+        let known = preset.params.get("properties").and_then(|p| p.as_object());
+        for (key, value) in settings {
+            if !known.is_some_and(|k| k.contains_key(key)) || slots.contains(key) {
+                bail!(
+                    "the layout {wanted:?} has no setting {key:?}. Its settings are listed by                      scene.layout.list; sources go in `sources`, in slot order"
+                );
+            }
+            values.insert(key.clone(), value.clone());
+        }
         crate::scene::layout::apply(&preset, &values, doc.canvas)?
     };
     scene.name = find::free_scene_name(doc, name.unwrap_or(&sources.join(" + ")));

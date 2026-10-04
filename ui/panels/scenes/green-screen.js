@@ -1,12 +1,12 @@
-// The Virtual set dialog: a presenter in front of a green or blue screen,
-// put into a designed studio in one step.
+// New scene, started from the green screen layout: a presenter in front of a
+// green or blue screen, put into a designed studio in one step.
 //
-// It asks three things: the picture behind (from the media library or a
-// source), the camera, and an optional picture in front such as a desk. The
-// one call it makes is `scene.virtual_set`, the same an agent makes, which
-// turns library pictures into sources, guesses the key colour from the camera
-// and builds the scene from the `virtual-set` layout. Fetched on open, never
-// before.
+// It is a scene like any other, made by `scene.create_from` with the
+// `virtual-set` layout, the same call an agent makes. That call turns library
+// pictures into sources and guesses the key colour from the camera. The
+// dialog asks three things: the picture behind (from the media library or a
+// source), the camera, and an optional picture in front such as a desk.
+// Fetched on open, never before.
 
 import { el } from "../../shell/dom.js";
 import { modal } from "../../shell/modal.js";
@@ -21,12 +21,13 @@ export function choices(media, sources, opts = {}) {
   return out;
 }
 
-/** The request the dialog sends, from what is picked. */
+/** The request the dialog sends, from what is picked: the sources in the
+ * layout's slot order, background, presenter, then what stands in front. */
 export function request(picked) {
-  const body = { background: picked.background, presenter: picked.presenter };
-  if (picked.foreground) body.foreground = picked.foreground;
-  if (picked.name && picked.name.trim()) body.name = picked.name.trim();
-  return body;
+  const sources = [picked.background, picked.presenter];
+  if (picked.foreground) sources.push(picked.foreground);
+  const name = picked.name && picked.name.trim() ? picked.name.trim() : "Presenter";
+  return { sources, layout: "virtual-set", name };
 }
 
 function select(label, options) {
@@ -42,7 +43,7 @@ function field(label, control, hint) {
 /**
  * @param {{client, scenes, onMade?: (answer: object) => void}} opts
  */
-export async function openVirtualSet(opts) {
+export async function openGreenScreen(opts) {
   const { client } = opts;
   let media = [];
   try {
@@ -54,8 +55,8 @@ export async function openVirtualSet(opts) {
   const background = select("Background", choices(media, sources));
   const presenter = select("Presenter", choices([], sources));
   const foreground = select("Foreground", choices(media, sources, { none: "Nothing in front" }));
-  const name = el("input", { type: "text", placeholder: "Virtual set", "aria-label": "Scene name" });
-  const make = el("button.btn.primary", { text: "Create the set" });
+  const name = el("input", { type: "text", placeholder: "Presenter", "aria-label": "Scene name" });
+  const make = el("button.btn.primary", { text: "Make the scene" });
   const body = el("div.col", {}, [
     el("p.sm.dim", { text: "The presenter is keyed and stands in front of the background. The key colour is found from the camera; fine tune it in the composer." }),
     field("Background", background, "A picture or a looping clip. Upload it in the Media tab first."),
@@ -63,23 +64,23 @@ export async function openVirtualSet(opts) {
     field("Foreground", foreground, "A transparent PNG drawn in front of the presenter, such as a desk."),
     field("Name", name),
   ]);
-  const dialog = modal({ title: "Virtual set", body, footer: [el("span.grow"), el("button.btn", { text: "Cancel", onclick: () => dialog.close() }), make] });
+  const dialog = modal({ title: "New scene: presenter on a green screen", body, footer: [el("span.grow"), el("button.btn", { text: "Cancel", onclick: () => dialog.close() }), make] });
   make.onclick = async () => {
     make.disabled = true;
     try {
-      const answer = await client.call("scene.virtual_set", request({
+      const answer = await client.call("scene.create_from", request({
         background: background.value, presenter: presenter.value, foreground: foreground.value, name: name.value,
       }));
       dialog.close();
       const how = answer.key_from === "guessed" ? `keyed on ${answer.key}, found in the camera` : answer.key_from === "given" ? `keyed on ${answer.key}` : "the key finds its colour on air";
-      toast({ text: `Made "${answer.scene.name}", ${how}.` });
+      toast({ text: `Made "${answer.name}", ${how}.` });
       if (opts.scenes && opts.scenes.refresh) await opts.scenes.refresh();
       if (opts.onMade) opts.onMade(answer);
     } catch (e) {
       make.disabled = false;
-      errorToast(e, "Virtual set");
+      errorToast(e, "New scene");
     }
   };
-  if (!sources.length) toast({ text: "There are no sources yet. Add the camera first, then make the set." });
+  if (!sources.length) toast({ text: "There are no sources yet. Add the camera first, then make the scene." });
   return dialog;
 }

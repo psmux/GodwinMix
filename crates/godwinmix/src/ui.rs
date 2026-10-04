@@ -169,7 +169,7 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/scenes/fix.js", include_str!("../../../ui/panels/scenes/fix.js")),
     ("panels/scenes/fix-row.js", include_str!("../../../ui/panels/scenes/fix-row.js")),
     ("panels/scenes/fix-note.js", include_str!("../../../ui/panels/scenes/fix-note.js")),
-    ("panels/scenes/virtual-set.js", include_str!("../../../ui/panels/scenes/virtual-set.js")),
+    ("panels/scenes/green-screen.js", include_str!("../../../ui/panels/scenes/green-screen.js")),
     ("panels/scenes/fix.css", include_str!("../../../ui/panels/scenes/fix.css")),
     ("panels/scenes/marks.js", include_str!("../../../ui/panels/scenes/marks.js")),
     ("panels/scenes/pictures.js", include_str!("../../../ui/panels/scenes/pictures.js")),
@@ -296,7 +296,7 @@ const DEV_ASSETS: &[(&str, &str)] = &[
     ("test/studio.js", include_str!("../../../ui/test/studio.js")),
     ("test/transitions.js", include_str!("../../../ui/test/transitions.js")),
     ("test/scene-fix.js", include_str!("../../../ui/test/scene-fix.js")),
-    ("test/virtual-set.js", include_str!("../../../ui/test/virtual-set.js")),
+    ("test/green-screen.js", include_str!("../../../ui/test/green-screen.js")),
     ("test/scene-pictures.js", include_str!("../../../ui/test/scene-pictures.js")),
     ("test/monitor-resize.js", include_str!("../../../ui/test/monitor-resize.js")),
     ("test/dock.js", include_str!("../../../ui/test/dock.js")),
@@ -885,9 +885,9 @@ mod tests {
         reachable.extend(closure_of("panels/data/dialog.js"));
         // A graphic's fields editor, which the drawer fetches for a template source.
         reachable.extend(closure_of("panels/sources/graphic-editor.js"));
-        // The Virtual set dialog, on its first press, and the key editor the
-        // composer fetches for an item with a key.
-        reachable.extend(closure_of("panels/scenes/virtual-set.js"));
+        // New scene from the green screen layout, on its first press, and the
+        // key editor the composer fetches for an item with a key.
+        reachable.extend(closure_of("panels/scenes/green-screen.js"));
         reachable.extend(closure_of("panels/composer/key.js"));
         reachable.extend(closure_of("panels/outputs/destination.js"));
         reachable.extend(closure_of("panels/channels/panel.js"));

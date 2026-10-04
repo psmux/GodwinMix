@@ -1101,6 +1101,35 @@ pub struct CpuUse {
     pub used_millicores: u32,
 }
 
+/// The scene `scene.create_from` made, and what it did on the way.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct CreateFromAnswer {
+    /// Sources this call added for files it was given.
+    pub added: Vec<String>,
+    pub canvas: Canvas,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
+    /// What `scene.validate` would say about it, so a client shows a warning
+    /// without asking again.
+    pub findings: Vec<Finding>,
+    /// Where each item actually lands, after groups are flattened and
+    /// references resolved. Bottom of the stack first, which is the order the
+    /// compositor takes them in.
+    pub geometry: Vec<Geometry>,
+    pub id: Id,
+    /// For a keyed layout, the colour written on the key: "#rrggbb", or
+    /// "auto" when no still of the camera could be had.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub key: Option<String>,
+    /// "given", "guessed" or "auto", beside `key`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub key_from: Option<String>,
+    pub name: String,
+    /// The scene's own record and one per item, parents before children.
+    pub records: Vec<Record>,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct CreateFromRequest {
@@ -1110,7 +1139,14 @@ pub struct CreateFromRequest {
     pub layout: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
-    /// Source ids, in the order they should be laid out.
+    /// Values for the layout's own settings, by name, as `scene.layout.list`
+    /// lists them: for `virtual-set`, `key` ("auto" or "#rrggbb"),
+    /// `presenter_scale` and `presenter_x`. A keyed layout with no `key`
+    /// guesses the colour from the camera.
+    pub settings: BTreeMap<String, Value>,
+    /// What to lay out, in slot order. Each is a source id, a file name from
+    /// the media library, or a path or URL to a picture or clip; a file becomes
+    /// a source the first time and is reused after that.
     pub sources: Vec<String>,
 }
 
@@ -4945,52 +4981,6 @@ pub struct VideoWant {
     pub width: Option<u32>,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-#[serde(default)]
-pub struct VirtualSetAnswer {
-    /// Sources this call added for files it was given.
-    pub added: Vec<String>,
-    /// The key colour written on the presenter's key: "#rrggbb", or "auto"
-    /// when no still of the camera could be had and the key finds it on air.
-    pub key: String,
-    /// "given", "guessed" or "auto".
-    pub key_from: String,
-    pub scene: SceneView,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-#[serde(default)]
-pub struct VirtualSetRequest {
-    /// What stands behind the presenter: a source id, a file name from the
-    /// media library, or a path or URL to a picture or clip.
-    pub background: String,
-    /// A transparent picture in front of the presenter, drawn over the whole
-    /// canvas: a source id, a media file name, or a path.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub foreground: Option<String>,
-    /// "auto" (the default) guesses the colour from the camera; "#rrggbb"
-    /// gives it.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub key: Option<String>,
-    /// A source for the lower third area, in front of everything else.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub lower_third: Option<String>,
-    /// The new scene's name. "Virtual set" when left out, with a number after
-    /// it when that is taken.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub name: Option<String>,
-    /// The camera to key: a source id.
-    pub presenter: String,
-    /// The presenter's picture as a fraction of the canvas, 0.3 to 1. 0.9
-    /// when left out.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub presenter_scale: Option<f64>,
-    /// Where the presenter stands across the canvas, 0 to 1. 0.5, the
-    /// middle, when left out.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub presenter_x: Option<f64>,
-}
-
 /// `[vitals]`, and what `vitals.set` changes: the thresholds, and whether
 /// to keep a mosaic up for the picture alarms while nobody is looking.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -5245,7 +5235,7 @@ pub struct MethodInfo {
     pub rest: Option<(&'static str, &'static str)>,
 }
 
-pub const METHODS: [MethodInfo; 191] = [
+pub const METHODS: [MethodInfo; 190] = [
     MethodInfo { name: "adbreak.end", summary: "Cut a running ad short, or disarm one that is scheduled.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/end")) },
     MethodInfo { name: "adbreak.start", summary: "Interrupt the programme with a clip, then rejoin live when it ends.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/start")) },
     MethodInfo { name: "agent.state", summary: "The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/agent/state")) },
@@ -5350,7 +5340,7 @@ pub const METHODS: [MethodInfo; 191] = [
     MethodInfo { name: "scene.add", summary: "Make an empty scene, or one built from a set of sources.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes")) },
     MethodInfo { name: "scene.apply_graphic", summary: "Fill a graphic that is on a scene, by field name, and optionally play it on or take it off. Answers with the records and, if asked, a still.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/apply_graphic")) },
     MethodInfo { name: "scene.apply_layout", summary: "Apply a layout, making a scene or reshaping one that exists. Applying onto an existing scene keeps the item ids, so the change is a ramp and not a cut.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/apply_layout")) },
-    MethodInfo { name: "scene.create_from", summary: "A scene from a set of sources, laid out by the built in layout for that count (full, two-box, three-box, quad, then a grid) or by a named one.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/create_from")) },
+    MethodInfo { name: "scene.create_from", summary: "A scene from a set of sources, laid out by the built in layout for that count (full, two-box, three-box, quad, then a grid) or by a named one. Pictures from the media library become sources, and a keyed layout such as virtual-set guesses its key colour from the camera.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/create_from")) },
     MethodInfo { name: "scene.duplicate", summary: "A copy of a scene with new ids throughout, so editing the copy cannot touch the original.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/{id}/duplicate")) },
     MethodInfo { name: "scene.edit.apply", summary: "Write a draft back into the live document.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/edit/apply")) },
     MethodInfo { name: "scene.edit.begin", summary: "Take a working copy of a scene. Editing is off air by default: the draft is written back on the next take of that scene, or when you apply it.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/edit/begin")) },
@@ -5396,7 +5386,6 @@ pub const METHODS: [MethodInfo; 191] = [
     MethodInfo { name: "scene.transaction.commit", summary: "Apply the batch.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/transaction/commit")) },
     MethodInfo { name: "scene.undo", summary: "Undo the last change. A drag marked with scene.history.mark undoes as one step.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/undo")) },
     MethodInfo { name: "scene.validate", summary: "Overlaps, items off the canvas, safe area breaches and missing sources: what to fix before saying a scene is done.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/scenes/validate")) },
-    MethodInfo { name: "scene.virtual_set", summary: "A new scene with a presenter keyed in front of a background, and optionally a foreground such as a desk and a lower third area. Pictures from the media library become sources; the key colour is guessed from the camera.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/virtual_set")) },
     MethodInfo { name: "setup.get", summary: "Where one piece stands, without starting anything.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/setup")) },
     MethodInfo { name: "setup.list", summary: "Where each piece the mixer sets up on first use stands: the browser renderer (`web`) and every first party plugin this copy carries.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/setup/list")) },
     MethodInfo { name: "setup.start", summary: "Set a piece up now, or join the set up already running, and answer at once with where it stands. Progress follows as `event/setup.changed`. Sources waiting on the piece start by themselves when it is ready.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/setup/start")) },
@@ -6260,8 +6249,8 @@ impl Client {
         self.call("scene.apply_layout", params).await
     }
 
-    /// A scene from a set of sources, laid out by the built in layout for that count (full, two-box, three-box, quad, then a grid) or by a named one.
-    pub async fn scene_create_from(&self, params: &CreateFromRequest) -> Result<SceneView> {
+    /// A scene from a set of sources, laid out by the built in layout for that count (full, two-box, three-box, quad, then a grid) or by a named one. Pictures from the media library become sources, and a keyed layout such as virtual-set guesses its key colour from the camera.
+    pub async fn scene_create_from(&self, params: &CreateFromRequest) -> Result<CreateFromAnswer> {
         self.call("scene.create_from", params).await
     }
 
@@ -6488,11 +6477,6 @@ impl Client {
     /// Overlaps, items off the canvas, safe area breaches and missing sources: what to fix before saying a scene is done.
     pub async fn scene_validate(&self, params: &ValidateRequest) -> Result<Validation> {
         self.call("scene.validate", params).await
-    }
-
-    /// A new scene with a presenter keyed in front of a background, and optionally a foreground such as a desk and a lower third area. Pictures from the media library become sources; the key colour is guessed from the camera.
-    pub async fn scene_virtual_set(&self, params: &VirtualSetRequest) -> Result<VirtualSetAnswer> {
-        self.call("scene.virtual_set", params).await
     }
 
     /// Where one piece stands, without starting anything.

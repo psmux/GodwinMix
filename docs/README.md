@@ -84,7 +84,7 @@ Start here if you have never run it.
 * [Show a picture, or a run of pictures](how-to/show-a-picture.md)
 * [Add text and a ticker](how-to/add-text-and-a-ticker.md)
 * [Show live data on air: RSS, JSON, a sheet or a websocket](how-to/show-live-data.md)
-* [Put a presenter in a virtual set](how-to/virtual-set.md)
+* [Put a presenter on a green screen into a designed studio](how-to/green-screen-presenter.md)
 * [Add an IP camera](how-to/add-an-ip-camera.md)
 * [Internet radio: send the sound out, or play a station in](how-to/radio.md)
 * [Capture SDI or HDMI from a DeckLink card](how-to/capture-sdi.md)

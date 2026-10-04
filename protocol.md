@@ -137,7 +137,7 @@ Keys accepted on every method, handled before a method runs.
 | `scene.add` | `POST /api/v1/scenes` | operate |  | 1 | Make an empty scene, or one built from a set of sources. |
 | `scene.apply_graphic` | `POST /api/v1/scenes/apply_graphic` | operate |  | 1 | Fill a graphic that is on a scene, by field name, and optionally play it on or take it off. Answers with the records and, if asked, a still. |
 | `scene.apply_layout` | `POST /api/v1/scenes/apply_layout` | operate |  | 1 | Apply a layout, making a scene or reshaping one that exists. Applying onto an existing scene keeps the item ids, so the change is a ramp and not a cut. |
-| `scene.create_from` | `POST /api/v1/scenes/create_from` | operate |  | 1 | A scene from a set of sources, laid out by the built in layout for that count (full, two-box, three-box, quad, then a grid) or by a named one. |
+| `scene.create_from` | `POST /api/v1/scenes/create_from` | operate |  | 1 | A scene from a set of sources, laid out by the built in layout for that count (full, two-box, three-box, quad, then a grid) or by a named one. Pictures from the media library become sources, and a keyed layout such as virtual-set guesses its key colour from the camera. |
 | `scene.duplicate` | `POST /api/v1/scenes/{id}/duplicate` | operate |  | 1 | A copy of a scene with new ids throughout, so editing the copy cannot touch the original. |
 | `scene.edit.apply` | `POST /api/v1/scenes/edit/apply` | operate |  | 1 | Write a draft back into the live document. |
 | `scene.edit.begin` | `POST /api/v1/scenes/edit/begin` | operate |  | 1 | Take a working copy of a scene. Editing is off air by default: the draft is written back on the next take of that scene, or when you apply it. |
@@ -183,7 +183,6 @@ Keys accepted on every method, handled before a method runs.
 | `scene.transaction.commit` | `POST /api/v1/scenes/transaction/commit` | operate |  | 1 | Apply the batch. |
 | `scene.undo` | `POST /api/v1/scenes/undo` | operate |  | 1 | Undo the last change. A drag marked with scene.history.mark undoes as one step. |
 | `scene.validate` | `GET /api/v1/scenes/validate` | read |  | 1 | Overlaps, items off the canvas, safe area breaches and missing sources: what to fix before saying a scene is done. |
-| `scene.virtual_set` | `POST /api/v1/scenes/virtual_set` | operate |  | 1 | A new scene with a presenter keyed in front of a background, and optionally a foreground such as a desk and a lower third area. Pictures from the media library become sources; the key colour is guessed from the camera. |
 | `setup.get` | `GET /api/v1/setup` | read |  | 1 | Where one piece stands, without starting anything. |
 | `setup.list` | `GET /api/v1/setup/list` | read |  | 1 | Where each piece the mixer sets up on first use stands: the browser renderer (`web`) and every first party plugin this copy carries. |
 | `setup.start` | `POST /api/v1/setup/start` | operate |  | 1 | Set a piece up now, or join the set up already running, and answer at once with where it stands. Progress follows as `event/setup.changed`. Sources waiting on the piece start by themselves when it is ready. |
@@ -1963,9 +1962,9 @@ MCP tool `apply_layout` in the `search` profile: readOnlyHint false, destructive
 
 #### `scene.create_from`
 
-A scene from a set of sources, laid out by the built in layout for that count (full, two-box, three-box, quad, then a grid) or by a named one.
+A scene from a set of sources, laid out by the built in layout for that count (full, two-box, three-box, quad, then a grid) or by a named one. Pictures from the media library become sources, and a keyed layout such as virtual-set guesses its key colour from the camera.
 
-MCP tool `create_scene_from` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+MCP tool `create_scene_from` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint false.
 
 ```json
 {
@@ -1973,7 +1972,7 @@ MCP tool `create_scene_from` in the `search` profile: readOnlyHint false, destru
     "$ref": "#/$defs/CreateFromRequest"
   },
   "result": {
-    "$ref": "#/$defs/SceneView"
+    "$ref": "#/$defs/CreateFromAnswer"
   }
 }
 ```
@@ -2697,23 +2696,6 @@ MCP tool `validate_scene` in the `search` profile: readOnlyHint true, destructiv
   },
   "result": {
     "$ref": "#/$defs/Validation"
-  }
-}
-```
-
-#### `scene.virtual_set`
-
-A new scene with a presenter keyed in front of a background, and optionally a foreground such as a desk and a lower third area. Pictures from the media library become sources; the key colour is guessed from the camera.
-
-MCP tool `create_virtual_set` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint false.
-
-```json
-{
-  "params": {
-    "$ref": "#/$defs/VirtualSetRequest"
-  },
-  "result": {
-    "$ref": "#/$defs/VirtualSetAnswer"
   }
 }
 ```

@@ -1,4 +1,5 @@
-// The Virtual set dialog and the key editor, against a fake client that
+// New scene from the green screen layout, and the key editor, against a fake
+// client that
 // answers as the core does.
 
 function fakeClient() {
@@ -11,7 +12,7 @@ function fakeClient() {
       calls.push({ method, params });
       if (method === "media.list") return { items: [{ name: "newsroom.png" }, { name: "desk.png" }] };
       if (method === "source.key_color") return { color: params.x === undefined ? "#2fb04c" : "#30b050", found: "green" };
-      if (method === "scene.virtual_set") return { scene: { id: "s1", name: "Virtual set" }, key: "#2fb04c", key_from: "guessed", added: ["newsroom"] };
+      if (method === "scene.create_from") return { id: "s1", name: "Presenter", key: "#2fb04c", key_from: "guessed", added: ["newsroom"] };
       return {};
     },
   };
@@ -19,33 +20,33 @@ function fakeClient() {
 
 const tick = () => new Promise((r) => setTimeout(r, 30));
 
-export async function virtualSetTests(test, eq, ok) {
-  const vs = await import("../panels/scenes/virtual-set.js");
+export async function greenScreenTests(test, eq, ok) {
+  const vs = await import("../panels/scenes/green-screen.js");
   test("the pickers offer library files first, then sources, and a way to have nothing in front", () => {
     const got = vs.choices([{ name: "newsroom.png" }], [{ id: "cam", name: "Studio camera" }], { none: "Nothing in front" });
     eq(got.map((c) => c.value), ["", "newsroom.png", "cam"]);
     eq(got[2].label, "Studio camera (cam)");
   });
-  test("the request leaves out what was not picked", () => {
-    eq(vs.request({ background: "newsroom.png", presenter: "cam", foreground: "", name: " " }), { background: "newsroom.png", presenter: "cam" });
-    eq(vs.request({ background: "a", presenter: "cam", foreground: "desk.png", name: "News" }), { background: "a", presenter: "cam", foreground: "desk.png", name: "News" });
+  test("the request is the layout's slots in order, leaving out what was not picked", () => {
+    eq(vs.request({ background: "newsroom.png", presenter: "cam", foreground: "", name: " " }), { sources: ["newsroom.png", "cam"], layout: "virtual-set", name: "Presenter" });
+    eq(vs.request({ background: "a", presenter: "cam", foreground: "desk.png", name: "News" }), { sources: ["a", "cam", "desk.png"], layout: "virtual-set", name: "News" });
   });
 
   const client = fakeClient();
   let made = null;
   let refreshed = false;
-  const dialog = await vs.openVirtualSet({ client, scenes: { refresh: async () => { refreshed = true; } }, onMade: (a) => { made = a; } });
+  const dialog = await vs.openGreenScreen({ client, scenes: { refresh: async () => { refreshed = true; } }, onMade: (a) => { made = a; } });
   const selects = [...dialog.el.querySelectorAll("select")];
   selects[0].value = "newsroom.png";
   selects[1].value = "cam";
   selects[2].value = "desk.png";
   dialog.el.querySelector("footer .btn.primary").click();
   await tick();
-  test("Create the set makes one scene.virtual_set call with what was picked", () => {
-    const call = client.calls.find((c) => c.method === "scene.virtual_set");
-    ok(call, "no scene.virtual_set call");
-    eq(call.params, { background: "newsroom.png", presenter: "cam", foreground: "desk.png" });
-    ok(made && made.scene.id === "s1", "the panel was not told about the new scene");
+  test("Make the scene makes one scene.create_from call with what was picked", () => {
+    const call = client.calls.find((c) => c.method === "scene.create_from");
+    ok(call, "no scene.create_from call");
+    eq(call.params, { sources: ["newsroom.png", "cam", "desk.png"], layout: "virtual-set", name: "Presenter" });
+    ok(made && made.id === "s1", "the panel was not told about the new scene");
     ok(refreshed, "the scene list was not read again");
     ok(!document.body.contains(dialog.el), "the dialog stayed open");
   });
