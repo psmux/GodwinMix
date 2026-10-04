@@ -106,6 +106,18 @@ Start here if you have never run it.
 * [Share a collection](how-to/share-a-collection.md)
 * [Use the mixer from an AI agent](how-to/use-with-an-ai-agent.md)
 * [Write a panel](how-to/write-a-panel.md)
+* [Add shows in bulk](how-to/add-shows-in-bulk.md)
+* [Benchmark GodwinMix at headend scale](how-to/benchmark-at-scale.md)
+* [Take streams from several encoders into one channel](how-to/channels.md)
+* [Customize the workspace](how-to/customize-the-workspace.md)
+* [Take headend feeds into direct shows](how-to/headend-feeds.md)
+* [Watch many shows at once](how-to/monitor-many-shows.md)
+* [Send a channel on to YouTube, Facebook or Twitch](how-to/restream-a-channel.md)
+* [Save and open a project](how-to/save-and-open-a-project.md)
+* [Send in several formats](how-to/send-in-several-formats.md)
+* [Receive and send MPEG-TS over UDP and multicast](how-to/udp-and-multicast.md)
+* [Upload a local media file](how-to/upload-local-media.md)
+* [Use this browser's camera and microphone](how-to/use-this-browsers-camera.md)
 
 
 ## Reference
@@ -154,6 +166,20 @@ Start here if you have never run it.
 * [Graphic templates: the SVG kind, the pack, the methods](reference/graphic-templates.md)
 * [Metrics](reference/metrics.md)
 * [Preview monitor status](reference/preview-monitor.md)
+* [The channel methods](reference/channels.md)
+* [Reference: what a direct show takes in](reference/direct-inputs.md)
+* [Direct shows: the host's table, events and calls](reference/direct-shows.md)
+* [Reference: the resource governor](reference/governor.md)
+* [Media upload](reference/media-upload.md)
+* [Project files and the project methods](reference/project.md)
+* [The publisher page](reference/publisher-page.md)
+* [Recording outputs](reference/recording.md)
+* [Setup on first use](reference/setup.md)
+* [Show health: alarms, thresholds and thumbnails](reference/show-health.md)
+* [Reference: shows and the station](reference/shows.md)
+* [Browser file sources](reference/source-file-picker.md)
+* [The udp plugin](reference/udp.md)
+* [Workspace layout](reference/workspace-layout.md)
 
 
 ## Explanation
@@ -175,6 +201,9 @@ Start here if you have never run it.
 * [Why the evals grade the world](explanation/evals.md)
 * [Footprint](explanation/footprint.md)
 * [How a source works](explanation/how-a-source-works.md)
+* [Converting a channel's stream for one destination](explanation/channel-transcoding.md)
+* [The direct host](explanation/direct-host.md)
+* [The resource governor](explanation/resource-governor.md)
 
 
 ## For AI agents
