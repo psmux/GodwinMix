@@ -17,6 +17,7 @@
 //! be a copy of the other. `run` below is what both call.
 
 pub mod address;
+pub mod bundled;
 pub mod bench;
 pub mod channels;
 pub mod cli;
@@ -584,6 +585,9 @@ fn first_run(config_path: &std::path::Path) -> Result<()> {
 /// first Windows smoke test died in `--example-config` with a stack overflow.
 /// Sixty four megabytes is address space, not memory, until it is touched.
 pub fn main_with_room() -> anyhow::Result<()> {
+    // Before anything, on the one thread there is: the GStreamer DLLs are
+    // delay loaded and this says where they are. See `bundled`.
+    bundled::prepare();
     const STACK: usize = 64 << 20;
     let program = std::thread::Builder::new()
         .name("godwinmix".into())
