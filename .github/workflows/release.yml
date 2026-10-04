@@ -323,6 +323,26 @@ jobs:
       # `cargo tauri build`, not `cargo build`: the plain build produces a bare
       # executable and no installer, which is what the old workflow did and why
       # there has never been a .msi or a .deb to download.
+      # The mixer was linked against Homebrew's GStreamer. Inside the app it
+      # must load the copy in Resources whoever starts it: the app sets
+      # DYLD_LIBRARY_PATH, an AI agent running `godwinmix mcp` does not. Each
+      # library the trimmed tree carries is pointed at by its path in the app.
+      - name: The mixer loads the runtime inside the app (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          triple=$(rustc -vV | sed -n 's/^host: //p')
+          bin="tauri-app/binaries/godwinmix-${triple}"
+          lib=tauri-app/gstreamer/macos/lib
+          otool -L "$bin" | awk 'NR>1 {print $1}' | while read -r dep; do
+            leaf="${dep##*/}"
+            if [ -f "$lib/$leaf" ]; then
+              install_name_tool -change "$dep" "@executable_path/../Resources/gstreamer/macos/lib/$leaf" "$bin"
+            fi
+          done
+          codesign --force --sign - "$bin"
+          otool -L "$bin" | grep -c "@executable_path"             || { echo "::error::nothing in the mixer pointed at the runtime in the app" >&2; exit 1; }
+
       # The person cutout: its two Apache 2.0 models and ONNX Runtime for this
       # platform (DirectML inside on Windows, CoreML on macOS), pinned and
       # checked. Resources of the app, beside the mixer, where it looks.
@@ -369,6 +389,9 @@ jobs:
           # --headless-check asks the mixer it starts whether it loaded each
           # of them, which is the claim that matters.
           ./"$app"/Contents/MacOS/godwinmix-desktop --headless-check
+          # And the mixer on its own, as an AI agent starts it: no desktop
+          # app, no variables, nothing from Homebrew on the path.
+          env -i HOME="$HOME" "$app/Contents/MacOS/godwinmix" codec list | head -5
 
       - name: Sizes, against the budget
         shell: bash

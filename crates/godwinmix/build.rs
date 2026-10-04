@@ -1,6 +1,7 @@
 //! On Windows, load the GStreamer and GLib DLLs on first use rather than at
 //! start, so the installed `godwinmix.exe` can find the copy the installer put
-//! beside it before Windows goes looking. See `src/bundled.rs`.
+//! beside it before Windows goes looking; on macOS, leave room to point the
+//! binary at the copy inside the app. See `src/bundled.rs`.
 
 /// What `godwinmix.exe` imports from GStreamer and GLib, read off the binary.
 const DELAYED: &[&str] = &[
@@ -25,5 +26,11 @@ fn main() {
             println!("cargo:rustc-link-arg-bins=/DELAYLOAD:{dll}");
         }
         println!("cargo:rustc-link-arg-bins=delayimp.lib");
+    }
+    // On macOS the release points the binary's GStreamer at the copy inside
+    // the app with install_name_tool, and those paths are longer than the
+    // Homebrew ones it was linked with: the header needs room for them.
+    if std::env::var("TARGET").unwrap_or_default().contains("apple-darwin") {
+        println!("cargo:rustc-link-arg-bins=-Wl,-headerpad_max_install_names");
     }
 }
