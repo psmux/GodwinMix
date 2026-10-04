@@ -1039,6 +1039,11 @@ pub struct CoreInfo {
     pub canvas: CanvasInfo,
     /// Always "godwinmix".
     pub core: String,
+    /// The mixer's own executable on the machine it runs on. What a surface
+    /// writes into an AI agent's configuration, so the command works there
+    /// whether or not the binary is on the PATH.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub executable: Option<String>,
     /// Feature strings a client can branch on: multiview, snapshot, uploads,
     /// mcp, browser, exec-sources, rehearsal, tokens.
     pub features: Vec<String>,

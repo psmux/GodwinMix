@@ -75,6 +75,7 @@ const ACTIONS = {
     await show("core/outputs");
     document.querySelector("gmx-outputs")?.show("resources");
   },
+  "help.agents": (client) => import("./agents.js").then((m) => m.openAgents(client)),
   "help.docs": () => window.open(DOCS, "_blank", "noopener"),
   "help.about": (client) => about(client),
 };
@@ -93,6 +94,7 @@ async function about(client) {
       el("p", { text: `GodwinMix ${info.version || ""}, protocol level ${info.api_level ?? "?"}.` }),
       canvas ? el("p.dim", { text: `The programme is ${canvas}.` }) : null,
       el("p.dim", { text: "A live video mixer. This page talks to the mixer over the same protocol every other client uses." }),
+      el("p.sm.dim", {}, ["NDI® is a registered trademark of Vizrt NDI AB. ", el("a", { href: "https://ndi.video/", target: "_blank", rel: "noopener", text: "ndi.video" })]),
       el("a", { href: DOCS, target: "_blank", rel: "noopener", text: "Documentation" }),
     ]),
   });

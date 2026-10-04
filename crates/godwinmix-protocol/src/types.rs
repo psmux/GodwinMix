@@ -515,6 +515,11 @@ pub struct CoreInfo {
     /// is off or the certificate could not be loaded.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tls: Option<TlsInfo>,
+    /// The mixer's own executable on the machine it runs on. What a surface
+    /// writes into an AI agent's configuration, so the command works there
+    /// whether or not the binary is on the PATH.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub executable: Option<String>,
 }
 
 /// `core.info.tls`: what the control port answers HTTPS with.

@@ -298,6 +298,10 @@
           "title": "Keyboard shortcuts"
         },
         {
+          "command": "help.agents",
+          "title": "Connect an AI agent"
+        },
+        {
           "command": "help.docs",
           "title": "Documentation"
         },

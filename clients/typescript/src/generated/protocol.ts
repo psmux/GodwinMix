@@ -580,6 +580,7 @@ export interface CoreInfo {
   api_level: number;
   canvas: CanvasInfo;
   core: string;
+  executable?: string | null;
   features: string[];
   limits: Limits;
   rehearsal: boolean;

@@ -122,6 +122,7 @@ function commands(client) {
     cmd("source.add-kind", "Add a source of one kind", "Sources", "", true),
     cmd("output.record", "Start recording", "Outputs"),
     cmd("output.resources", "Show resources", "Outputs"),
+    cmd("help.agents", "Connect an AI agent", "Help"),
     cmd("help.docs", "Documentation", "Help"),
     cmd("help.about", "About GodwinMix", "Help"),
   ]);
