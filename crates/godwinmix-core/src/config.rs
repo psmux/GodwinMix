@@ -1611,6 +1611,15 @@ impl Config {
         let mut cfg: Config = toml::from_str(&raw)
             .with_context(|| format!("parsing config {}", path.display()))?;
         cfg.source_path = path.to_path_buf();
+        // A relative media folder is beside the config that names it, not
+        // wherever the mixer happened to be started. The desktop app starts
+        // it from the install folder, which nobody may write to, and every
+        // upload failed there with "Access is denied".
+        if let Some(dir) = path.parent().filter(|d| !d.as_os_str().is_empty()) {
+            if Path::new(&cfg.media.dir).is_relative() {
+                cfg.media.dir = dir.join(&cfg.media.dir).to_string_lossy().into_owned();
+            }
+        }
 
         // Once the UI has managed sources, its list wins. Merging the two would
         // mean a source deleted in the UI reappearing on the next restart.
@@ -1940,6 +1949,20 @@ sidecar = \"/opt/b\"\n").unwrap();
         let cfg: Config = toml::from_str(include_str!("../../../godwinmix.example.toml"))
             .expect("the example config parses");
         cfg.validate().expect("the example config validates");
+    }
+
+    #[test]
+    fn a_relative_media_folder_is_beside_the_config_not_the_working_directory() {
+        let dir = std::env::temp_dir().join(format!("gmx-cfg-media-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("godwinmix.toml");
+        std::fs::write(&path, "[media]\ndir = \"media\"\n").unwrap();
+        let cfg = Config::load(&path).unwrap();
+        assert_eq!(Path::new(&cfg.media.dir), dir.join("media"));
+        let absolute = dir.join("elsewhere");
+        std::fs::write(&path, format!("[media]\ndir = {:?}\n", absolute.display().to_string())).unwrap();
+        assert_eq!(Path::new(&Config::load(&path).unwrap().media.dir), absolute, "an absolute folder stays");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
