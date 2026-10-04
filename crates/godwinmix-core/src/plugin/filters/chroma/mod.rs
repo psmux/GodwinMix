@@ -25,8 +25,8 @@
 //! caps into it and the filter is interchangeable with no filter at all.
 
 mod colour;
-mod feather;
-mod handed;
+pub(crate) mod feather;
+pub(crate) mod handed;
 pub mod frame;
 pub mod guess;
 pub mod lut;

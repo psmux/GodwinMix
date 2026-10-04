@@ -1722,6 +1722,11 @@ impl Config {
                 crate::plugin::filters::chroma::validate(&f.params)
                     .with_context(|| format!("filter {}", f.id))?;
             }
+            #[cfg(feature = "matte")]
+            if f.type_id == crate::plugin::filters::matte::MANIFEST.provide_id() {
+                crate::plugin::filters::matte::validate(&f.params)
+                    .with_context(|| format!("filter {}", f.id))?;
+            }
         }
 
         let mut seen = std::collections::HashSet::new();

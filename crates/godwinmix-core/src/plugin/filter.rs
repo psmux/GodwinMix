@@ -418,6 +418,10 @@ pub fn make(type_id: &str) -> Result<Box<dyn Filter>> {
         t if super::filters::chroma::MANIFEST.is(t) => {
             Ok(Box::new(super::filters::chroma::ChromaKey::default()))
         }
+        #[cfg(feature = "matte")]
+        t if super::filters::matte::MANIFEST.is(t) => {
+            Ok(Box::new(super::filters::matte::Cutout::default()))
+        }
         other => anyhow::bail!(
             "no filter type `{other}` in this build. It has: {}",
             available().join(", ")
@@ -426,12 +430,21 @@ pub fn make(type_id: &str) -> Result<Box<dyn Filter>> {
 }
 
 pub fn available() -> Vec<String> {
-    vec![super::filters::chroma::MANIFEST.provide_id()]
+    built_in().iter().map(|m| m.provide_id()).collect()
 }
 
 /// Every filter kind this build carries.
 pub fn described() -> Vec<super::KindInfo> {
-    vec![super::filters::chroma::MANIFEST.describe()]
+    built_in().iter().map(|m| m.describe()).collect()
+}
+
+/// The filters compiled into this build. The cutout is behind the `matte`
+/// feature, which the desktop and server builds turn on.
+fn built_in() -> Vec<&'static Manifest> {
+    let mut out = vec![&super::filters::chroma::MANIFEST];
+    #[cfg(feature = "matte")]
+    out.push(&super::filters::matte::MANIFEST);
+    out
 }
 
 #[cfg(test)]
