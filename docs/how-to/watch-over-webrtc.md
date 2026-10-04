@@ -82,4 +82,4 @@ it does not.
   server on the output, and a TURN server if both ends are behind strict NAT.
 
 Every route, code and param is in the
-[streams reference](../reference/streams.md#post-whep-target).
+[streams reference](../reference/streams.md#post-wheptarget).
