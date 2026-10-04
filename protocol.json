@@ -2576,7 +2576,7 @@
         },
         "settings": {
           "additionalProperties": true,
-          "description": "Values for the layout's own settings, by name, as `scene.layout.list`\nlists them: for `virtual-set`, `key` (\"auto\" or \"#rrggbb\"),\n`presenter_scale` and `presenter_x`. A keyed layout with no `key`\nguesses the colour from the camera.",
+          "description": "Values for the layout's own settings, by name, as `scene.layout.list`\nlists them: for `virtual-set`, `key` (\"auto\" or \"#rrggbb\"),\n`presenter_scale` and `presenter_x`. A keyed layout with no `key`\nguesses the colour from the camera. `screen` says what is behind the\npresenter: \"green\" (the default), \"blue\", or \"none\", which cuts the\nperson out with a model and needs no screen at all.",
           "type": "object"
         },
         "sources": {
@@ -12256,6 +12256,11 @@
       {
         "description": "A green or blue screen key with spill removal, a soft edge and a garbage matte",
         "id": "chroma/filter",
+        "schemes": []
+      },
+      {
+        "description": "The person cut out of the camera, with no green screen: a matting model on the GPU where there is one and the CPU where there is not",
+        "id": "matte/filter",
         "schemes": []
       }
     ],

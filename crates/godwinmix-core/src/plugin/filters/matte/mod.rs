@@ -64,18 +64,13 @@ pub const MANIFEST: Manifest = Manifest {
     tier: Tier::Core,
 };
 
+#[derive(Default)]
 pub struct Cutout {
     /// Made with the filter, before it is built, as the key's is: the host
     /// may ask for it first.
     hook: BoardHook,
     cutter: Option<Arc<Cutter>>,
     settings: Settings,
-}
-
-impl Default for Cutout {
-    fn default() -> Self {
-        Cutout { hook: BoardHook::new(), cutter: None, settings: Settings::default() }
-    }
 }
 
 impl Filter for Cutout {

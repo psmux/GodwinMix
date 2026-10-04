@@ -106,6 +106,7 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/composer/composer.css", include_str!("../../../ui/panels/composer/composer.css")),
     ("panels/composer/composer.js", include_str!("../../../ui/panels/composer/composer.js")),
     ("panels/composer/inspector.js", include_str!("../../../ui/panels/composer/inspector.js")),
+    ("panels/composer/cutout.js", include_str!("../../../ui/panels/composer/cutout.js")),
     ("panels/composer/key.js", include_str!("../../../ui/panels/composer/key.js")),
     ("panels/composer/ops.js", include_str!("../../../ui/panels/composer/ops.js")),
     ("panels/composer/motion.js", include_str!("../../../ui/panels/composer/motion.js")),
@@ -889,6 +890,7 @@ mod tests {
         // key editor the composer fetches for an item with a key.
         reachable.extend(closure_of("panels/scenes/green-screen.js"));
         reachable.extend(closure_of("panels/composer/key.js"));
+        reachable.extend(closure_of("panels/composer/cutout.js"));
         reachable.extend(closure_of("panels/outputs/destination.js"));
         reachable.extend(closure_of("panels/channels/panel.js"));
         reachable.extend(closure_of("shell/sandbox.js"));

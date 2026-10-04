@@ -573,7 +573,8 @@ async fn filter_add(call: Call, params: Value) -> Result<Value, RpcError> {
     // A key makes transparency, and the software programme has nowhere to
     // keep it. Said here, because the alternative was an ok and a filter that
     // never went on. See `mixer::programme_keeps_alpha`.
-    if req.type_id == "chroma/filter" && !godwinmix_core::mixer::programme_keeps_alpha() {
+    let makes_alpha = req.type_id == "chroma/filter" || req.type_id == "matte/filter";
+    if makes_alpha && !godwinmix_core::mixer::programme_keeps_alpha() {
         return Err(RpcError::not_in_state(
             "a chroma key cannot be drawn by this mixer yet. Its programme is composited in \
              I420, which has no transparency, so a keyed picture has nothing to show through \
@@ -581,6 +582,19 @@ async fn filter_add(call: Call, params: Value) -> Result<Value, RpcError> {
              the CPU and is not switched on. Nothing was changed.",
         )
         .with("filter", req.type_id.clone()));
+    }
+    // A cutout needs a runtime and a model on this machine. Asked here, so a
+    // machine without them hears what to install instead of getting a filter
+    // that draws the camera whole and says nothing.
+    #[cfg(feature = "matte")]
+    if req.type_id == "matte/filter" {
+        let filter_params: godwinmix_core::config::Params =
+            serde_json::from_value(serde_json::Value::Object(req.params.clone()))
+                .unwrap_or_default();
+        if let Err(e) = godwinmix_core::plugin::filters::matte::ready(&filter_params) {
+            return Err(RpcError::not_in_state(format!("{e:#}. Nothing was changed."))
+                .with("filter", req.type_id.clone()));
+        }
     }
     apply(&call, &req.scene, req.draft.as_deref(), None, None, None, move |doc, i| {
         let id = find::item_id_in(&doc.scenes[i], &req.item)?;

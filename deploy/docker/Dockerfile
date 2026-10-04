@@ -33,6 +33,13 @@ COPY . .
 RUN cargo build --release --locked -p godwinmix --bins \
     && strip target/release/godwinmix target/release/gmx
 
+# The person cutout's two models and ONNX Runtime for this architecture,
+# pinned and checked by the same script the desktop installers use. The
+# runtime image puts them where the mixer looks from /usr/local/bin.
+RUN apt-get update && apt-get install -y --no-install-recommends python3 curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && dev/fetch-models.sh --models /cutout/models --runtime /cutout/runtime
+
 # The browser runs outside the mixer. Debian's WPE fallback can crash inside
 # the mixer process, so the default image ships the existing CEF sidecar.
 FROM builder AS browser-builder
@@ -127,6 +134,8 @@ RUN if [ -f /opt/godwinmix/browser/godwinmix-browser ]; then \
 
 COPY --from=builder /src/target/release/godwinmix /usr/local/bin/godwinmix
 COPY --from=builder /src/target/release/gmx /usr/local/bin/gmx
+COPY --from=builder /cutout/models/ /usr/local/share/godwinmix/models/
+COPY --from=builder /cutout/runtime/ /usr/local/lib/godwinmix/
 COPY godwinmix.example.toml /usr/share/godwinmix/godwinmix.example.toml
 COPY deploy/docker/default.toml /usr/share/godwinmix/default.toml
 COPY deploy/docker/entrypoint.sh /usr/local/bin/gmx-entrypoint

@@ -179,7 +179,10 @@ jobs:
       # on 2026-10-03 with all of it in: 158 MB for the NSIS .exe and 224 MB
       # for the .msi, whose cabinet compresses Chromium less well. A release
       # that breaks this does not get published.
-      WINDOWS_INSTALLER_BUDGET_MB: 250
+      # Raised to 300 on 2026-10-04 for the person cutout: ONNX Runtime with
+      # DirectML (35 MB) and its two models (13 MB) take the .msi from 236 MB
+      # to about 265. The NSIS .exe stays near 185.
+      WINDOWS_INSTALLER_BUDGET_MB: 300
       # 133.5 MB on Windows on 2026-10-03 once every first party plugin's
       # elements were kept (WHIP, NDI and DeckLink had been trimmed away).
       RUNTIME_BUDGET_MB: 160
@@ -320,6 +323,13 @@ jobs:
       # `cargo tauri build`, not `cargo build`: the plain build produces a bare
       # executable and no installer, which is what the old workflow did and why
       # there has never been a .msi or a .deb to download.
+      # The person cutout: its two Apache 2.0 models and ONNX Runtime for this
+      # platform (DirectML inside on Windows, CoreML on macOS), pinned and
+      # checked. Resources of the app, beside the mixer, where it looks.
+      - name: The cutout models and runtime, inside the app
+        shell: bash
+        run: ./dev/fetch-models.sh --models tauri-app/models --runtime tauri-app/onnxruntime
+
       - name: Bundle
         working-directory: tauri-app
         run: cargo tauri build --bundles ${{ matrix.bundles }}

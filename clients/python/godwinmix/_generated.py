@@ -721,7 +721,7 @@ class CreateFromRequest(TypedDict, total=False):
     # A layout name from `scene.layout.list`. Left out, the number of sources picks one.
     name: Optional[str]
     settings: Dict[str, Any]
-    # Values for the layout's own settings, by name, as `scene.layout.list` lists them: for `virtual-set`, `key` ("auto" or "#rrggbb"), `presenter_scale` and `presenter_x`. A keyed layout with no `key` guesses the colour from the camera.
+    # Values for the layout's own settings, by name, as `scene.layout.list` lists them: for `virtual-set`, `key` ("auto" or "#rrggbb"), `presenter_scale` and `presenter_x`. A keyed layout with no `key` guesses the colour from the camera. `screen` says what is behind the presenter: "green" (the default), "blue", or "none", which cuts the person out with a model and needs no screen at all.
     sources: List[str]
     # What to lay out, in slot order. Each is a source id, a file name from the media library, or a path or URL to a picture or clip; a file becomes a source the first time and is reused after that.
 
