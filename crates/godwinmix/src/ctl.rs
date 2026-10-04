@@ -121,6 +121,15 @@ pub enum Ctl {
     EndAd,
     /// List the clips available in the media library.
     Media,
+    /// Put a file in the media library: a picture, a clip, an SVG template or
+    /// a logo, for a source or a graphic to use. Answers the name it has there.
+    Upload {
+        /// The file on this machine.
+        file: std::path::PathBuf,
+        /// The name in the library. The file's own name when left out.
+        #[arg(long)]
+        name: Option<String>,
+    },
     /// Put a web page on air in one go: add it as a source, add the RTMP
     /// destination if given, and take it to programme once it renders.
     Golive {
@@ -450,6 +459,15 @@ pub async fn run(base: &str, token: Option<&str>, cmd: Ctl) -> Result<()> {
                 }
             );
         }
+        Ctl::Upload { file, name } => {
+            let name = match name {
+                Some(n) => n,
+                None => file.file_name().map(|n| n.to_string_lossy().into_owned()).context("the file has no name; pass --name")?,
+            };
+            let bytes = std::fs::read(&file).with_context(|| format!("reading {}", file.display()))?;
+            let answer = api.upload(&name, bytes).await?;
+            println!("{}", answer.get("name").and_then(Value::as_str).unwrap_or(&name));
+        }
         Ctl::Media => {
             let listing: MediaListing = api.get("media.list", None, &[]).await?;
             if let Some(err) = listing.error {
@@ -697,6 +715,21 @@ impl Api {
         let verb = reqwest::Method::from_bytes(rest.http.as_bytes())
             .with_context(|| format!("{} is not an HTTP method", rest.http))?;
         Ok((verb, format!("{}{path}", self.base)))
+    }
+
+    /// A file into the media library, as `POST /api/v1/media/upload` takes it:
+    /// the bytes as the body, the name in the query.
+    pub async fn upload(&self, name: &str, bytes: Vec<u8>) -> Result<Value> {
+        let url = format!("{}/api/v1/media/upload", self.base);
+        let r = self
+            .client
+            .post(&url)
+            .query(&[("name", name)])
+            .body(bytes)
+            .send()
+            .await
+            .with_context(|| format!("uploading {name} to {url}"))?;
+        read("media.upload", r).await
     }
 
     /// A read, with query parameters.
