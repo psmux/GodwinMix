@@ -56,14 +56,33 @@ pub struct Picture {
     pub after: Vec<gst::Element>,
 }
 
-/// uridecodebin, then imagefreeze repeating the one frame live.
+/// uridecodebin, made canvas sized I420 once, then imagefreeze repeating that
+/// one frame live.
+///
+/// Converted and scaled before the freeze, not after it. After it, a 1080p
+/// photograph was converted and scaled again thirty times a second though it
+/// never changed; on a busy machine that ran at two thirds of real time, the
+/// picture fell behind the programme, was judged stalled and restarted, and
+/// the compositor drew nothing for it. Now everything after the freeze passes
+/// through.
 pub fn still(ctx: &BuildCtx, uri: &str) -> Result<Picture> {
     let decode = make("uridecodebin", &format!("{}-src-image", ctx.id))?;
     decode.set_property("uri", crate::input::to_uri(uri));
     let convert = make("videoconvert", &format!("{}-image-convert", ctx.id))?;
+    let scale = make("videoscale", &format!("{}-image-scale", ctx.id))?;
+    let size = make("capsfilter", &format!("{}-image-size", ctx.id))?;
+    size.set_property(
+        "caps",
+        gst::Caps::builder("video/x-raw")
+            .field("format", "I420")
+            .field("width", ctx.canvas.width)
+            .field("height", ctx.canvas.height)
+            .field("pixel-aspect-ratio", gst::Fraction::new(1, 1))
+            .build(),
+    );
     let freeze = make("imagefreeze", &format!("{}-image-freeze", ctx.id))?;
     freeze.set_property("is-live", true);
-    Ok(Picture { before: Vec::new(), dynamic: decode, after: vec![convert, freeze] })
+    Ok(Picture { before: Vec::new(), dynamic: decode, after: vec![convert, scale, size, freeze] })
 }
 
 /// multifilesrc looping at `fps`, then decodebin.
