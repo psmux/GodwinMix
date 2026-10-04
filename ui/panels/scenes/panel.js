@@ -85,8 +85,23 @@ class ScenesPanel extends HTMLElement {
       this.count,
       el("span.grow"),
       this.viewBtn,
-      el("button.btn", { text: "Virtual set", title: "A presenter keyed in front of a background, with a desk in front if you have one", onclick: () => this.virtualSet() }),
       el("button.btn", { text: "New scene", title: "An empty scene to drag inputs into", onclick: () => this.newScene() }),
+      // Other ways to start a new scene. Still a scene, so it lives under New
+      // scene rather than as a button of its own beside it.
+      el("button.btn.sm", {
+        text: "▾",
+        title: "Start the new scene from a layout",
+        "aria-label": "Start the new scene from a layout",
+        onclick: async (e) => {
+          const r = e.currentTarget.getBoundingClientRect();
+          // Loaded on the first press, like the rest of the menus here.
+          const { contextMenu } = await import("../../shell/menu.js");
+          contextMenu(r.left, r.bottom, [
+            { label: "Empty scene", run: () => this.newScene() },
+            { label: "Presenter on a green screen", run: () => this.newGreenScreenScene() },
+          ]);
+        },
+      }),
     ]);
 
     // The tab strip. A tab is not a tile: clicking one says which scene the
@@ -442,15 +457,18 @@ class ScenesPanel extends HTMLElement {
     }
   }
 
-  /** The Virtual set dialog; the scene it makes becomes the one worked on. */
-  async virtualSet() {
-    // Loaded on the first press: a page that never makes a set never pays for it.
-    const { openVirtualSet } = await import("./virtual-set.js");
-    await openVirtualSet({
+  /**
+   * New scene, started from the green screen layout: a presenter keyed in
+   * front of a background. The scene it makes becomes the one worked on.
+   */
+  async newGreenScreenScene() {
+    // Loaded on the first press: a page that never makes one never pays for it.
+    const { openGreenScreen } = await import("./green-screen.js");
+    await openGreenScreen({
       client: this.client,
       scenes: this.scenes,
-      onMade: (answer) => {
-        if (answer && answer.scene && answer.scene.id) setFocusedScene(answer.scene.id);
+      onMade: (scene) => {
+        if (scene && scene.id) setFocusedScene(scene.id);
         this.render();
       },
     });
@@ -733,7 +751,7 @@ class ScenesPanel extends HTMLElement {
     const one = () => this.selected()[0] || null;
     return [
       { id: "scenes.new", title: "New scene", group: "Scenes", run: () => this.newScene() },
-      { id: "scenes.virtual-set", title: "Virtual set", group: "Scenes", run: () => this.virtualSet() },
+      { id: "scenes.new-green-screen", title: "New scene: presenter on a green screen", group: "Scenes", run: () => this.newGreenScreenScene() },
       { id: "scenes.open", title: "Open the composer", group: "Scenes", enabled: () => !!one(), run: () => this.open(one()) },
       // No `enabled`: it finds a scene for itself, and says so in a toast when
       // there is none. A row that reads as available has to do something.

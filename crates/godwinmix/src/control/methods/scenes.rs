@@ -29,9 +29,9 @@ mod key_color;
 mod obs;
 pub(crate) mod layout;
 mod requests;
+mod from_sources;
 mod set_inputs;
 mod share;
-mod virtual_set;
 
 pub use requests::*;
 
@@ -42,7 +42,8 @@ pub fn register(reg: &mut Registry<Call>) {
     graphics::register(reg);
     share::register(reg);
     edit::register(reg);
-    virtual_set::register(reg);
+    from_sources::register(reg);
+    key_color::register(reg);
 }
 
 /// `scene.list`, `get`, `add`, `remove`, `rename`, `duplicate`, `validate`.
@@ -98,27 +99,6 @@ fn scenes(reg: &mut Registry<Call>) {
         )
         .params(schema_of::<AddSceneRequest>)
         .result(schema_of::<godwinmix_core::scene::server::SceneView>),
-    );
-
-    reg.register(
-        MethodDef::new(
-            "scene.create_from",
-            Scope::Operate,
-            "A scene from a set of sources, laid out by the built in layout for that count \
-             (full, two-box, three-box, quad, then a grid) or by a named one.",
-            handler(create_from),
-        )
-        .params(schema_of::<CreateFromRequest>)
-        .result(schema_of::<godwinmix_core::scene::server::SceneView>)
-        .tool(
-            "create_scene_from",
-            Tier::Search,
-            "Make a scene out of a list of sources in one call. With no `layout` the count \
-             picks one: one source fills the canvas, two make a two box, three a three \
-             box, four a quad, more a grid. The items are named after their sources, so \
-             you can move them by name afterwards. Returns the scene with every item's box \
-             in pixels.",
-        ),
     );
 
     reg.register(
@@ -257,30 +237,6 @@ async fn add(call: Call, params: Value) -> Result<Value, RpcError> {
                 godwinmix_core::scene::server::find::free_scene_name(doc, &name),
             );
             scene.color = req.color.clone();
-            let id = scene.id;
-            doc.scenes.push(scene);
-            Ok(id)
-        })
-        .map_err(|e| scene_error(&call, e))?;
-    body(server(&call).scene(&id.to_string()).map_err(|e| scene_error(&call, e))?)
-}
-
-async fn create_from(call: Call, params: Value) -> Result<Value, RpcError> {
-    let req: CreateFromRequest = call.params(&params)?;
-    if req.sources.is_empty() {
-        return Err(RpcError::invalid_params(
-            "scene.create_from needs at least one source. Read the ids from source.list.",
-        ));
-    }
-    // A source the mixer does not have would be a scene that draws nothing, so
-    // it is refused here with the ids that would have worked.
-    let known = call.source_ids().await?;
-    if let Some(missing) = req.sources.iter().find(|s| !known.contains(s)) {
-        return Err(RpcError::not_found("source", missing, &known));
-    }
-    let (id, _) = server(&call)
-        .edit(client(&call).as_deref(), |doc| {
-            let scene = ops::create_from(doc, &req.sources, req.layout.as_deref(), req.name.as_deref())?;
             let id = scene.id;
             doc.scenes.push(scene);
             Ok(id)

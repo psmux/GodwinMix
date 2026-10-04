@@ -149,8 +149,9 @@ A chroma key shows its controls under its name: the key colour with **Find**
 and **Pick**, similarity, edge softness, spill, feather and the four edges of
 the garbage matte. They apply on air as you drag. The composer's own picture
 does not run item filters, so it shows the camera unkeyed; the programme shows
-the key. A presenter in a designed studio is one step with **Virtual set** in
-the Scenes panel: see [put a presenter in a virtual set](virtual-set.md).
+the key. A presenter in a designed studio is one step from the **▾** beside
+**New scene** in the Scenes panel: see [put a presenter on a green screen into
+a designed studio](green-screen-presenter.md).
 
 **Enter** and **Exit** are the item's own transitions: None, Fade, Slide, Zoom
 or Wipe, with the edge a slide or a wipe uses, a length and an easing. **Show

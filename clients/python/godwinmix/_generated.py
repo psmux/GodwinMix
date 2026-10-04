@@ -696,12 +696,34 @@ class CpuUse(TypedDict, total=False):
     room_millicores: int
     used_millicores: int
 
+class CreateFromAnswer(TypedDict, total=False):
+    """The scene `scene.create_from` made, and what it did on the way."""
+
+    added: List[str]
+    # Sources this call added for files it was given.
+    canvas: Canvas
+    color: Optional[str]
+    findings: List[Finding]
+    # What `scene.validate` would say about it, so a client shows a warning without asking again.
+    geometry: List[Geometry]
+    # Where each item actually lands, after groups are flattened and references resolved. Bottom of the stack first, which is the order the compositor takes them in.
+    id: Id
+    key: Optional[str]
+    # For a keyed layout, the colour written on the key: "#rrggbb", or "auto" when no still of the camera could be had.
+    key_from: Optional[str]
+    # "given", "guessed" or "auto", beside `key`.
+    name: str
+    records: List[Record]
+    # The scene's own record and one per item, parents before children.
+
 class CreateFromRequest(TypedDict, total=False):
     layout: Optional[str]
     # A layout name from `scene.layout.list`. Left out, the number of sources picks one.
     name: Optional[str]
+    settings: Dict[str, Any]
+    # Values for the layout's own settings, by name, as `scene.layout.list` lists them: for `virtual-set`, `key` ("auto" or "#rrggbb"), `presenter_scale` and `presenter_x`. A keyed layout with no `key` guesses the colour from the camera.
     sources: List[str]
-    # Source ids, in the order they should be laid out.
+    # What to lay out, in slot order. Each is a source id, a file name from the media library, or a path or URL to a picture or clip; a file becomes a source the first time and is reused after that.
 
 class Crop(TypedDict, total=False):
     """How much of the content's own pixels to trim, normalised 0 to 1 so it survives a canvas change. vMix and CasparCG do this; OBS crops in pixels, which is why an OBS collection moved from 1080p to 720p loses its crops."""
@@ -3128,33 +3150,6 @@ class VideoWant(TypedDict, total=False):
     # Keyframe interval. Renditions in one ladder share it.
     width: Optional[int]
 
-class VirtualSetAnswer(TypedDict, total=False):
-    added: List[str]
-    # Sources this call added for files it was given.
-    key: str
-    # The key colour written on the presenter's key: "#rrggbb", or "auto" when no still of the camera could be had and the key finds it on air.
-    key_from: str
-    # "given", "guessed" or "auto".
-    scene: SceneView
-
-class VirtualSetRequest(TypedDict, total=False):
-    background: str
-    # What stands behind the presenter: a source id, a file name from the media library, or a path or URL to a picture or clip.
-    foreground: Optional[str]
-    # A transparent picture in front of the presenter, drawn over the whole canvas: a source id, a media file name, or a path.
-    key: Optional[str]
-    # "auto" (the default) guesses the colour from the camera; "#rrggbb" gives it.
-    lower_third: Optional[str]
-    # A source for the lower third area, in front of everything else.
-    name: Optional[str]
-    # The new scene's name. "Virtual set" when left out, with a number after it when that is taken.
-    presenter: str
-    # The camera to key: a source id.
-    presenter_scale: Optional[float]
-    # The presenter's picture as a fraction of the canvas, 0.3 to 1. 0.9 when left out.
-    presenter_x: Optional[float]
-    # Where the presenter stands across the canvas, 0 to 1. 0.5, the middle, when left out.
-
 class VitalsConfig(TypedDict, total=False):
     """`[vitals]`, and what `vitals.set` changes: the thresholds, and whether to keep a mosaic up for the picture alarms while nobody is looking."""
 
@@ -3522,7 +3517,7 @@ METHODS = (
     {"name": "scene.add", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes"), "summary": 'Make an empty scene, or one built from a set of sources.'},
     {"name": "scene.apply_graphic", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/apply_graphic"), "summary": 'Fill a graphic that is on a scene, by field name, and optionally play it on or take it off. Answers with the records and, if asked, a still.'},
     {"name": "scene.apply_layout", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/apply_layout"), "summary": 'Apply a layout, making a scene or reshaping one that exists. Applying onto an existing scene keeps the item ids, so the change is a ramp and not a cut.'},
-    {"name": "scene.create_from", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/create_from"), "summary": 'A scene from a set of sources, laid out by the built in layout for that count (full, two-box, three-box, quad, then a grid) or by a named one.'},
+    {"name": "scene.create_from", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/create_from"), "summary": 'A scene from a set of sources, laid out by the built in layout for that count (full, two-box, three-box, quad, then a grid) or by a named one. Pictures from the media library become sources, and a keyed layout such as virtual-set guesses its key colour from the camera.'},
     {"name": "scene.duplicate", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/{id}/duplicate"), "summary": 'A copy of a scene with new ids throughout, so editing the copy cannot touch the original.'},
     {"name": "scene.edit.apply", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/edit/apply"), "summary": 'Write a draft back into the live document.'},
     {"name": "scene.edit.begin", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/edit/begin"), "summary": 'Take a working copy of a scene. Editing is off air by default: the draft is written back on the next take of that scene, or when you apply it.'},
@@ -3568,7 +3563,6 @@ METHODS = (
     {"name": "scene.transaction.commit", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/transaction/commit"), "summary": 'Apply the batch.'},
     {"name": "scene.undo", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/undo"), "summary": 'Undo the last change. A drag marked with scene.history.mark undoes as one step.'},
     {"name": "scene.validate", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/scenes/validate"), "summary": 'Overlaps, items off the canvas, safe area breaches and missing sources: what to fix before saying a scene is done.'},
-    {"name": "scene.virtual_set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/virtual_set"), "summary": 'A new scene with a presenter keyed in front of a background, and optionally a foreground such as a desk and a lower third area. Pictures from the media library become sources; the key colour is guessed from the camera.'},
     {"name": "setup.get", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/setup"), "summary": 'Where one piece stands, without starting anything.'},
     {"name": "setup.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/setup/list"), "summary": 'Where each piece the mixer sets up on first use stands: the browser renderer (`web`) and every first party plugin this copy carries.'},
     {"name": "setup.start", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/setup/start"), "summary": 'Set a piece up now, or join the set up already running, and answer at once with where it stands. Progress follows as `event/setup.changed`. Sources waiting on the piece start by themselves when it is ready.'},
@@ -4976,14 +4970,17 @@ class GeneratedMethods:
         *,
         layout: Optional[str] = None,
         name: Optional[str] = None,
-    ) -> SceneView:
-        """A scene from a set of sources, laid out by the built in layout for that count (full, two-box, three-box, quad, then a grid) or by a named one."""
+        settings: Optional[Dict[str, Any]] = None,
+    ) -> CreateFromAnswer:
+        """A scene from a set of sources, laid out by the built in layout for that count (full, two-box, three-box, quad, then a grid) or by a named one. Pictures from the media library become sources, and a keyed layout such as virtual-set guesses its key colour from the camera."""
         params: Dict[str, Any] = {}
         params["sources"] = sources
         if layout is not None:
             params["layout"] = layout
         if name is not None:
             params["name"] = name
+        if settings is not None:
+            params["settings"] = settings
         return await self._call("scene.create_from", params)
 
     async def scene_duplicate(
@@ -5761,36 +5758,6 @@ class GeneratedMethods:
         if scene is not None:
             params["scene"] = scene
         return await self._call("scene.validate", params)
-
-    async def scene_virtual_set(
-        self,
-        background: str,
-        presenter: str,
-        *,
-        foreground: Optional[str] = None,
-        key: Optional[str] = None,
-        lower_third: Optional[str] = None,
-        name: Optional[str] = None,
-        presenter_scale: Optional[float] = None,
-        presenter_x: Optional[float] = None,
-    ) -> VirtualSetAnswer:
-        """A new scene with a presenter keyed in front of a background, and optionally a foreground such as a desk and a lower third area. Pictures from the media library become sources; the key colour is guessed from the camera."""
-        params: Dict[str, Any] = {}
-        params["background"] = background
-        params["presenter"] = presenter
-        if foreground is not None:
-            params["foreground"] = foreground
-        if key is not None:
-            params["key"] = key
-        if lower_third is not None:
-            params["lower_third"] = lower_third
-        if name is not None:
-            params["name"] = name
-        if presenter_scale is not None:
-            params["presenter_scale"] = presenter_scale
-        if presenter_x is not None:
-            params["presenter_x"] = presenter_x
-        return await self._call("scene.virtual_set", params)
 
     async def setup_get(
         self,

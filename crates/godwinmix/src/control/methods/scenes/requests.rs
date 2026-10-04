@@ -33,7 +33,9 @@ pub struct AddSceneRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct CreateFromRequest {
-    /// Source ids, in the order they should be laid out.
+    /// What to lay out, in slot order. Each is a source id, a file name from
+    /// the media library, or a path or URL to a picture or clip; a file becomes
+    /// a source the first time and is reused after that.
     pub sources: Vec<String>,
     /// A layout name from `scene.layout.list`. Left out, the number of sources
     /// picks one.
@@ -41,6 +43,29 @@ pub struct CreateFromRequest {
     pub layout: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
+    /// Values for the layout's own settings, by name, as `scene.layout.list`
+    /// lists them: for `virtual-set`, `key` ("auto" or "#rrggbb"),
+    /// `presenter_scale` and `presenter_x`. A keyed layout with no `key`
+    /// guesses the colour from the camera.
+    #[serde(default, skip_serializing_if = "Map::is_empty")]
+    pub settings: Map<String, Value>,
+}
+
+/// The scene `scene.create_from` made, and what it did on the way.
+#[derive(Debug, Clone, Serialize, JsonSchema)]
+pub struct CreateFromAnswer {
+    #[serde(flatten)]
+    pub scene: godwinmix_core::scene::server::SceneView,
+    /// Sources this call added for files it was given.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub added: Vec<String>,
+    /// For a keyed layout, the colour written on the key: "#rrggbb", or
+    /// "auto" when no still of the camera could be had.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key: Option<String>,
+    /// "given", "guessed" or "auto", beside `key`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key_from: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]

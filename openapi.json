@@ -2495,6 +2495,76 @@
         ],
         "type": "object"
       },
+      "CreateFromAnswer": {
+        "description": "The scene `scene.create_from` made, and what it did on the way.",
+        "properties": {
+          "added": {
+            "description": "Sources this call added for files it was given.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "canvas": {
+            "$ref": "#/components/schemas/Canvas"
+          },
+          "color": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "findings": {
+            "description": "What `scene.validate` would say about it, so a client shows a warning\nwithout asking again.",
+            "items": {
+              "$ref": "#/components/schemas/Finding"
+            },
+            "type": "array"
+          },
+          "geometry": {
+            "description": "Where each item actually lands, after groups are flattened and\nreferences resolved. Bottom of the stack first, which is the order the\ncompositor takes them in.",
+            "items": {
+              "$ref": "#/components/schemas/Geometry"
+            },
+            "type": "array"
+          },
+          "id": {
+            "$ref": "#/components/schemas/Id"
+          },
+          "key": {
+            "description": "For a keyed layout, the colour written on the key: \"#rrggbb\", or\n\"auto\" when no still of the camera could be had.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "key_from": {
+            "description": "\"given\", \"guessed\" or \"auto\", beside `key`.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "records": {
+            "description": "The scene's own record and one per item, parents before children.",
+            "items": {
+              "$ref": "#/components/schemas/Record"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "canvas",
+          "records",
+          "geometry"
+        ],
+        "type": "object"
+      },
       "CreateFromRequest": {
         "properties": {
           "layout": {
@@ -2510,8 +2580,13 @@
               "null"
             ]
           },
+          "settings": {
+            "additionalProperties": true,
+            "description": "Values for the layout's own settings, by name, as `scene.layout.list`\nlists them: for `virtual-set`, `key` (\"auto\" or \"#rrggbb\"),\n`presenter_scale` and `presenter_x`. A keyed layout with no `key`\nguesses the colour from the camera.",
+            "type": "object"
+          },
           "sources": {
-            "description": "Source ids, in the order they should be laid out.",
+            "description": "What to lay out, in slot order. Each is a source id, a file name from\nthe media library, or a path or URL to a picture or clip; a file becomes\na source the first time and is reused after that.",
             "items": {
               "type": "string"
             },
@@ -10785,103 +10860,6 @@
         },
         "type": "object"
       },
-      "VirtualSetAnswer": {
-        "properties": {
-          "added": {
-            "description": "Sources this call added for files it was given.",
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "key": {
-            "description": "The key colour written on the presenter's key: \"#rrggbb\", or \"auto\"\nwhen no still of the camera could be had and the key finds it on air.",
-            "type": "string"
-          },
-          "key_from": {
-            "description": "\"given\", \"guessed\" or \"auto\".",
-            "type": "string"
-          },
-          "scene": {
-            "$ref": "#/components/schemas/SceneView"
-          }
-        },
-        "required": [
-          "scene",
-          "key",
-          "key_from",
-          "added"
-        ],
-        "type": "object"
-      },
-      "VirtualSetRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "background": {
-            "description": "What stands behind the presenter: a source id, a file name from the\nmedia library, or a path or URL to a picture or clip.",
-            "type": "string"
-          },
-          "foreground": {
-            "default": null,
-            "description": "A transparent picture in front of the presenter, drawn over the whole\ncanvas: a source id, a media file name, or a path.",
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "key": {
-            "default": null,
-            "description": "\"auto\" (the default) guesses the colour from the camera; \"#rrggbb\"\ngives it.",
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "lower_third": {
-            "default": null,
-            "description": "A source for the lower third area, in front of everything else.",
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "name": {
-            "default": null,
-            "description": "The new scene's name. \"Virtual set\" when left out, with a number after\nit when that is taken.",
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "presenter": {
-            "description": "The camera to key: a source id.",
-            "type": "string"
-          },
-          "presenter_scale": {
-            "default": null,
-            "description": "The presenter's picture as a fraction of the canvas, 0.3 to 1. 0.9\nwhen left out.",
-            "format": "double",
-            "type": [
-              "number",
-              "null"
-            ]
-          },
-          "presenter_x": {
-            "default": null,
-            "description": "Where the presenter stands across the canvas, 0 to 1. 0.5, the\nmiddle, when left out.",
-            "format": "double",
-            "type": [
-              "number",
-              "null"
-            ]
-          }
-        },
-        "required": [
-          "background",
-          "presenter"
-        ],
-        "type": "object"
-      },
       "VitalsConfig": {
         "description": "`[vitals]`, and what `vitals.set` changes: the thresholds, and whether\nto keep a mosaic up for the picture alarms while nobody is looking.",
         "properties": {
@@ -14958,7 +14936,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SceneView"
+                  "$ref": "#/components/schemas/CreateFromAnswer"
                 }
               }
             },
@@ -14968,12 +14946,12 @@
             "$ref": "#/components/responses/Error"
           }
         },
-        "summary": "A scene from a set of sources, laid out by the built in layout for that count (full, two-box, three-box, quad, then a grid) or by a named one.",
+        "summary": "A scene from a set of sources, laid out by the built in layout for that count (full, two-box, three-box, quad, then a grid) or by a named one. Pictures from the media library become sources, and a keyed layout such as virtual-set guesses its key colour from the camera.",
         "tags": [
           "scene"
         ],
         "x-destructive": false,
-        "x-idempotent": true,
+        "x-idempotent": false,
         "x-scope": "operate"
       }
     },
@@ -16415,44 +16393,6 @@
         "x-destructive": false,
         "x-idempotent": true,
         "x-scope": "read"
-      }
-    },
-    "/api/v1/scenes/virtual_set": {
-      "post": {
-        "description": "JSON-RPC method `scene.virtual_set`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
-        "operationId": "scene.virtual_set",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/VirtualSetRequest"
-              }
-            }
-          },
-          "required": false
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/VirtualSetAnswer"
-                }
-              }
-            },
-            "description": "the full resulting object, so no follow up read is needed"
-          },
-          "default": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "summary": "A new scene with a presenter keyed in front of a background, and optionally a foreground such as a desk and a lower third area. Pictures from the media library become sources; the key colour is guessed from the camera.",
-        "tags": [
-          "scene"
-        ],
-        "x-destructive": false,
-        "x-idempotent": false,
-        "x-scope": "operate"
       }
     },
     "/api/v1/scenes/{id}": {

@@ -279,8 +279,6 @@ const COLLECTION_LEVEL: &[&str] = &[
     "scene.apply_graphic",
     "scene.validate",
     "scene.export",
-    // Makes a new scene, so there is no member to name yet.
-    "scene.virtual_set",
     // Many shows at once, or every one: no member to name.
     "show.add_many",
     "show.remove_many",

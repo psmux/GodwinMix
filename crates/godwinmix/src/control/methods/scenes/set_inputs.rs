@@ -1,4 +1,4 @@
-//! What `scene.virtual_set` is given, turned into what the layout takes: a
+//! What `scene.create_from` is given, turned into what a layout takes: a
 //! source id for each picture, and a key colour.
 
 use crate::control::call::Call;
