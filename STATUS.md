@@ -40,9 +40,22 @@ resolved against the install folder. The release's macOS job deleted its own
 hours until it timed out, and its Linux jobs lacked the RTSP server's
 development package. The docs index had 29 pages missing.
 
+The background plate stayed black behind the cutout in the installed app, for
+three reasons stacked on each other. The trimmed GStreamer had lost
+`imagefreeze`, `rsvgdec`, `multifilesrc` and several more that the code makes
+by name, so the trimmer now reads the element names out of the source. A
+library picture's Windows path, `\\?\C:\...`, was read as an address with a
+query and became a clip that played once. And a still added while a show was
+running was shifted onto the programme's timeline a second time: `imagefreeze`
+already stamps with the programme's running time, so the picture sat as far
+in the future as the show was old, its queues filled and it was restarted as
+stalled. A picture present at startup worked only because both numbers were
+near zero. A still now declares `programme-timeline`, as the test pattern does.
+
 Still open: the station link test and the transition frame rate test fail on
-a loaded run here and pass alone. A real person was not in front of the camera
-for the cutout's test; the empty room was cut out to black, which is right.
+a loaded run here and pass alone. The app's mixer exited once with code 1
+right after an upgrade and has not done it again; there was nothing in its
+log to say why.
 
 ## Windows, 2026-10-03
 
