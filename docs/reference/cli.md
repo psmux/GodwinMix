@@ -89,7 +89,7 @@ Drops `godwinmix-operate`, `godwinmix-develop` and `godwinmix-design` where an
 AI coding tool reads them.
 
 ```sh
-gmx skill install --for claude            # or codex, or gemini
+gmx skill install --for claude            # or opencode, pi, codex, gemini
 gmx skill install --for codex --print     # show what it would write
 gmx skill install --for claude --project  # into ./.claude/skills rather than ~
 gmx skill list --for gemini               # the skills and where they would go
@@ -108,6 +108,37 @@ safety rules that will refuse it, what a look costs. `godwinmix-develop` is
 for building on it: the manifest, the contract and the test loop.
 `godwinmix-design` is for graphics: the template pack, writing an SVG template,
 safe areas, placing and looking at a graphic.
+
+`--for opencode` writes to `~/.config/opencode/skills` (`.opencode/skills`
+with `--project`); `--for pi` writes to `.agents/skills`, which pi and other
+tools that follow that convention read.
+
+### `gmx tool`
+
+Runs one MCP tool by name, with its arguments as a JSON object or `@file`:
+the same tool table `godwinmix mcp` serves, for an agent with a shell and no
+MCP, and for trying a tool by hand. A refusal prints and exits 1.
+
+```sh
+gmx tool list
+gmx tool search_tools '{"query": "lower third"}'
+gmx tool add_source '{"name": "lower", "uri": "template:news-lower-third"}'
+```
+
+### `gmx ctl upload`
+
+Puts a file in the media library and prints its name there:
+
+```sh
+gmx ctl upload backdrop.png
+gmx ctl upload card.svg --name our-card.svg
+```
+
+### Which mixer a command talks to
+
+`--url` and `--token`, else `GODWINMIX_URL` and `GODWINMIX_TOKEN`, else the
+desktop app's own mixer on this machine (its address and token are read from
+the app's data folder), else `http://127.0.0.1:8080`.
 
 ### Graphic templates and any method
 

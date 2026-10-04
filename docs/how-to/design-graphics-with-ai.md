@@ -5,17 +5,20 @@ air a minute later, designed, branded and checked. The agent writes or picks
 an [SVG template](write-an-svg-template.md), the mixer draws it with no
 browser, and the agent looks at the result before it tells you it is done.
 
-This works with any agent that speaks MCP: Claude Code, Codex, Gemini CLI,
-Cursor. A small model does the pack and the field changes well; designing a
-new template from nothing wants a stronger one.
+This works with Claude Code, opencode, pi, Codex, Gemini CLI, Cursor and
+any other agent that speaks MCP or runs commands. A small model does the pack
+and the field changes well; designing a new template from nothing wants a
+stronger one.
 
 ## 1. Connect the agent and give it the skill
 
-Connect the mixer as an MCP server, as in
-[use the mixer from an AI agent](use-with-an-ai-agent.md):
+In GodwinMix, **Help > Connect an AI agent** shows the lines for your agent,
+written for your computer: run them and you are done. Every agent, and a mixer
+on another machine, is in [connect an AI agent](connect-an-ai-agent.md). For
+Claude Code it is:
 
 ```sh
-claude mcp add godwinmix -- godwinmix mcp --url http://localhost:8080
+claude mcp add godwinmix -- godwinmix mcp
 ```
 
 Then install the skills. `godwinmix-design` is the one that teaches graphics:
@@ -24,7 +27,7 @@ template is written, safe areas, how to put one on a scene with an enter and an
 exit, and how to look at it.
 
 ```sh
-gmx skill install --for claude          # or codex, or gemini
+gmx skill install --for claude          # or opencode, pi, codex, gemini
 ```
 
 The template tools are behind `search_tools`, so they cost nothing in the tool
