@@ -250,15 +250,23 @@ jobs:
       # bundle-plugins.sh. The SDK's terms allow that when the application's
       # own licence carries the NDI end user terms, which windows-licence.txt
       # does, and a link to ndi.video sits wherever NDI is picked.
+      #
+      # Unpacked with innoextract, not run: the SDK's installer, even with
+      # /VERYSILENT, sat on a runner for two hours until the job timed out.
       - name: NDI SDK (Windows)
         if: runner.os == 'Windows'
+        timeout-minutes: 10
         shell: pwsh
         run: |
-          $exe = "$env:RUNNER_TEMP\ndi-sdk.exe"
-          Invoke-WebRequest "https://downloads.ndi.tv/SDK/NDI_SDK/NDI%206%20SDK.exe" -OutFile $exe
-          $dir = "$env:RUNNER_TEMP\ndi-sdk"
-          Start-Process $exe -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/DIR=`"$dir`"" -Wait
-          if (-not (Test-Path "$dir\Bin\x64\Processing.NDI.Lib.x64.dll")) { throw "the NDI SDK did not install to $dir" }
+          $tmp = $env:RUNNER_TEMP
+          Invoke-WebRequest "https://github.com/dscharrer/innoextract/releases/download/1.9/innoextract-1.9-windows.zip" -OutFile "$tmp\innoextract.zip"
+          $sum = (Get-FileHash "$tmp\innoextract.zip" -Algorithm SHA256).Hash.ToLower()
+          if ($sum -ne "6989342c9b026a00a72a38f23b62a8e6a22cc5de69805cf47d68ac2fec99306") { throw "innoextract.zip has sha256 $sum" }
+          Expand-Archive "$tmp\innoextract.zip" "$tmp\innoextract"
+          Invoke-WebRequest "https://downloads.ndi.tv/SDK/NDI_SDK/NDI%206%20SDK.exe" -OutFile "$tmp\ndi-sdk.exe"
+          & "$tmp\innoextract\innoextract.exe" -s -e -d "$tmp\ndi-sdk" "$tmp\ndi-sdk.exe"
+          $dir = "$tmp\ndi-sdk\app"
+          if (-not (Test-Path "$dir\Bin\x64\Processing.NDI.Lib.x64.dll")) { throw "the NDI SDK did not unpack to $dir" }
           "NDI_SDK_DIR=$dir" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       # The camera, the screen and the microphone, staged the way the core
