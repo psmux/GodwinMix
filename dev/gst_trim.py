@@ -575,6 +575,10 @@ def plugin_elements(plugins: Path) -> set[str]:
 CODE_EXTRA = [
     "curlhttpsrc", "vp8alphadecodebin", "vp9alphadecodebin",
     "nicesrc", "nicesink", "rtmpsink", "rtmpsrc", "ristsrc",
+    # What decodebin picks for a picture in the library. Never named in the
+    # code, so the scan cannot find them, and without pngdec a PNG fell to
+    # the much slower libav decoder; a WebP or GIF did not open at all.
+    "pngdec", "webpdec", "gdkpixbufdec",
 ]
 
 
