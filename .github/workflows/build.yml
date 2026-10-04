@@ -51,7 +51,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
-            libgstreamer-plugins-bad1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
+            libgstreamer-plugins-bad1.0-dev libgstrtspserver-1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
             gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav gstreamer1.0-tools xvfb libgl1-mesa-dri
 
       - name: GStreamer (macOS)
@@ -226,7 +226,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
-            libgstreamer-plugins-bad1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
+            libgstreamer-plugins-bad1.0-dev libgstrtspserver-1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
             gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav gstreamer1.0-tools xvfb libgl1-mesa-dri
 
       - name: Test
@@ -288,7 +288,7 @@ jobs:
               apt-get update
               apt-get install -y --no-install-recommends \
                 libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
-                libgstreamer-plugins-bad1.0-dev pkg-config
+                libgstreamer-plugins-bad1.0-dev libgstrtspserver-1.0-dev pkg-config
               cargo build --release --locked -p godwinmix --bins
               ls -la target/release/godwinmix target/release/gmx
             '
@@ -324,7 +324,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
-            libgstreamer-plugins-bad1.0-dev
+            libgstreamer-plugins-bad1.0-dev libgstrtspserver-1.0-dev
       # `-D warnings` since the hardening pass: the five that had sat in
       # convert.rs, input.rs, media.rs and output.rs since the start are fixed,
       # and the count is zero. Keep it there. A lint worth disagreeing with
