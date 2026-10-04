@@ -15,6 +15,10 @@ fn a_picture_address_is_claimed_above_a_clip() {
     assert_eq!(kind("/srv/slides/title.png").as_deref(), Some("image/source"));
     assert_eq!(kind("file:///srv/slides/title.jpeg").as_deref(), Some("image/source"));
     assert_eq!(kind("/clips/ad.mp4").as_deref(), Some("file/source"));
+    // Windows' extended form has a `?` that is part of the path. It was read
+    // as a query, and a library picture became a clip that played once.
+    assert_eq!(image_type(r"\\?\C:\Users\me\media\plate.png"), Some("image/png"));
+    assert_eq!(kind(r"\\?\C:\Users\me\media\plate.png").as_deref(), Some("image/source"));
 }
 
 #[test]

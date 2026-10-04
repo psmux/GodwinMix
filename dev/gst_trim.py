@@ -570,12 +570,44 @@ def plugin_elements(plugins: Path) -> set[str]:
     return found
 
 
+# Elements the core names in ways `code_elements` does not read: a fallback
+# picked from a list, a decoder recognised by name, a constant.
+CODE_EXTRA = [
+    "curlhttpsrc", "vp8alphadecodebin", "vp9alphadecodebin",
+    "nicesrc", "nicesink", "rtmpsink", "rtmpsrc", "ristsrc",
+]
+
+
+def code_elements(repo: Path) -> set[str]:
+    """Every element the core and the plugins create or ask for by name.
+
+    Read from the source, the way `plugin_elements` reads a plugin's NEEDED
+    list, so the installer's runtime has what the code uses and does not
+    depend on a list kept by hand. A hand list let `imagefreeze`, `rsvgdec`,
+    `multifilesrc`, `cmafmux` and the RIST elements fall out of the Windows
+    installer: every still picture, every SVG graphic, every picture
+    sequence, the HLS output and RIST failed in the installed app.
+    """
+    import re
+    found = set(CODE_EXTRA)
+    calls = re.compile(r'(?:\bmake|ElementFactory::make|ElementFactory::find|probe::exists)\(\s*"([a-z0-9_]+)"')
+    lists = re.compile(r'(?:absent|require)\(\s*&\[([^\]]*)\]', re.S)
+    sources = [*(repo / "crates").glob("*/src/**/*.rs"), *(repo / "plugins").glob("*/src/**/*.rs")]
+    for source in sources:
+        text = source.read_text(encoding="utf-8", errors="replace")
+        found.update(calls.findall(text))
+        for block in lists.findall(text):
+            found.update(re.findall(r'"([a-z0-9_]+)"', block))
+    return found
+
+
 def wanted_plugins(prefix: Path, plugins: Path, registry: Path,
                    platform: str, codecs: Path) -> tuple[list[str], list[str]]:
     """The plugins to keep, and the elements that asked for them."""
     elements = sorted(catalogue_elements(codecs)
                       | set(PIPELINE) | set(PLATFORM.get(platform, []))
-                      | plugin_elements(codecs.parent / "plugins"))
+                      | plugin_elements(codecs.parent / "plugins")
+                      | code_elements(codecs.parent))
     where = element_map(prefix, plugins, registry)
     keep = set(ALWAYS_PLUGINS)
     absent = []

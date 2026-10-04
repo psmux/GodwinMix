@@ -22,6 +22,8 @@ const EXTENSIONS: &[(&str, &str)] = &[
 /// The image type an address names by its extension, if it names one.
 pub fn image_type(uri: &str) -> Option<&'static str> {
     let lower = uri.trim().to_lowercase();
+    // A Windows extended path, `\\?\C:\...`, has a `?` that is not a query.
+    let lower = lower.strip_prefix(r"\\?\").map(str::to_string).unwrap_or(lower);
     let path = lower.split(['?', '#']).next().unwrap_or(&lower);
     let ext = path.rsplit_once('.')?.1;
     EXTENSIONS.iter().find(|(e, _)| *e == ext).map(|(_, t)| *t)
