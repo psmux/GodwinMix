@@ -20,7 +20,12 @@ pub async fn source_for(
         return Ok(named.to_string());
     }
     let uri = match call.app.library.resolve(named) {
-        Ok(path) => path.to_string_lossy().into_owned(),
+        // A plain path, not Windows' extended `\\?\` form, which the
+        // kinds that read an address by its shape do not recognise.
+        Ok(path) => {
+            let text = path.to_string_lossy().into_owned();
+            text.strip_prefix(r"\\?\").map(str::to_string).unwrap_or(text)
+        }
         Err(_) if named.contains("://") || std::path::Path::new(named).is_file() => named.to_string(),
         Err(_) => {
             return Err(RpcError::not_found(field, named, known)
