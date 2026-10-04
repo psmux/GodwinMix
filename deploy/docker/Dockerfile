@@ -38,7 +38,7 @@ RUN cargo build --release --locked -p godwinmix --bins \
 # runtime image puts them where the mixer looks from /usr/local/bin.
 RUN apt-get update && apt-get install -y --no-install-recommends python3 curl \
     && rm -rf /var/lib/apt/lists/* \
-    && dev/fetch-models.sh --models /cutout/models --runtime /cutout/runtime
+    && bash dev/fetch-models.sh --models /cutout/models --runtime /cutout/runtime
 
 # The browser runs outside the mixer. Debian's WPE fallback can crash inside
 # the mixer process, so the default image ships the existing CEF sidecar.

@@ -356,7 +356,7 @@ jobs:
       # checked. Resources of the app, beside the mixer, where it looks.
       - name: The cutout models and runtime, inside the app
         shell: bash
-        run: ./dev/fetch-models.sh --models tauri-app/models --runtime tauri-app/onnxruntime
+        run: bash dev/fetch-models.sh --models tauri-app/models --runtime tauri-app/onnxruntime
 
       - name: Bundle
         working-directory: tauri-app
