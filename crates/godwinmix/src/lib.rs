@@ -16,6 +16,7 @@
 //! `gmx`, because the short name is what an operator types and neither should
 //! be a copy of the other. `run` below is what both call.
 
+pub mod address;
 pub mod bench;
 pub mod channels;
 pub mod cli;
@@ -259,6 +260,24 @@ enum Command {
     /// `godwinmix-develop` and `godwinmix-design` where that tool reads them.
     /// `--print` shows what it would write and writes nothing.
     Skill(cli::skill::SkillArgs),
+    /// Run one MCP tool from a shell: `gmx tool list`, or
+    /// `gmx tool add_source '{"name": "news", "uri": "template:breaking-news"}'`.
+    ///
+    /// The same tools `godwinmix mcp` serves, for an agent with a shell and
+    /// no MCP (pi), and for trying a tool by hand. With no --url it finds the
+    /// desktop app's mixer on this machine.
+    Tool {
+        /// Address of the mixer's control server.
+        #[arg(long, env = "GODWINMIX_URL")]
+        url: Option<String>,
+        /// Bearer token for a mixer whose API requires one.
+        #[arg(long, env = "GODWINMIX_TOKEN", hide_env_values = true)]
+        token: Option<String>,
+        /// The tool's name, or `list`.
+        name: String,
+        /// Its arguments as a JSON object, or @file.
+        args: Option<String>,
+    },
     /// The session log as an artefact: show a timeline, replay a session
     /// against a test core, diff two runs. See `src/cli/session.rs`.
     Session(cli::session::SessionArgs),
@@ -607,8 +626,7 @@ pub async fn run() -> Result<()> {
     // are picked up here, with the warning, for one release. See `config::env_var`.
     match args.command {
         Some(Command::Ctl { url, token, cmd }) => {
-            let url = url.or_else(|| config::env_var("URL")).unwrap_or_else(|| DEFAULT_URL.into());
-            let token = token.or_else(|| config::env_var("TOKEN"));
+            let (url, token) = address::resolve(url, token);
             return ctl::run(&url, token.as_deref(), cmd).await;
         }
         Some(Command::Bench(b)) => {
@@ -617,8 +635,7 @@ pub async fn run() -> Result<()> {
             return bench::run(b).await;
         }
         Some(Command::Mcp { url, token, profile, http }) => {
-            let url = url.or_else(|| config::env_var("URL")).unwrap_or_else(|| DEFAULT_URL.into());
-            let token = token.or_else(|| config::env_var("TOKEN"));
+            let (url, token) = address::resolve(url, token);
             return mcp::run(&url, token, profile.into(), http).await;
         }
         Some(Command::Codec { cmd }) => {
@@ -628,23 +645,19 @@ pub async fn run() -> Result<()> {
         }
         Some(Command::Marketplace { cmd }) => return cli::marketplace::run(cmd),
         Some(Command::Plugin { url, token, cmd }) => {
-            let url = url.or_else(|| config::env_var("URL")).unwrap_or_else(|| DEFAULT_URL.into());
-            let token = token.or_else(|| config::env_var("TOKEN"));
+            let (url, token) = address::resolve(url, token);
             return cli::plugin::run(&url, token.as_deref(), cmd).await;
         }
         Some(Command::Shows { url, token, cmd }) => {
-            let url = url.or_else(|| config::env_var("URL")).unwrap_or_else(|| DEFAULT_URL.into());
-            let token = token.or_else(|| config::env_var("TOKEN"));
+            let (url, token) = address::resolve(url, token);
             return cli::shows::run(&url, token.as_deref(), cmd).await;
         }
         Some(Command::Chaos { url, token, cmd }) => {
-            let url = url.or_else(|| config::env_var("URL")).unwrap_or_else(|| DEFAULT_URL.into());
-            let token = token.or_else(|| config::env_var("TOKEN"));
+            let (url, token) = address::resolve(url, token);
             return cli::chaos::run(&url, token.as_deref(), cmd).await;
         }
         Some(Command::Ui(args)) => {
-            let url = args.url.clone().or_else(|| config::env_var("URL")).unwrap_or_else(|| DEFAULT_URL.into());
-            let token = args.token.clone().or_else(|| config::env_var("TOKEN"));
+            let (url, token) = address::resolve(args.url.clone(), args.token.clone());
             return cli::ui::run(&url, token.as_deref(), args);
         }
         Some(Command::Preset { cmd }) => {
@@ -659,15 +672,17 @@ pub async fn run() -> Result<()> {
         }
         Some(Command::Node { url, token, daemon, cmd }) => match cmd {
             Some(cmd) => {
-                let url =
-                    url.or_else(|| config::env_var("URL")).unwrap_or_else(|| DEFAULT_URL.into());
-                let token = token.or_else(|| config::env_var("TOKEN"));
+                let (url, token) = address::resolve(url, token);
                 return cli::node::run(&url, token.as_deref(), cmd).await;
             }
             None => return cli::node::serve(daemon).await,
         },
         Some(Command::Agent(args)) => return cli::agent::run(args.cmd).await,
         Some(Command::Skill(args)) => return cli::skill::run(args.cmd),
+        Some(Command::Tool { url, token, name, args }) => {
+            let (url, token) = address::resolve(url, token);
+            return cli::tool::run(&url, token, &name, args.as_deref()).await;
+        }
         Some(Command::Session(args)) => {
             // A replay builds a real pipeline, so GStreamer comes up first.
             // `show` and `diff` need nothing and pay nothing for it.

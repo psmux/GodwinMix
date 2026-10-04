@@ -21,4 +21,5 @@ pub mod session;
 pub mod shows;
 pub mod skill;
 pub mod tasks;
+pub mod tool;
 pub mod ui;
