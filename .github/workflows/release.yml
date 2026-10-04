@@ -261,7 +261,7 @@ jobs:
           $tmp = $env:RUNNER_TEMP
           Invoke-WebRequest "https://github.com/dscharrer/innoextract/releases/download/1.9/innoextract-1.9-windows.zip" -OutFile "$tmp\innoextract.zip"
           $sum = (Get-FileHash "$tmp\innoextract.zip" -Algorithm SHA256).Hash.ToLower()
-          if ($sum -ne "6989342c9b026a00a72a38f23b62a8e6a22cc5de69805cf47d68ac2fec99306") { throw "innoextract.zip has sha256 $sum" }
+          if ($sum -ne "6989342c9b026a00a72a38f23b62a8e6a22cc5de69805cf47d68ac2fec993065") { throw "innoextract.zip has sha256 $sum" }
           Expand-Archive "$tmp\innoextract.zip" "$tmp\innoextract"
           Invoke-WebRequest "https://downloads.ndi.tv/SDK/NDI_SDK/NDI%206%20SDK.exe" -OutFile "$tmp\ndi-sdk.exe"
           & "$tmp\innoextract\innoextract.exe" -s -e -d "$tmp\ndi-sdk" "$tmp\ndi-sdk.exe"
