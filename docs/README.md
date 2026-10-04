@@ -101,6 +101,7 @@ Start here if you have never run it.
 * [Import your scenes from OBS](how-to/import-from-obs.md)
 * [Make a graphic](how-to/make-a-graphic.md)
 * [Write an SVG template](how-to/write-an-svg-template.md)
+* [Connect an AI agent, and have it make your graphics](how-to/connect-an-ai-agent.md)
 * [Design graphics with an AI agent](how-to/design-graphics-with-ai.md)
 * [Use the mixer controls](how-to/preview-monitor.md)
 * [Run on a Raspberry Pi](how-to/run-on-a-raspberry-pi.md)

@@ -1,7 +1,7 @@
 # Skills
 
 Three Agent Skills that ship with the CLI. `gmx skill install` drops them into
-Claude Code, Codex or Gemini CLI, so an agent asked to run a show, write a
+Claude Code, opencode, pi, Codex or Gemini CLI, so an agent asked to run a show, write a
 plugin or design a graphic already knows the conventions instead of guessing
 them.
 
@@ -12,7 +12,7 @@ them.
 | [godwinmix-design](godwinmix-design/SKILL.md) | designing a graphic: the template pack, an SVG template with fields and shrink to fit, safe areas, putting it on a scene with an enter and an exit, looking at it, changing its words on air |
 
 ```sh
-gmx skill install --for claude          # or codex, or gemini
+gmx skill install --for claude          # or opencode, pi, codex, gemini
 gmx skill install --for claude --print  # what it would write, writing nothing
 ```
 

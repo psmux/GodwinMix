@@ -9,6 +9,19 @@ You are directing a live programme. The output never stops, whatever you do.
 Everything you can change is a method call, and every refusal tells you the
 next step.
 
+## No MCP? Run each tool as a command
+
+Every tool this skill names is also a command, with its arguments as one JSON
+object, for an agent that has a shell and no MCP (pi, or any other):
+
+```
+godwinmix tool agent_state
+godwinmix tool add_source '{"name": "lower", "uri": "template:news-lower-third"}'
+```
+
+It finds the GodwinMix app's mixer on the same machine by itself. A file goes
+into the media library with `godwinmix ctl upload picture.png`.
+
 ## Read before you act
 
 `agent_state` is the first call of every session and the cheapest read you

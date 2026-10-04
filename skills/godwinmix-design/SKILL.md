@@ -11,6 +11,19 @@ on air is drawn again in a few milliseconds and swapped in on the next frame,
 with no rebuild and no gap. It costs a Raspberry Pi almost nothing while it
 holds still, so it is the default for anything designed.
 
+## No MCP? Run each tool as a command
+
+Every tool this skill names is also a command, with its arguments as one JSON
+object, for an agent that has a shell and no MCP (pi, or any other):
+
+```
+godwinmix tool agent_state
+godwinmix tool add_source '{"name": "lower", "uri": "template:news-lower-third"}'
+```
+
+It finds the GodwinMix app's mixer on the same machine by itself. A file goes
+into the media library with `godwinmix ctl upload picture.png`.
+
 ## Pick the cheapest thing that does the job
 
 | Ask | Use | Why |

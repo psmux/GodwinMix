@@ -7,6 +7,11 @@ the operator's browser see the same state and the same refusals.
 ## One command
 
 The mixer has to be running and reachable. The MCP server is the same binary.
+With no `--url` it finds the desktop app's mixer on the same machine, address
+and token both, so on a machine with GodwinMix open `godwinmix mcp` is the
+whole command. **Help > Connect an AI agent** in the app writes it out for
+each agent with the right path; [connect an AI agent](connect-an-ai-agent.md)
+covers opencode and pi as well as the ones below.
 
 Claude Code:
 
@@ -150,7 +155,7 @@ it, and one for designing graphics. Each is written for the tool that will
 read it.
 
 ```sh
-gmx skill install --for claude          # or codex, or gemini
+gmx skill install --for claude          # or opencode, pi, codex, gemini
 gmx skill install --for claude --print  # see what it would write first
 ```
 

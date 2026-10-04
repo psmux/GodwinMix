@@ -361,11 +361,19 @@ everything else exists to protect.
 ## For agents
 
 An AI agent operates this mixer through the same API as everyone else, and
-`godwinmix mcp` dresses that API as an MCP server over stdio:
+`godwinmix mcp` dresses that API as an MCP server over stdio. With GodwinMix
+open on the same machine it needs no address and no token:
 
 ```sh
-claude mcp add godwinmix -- godwinmix mcp --url http://HOST:8080 --token TOKEN
+claude mcp add godwinmix -- godwinmix mcp
+godwinmix skill install --for claude     # or opencode, pi, codex, gemini
 ```
+
+**Help > Connect an AI agent** in the app shows the lines for Claude Code,
+opencode, pi, Codex, Gemini CLI and any MCP client. An agent with no MCP,
+pi for one, runs the same tools as commands: `godwinmix tool add_source
+'{...}'`. Then ask it for a lower third in your colours; see
+[connect an AI agent](docs/how-to/connect-an-ai-agent.md).
 
 `GET /api/agent/state` is the state cut down to what a director needs: what is
 on programme, every source with its state, whether it has audio, how long since
