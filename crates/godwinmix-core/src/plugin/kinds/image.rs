@@ -72,7 +72,19 @@ impl Source for ImageSource {
     fn initialize(&mut self, hello: Hello) -> Result<Ready> {
         fps(&hello.params)?;
         self.ctx.canvas = hello.canvas;
-        Ok(Ready { manifest: MANIFEST, latency_ms: 0, capabilities: MANIFEST.capabilities })
+        // A still's frames come from `imagefreeze` and its silence from a live
+        // `audiotestsrc`, both stamped with the running time of the clock and
+        // base time the mixer gave this pipeline, which is the programme's.
+        // Shifted again by the aligner, a picture added a minute into a show
+        // sat a minute in the future, the compositor held it until its queue
+        // filled, and it was judged stalled with nothing drawn. A sequence's
+        // frames start at zero and still want the shift.
+        let capabilities = if is_sequence(&self.ctx.cfg.uri) {
+            MANIFEST.capabilities
+        } else {
+            MANIFEST.capabilities.with(Capability::ProgrammeTimeline)
+        };
+        Ok(Ready { manifest: MANIFEST, latency_ms: 0, capabilities })
     }
 
     fn start(&mut self, canvas: &CanvasCaps, thumb: bool) -> Result<MediaEnds> {
