@@ -84,9 +84,6 @@ pub enum ObserveCmd {
     },
 }
 
-/// The default mixer address, matching the one `gmx ctl` uses.
-const DEFAULT_URL: &str = "http://127.0.0.1:8080";
-
 /// A reader that has gone away is not an error.
 ///
 /// `gmx dot cam1 | dot -Tsvg` and `gmx logs -f | head` both close the pipe
@@ -349,10 +346,7 @@ fn trace(dir: &Path, id: &str) -> Result<()> {
 }
 
 async fn dot(name: &str, url: Option<String>, token: Option<String>) -> Result<()> {
-    let url = url
-        .or_else(|| godwinmix_core::config::env_var("URL"))
-        .unwrap_or_else(|| DEFAULT_URL.to_string());
-    let token = token.or_else(|| godwinmix_core::config::env_var("TOKEN"));
+    let (url, token) = crate::address::resolve(url, token);
     let client = reqwest::Client::new();
     let mut req = client
         .get(format!("{}/api/v1/pipeline/dot", url.trim_end_matches('/')))

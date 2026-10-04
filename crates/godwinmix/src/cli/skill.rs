@@ -58,6 +58,10 @@ pub enum Tool {
     Claude,
     Codex,
     Gemini,
+    /// opencode: `~/.config/opencode/skills`.
+    Opencode,
+    /// pi, and any tool that reads the shared `.agents/skills` folder.
+    Pi,
 }
 
 impl Tool {
@@ -66,6 +70,8 @@ impl Tool {
             Self::Claude => "claude",
             Self::Codex => "codex",
             Self::Gemini => "gemini",
+            Self::Opencode => "opencode",
+            Self::Pi => "pi",
         }
     }
 
@@ -86,6 +92,9 @@ impl Tool {
             (Self::Codex, false) => root.join(".codex/skills"),
             (Self::Gemini, true) => root.join(".gemini/skills"),
             (Self::Gemini, false) => root.join(".gemini/skills"),
+            (Self::Opencode, true) => root.join(".opencode/skills"),
+            (Self::Opencode, false) => root.join(".config/opencode/skills"),
+            (Self::Pi, _) => root.join(".agents/skills"),
         })
     }
 }

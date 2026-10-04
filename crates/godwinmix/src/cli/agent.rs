@@ -144,10 +144,7 @@ impl Baseline {
 
 pub async fn run(cmd: AgentCmd) -> Result<()> {
     let AgentCmd::Cost { url, token, write_baseline, json: as_json } = cmd;
-    let url = url
-        .or_else(|| godwinmix_core::config::env_var("URL"))
-        .unwrap_or_else(|| crate::DEFAULT_URL.to_string());
-    let token = token.or_else(|| godwinmix_core::config::env_var("TOKEN"));
+    let (url, token) = crate::address::resolve(url, token);
     let client = reqwest::Client::new();
 
     let state = state_table(&client, &url, token.as_deref()).await;
