@@ -1543,6 +1543,7 @@ dependencies = [
  "gstreamer-webrtc",
  "image",
  "libc",
+ "libloading 0.9.0",
  "ort",
  "parking_lot",
  "rcgen",

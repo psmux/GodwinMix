@@ -32,7 +32,7 @@ export function menu(panel, id, e) {
     id && { label: many ? `Remove ${ids.length}` : "Remove", key: "Delete", run: () => panel.remove(ids) },
     { kind: "separator" },
     { label: "New scene", run: () => panel.newScene() },
-    { label: "New scene: presenter on a green screen", run: () => panel.newGreenScreenScene() },
+    { label: "New scene: presenter in front of a new background", run: () => panel.newGreenScreenScene() },
   ].filter(Boolean));
 }
 

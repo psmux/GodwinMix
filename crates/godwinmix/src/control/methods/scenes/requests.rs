@@ -46,7 +46,9 @@ pub struct CreateFromRequest {
     /// Values for the layout's own settings, by name, as `scene.layout.list`
     /// lists them: for `virtual-set`, `key` ("auto" or "#rrggbb"),
     /// `presenter_scale` and `presenter_x`. A keyed layout with no `key`
-    /// guesses the colour from the camera.
+    /// guesses the colour from the camera. `screen` says what is behind the
+    /// presenter: "green" (the default), "blue", or "none", which cuts the
+    /// person out with a model and needs no screen at all.
     #[serde(default, skip_serializing_if = "Map::is_empty")]
     pub settings: Map<String, Value>,
 }

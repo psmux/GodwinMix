@@ -81,6 +81,9 @@ ort = { version = "=2.0.0-rc.13", default-features = false, features = ["std", "
 # runtime that carries it is still found at run time.
 [target.'cfg(windows)'.dependencies]
 ort = { version = "=2.0.0-rc.13", default-features = false, features = ["directml"], optional = true }
+# Loads DirectML.dll from beside onnxruntime.dll before the runtime asks for
+# it: Windows does not look in a library's own folder for what it needs.
+libloading = { version = "0.9", optional = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 ort = { version = "=2.0.0-rc.13", default-features = false, features = ["coreml"], optional = true }
@@ -90,7 +93,7 @@ default = []
 # A person cut out of the camera picture with no green screen, by a matting
 # model on whatever the machine has: DirectML, CoreML, CUDA, OpenVINO or the
 # CPU. Adds the `ort` bindings and no native code.
-matte = ["dep:ort"]
+matte = ["dep:ort", "dep:libloading"]
 
 [dev-dependencies]
 # Paused time, so the multiview linger tests assert on two seconds without

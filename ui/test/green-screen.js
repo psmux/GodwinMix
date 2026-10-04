@@ -30,6 +30,8 @@ export async function greenScreenTests(test, eq, ok) {
   test("the request is the layout's slots in order, leaving out what was not picked", () => {
     eq(vs.request({ background: "newsroom.png", presenter: "cam", foreground: "", name: " " }), { sources: ["newsroom.png", "cam"], layout: "virtual-set", name: "Presenter" });
     eq(vs.request({ background: "a", presenter: "cam", foreground: "desk.png", name: "News" }), { sources: ["a", "cam", "desk.png"], layout: "virtual-set", name: "News" });
+    eq(vs.request({ background: "a", presenter: "cam", screen: "none" }).settings, { screen: "none" });
+    eq(vs.request({ background: "a", presenter: "cam", screen: "green" }).settings, undefined);
   });
 
   const client = fakeClient();
@@ -40,6 +42,7 @@ export async function greenScreenTests(test, eq, ok) {
   selects[0].value = "newsroom.png";
   selects[1].value = "cam";
   selects[2].value = "desk.png";
+  // selects[3] is what is behind the presenter, left at a green screen.
   dialog.el.querySelector("footer .btn.primary").click();
   await tick();
   test("Make the scene makes one scene.create_from call with what was picked", () => {

@@ -47,7 +47,9 @@
     "resources": {
       "gstreamer": "gstreamer",
       "plugins": "plugins",
-      "browser": "browser"
+      "browser": "browser",
+      "models": "models",
+      "onnxruntime": "onnxruntime"
     },
     "macOS": {
       "minimumSystemVersion": "10.15"

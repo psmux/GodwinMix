@@ -46,6 +46,7 @@ fn locate() -> std::result::Result<PathBuf, String> {
             tried.push(path.display().to_string());
             continue;
         }
+        preload_beside(&path);
         // `ort` panics on a library it cannot use rather than answering, so
         // the panic is turned back into an answer here.
         let attempt = std::panic::catch_unwind(|| ort::init_from(&path).map(|b| b.with_name("godwinmix").commit()));
@@ -65,6 +66,29 @@ fn locate() -> std::result::Result<PathBuf, String> {
         tried.join(", ")
     ))
 }
+
+/// On Windows, load what the runtime needs from its own folder first. The
+/// loader searches the application's folder and the system's, never the
+/// folder of the library asking, so a DirectML.dll beside onnxruntime.dll in
+/// a subfolder would not be found and the runtime would fall back to the CPU.
+/// Loaded once and kept: a library the process already has is used by name.
+#[cfg(windows)]
+fn preload_beside(runtime: &Path) {
+    let Some(dir) = runtime.parent().filter(|d| !d.as_os_str().is_empty()) else { return };
+    for name in ["DirectML.dll", "onnxruntime_providers_shared.dll"] {
+        let path = dir.join(name);
+        if path.is_file() {
+            // SAFETY: a library shipped beside the runtime, loaded for the
+            // runtime to use; nothing is called through this handle.
+            if let Ok(lib) = unsafe { libloading::Library::new(&path) } {
+                std::mem::forget(lib);
+            }
+        }
+    }
+}
+
+#[cfg(not(windows))]
+fn preload_beside(_: &Path) {}
 
 /// Where the runtime is looked for: the operator's choice, then beside the
 /// mixer as the installers put it, then the system's own search.

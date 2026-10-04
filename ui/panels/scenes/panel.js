@@ -98,7 +98,7 @@ class ScenesPanel extends HTMLElement {
           const { contextMenu } = await import("../../shell/menu.js");
           contextMenu(r.left, r.bottom, [
             { label: "Empty scene", run: () => this.newScene() },
-            { label: "Presenter on a green screen", run: () => this.newGreenScreenScene() },
+            { label: "Presenter in front of a new background", run: () => this.newGreenScreenScene() },
           ]);
         },
       }),
@@ -458,8 +458,9 @@ class ScenesPanel extends HTMLElement {
   }
 
   /**
-   * New scene, started from the green screen layout: a presenter keyed in
-   * front of a background. The scene it makes becomes the one worked on.
+   * New scene, started from the presenter layout: a presenter in front of a
+   * new background, keyed on a screen or cut out with none. The scene it
+   * makes becomes the one worked on.
    */
   async newGreenScreenScene() {
     // Loaded on the first press: a page that never makes one never pays for it.
@@ -751,7 +752,7 @@ class ScenesPanel extends HTMLElement {
     const one = () => this.selected()[0] || null;
     return [
       { id: "scenes.new", title: "New scene", group: "Scenes", run: () => this.newScene() },
-      { id: "scenes.new-green-screen", title: "New scene: presenter on a green screen", group: "Scenes", run: () => this.newGreenScreenScene() },
+      { id: "scenes.new-green-screen", title: "New scene: presenter in front of a new background", group: "Scenes", run: () => this.newGreenScreenScene() },
       { id: "scenes.open", title: "Open the composer", group: "Scenes", enabled: () => !!one(), run: () => this.open(one()) },
       // No `enabled`: it finds a scene for itself, and says so in a toast when
       // there is none. A row that reads as available has to do something.

@@ -109,6 +109,22 @@ async fn a_presenter_scene_is_made_in_one_call_from_a_camera_and_two_library_pic
     assert_eq!(refused["error"]["data"]["field"], "sources[0]", "{refused}");
     assert!(refused["error"]["data"]["next"].as_str().unwrap().contains("media.upload"), "{refused}");
 
+    // No screen at all: the presenter is cut out by a model instead of keyed.
+    let cut = ask(&mut socket, 7, "scene.create_from", json!({"sources": ["newsroom.png", "cam"], "layout": "virtual-set", "settings": {"screen": "none"}})).await;
+    match cut.get("result") {
+        Some(made) => {
+            assert!(made.get("key").is_none(), "a cutout has no key colour: {made}");
+            let text = made.to_string();
+            assert!(text.contains("matte/filter") && !text.contains("chroma/filter"), "{text}");
+        }
+        // A machine with no runtime or models refuses, and says what to do.
+        None => assert!(cut["error"]["message"].as_str().unwrap_or_default().contains("ONNX Runtime") || cut["error"]["message"].as_str().unwrap_or_default().contains("models folder"), "{cut}"),
+    }
+    let blue = ask(&mut socket, 8, "scene.create_from", json!({"sources": ["newsroom.png", "cam"], "layout": "virtual-set", "settings": {"screen": "blue", "key": "#2040e0"}})).await;
+    assert!(blue["result"].to_string().contains("\"method\":\"blue\""), "{blue}");
+    let nonsense = ask(&mut socket, 9, "scene.create_from", json!({"sources": ["cam"], "settings": {"screen": "none"}})).await;
+    assert_eq!(nonsense["error"]["data"]["field"], "settings.screen", "{nonsense}");
+
     // A plain layout has no key, and says nothing about one.
     let plain = ask(&mut socket, 5, "scene.create_from", json!({"sources": ["cam"]})).await;
     assert!(plain["result"].get("key").is_none(), "{plain}");

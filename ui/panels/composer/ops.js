@@ -127,12 +127,24 @@ export async function filterTypes(client) {
     const found = [];
     for (const plugin of (list && list.plugins) || []) {
       for (const provide of plugin.provides || []) {
-        if (provide.kind === "filter") found.push({ id: `${plugin.name}/${provide.id}`, title: provide.title || provide.id, plugin: plugin.name });
+        if (provide.kind === "filter") {
+          const id = `${plugin.name}/${provide.id}`;
+          found.push({ id, title: provide.title || FILTER_TITLES[id] || provide.id, plugin: plugin.name });
+        }
       }
     }
     if (found.length) return found;
   } catch {
     /* an older core with no plugin.list falls through to the built in list */
   }
-  return [{ id: "chroma/filter", title: "Chroma key", plugin: "built in" }];
+  return BUILT_IN_FILTERS;
 }
+
+/** What the built in filters are called in the menu. */
+export const FILTER_TITLES = {
+  "chroma/filter": "Chroma key: a green or blue screen",
+  "matte/filter": "Background cutout: no screen needed",
+};
+
+/** The filters every build is asked to have, for a core that lists none. */
+const BUILT_IN_FILTERS = Object.entries(FILTER_TITLES).map(([id, title]) => ({ id, title, plugin: "built in" }));
