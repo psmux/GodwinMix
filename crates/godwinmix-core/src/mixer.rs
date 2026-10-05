@@ -413,8 +413,10 @@ mod exited;
 mod generation;
 mod keyed;
 mod lifecycle;
+mod memwatch;
 mod motion;
 mod offload;
+mod patience;
 mod rendered;
 pub mod slots;
 pub mod transition;
@@ -1200,11 +1202,22 @@ pub struct Mixer {
     /// adds under the same id waiting for it. See `mixer::lifecycle`.
     stopping: HashMap<SourceId, lifecycle::Stopping>,
     /// Consecutive rebuilds of a source that did not bring it back to life,
-    /// and the moment before which the next one must not start. Cleared the
-    /// moment the source delivers a frame, so a source that recovers is back
-    /// on the fast path immediately.
+    /// and the moment before which the next one must not start. Cleared
+    /// once the source has stayed live for `patience::HEALTHY_FOR`, not at
+    /// its first frame: on 2026-10-05 a page that came back for two seconds
+    /// between stalls was rebuilt 43 times in an hour that way.
     rebuild_failures: HashMap<SourceId, u32>,
     rebuild_not_before: HashMap<SourceId, Instant>,
+    /// How long each source may stay stalled before it is restarted, and
+    /// whether it has earned its backoff back. Kept across a rebuild, which
+    /// replaces the slot. See `mixer::patience`.
+    patience: HashMap<SourceId, patience::Patience>,
+    /// The programme frame count at the last tick, and when, to tell a
+    /// starved machine from a dead source. See `patience::programme_starved`.
+    programme_frames: (Instant, u64),
+    /// The mixer's own memory, logged every five minutes. See
+    /// `mixer::memwatch`.
+    memory: memwatch::MemoryWatch,
     /// The branch of a source that is being rebuilt, kept in the programme
     /// pipeline so its last frame stays on air. See `retire_branch`.
     retired: Vec<RetiredBranch>,
@@ -1873,6 +1886,9 @@ impl Mixer {
             stopping: HashMap::new(),
             rebuild_failures: HashMap::new(),
             rebuild_not_before: HashMap::new(),
+            patience: HashMap::new(),
+            programme_frames: (Instant::now(), 0),
+            memory: Default::default(),
             retired: Vec::new(),
             programme_filters: Vec::new(),
             pool,
@@ -2500,7 +2516,14 @@ impl Mixer {
         // branch while that thread is still pushing and the two wait on each
         // other.
         let held = was_program && self.cfg.stall.hold_last_frame && has_picture;
+        // The removal forgets everything kept under the id, which is right for
+        // a source somebody removed and wrong for this one: its strikes are
+        // what stop the next stall rebuilding it at once. Put back below.
+        let patience = self.patience.remove(id);
         let removed = if held { self.retire_branch(id) } else { self.remove_source(id) };
+        if let Some(p) = patience {
+            self.patience.insert(id.clone(), p);
+        }
         if let Err(e) = removed {
             warn!(source = %id, ?e, "could not remove the failed source before building it again");
         }
@@ -2877,6 +2900,7 @@ impl Mixer {
         self.exits.remove(id);
         self.rebuild_failures.remove(id);
         self.rebuild_not_before.remove(id);
+        self.patience.remove(id);
         info!(source = %id, "source removed");
         if id != AD_ID {
             crate::slow_step!("persist_runtime", id, self.persist_runtime());
@@ -4185,6 +4209,9 @@ impl Mixer {
         // when the stall timer gives up on it. See `mixer::exited`.
         self.restart_the_exited();
 
+        // A line in the log every five minutes with the mixer's own size.
+        self.watch_memory();
+
         // Held frames that have run out of time. Before the liveness sweep, so
         // a source that has come back releases its own held frame there rather
         // than here.
@@ -4197,9 +4224,12 @@ impl Mixer {
         let mut first_picture = Vec::new();
         let mut judged_stalled = Vec::new();
         let fallback_ticks = (CLIENT_FALLBACK_AFTER.as_millis() / TICK.as_millis()) as u32;
-        let stall_ticks = ((self.cfg.stall.restart_after_secs * 1000).max(TICK.as_millis() as u64)
-            / TICK.as_millis() as u64) as u32;
+        let stall_limit = Duration::from_secs(self.cfg.stall.restart_after_secs).max(TICK);
+        let loaded = self.programme_starved();
+        let now = Instant::now();
+        let mut forgiven = Vec::new();
         for slot in &mut self.sources {
+            let patience = self.patience.entry(slot.input.id.clone()).or_default();
             // Whether this source can be scrubbed is asked here rather than
             // where it is reported. Nothing answers a SEEKING query until the
             // chain from the source element to the proxies is built, which for a
@@ -4223,12 +4253,20 @@ impl Mixer {
                     // tick that reaches it. `arm_source_restart` is the one gate
                     // (a source may have only one restart armed, and a rebuild
                     // may be waiting out its backoff), and a single shot here
-                    // meant a refusal there was never asked again.
-                    if slot.stalled_ticks >= stall_ticks {
+                    // meant a refusal there was never asked again. The mark
+                    // moves out with each restart that did not hold, and
+                    // comes slower while the programme itself is starved; see
+                    // `mixer::patience`.
+                    if patience.stalled_tick(TICK, loaded, stall_limit) {
                         restart.push(slot.input.id.clone());
                     }
                 }
-                _ => slot.stalled_ticks = 0,
+                state => {
+                    slot.stalled_ticks = 0;
+                    if patience.healthy_tick(matches!(state, SourceState::Live), now) {
+                        forgiven.push(slot.input.id.clone());
+                    }
+                }
             }
 
             // A source that connects but never delivers anything is the
@@ -4264,17 +4302,23 @@ impl Mixer {
             self.log_timeline(&id, "judged stalled", true);
         }
         for id in restart {
-            self.arm_source_restart(id, "it has delivered nothing for too long");
+            self.arm_stall_restart(id);
+        }
+        for id in forgiven {
+            info!(source = %id, "the source has stayed live since its last restart; its backoff starts again from nothing");
         }
 
         for slot in &self.sources {
-            if matches!(slot.input.observed_state(), SourceState::Live) {
-                self.source_attempts.insert(slot.input.id.clone(), 0);
-                // A source that is delivering has been rebuilt successfully,
-                // however many attempts it took, so the backoff starts again
-                // from nothing the next time it goes wrong.
-                self.rebuild_failures.remove(&slot.input.id);
-                self.rebuild_not_before.remove(&slot.input.id);
+            let id = &slot.input.id;
+            // Delivering, and not on probation after a restart. A source
+            // that is back for a frame or two between stalls has not been
+            // rebuilt successfully, and clearing its backoff then is what
+            // let the storm of 2026-10-05 run at full speed.
+            let forgiven = self.patience.get(id).is_none_or(patience::Patience::forgiven);
+            if forgiven && matches!(slot.input.observed_state(), SourceState::Live) {
+                self.source_attempts.insert(id.clone(), 0);
+                self.rebuild_failures.remove(id);
+                self.rebuild_not_before.remove(id);
             }
         }
 
@@ -4345,10 +4389,12 @@ impl Mixer {
     ///
     /// A server that has gone away will keep refusing us, so retrying every two
     /// seconds forever is just noise. The delay grows to ten seconds and stays
-    /// there until the source comes back.
-    fn arm_source_restart(&mut self, id: SourceId, why: &'static str) {
+    /// there until the source has come back, and after a stall restart until
+    /// it has stayed back for `patience::HEALTHY_FOR`. True when a restart or
+    /// a retry was scheduled, false when this one was refused.
+    fn arm_source_restart(&mut self, id: SourceId, why: &'static str) -> bool {
         let Some(slot) = self.sources.iter().find(|s| s.input.id == id) else {
-            return;
+            return false;
         };
         // The retry goes to this instance and no other: a source removed and
         // added again under the same id before the delay runs out is a
@@ -4357,7 +4403,7 @@ impl Mixer {
         // The restart already running is the answer to this stall; a second
         // one queued behind it would only take the pipeline down again.
         if slot.input.restarting() {
-            return;
+            return false;
         }
         // A source that does not declare `restart-in-place` is built again from
         // nothing (see `rebuild_source`), which for a page costs a browser
@@ -4370,7 +4416,7 @@ impl Mixer {
         if !slot.input.restarts_in_place() {
             let now = Instant::now();
             if self.rebuild_not_before.get(&id).is_some_and(|t| *t > now) {
-                return;
+                return false;
             }
             let failures = *self.rebuild_failures.get(&id).unwrap_or(&0);
             if let Some(wait) = self.cfg.stall.rebuild_delay(failures) {
@@ -4392,11 +4438,11 @@ impl Mixer {
                     tokio::time::sleep(wait).await;
                     let _ = handle.send(Command::RetrySource(again, generation));
                 });
-                return;
+                return true;
             }
         }
         if !slot.input.try_arm_restart() {
-            return;
+            return false;
         }
         // `why` rather than a fixed message: this is reached from the stall
         // sweep, from a pipeline error and from an end of stream, and a line
@@ -4415,6 +4461,7 @@ impl Mixer {
             tokio::time::sleep(delay).await;
             let _ = handle.send(Command::RetrySource(id, generation));
         });
+        true
     }
 
     fn emit_output_state(&self, out: &OutputSlot) {
@@ -5382,6 +5429,7 @@ mod tests {
     mod preview_churn;
     mod slow_restart;
     mod stale_work;
+    mod stall_storm;
     mod slow_output;
     mod thumb;
     use crate::plugin::branch::meter_name;
