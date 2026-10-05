@@ -108,7 +108,31 @@ fn load() -> Result<Lib, String> {
     if unsafe { (loaded.startup)() } < 0 {
         return Err(format!("libsrt would not start: {}", loaded.last_error()));
     }
+    hold_gstreamer_srt();
     Ok(loaded)
+}
+
+/// Keep one GStreamer SRT element alive for the life of the process.
+///
+/// GStreamer's SRT elements count themselves, and when the last of them is
+/// destroyed they call `srt_cleanup()`. That stops libsrt for the whole
+/// process: it closes every SRT socket, this listener's too, and with the
+/// libsrt 1.5.4 Ubuntu 26.04 ships the cleanup then waited for ever on a
+/// condition the accept thread was still waiting on. A channel server that
+/// also sends to an SRT destination or reads an SRT input would hang the
+/// moment that element went. One element made here and never dropped keeps
+/// GStreamer's count above zero, so its cleanup never runs while we listen.
+fn hold_gstreamer_srt() {
+    static HELD: OnceLock<()> = OnceLock::new();
+    HELD.get_or_init(|| {
+        if gmx_netkit::init().is_err() {
+            return;
+        }
+        if let Ok(element) = gstreamer::ElementFactory::make("srtsrc").build() {
+            // Leaked on purpose, as said above.
+            std::mem::forget(element);
+        }
+    });
 }
 
 impl Lib {

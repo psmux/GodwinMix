@@ -95,7 +95,10 @@ mod tests {
         std::fs::create_dir_all(&long).unwrap();
         let first = alias(&long).unwrap();
         assert_eq!(alias(&long).unwrap(), first);
-        assert!(first.as_os_str().len() < 40, "{}", first.display());
+        // Short enough to leave a socket name room inside 104 bytes. Not 40:
+        // under $XDG_RUNTIME_DIR with a four digit uid, as on a CI runner, the
+        // link is /run/user/1001/gmx-1001/ and 16 hex digits, which is 40.
+        assert!(first.as_os_str().len() <= 64, "{}", first.display());
         std::fs::write(long.join("probe"), b"x").unwrap();
         assert_eq!(std::fs::read(first.join("probe")).unwrap(), b"x");
         let _ = std::fs::remove_file(&first);

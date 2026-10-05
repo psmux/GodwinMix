@@ -102,6 +102,6 @@ ui/test/vendor/
 # The cutout models and ONNX Runtime, fetched by dev/fetch-models.sh.
 /models/
 
-# The cutout models and runtime the release step stages for the app.
-/tauri-app/models/
-/tauri-app/onnxruntime/
+# The cutout models and runtime the release step stages for the app are
+# ignored by tauri-app/models/.gitignore and tauri-app/onnxruntime/.gitignore,
+# which are committed so the two folders exist for a build that has none.

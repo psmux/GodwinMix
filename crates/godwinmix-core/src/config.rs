@@ -1611,15 +1611,7 @@ impl Config {
         let mut cfg: Config = toml::from_str(&raw)
             .with_context(|| format!("parsing config {}", path.display()))?;
         cfg.source_path = path.to_path_buf();
-        // A relative media folder is beside the config that names it, not
-        // wherever the mixer happened to be started. The desktop app starts
-        // it from the install folder, which nobody may write to, and every
-        // upload failed there with "Access is denied".
-        if let Some(dir) = path.parent().filter(|d| !d.as_os_str().is_empty()) {
-            if Path::new(&cfg.media.dir).is_relative() {
-                cfg.media.dir = dir.join(&cfg.media.dir).to_string_lossy().into_owned();
-            }
-        }
+        cfg.resolve_beside(path);
 
         // Once the UI has managed sources, its list wins. Merging the two would
         // mean a source deleted in the UI reappearing on the next restart.
@@ -1659,6 +1651,21 @@ impl Config {
     /// The same rules `load` applies, for a config that is not a file on this
     /// machine: a preset's, checked before it is written anywhere, or one that
     /// arrived over the wire. `label` is what an error names.
+    /// Makes the paths the file may write relative absolute, beside the file
+    /// at `path`. A relative media folder is beside the config that names it,
+    /// not wherever the mixer happened to be started. The desktop app starts
+    /// it from the install folder, which nobody may write to, and every upload
+    /// failed there with "Access is denied". `load` does this; a caller that
+    /// parses the same file with `from_toml` and compares it with the running
+    /// config does it too, or the folder reads as changed when it is not.
+    pub fn resolve_beside(&mut self, path: &Path) {
+        if let Some(dir) = path.parent().filter(|d| !d.as_os_str().is_empty()) {
+            if Path::new(&self.media.dir).is_relative() {
+                self.media.dir = dir.join(&self.media.dir).to_string_lossy().into_owned();
+            }
+        }
+    }
+
     pub fn from_toml(text: &str, label: &str) -> Result<Self> {
         let cfg: Config =
             toml::from_str(text).with_context(|| format!("parsing {label}"))?;

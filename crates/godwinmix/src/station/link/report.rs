@@ -36,7 +36,15 @@ impl Reporter {
     }
 
     pub fn released(&self) {
-        let _ = self.held.fetch_update(Ordering::SeqCst, Ordering::SeqCst, |n| n.checked_sub(1));
+        // A compare and swap loop rather than `fetch_update`, which Rust 1.99
+        // deprecates for `try_update`, a name the 1.82 floor does not have.
+        let mut n = self.held.load(Ordering::SeqCst);
+        while n > 0 {
+            match self.held.compare_exchange_weak(n, n - 1, Ordering::SeqCst, Ordering::SeqCst) {
+                Ok(_) => return,
+                Err(now) => n = now,
+            }
+        }
     }
 
     fn run(&self, out: &Sender<String>) {
