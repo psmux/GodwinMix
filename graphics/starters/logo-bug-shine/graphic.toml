@@ -1,0 +1,9 @@
+name = "Logo bug with a shine"
+kind = "html"
+file = "logo-bug-shine.html"
+zone = "bug"
+moves = true
+transparent = true
+description = "A station mark in the top right corner, a logo picture or the station's name, with a light that sweeps across it every few seconds. Fades in and out. Still between sweeps, so it costs almost nothing."
+tags = ["logo", "station", "bug"]
+origin = "shipped"

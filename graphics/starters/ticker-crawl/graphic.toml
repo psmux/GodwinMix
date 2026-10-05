@@ -1,0 +1,9 @@
+name = "News crawl"
+kind = "html"
+file = "ticker-crawl.html"
+zone = "bottom"
+moves = true
+transparent = true
+description = "A bar along the bottom with a label and headlines crawling right to left, looping. Put the headlines in items, separated by |. Rises in from the bottom edge."
+tags = ["news", "ticker", "crawl", "headlines"]
+origin = "shipped"

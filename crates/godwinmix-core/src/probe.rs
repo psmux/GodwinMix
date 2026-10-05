@@ -105,6 +105,20 @@ pub fn exists(factory: &str) -> bool {
     gst::ElementFactory::find(factory).is_some()
 }
 
+/// For a test that needs an optional element: whether it is installed, and
+/// when it is not, a line on stdout saying the test was skipped and why, so
+/// the log shows it rather than a silent pass. `cmafmux` is the usual one: it
+/// comes from gst-plugins-rs, which no Linux distribution packages, and on a
+/// machine without it the mixer refuses an HLS output with the next step.
+pub fn have_or_skip(factory: &str) -> bool {
+    let _ = gst::init();
+    let ok = exists(factory);
+    if !ok {
+        println!("skipping: no {factory} in this GStreamer");
+    }
+    ok
+}
+
 /// The best AAC encoder installed, or None. Split out so the file converter
 /// and the programme encoder cannot drift onto different lists.
 pub fn best_audio_encoder() -> Option<&'static str> {

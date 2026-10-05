@@ -1,0 +1,89 @@
+name: agents
+
+# What an AI agent does to a mixer, on Linux, macOS and Windows, without a
+# model: dev/agents_e2e.py starts a throwaway core with two test cameras,
+# speaks MCP to `gmx mcp` over stdio the way Claude Code and opencode do
+# (initialize, tools/list, a scene, a lower third, a ticker, a look, a cut,
+# a tool reached through call_tool), then makes the same kind of calls
+# through `gmx tool`, the way pi does. It also sets each agent tool up with
+# `gmx agent setup --dry-run`, which writes nothing and proves the paths are
+# worked out on every system.
+#
+# Kept apart from build.yml and platforms.yml on purpose: it needs only the
+# mixer binary, and a failure here names the agent surface and nothing else.
+
+on:
+  push:
+    paths:
+      - "crates/**"
+      - "skills/**"
+      - "dev/agents_e2e*.py"
+      - ".github/workflows/agents.yml"
+  pull_request:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+concurrency:
+  group: agents-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  agents:
+    name: agents (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, name: linux, exe: "" }
+          - { os: macos-latest, name: macos, exe: "" }
+          - { os: windows-latest, name: windows, exe: ".exe" }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: agents-${{ matrix.name }}
+
+      - name: GStreamer (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+            libgstreamer-plugins-bad1.0-dev libgstrtspserver-1.0-dev gstreamer1.0-plugins-base \
+            gstreamer1.0-plugins-good gstreamer1.0-plugins-bad \
+            gstreamer1.0-plugins-ugly gstreamer1.0-libav gstreamer1.0-tools
+
+      - name: GStreamer (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install gstreamer
+          echo "PKG_CONFIG_PATH=$(brew --prefix gstreamer)/lib/pkgconfig:$(brew --prefix)/lib/pkgconfig" >> "$GITHUB_ENV"
+
+      - name: GStreamer (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./dev/install-gstreamer-windows.ps1
+
+      - name: Build the mixer
+        run: cargo build --locked -p godwinmix --bins
+
+      - name: Every agent tool's setup, planned on this system
+        shell: bash
+        run: |
+          for tool in claude opencode pi codex gemini cursor vscode other; do
+            ./target/debug/gmx${{ matrix.exe }} agent setup "$tool" --dry-run
+            ./target/debug/gmx${{ matrix.exe }} agent setup "$tool" --project "$RUNNER_TEMP/proj" --dry-run
+          done
+          ./target/debug/gmx${{ matrix.exe }} agent tools
+
+      - name: MCP and gmx tool against a real core
+        shell: bash
+        run: |
+          PY=$(command -v python3 || command -v python)
+          "$PY" dev/agents_e2e.py --start --gmx "./target/debug/gmx${{ matrix.exe }}"

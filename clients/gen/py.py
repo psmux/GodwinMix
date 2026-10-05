@@ -118,10 +118,13 @@ def _types(model):
         if is_object and props:
             # A key that is not an identifier, or is a Python keyword (the
             # `plugin.update` result has a `from`), cannot sit in a class body.
+            # The functional form is a call, evaluated when the module loads,
+            # so each type goes in as a string: a class further down the file
+            # is then a forward reference, resolved lazily as in a class body.
             if not all(k.isidentifier() and not keyword.iskeyword(k) for k in props):
                 out.append(f'{name} = TypedDict("{name}", {{')
                 for key, sub in props.items():
-                    out.append(f'    "{key}": {py_type(model, sub)},')
+                    out.append(f'    "{key}": "{py_type(model, sub)}",')
                 out.append("}, total=False)")
                 out.append("")
                 continue

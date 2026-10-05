@@ -51,8 +51,10 @@ pub fn any_object(_g: &mut SchemaGenerator) -> Value {
 pub enum Tier {
     /// In both profiles. Five of these, no more.
     Minimal,
-    /// In `standard` only. Twelve hot tools in total, counting the minimal five.
+    /// In `standard` only: the live mix, its graphics and its scenes.
     Standard,
+    /// In `headend` only: many shows at once, a channel list, their health.
+    Headend,
     /// Reachable by name and through `search_tools`, never in the hot list.
     Search,
 }

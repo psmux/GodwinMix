@@ -238,6 +238,11 @@ impl MediaLibrary {
                 continue;
             }
             if meta.is_dir() {
+                // The Graphics gallery lives inside the library by default
+                // and lists its own items; they are not clips.
+                if path.join(crate::gallery::MARKER).is_file() {
+                    continue;
+                }
                 let _ = self.walk(root, &path, depth + 1, out);
                 continue;
             }

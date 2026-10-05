@@ -32,13 +32,15 @@ pub fn register(reg: &mut Registry<Call>) {
         .result(any_object)
         .tool(
             "add_scene_item",
-            Tier::Search,
+            Tier::Standard,
             "Put a source, another scene or a graphic onto a scene. `content` is \
-             {\"source\": \"cam1\"} for a source. Leave `transform` out and it is placed in \
-             the next free cell of a grid over what is already there. Name it something a \
-             person would say, like \"lower third\", because every other command takes that \
-             name. `visible: false` with an `enter` and an `exit` puts a graphic on a scene \
-             that is on air without showing it; show it with `set_scene_item`.",
+             {\"source\": \"cam1\"} for a source. Leave `transform` out and a template \
+             source covers the whole canvas, where it was designed to sit; anything else \
+             goes in the next free cell of a grid. Name it something a person would say, \
+             like \"lower third\", because every other command takes that name. \
+             `visible: false` with an `enter` and an `exit` puts a graphic on a scene that \
+             is on air without showing it; show it with `set_scene_item`. No scene yet? \
+             `create_scene_from` makes one from the source on air.",
         ),
     );
 
@@ -66,7 +68,7 @@ pub fn register(reg: &mut Registry<Call>) {
         .result(any_object)
         .tool(
             "set_scene_item",
-            Tier::Search,
+            Tier::Standard,
             "Change one item on a scene: its position and size (`transform`), its crop, \
              its opacity, whether it is visible, whether its sound is heard (`audio`: \
              follow, always or never). Name the item by the name you gave it. `props` is a \
@@ -270,11 +272,14 @@ async fn add(call: Call, params: Value) -> Result<Value, RpcError> {
     })?;
     // A source the mixer does not have draws nothing, so it is refused here
     // with the ids that would have worked.
+    let mut covers_canvas = false;
     if let Content::Source { source } = &content {
-        let known = call.source_ids().await?;
-        if !known.contains(source) {
+        let status = call.app.mixer.status().await.map_err(|e| call.mixer_error(e))?;
+        let Some(found) = status.sources.iter().find(|s| &s.id == source) else {
+            let known: Vec<String> = status.sources.iter().map(|s| s.id.clone()).collect();
             return Err(RpcError::not_found("source", source, &known));
-        }
+        };
+        covers_canvas = super::whole_canvas::covers_canvas(found);
     }
     let transform = match &req.transform {
         Some(value) => Some(serde_json::from_value(value.clone()).map_err(|e| {
@@ -299,8 +304,10 @@ async fn add(call: Call, params: Value) -> Result<Value, RpcError> {
         // A graphic is placed in the frame its plugin's designer block asks
         // for, because a lower third dropped into the next free cell of a grid
         // is a lower third in the wrong place.
+        // A template is drawn on the whole canvas with its parts in place.
         item.transform = transform
             .or_else(|| graphic_frame(&content, doc))
+            .or_else(|| covers_canvas.then(|| super::whole_canvas::transform(doc)))
             .unwrap_or_else(|| ops::next_free_cell(doc, &doc.scenes[i]));
         item.visible = visible.unwrap_or(item.visible);
         (item.enter, item.exit) = (enter.clone(), exit.clone());

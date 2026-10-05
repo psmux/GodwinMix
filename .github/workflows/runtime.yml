@@ -55,9 +55,11 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: llvm-tools
+      # The official full 1.28 installer the release uses, not chocolatey's
+      # typical 1.26, so this checks the runtime that actually ships.
       - name: Install the Windows media runtime
         shell: pwsh
-        run: choco install -y --no-progress gstreamer gstreamer-devel
+        run: ./dev/install-gstreamer-windows.ps1
       - name: Validate the stripped runtime budget and elements
         shell: pwsh
-        run: ./dev/bundle-gstreamer.ps1 -BudgetMb 130
+        run: ./dev/bundle-gstreamer.ps1 -BudgetMb 160

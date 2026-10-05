@@ -106,6 +106,7 @@ Start here if you have never run it.
 * [Write an SVG template](how-to/write-an-svg-template.md)
 * [Connect an AI agent, and have it make your graphics](how-to/connect-an-ai-agent.md)
 * [Design graphics with an AI agent](how-to/design-graphics-with-ai.md)
+* [Build your own graphics gallery with an AI agent](how-to/build-a-graphics-gallery-with-ai.md): any agent saves lower thirds, backgrounds, tickers, bugs and sets, you put them on air in two clicks
 * [Use the mixer controls](how-to/preview-monitor.md)
 * [Run on a Raspberry Pi](how-to/run-on-a-raspberry-pi.md)
 * [Share a collection](how-to/share-a-collection.md)
@@ -174,6 +175,8 @@ Start here if you have never run it.
 * [The HLS output: params, routes, the viewer key](reference/hls-output.md)
 * [Graphics](reference/graphics.md)
 * [Graphic templates: the SVG kind, the pack, the methods](reference/graphic-templates.md)
+* [The gallery methods](reference/gallery.md): `gallery.*`, their tools and their byte routes
+* [The gallery's item format](reference/gallery-format.md): one folder and a `graphic.toml` per graphic, the kinds, the zip
 * [Metrics](reference/metrics.md)
 * [Preview monitor status](reference/preview-monitor.md)
 * [The channel methods](reference/channels.md)
