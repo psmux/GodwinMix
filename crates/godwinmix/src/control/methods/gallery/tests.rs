@@ -49,8 +49,12 @@ fn a_save_reads_the_ways_models_write_it() {
     assert!(r.replace && r.values.is_some());
     assert_eq!(super::words(r.tags.as_ref()), ["news", "red"]);
     assert_eq!(godwinmix_protocol::gallery::Zone::parse(r.zone.as_deref().unwrap()), Some(godwinmix_protocol::gallery::Zone::LowerThird));
-    let wrong = serde_json::from_value::<GallerySaveRequest>(serde_json::json!({"name": "x", "svg_code": "<svg/>"})).unwrap_err().to_string();
+    let r: GallerySaveRequest = serde_json::from_value(serde_json::json!({"name": "x", "svg_code": "<svg/>"})).expect("svg_code is read as svg");
+    assert_eq!(r.svg.as_deref(), Some("<svg/>"));
+    let wrong = serde_json::from_value::<GallerySaveRequest>(serde_json::json!({"name": "x", "svg_markup": "<svg/>"})).unwrap_err().to_string();
     assert!(wrong.contains("svg") && wrong.contains("expected one of"), "an unknown field names the ones there are: {wrong}");
+    let untitled: GallerySaveRequest = serde_json::from_value(serde_json::json!({"svg": "<svg/>"})).expect("a missing name reaches the handler, which says what to do");
+    assert!(untitled.name.is_empty());
 }
 
 #[test]

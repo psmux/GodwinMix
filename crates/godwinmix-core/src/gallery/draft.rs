@@ -68,7 +68,9 @@ pub fn svg(svg: &str) -> Result<Draft, Refusal> {
     }
     let kind = if templated { GalleryKind::Template } else { GalleryKind::Image };
     let mut d = Draft { manifest: manifest(kind, "graphic.svg"), files: vec![("graphic.svg".into(), svg.as_bytes().to_vec())], ..Default::default() };
-    if svg.contains("http://") || svg.contains("https://") {
+    // A namespace is an address in name only; a picture or a font loaded
+    // from one is the thing that would be missing offline.
+    if ["href=\"http", "href='http", "url(http", "url('http", "url(\"http"].iter().any(|p| svg.contains(p)) {
         d.warnings.push("the SVG names an address on the network; pictures in a template come from data: URIs or the media library".into());
     }
     Ok(d)

@@ -7,8 +7,9 @@
 //! one does. Every refusal says what to call next.
 //!
 //! Everything that reads a disk or draws a picture runs on a blocking
-//! thread, and drawing previews is limited to two at once, so a page opening
-//! a gallery of fifty items never takes a core from the encoder.
+//! thread, and cards are drawn two at a time (with one more lane for a
+//! preview asked for by name), so a page opening a gallery of fifty items
+//! never takes a core from the encoder.
 
 mod files;
 mod list;
@@ -48,6 +49,9 @@ pub(crate) async fn blocking<T: Send + 'static>(what: &str, f: impl FnOnce() -> 
 /// One item by id or name, or the error that lists what there is.
 pub(crate) async fn entry(id: &str) -> Result<Entry, RpcError> {
     let id = id.trim().to_string();
+    if id.is_empty() {
+        return Err(RpcError::invalid_params("which graphic? Give `id`, an id from list_graphics, such as \"news-lower-third\".").with("field", "id"));
+    }
     let wanted = id.clone();
     blocking("reading the gallery", move || gallery::store::find(&dir(), &wanted)).await?.map_err(|e| missing(&id, e))
 }

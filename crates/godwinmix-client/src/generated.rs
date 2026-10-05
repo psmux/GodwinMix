@@ -1851,7 +1851,8 @@ pub struct Frame {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct GalleryDuplicateRequest {
-    pub id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
     /// The copy's name. Default: the name with "copy" after it.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
@@ -1863,7 +1864,8 @@ pub struct GalleryDuplicateRequest {
 pub struct GalleryEditRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
-    pub id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     pub tags: Value,
@@ -1903,7 +1905,8 @@ pub struct GalleryExported {
 #[serde(default)]
 pub struct GalleryIdRequest {
     /// The item's id from `gallery.list`.
-    pub id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
 }
 
 /// `gallery.import`: files made elsewhere, checked one by one.
@@ -1949,6 +1952,11 @@ pub struct GalleryItem {
     pub made_by: Option<String>,
     /// Whether it moves by itself: a clip, a page, a ticker.
     pub moves: bool,
+    /// A file of the item a page plays as its moving preview, served at
+    /// `/api/v1/gallery/{id}/files/{moving}`: a clip itself, or the item's
+    /// own `preview.webm`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub moving: Option<String>,
     pub name: String,
     pub origin: Origin,
     /// The sources on this mixer drawing it now.
@@ -2010,7 +2018,8 @@ pub struct GalleryPlaceRequest {
     /// air.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub camera: Option<String>,
-    pub id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
     /// The scene to add it to. Default: the scene on air.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub scene: Option<String>,
@@ -2073,7 +2082,8 @@ pub struct GalleryPreviewRequest {
     /// `black`, `white`, or a colour `#rrggbb`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub background: Option<String>,
-    pub id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
     /// Field values to try, over the item's own, without saving them.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub values: Option<BTreeMap<String, Value>>,
@@ -2119,7 +2129,8 @@ pub struct GallerySaveRequest {
     pub moves: Option<bool>,
     /// What people call it: `"Storm warning lower third"`. The id is made
     /// from it.
-    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
     /// Write over an item with the same id. Every source drawing it is drawn
     /// again.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -2170,7 +2181,8 @@ pub struct GallerySaved {
 #[serde(default)]
 pub struct GalleryShowRequest {
     /// The gallery id, the source id or the scene item's name.
-    pub id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
     /// Default: the scene on air.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub scene: Option<String>,

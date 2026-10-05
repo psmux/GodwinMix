@@ -1232,6 +1232,8 @@ class GalleryItem(TypedDict, total=False):
     # Who or what saved it, in its own words: `claude-code`, `opencode`.
     moves: bool
     # Whether it moves by itself: a clip, a page, a ticker.
+    moving: Optional[str]
+    # A file of the item a page plays as its moving preview, served at `/api/v1/gallery/{id}/files/{moving}`: a clip itself, or the item's own `preview.webm`.
     name: str
     origin: Origin
     placed: List[str]
@@ -4687,22 +4689,23 @@ class GeneratedMethods:
 
     async def gallery_duplicate(
         self,
-        id: str,
         *,
+        id: Optional[str] = None,
         name: Optional[str] = None,
     ) -> GallerySaved:
         """Copy an item, shipped ones included, under a new name."""
         params: Dict[str, Any] = {}
-        params["id"] = id
+        if id is not None:
+            params["id"] = id
         if name is not None:
             params["name"] = name
         return await self._call("gallery.duplicate", params)
 
     async def gallery_edit(
         self,
-        id: str,
         *,
         description: Optional[str] = None,
+        id: Optional[str] = None,
         name: Optional[str] = None,
         tags: Any = None,
         values: Optional[Dict[str, Any]] = None,
@@ -4710,9 +4713,10 @@ class GeneratedMethods:
     ) -> GallerySaved:
         """Change an item's name, tags, description, zone or the values it fills its fields with."""
         params: Dict[str, Any] = {}
-        params["id"] = id
         if description is not None:
             params["description"] = description
+        if id is not None:
+            params["id"] = id
         if name is not None:
             params["name"] = name
         if tags is not None:
@@ -4776,9 +4780,9 @@ class GeneratedMethods:
 
     async def gallery_place(
         self,
-        id: str,
         *,
         camera: Optional[str] = None,
+        id: Optional[str] = None,
         scene: Optional[str] = None,
         values: Optional[Dict[str, Any]] = None,
         visible: Optional[bool] = None,
@@ -4786,9 +4790,10 @@ class GeneratedMethods:
     ) -> GalleryPlaced:
         """Add a gallery item to a scene in its zone (a lower third low on the left, a background under everything, a bug in the corner), hidden until gallery.show. A set becomes a new scene."""
         params: Dict[str, Any] = {}
-        params["id"] = id
         if camera is not None:
             params["camera"] = camera
+        if id is not None:
+            params["id"] = id
         if scene is not None:
             params["scene"] = scene
         if values is not None:
@@ -4801,17 +4806,18 @@ class GeneratedMethods:
 
     async def gallery_preview(
         self,
-        id: str,
         *,
         background: Optional[str] = None,
+        id: Optional[str] = None,
         values: Optional[Dict[str, Any]] = None,
         width: Optional[int] = None,
     ) -> GalleryPreview:
         """A picture of a gallery item as it would land on the canvas, transparent parts over a checkerboard, drawn on demand."""
         params: Dict[str, Any] = {}
-        params["id"] = id
         if background is not None:
             params["background"] = background
+        if id is not None:
+            params["id"] = id
         if values is not None:
             params["values"] = values
         if width is not None:
@@ -4820,16 +4826,17 @@ class GeneratedMethods:
 
     async def gallery_remove(
         self,
-        id: str,
+        *,
+        id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Delete a saved item and its files. Refused while a source shows it."""
         params: Dict[str, Any] = {}
-        params["id"] = id
+        if id is not None:
+            params["id"] = id
         return await self._call("gallery.remove", params)
 
     async def gallery_save(
         self,
-        name: str,
         *,
         data: Optional[str] = None,
         description: Optional[str] = None,
@@ -4840,6 +4847,7 @@ class GeneratedMethods:
         kind: Optional[str] = None,
         made_by: Optional[str] = None,
         moves: Optional[bool] = None,
+        name: Optional[str] = None,
         replace: Optional[bool] = None,
         set: Optional[Union[SetSpec, None]] = None,
         source: Any = None,
@@ -4851,7 +4859,6 @@ class GeneratedMethods:
     ) -> GallerySaved:
         """Save a graphic of any kind into the gallery with a name, tags and a description: an SVG template, an HTML page, a picture or clip, a ticker or text, or a virtual set."""
         params: Dict[str, Any] = {}
-        params["name"] = name
         if data is not None:
             params["data"] = data
         if description is not None:
@@ -4870,6 +4877,8 @@ class GeneratedMethods:
             params["made_by"] = made_by
         if moves is not None:
             params["moves"] = moves
+        if name is not None:
+            params["name"] = name
         if replace is not None:
             params["replace"] = replace
         if set is not None:
@@ -4890,14 +4899,15 @@ class GeneratedMethods:
 
     async def gallery_show(
         self,
-        id: str,
         *,
+        id: Optional[str] = None,
         scene: Optional[str] = None,
         visible: Optional[bool] = None,
     ) -> GalleryShown:
         """Show a placed gallery item on air, or hide it, taking its scene when that scene is not on air. For a set, take its scene."""
         params: Dict[str, Any] = {}
-        params["id"] = id
+        if id is not None:
+            params["id"] = id
         if scene is not None:
             params["scene"] = scene
         if visible is not None:

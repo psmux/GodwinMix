@@ -10,7 +10,7 @@ export function label(item) {
     bug: "Bug",
     bottom: "Ticker",
     top: "Top strip",
-    center: "Title card",
+    center: "Card",
   }[item.zone];
   if (item.kind === "set") return "Virtual set";
   if (item.kind === "ticker") return "Ticker";
