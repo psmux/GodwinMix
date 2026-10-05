@@ -140,6 +140,12 @@ and an exit, looking at the result, and changing its words on air.
 
 ### Assets the agent makes itself
 
+Whatever the agent makes, a template, a background, a ticker, a web graphic,
+a clip or a virtual set, it can save into the Graphics gallery with one call,
+`save_graphic`, and look at it with `preview_graphic`. It then shows as a card
+under **View > Graphics**, ready to put on air in two clicks. See
+[build your own graphics gallery with an AI agent](build-a-graphics-gallery-with-ai.md).
+
 An agent that can write files can make a whole new graphic: it writes an SVG
 template with `{{fields}}` in it and saves it with `save_template`, which
 refuses one that would not draw. See [write an SVG
@@ -169,6 +175,8 @@ mixer, open GodwinMix first, or set `GODWINMIX_URL` for a mixer elsewhere.
 
 * [Design graphics with an AI agent](design-graphics-with-ai.md): what the
   agent does, call by call.
+* [Build your own graphics gallery with an AI agent](build-a-graphics-gallery-with-ai.md):
+  save, look, fix, and put on air from the gallery.
 * [Use the mixer from an AI agent](use-with-an-ai-agent.md): profiles,
   headends, the rules that refuse a take.
 * [The operator playbook](../agents.md).
