@@ -71,7 +71,7 @@ pub fn constants(source: &str) -> Result<String> {
 
 /// How a shader transition runs on this machine.
 pub enum Runner {
-    Gpu(gl::Gl),
+    Gpu(Box<gl::Gl>),
     Cpu(cpu::Shader),
     Dissolve,
 }
@@ -122,7 +122,7 @@ impl ShaderMix {
             }
             match fragment(&source).and_then(|f| gl::Gl::start(&f, size)) {
                 Ok(g) => {
-                    let _ = slot.set(Runner::Gpu(g));
+                    let _ = slot.set(Runner::Gpu(Box::new(g)));
                 }
                 Err(e) => tracing::warn!(shader = %name, error = %format!("{e:#}"), "the shader would not run on the GPU; drawing it the software way or as a dissolve"),
             }

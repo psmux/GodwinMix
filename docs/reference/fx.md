@@ -209,17 +209,55 @@ asked once, the first time something wants to know.
 
 ## What it costs
 
-On this laptop (Windows 11, Intel Core with Intel Arc graphics), one core, a
-1920x1080 frame, release build, `cargo test -p godwinmix-core --release --test
-fx_cost -- --ignored --nocapture`:
+Measured on this laptop (Windows 11, Intel Core Ultra 9 285H, Intel Arc
+graphics) while four other builds ran on it, so read these as an upper bound:
+the same loops gave numbers up to twice as far apart between runs. One core,
+a 1920x1080 frame, `cargo test -p godwinmix-core --release --test fx_cost --
+--ignored --nocapture`:
 
-COST_TABLE
+| What is drawn | Per frame | Share of a 30 fps frame |
+|---|---|---|
+| a stinger by its alpha, full size | 9.5 ms | 28 percent |
+| a clip with Screen, decoded at half size | 13.3 ms | 40 percent |
+| a clip with Add, at half size | 6.8 ms | 20 percent |
+| a clip with a luma key, at half size | 10.3 ms | 31 percent |
+| a luma matte | 5.7 ms | 17 percent |
+| a dissolve (a shader with no GPU and no software version) | 2.5 ms | 7 percent |
+| `glitch-slice`, software | 0.6 ms | 2 percent |
+| `ripple`, software | 35 ms | 105 percent |
 
-The shader on the GPU costs the programme's thread two frame copies a frame,
-the pictures up and the answer down. Decoding the starter clips at 1080p in
-AYUV runs on the clip's own threads:
+The software ripple is more than a frame at 1080p on this machine, so with no
+GPU it is taken off after ten frames and the take stays a cut; at 720p it
+fits. On the GPU it costs the programme's thread two frame copies a frame,
+the pictures up and the answer down.
 
-DECODE_TABLE
+Decoding a starter clip into 1080p AYUV runs on the clip's own threads: 76
+to 80 frames a second, so well ahead of a 30 fps programme. The first frame
+of the first clip a process opens came after 556 ms, while the decoder's
+plugin loaded; after that 48 ms.
+
+End to end, an optimised core (`--profile ci`) at 1920x1080 and 30 fps, a
+moving test pattern on air, the station and the show process together, each
+item played back to back for eight seconds against the five seconds before
+it, three rounds, the median (`fx.fire` for an effect, takes between two
+sources for a transition):
+
+| Item | Added CPU, percent of one core |
+|---|---|
+| `bokeh` fired | 15 |
+| `film-burn` fired | 31 |
+| `glitch` fired | 49 |
+| `light-leak` fired | 96 |
+| `glitch` take | 44 |
+| `light-leak` take | 42 |
+| `film-burn` take | 27 |
+| `iris` take | 0 to 11 |
+| `glitch-slice` take, on the GPU | 4 |
+| `ripple` take, on the GPU | 34 |
+
+The core at rest took 40 to 70 percent of a core in the same windows, which
+is the noise these sit in. Nothing above showed as a slow programme frame,
+and no effect was taken off.
 
 ## Methods
 

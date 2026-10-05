@@ -1,5 +1,50 @@
 # Where GodwinMix stands
 
+## Transitions and effects from packs, 2026-10-06
+
+**What there was.** Eleven built in transitions and a `stinger` that added a
+clip as a source over both scenes and cut under it half way. A clip whose
+decoder gave alpha was drawn by the overlay board by that alpha, so a WebM or
+ProRes stinger with alpha worked; its `luma` param was read and did nothing,
+so a light leak or a burn on black covered the picture with black. A stinger's
+sound was not mixed in (the clip is in neither scene, so its fader stays
+down), its cut point was a guess, and nothing measured either.
+There was no Screen, no Add, no luma matte, no shader, no effect that is not
+a transition, and no way to bring in a pack.
+
+**What changed.** An fx library (`crates/godwinmix-core/src/fx/`), kept as
+gallery items with kind `transition` or `effect`, filled by `fx.import` from a
+file, folder or zip, which measures each clip and finds its cut. Every look is
+a pass on the overlay board after the compositor: clips by alpha, Screen, Add
+or a luma key, mattes and shaders over two pictures with the old scene live
+when it was one source. Shaders on GPU through GStreamer GL, with software
+versions of the two shipped ones. A pass slower than a frame for ten frames is
+taken off. Seven starters made with ffmpeg. The Looks panel beside Take, effect
+buttons, `fx.assign` for a default and per scene transition, and seven MCP
+tools behind `search_tools`.
+
+**Measured.** At 1080p on one loaded core: alpha 9.5 ms a frame, Screen at
+half size 13.3, Add 6.8, luma key 10.3, matte 5.7, software glitch slice 0.6,
+software ripple 35. End to end on an optimised core at 1080p30, the median of
+three rounds added 15 to 96 percent of one core for an effect and 0 to 44 for
+a transition, against a core at rest on 40 to 70 percent. On a debug core at
+640x360 and an optimised one at 1080p, every starter was taken or fired over a
+moving test pattern with bursts of programme snapshots: the stinger covered
+and cut under itself, the leak and the burn whited out with the cut under the
+white, the iris opened from the middle, both shaders ran on the GPU, and the
+effects went when their clips ended. `docs/reference/fx.md` has the tables.
+
+**Not done.** A stinger's sound is decoded and dropped. A matte that is a
+clip, an image sequence, a shader with its own textures and HEVC alpha are
+refused with a sentence each. The debug core is too slow for these passes at
+1080p (the slow pass guard takes them off), so verify fx on a debug core at
+360p or on `--profile ci`. Only Windows was run: macOS and Linux build the
+same code with no `cfg`, and GL there is untried. On this laptop the show
+process still dies about one start in four on the Quick Sync heap fault
+(0xc0000374), three times before the 1080p measurement; the station restarted
+it each time. `transition_tests::every_new_transition` failed one run in two
+on the box's centre point while four builds loaded the machine, and passed on
+the next; the box is not touched by this work.
 ## Graphics that move, 2026-10-06
 
 An audit of what could carry motion and transparency, then the fixes.
