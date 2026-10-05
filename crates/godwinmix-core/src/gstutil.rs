@@ -1051,7 +1051,10 @@ mod tests {
         let queued = queue.property::<u32>("current-level-buffers");
         release.send(()).unwrap();
         pipeline.set_state(gst::State::Null).unwrap();
-        assert_eq!(queued, 2, "a slow preview retained a backlog of full canvas frames");
+        // At most two is the promise. It reads two alone; with the rest of
+        // the suite on the machine, Linux and macOS runners read one, fifty
+        // runs out of fifty alone did not, and one is no backlog either.
+        assert!((1..=2).contains(&queued), "a slow preview retained a backlog of full canvas frames: {queued}");
     }
 
     /// The flush a restarting source sends across its proxy has to flush the
