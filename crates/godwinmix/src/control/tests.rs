@@ -234,6 +234,10 @@ fn the_table_matches_the_scopes_in_the_protocol_document() {
     for name in ["show.add", "show.rename", "show.remove", "show.start", "show.stop", "show.set", "show.add_many", "show.remove_many"] {
         assert_eq!(scope(name), Scope::Admin, "{name}");
     }
+    // Device tokens hand out access, so only an admin makes, lists or takes one back.
+    for name in ["token.create", "token.list", "token.revoke"] {
+        assert_eq!(scope(name), Scope::Admin, "{name}");
+    }
 
     let destructive: Vec<&str> =
         reg.iter().filter(|m| m.destructive).map(|m| m.name).collect();
@@ -273,6 +277,9 @@ fn the_table_matches_the_scopes_in_the_protocol_document() {
             "show.remove",
             "show.remove_many",
             "source.remove",
+            // A device signed out cannot be signed in again with the same
+            // secret: the next code is a different token.
+            "token.revoke",
         ],
         "the destructive set is the one 03 section 6 marks, plus filter.remove (taking a \
          filter out changes the picture and cannot be undone by repeating it), \

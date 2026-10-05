@@ -10,9 +10,15 @@ the app writes a config file, generates a token, takes a free port from the
 operating system and starts the mixer on it. There is no port and no token
 compiled into the shell.
 
+The mixer the app starts answers on this computer only, at `127.0.0.1`.
+Nothing else on the network can reach it until you turn on **Let other
+devices on this network connect**; see
+[Letting phones and tablets in](#letting-phones-and-tablets-in).
+
 * Building it: [Building](#building)
 * What the first launch creates: [First launch](#first-launch)
 * Driving a mixer on another machine: [Connecting to a server](#connecting-to-a-server)
+* Phones and tablets on the same network: [Letting phones and tablets in](#letting-phones-and-tablets-in)
 * The bundled media stack: [The GStreamer inside the app](#the-gstreamer-inside-the-app)
 * The camera, the screen and the microphone: [The plugins inside the app](#the-plugins-inside-the-app)
 * Updates: [Updates](#updates)
@@ -122,6 +128,9 @@ directory:
 | `core-token` | the bearer token the local mixer is started with, generated once, owner readable only |
 | `connection.json` | which mixer was connected to last |
 | `local-core.port` | the port the local mixer was given, so a shell that crashed finds its mixer again instead of starting a second one |
+| `lan.json` | whether other devices may connect, and the port kept for them once they may |
+| `godwinmix.devices.toml` | the device tokens made for phones and tablets, as digests, never the secrets |
+| `godwinmix.control.crt` | the certificate the mixer answers HTTPS with, for a phone that wants to trust it |
 | `gstreamer-registry.bin` | GStreamer's plugin cache, kept here because an installed app's own directory is read only |
 | `plugins/` | the camera, the screen and the microphone, copied out of the app, plus anything added from the window later |
 
@@ -139,7 +148,9 @@ Everything the mixer prints goes to `mixer.log`, with one previous file kept as
 
 The port is not remembered between sessions on purpose. A new one is taken at
 every start, so two copies of the app, or the app beside a mixer somebody
-started from a terminal, never fight over 8080.
+started from a terminal, never fight over 8080. The one exception is a mixer
+other devices may connect to, which keeps its port, so a phone's saved link
+keeps working.
 
 To check all of this without a screen, on your machine or in CI:
 
@@ -172,13 +183,37 @@ whether it is this computer or an address. The version comes from
 `/api/status` instead, and the app says "(version not reported)" rather than
 refusing to connect.
 
+## Letting phones and tablets in
+
+**Let other devices on this network connect**, in the GodwinMix menu, is off
+by default. Turning it on restarts the mixer bound to `0.0.0.0`, on a port
+chosen the first time and kept in `lan.json` from then on, and its
+certificate names the computer's LAN addresses and `.local` name as well as
+`localhost`. The app asks before it restarts the mixer, because the
+programme and every output stop for a few seconds. Turning it off restarts
+the mixer on `127.0.0.1` again.
+
+It is never an open port. The mixer is always started with the token in
+`core-token`, and each phone signs in with a device token of its own, made
+under **Help > Open on another device** as a QR code. If the kept port is
+taken by something else when the mixer starts, a new one is chosen and kept,
+and phones need a new code.
+
+A mixer on another machine is not affected by this setting; it is bound
+however its own config says. With no mixer of this app's running, the setting
+is saved and applies the next time the app starts one.
+
+[Run a show from phones](run-a-show-from-phones.md) is the whole procedure,
+certificates and firewalls included.
+
 ## The menu bar
 
 Once the window is showing a mixer, the app's menu bar has the same File,
 Edit, View, Sources, Scenes, Outputs and Help menus as the page, read from
 the mixer's `shell/menus.json`, and the page draws no menu bar of its own.
 Choosing an item runs the same command the page's menu would. On macOS the
-GodwinMix menu (About, Connect, Restart, the folders, Quit) stays first, and
+GodwinMix menu (About, Connect, Restart, Let other devices on this network
+connect, the folders, Quit) stays first, and
 Edit keeps Cut, Copy, Paste and Select All for text boxes.
 
 Only `Cmd+O` (Open project), `Cmd+S` (Save project as) and `Cmd+K` (the

@@ -20,7 +20,7 @@ fn a_seat_is_given_back_when_the_connection_goes() {
     let presence = Presence::new();
     let mut told = presence.subscribe();
     let token = Token::open();
-    let here = presence.join("open.s1", &token, Some("gmx/0.2"));
+    let here = presence.join("open.s1", &token, None, Some("gmx/0.2"));
     assert!(told.try_recv().is_ok(), "joining was not announced");
     assert!(presence.set("open.s1", Some("wide".into()), Some("Sam".into())));
     let list = presence.list(Some("open.s1"));

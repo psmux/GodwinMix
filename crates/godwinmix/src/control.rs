@@ -191,7 +191,8 @@ impl AppState {
         } = engine;
         let channels = channels_for(cfg, &plugins, &mixer, &scenes);
         join_channels_to_renditions(&channels);
-        let tokens = crate::station::show::with_station_token(cfg.tokens(rehearsal));
+        let tokens = crate::station::show::with_station_token(cfg.tokens(rehearsal))
+            .with_devices(crate::devices::for_config(&cfg.source_path));
         let safety =
             godwinmix_core::safety::Guard::new(cfg.safety.clone(), cfg.canvas.fps.max(1) as u32);
         // The flash guard needs a luminance measurement and the telemetry

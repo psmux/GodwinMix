@@ -4,7 +4,7 @@
 // No inline script anywhere in this page, so the Content Security Policy the
 // server sets can be a real one rather than a hole with `unsafe-inline` in it.
 
-import { connect, storedToken, storeToken, migrateLegacyKeys } from "./client/index.js";
+import { connect, storedToken, storeToken, migrateLegacyKeys, takeTokenFromAddress } from "./client/index.js";
 import { installGlobal } from "./shell/registry.js";
 import { mountShell } from "./shell/shell.js";
 import { initTheme } from "./shell/theme.js";
@@ -65,6 +65,7 @@ async function authorise(base) {
 
 async function main() {
   migrateLegacyKeys();
+  takeTokenFromAddress(location, history);
   initTheme();
 
   // What the gallery would start as if no preset says otherwise. Read before

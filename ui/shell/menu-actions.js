@@ -75,6 +75,7 @@ const ACTIONS = {
     await show("core/outputs");
     document.querySelector("gmx-outputs")?.show("resources");
   },
+  "help.devices": (client) => import("./devices.js").then((m) => m.openDevices(client)),
   "help.agents": (client) => import("./agents.js").then((m) => m.openAgents(client)),
   "help.docs": () => window.open(DOCS, "_blank", "noopener"),
   "help.about": (client) => about(client),

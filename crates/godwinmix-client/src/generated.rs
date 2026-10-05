@@ -1280,6 +1280,18 @@ pub type DestinationState = String;
 /// The values api_level 1 knows for [`DestinationState`].
 pub const DESTINATION_STATE_VALUES: &[&str] = &["off", "waiting", "connecting", "live", "reconnecting", "failed"];
 
+/// One device token, without its secret.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct DeviceToken {
+    /// When it was made, RFC 3339 in UTC.
+    pub created: String,
+    /// Recorded against every take in `program.history`, like any token id.
+    pub id: String,
+    pub label: String,
+    pub scope: Scope,
+}
+
 /// Use of one hardware device by a plan.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -3735,6 +3747,19 @@ pub struct SceneView {
     pub records: Vec<Record>,
 }
 
+/// What a token may reach. Ordered: `admin` implies `operate` implies `read`.
+///
+/// `Plugin` is the exception and sits below the ladder on purpose. It is what
+/// a plugin's own per instance token carries, and it grants exactly one thing:
+/// calling that plugin's own tools. It implies no reading and no operating, so
+/// a plugin that tries `program.take` is refused with -32002, which is what 04
+/// section 8 asks for. Which plugin a token belongs to is `Token::plugin`,
+/// beside the scope rather than inside it, so `Scope` stays `Copy` and the
+/// method table stays a table of constants.
+pub type Scope = String;
+/// The values api_level 1 knows for [`Scope`].
+pub const SCOPE_VALUES: &[&str] = &["plugin", "read", "operate", "admin"];
+
 /// `plugin.search`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -4846,6 +4871,37 @@ pub struct TlsInfo {
     pub urls: Vec<String>,
 }
 
+/// `token.create`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TokenCreateRequest {
+    /// A slug to use as the id. Made from the label when absent, with `-2`,
+    /// `-3` on the end when that one is taken.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    /// What a person calls the device: "Sam's phone". Defaults to "Phone".
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+    /// `read`, `operate` (the default) or `admin`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scope: Option<Scope>,
+}
+
+/// What `token.create` answers with. The only time the secret is shown.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TokenCreated {
+    /// When it was made, RFC 3339 in UTC.
+    pub created: String,
+    /// Recorded against every take in `program.history`, like any token id.
+    pub id: String,
+    pub label: String,
+    pub scope: Scope,
+    /// The secret. Send it as `Authorization: Bearer <token>`, or open the
+    /// page at `https://<host>:<port>/#token=<token>`. It cannot be read back.
+    pub token: String,
+}
+
 /// What the calling token is allowed to do, echoed back so a surface can grey
 /// out what it cannot reach instead of discovering it at the first refusal.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -4858,6 +4914,28 @@ pub struct TokenInfo {
     pub profile: String,
     pub rehearsal: bool,
     pub scopes: Vec<String>,
+}
+
+/// `token.list`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TokenList {
+    pub tokens: Vec<DeviceToken>,
+}
+
+/// `token.revoke`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TokenRevokeRequest {
+    /// The device token's id, from `token.list`.
+    pub id: String,
+}
+
+/// What `token.revoke` answers with.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TokenRevoked {
+    pub revoked: DeviceToken,
 }
 
 /// `tool.call`.
@@ -5330,7 +5408,7 @@ pub struct MethodInfo {
     pub rest: Option<(&'static str, &'static str)>,
 }
 
-pub const METHODS: [MethodInfo; 192] = [
+pub const METHODS: [MethodInfo; 195] = [
     MethodInfo { name: "adbreak.end", summary: "Cut a running ad short, or disarm one that is scheduled.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/end")) },
     MethodInfo { name: "adbreak.start", summary: "Interrupt the programme with a clip, then rejoin live when it ends.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/start")) },
     MethodInfo { name: "agent.state", summary: "The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/agent/state")) },
@@ -5520,6 +5598,9 @@ pub const METHODS: [MethodInfo; 192] = [
     MethodInfo { name: "template.get", summary: "One template, with its SVG as written.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/template")) },
     MethodInfo { name: "template.list", summary: "The graphic templates: the built in pack and the SVG templates in the media library, each with its fields.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/template/list")) },
     MethodInfo { name: "template.save", summary: "Check an SVG template and write it into the media library.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/template/save")) },
+    MethodInfo { name: "token.create", summary: "Make a token for one phone or tablet, with the read, operate (the default) or admin scope. The secret is in this answer and nowhere else: the mixer keeps only a digest of it. Open the page at https://<host>:<port>/#token=<token> to sign the device in.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/token/create")) },
+    MethodInfo { name: "token.list", summary: "Every device token: its id, label, scope and when it was made. Never a secret.", scope: "admin", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/token/list")) },
+    MethodInfo { name: "token.revoke", summary: "Take a device token back. The device's next call is refused, including on a connection it already has open.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/token/revoke")) },
     MethodInfo { name: "tool.call", summary: "Call one of a plugin's tools, in MCP's shape. The name is `<plugin>/<tool>`, or the bare tool name when only one plugin has it.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/tool/call")) },
     MethodInfo { name: "vitals.get", summary: "This show's health (its state and alarms, null in the first second) and the thresholds they are judged by.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/vitals")) },
     MethodInfo { name: "vitals.set", summary: "Change the alarm thresholds, or whether a mosaic is kept up for the black and freeze checks while nobody is looking. Fields left out keep their defaults; a duration of 0 switches that check off. Applies within a second.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/vitals/set")) },
@@ -6777,6 +6858,21 @@ impl Client {
     /// Check an SVG template and write it into the media library.
     pub async fn template_save(&self, params: &TemplateSaveRequest) -> Result<TemplateSaved> {
         self.call("template.save", params).await
+    }
+
+    /// Make a token for one phone or tablet, with the read, operate (the default) or admin scope. The secret is in this answer and nowhere else: the mixer keeps only a digest of it. Open the page at https://<host>:<port>/#token=<token> to sign the device in.
+    pub async fn token_create(&self, params: &TokenCreateRequest) -> Result<TokenCreated> {
+        self.call("token.create", params).await
+    }
+
+    /// Every device token: its id, label, scope and when it was made. Never a secret.
+    pub async fn token_list(&self) -> Result<TokenList> {
+        self.call("token.list", &serde_json::json!({})).await
+    }
+
+    /// Take a device token back. The device's next call is refused, including on a connection it already has open.
+    pub async fn token_revoke(&self, params: &TokenRevokeRequest) -> Result<TokenRevoked> {
+        self.call("token.revoke", params).await
     }
 
     /// Call one of a plugin's tools, in MCP's shape. The name is `<plugin>/<tool>`, or the bare tool name when only one plugin has it.

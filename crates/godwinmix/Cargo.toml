@@ -81,6 +81,9 @@ base64 = { workspace = true }
 # Checks the web page engine download against the digest its index publishes.
 # Already in the tree under tungstenite, so it adds nothing to a build.
 sha1 = "0.10"
+# SHA-256 of a device token, so the file that keeps them holds no secret.
+# Already compiled for rustls and the engine; this adds nothing to a build.
+ring = { workspace = true }
 
 [features]
 default = ["matte"]

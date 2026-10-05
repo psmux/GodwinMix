@@ -396,6 +396,28 @@ export function storedToken() {
   }
 }
 
+/**
+ * A device signed in by a code from Help > Open on another device arrives at
+ * `/#token=...`. A browser never sends the fragment to the server, so the
+ * secret is in no log on the way. Here it goes into storage and off the
+ * address bar, so a bookmark or a screenshot of the page carries none.
+ * Returns the token it found, or null.
+ */
+export function takeTokenFromAddress(loc, hist) {
+  const m = /(?:^#|&)token=([^&]*)/.exec(loc.hash || "");
+  if (!m) return null;
+  let token = m[1];
+  try {
+    token = decodeURIComponent(token);
+  } catch {
+    /* kept as it came */
+  }
+  if (token) storeToken(token);
+  const rest = loc.hash.slice(1).split("&").filter((p) => p && !p.startsWith("token=")).join("&");
+  hist.replaceState(null, "", loc.pathname + loc.search + (rest ? "#" + rest : ""));
+  return token || null;
+}
+
 export function storeToken(token) {
   try {
     if (token) localStorage.setItem(TOKEN_KEY, token);
