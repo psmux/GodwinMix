@@ -153,6 +153,13 @@ async fn mp2_sound_is_refused_with_the_next_step_and_served_once_a_rendition_mak
         return;
     }
     let (dir, port) = folder_with_relay("hls-direct-mp2");
+    // No reserve: the sound decode is a sliver of a core, and on a three or
+    // four core runner the reserve and its allowance for jumps in load left
+    // "0.0 cores free" for minutes. What is checked is the refusal and the
+    // rendition, not what the machine keeps back.
+    let config = dir.join("godwinmix.toml");
+    let written = std::fs::read_to_string(&config).unwrap();
+    std::fs::write(&config, format!("{written}\n[governor]\nreserve_cores = 0\n")).unwrap();
     let source = staged_ingest(&dir);
     let st = start_alone(dir.clone(), port, &[]).await;
     let mut ws = rpc(&st, "").await;
