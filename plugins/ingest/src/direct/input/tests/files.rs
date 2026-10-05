@@ -17,7 +17,7 @@ fn a_file_loops_at_its_own_pace_with_time_running_on() {
     for name in ["loop.ts", "loop.mp4"] {
         let clip = clip(name, &["-f", "lavfi", "-i", "testsrc2=size=320x240:rate=25", "-f", "lavfi", "-i", "sine", "-t", "2",
             "-c:v", "libx264", "-preset", "ultrafast", "-g", "25", "-c:a", "aac"]);
-        let rx = start(json!(format!("file://{}", path(&clip))), &Context::default());
+        let rx = start(json!(file_url(&clip)), &Context::default());
         std::thread::sleep(Duration::from_secs(5));
         let times = rx.got.times();
         drop(rx);
@@ -69,7 +69,7 @@ fn a_backup_takes_over_from_a_main_that_is_silent() {
     }
     let clip = ts_clip(4);
     let spec = json!({"uri": "udp://127.0.0.1:19935", "params": {"stall_ms": 1000},
-                      "backup": format!("file://{}", path(&clip))});
+                      "backup": file_url(&clip)});
     let rx = start(spec, &Context::default());
     assert!(eventually(10, || rx.got.keyframes() >= 2), "nothing from the backup");
     let s = rx.got.last();

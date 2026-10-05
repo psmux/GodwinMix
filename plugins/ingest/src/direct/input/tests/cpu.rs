@@ -79,7 +79,7 @@ fn cpu_per_input_at_1080p_8_mbit() {
         let _relay = gst("udpsrc port=19940 caps=video/mpegts ! rtpmp2tpay ! ristsink address=127.0.0.1 port=19928");
         rows.push(("rist", measure(json!("rist://@0.0.0.0:19928"), 15)));
     }
-    rows.push(("file", measure(json!(format!("file://{}", path(&clip))), 15)));
+    rows.push(("file", measure(json!(file_url(&clip)), 15)));
     {
         let _server = copy_out(&clip, &["-f", "flv", "-listen", "1", "rtmp://127.0.0.1:19934/live/feed"]);
         std::thread::sleep(Duration::from_millis(800));

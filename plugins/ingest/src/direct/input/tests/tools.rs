@@ -67,3 +67,11 @@ pub fn ts_clip(secs: u32) -> PathBuf {
 pub fn path(p: &Path) -> String {
     p.to_string_lossy().into_owned()
 }
+
+/// A `file://` address for `p`. On Windows a drive path needs a third slash
+/// and forward slashes, `file:///C:/Users/...`; written as `file://C:\...` it
+/// is refused as no file address at all.
+pub fn file_url(p: &Path) -> String {
+    let s = path(p).replace('\\', "/");
+    if s.starts_with('/') { format!("file://{s}") } else { format!("file:///{s}") }
+}
