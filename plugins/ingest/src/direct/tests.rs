@@ -144,7 +144,12 @@ fn a_dead_output_slows_neither_the_input_nor_the_live_output() {
     let got = listen_udp(socket, 5).join().unwrap();
     let _ = encoder.set_state(gst::State::Null);
     let (pictures, _) = decode(&got, "dead");
-    assert!(pictures >= 120, "the live output kept its frame rate: {pictures} pictures in 5 s");
+    // 120 of 150 alone; 100 on a runner that declares itself slow, where a
+    // macOS runner counted 119. An output held up by the dead one would have
+    // a handful.
+    let slow = std::env::var("GODWINMIX_TIMING_SLACK").ok().and_then(|s| s.parse::<f64>().ok()).is_some_and(|s| s > 1.0);
+    let floor = if slow { 100 } else { 120 };
+    assert!(pictures >= floor, "the live output kept its frame rate: {pictures} pictures in 5 s");
     assert!(blocked.dropped_gops() > 0 || blocked.waiting().0 > 0, "the blocked reader held or lost GOPs of its own");
     let worst = slowest.load(Ordering::Relaxed);
     assert!(worst < 20_000, "the input never waited on an output: slowest push {worst} µs");
