@@ -6,12 +6,10 @@
 //! doing. Only the newest line matters (each is the whole state), so a
 //! renderer that is slow to read is sent the latest, not a queue.
 
-use super::frames::{self, Feed};
+use super::frames::{self, Feed, Target};
 use crate::caps::CanvasCaps;
 use crate::config::BrowserConfig;
 use crate::input::{spawn_exec, ExecChild, ExecSpec, ExecStdout};
-use crate::overlay::carrier::Carrier;
-use crate::overlay::Layer;
 use anyhow::{Context, Result};
 use std::io::{Read, Write};
 use std::path::Path;
@@ -53,12 +51,12 @@ pub struct Renderer {
 impl Renderer {
     /// Start the renderer on `page` at the canvas size, its pictures going to
     /// `layer`, and tell it `state` straight away.
-    pub fn start(id: &str, page: &Page, canvas: &CanvasCaps, browser: &BrowserConfig, layer: Arc<Layer>, carrier: Arc<Carrier>, state: String) -> Result<Renderer> {
+    pub fn start(id: &str, page: &Page, canvas: &CanvasCaps, browser: &BrowserConfig, to: Target, state: String) -> Result<Renderer> {
         let spec = spec(page, canvas, browser)?;
         let (stdout, mut child, stderr) = spawn_exec(id, &spec)?;
         let stdin = child.stdin.take().context("the renderer has no stdin to send the graphic's state on")?;
         let feed = Feed::new();
-        frames::start(id, reader(stdout), layer, carrier, feed.clone());
+        frames::start(id, reader(stdout), to, feed.clone());
         let lines = writer(id, stdin);
         let _ = lines.send(state);
         Ok(Renderer { _child: ExecChild::new(child, spec.env.clone(), None, stderr), lines, feed })

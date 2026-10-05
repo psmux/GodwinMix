@@ -25,7 +25,7 @@
                font-family: Inter, "Segoe UI", "Helvetica Neue", Helvetica, Arial, "DejaVu Sans", sans-serif;
                background: linear-gradient(180deg, color-mix(in srgb, var(--panel) 70%, #000) 0%, var(--panel) 55%, #05070d 100%); }
   /* The back wall: three screens. The middle one sits behind the presenter's head. */
-  .screen { position: absolute; top: 120px; height: 520px; border-radius: 10px; overflow: hidden;
+  .screen { position: absolute; top: 190px; height: 450px; border-radius: 10px; overflow: hidden;
             background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 55%, var(--panel)), var(--panel) 70%);
             box-shadow: 0 0 0 6px rgba(255, 255, 255, .06), 0 30px 80px rgba(0, 0, 0, .5); }
   .left { left: 60px; width: 470px; } .right { right: 60px; width: 470px; }
@@ -36,8 +36,9 @@
   .right .sweep { animation-delay: -4.5s; }
   @keyframes sweep { to { left: 140%; } }
   .lines { position: absolute; inset: 0; background: repeating-linear-gradient(0deg, rgba(255, 255, 255, .05) 0 2px, transparent 2px 26px); }
-  .brand { position: absolute; left: 0; right: 0; top: 170px; text-align: center; }
-  .station { font-size: 96px; font-weight: 900; letter-spacing: 6px; opacity: .9; }
+  /* The name sits above the screens, clear of the presenter's head. */
+  .brand { position: absolute; left: 0; right: 0; top: 34px; text-align: center; }
+  .station { font-size: 84px; font-weight: 900; letter-spacing: 6px; opacity: .9; }
   .city { font-size: 26px; font-weight: 700; letter-spacing: 8px; color: var(--accent); margin-top: 6px; }
   .strip { position: absolute; left: 0; right: 0; top: 660px; height: 8px; background: var(--accent);
            box-shadow: 0 0 30px var(--accent); opacity: .85; }

@@ -15,6 +15,7 @@
 //! blocks on the pipe, never on the programme. The carrier, the grey frame
 //! the tile and the supervisor see, is made again at most twice a second.
 
+use super::opaque::Opaque;
 use crate::overlay::carrier::Carrier;
 use crate::overlay::picture::{Area, Picture};
 use crate::overlay::Layer;
@@ -55,11 +56,21 @@ impl Feed {
     }
 }
 
+/// Where a renderer's pictures go: a transparent page to the layer (and its
+/// carrier, for the tile), a page that covers the picture to `opaque`.
+#[derive(Clone)]
+pub struct Target {
+    pub layer: Arc<Layer>,
+    pub carrier: Arc<Carrier>,
+    pub opaque: Option<Arc<Opaque>>,
+}
+
 /// Read frames from `pipe` until it closes, and keep the carrier current.
-pub fn start(id: &str, pipe: Box<dyn Read + Send>, layer: Arc<Layer>, carrier: Arc<Carrier>, feed: Arc<Feed>) {
-    let (l, f, c) = (layer.clone(), feed.clone(), carrier.clone());
+pub fn start(id: &str, pipe: Box<dyn Read + Send>, to: Target, feed: Arc<Feed>) {
+    let (layer, carrier) = (to.layer.clone(), to.carrier.clone());
+    let f = feed.clone();
     let reader = std::thread::Builder::new().name(format!("gmx-html-{id}")).spawn(move || {
-        let why = read(pipe, &l, &c, &f);
+        let why = read(pipe, &to, &f);
         tracing::debug!(reason = %why, "the HTML renderer's pictures stopped");
         f.end();
     });
@@ -70,7 +81,8 @@ pub fn start(id: &str, pipe: Box<dyn Read + Send>, layer: Arc<Layer>, carrier: A
     let _ = std::thread::Builder::new().name(format!("gmx-html-carrier-{id}")).spawn(move || refresh(&layer, &carrier, &feed));
 }
 
-fn read(mut pipe: Box<dyn Read + Send>, layer: &Layer, carrier: &Carrier, feed: &Feed) -> String {
+fn read(mut pipe: Box<dyn Read + Send>, to: &Target, feed: &Feed) -> String {
+    let layer = &to.layer;
     let mut header = [0u8; HEADER];
     // The whole box last sent, kept to copy patches into.
     let mut held: Option<(Area, Vec<u8>)> = None;
@@ -87,7 +99,9 @@ fn read(mut pipe: Box<dyn Read + Send>, layer: &Layer, carrier: &Carrier, feed: 
         }
         if whole_frame {
             // A design that covers the picture: straight to the compositor.
-            carrier.show_i420(&data, area.w, area.h);
+            if let Some(o) = &to.opaque {
+                o.show(&data, area.w, area.h);
+            }
             feed.frames.fetch_add(1, Ordering::Relaxed);
             continue;
         }
