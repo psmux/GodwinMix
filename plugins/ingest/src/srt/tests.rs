@@ -79,7 +79,9 @@ fn two_callers_on_one_port_are_two_streams_of_one_channel() {
     };
     let two = caller(server.port(), "#!::r=church/cam2,m=publish,u=phone", KEY_TWO).unwrap();
     let both = wait_for(|| gate.hub.is_live("church", "main") && gate.hub.is_live("church", "cam2"));
-    let coded = wait_for(|| gate.hub.stream("church", "cam2").is_some_and(|s| s["video"]["width"] == 320));
+    // Both kinds: on a busy runner the picture's size was read and the
+    // sound's codec had not been yet.
+    let coded = wait_for(|| gate.hub.stream("church", "cam2").is_some_and(|s| s["video"]["width"] == 320 && !s["audio"].is_null()));
     let described = gate.hub.stream("church", "cam2");
     stop(one);
     stop(two);
