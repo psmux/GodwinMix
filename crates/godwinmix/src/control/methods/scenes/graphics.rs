@@ -224,7 +224,9 @@ pub(crate) async fn place(
             uri,
             kind: Some("web".into()),
             superimpose: None,
-            params: Map::new(),
+            // The host's page is transparent; drawn in graphic mode, the
+            // picture under the graphic shows through its soft edges.
+            params: [("transparent".to_string(), Value::Bool(true))].into_iter().collect(),
         };
         crate::control::add_source_now(&call.app, request)
             .await

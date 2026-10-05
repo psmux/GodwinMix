@@ -4,6 +4,8 @@
 use super::super::{body, handler};
 use crate::control::call::Call;
 use godwinmix_core::graphics::fill::value_of;
+use godwinmix_core::graphics::html;
+use godwinmix_core::plugin::kinds::html::params;
 use godwinmix_core::plugin::kinds::template;
 use godwinmix_protocol::error::RpcError;
 use godwinmix_protocol::graphics::*;
@@ -33,9 +35,9 @@ async fn fields(call: Call, params: Value) -> Result<Value, RpcError> {
     let Some(cfg) = configs.sources.iter().find(|s| s.id == req.id) else {
         return Err(RpcError::not_found("source", &req.id, &call.source_ids().await?));
     };
-    let Some(name) = template::name_in(&cfg.uri) else {
-        let graphics: Vec<String> =
-            configs.sources.iter().filter(|s| template::name_in(&s.uri).is_some()).map(|s| s.id.clone()).collect();
+    let is_graphic = |uri: &str| template::name_in(uri).is_some() || html::name_in(uri).is_some();
+    if !is_graphic(&cfg.uri) {
+        let graphics: Vec<String> = configs.sources.iter().filter(|s| is_graphic(&s.uri)).map(|s| s.id.clone()).collect();
         return Err(RpcError::invalid_params(format!(
             "{} is not a graphic template, so it has no fields. The graphics on this mixer are: {}",
             req.id,
@@ -43,20 +45,26 @@ async fn fields(call: Call, params: Value) -> Result<Value, RpcError> {
         ))
         .with("id", req.id.clone())
         .with("graphics", graphics));
+    }
+    let unreadable = |e: anyhow::Error| RpcError::not_in_state(format!("{} cannot read its template: {e:#}", req.id)).with("id", req.id.clone());
+    let (info, values) = match html::name_in(&cfg.uri) {
+        Some(_) => {
+            let read = params::validate(&cfg.effective_params()).map_err(unreadable)?;
+            (read.template.info.clone(), read.values)
+        }
+        None => {
+            let read = template::validate(&cfg.effective_params()).map_err(unreadable)?;
+            (read.template.info.clone(), read.values)
+        }
     };
-    let read = template::validate(&cfg.effective_params()).map_err(|e| {
-        RpcError::not_in_state(format!("{} cannot read its template {name}: {e:#}", req.id)).with("id", req.id.clone())
-    })?;
     let brand = super::brand();
-    let fields = read
-        .template
-        .info
+    let fields = info
         .fields
         .iter()
         .map(|f| {
-            let (value, set) = value_of(f, &read.values, &brand);
+            let (value, set) = value_of(f, &values, &brand);
             FieldValue { field: f.clone(), value, set }
         })
         .collect();
-    body(TemplateFields { id: req.id, template: read.template.info.name.clone(), fields, path: "params.fields.<name>".into() })
+    body(TemplateFields { id: req.id, template: info.name.clone(), fields, path: "params.fields.<name>".into() })
 }

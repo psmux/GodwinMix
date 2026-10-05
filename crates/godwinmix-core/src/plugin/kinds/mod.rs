@@ -12,6 +12,7 @@ pub mod clip_pace;
 pub mod clip_start;
 pub mod exec;
 pub mod file;
+pub mod html;
 pub mod image;
 pub mod image_alpha;
 pub mod image_decode;

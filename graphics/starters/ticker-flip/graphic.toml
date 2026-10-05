@@ -1,0 +1,9 @@
+name = "Flip ticker"
+kind = "html"
+file = "ticker-flip.html"
+zone = "bottom"
+moves = true
+transparent = true
+description = "One headline at a time on a bar near the bottom, each flipping over in 3D to the next every few seconds. Put the headlines in items, separated by |."
+tags = ["news", "ticker", "headlines", "3d"]
+origin = "shipped"

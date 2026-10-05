@@ -29,8 +29,37 @@ macro_rules! starter {
     };
 }
 
+/// A starter whose files live elsewhere under `graphics/`, named on the
+/// left as the item has them: the HTML starter designs are the template
+/// pack's own pages, kept once.
+macro_rules! starter_from {
+    ($id:literal, [$($name:literal <- $from:literal),* $(,)?]) => {
+        Starter {
+            id: $id,
+            files: &[$(($name, include_bytes!(concat!("../../../../graphics/", $from)))),*],
+        }
+    };
+}
+
 /// Every starter that ships.
-pub const STARTERS: &[Starter] = &[starter!("blue-gradient", ["graphic.toml", "background.svg"])];
+pub const STARTERS: &[Starter] = &[
+    starter!("blue-gradient", ["graphic.toml", "background.svg"]),
+    starter_from!("lower-third-glass", ["graphic.toml" <- "starters/lower-third-glass/graphic.toml", "preview.jpg" <- "starters/lower-third-glass/preview.jpg", "lower-third-glass.html" <- "html/lower-third-glass.html"]),
+    starter_from!("lower-third-bold", ["graphic.toml" <- "starters/lower-third-bold/graphic.toml", "preview.jpg" <- "starters/lower-third-bold/preview.jpg", "lower-third-bold.html" <- "html/lower-third-bold.html"]),
+    starter_from!("lower-third-line", ["graphic.toml" <- "starters/lower-third-line/graphic.toml", "preview.jpg" <- "starters/lower-third-line/preview.jpg", "lower-third-line.html" <- "html/lower-third-line.html"]),
+    starter_from!("ticker-crawl", ["graphic.toml" <- "starters/ticker-crawl/graphic.toml", "preview.jpg" <- "starters/ticker-crawl/preview.jpg", "ticker-crawl.html" <- "html/ticker-crawl.html"]),
+    starter_from!("ticker-flip", ["graphic.toml" <- "starters/ticker-flip/graphic.toml", "preview.jpg" <- "starters/ticker-flip/preview.jpg", "ticker-flip.html" <- "html/ticker-flip.html"]),
+    starter_from!("score-bug-live", ["graphic.toml" <- "starters/score-bug-live/graphic.toml", "preview.jpg" <- "starters/score-bug-live/preview.jpg", "score-bug-live.html" <- "html/score-bug-live.html"]),
+    starter_from!("logo-bug-shine", ["graphic.toml" <- "starters/logo-bug-shine/graphic.toml", "preview.jpg" <- "starters/logo-bug-shine/preview.jpg", "logo-bug-shine.html" <- "html/logo-bug-shine.html"]),
+    starter_from!("countdown-ring", ["graphic.toml" <- "starters/countdown-ring/graphic.toml", "preview.jpg" <- "starters/countdown-ring/preview.jpg", "countdown-ring.html" <- "html/countdown-ring.html"]),
+    starter_from!("logo-spin-3d", ["graphic.toml" <- "starters/logo-spin-3d/graphic.toml", "preview.jpg" <- "starters/logo-spin-3d/preview.jpg", "logo-spin-3d.html" <- "html/logo-spin-3d.html"]),
+    starter_from!("title-card-3d", ["graphic.toml" <- "starters/title-card-3d/graphic.toml", "preview.jpg" <- "starters/title-card-3d/preview.jpg", "title-card-3d.html" <- "html/title-card-3d.html"]),
+    starter_from!("starting-soon", ["graphic.toml" <- "starters/starting-soon/graphic.toml", "preview.jpg" <- "starters/starting-soon/preview.jpg", "starting-soon.html" <- "html/starting-soon.html"]),
+    starter_from!("background-gradient", ["graphic.toml" <- "starters/background-gradient/graphic.toml", "preview.jpg" <- "starters/background-gradient/preview.jpg", "background-gradient.html" <- "html/background-gradient.html"]),
+    starter_from!("background-particles", ["graphic.toml" <- "starters/background-particles/graphic.toml", "preview.jpg" <- "starters/background-particles/preview.jpg", "background-particles.html" <- "html/background-particles.html"]),
+    starter_from!("studio-newsroom", ["graphic.toml" <- "starters/studio-newsroom/graphic.toml", "preview.jpg" <- "starters/studio-newsroom/preview.jpg", "set-newsroom.html" <- "html/set-newsroom.html", "set-newsroom-desk.svg" <- "set-newsroom-desk.svg"]),
+    starter_from!("studio-ring", ["graphic.toml" <- "starters/studio-ring/graphic.toml", "preview.jpg" <- "starters/studio-ring/preview.jpg", "set-studio.html" <- "html/set-studio.html", "set-studio-frame.svg" <- "set-studio-frame.svg"]),
+];
 
 impl Starter {
     pub fn manifest(&self) -> Result<Manifest> {

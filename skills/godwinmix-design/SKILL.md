@@ -1,15 +1,23 @@
 ---
 name: godwinmix-design
-description: Design on screen graphics for a GodwinMix mixer, save them into its Graphics gallery and put them on air. Use when asked to make, brand, restyle or reword a lower third, a breaking news bar, a news ticker or crawl, a score bug, a logo bug, a title card, a background, a web (HTML) graphic, a clip with transparency, a virtual set or news studio set for a presenter (with or without a green screen), or to choose between a text source, an SVG template and an OGraf page. Covers the built in pack, writing an SVG template with {{fields}} and shrink to fit, safe areas, save_template, placing it on the scene that is on air with an enter and an exit, the virtual-set layout, looking at the result with snapshot and preview_frame, and changing its words on air with set_source.
+description: Design on screen graphics for a GodwinMix mixer, save them into its Graphics gallery and put them on air. Use when asked to make, brand, restyle or reword a lower third, a breaking news bar, a news ticker or crawl, a score bug, a logo bug, a countdown, a title card, a starting soon slate, a background, an animated, 3D or web (HTML) graphic, a clip with transparency, or a virtual set or news studio set for a presenter (with or without a green screen). Covers choosing between a text source, an SVG template (a still, almost free) and an HTML template (motion, 3D, transparency), the starter designs, writing and checking a template (check_template), save_template, placing it on the scene on air with an enter and a hold exit, the virtual-set layout, looking at the result with snapshot and preview_frame, and changing its words on air with set_source.
 ---
 
 # Designing graphics for a GodwinMix mixer
 
-A graphic here is an SVG with named fields in it, `{{headline}}`, drawn by the
-mixer at the size it is placed at, once per change, and held. A field changed
-on air is drawn again in a few milliseconds and swapped in on the next frame,
-with no rebuild and no gap. It costs a Raspberry Pi almost nothing while it
-holds still, so it is the default for anything designed.
+A graphic here is a template with named fields. Two formats:
+
+* **SVG** (`template:<name>`): drawn by the mixer once per change and held.
+  Costs a Raspberry Pi almost nothing. The default for anything that holds
+  still.
+* **HTML** (`html:<name>`): a web page drawn by the browser renderer with its
+  transparency kept, for anything that moves: CSS animation, a crawl, a clock,
+  WebGL 3D, its own way in and out. A held page costs next to nothing; a small
+  moving one 10 to 30 percent of a core; full screen motion up to most of one.
+  On a Raspberry Pi keep to SVG, stills and video loops.
+
+A field changed on air reaches the screen on the next frame either way, with
+no rebuild and no reload.
 
 ## Calling the tools
 
@@ -38,13 +46,17 @@ into the media library with `godwinmix ctl upload picture.png`.
 | Ask | Use | Why |
 |---|---|---|
 | Plain words in a box, a crawl, credits | `text:` or `ticker:` source | the cheapest there is; see `godwinmix-operate` |
-| A designed graphic: panels, an accent colour, a hierarchy of type, a logo | an SVG template, `template:<name>` | native, cheap, branded, live fields |
-| Something that moves inside itself every frame: a ticking clock face, a particle wipe, a chart that animates | OGraf (`scene.apply_graphic`) | a Chromium page per graphic; too heavy for a Pi |
+| A designed graphic that holds still: panels, an accent colour, a logo | an SVG template, `template:<name>` | native, cheap, branded, live fields |
+| A graphic that moves: animated strap, flip ticker, running clock, countdown, 3D logo, looping background, set backdrop | an HTML template, `html:<name>` | real animation and alpha; costs while it moves |
+| A pre rendered animation | WebM with VP9 alpha in the media library | one video decode |
 
-Movement in and out is not a reason to reach for OGraf. Every scene item has
-an `enter` and an `exit` (fade, slide, wipe, zoom), and they move templates
-like anything else. Do not put `<animate>` or CSS animation in a template:
-it is drawn once, as a still.
+Movement in and out alone is not a reason for HTML. Every scene item has an
+`enter` and an `exit` (fade, slide, wipe, zoom), and they move SVG templates
+like anything else. Do not put `<animate>` or CSS animation in an SVG
+template: it is drawn once, as a still.
+
+Never start from a blank page. `get_template` a starter design, change its
+words and colours, save it under a new name, check it.
 
 ## The gallery: save, look, fix, place, show
 
@@ -72,8 +84,8 @@ saying what to call.
 
 ## The pack
 
-`list_templates {}` answers with every template and its fields. Eight are
-built in:
+`list_templates {}` answers with every template, its `format` and its
+fields. Built in, SVG (`template:<name>`):
 
 | Name | Fields |
 |---|---|
@@ -85,6 +97,16 @@ built in:
 | `title-card` | `kicker`, `title`, `subtitle` (full screen, opaque) |
 | `quote-card` | `line1`, `line2`, `line3`, `attribution` |
 | `location-tag` | `place`, `detail` |
+| `set-newsroom-desk`, `set-studio-frame` | set foregrounds (see Virtual sets) |
+
+Built in, HTML (`html:<name>`): `lower-third-glass`, `lower-third-bold`,
+`lower-third-line` (`name`, `title`), `ticker-crawl` and `ticker-flip`
+(`label`, `items` split by `|`), `score-bug-live` (teams, scores, a `clock`
+that runs itself while `running` is yes), `logo-bug-shine`, `countdown-ring`
+(`duration` mm:ss or `until` hh:mm), `logo-spin-3d` (WebGL), `title-card-3d`,
+`starting-soon`, `background-gradient`, `background-particles`, and the set
+backgrounds `set-newsroom` and `set-studio`. Ask `list_templates` for each
+one's fields.
 
 Every one also has `accent`, `text` and `panel`, three colours. Set them per
 graphic in `fields`, or once for the whole station in the config's
@@ -165,7 +187,7 @@ is enough to see where things are. Check: are the words inside their panel,
 is anything cut at an edge, does it read against the picture under it. Fix,
 look again, and stop when it is right.
 
-## Write your own template
+## Write your own SVG template
 
 Start from a pack template rather than a blank page:
 
@@ -222,7 +244,52 @@ The rules a template follows:
   a small capitals label. Leave 28 to 32 units between words and the edge of
   their panel. Use `accent` for one strong shape, not everything.
 
-### Safe areas, on 1920 by 1080
+## Write an HTML template
+
+Copy a pack design: `get_template {"name": "lower-third-glass"}` gives its
+whole `html`. The rules (all of them, with an example of each kind, are in
+`docs/reference/graphics-for-agents.md`):
+
+1. One `.html` file laid out on a 1920 by 1080 page.
+2. In `<head>`, a JSON block declaring the fields:
+   `<script type="application/json" id="gmx-template">{"title": "...", "category": "lower-third", "out_ms": 600, "fields": {"name": {"label": "Name", "default": "Ada"}, "accent": {"type": "color", "default": "#e4572e"}}}</script>`.
+   Add `"opaque": true` for a full screen design and `"fps": 20` for a slow one.
+3. `html, body { margin: 0; background: transparent; }` unless opaque.
+4. Show a field with `data-field="name"` (text, or an `<img>`'s picture) or
+   `var(--name)` in CSS. A script reads `e.detail` of the `gmx:update` event.
+5. Hidden by default, shown under `.gmx-in`: the mixer adds `gmx-in` to
+   `<html>` when it goes on the programme and `gmx-out` when it comes off.
+   `out_ms` is how long the way out takes.
+6. Nothing from the network: no web fonts, no CDN, no `https://`. Pictures and
+   font files go in the media library and are named by file name.
+7. Move with `transform` and `opacity`; run a loop only between `gmx:in` and
+   `gmx:out`.
+
+Check, then save:
+
+```
+check_template {"html": "<the page>"}        -> {"ok": false, "problems": [{"problem": "...", "fix": "..."}]}
+save_template {"name": "ours-strap", "html": "<the page>"}   -> uri html:ours-strap.html
+```
+
+Fix every problem the check names and check again until `ok` is true. Place
+it like an SVG one, with `"exit": {"type": "hold", "duration_ms": <out_ms>}`
+so it stays drawn while its own way out plays. To see it off air, set
+`params.cue` to `"in"` on the source; `"auto"` follows the programme again.
+
+## Virtual sets
+
+Two ship ready to use: `list_graphics {"query": "set"}` finds
+`studio-newsroom` (moving newsroom wall, anchor desk) and `studio-ring` (3D
+floor and turning ring, lit pillars); `place_graphic {"id":
+"studio-newsroom", "camera": "cam1"}` makes the scene. To design one: a
+full screen background (an SVG, or for movement an HTML template with
+`"opaque": true` and `"resolution": 0.5`) and a foreground transparent
+except a desk from about y 820 down, both in the same colours; the presenter
+stands on the bottom edge in the middle at 90 percent of the height. Save it
+with `save_graphic` and `set`, or build it as below.
+
+## Safe areas, on 1920 by 1080
 
 | Area | Share | x from, to | y from, to |
 |---|---|---|---|
@@ -328,3 +395,8 @@ gmx ctl rpc scene.item.add @item.json                        # any method, param
   default.
 * **`there is no template`**: the error lists the pack; `list_templates` lists
   the library too.
+* **An HTML graphic shows nothing.** It is out: the item is not on the
+  programme, or the page has no `.gmx-in` rules. Set `params.cue` to `"in"` to
+  look at it, and run `check_template` on it.
+* **An HTML graphic covers the picture with black or white.** Its page paints a
+  background. `check_template` says which line.

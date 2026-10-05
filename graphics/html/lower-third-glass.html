@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Glass lower third</title>
+<!-- A GodwinMix HTML template. Copy it, change the words, colours and
+     layout, and save it with save_template. The rules are in
+     docs/reference/graphics-for-agents.md. -->
+<script type="application/json" id="gmx-template">
+{
+  "title": "Glass lower third",
+  "description": "Name and role on a dark glass panel with an accent bar. Wipes in from the left, out the same way.",
+  "category": "lower-third",
+  "out_ms": 600,
+  "fields": {
+    "name":   {"label": "Name", "default": "Ada Lovelace"},
+    "title":  {"label": "Role", "default": "Head of Engine Research"},
+    "accent": {"label": "Accent colour", "type": "color", "default": "#e4572e"},
+    "panel":  {"label": "Panel colour", "type": "color", "default": "#0f172a"},
+    "text":   {"label": "Text colour", "type": "color", "default": "#ffffff"}
+  }
+}
+</script>
+<style>
+  html, body { margin: 0; background: transparent; overflow: hidden; }
+  :root { --accent: #e4572e; --panel: #0f172a; --text: #ffffff; }
+  body { font-family: Inter, "Segoe UI", "Helvetica Neue", Helvetica, Arial, "DejaVu Sans", sans-serif; }
+
+  .strap { position: absolute; left: 120px; top: 800px; height: 150px; display: flex; }
+  .bar { width: 12px; background: var(--accent); border-radius: 6px 0 0 6px;
+         transform: scaleY(0); transform-origin: 50% 100%; }
+  .panel { position: relative; padding: 22px 48px 0 32px; min-width: 520px; max-width: 1100px;
+           background: linear-gradient(100deg, color-mix(in srgb, var(--panel) 92%, transparent),
+                                              color-mix(in srgb, var(--panel) 70%, transparent));
+           border-radius: 0 10px 10px 0; box-shadow: 0 18px 40px rgba(0, 0, 0, .35);
+           clip-path: inset(0 100% 0 0); }
+  .name  { color: var(--text); font-size: 60px; font-weight: 800; letter-spacing: -.5px; white-space: nowrap; line-height: 1.1; }
+  .title { color: var(--text); opacity: .82; font-size: 32px; font-weight: 500; white-space: nowrap; margin-top: 6px; }
+  .name, .title { transform: translateY(18px); opacity: 0; }
+
+  /* Out, and before it is taken: the way it leaves. */
+  .bar   { transition: transform .25s ease-in .35s; }
+  .panel { transition: clip-path .4s cubic-bezier(.6, 0, .8, .2) .1s; }
+  .name, .title { transition: transform .25s ease-in, opacity .2s ease-in; }
+
+  /* In: the way it arrives, in steps. */
+  .gmx-in .bar   { transform: scaleY(1); transition: transform .3s cubic-bezier(.2, .8, .2, 1); }
+  .gmx-in .panel { clip-path: inset(0 0 0 0); transition: clip-path .55s cubic-bezier(.2, .8, .2, 1) .15s; }
+  .gmx-in .name  { transform: none; opacity: 1; transition: transform .45s cubic-bezier(.2, .8, .2, 1) .35s, opacity .3s .35s; }
+  .gmx-in .title { transform: none; opacity: .82; transition: transform .45s cubic-bezier(.2, .8, .2, 1) .45s, opacity .3s .45s; }
+</style>
+</head>
+<body>
+  <div class="strap">
+    <div class="bar"></div>
+    <div class="panel">
+      <div class="name" data-field="name" data-fit="1000">Ada Lovelace</div>
+      <div class="title" data-field="title" data-fit="1000">Head of Engine Research</div>
+    </div>
+  </div>
+<script>
+  // Shrink a long name to fit its width rather than run off the panel.
+  function fit() {
+    document.querySelectorAll("[data-fit]").forEach(function (el) {
+      el.style.fontSize = "";
+      var max = Number(el.dataset.fit), size = parseFloat(getComputedStyle(el).fontSize);
+      while (el.scrollWidth > max && size > 12) { size -= 2; el.style.fontSize = size + "px"; }
+    });
+  }
+  window.addEventListener("gmx:update", fit);
+  fit();
+</script>
+</body>
+</html>

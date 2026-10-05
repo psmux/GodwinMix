@@ -97,69 +97,31 @@ blanked, so a half filled graphic says what is missing.
 
 ## Transparency, and what it costs
 
-**Today an opaque graphic is right on air and a transparent one is not.** A
-bar with words on it, a full frame card, a solid strap: right. A soft edge, a
-rounded corner, a drop shadow, a gap you should see the camera through: the
-page's own background covers the picture inside the item's frame.
+An OGraf graphic is drawn with its transparency: a soft edge, a rounded
+corner, a drop shadow or a gap shows the picture under it. Its source is a
+`browser/source` with `transparent: true`, which the scene adds by itself.
+The page is rendered by the browser renderer in graphic mode: only the part
+of the page with something in it crosses to the mixer, only when it changed,
+already in AYUV, and the overlay board blends that part over the programme
+after the compositor (see `overlay` in the core). A graphic that holds still
+sends nothing and costs the blend of its own box.
 
-The reason is the canvas contract. Every source in the graph is converted to
-I420 before it reaches a compositor (`caps.rs`), and I420 carries no alpha.
-The browser sidecar can render a page with a real alpha channel
-(`--transparent`, which makes it emit AYUV), and the `alpha` element behind
-`chroma/filter` can key a colour out, but both are flattened by the
-`videoconvert` that puts the frame back on the canvas contract before the
-compositor sees it.
+The same works for any web page: add it with `params.transparent = true`
+(see [web page sources](web-page-sources.md#transparent-pages)). And a
+graphic written for this mixer rather than for OGraf can be an HTML template,
+which is the same page with its fields and its way in and out driven by the
+mixer itself; see [graphics for agents](graphics-for-agents.md).
 
-Measured on this machine with `gst-launch-1.0`, to be exact about it:
+What it cannot do, as for every transparent source: it is drawn over every
+opaque item, whatever its place in the stack. Among transparent items the
+stack order holds. On a GPU graphics entry the board does not draw, and the
+graphic goes through the compositor flat.
 
-```
-green ! alpha method=green ! videoconvert ! I420        -> Y 13 U 128 V 128   (black)
-green ! alpha method=green ! videoconvert ! I420
-      ! compositor over red ! I420                      -> Y 13 U 128 V 128   (black)
-green ! alpha method=green ! AYUV
-      ! compositor(out AYUV) over red ! I420            -> Y 81 U 90 V 240    (the red underneath)
-```
+### The key colour fallback
 
-The third line is the fix and it is the only line that differs. What it needs:
-
-1. **The item filter's outgoing caps.** `plugin/filters/chroma.rs` ends its bin
-   with a capsfilter pinned to `canvas.video()`, which is I420. A filter that
-   declares `media.alpha = true` should be allowed to hand back an alpha format
-   instead. One condition on one capsfilter.
-2. **The slot's compositor pad.** `mixer/slots.rs` links each slot into `vmix`.
-   A pad carrying alpha needs the compositor's negotiated output to be an alpha
-   format; `compositor` refuses an AYUV sink pad while its src is pinned to
-   I420.
-3. **The programme compositor's output.** `mixer.rs::programme_caps` would
-   become AYUV, with `videoconvert ! capsfilter(I420)` immediately after it so
-   the encoder still gets exactly what it gets today and the canvas contract
-   downstream of the compositor is unchanged.
-4. **The source's own normaliser.** `plugin/kinds/normalise.rs` pins `vcaps` to
-   `canvas.video()`. A source that declares `Capability::Alpha` (the capability
-   exists already, and `layered/source` declares it) should be pinned to the
-   alpha format instead, so the sidecar's AYUV survives to the slot.
-
-The cost is the reason this is a decision and not an oversight. An AYUV frame
-is 4 bytes a pixel where I420 is 1.5, so the programme compositor's working set
-goes up by 2.7 times for as long as any alpha source is on the canvas, and 11
-section 3 prices a full canvas opaque pad through a second compositor at
-0.14 ms a frame. `mixer/group.rs` already refuses alpha for a filtered group
-for the same reason and says so in its head. The honest shape is to make the
-alpha format a per source decision driven by `Capability::Alpha`, so a show
-with no graphic on it pays nothing, which is what "nothing runs unless asked"
-means here.
-
-Until that lands, design against a solid shape. Most lower thirds are a
-coloured bar, which is why the example one is.
-
-### The luma key fallback
-
-`chroma/filter` is on an item's filter chain and takes `method` (green, blue or
-custom), `target_r`, `target_g`, `target_b`, `angle`, `noise` and `spread`. A
-graphic served on a solid key colour with that filter on its item is the
-fallback the specification asks for, and the wiring is all there. It does not
-yet show the camera through, for the reason above, and it is the same one
-change: the measurement in the table is exactly this pipeline.
+`chroma/filter` on an item's filter chain still keys a page served on a solid
+colour, for a page that cannot be made transparent. It is not needed for a
+page drawn with `transparent: true`.
 
 ## The host
 

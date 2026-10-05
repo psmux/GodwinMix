@@ -289,6 +289,7 @@ pub const CAPABILITIES: &[&str] = &[
     "audio-layers",
     "alpha",
     "programme-timeline",
+    "cue",
 ];
 
 /// The platform triples `gmx plugin add` matches against.

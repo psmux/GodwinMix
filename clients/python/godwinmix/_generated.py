@@ -1715,7 +1715,7 @@ class ItemTransition(TypedDict, total=False):
     on_take: bool
     # Also play it when a scene holding this item is taken, in place of the scene's own transition for this item.
     type: ItemTransitionKind
-    # cut, fade, slide, zoom or wipe.
+    # cut, fade, slide, zoom, wipe or hold. `hold` keeps the item as it is for `duration_ms` and then takes it away, for a graphic whose own animation is its way out.
 
 class ItemsRequest(TypedDict, total=False):
     """`scene.item.align`, `distribute`, `fit_to_canvas`, `cover_canvas`, `arrange_grid`, `match_size`, `group`."""
@@ -3254,17 +3254,46 @@ class TaskView(TypedDict, total=False):
     state: TaskState
     task_id: str
 
+class TemplateCheckRequest(TypedDict, total=False):
+    """`template.check`: read a template the way `template.save` and `source.add` would, without writing anything, and say what to fix."""
+
+    html: Optional[str]
+    # An HTML template's whole document.
+    name: Optional[str]
+    # Or a template by name, as `template.list` gives it.
+    svg: Optional[str]
+    # An SVG template's whole document.
+
+class TemplateChecked(TypedDict, total=False):
+    """The answer to `template.check`."""
+
+    ok: bool
+    # True when nothing at level `error` was found.
+    problems: List[TemplateProblem]
+    template: Union[TemplateInfo, None]
+    # The template as it reads, when it reads at all.
+
 class TemplateDoc(TypedDict, total=False):
     """A template and its SVG."""
 
+    category: Optional[str]
+    # What sort of graphic it is, for a picker: lower-third, ticker, bug, score, title, background, foreground, countdown, slate. HTML only.
     description: str
     fields: List[TemplateField]
+    format: TemplateFormat
+    # `svg` (absent) or `html`.
     height: int
+    html: Optional[str]
+    # The HTML as written, for an HTML template.
     name: str
     # The name `template:<name>` adds it by: a pack name such as `news-lower-third`, or a library file name such as `my-bar.svg`.
+    opaque: bool
+    # True for a design that covers the whole picture on purpose: a background, a title card, a slate. HTML only.
     origin: TemplateOrigin
+    out_ms: Optional[int]
+    # How long its own way out takes, in milliseconds. Give the scene item `"exit": {"type": "hold", "duration_ms": <this>}` so it stays drawn while it plays. HTML only.
     svg: str
-    # The SVG as written, with its `{{field}}` markers in place.
+    # The SVG as written, with its `{{field}}` markers in place. Empty for an HTML template.
     title: str
     uri: str
     # The address to give `source.add`.
@@ -3309,12 +3338,20 @@ class TemplateGetRequest(TypedDict, total=False):
 class TemplateInfo(TypedDict, total=False):
     """One template, as `template.list` and `template.get` describe it."""
 
+    category: Optional[str]
+    # What sort of graphic it is, for a picker: lower-third, ticker, bug, score, title, background, foreground, countdown, slate. HTML only.
     description: str
     fields: List[TemplateField]
+    format: TemplateFormat
+    # `svg` (absent) or `html`.
     height: int
     name: str
     # The name `template:<name>` adds it by: a pack name such as `news-lower-third`, or a library file name such as `my-bar.svg`.
+    opaque: bool
+    # True for a design that covers the whole picture on purpose: a background, a title card, a slate. HTML only.
     origin: TemplateOrigin
+    out_ms: Optional[int]
+    # How long its own way out takes, in milliseconds. Give the scene item `"exit": {"type": "hold", "duration_ms": <this>}` so it stays drawn while it plays. HTML only.
     title: str
     uri: str
     # The address to give `source.add`.
@@ -3328,15 +3365,27 @@ class TemplateList(TypedDict, total=False):
     # Library files that look like templates and would not read, and why.
     templates: List[TemplateInfo]
 
+class TemplateProblem(TypedDict, total=False):
+    """One thing wrong with a template, and what to do about it."""
+
+    fix: str
+    # What to change, in words a model can act on.
+    level: str
+    # `error` stops it being saved or drawn; `warning` is drawn as it is.
+    problem: str
+    # What is wrong, quoting the part of the file it is in.
+
 class TemplateSaveRequest(TypedDict, total=False):
     """`template.save`: check an SVG template and write it into the media library."""
 
+    html: Optional[str]
+    # The whole HTML document of an HTML template, saved as `<name>.html`.
     name: str
     # The file name, ending `.svg` or not (it is added). One segment, no slashes.
     replace: bool
     # Write over a library file of the same name. Every source drawing it is drawn again with the new SVG, on air, with no rebuild.
     svg: str
-    # The whole SVG document.
+    # The whole SVG document. Leave it empty and give `html` to save an HTML template.
 
 class TemplateSaved(TypedDict, total=False):
     """The answer to `template.save`."""
@@ -3745,7 +3794,7 @@ FeedFormat = Union[Literal['auto', 'json'], Literal['rss'], Literal['csv'], Lite
 FeedState = Union[Literal['paused'], Literal['starting'], Literal['ok'], Literal['failing']]
 
 # What a field holds.
-FieldType = Literal['text', 'color']
+FieldType = Literal['text', 'color', 'image']
 
 # How content fills its frame. SVG's vocabulary, which replaces OBS's seven bounds types and maps onto `sizing-policy` on a `glvideomixer` pad.
 Fit = Literal['none', 'contain', 'cover', 'stretch', 'fit-width', 'fit-height', 'max']
@@ -3764,7 +3813,7 @@ Id = str
 
 ItemEdge = Literal['left', 'right', 'top', 'bottom']
 
-ItemTransitionKind = Literal['cut', 'fade', 'slide', 'zoom', 'wipe']
+ItemTransitionKind = Literal['cut', 'fade', 'slide', 'zoom', 'wipe', 'hold']
 
 # How a publisher gives its key.
 KeyMode = Literal['query', 'stream']
@@ -3825,6 +3874,9 @@ TaskState = Literal['running', 'completed', 'failed', 'cancelled']
 
 # `ext.telemetry`. Accepts `false` to mean off, `true` for the default rate, or an object naming it.
 TelemetryExt = Union[bool, Dict[str, Any]]
+
+# What a template is written in.
+TemplateFormat = Literal['svg', 'html']
 
 # Where a template comes from.
 TemplateOrigin = Literal['pack', 'library']
@@ -4035,10 +4087,11 @@ METHODS = (
     {"name": "task.cancel", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/tasks/{id}/cancel"), "summary": 'Ask a piece of long running work to stop. Cooperative: the answer says the request landed, not that the work has stopped yet.'},
     {"name": "task.get", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/tasks/{id}"), "summary": 'How a piece of long running work is getting on, and its answer once it has one.'},
     {"name": "task.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/tasks"), "summary": 'Every background job this core knows about, newest first.'},
+    {"name": "template.check", "scope": "read", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/template/check"), "summary": 'Read an SVG or HTML template the way saving or drawing it would, and say what to fix. Writes nothing.'},
     {"name": "template.fields", "scope": "read", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/template/fields"), "summary": "A running graphic's fields: each one's label, type, default and what it shows now."},
-    {"name": "template.get", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/template"), "summary": 'One template, with its SVG as written.'},
-    {"name": "template.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/template/list"), "summary": 'The graphic templates: the built in pack and the SVG templates in the media library, each with its fields.'},
-    {"name": "template.save", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/template/save"), "summary": 'Check an SVG template and write it into the media library.'},
+    {"name": "template.get", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/template"), "summary": 'One template, with its SVG or HTML as written.'},
+    {"name": "template.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/template/list"), "summary": 'The graphic templates: the built in packs and the SVG and HTML templates in the media library, each with its fields.'},
+    {"name": "template.save", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/template/save"), "summary": 'Check an SVG or HTML template and write it into the media library.'},
     {"name": "token.create", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/token/create"), "summary": 'Make a token for one phone or tablet, with the read, operate (the default) or admin scope. The secret is in this answer and nowhere else: the mixer keeps only a digest of it. Open the page at https://<host>:<port>/#token=<token> to sign the device in.'},
     {"name": "token.list", "scope": "admin", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/token/list"), "summary": 'Every device token: its id, label, scope and when it was made. Never a secret.'},
     {"name": "token.revoke", "scope": "admin", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/token/revoke"), "summary": "Take a device token back. The device's next call is refused, including on a connection it already has open."},
@@ -6947,6 +7000,23 @@ class GeneratedMethods:
         params: Dict[str, Any] = {}
         return await self._call("task.list", params)
 
+    async def template_check(
+        self,
+        *,
+        html: Optional[str] = None,
+        name: Optional[str] = None,
+        svg: Optional[str] = None,
+    ) -> TemplateChecked:
+        """Read an SVG or HTML template the way saving or drawing it would, and say what to fix. Writes nothing."""
+        params: Dict[str, Any] = {}
+        if html is not None:
+            params["html"] = html
+        if name is not None:
+            params["name"] = name
+        if svg is not None:
+            params["svg"] = svg
+        return await self._call("template.check", params)
+
     async def template_fields(
         self,
         id: str,
@@ -6960,7 +7030,7 @@ class GeneratedMethods:
         self,
         name: str,
     ) -> TemplateDoc:
-        """One template, with its SVG as written."""
+        """One template, with its SVG or HTML as written."""
         params: Dict[str, Any] = {}
         params["name"] = name
         return await self._call("template.get", params)
@@ -6968,23 +7038,27 @@ class GeneratedMethods:
     async def template_list(
         self,
     ) -> TemplateList:
-        """The graphic templates: the built in pack and the SVG templates in the media library, each with its fields."""
+        """The graphic templates: the built in packs and the SVG and HTML templates in the media library, each with its fields."""
         params: Dict[str, Any] = {}
         return await self._call("template.list", params)
 
     async def template_save(
         self,
         name: str,
-        svg: str,
         *,
+        html: Optional[str] = None,
         replace: Optional[bool] = None,
+        svg: Optional[str] = None,
     ) -> TemplateSaved:
-        """Check an SVG template and write it into the media library."""
+        """Check an SVG or HTML template and write it into the media library."""
         params: Dict[str, Any] = {}
         params["name"] = name
-        params["svg"] = svg
+        if html is not None:
+            params["html"] = html
         if replace is not None:
             params["replace"] = replace
+        if svg is not None:
+            params["svg"] = svg
         return await self._call("template.save", params)
 
     async def token_create(
