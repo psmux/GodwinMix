@@ -58,7 +58,7 @@
     var items = String(f.items || "").split("|").map(function (s) { return s.trim(); }).filter(Boolean);
     var strip = document.getElementById("strip");
     strip.textContent = "";
-    // Twice over, so the loop is seamless at half way.
+    // Twice over, so the loop joins up at half way.
     for (var copy = 0; copy < 2; copy++) {
       items.forEach(function (t) {
         var s = document.createElement("span"); s.textContent = t; strip.appendChild(s);

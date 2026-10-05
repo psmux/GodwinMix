@@ -12,8 +12,9 @@ A graphic here is a template with named fields. Two formats:
   still.
 * **HTML** (`html:<name>`): a web page drawn by the browser renderer with its
   transparency kept, for anything that moves: CSS animation, a crawl, a clock,
-  WebGL 3D, its own way in and out. A held page costs next to nothing; a moving
-  one costs a few percent of a core.
+  WebGL 3D, its own way in and out. A held page costs next to nothing; a small
+  moving one 10 to 30 percent of a core; full screen motion up to most of one.
+  On a Raspberry Pi keep to SVG, stills and video loops.
 
 A field changed on air reaches the screen on the next frame either way, with
 no rebuild and no reload.
