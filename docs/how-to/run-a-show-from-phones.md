@@ -129,8 +129,16 @@ you control, or the computer's own hotspot.
 
 ## Add a phone's camera
 
-<!-- Filled in by the phone camera page work. -->
-See [Use this browser's camera](use-this-browsers-camera.md).
+A phone can also be one of the cameras. It needs no operator token for that:
+press **Add a source**, then **Cameras**, then **Show code** on **A phone's
+camera**, and scan that code with the phone. Each phone that scans it becomes
+a source of its own, named after the phone or after the name typed on its
+page. The same phone can be a camera and a control surface at once, in two
+browser tabs, though the camera tab has to stay in front.
+
+The full steps, the camera flip, holding the phone upright or on its side, and
+keeping the screen awake are in
+[Use this browser's camera: Add a phone's camera](use-this-browsers-camera.md#add-a-phones-camera).
 
 ## Take a device back
 
