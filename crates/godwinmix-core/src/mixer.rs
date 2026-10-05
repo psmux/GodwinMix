@@ -5519,7 +5519,12 @@ mod tests {
     #[test]
     fn a_tile_is_shifted_onto_a_programme_that_has_run_for_hours() {
         let _ = gst::init();
-        let clock = gst::SystemClock::obtain();
+        // A wall clock, not the shared monotonic one: that counts from boot,
+        // and a CI machine started minutes ago has no three hours to go back.
+        let clock: gst::Clock = gst::glib::Object::builder::<gst::SystemClock>()
+            .property("clock-type", gst::ClockType::Realtime)
+            .build()
+            .upcast();
         let three_hours = gst::ClockTime::from_seconds(3 * 3600);
         let base = clock.time().checked_sub(three_hours).expect("the clock is past three hours");
         let aligner = Arc::new(TimelineAligner {
