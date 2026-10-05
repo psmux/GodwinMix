@@ -8,7 +8,7 @@
 use super::xml;
 use crate::plugin::kinds::image_probe::svg_size;
 use anyhow::{bail, Result};
-pub use godwinmix_protocol::graphics::{FieldType, TemplateField, TemplateInfo, TemplateOrigin};
+pub use godwinmix_protocol::graphics::{FieldType, TemplateField, TemplateFormat, TemplateInfo, TemplateOrigin};
 
 /// The largest template read, in bytes. A logo embedded as a data URI is
 /// the usual reason one is big.
@@ -48,7 +48,7 @@ impl Template {
         let title = meta.and_then(|t| xml::attr(t, "title")).unwrap_or_else(|| name.trim_end_matches(".svg").replace(['-', '_'], " "));
         let description = meta.and_then(|t| xml::attr(t, "description")).unwrap_or_default();
         let uri = format!("template:{name}");
-        let info = TemplateInfo { name: name.into(), title, description, origin, uri, width, height, fields };
+        let info = TemplateInfo { name: name.into(), title, description, origin, uri, width, height, fields, format: Default::default(), category: None, out_ms: None, opaque: false };
         Ok(Template { info, svg })
     }
 

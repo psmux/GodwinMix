@@ -344,6 +344,41 @@ the sidecar quits its message loop, and no Chromium process is left behind
 (checked on both platforms). The sidecar also stops itself when the mixer
 goes away and its stdout closes.
 
+### Transparent pages
+
+`params.transparent = true` draws a page over the picture with its alpha
+kept: an overlay somebody else hosts, an OGraf graphic (the scene sets it for
+those), a page of your own with a transparent background.
+
+```sh
+gmx ctl source add alerts https://example.com/overlay --web --param transparent=true
+```
+
+The renderer runs such a page in graphic mode (`--graphic`). Nothing is paced
+and nothing is muxed: a frame leaves only when Chromium painted one, and only
+the box around what is not fully transparent, already in AYUV, so a page that
+holds still sends nothing at all. The mixer reads those boxes into a layer
+the overlay board blends after the compositor, as it does a text or a
+transparent PNG. The page has no sound in this mode, and `superimpose` does
+not apply.
+
+Measured on a Core Ultra 9 285H laptop at 1080p30, the renderer's whole
+process tree: a blank transparent page sent as a stream took 125 percent of
+one core, the same page in graphic mode about 2 to 25 percent (most of it
+Chromium's own idle work, which varied with the machine's load). A lower
+third that moves all the time costs what its moving part costs; the numbers
+are in [graphics for agents](graphics-for-agents.md#what-it-costs).
+
+HTML templates (`html:<name>`) use the same mode, with the network cut off
+(`--offline`), their fields and their way in and out told on stdin; see
+[graphics for agents](graphics-for-agents.md).
+
+**WebGL without a GPU.** The renderer is started with `--disable-gpu` and
+`--enable-unsafe-swiftshader`, so WebGL is drawn on the CPU: by WARP (the
+Microsoft Basic Render Driver) on Windows, checked; by SwiftShader on Linux
+and macOS, not checked here. `--gpu` on the renderer's command line
+(`[browser] args = ["--gpu"]`) lets Chromium use the GPU instead.
+
 ### Web pages as sources (wpesrc)
 
 The fallback when no sidecar is installed. A page is rendered by WPE WebKit

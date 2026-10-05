@@ -14,9 +14,9 @@ pub(super) async fn place(call: &Call, e: &Entry, req: &GalleryPlaceRequest) -> 
     let spec = e.manifest.set.as_ref().ok_or_else(|| RpcError::internal(format!("{} is a set with no [set] in its graphic.toml", e.item.id)))?;
     let dir = e.dir().ok_or_else(|| RpcError::internal("a set with no folder"))?;
     let camera = camera(call, req.camera.as_deref()).await?;
-    let mut sources = vec![plain(&dir.join(&spec.background)), camera.clone()];
+    let mut sources = vec![drawn(&dir.join(&spec.background)), camera.clone()];
     if let Some(front) = spec.foreground.as_ref().filter(|f| dir.join(f).is_file()) {
-        sources.push(plain(&dir.join(front)));
+        sources.push(drawn(&dir.join(front)));
     }
     let made = invoke(call, "scene.create_from", json!({
         "sources": sources,
@@ -37,6 +37,20 @@ pub(super) async fn place(call: &Call, e: &Entry, req: &GalleryPlaceRequest) -> 
         new_scene: true,
         next: format!("The scene {scene} has {camera} standing in the set. show_graphic {{\"id\": \"{}\"}} takes it to air; place a lower third on it with place_graphic {{\"scene\": \"{scene}\"}}.", e.item.id),
     })
+}
+
+/// How a set's file is drawn: an HTML template (a moving backdrop) as
+/// `html:`, an SVG with fields as `template:`, anything else by its path.
+fn drawn(file: &std::path::Path) -> String {
+    let text = std::fs::read_to_string(file).unwrap_or_default();
+    let name = file.to_string_lossy().to_ascii_lowercase();
+    if name.ends_with(".html") && text.contains(godwinmix_core::graphics::html::meta::BLOCK_ID) {
+        format!("html:{}", plain(file))
+    } else if name.ends_with(".svg") && (text.contains("{{") || text.contains("<gmx:template")) {
+        format!("template:{}", plain(file))
+    } else {
+        plain(file)
+    }
 }
 
 /// The camera for a set: the one asked for, else the source on air.

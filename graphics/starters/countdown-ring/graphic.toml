@@ -1,0 +1,9 @@
+name = "Countdown ring"
+kind = "html"
+file = "countdown-ring.html"
+zone = "bug"
+moves = true
+transparent = true
+description = "A transparent countdown in the bottom right: minutes and seconds inside a ring that empties. It starts counting when it is taken, from duration, or counts to a time of day when until is set (such as 19:30)."
+tags = ["countdown", "timer", "clock"]
+origin = "shipped"

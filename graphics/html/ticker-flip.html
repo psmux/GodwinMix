@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Flip ticker</title>
+<script type="application/json" id="gmx-template">
+{
+  "title": "Flip ticker",
+  "description": "One headline at a time on a bar near the bottom, each flipping over in 3D to the next every few seconds. Put the headlines in items, separated by |.",
+  "category": "ticker",
+  "out_ms": 450,
+  "fields": {
+    "label":   {"label": "Label", "default": "HEADLINES"},
+    "items":   {"label": "Headlines, separated by |", "default": "Polls close at ten tonight | Turnout is up on the last election | First results expected after midnight"},
+    "seconds": {"label": "Seconds per headline", "default": "5"},
+    "accent":  {"label": "Label colour", "type": "color", "default": "#2563eb"},
+    "panel":   {"label": "Bar colour", "type": "color", "default": "#ffffff"},
+    "text":    {"label": "Text colour", "type": "color", "default": "#0f172a"}
+  }
+}
+</script>
+<style>
+  html, body { margin: 0; background: transparent; overflow: hidden; }
+  :root { --accent: #2563eb; --panel: #ffffff; --text: #0f172a; }
+  body { font-family: Inter, "Segoe UI", "Helvetica Neue", Helvetica, Arial, "DejaVu Sans", sans-serif; }
+
+  .bar { position: absolute; left: 96px; top: 950px; width: 1728px; height: 72px; display: flex;
+         border-radius: 8px; overflow: hidden; box-shadow: 0 10px 30px rgba(0, 0, 0, .3);
+         transform: translateY(150px); }
+  .label { flex: none; background: var(--accent); color: #fff; padding: 0 30px; font: 800 28px/72px Inter, Arial, sans-serif; letter-spacing: 2px; }
+  .stage { flex: 1; background: var(--panel); perspective: 600px; position: relative; }
+  .line { position: absolute; inset: 0; padding: 0 30px; color: var(--text); font-size: 34px; font-weight: 600;
+          line-height: 72px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+          backface-visibility: hidden; transform-origin: 50% 50% -36px; transition: transform .6s cubic-bezier(.3, .7, .2, 1); }
+  .line.next { transform: rotateX(-90deg); }
+  .line.gone { transform: rotateX(90deg); }
+
+  .bar { transition: transform .4s cubic-bezier(.6, 0, .8, .2); }
+  .gmx-in .bar { transform: none; transition: transform .5s cubic-bezier(.2, .8, .2, 1); }
+</style>
+</head>
+<body>
+  <div class="bar">
+    <div class="label" data-field="label">HEADLINES</div>
+    <div class="stage"><div class="line" id="a"></div><div class="line next" id="b"></div></div>
+  </div>
+<script>
+  function defaults() {
+    var d = {}, decl = JSON.parse(document.getElementById("gmx-template").textContent).fields;
+    for (var k in decl) d[k] = decl[k].default;
+    return d;
+  }
+  var items = [], at = 0, timer = null, front = document.getElementById("a"), back = document.getElementById("b");
+  function set(f) {
+    items = String(f.items || "").split("|").map(function (s) { return s.trim(); }).filter(Boolean);
+    at = 0; front.textContent = items[0] || "";
+    clearInterval(timer);
+    // Flip only while on air, so a held ticker paints nothing.
+    if (document.documentElement.classList.contains("gmx-in") && items.length > 1) {
+      timer = setInterval(flip, Math.max(2, Number(f.seconds) || 5) * 1000);
+    }
+  }
+  function flip() {
+    at = (at + 1) % items.length;
+    back.textContent = items[at];
+    // Put the next line under the bar with no animation, then flip both.
+    back.style.transition = "none"; back.className = "line next"; void back.offsetWidth; back.style.transition = "";
+    front.className = "line gone"; back.className = "line";
+    var t = front; front = back; back = t;
+  }
+  var current = defaults();
+  window.addEventListener("gmx:update", function (e) { current = e.detail; set(current); });
+  window.addEventListener("gmx:in", function () { set(current); });
+  window.addEventListener("gmx:out", function () { clearInterval(timer); });
+  set(current);
+</script>
+</body>
+</html>

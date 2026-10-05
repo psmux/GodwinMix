@@ -1,0 +1,9 @@
+name = "3D title card"
+kind = "html"
+file = "title-card-3d.html"
+zone = "overlay"
+moves = true
+transparent = false
+description = "A full screen title card: a kicker, a big title and a subtitle beside a slowly turning faceted crystal drawn in WebGL, on a deep gradient. Covers the picture on purpose. Works with no GPU, at a lower resolution."
+tags = ["title", "3d", "webgl", "full screen"]
+origin = "shipped"

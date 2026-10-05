@@ -1,0 +1,9 @@
+name = "3D spinning logo"
+kind = "html"
+file = "logo-spin-3d.html"
+zone = "center"
+moves = true
+transparent = true
+description = "The station's mark on a thick metal coin that spins in, turns slowly in 3D with light moving across it, and spins away. Transparent around the coin. Drawn in WebGL; works with no GPU at a lower frame rate."
+tags = ["logo", "3d", "webgl", "sting"]
+origin = "shipped"
