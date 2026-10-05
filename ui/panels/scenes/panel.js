@@ -22,8 +22,7 @@
 // collection agree without any of them being special.
 
 import { el, clear, on } from "../../shell/dom.js";
-import { DragSelect, dragHandle } from "../../shell/pointer.js";
-import { byPointer } from "../../shell/touch.js";
+import { DragSelect, dragHandle, byPointer } from "../../shell/pointer.js";
 import { Selection } from "../../shell/selection.js";
 import { registerAll } from "../../shell/commands.js";
 import { focusedScene, setFocusedScene, onFocusChanged } from "../../shell/focus.js";

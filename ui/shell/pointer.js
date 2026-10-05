@@ -12,7 +12,14 @@
 
 import { Selection, overlaps, rectFrom } from "./selection.js";
 import { el, on } from "./dom.js";
-import { isTouch } from "./touch.js";
+
+/** True for a pointer that is a finger or a pen rather than a mouse. */
+export const isTouch = (e) => e.pointerType === "touch" || e.pointerType === "pen";
+
+/** Words for the hand in use: "Double click" to a mouse, "Double tap" to a finger. */
+export function byPointer(mouse, finger) {
+  return typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches ? finger : mouse;
+}
 
 /** Travel in CSS pixels before a press becomes a drag rather than a click. */
 export const DRAG_THRESHOLD = 5;
