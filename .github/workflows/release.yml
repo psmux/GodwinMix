@@ -507,6 +507,13 @@ jobs:
           sha256sum * > SHA256SUMS
           cat SHA256SUMS
 
+      # The image is pushed under the repository's name in lower case, which
+      # is the only case a registry takes; `docker run` with the name as
+      # written on GitHub is refused.
+      - name: The image's name
+        id: image
+        run: echo "name=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
@@ -519,11 +526,12 @@ jobs:
             Docker, which carries its own GStreamer:
 
                 docker run -d --name godwinmix -p 127.0.0.1:8080:8080 \
-                  -e GODWINMIX_TOKEN=change-me ghcr.io/${{ github.repository }}:${{ github.ref_name }}
+                  -e GODWINMIX_TOKEN=change-me ${{ steps.image.outputs.name }}:${{ github.ref_name }}
 
-            Desktop: the `.dmg` on macOS, the `.msi` on Windows, the `.deb` on
-            Debian and Ubuntu. Each carries its own trimmed GStreamer, so
-            nothing else needs installing (see the README, Platforms).
+            Desktop: the `.dmg` on macOS; the `-setup.exe` or the `.msi` on
+            Windows; the `.deb` on Debian and Ubuntu, or the `.AppImage` on any
+            other Linux. Each carries its own trimmed GStreamer, so nothing
+            else needs installing (see the README, Platforms).
 
             Server: the archive for your platform holds `godwinmix` and `gmx`,
             the same binary under two names, plus the example config. The
