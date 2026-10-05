@@ -67,9 +67,10 @@ export async function browserChannelTests(test, eq, ok) {
     eq(calls, ["channel.get", "channel.key.reveal", "channel.key.add"]);
   });
 
-  test("the add source picker offers this browser under Cameras and under Microphones only", () => {
+  test("the add source picker offers this browser under Cameras and under Microphones only, and a phone under Cameras", () => {
     const none = { cameras: [], mics: [] };
-    eq(browserEntries({}, "cameras", {}, none).map((e) => e.name), ["This browser's camera"]);
+    eq(browserEntries({}, "cameras", {}, none).map((e) => e.name), ["This browser's camera", "A phone's camera"]);
+    eq(browserEntries({}, "cameras", {}, none)[1].label, "Show code");
     eq(browserEntries({}, "audio", {}, none).map((e) => e.name), ["This browser's microphone"]);
     eq(browserEntries({}, "screens", {}, none), []);
   });
@@ -81,7 +82,7 @@ export async function browserChannelTests(test, eq, ok) {
 
   test("once allowed a camera, the picker lists this browser's devices by name, as it does the mixer's", () => {
     const devices = { cameras: [{ id: "c1", label: "FaceTime HD" }, { id: "c2", label: "Logitech C920" }], mics: [{ id: "m1", label: "MacBook Pro Microphone" }] };
-    eq(browserEntries({}, "cameras", {}, devices).map((e) => e.name), ["FaceTime HD (this browser)", "Logitech C920 (this browser)"]);
+    eq(browserEntries({}, "cameras", {}, devices).map((e) => e.name), ["FaceTime HD (this browser)", "Logitech C920 (this browser)", "A phone's camera"]);
     eq(browserEntries({}, "audio", {}, devices).map((e) => e.name), ["MacBook Pro Microphone (this browser)"]);
   });
 

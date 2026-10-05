@@ -98,9 +98,15 @@ function showCode(client, channel, link, fingerprint) {
   ]);
   const paint = (ch) => paintLive(live, ch);
   paint(channel);
-  const off = client.on("event", ({ name, params }) => {
+  // channel.* events only while the code is on screen, as the Channels panel does.
+  const release = client.listen ? client.listen("channel.*") : () => {};
+  const stop = client.on("event", ({ name, params }) => {
     if (name === "channel.changed" && params.channel && params.channel.id === channel.id) paint(params.channel);
   });
+  const off = () => {
+    stop();
+    release();
+  };
   const done = el("button.btn.primary", { text: "Done" });
   stylesheet();
   const m = modal({ title: "Add a phone's camera", body, footer: [copyButton, done], onClose: off });

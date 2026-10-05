@@ -3,15 +3,17 @@
 //!
 //! ```text
 //!   webrtcbin ─┬─► rtph264depay ──► h264parse ──► appsink (video tags)
+//!              ├─► rtpvp8depay ──► vp8dec ──► H.264 encoder ──► h264parse ──► appsink
 //!              └─► rtpopusdepay ──► opusdec ──► avenc_aac ──► aacparse ──► appsink (audio tags)
 //! ```
 //!
-//! The video is never decoded: the answer offers H.264 only, so a browser
-//! sends H.264 and its access units go to the hub as they came. The sound is
-//! the one thing transcoded anywhere in this plugin, Opus to AAC, because
-//! WebRTC carries Opus and the hub carries what FLV can. An audio transcode
-//! is a few percent of one core; a video one would not be, which is why
-//! VP8 and VP9 are not accepted.
+//! H.264 video is never decoded: it comes first in the answer, so a browser
+//! that can send it does, and its access units go to the hub as they came.
+//! VP8 is taken from a browser that offers nothing else (some Android ones),
+//! and made into H.264 here, because the hub carries what FLV can; `vp8`
+//! says what that costs and when. VP9 and AV1 are not accepted. The sound is
+//! transcoded, Opus to AAC, for the same reason: WebRTC carries Opus and the
+//! hub does not. An audio transcode is a few percent of one core.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -29,6 +31,7 @@ use crate::rtmp::Kick;
 use crate::tagger::{self, Shared, Zero};
 
 mod branch;
+mod vp8;
 
 /// How long an answer waits for ICE to gather its candidates. Host
 /// candidates take milliseconds; this is for a slow interface.
@@ -62,8 +65,10 @@ impl Session {
             ));
         }
         let sdp =gst_sdp::SDPMessage::parse_buffer(offer.as_bytes()).map_err(|_| "the offer is not SDP. Send the RTCPeerConnection's offer as the request body, with Content-Type application/sdp.".to_string())?;
-        if !offer.contains("H264") {
-            return Err("the offer has no H.264 video. Channels take H.264 from WebRTC so the picture is never decoded; set the browser or encoder to H.264.".into());
+        let vp8 = vp8::available();
+        if !offer.contains("H264") && !(vp8 && offer.contains("VP8")) {
+            let also = if vp8 { " or VP8" } else { "" };
+            return Err(format!("the offer has no H.264{also} video, which is what a channel takes from WebRTC. Set the browser or encoder to H.264."));
         }
         let stop = Arc::new(AtomicBool::new(false));
         let halt = stop.clone();
@@ -71,7 +76,7 @@ impl Session {
         let name = format!("{}-{}", admit.app, admit.stream);
         let inlet = gate.let_in(Protocol::Whip, admit, peer, kick)?;
         let to = tagger::share(inlet);
-        let (pipe, bin) = build(&name, ports, &to)?;
+        let (pipe, bin) = build(&name, ports, &to, vp8)?;
         let session = Session { pipe: Some(pipe), to, stop: stop.clone() };
         let answer = negotiate(&bin, sdp)?;
         watch(bin, stop, ended);
@@ -87,7 +92,7 @@ impl Drop for Session {
     }
 }
 
-fn build(name: &str, ports: (u16, u16), to: &Shared) -> Result<(Pipe, gst::Element), String> {
+fn build(name: &str, ports: (u16, u16), to: &Shared, vp8: bool) -> Result<(Pipe, gst::Element), String> {
     let pipeline = gst::Pipeline::with_name(&format!("whip-{name}"));
     let bin = gst::ElementFactory::make("webrtcbin")
         .property_from_str("bundle-policy", "max-bundle")
@@ -105,7 +110,8 @@ fn build(name: &str, ports: (u16, u16), to: &Shared) -> Result<(Pipe, gst::Eleme
         }
     }
     pipeline.add(&bin).map_err(|e| e.to_string())?;
-    for (kind, caps) in [("video", "application/x-rtp,media=video,encoding-name=H264,clock-rate=90000"), ("audio", "application/x-rtp,media=audio,encoding-name=OPUS,clock-rate=48000")] {
+    let video = vp8::video_caps(vp8);
+    for (kind, caps) in [("video", video.as_str()), ("audio", "application/x-rtp,media=audio,encoding-name=OPUS,clock-rate=48000")] {
         let caps: gst::Caps = caps.parse().map_err(|_| format!("the {kind} caps did not parse"))?;
         let direction = gst_webrtc::WebRTCRTPTransceiverDirection::Recvonly;
         let _ = bin.emit_by_name::<Option<gst_webrtc::WebRTCRTPTransceiver>>("add-transceiver", &[&direction, &caps]);
@@ -134,7 +140,7 @@ fn negotiate(bin: &gst::Element, sdp: gst_sdp::SDPMessage) -> Result<String, Str
     let answer = promise
         .get_reply()
         .and_then(|r| r.get::<gst_webrtc::WebRTCSessionDescription>("answer").ok())
-        .ok_or("webrtcbin made no answer to that offer. It may offer nothing this can receive: H.264 video and Opus audio.")?;
+        .ok_or("webrtcbin made no answer to that offer. It may offer nothing this can receive: H.264 or VP8 video and Opus audio.")?;
     let promise = gst::Promise::new();
     bin.emit_by_name::<()>("set-local-description", &[&answer, &promise]);
     promise.wait();
