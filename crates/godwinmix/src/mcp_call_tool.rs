@@ -62,6 +62,36 @@ fn arguments(map: &Map<String, Value>) -> Result<Value, String> {
     }
 }
 
+/// Arguments with an object or a list sent as JSON text put back as what
+/// they are. Claude Code does this to an argument whose schema says it takes
+/// anything: `"params": "{\"fields\": ...}"` and `"exit": "{\"type\": \"fade\"}"`
+/// were both refused, and Opus had to retry each through `call_tool`. Only
+/// text that parses as an object or a list is touched, so a word that merely
+/// starts with a brace stays a word, and so does any argument the tool's
+/// schema says is text, such as an OBS collection's `content`.
+pub fn unstring(args: &Value, schema: Option<&Value>) -> Value {
+    let Some(map) = args.as_object() else { return args.clone() };
+    let is_text = |key: &str| {
+        let t = schema.map(|s| &s["properties"][key]["type"]);
+        t.is_some_and(|t| t == "string" || t.as_array().is_some_and(|a| a.iter().all(|x| x == "string" || x == "null")))
+    };
+    let fixed = map
+        .iter()
+        .map(|(k, v)| {
+            let parsed = v
+                .as_str()
+                .map(str::trim)
+                .filter(|t| !is_text(k) && (t.starts_with('{') || t.starts_with('[')));
+            let value = match parsed.and_then(|t| serde_json::from_str::<Value>(t).ok()) {
+                Some(inner @ (Value::Object(_) | Value::Array(_))) => inner,
+                _ => v.clone(),
+            };
+            (k.clone(), value)
+        })
+        .collect();
+    Value::Object(fixed)
+}
+
 fn usage(what: &str) -> String {
     format!(
         "{what}. Send {{\"name\": \"<tool>\", \"arguments\": {{...}}}}, for example \
@@ -108,6 +138,27 @@ mod tests {
         assert!(text.contains("apply_layout") && text.contains("call_tool"), "{text}");
         let r = s.call("call_tool", &json!({})).await;
         assert_eq!(r["isError"], true);
+    }
+
+    #[test]
+    fn an_object_sent_as_text_is_an_object_again() {
+        let sent = json!({
+            "params": "{\"fields\": {\"name\": \"Ana\"}}",
+            "exit": " {\"type\": \"fade\"} ",
+            "items": "[\"a\", \"b\"]",
+            "template": "{title} at {time}",
+            "name": "lower third",
+        });
+        let out = unstring(&sent, None);
+        assert_eq!(out["params"]["fields"]["name"], "Ana");
+        assert_eq!(out["exit"]["type"], "fade");
+        assert_eq!(out["items"], json!(["a", "b"]));
+        assert_eq!(out["template"], "{title} at {time}", "a word that starts with a brace stays a word");
+        assert_eq!(out["name"], "lower third");
+        // Text the tool asks for as text is never parsed.
+        let schema = json!({"properties": {"content": {"type": "string"}}});
+        let obs = json!({"content": "{\"scenes\": []}"});
+        assert_eq!(unstring(&obs, Some(&schema)), obs);
     }
 
     #[test]

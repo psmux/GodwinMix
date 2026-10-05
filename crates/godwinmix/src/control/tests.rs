@@ -244,6 +244,9 @@ fn the_table_matches_the_scopes_in_the_protocol_document() {
     assert_eq!(
         destructive,
         vec![
+            // It rewrites another program's configuration file, keeping a
+            // copy of the old one beside it.
+            "agent.setup",
             // It takes a live stream off a platform, and repeating the call
             // does not put it back.
             "channel.destination.remove",

@@ -52,6 +52,9 @@ pub struct Server {
     client: reqwest::Client,
     registry: Registry<Call>,
     profile: Profile,
+    /// Every tool's input schema by name, built on first use: `unstring`
+    /// reads it to leave a text argument alone.
+    schemas: std::sync::OnceLock<std::collections::HashMap<String, Value>>,
 }
 
 /// Serve until stdin closes, or on a Streamable HTTP address.
@@ -117,7 +120,20 @@ impl Server {
             client: reqwest::Client::new(),
             registry: crate::control::methods::registry(),
             profile,
+            schemas: std::sync::OnceLock::new(),
         }
+    }
+
+    /// One tool's input schema, for the forgiving reading of its arguments.
+    fn schema_of(&self, tool: &str) -> Option<&Value> {
+        self.schemas
+            .get_or_init(|| {
+                mcp_tools::all_tools(&self.registry)
+                    .into_iter()
+                    .map(|t| (t["name"].as_str().unwrap_or_default().to_string(), t["inputSchema"].clone()))
+                    .collect()
+            })
+            .get(tool)
     }
 
     /// The hot list this client is shown.
@@ -184,6 +200,7 @@ impl Server {
         if name.starts_with("gmx_") && mcp_tools::method_for(&self.registry, name).is_none() {
             return self.plugin_tool(name, args).await;
         }
+        let args = &call_tool::unstring(args, self.schema_of(name));
         let plan = match self.plan(name, args) {
             Ok(p) => p,
             Err(msg) => return error_result(msg),
