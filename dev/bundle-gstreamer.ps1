@@ -186,7 +186,7 @@ Remove-Item $registry -ErrorAction SilentlyContinue
 
 Write-Host ""
 $failed = 0
-foreach ($element in @("compositor", "videoflip", "videocrop", "videoscale", "audiomixer", "proxysink", "rtmp2sink", "srtsink")) {
+foreach ($element in @("compositor", "videoflip", "videocrop", "videoscale", "audiomixer", "proxysink", "rtmp2sink", "srtsink", "webrtcbin", "srtpenc", "dtlssrtpenc", "nicesrc")) {
     Write-Host -NoNewline ("{0,-26}" -f $element)
     & $inspect $element > $null 2>&1
     if ($LASTEXITCODE -eq 0) { Write-Host "ok" }
