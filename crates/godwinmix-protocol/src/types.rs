@@ -473,7 +473,7 @@ pub struct TokenInfo {
     /// "none" or "required": whether destructive calls need a confirm token.
     pub confirm: String,
     pub rehearsal: bool,
-    /// MCP tool profile this token is meant for: "standard" or "minimal".
+    /// MCP tool profile this token is meant for: "standard", "minimal" or "headend".
     pub profile: String,
 }
 

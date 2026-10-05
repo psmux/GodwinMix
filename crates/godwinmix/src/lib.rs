@@ -220,9 +220,10 @@ enum Command {
         token: Option<String>,
         /// How many tools to put in front of the agent.
         ///
-        /// `standard` is twelve hot tools, about 4,000 tokens. `minimal` is
-        /// five, for a model with a small context; everything else is still
-        /// callable by name and findable with `search_tools`.
+        /// `standard` is the live mix, its graphics and its scenes, fourteen
+        /// tools. `minimal` is six, for a model with a small context.
+        /// `headend` is many shows at once. In every one, everything else is
+        /// found with `search_tools` and run with `call_tool`.
         #[arg(long, env = "GODWINMIX_MCP_PROFILE", default_value = "standard")]
         profile: McpProfile,
         /// Serve MCP over Streamable HTTP at this address instead of stdio.
@@ -443,6 +444,7 @@ fn run_test_core() -> Result<()> {
 enum McpProfile {
     Standard,
     Minimal,
+    Headend,
 }
 
 impl From<McpProfile> for godwinmix_protocol::scope::Profile {
@@ -450,6 +452,7 @@ impl From<McpProfile> for godwinmix_protocol::scope::Profile {
         match p {
             McpProfile::Standard => Self::Standard,
             McpProfile::Minimal => Self::Minimal,
+            McpProfile::Headend => Self::Headend,
         }
     }
 }

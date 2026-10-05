@@ -171,6 +171,12 @@ impl Server {
         if name == mcp_tools::SEARCH_TOOL {
             return self.search(args).await;
         }
+        if name == mcp_tools::CALL_TOOL {
+            return match call_tool::unwrap(args) {
+                Ok((inner, inner_args)) => Box::pin(self.call(&inner, &inner_args)).await,
+                Err(msg) => error_result(msg),
+            };
+        }
         // A plugin's tool, if the mixer has one by that name. Routed through
         // `tool.call`, which reaches the plugin process and brings the answer
         // back in MCP's own shape. Nothing about this is in the hot list, so
@@ -223,8 +229,8 @@ impl Server {
         let text = serde_json::to_string_pretty(&json!({ "tools": found }))
             .unwrap_or_else(|_| "{}".into());
         text_result(format!(
-            "Call any of these by name with tools/call. They are not in your tool list, and \
-             they do not need to be.\n{text}"
+            "Run one with call_tool: {{\"name\": \"<its name>\", \"arguments\": {{...}}}}. \
+             They are not in your tool list, and they do not need to be.\n{text}"
         ))
     }
 
@@ -579,15 +585,20 @@ fn initialize_result(params: &Value, profile: Profile) -> Value {
         },
         "serverInfo": { "name": SERVER_NAME, "version": env!("CARGO_PKG_VERSION") },
         "instructions": format!(
-            "GodwinMix runs shows. A show is one encoder: either a live mix (several sources, \
-             one on programme at a time, sent out without interruption) or, with compositing \
-             off, one input straight to its outputs, copied or transcoded. `list_shows` says \
-             what this machine runs; `add_shows` makes many in one call (dry_run first) and \
-             `show_stats` watches them all in one read. In a mix, start with `agent_state` to \
-             learn the source ids and how much each picture is moving, then `take` to switch \
-             what is on air; tools that work inside one show take `show: <id>` and default to \
-             the first. `snapshot` shows you a picture when a number is not enough. You are on the {} tool profile; anything not in \
-             your list is reachable through `search_tools` and can be called by name. Every \
+            "These tools run GodwinMix, a live video mixer: what is \"on air\" or \"live\" is \
+             its programme. Start with `agent_state`: the source ids, which one is on air, \
+             and how much each picture moves. Switch with `take {{\"source\": \"cam1\"}}` or \
+             `take {{\"scene\": \"Live\"}}`. A graphic (lower third, ticker, title) is a \
+             source, `add_source` with uri template:<name>, text: or ticker:, placed on the \
+             scene that is on air with `add_scene_item`; if a source rather than a scene is \
+             on air, `create_scene_from {{\"sources\": [\"<that source>\"], \"name\": \
+             \"Live\"}}`, add the graphic to it, then `take {{\"scene\": \"Live\"}}`. A \
+             virtual set, a presenter in front of a designed studio, is `create_scene_from` \
+             with layout \"virtual-set\" and `settings.screen` \"none\" when there is no \
+             green screen. Look with `snapshot {{\"id\": \"program\"}}` before saying it is \
+             done. You are on the {} tool profile; any other tool is found with \
+             `search_tools` and run with `call_tool`. Tools that work inside one show take \
+             `show: <id>` and default to the first; `list_shows` lists them. Every \
              tool talks to the running mixer over its HTTP API, so refusals come back \
              verbatim with the mixer's own reason and the next step to take. Mutating tools \
              accept an `idempotency_key`, so a retry after a timeout is free; destructive \
@@ -624,6 +635,9 @@ mod preview;
 #[cfg(test)]
 #[path = "mcp_shows_tests.rs"]
 mod shows_tests;
+
+#[path = "mcp_call_tool.rs"]
+mod call_tool;
 
 #[cfg(test)]
 #[path = "mcp_schema_tests.rs"]
@@ -711,12 +725,14 @@ mod tests {
             assert!(!t["description"].as_str().unwrap().is_empty(), "{name} has no description");
             assert_eq!(t["inputSchema"]["type"], "object", "{name} schema is not an object");
             assert!(t["annotations"]["readOnlyHint"].is_boolean(), "{name} has no annotations");
-            if name == mcp_tools::SEARCH_TOOL {
+            if name == mcp_tools::SEARCH_TOOL || name == mcp_tools::CALL_TOOL {
                 continue;
             }
             let args = json!({
                 "id": "cam1", "uri": "rtmp://h/l/k", "url": "https://e.com",
-                "shows": [], "output": "out"
+                "shows": [], "output": "out", "sources": ["cam1"], "scene": "Live",
+                "content": {"source": "cam1"}, "item": "lower", "name": "n", "svg": "<svg/>",
+                "props": {}
             });
             let plan = s.plan(name, &args);
             assert!(plan.is_ok(), "no route for tool {name}: {plan:?}");
@@ -782,7 +798,7 @@ input = "input.json"
         )
         .expect("a manifest");
 
-        for profile in [Profile::Standard, Profile::Minimal] {
+        for profile in [Profile::Standard, Profile::Minimal, Profile::Headend] {
             let s = Server::new("http://127.0.0.1:1", None, profile);
             let before: Vec<String> = s
                 .tools()
@@ -818,17 +834,18 @@ input = "input.json"
     /// The minimal profile is five tools and no more, and the way out is in
     /// the list.
     #[tokio::test]
-    async fn the_minimal_profile_is_five_tools_with_a_way_out() {
+    async fn the_minimal_profile_is_six_tools_with_a_way_out() {
         let s = Server::new("http://127.0.0.1:1", None, Profile::Minimal);
         let tools = s.tools();
-        assert_eq!(tools.len(), 5, "minimal is five tools: {tools:#?}");
+        assert_eq!(tools.len(), 6, "minimal is six tools: {tools:#?}");
         let names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
         // Ordered by the method name behind each tool, so two runs of the same
         // build give byte identical output and a prompt cache survives a
-        // reconnect. search_tools is last, because it is the way out.
+        // reconnect. call_tool and search_tools are last, because they are
+        // the way out.
         assert_eq!(
             names,
-            vec!["agent_state", "take", "add_source", "list_sources", "search_tools"]
+            vec!["agent_state", "take", "add_source", "list_sources", "call_tool", "search_tools"]
         );
         // A tool that is not in the list is still callable by name.
         assert!(s.plan("remove_output", &json!({ "id": "yt" })).is_ok());

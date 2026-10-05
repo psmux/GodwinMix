@@ -33,6 +33,7 @@ mod requests;
 mod from_sources;
 mod set_inputs;
 mod share;
+mod whole_canvas;
 
 pub use requests::*;
 

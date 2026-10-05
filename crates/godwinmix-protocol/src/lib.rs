@@ -49,6 +49,7 @@ pub mod graphics;
 pub mod health;
 pub mod idempotency;
 pub mod mcp_bindings;
+pub mod mcp_schema;
 pub mod mcp_tools;
 pub mod method;
 pub mod openapi;

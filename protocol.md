@@ -1776,7 +1776,7 @@ What is on air, the programme running time, and what revert would go back to.
 
 One call to put a web page on air: add the page, add the destination, and take the page as soon as it renders.
 
-MCP tool `go_live` in the `standard` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+MCP tool `go_live` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
 
 ```json
 {
@@ -2002,7 +2002,7 @@ MCP tool `apply_layout` in the `search` profile: readOnlyHint false, destructive
 
 A scene from a set of sources, laid out by the built in layout for that count (full, two-box, three-box, quad, then a grid) or by a named one. Pictures from the media library become sources, and a keyed layout such as virtual-set guesses its key colour from the camera.
 
-MCP tool `create_scene_from` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint false.
+MCP tool `create_scene_from` in the `standard` profile: readOnlyHint false, destructiveHint false, idempotentHint false.
 
 ```json
 {
@@ -2179,7 +2179,7 @@ Read an OBS Studio scene collection and add its scenes to this one. Send the fil
 
 Put something on a scene's canvas. With no transform it lands in the next free cell, so a drop never needs a dialog.
 
-MCP tool `add_scene_item` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+MCP tool `add_scene_item` in the `standard` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
 
 ```json
 {
@@ -2440,7 +2440,7 @@ MCP tool `scene_item_schema` in the `search` profile: readOnlyHint true, destruc
 
 Assign an item's properties. Only the keys named move; the rest are left alone, so calling it twice with the same body changes nothing the second time.
 
-MCP tool `set_scene_item` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+MCP tool `set_scene_item` in the `standard` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
 
 ```json
 {
@@ -2805,7 +2805,7 @@ MCP tool `add_show` in the `search` profile: readOnlyHint false, destructiveHint
 
 Make many shows in one call, such as every channel of a headend. The whole batch is checked first. With dry_run (the default) nothing is made: the answer says what would be, what its renditions would cost and whether the governor would admit them. Without it, every show that fits is made and the rest are refused with why; a show is made whole or not at all.
 
-MCP tool `add_shows` in the `standard` profile: readOnlyHint false, destructiveHint false, idempotentHint false.
+MCP tool `add_shows` in the `headend` profile: readOnlyHint false, destructiveHint false, idempotentHint false.
 
 ```json
 {
@@ -2822,7 +2822,7 @@ MCP tool `add_shows` in the `standard` profile: readOnlyHint false, destructiveH
 
 Every show on this machine: its name, whether it is running, what is on air, what its outputs send and what its process costs. `current` is the show a client reaches when it names none.
 
-MCP tool `list_shows` in the `standard` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+MCP tool `list_shows` in the `headend` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
 
 ```json
 {
@@ -2875,7 +2875,7 @@ MCP tool `remove_show_output` in the `search` profile: readOnlyHint false, destr
 
 Change one output of a show without compositing, naming only what moves: another address, a new key, on or off, copy or a rendition.
 
-MCP tool `set_show_output` in the `standard` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+MCP tool `set_show_output` in the `headend` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
 
 ```json
 {
@@ -2943,7 +2943,7 @@ MCP tool `rename_show` in the `search` profile: readOnlyHint false, destructiveH
 
 Change a show's name, its input, or whether it composites. Turning compositing on starts a show process whose one source is the input and moves the outputs to it; turning it off hands them back to the direct host, when the show has one source and no scenes in use. A switch can take half a minute, so it answers at once with a task_id and the show as it is; task.get with that id carries this answer, with how long the outputs were off, once it is done.
 
-MCP tool `set_show` in the `standard` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+MCP tool `set_show` in the `headend` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
 
 ```json
 {
@@ -2977,7 +2977,7 @@ MCP tool `start_show` in the `search` profile: readOnlyHint false, destructiveHi
 
 Health, input numbers and each output's numbers for many shows in one read, from what the station already holds, so it is cheap to call every second for two hundred shows. `fields` narrows it to health, input or outputs.
 
-MCP tool `show_stats` in the `standard` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+MCP tool `show_stats` in the `headend` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
 
 ```json
 {
@@ -3011,7 +3011,7 @@ MCP tool `stop_show` in the `search` profile: readOnlyHint false, destructiveHin
 
 One JPEG: the whole contact sheet, the programme, or one source cut out of the mosaic.
 
-MCP tool `snapshot` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+MCP tool `snapshot` in the `standard` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
 
 ```json
 {
@@ -3228,7 +3228,7 @@ MCP tool `seek_source` in the `search` profile: readOnlyHint false, destructiveH
 
 Change a running source: its name and colour, its params, or where it runs. The name and colour live on the scene document. Moving a source between the core, a sidecar and a node is `place`; the programme keeps its frame rate across the move and the compositor covers the swap.
 
-MCP tool `set_source` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+MCP tool `set_source` in the `standard` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
 
 ```json
 {
@@ -3333,7 +3333,7 @@ MCP tool `get_template` in the `search` profile: readOnlyHint true, destructiveH
 
 The graphic templates: the built in pack and the SVG templates in the media library, each with its fields.
 
-MCP tool `list_templates` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+MCP tool `list_templates` in the `standard` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
 
 ```json
 {
@@ -3352,7 +3352,7 @@ MCP tool `list_templates` in the `search` profile: readOnlyHint true, destructiv
 
 Check an SVG template and write it into the media library.
 
-MCP tool `save_template` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint false.
+MCP tool `save_template` in the `standard` profile: readOnlyHint false, destructiveHint false, idempotentHint false.
 
 ```json
 {

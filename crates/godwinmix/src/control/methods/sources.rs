@@ -65,12 +65,15 @@ pub fn register(reg: &mut Registry<Call>) {
         .tool(
             "add_source",
             Tier::Minimal,
-            "Add a source while the mixer is running. The protocol is worked out from the \
-             URL: rtmp, rtmps, an https .m3u8 or .mpd manifest, rtsp, srt, udp, a file path \
-             or a media file URL. For a web page, pass its https URL with kind \"web\" and \
-             the mixer renders it in a real browser, with its audio. Omit the id to have one \
-             derived from the name or the host. The source is not on air until you `take` \
-             it; the answer carries the id it got and its state.",
+            "Add a source while the mixer is running: a camera or stream (rtmp, rtsp, srt, \
+             udp, https .m3u8, a file path or a media file name), a web page (https URL with \
+             kind \"web\"), or something the mixer draws itself. A designed graphic is \
+             {\"id\": \"lower\", \"uri\": \"template:news-lower-third\", \"params\": \
+             {\"fields\": {\"name\": \"Ana Silva\", \"title\": \"Producer\", \"accent\": \
+             \"#1f6fd1\"}}} (list_templates names them and their fields). Words in a box are \
+             uri \"text:\" with params.text; a crawling ticker is uri \"ticker:\" with \
+             params.items, a list of headlines. Nothing is on air until it is on a scene \
+             that is on air (add_scene_item) or taken with `take`.",
         ),
     );
 
@@ -391,14 +394,12 @@ pub(crate) fn register_set(reg: &mut Registry<Call>) {
         .result(schema_of::<SourceStatus>)
         .tool(
             "set_source",
-            Tier::Search,
-            "Change a running source in place: rename it, change its params, or move it \
-             between the core, a sidecar process and a node on another machine with \
-             `place`. Only the fields you name change. Moving a source rebuilds it where \
-             you asked for it; the programme's frame rate is not affected, and a source \
-             that is on air holds its picture while the new instance comes up. A plugin \
-             that did not declare the placement is refused with the placements it did \
-             declare.",
+            Tier::Standard,
+            "Change a running source in place, only the fields you name: new words on air \
+             for a graphic ({\"id\": \"lower\", \"params\": {\"fields\": {\"title\": \
+             \"Editor\"}}}), a text's params.text, a ticker's params.items, its name, or \
+             with `place` where it runs (core, sidecar, node:<name>). A source on air holds \
+             its picture while it changes.",
         ),
     );
 }
