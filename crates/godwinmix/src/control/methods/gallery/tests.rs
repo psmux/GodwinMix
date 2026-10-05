@@ -26,6 +26,24 @@ fn a_model_finds_the_gallery_tools_by_asking_in_plain_words() {
     }
 }
 
+/// The skill and the docs name the tools; a renamed tool fails here rather
+/// than in an agent's session.
+#[test]
+fn every_gallery_tool_the_skill_and_the_how_to_name_exists() {
+    let names: Vec<String> = all_tools(&registry()).iter().map(|t| t["name"].as_str().unwrap_or_default().to_string()).collect();
+    for text in [
+        include_str!("../../../../../../skills/godwinmix-design/SKILL.md"),
+        include_str!("../../../../../../docs/how-to/build-a-graphics-gallery-with-ai.md"),
+        include_str!("../../../../../../ui/panels/graphics/prompts.js"),
+    ] {
+        for word in text.split(|c: char| !(c.is_ascii_alphanumeric() || c == '_')) {
+            if word.ends_with("_graphic") || word.ends_with("_graphics") {
+                assert!(names.iter().any(|n| n == word), "{word} is named and is not a tool");
+            }
+        }
+    }
+}
+
 #[test]
 fn every_gallery_tool_is_short_enough_to_read_and_names_no_dashes() {
     let tools = all_tools(&registry());

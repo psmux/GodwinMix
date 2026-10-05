@@ -26,8 +26,8 @@ This page is the contract. The methods that act on it are in
   exports/                  zips written by gallery.export
 ```
 
-The gallery directory is `[gallery] dir` in the config. Left out, it is a
-folder called `graphics` inside the media library (`[media] dir`), so it
+The gallery directory is `[graphics] gallery` in the config. Left out, it is
+a folder called `graphics` inside the media library (`[media] dir`), so it
 moves with the library and the desktop app keeps it in the same place as
 every other file it holds. Paths in `graphic.toml` are relative to the item's
 folder and use `/`, so a folder copied between Windows, macOS and Linux reads
