@@ -1389,6 +1389,16 @@ impl SlotPool {
         // this crate's tests in `gst_video_aggregator_fill_queues`.
         set_f64(&self.slots[index].pad, "alpha", 0.0);
         crate::slow_step!("slot frame barrier", index, gstutil::after_next_frame(&self.slots[index].pad));
+        // The valve shuts before the flush, now that the flush no longer goes
+        // through it. A frame the source's tee pushes into a flushing slot
+        // comes back `FLUSHING`; a tee with one pad hands that straight up to
+        // the source's `pgm-vq`, whose task pauses on it and stays paused, and
+        // the source is black in every place it is drawn from then on while
+        // its own pipeline reads as live. A valve that is dropping answers
+        // `OK` whatever the push below it returned. Seen on 2026-10-05 as a
+        // test pattern that stayed black when taken after a round of takes
+        // had moved it off its slot.
+        self.slots[index].gate.set_property("drop", true);
         let chain = self.slots[index].gate.static_pad("src");
         if let Some(pad) = &chain {
             crate::slow_step!("slot flush", index, gstutil::wake_below(pad));

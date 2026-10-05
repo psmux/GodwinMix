@@ -5426,7 +5426,9 @@ pub fn spawn(
 #[cfg(test)]
 mod tests {
     mod endurance;
+    mod flush_window;
     mod full_pool;
+    mod full_pool_draw;
     mod odd_segment;
     mod restart;
     mod preview_churn;

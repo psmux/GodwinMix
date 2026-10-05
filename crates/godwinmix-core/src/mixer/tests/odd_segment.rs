@@ -1,16 +1,5 @@
-use super::full_pool::count_programme;
+use super::full_pool::{count_pad, count_programme};
 use super::*;
-
-/// Frames reaching one compositor pad.
-fn count_pad(pad: &gst::Pad) -> Arc<std::sync::atomic::AtomicU64> {
-    let frames = Arc::new(std::sync::atomic::AtomicU64::new(0));
-    let counted = frames.clone();
-    pad.add_probe(gst::PadProbeType::BUFFER, move |_, _| {
-        counted.fetch_add(1, Ordering::Relaxed);
-        gst::PadProbeReturn::Ok
-    });
-    frames
-}
 
 /// Run the mixer loop by hand for `secs`: bus events and commands, as
 /// `mixer::spawn` would. Answers whether a source restart came through.

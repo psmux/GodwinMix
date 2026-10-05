@@ -12,6 +12,17 @@ pub(super) fn count_programme(mix: &Mixer) -> Arc<std::sync::atomic::AtomicU64> 
     frames
 }
 
+/// Frames reaching one compositor pad.
+pub(super) fn count_pad(pad: &gst::Pad) -> Arc<std::sync::atomic::AtomicU64> {
+    let frames = Arc::new(std::sync::atomic::AtomicU64::new(0));
+    let counted = frames.clone();
+    pad.add_probe(gst::PadProbeType::BUFFER, move |_, _| {
+        counted.fetch_add(1, Ordering::Relaxed);
+        gst::PadProbeReturn::Ok
+    });
+    frames
+}
+
 /// Count the buffers that reach a slot's queue with no segment in front of
 /// them, which is what the compositor turns into an abort. Installed ahead of
 /// the slot's own guard, so it sees what arrived rather than what was mended.
@@ -33,7 +44,7 @@ fn count_unsegmented(mix: &Mixer) -> Arc<std::sync::atomic::AtomicU64> {
 
 /// A source that is added and never delivers, the way a phone takes a few
 /// seconds to send its first picture.
-fn silent(id: &str) -> SourceConfig {
+pub(super) fn silent(id: &str) -> SourceConfig {
     toml::from_str(&format!("id = \"{id}\"\nuri = \"rtmp://192.0.2.1/live/{id}\"\n")).unwrap()
 }
 
@@ -91,12 +102,16 @@ async fn a_source_back_on_the_slot_it_left_brings_its_segment_with_it() {
         tokio::time::sleep(Duration::from_millis(300)).await;
     }
     let before = frames.load(Ordering::Relaxed);
+    let pad = mix.pool.slots().iter().find(|s| s.showing()).map(|s| s.pad().clone()).unwrap();
+    let drawn = count_pad(&pad);
     tokio::time::sleep(Duration::from_secs(1)).await;
     let after = frames.load(Ordering::Relaxed);
     let showing = on_air(&mix);
     let unsegmented = bad.load(Ordering::Relaxed);
+    let drawn = drawn.load(Ordering::Relaxed);
     mix.shutdown();
     assert_eq!(unsegmented, 0, "frames left a slot's valve with no segment below it");
     assert!(after > before + 10, "the programme stopped: {before} then {after}");
     assert_eq!(showing, Some(id), "the source did not come back on air");
+    assert!(drawn > 10, "the slot it came back to had {drawn} frames in a second");
 }
