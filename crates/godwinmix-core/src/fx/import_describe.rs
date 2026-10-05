@@ -3,7 +3,7 @@
 
 use super::super::{detect, library};
 use anyhow::{bail, Context, Result};
-use godwinmix_protocol::fx::{Blend, FxEntry, FxImportRequest, FxKind, FxManifest};
+use godwinmix_protocol::fx::{FxBlend, FxEntry, FxImportRequest, FxKind, FxManifest};
 use std::path::{Path, PathBuf};
 
 /// The manifest for one file, and its measurement when it was decoded.
@@ -13,7 +13,7 @@ pub fn describe(path: &Path, slug: &str, file_name: &str, req: &FxImportRequest)
         name: slug.to_string(),
         title: title.trim().to_string(),
         kind: FxKind::Shader,
-        blend: Blend::Normal,
+        blend: FxBlend::Normal,
         file: file_name.to_string(),
         duration_ms: 1000,
         cut_at_ms: req.cut_at_ms,
@@ -51,7 +51,10 @@ pub fn describe(path: &Path, slug: &str, file_name: &str, req: &FxImportRequest)
 /// A folder that already has an `fx.json`, copied in as it is.
 pub fn copy_item(dir: &Path, root: &Path, replace: bool) -> Result<FxEntry> {
     let m = library::read(dir)?;
-    let slug = library::slug(&m.name);
+    let mut slug = library::slug(&m.name);
+    if godwinmix_protocol::requests::TRANSITIONS.contains(&slug.as_str()) {
+        slug.push_str("-fx");
+    }
     let target = root.join(&slug);
     if target.exists() && !replace {
         bail!("the library already has {slug}. Pass replace: true to write over it");

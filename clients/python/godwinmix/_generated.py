@@ -1161,6 +1161,136 @@ class Frame(TypedDict, total=False):
     h: float
     w: float
 
+class FxEntry(TypedDict, total=False):
+    """One item in `fx.list`: the manifest, and what this machine makes of it."""
+
+    blend: FxBlend
+    coverage: Optional[float]
+    # How much of the picture the clip covers at that frame, 0 to 1. Under about 0.9 the cut may show; the import says so.
+    cut_at_measured_ms: Optional[int]
+    # The frame the import found most covered, which is where the cut goes unless `cut_at_ms` says otherwise.
+    cut_at_ms: Optional[int]
+    # When the scenes swap under a clip, in milliseconds from its start. Absent is `cut_at_measured_ms`, then half way.
+    dir: str
+    # The folder on the mixer's machine.
+    duration_ms: int
+    # How long it runs. A clip's own length; a matte or a shader's default, which a take may override with `duration_ms`.
+    effect: bool
+    # Whether `fx.fire` may play it over the programme on its own.
+    file: str
+    # The media file, inside the folder: a clip, a picture or a `.glsl`.
+    invert: bool
+    # A matte read white first instead of black first.
+    kind: FxKind
+    licence: Optional[str]
+    # Where it came from and on what terms, as the pack said.
+    name: str
+    # The slug every method and a take names it by, such as `light-leak`.
+    note: Optional[str]
+    # Anything an operator should know, in a sentence.
+    origin: str
+    # `starter` (shipped with the mixer, read only) or `library`.
+    preview: str
+    # A moving preview: a strip of frames in one JPEG, see `fx.preview`.
+    runs: Optional[str]
+    # `cpu`, `gpu`, or `fade` for a shader this machine can only run as a dissolve. Absent for a clip or a matte, which always run on the CPU.
+    softness: Optional[float]
+    # A matte's soft edge, 0 (hard) to 1. 0.1 when absent.
+    source: Optional[str]
+    title: str
+    # What a picker shows.
+    transition: bool
+    # Whether a take may use it.
+
+class FxFireRequest(TypedDict, total=False):
+    """`fx.fire`: play an effect over the programme once."""
+
+    blend: Union[FxBlend, None]
+    # A blend for this firing only.
+    name: str
+    opacity: Optional[float]
+    # How strong, 0 to 1. 1 when absent.
+
+class FxFired(TypedDict, total=False):
+    """What `fx.fire` answers."""
+
+    duration_ms: int
+    # How long it will be on the programme.
+    name: str
+
+class FxImportRequest(TypedDict, total=False):
+    """`fx.import`: a file, a folder or a zip on the mixer's machine."""
+
+    blend: Union[FxBlend, None]
+    # How a clip is put over the picture, when the import should not decide.
+    cut_at_ms: Optional[int]
+    # Where the scenes swap, when the measured frame is not the one.
+    kind: Union[FxKind, None]
+    # What it is, when the import should not decide by looking.
+    name: Optional[str]
+    # The slug to give it. Taken from the file name when absent. Ignored for a folder or a zip, whose items are named after their files.
+    path: str
+    # An absolute path, or a name in the media library (where `media.upload` puts a file). A folder or a zip imports everything in it it can read.
+    replace: bool
+    # Write over an item of the same name.
+
+class FxImported(TypedDict, total=False):
+    """What `fx.import` answers."""
+
+    imported: List[FxEntry]
+    skipped: List[FxSkipped]
+    # Files that were not imported, each with why.
+
+class FxList(TypedDict, total=False):
+    """What `fx.list` answers."""
+
+    errors: List[str]
+    # Folders under `fx/` that would not read, each with the reason.
+    fx: List[FxEntry]
+    gpu: bool
+    # Whether GStreamer GL runs here, which decides `runs` for a shader.
+
+class FxListRequest(TypedDict, total=False):
+    """`fx.list`."""
+
+    role: Optional[str]
+    # `transition` or `effect` to see only those. Absent lists all.
+
+class FxNameRequest(TypedDict, total=False):
+    """`fx.get`, `fx.remove` and `fx.preview`: one item by name."""
+
+    name: str
+
+class FxPreview(TypedDict, total=False):
+    """What `fx.preview` answers: a strip of frames side by side in one JPEG."""
+
+    duration_ms: int
+    # How long the strip takes to play once, in milliseconds.
+    frame_height: int
+    frame_width: int
+    frames: int
+    name: str
+    url: str
+    # `GET` this for the JPEG.
+
+class FxSetRequest(TypedDict, total=False):
+    """`fx.set`: change what an item does. Only what is named moves."""
+
+    blend: Union[FxBlend, None]
+    cut_at_ms: Optional[int]
+    # Where the scenes swap. 0 puts it back to the measured frame.
+    duration_ms: Optional[int]
+    effect: Optional[bool]
+    invert: Optional[bool]
+    name: str
+    softness: Optional[float]
+    title: Optional[str]
+    transition: Optional[bool]
+
+class FxSkipped(TypedDict, total=False):
+    file: str
+    reason: str
+
 class Geometry(TypedDict, total=False):
     """One item's derived box."""
 
@@ -3446,6 +3576,12 @@ Fit = Literal['none', 'contain', 'cover', 'stretch', 'fit-width', 'fit-height', 
 # Content on the wire. The same four shapes as the tree, except that a group names no children: they are records whose parent is the group.
 FlatContent = Dict[str, Any]
 
+# How a clip is put over the picture.
+FxBlend = Literal['normal', 'screen', 'add', 'luma']
+
+# What a file is, which decides how it is drawn.
+FxKind = Literal['stinger', 'overlay', 'matte', 'shader']
+
 # The one word a monitoring wall colours a row by.
 HealthState = Literal['ok', 'warning', 'alarm', 'off']
 
@@ -3565,6 +3701,12 @@ METHODS = (
     {"name": "filter.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/filters"), "summary": 'Every filter in place, with what it is and where it sits.'},
     {"name": "filter.remove", "scope": "operate", "mutating": True, "destructive": True, "rest": ("DELETE", "/api/v1/filters/{id}"), "summary": 'Take a filter out of the pipeline.'},
     {"name": "filter.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/filters/{id}/set"), "summary": "Change a filter's settings in place. A filter that cannot take the change while running says so rather than being restarted behind your back."},
+    {"name": "fx.fire", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/fx/fire"), "summary": 'Play an effect over the programme once: drawn on top of whatever is on air until its clip ends.'},
+    {"name": "fx.import", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/fx/import"), "summary": "Import a transition or effect from a file, a folder or a zip on the mixer's machine, measuring what it is and where it covers the picture."},
+    {"name": "fx.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/fx/list"), "summary": 'The imported transitions and effects, with what each is and whether it runs on the GPU here.'},
+    {"name": "fx.preview", "scope": "read", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/fx/preview"), "summary": 'A moving preview of an item: twelve frames side by side in one JPEG, made once and kept.'},
+    {"name": "fx.remove", "scope": "operate", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/fx/remove"), "summary": 'Delete an imported item from the library. The starter set cannot be deleted.'},
+    {"name": "fx.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/fx/set"), "summary": 'Change an imported item: its blend, its cut point, its length, whether it is a transition or an effect.'},
     {"name": "governor.calibrate", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/governor/calibrate"), "summary": "Measure this machine's encoders again, in the background, a few seconds of every core. Refused while anything is on air unless `confirm` is true."},
     {"name": "governor.status", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/governor/status"), "summary": 'The resource governor: when this machine was measured, what is in use and free on the CPU and each GPU encoder, and what was shed to keep the programme whole.'},
     {"name": "log.gst", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/log/gst"), "summary": "Raise GStreamer's own debug categories for a while, then let them fall back on their own."},
@@ -4413,6 +4555,110 @@ class GeneratedMethods:
         if params is not None:
             params["params"] = params
         return await self._call("filter.set", params)
+
+    async def fx_fire(
+        self,
+        name: str,
+        *,
+        blend: Optional[Union[FxBlend, None]] = None,
+        opacity: Optional[float] = None,
+    ) -> FxFired:
+        """Play an effect over the programme once: drawn on top of whatever is on air until its clip ends."""
+        params: Dict[str, Any] = {}
+        params["name"] = name
+        if blend is not None:
+            params["blend"] = blend
+        if opacity is not None:
+            params["opacity"] = opacity
+        return await self._call("fx.fire", params)
+
+    async def fx_import(
+        self,
+        path: str,
+        *,
+        blend: Optional[Union[FxBlend, None]] = None,
+        cut_at_ms: Optional[int] = None,
+        kind: Optional[Union[FxKind, None]] = None,
+        name: Optional[str] = None,
+        replace: Optional[bool] = None,
+    ) -> FxImported:
+        """Import a transition or effect from a file, a folder or a zip on the mixer's machine, measuring what it is and where it covers the picture."""
+        params: Dict[str, Any] = {}
+        params["path"] = path
+        if blend is not None:
+            params["blend"] = blend
+        if cut_at_ms is not None:
+            params["cut_at_ms"] = cut_at_ms
+        if kind is not None:
+            params["kind"] = kind
+        if name is not None:
+            params["name"] = name
+        if replace is not None:
+            params["replace"] = replace
+        return await self._call("fx.import", params)
+
+    async def fx_list(
+        self,
+        *,
+        role: Optional[str] = None,
+    ) -> FxList:
+        """The imported transitions and effects, with what each is and whether it runs on the GPU here."""
+        params: Dict[str, Any] = {}
+        if role is not None:
+            params["role"] = role
+        return await self._call("fx.list", params)
+
+    async def fx_preview(
+        self,
+        name: str,
+    ) -> FxPreview:
+        """A moving preview of an item: twelve frames side by side in one JPEG, made once and kept."""
+        params: Dict[str, Any] = {}
+        params["name"] = name
+        return await self._call("fx.preview", params)
+
+    async def fx_remove(
+        self,
+        name: str,
+    ) -> Dict[str, Any]:
+        """Delete an imported item from the library. The starter set cannot be deleted."""
+        params: Dict[str, Any] = {}
+        params["name"] = name
+        return await self._call("fx.remove", params)
+
+    async def fx_set(
+        self,
+        name: str,
+        *,
+        blend: Optional[Union[FxBlend, None]] = None,
+        cut_at_ms: Optional[int] = None,
+        duration_ms: Optional[int] = None,
+        effect: Optional[bool] = None,
+        invert: Optional[bool] = None,
+        softness: Optional[float] = None,
+        title: Optional[str] = None,
+        transition: Optional[bool] = None,
+    ) -> FxEntry:
+        """Change an imported item: its blend, its cut point, its length, whether it is a transition or an effect."""
+        params: Dict[str, Any] = {}
+        params["name"] = name
+        if blend is not None:
+            params["blend"] = blend
+        if cut_at_ms is not None:
+            params["cut_at_ms"] = cut_at_ms
+        if duration_ms is not None:
+            params["duration_ms"] = duration_ms
+        if effect is not None:
+            params["effect"] = effect
+        if invert is not None:
+            params["invert"] = invert
+        if softness is not None:
+            params["softness"] = softness
+        if title is not None:
+            params["title"] = title
+        if transition is not None:
+            params["transition"] = transition
+        return await self._call("fx.set", params)
 
     async def governor_calibrate(
         self,

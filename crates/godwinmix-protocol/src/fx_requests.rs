@@ -1,6 +1,6 @@
 //! The bodies of the `fx.*` methods.
 
-use super::{Blend, FxEntry, FxKind};
+use super::{FxBlend, FxEntry, FxKind};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -38,7 +38,7 @@ pub struct FxImportRequest {
     pub kind: Option<FxKind>,
     /// How a clip is put over the picture, when the import should not decide.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub blend: Option<Blend>,
+    pub blend: Option<FxBlend>,
     /// Where the scenes swap, when the measured frame is not the one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cut_at_ms: Option<u64>,
@@ -69,7 +69,7 @@ pub struct FxSetRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub blend: Option<Blend>,
+    pub blend: Option<FxBlend>,
     /// Where the scenes swap. 0 puts it back to the measured frame.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cut_at_ms: Option<u64>,
@@ -97,7 +97,7 @@ pub struct FxFireRequest {
     pub name: String,
     /// A blend for this firing only.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub blend: Option<Blend>,
+    pub blend: Option<FxBlend>,
     /// How strong, 0 to 1. 1 when absent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub opacity: Option<f64>,

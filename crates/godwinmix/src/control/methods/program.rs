@@ -236,11 +236,15 @@ fn resolve_transition(
         let spec = spec_of(&request, &extra);
         return Ok(Some(spec).filter(|s| !s.is_cut()));
     }
+    if let Some(spec) = super::fx::spec_for(call, asked, &extra)? {
+        return Ok(Some(spec));
+    }
     req.check_transition(&extra).map_err(|refusal| {
         let mut names: Vec<String> =
             godwinmix_protocol::requests::TRANSITIONS.iter().map(|s| s.to_string()).collect();
         names.extend(call.app.scenes.transition_names());
         names.extend(extra.iter().cloned());
+        names.extend(super::fx::transition_names(call));
         let mut error = RpcError::invalid_params(refusal.message).with("transitions", json!(names));
         for (key, value) in refusal.data {
             error = error.with(&key, value);
@@ -474,6 +478,7 @@ fn transitions(call: &Call) -> godwinmix_protocol::transitions::TransitionCatalo
         }
     }
     list.extend(plugins.iter().map(|p| entry(p, "plugin", p, None)));
+    list.extend(super::fx::catalogue(call));
     let words = |w: &[&str]| w.iter().map(|s| s.to_string()).collect();
     TransitionCatalogue {
         transitions: list,

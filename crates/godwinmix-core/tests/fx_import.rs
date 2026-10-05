@@ -4,7 +4,7 @@
 //! every import has a preview strip.
 
 use godwinmix_core::fx::{detect, import, library, sprite, starter};
-use godwinmix_protocol::fx::{Blend, FxImportRequest, FxKind};
+use godwinmix_protocol::fx::{FxBlend, FxImportRequest, FxKind};
 use gstreamer as gst;
 use std::path::{Path, PathBuf};
 
@@ -32,7 +32,7 @@ fn the_starter_clips_measure_as_their_manifests_say() {
         println!("{name:<12} {:?} {:?} cut {:?} coverage {:?} transition {} alpha {} {} ms", v.kind, v.blend, v.cut_at_ms, v.coverage, v.transition, measured.alpha, measured.duration_ms);
         assert_eq!(v.kind, m.kind, "{name} measured as the wrong kind");
         if m.kind != FxKind::Matte {
-            assert_eq!(v.blend == Blend::Normal, m.blend == Blend::Normal, "{name}: alpha or light");
+            assert_eq!(v.blend == FxBlend::Normal, m.blend == FxBlend::Normal, "{name}: alpha or light");
             assert!(measured.duration_ms.abs_diff(m.duration_ms) <= 70, "{name}: {} ms, the manifest says {}", measured.duration_ms, m.duration_ms);
         }
         if let (Some(a), Some(b)) = (v.cut_at_ms, m.cut_at_measured_ms) {

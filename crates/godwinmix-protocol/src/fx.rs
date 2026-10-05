@@ -33,7 +33,7 @@ pub enum FxKind {
 /// How a clip is put over the picture.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
-pub enum Blend {
+pub enum FxBlend {
     /// Over, by the clip's own alpha. What a stinger with alpha wants.
     #[default]
     Normal,
@@ -55,7 +55,7 @@ pub struct FxManifest {
     pub title: String,
     pub kind: FxKind,
     #[serde(default)]
-    pub blend: Blend,
+    pub blend: FxBlend,
     /// The media file, inside the folder: a clip, a picture or a `.glsl`.
     pub file: String,
     /// How long it runs. A clip's own length; a matte or a shader's default,

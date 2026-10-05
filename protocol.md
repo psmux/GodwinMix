@@ -80,6 +80,12 @@ Keys accepted on every method, handled before a method runs.
 | `filter.list` | `GET /api/v1/filters` | read |  | 1 | Every filter in place, with what it is and where it sits. |
 | `filter.remove` | `DELETE /api/v1/filters/{id}` | operate | yes | 1 | Take a filter out of the pipeline. |
 | `filter.set` | `POST /api/v1/filters/{id}/set` | operate |  | 1 | Change a filter's settings in place. A filter that cannot take the change while running says so rather than being restarted behind your back. |
+| `fx.fire` | `POST /api/v1/fx/fire` | operate |  | 1 | Play an effect over the programme once: drawn on top of whatever is on air until its clip ends. |
+| `fx.import` | `POST /api/v1/fx/import` | operate |  | 1 | Import a transition or effect from a file, a folder or a zip on the mixer's machine, measuring what it is and where it covers the picture. |
+| `fx.list` | `GET /api/v1/fx/list` | read |  | 1 | The imported transitions and effects, with what each is and whether it runs on the GPU here. |
+| `fx.preview` | `POST /api/v1/fx/preview` | read |  | 1 | A moving preview of an item: twelve frames side by side in one JPEG, made once and kept. |
+| `fx.remove` | `POST /api/v1/fx/remove` | operate | yes | 1 | Delete an imported item from the library. The starter set cannot be deleted. |
+| `fx.set` | `POST /api/v1/fx/set` | operate |  | 1 | Change an imported item: its blend, its cut point, its length, whether it is a transition or an effect. |
 | `governor.calibrate` | `POST /api/v1/governor/calibrate` | admin |  | 1 | Measure this machine's encoders again, in the background, a few seconds of every core. Refused while anything is on air unless `confirm` is true. |
 | `governor.status` | `GET /api/v1/governor/status` | read |  | 1 | The resource governor: when this machine was measured, what is in use and free on the CPU and each GPU encoder, and what was shed to keep the programme whole. |
 | `log.gst` | `POST /api/v1/log/gst` | admin |  | 1 | Raise GStreamer's own debug categories for a while, then let them fall back on their own. |
@@ -1000,6 +1006,108 @@ Change a filter's settings in place. A filter that cannot take the change while 
   },
   "result": {
     "$ref": "#/$defs/FilterRecord"
+  }
+}
+```
+
+#### `fx.fire`
+
+Play an effect over the programme once: drawn on top of whatever is on air until its clip ends.
+
+MCP tool `fire_fx` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint false.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/FxFireRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/FxFired"
+  }
+}
+```
+
+#### `fx.import`
+
+Import a transition or effect from a file, a folder or a zip on the mixer's machine, measuring what it is and where it covers the picture.
+
+MCP tool `import_fx` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint false.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/FxImportRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/FxImported"
+  }
+}
+```
+
+#### `fx.list`
+
+The imported transitions and effects, with what each is and whether it runs on the GPU here.
+
+MCP tool `list_fx` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/FxListRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/FxList"
+  }
+}
+```
+
+#### `fx.preview`
+
+A moving preview of an item: twelve frames side by side in one JPEG, made once and kept.
+
+MCP tool `preview_fx` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/FxNameRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/FxPreview"
+  }
+}
+```
+
+#### `fx.remove`
+
+Delete an imported item from the library. The starter set cannot be deleted.
+
+MCP tool `remove_fx` in the `search` profile: readOnlyHint false, destructiveHint true, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/FxNameRequest"
+  },
+  "result": {
+    "type": "object"
+  }
+}
+```
+
+#### `fx.set`
+
+Change an imported item: its blend, its cut point, its length, whether it is a transition or an effect.
+
+MCP tool `set_fx` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/FxSetRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/FxEntry"
   }
 }
 ```
