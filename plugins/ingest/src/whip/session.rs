@@ -65,11 +65,14 @@ impl Session {
             ));
         }
         let sdp =gst_sdp::SDPMessage::parse_buffer(offer.as_bytes()).map_err(|_| "the offer is not SDP. Send the RTCPeerConnection's offer as the request body, with Content-Type application/sdp.".to_string())?;
-        let vp8 = vp8::available();
-        if !offer.contains("H264") && !(vp8 && offer.contains("VP8")) {
-            let also = if vp8 { " or VP8" } else { "" };
+        let can_vp8 = vp8::available();
+        if !offer.contains("H264") && !(can_vp8 && offer.contains("VP8")) {
+            let also = if can_vp8 { " or VP8" } else { "" };
             return Err(format!("the offer has no H.264{also} video, which is what a channel takes from WebRTC. Set the browser or encoder to H.264."));
         }
+        // One video codec in the answer, so the stream that arrives is the one
+        // its branch was built for: H.264 whenever the offer has it.
+        let vp8 = !offer.contains("H264");
         let stop = Arc::new(AtomicBool::new(false));
         let halt = stop.clone();
         let kick: Kick = Arc::new(move || halt.store(true, Ordering::Relaxed));
@@ -110,8 +113,7 @@ fn build(name: &str, ports: (u16, u16), to: &Shared, vp8: bool) -> Result<(Pipe,
         }
     }
     pipeline.add(&bin).map_err(|e| e.to_string())?;
-    let video = vp8::video_caps(vp8);
-    for (kind, caps) in [("video", video.as_str()), ("audio", "application/x-rtp,media=audio,encoding-name=OPUS,clock-rate=48000")] {
+    for (kind, caps) in [("video", vp8::video_caps(vp8)),("audio", "application/x-rtp,media=audio,encoding-name=OPUS,clock-rate=48000")] {
         let caps: gst::Caps = caps.parse().map_err(|_| format!("the {kind} caps did not parse"))?;
         let direction = gst_webrtc::WebRTCRTPTransceiverDirection::Recvonly;
         let _ = bin.emit_by_name::<Option<gst_webrtc::WebRTCRTPTransceiver>>("add-transceiver", &[&direction, &caps]);

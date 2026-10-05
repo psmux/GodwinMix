@@ -33,7 +33,10 @@ export class ScreenAwake {
   }
 
   async take() {
-    if (!this.possible) return;
+    // One request at a time: every state change asks, and a lock that is
+    // still on its way would otherwise be asked for twice.
+    if (!this.possible || this.asking) return;
+    this.asking = true;
     try {
       const lock = await this.nav.wakeLock.request("screen");
       if (!this.wanted) return void lock.release().catch(() => {});
@@ -44,6 +47,8 @@ export class ScreenAwake {
     } catch {
       // Refused: the page is hidden, or the battery saver is on. The next
       // visibilitychange asks again.
+    } finally {
+      this.asking = false;
     }
   }
 
