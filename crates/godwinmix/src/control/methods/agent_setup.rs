@@ -54,7 +54,7 @@ fn dirs() -> Result<Dirs, RpcError> {
 
 async fn setup(call: Call, params: Value) -> Result<Value, RpcError> {
     let mut req: SetupRequest = call.params(&params)?;
-    req.dry_run = call.dry_run;
+    req.dry_run |= call.dry_run;
     let exe = std::env::current_exe().map_err(|e| RpcError::internal(format!("this mixer cannot find its own executable: {e}")))?;
     let dirs = dirs()?;
     let mut setup = agents::plan(&req, &exe, &dirs).map_err(RpcError::invalid_params)?;

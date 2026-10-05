@@ -67,7 +67,16 @@ class Core:
         with open(path, "w", encoding="utf-8") as f:
             f.write(config(example, port, self.token, self.work))
         self.log = open(os.path.join(self.work, "core.log"), "w")
-        self.proc = subprocess.Popen([godwinmix, "--config", path], cwd=self.work, stdout=self.log, stderr=subprocess.STDOUT)
+        # A home of its own, so `agent.setup` writes where the test can look
+        # and never into the runner's real one.
+        self.home = os.path.join(self.work, "home")
+        os.makedirs(self.home)
+        env = dict(os.environ, HOME=self.home, USERPROFILE=self.home,
+                   APPDATA=os.path.join(self.home, "AppData", "Roaming"),
+                   XDG_CONFIG_HOME=os.path.join(self.home, ".config"),
+                   XDG_DATA_HOME=os.path.join(self.home, ".local", "share"))
+        self.proc = subprocess.Popen([godwinmix, "--config", path], cwd=self.work, env=env,
+                                     stdout=self.log, stderr=subprocess.STDOUT)
 
     def wait(self, seconds=90):
         deadline = time.time() + seconds

@@ -62,6 +62,10 @@ pub enum Tool {
     Opencode,
     /// pi, and any tool that reads the shared `.agents/skills` folder.
     Pi,
+    /// Cursor: `~/.cursor/skills`.
+    Cursor,
+    /// VS Code's Copilot: `~/.copilot/skills`, `.github/skills` in a project.
+    Vscode,
 }
 
 impl Tool {
@@ -72,6 +76,8 @@ impl Tool {
             Self::Gemini => "gemini",
             Self::Opencode => "opencode",
             Self::Pi => "pi",
+            Self::Cursor => "cursor",
+            Self::Vscode => "vscode",
         }
     }
 
@@ -95,6 +101,9 @@ impl Tool {
             (Self::Opencode, true) => root.join(".opencode").join("skills"),
             (Self::Opencode, false) => root.join(".config").join("opencode").join("skills"),
             (Self::Pi, _) => root.join(".agents").join("skills"),
+            (Self::Cursor, _) => root.join(".cursor").join("skills"),
+            (Self::Vscode, true) => root.join(".github").join("skills"),
+            (Self::Vscode, false) => root.join(".copilot").join("skills"),
         })
     }
 }
