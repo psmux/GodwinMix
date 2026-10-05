@@ -3,8 +3,8 @@
 // against a detached root, so nothing here needs a touch screen.
 
 import { watchTouch, ignored, SLOP } from "../shell/touch.js";
-import { DragSelect, dragHandle } from "../shell/pointer.js";
-import { Selection } from "../shell/selection.js";
+import { dragHandle } from "../shell/pointer.js";
+import { trayTests } from "./touch-tray.js";
 import { el } from "../shell/dom.js";
 
 const tick = (ms = 0) => new Promise((r) => setTimeout(r, ms));
@@ -30,9 +30,17 @@ function stage() {
   const root = el("div", { style: { position: "fixed", left: "0", top: "0", width: "300px" } }, [tile, field]);
   document.body.append(root);
   const seen = [];
-  for (const type of ["contextmenu", "dblclick", "click"]) root.addEventListener(type, (e) => seen.push([type, e.target, e.clientX, e.clientY]));
+  const s = { root, tile, field, handle, seen, menus: true };
+  for (const type of ["contextmenu", "dblclick", "click"]) {
+    root.addEventListener(type, (e) => {
+      seen.push([type, e.target, e.clientX, e.clientY]);
+      // What a panel with an item menu does with the event.
+      if (type === "contextmenu" && s.menus) e.preventDefault();
+    });
+  }
   const stop = watchTouch(root, { longPress: PRESS });
-  return { root, tile, field, handle, seen, done: () => { stop(); root.remove(); } };
+  s.done = () => { stop(); root.remove(); };
+  return s;
 }
 
 async function gestures(test, eq, ok) {
@@ -52,6 +60,18 @@ async function gestures(test, eq, ok) {
   test("the click a finger makes as it lifts after a long press is swallowed", () => {
     eq(s.seen.filter(([t]) => t === "click").length, 0);
   });
+
+  // Nothing here has a menu: a Take button held a moment too long.
+  s.menus = false;
+  s.seen.length = 0;
+  finger(name, "pointerdown", 30, 40);
+  await tick(PRESS + 30);
+  finger(name, "pointerup", 30, 40);
+  name.click();
+  test("a long press nothing answers leaves the click alone, so a held Take still takes", () => {
+    eq(s.seen.map(([t]) => t), ["contextmenu", "click"]);
+  });
+  s.menus = true;
 
   s.seen.length = 0;
   finger(name, "pointerdown", 30, 40);
@@ -96,59 +116,7 @@ async function gestures(test, eq, ok) {
   s.done();
 }
 
-/** The tray's pointer pipeline under a finger. */
-async function tray(test, eq, ok) {
-  const s = stage();
-  const calls = { activate: 0, menu: 0, drops: [] };
-  const drag = new DragSelect({
-    container: s.root,
-    selection: new Selection(),
-    order: () => ["cam-1"],
-    onChange: () => {},
-    onActivate: () => { calls.activate += 1; },
-    onMenu: () => { calls.menu += 1; },
-    onDrop: (info) => calls.drops.push(info),
-  });
-  const name = s.tile.querySelector(".name");
-
-  finger(name, "pointerdown", 30, 40);
-  await tick(PRESS + 30);
-  finger(name, "pointerup", 30, 40);
-  test("a long press on a tile opens its menu and does not put it on air", () => {
-    eq(calls.menu, 1);
-    eq(calls.activate, 0);
-  });
-
-  await tick(400);
-  finger(name, "pointerdown", 30, 40);
-  finger(name, "pointermove", 30, 70);
-  finger(name, "pointerup", 30, 70);
-  test("a finger dragged across a tile scrolls rather than moves it", () => {
-    eq(calls.drops.length, 0);
-    eq(calls.activate, 0);
-    ok(!document.querySelector(".dragging-tiles"), "no drag left behind");
-  });
-
-  await tick(400);
-  finger(s.handle, "pointerdown", 10, 40);
-  finger(s.handle, "pointermove", 60, 90);
-  finger(s.handle, "pointerup", 60, 90);
-  test("the grip drags the tile", () => {
-    eq(calls.drops.length, 1);
-    eq(calls.drops[0].ids, ["cam-1"]);
-  });
-
-  await tick(400);
-  tap(s.handle, 10, 40);
-  test("a tap on the grip selects without taking", () => eq(calls.activate, 0));
-
-  tap(name, 30, 40);
-  test("a tap on the tile still takes it", () => eq(calls.activate, 1));
-  drag.destroy();
-  s.done();
-}
-
 export async function touchTests(test, eq, ok) {
   await gestures(test, eq, ok);
-  await tray(test, eq, ok);
+  await trayTests(test, eq, ok, { stage, finger, tap, tick, PRESS });
 }
