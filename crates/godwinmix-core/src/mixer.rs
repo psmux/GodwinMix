@@ -5427,6 +5427,7 @@ pub fn spawn(
 mod tests {
     mod endurance;
     mod full_pool;
+    mod odd_segment;
     mod restart;
     mod preview_churn;
     mod slow_restart;

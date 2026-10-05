@@ -1,7 +1,7 @@
 use super::*;
 
 /// Count the buffers that reach the programme's raw video tee.
-fn count_programme(mix: &Mixer) -> Arc<std::sync::atomic::AtomicU64> {
+pub(super) fn count_programme(mix: &Mixer) -> Arc<std::sync::atomic::AtomicU64> {
     let frames = Arc::new(std::sync::atomic::AtomicU64::new(0));
     let counted = frames.clone();
     let tee = mix.program.by_name("vraw-tee").expect("the raw video tee");
