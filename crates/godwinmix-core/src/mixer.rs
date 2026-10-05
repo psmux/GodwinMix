@@ -419,6 +419,7 @@ mod offload;
 mod patience;
 mod rendered;
 pub mod slots;
+mod slot_guard;
 pub mod transition;
 pub mod unstarted;
 #[cfg(test)]
@@ -5425,6 +5426,7 @@ pub fn spawn(
 #[cfg(test)]
 mod tests {
     mod endurance;
+    mod full_pool;
     mod restart;
     mod preview_churn;
     mod slow_restart;

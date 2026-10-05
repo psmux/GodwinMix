@@ -47,6 +47,25 @@ pub fn resume_chain(sink: &gst::Pad) {
     sink.send_event(gst::event::FlushStop::new(false));
 }
 
+/// [`wake_chain`] for the chain below a src pad, pushed out of that pad
+/// rather than sent into the pad below it.
+///
+/// The difference is the src pad's own memory. A flush stop takes the segment
+/// off every pad it passes, and a src pad that a flush went past knows it has
+/// to send its segment again. One that a flush went around, because it was
+/// sent straight into the pad below, still believes the pad below has the
+/// segment, and if the same segment comes back it is not sent: the next frame
+/// arrives with no segment in front of it. See `mixer::slot_guard`.
+pub fn wake_below(src: &gst::Pad) {
+    src.push_event(gst::event::FlushStart::new());
+}
+
+/// [`resume_chain`] for the chain below a src pad, as [`wake_below`] is for
+/// [`wake_chain`].
+pub fn resume_below(src: &gst::Pad) {
+    src.push_event(gst::event::FlushStop::new(false));
+}
+
 /// How long [`after_next_frame`] waits for a compositor that is not pushing.
 pub const FRAME_BARRIER: Duration = Duration::from_millis(150);
 
