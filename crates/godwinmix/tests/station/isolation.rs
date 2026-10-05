@@ -86,10 +86,13 @@ async fn a_show_killed_is_started_again_the_other_runs_on_and_its_share_goes_bac
     assert_eq!(second["restarts"], 1, "{list}");
     assert_ne!(pid_of(&dir, "second"), Some(pid), "a new process");
 
-    until("the restarted show to hold its rendition again, once", Duration::from_secs(20), || async {
-        governor_used(&st).await.0 == held.0
-    })
-    .await;
+    let start = Instant::now();
+    let mut now = governor_used(&st).await;
+    while now.0 != held.0 && start.elapsed() < Duration::from_secs(20) {
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        now = governor_used(&st).await;
+    }
+    assert_eq!(now.0, held.0, "the restarted show holds its rendition again, once: {now:?} against {held:?} before");
 
     let main = list["shows"].as_array().unwrap().iter().find(|s| s["id"] == "main").cloned().unwrap();
     assert_eq!((main["state"].clone(), main["restarts"].clone()), (json!("running"), json!(0)), "{list}");
