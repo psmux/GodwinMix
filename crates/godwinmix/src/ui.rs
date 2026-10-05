@@ -60,6 +60,10 @@ const ASSETS: &[(&str, &str)] = &[
     ("join/whip.js", include_str!("../../../ui/join/whip.js")),
     ("join/meter.js", include_str!("../../../ui/join/meter.js")),
     ("join/stats.js", include_str!("../../../ui/join/stats.js")),
+    ("join/name.js", include_str!("../../../ui/join/name.js")),
+    ("join/name-field.js", include_str!("../../../ui/join/name-field.js")),
+    ("join/wake.js", include_str!("../../../ui/join/wake.js")),
+    ("join/flip.js", include_str!("../../../ui/join/flip.js")),
     ("kits/canvas/draw.js", include_str!("../../../ui/kits/canvas/draw.js")),
     ("kits/canvas/geometry.js", include_str!("../../../ui/kits/canvas/geometry.js")),
     ("kits/canvas/gizmos.js", include_str!("../../../ui/kits/canvas/gizmos.js")),
@@ -181,6 +185,7 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/sources/browser-device.js", include_str!("../../../ui/panels/sources/browser-device.js")),
     ("panels/sources/browser-dock.js", include_str!("../../../ui/panels/sources/browser-dock.js")),
     ("panels/sources/browser-entry.js", include_str!("../../../ui/panels/sources/browser-entry.js")),
+    ("panels/sources/phone-camera.js", include_str!("../../../ui/panels/sources/phone-camera.js")),
     ("panels/sources/first-air.js", include_str!("../../../ui/panels/sources/first-air.js")),
     ("panels/sources/local.js", include_str!("../../../ui/panels/sources/local.js")),
     ("panels/sources/chooser-loader.js", include_str!("../../../ui/panels/sources/chooser-loader.js")),
@@ -942,6 +947,8 @@ mod tests {
         // is asked for.
         reachable.extend(closure_of("join/page.js"));
         reachable.extend(closure_of("panels/sources/browser-device.js"));
+        // A phone's camera: the code and the link, when that row is pressed.
+        reachable.extend(closure_of("panels/sources/phone-camera.js"));
         for (path, _) in ASSETS {
             if path.ends_with(".css") || path.ends_with(".html") || path.ends_with(".json") {
                 continue;
@@ -1024,6 +1031,7 @@ mod tests {
             ("shell/settings-dialog.js", "Settings for this page"),
             ("panels/outputs/record-start.js", "Record pressed"),
             ("panels/sources/browser-device.js", "this browser's camera opened"),
+            ("panels/sources/phone-camera.js", "A phone's camera picked in Add source"),
             ("join/publisher.js", "this browser's camera opened, or /join/"),
         ] {
             assert!(known(path).is_some(), "{path} is not served at all");
