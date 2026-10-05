@@ -91,6 +91,13 @@ impl Tap {
         });
     }
 
+    /// Milliseconds from `from` to the first frame where any point is
+    /// green, the scene coming in, or `None` if none was.
+    pub(super) fn first_green_after(&self, from: u64) -> Option<u64> {
+        let frames = self.frames.lock();
+        frames.iter().filter(|(t, _)| *t >= from).find(|(_, v)| v.iter().any(|p| is_green(*p))).map(|(t, _)| (t - from) / 1_000_000)
+    }
+
     /// What the frame nearest to `at` showed.
     pub(super) fn at(&self, at: u64) -> Vec<(u8, u8)> {
         let frames = self.frames.lock();
@@ -137,14 +144,19 @@ fn landed_on_green(mix: &Mixer) {
     assert!(mix.pool.driven_by_a_transition("xpos").is_empty() && mix.pool.driven_by_a_transition("alpha").is_empty());
 }
 
-/// A second, longer by `GODWINMIX_TIMING_SLACK` on a runner that declares
-/// itself slow. The middle frame is read by its time, and the scene coming
-/// in is drawn only once its slot has a picture again: on a Windows runner a
-/// 300 ms zoom still showed the old scene at its centre half way through, and
-/// at 900 ms a slide still had none of the new scene at three quarters
-/// across. What the middle frame must show does not change.
+/// Three hundred milliseconds, longer by `GODWINMIX_TIMING_SLACK` on a runner
+/// that declares itself slow: the middle frame is read by its time, and on a
+/// Windows runner a 300 ms zoom still showed the old scene at its centre
+/// half way through.
+///
+/// Longer does not cure what fails here under load. With the whole mixer
+/// suite running beside it, three times in thirteen runs on a Windows
+/// laptop, the scene coming in was not drawn at all for the whole window
+/// (3 s at a slack of 3) and appeared 400 ms after it ended, when the
+/// transition settled. The message prints the window a tenth at a time and
+/// when the new scene first showed. See STATUS.md, 2026-10-06.
 fn spec(kind: Kind) -> TransitionSpec {
-    let ms = (1000.0 * crate::plugin::harness::timing_slack()) as u64;
+    let ms = (300.0 * crate::plugin::harness::timing_slack()) as u64;
     TransitionSpec::new(kind, ms)
 }
 
@@ -181,8 +193,12 @@ async fn every_new_transition_keeps_the_frame_rate_and_lands_on_the_taken_scene(
         println!("{name}: largest interval {:.1} ms", largest as f64 / 1e6);
         assert!(largest <= allowed, "{name}: the largest interval was {largest} ns against a frame of {frame}");
         let mid = tap.at(window.0 + (window.1 - window.0) / 2);
+        // The window a tenth at a time, for the message: whether the new
+        // scene came late or the curve went wrong reads off it at once.
+        let tenths: Vec<_> = (0..=10).map(|t| tap.at(window.0 + (window.1 - window.0) * t / 10)).collect();
+        let tenths = format!("{tenths:?}, the new scene first drawn {:?} ms in", tap.first_green_after(window.0));
         for (i, check) in checks.iter().enumerate() {
-            assert!(check(mid[i]), "{name}: point {:?} half way through showed {:?}", points[i], mid[i]);
+            assert!(check(mid[i]), "{name}: point {:?} half way through showed {:?}; by tenths {tenths}", points[i], mid[i]);
         }
         landed_on_green(&mix);
         let after = tap.at(window.1 + frame * 4);
