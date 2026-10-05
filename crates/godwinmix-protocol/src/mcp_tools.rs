@@ -208,23 +208,26 @@ fn score(tool: &Value, words: &[String]) -> usize {
     score
 }
 
-/// How deep a schema may nest before inlining gives up. A recursive type would
-/// otherwise expand for ever; none of ours is, and a guard is cheaper than
-/// finding out the hard way in a client's context window.
+/// How many references inlining follows down one path before it gives up. A
+/// recursive type would otherwise expand for ever; none of ours is, and a
+/// guard is cheaper than finding out the hard way in a client's context
+/// window. Only a `$ref` counts. Counting every level once replaced the word
+/// `"string"` in a deep `type` with an object, a schema Claude Code refuses,
+/// which hid `take` from every Claude Code session.
 const MAX_DEPTH: usize = 8;
 
 /// Replace every `$ref: "#/$defs/X"` with the definition itself.
 ///
 /// MCP clients want a self contained input schema: most do not resolve `$ref`
 /// at all, and a tool whose schema is one `$ref` reads to a model as a tool
-/// that takes anything.
+/// that takes anything. `depth` is the number of references already followed.
 pub fn inline_refs(schema: &Value, defs: &Map<String, Value>, depth: usize) -> Value {
-    if depth > MAX_DEPTH {
-        return json!({ "type": "object" });
-    }
     match schema {
         Value::Object(map) => {
             if let Some(name) = map.get("$ref").and_then(Value::as_str).and_then(def_name) {
+                if depth >= MAX_DEPTH {
+                    return json!({ "type": "object" });
+                }
                 if let Some(target) = defs.get(name) {
                     let mut inlined = inline_refs(target, defs, depth + 1);
                     // A sibling `description` on the reference is the field's
@@ -241,12 +244,12 @@ pub fn inline_refs(schema: &Value, defs: &Map<String, Value>, depth: usize) -> V
                 if key == "$defs" {
                     continue;
                 }
-                out.insert(key.clone(), inline_refs(value, defs, depth + 1));
+                out.insert(key.clone(), inline_refs(value, defs, depth));
             }
             Value::Object(out)
         }
         Value::Array(items) => {
-            Value::Array(items.iter().map(|v| inline_refs(v, defs, depth + 1)).collect())
+            Value::Array(items.iter().map(|v| inline_refs(v, defs, depth)).collect())
         }
         other => other.clone(),
     }
@@ -296,5 +299,17 @@ mod tests {
             serde_json::from_value(json!({ "Loop": { "$ref": "#/$defs/Loop" } })).unwrap();
         let out = inline_refs(&json!({ "$ref": "#/$defs/Loop" }), &defs, 0);
         assert_eq!(out["type"], "object");
+    }
+
+    /// Deep nesting with no reference in it comes through whole. Counting
+    /// every level once turned `"type": "string"` ten levels down into
+    /// `"type": {"type": "object"}`, which is not a schema at all.
+    #[test]
+    fn deep_nesting_without_a_reference_is_left_whole() {
+        let mut schema = json!({ "type": "string" });
+        for _ in 0..12 {
+            schema = json!({ "anyOf": [schema, { "type": "null" }] });
+        }
+        assert_eq!(inline_refs(&schema, &Map::new(), 0), schema);
     }
 }
