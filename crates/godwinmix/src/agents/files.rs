@@ -68,9 +68,13 @@ pub fn path_note(exe: &Path) -> Option<String> {
         return None;
     }
     let e = exe.display();
+    // Bash first: pi, and Claude Code's Bash tool on Windows, run Git Bash.
+    // A free model shown the PowerShell form first sent it to bash and lost a
+    // turn to the error.
     Some(format!(
         "> On this machine `godwinmix` is not on PATH. Wherever this skill says \
-         `godwinmix`, run \"{e}\" instead, quoted (in PowerShell, & \"{e}\")."
+         `godwinmix`, run \"{e}\" instead, in double quotes. Only PowerShell needs \
+         an & in front of it."
     ))
 }
 

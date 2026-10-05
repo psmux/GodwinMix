@@ -94,7 +94,9 @@ fn print(setup: &agents::Setup, dry_run: bool) {
 
 pub fn tools() -> Result<()> {
     let dirs = Dirs::from_env().context("no home folder: set HOME (or USERPROFILE on Windows)")?;
-    for d in agents::detect::detect(&dirs, std::env::var_os("PATH").as_deref()) {
+    let found = agents::detect::detect(&dirs, std::env::var_os("PATH").as_deref());
+    // `other` is any MCP client, which is set up by pasting, not found.
+    for d in found.into_iter().filter(|d| d.tool != AgentTool::Other) {
         let id = serde_json::to_value(d.tool).ok().and_then(|v| v.as_str().map(String::from)).unwrap_or_default();
         let found = d.found.unwrap_or_else(|| "not found".into());
         println!("{id:<9} {:<15} {found}", d.name);
