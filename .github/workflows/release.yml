@@ -493,9 +493,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # By name, not everything the run uploaded: the image job's build
+      # action uploads a `.dockerbuild` record of its own, which is no part of
+      # the release, and failing to download it failed the first release.
       - uses: actions/download-artifact@v4
         with:
           path: incoming
+          pattern: core-*
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: incoming
+          pattern: desktop-*
 
       - name: One directory, one checksum file
         run: |
