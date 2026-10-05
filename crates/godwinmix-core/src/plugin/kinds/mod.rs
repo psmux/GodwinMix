@@ -31,7 +31,7 @@ pub mod ticker;
 use super::{MediaEnds, Tier};
 use crate::caps::CanvasCaps;
 use crate::config::{BrowserConfig, SourceConfig};
-use crate::input::{install_buffer_probe, install_timeline_probe, route_pads, LastBuffer};
+use crate::input::{guard_timeline, install_buffer_probe, install_timeline_probe, route_pads, LastBuffer};
 use crate::probe::Backends;
 use crate::state::{SourceHealth, SourceId};
 use anyhow::{Context, Result};
@@ -180,6 +180,11 @@ where
     // source as healthy while an element downstream of it silently discards
     // everything, which is exactly how the cameras appeared to have audio
     // while the programme carried silence.
+    // First of all, so nothing after it counts a buffer it holds back: a
+    // segment or a buffer the programme could not place in time stops here
+    // and costs this source alone (`input::boundary`).
+    guard_timeline(&norm.video_proxy, id, "video")?;
+    guard_timeline(&norm.audio_proxy, id, "audio")?;
     let health = SourceHealth::new(ctx.origin);
     install_buffer_probe(&norm.video_proxy, "sink", {
         let h = health.clone();

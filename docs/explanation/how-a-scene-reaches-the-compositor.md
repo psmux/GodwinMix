@@ -181,6 +181,37 @@ was given when it was added. That is what makes the ordinary path cost exactly
 what it did before the pool existed, and what makes a take show the current
 picture rather than a frame from whenever the valve last closed.
 
+## Moving a slot to another source
+
+A slot that changes hands is flushed first: the outgoing source can have a
+frame parked in it, and the flush is what lets that go. Three things about how
+it is flushed matter, and each one was learned the hard way on 2026-10-05,
+with two phones joining a show that already had more sources than slots.
+
+The flush is pushed out of the valve's own src pad, not sent into the queue
+under it. A flush takes the segment off every pad it passes. Sent into the
+queue, it went around the valve, and the valve still believed the queue had
+the segment. When the same source came back to the slot it had just lost, it
+brought the identical segment, the valve did not send it again, and the next
+frame reached the compositor with no segment at all. `compositor` asserts on
+that in `gst_video_aggregator_fill_queues` and the whole process aborts.
+Adding a phone to a full pool did exactly this: the new source took the slot
+on air, and the next apply gave it straight back.
+
+The valve is shut before the flush. A frame the source's tee pushes into a
+flushing slot comes back `FLUSHING`; a tee with one pad hands that up to the
+source's queue, which pauses on it and never starts again, so the source stays
+black everywhere it is drawn while its own pipeline reads as live. A valve that
+is dropping answers `OK` whatever happened below it.
+
+A source being added never takes a slot that is on the canvas. With the pool
+full it takes one that is hidden, and if every one is showing the pool grows.
+
+Behind all three, each slot's queue checks that a frame has a segment in
+front of it, sends the valve's one down first if it has not, and drops the
+frame if there is none to send (`mixer::slot_guard`). It should never fire; a
+warning naming the slot says it did.
+
 ## z bands
 
 | Band | What is in it |
