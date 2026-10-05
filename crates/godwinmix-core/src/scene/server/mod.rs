@@ -21,28 +21,34 @@
 //! the patch is read off the result. No command describes its own change, so no
 //! command can describe it wrongly.
 
+mod clients;
 pub mod compose;
+pub mod conflict;
+mod drafts;
 pub mod find;
 pub mod graphics;
 pub mod ops;
 pub mod patch;
 pub mod store;
+mod undo;
 pub mod view;
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 use parking_lot::Mutex;
 use tokio::sync::broadcast;
 
 use crate::caps::CanvasCaps;
 use crate::mixer::Placement;
-use crate::scene::document::{Canvas, Collection, Scene};
+use crate::scene::document::{Canvas, Collection};
 use crate::scene::id::Id;
 use crate::scene::validate::Finding;
 
+pub use conflict::{Conflict, Refused};
+pub use drafts::{Draft, Stale};
 pub use patch::{Patch, Update};
 pub use view::{Geometry, SceneView};
 
@@ -50,10 +56,6 @@ pub use view::{Geometry, SceneView};
 /// that falls further behind than this is told to take a fresh snapshot,
 /// which is `event/resync`.
 const PATCH_QUEUE: usize = 256;
-
-/// How deep the undo stack goes. Each entry is a diff of the records that
-/// changed, not a copy of the document, so this is cheap.
-const UNDO_DEPTH: usize = 200;
 
 /// What a mutating command answers with: the resulting records plus the
 /// derived geometry, so no follow up read is needed.
@@ -64,20 +66,6 @@ pub struct Outcome {
     /// What changed. Empty when the command was asked for what was already
     /// true, which is what makes every one of them idempotent.
     pub patch: Patch,
-}
-
-/// A working copy of one scene, edited off air.
-#[derive(Debug, Clone)]
-pub struct Draft {
-    pub id: Id,
-    /// The scene in the live document this draft came from.
-    pub of: Id,
-    /// The name of that scene when the draft was taken, for a message.
-    pub name: String,
-    /// True when the client asked to edit on air. The UI says so; the server
-    /// only records the choice.
-    pub live: bool,
-    scene: Scene,
 }
 
 /// The document, and everything that has to be true about it.
@@ -91,16 +79,12 @@ struct Inner {
     doc: Collection,
     path: Option<PathBuf>,
     canvas: CanvasCaps,
-    /// Patches that undo what has been done, newest last.
-    undo: Vec<Patch>,
-    redo: Vec<Patch>,
-    /// The label a client set with `scene.history.mark`, which merges the
-    /// commands that follow into one undo step.
-    group: Option<String>,
-    /// The document as it was when the open transaction began.
-    transaction: Option<Collection>,
-    /// Patches gathered while a transaction is open.
-    pending: Vec<Patch>,
+    /// Every client's own undo and redo stacks, marks and open transaction.
+    /// See `clients.rs`.
+    clients: clients::Histories,
+    /// Who changed each record last, so a refused undo can say who is in the
+    /// way. See `conflict.rs`.
+    writers: conflict::Writers,
     drafts: Vec<Draft>,
     /// The scene that is armed. `program.take {}` with no argument takes it.
     preview: Option<Id>,
@@ -124,11 +108,8 @@ impl SceneServer {
                 doc,
                 path,
                 canvas,
-                undo: Vec::new(),
-                redo: Vec::new(),
-                group: None,
-                transaction: None,
-                pending: Vec::new(),
+                clients: clients::Histories::default(),
+                writers: conflict::Writers::default(),
                 drafts: Vec::new(),
                 preview: None,
                 preview_draft: None,
@@ -321,7 +302,7 @@ impl SceneServer {
     pub fn show_draft(&self, draft: Option<&str>) -> Result<()> {
         let mut inner = self.inner.lock();
         inner.preview_draft = match draft {
-            Some(id) => Some(find_draft(&inner.drafts, id)?.id),
+            Some(id) => Some(drafts::find_draft(&inner.drafts, id)?.id),
             None => None,
         };
         Ok(())
@@ -335,10 +316,7 @@ impl SceneServer {
         // place, the way `edit_draft` edits it, so a reference to another
         // scene resolves against the collection the draft belongs to.
         let mut working = inner.doc.clone();
-        match working.scenes.iter().position(|s| s.id == draft.of) {
-            Some(index) => working.scenes[index] = draft.scene.clone(),
-            None => working.scenes.push(draft.scene.clone()),
-        }
+        drafts::put_in(&mut working, &draft.scene);
         let scene = working.scene(&draft.of)?;
         let canvas = working.canvas;
         let (sx, sy) = (width as f64 / canvas.width as f64, height as f64 / canvas.height as f64);
@@ -383,7 +361,8 @@ impl SceneServer {
         client_seq: Option<u64>,
         f: impl FnOnce(&mut Collection) -> Result<T>,
     ) -> Result<(T, Patch)> {
-        let mut inner = self.inner.lock();
+        let mut guard = self.inner.lock();
+        let inner = &mut *guard;
         let before = inner.doc.to_flat();
         let mut working = inner.doc.clone();
         let value = f(&mut working)?;
@@ -397,17 +376,27 @@ impl SceneServer {
         if p.is_empty() {
             return Ok((value, p));
         }
-        p.seq = self.seq.fetch_add(1, Ordering::SeqCst) + 1;
         p.source_client = client.map(str::to_string);
         p.client_seq = client_seq;
-        p.label = inner.group.clone();
+        let at = self.seq.load(Ordering::SeqCst);
+        let history = inner.clients.of(client, at);
+        p.label = history.group.clone();
+        // Inside this client's transaction nothing is published until its
+        // commit: a client that saw half a batch would draw a frame nobody
+        // asked for. Nor is a number taken, so the patches every client does
+        // see stay one apart and a mirror reads no gap into them. Another
+        // client's edit in the meantime goes straight through.
+        let batched = history.transaction.is_some();
+        if !batched {
+            p.seq = self.seq.fetch_add(1, Ordering::SeqCst) + 1;
+        }
+        history.remember(p.clone());
+        inner.writers.note(&p, client);
         inner.doc = working;
-        inner.remember(p.clone());
-        inner.save();
-        let batched = inner.transaction.is_some();
-        drop(inner);
-        // Inside a transaction nothing is published until commit: a client
-        // that saw half a batch would draw a frame nobody asked for.
+        if !batched {
+            inner.save();
+        }
+        drop(guard);
         if !batched {
             let _ = self.patches.send(p.clone());
         }
@@ -441,229 +430,6 @@ impl SceneServer {
         let inner = self.inner.lock();
         let scene = inner.doc.scene(&id).map(|s| SceneView::of(&inner.doc, s));
         Ok(Outcome { scene, patch })
-    }
-
-    // -- transactions --------------------------------------------------
-
-    /// Begin a transaction. Everything until `commit` applies on one frame or
-    /// not at all (CasparCG's `MIXER COMMIT`).
-    pub fn begin(&self) -> Result<()> {
-        let mut inner = self.inner.lock();
-        if inner.transaction.is_some() {
-            bail!(
-                "a transaction is already open on this core. Commit it with \
-                 scene.transaction.commit or throw it away with scene.transaction.abort"
-            );
-        }
-        inner.transaction = Some(inner.doc.clone());
-        inner.pending.clear();
-        Ok(())
-    }
-
-    /// Commit: one patch for everything that happened, one undo step.
-    pub fn commit(&self, client: Option<&str>) -> Result<Patch> {
-        let mut inner = self.inner.lock();
-        let Some(start) = inner.transaction.take() else {
-            bail!("no transaction is open. Open one with scene.transaction.begin");
-        };
-        let before = start.to_flat();
-        let after = inner.doc.to_flat();
-        inner.pending.clear();
-        let mut p = patch::diff(&before, &after);
-        if p.is_empty() {
-            return Ok(p);
-        }
-        p.seq = self.seq.fetch_add(1, Ordering::SeqCst) + 1;
-        p.source_client = client.map(str::to_string);
-        // Nothing inside the transaction went on the undo stack, so the whole
-        // batch is one step: that is what "applies on one frame or not at all"
-        // means for somebody pressing Ctrl+Z afterwards.
-        inner.redo.clear();
-        let step = p.inverse();
-        inner.push_undo(step);
-        inner.save();
-        drop(inner);
-        let _ = self.patches.send(p.clone());
-        Ok(p)
-    }
-
-    /// Throw the transaction away. The document goes back to where it was when
-    /// the transaction opened, in one patch, so a client's mirror follows.
-    pub fn abort(&self, client: Option<&str>) -> Result<Patch> {
-        let mut inner = self.inner.lock();
-        let Some(start) = inner.transaction.take() else {
-            bail!("no transaction is open. Open one with scene.transaction.begin");
-        };
-        let before = inner.doc.to_flat();
-        let after = start.to_flat();
-        let mut p = patch::diff(&before, &after);
-        inner.doc = start;
-        inner.pending.clear();
-        if p.is_empty() {
-            return Ok(p);
-        }
-        p.seq = self.seq.fetch_add(1, Ordering::SeqCst) + 1;
-        p.source_client = client.map(str::to_string);
-        inner.save();
-        drop(inner);
-        let _ = self.patches.send(p.clone());
-        Ok(p)
-    }
-
-    pub fn in_transaction(&self) -> bool {
-        self.inner.lock().transaction.is_some()
-    }
-
-    // -- undo ----------------------------------------------------------
-
-    /// Group the commands that follow into one undo step, until the next mark.
-    /// A drag of forty moves is one Ctrl+Z.
-    pub fn mark(&self, label: Option<String>) {
-        self.inner.lock().group = label;
-    }
-
-    pub fn undo(&self, client: Option<&str>) -> Result<Patch> {
-        self.step(client, true)
-    }
-
-    pub fn redo(&self, client: Option<&str>) -> Result<Patch> {
-        self.step(client, false)
-    }
-
-    fn step(&self, client: Option<&str>, back: bool) -> Result<Patch> {
-        let mut inner = self.inner.lock();
-        if inner.transaction.is_some() {
-            bail!("a transaction is open. Commit or abort it before undoing");
-        }
-        let taken = if back { inner.undo.pop() } else { inner.redo.pop() };
-        let Some(step) = taken else {
-            bail!(
-                "there is nothing to {}. {} changes are on the stack",
-                if back { "undo" } else { "redo" },
-                if back { inner.undo.len() } else { inner.redo.len() }
-            );
-        };
-        let mut working = inner.doc.clone();
-        apply(&mut working, &step)?;
-        let before = inner.doc.to_flat();
-        let after = working.to_flat();
-        let mut p = patch::diff(&before, &after);
-        p.seq = self.seq.fetch_add(1, Ordering::SeqCst) + 1;
-        p.source_client = client.map(str::to_string);
-        p.label = step.label.clone();
-        inner.doc = working;
-        // The step that undoes what we just did goes on the other stack.
-        if back {
-            // Bounded by the undo stack it came off, so no trim is needed here.
-            inner.redo.push(p.inverse());
-        } else {
-            let step = p.inverse();
-            inner.push_undo(step);
-        }
-        inner.group = None;
-        inner.save();
-        drop(inner);
-        let _ = self.patches.send(p.clone());
-        Ok(p)
-    }
-
-    /// How many steps are on each stack, for a UI that greys out a button.
-    pub fn history(&self) -> (usize, usize) {
-        let inner = self.inner.lock();
-        (inner.undo.len(), inner.redo.len())
-    }
-
-    // -- drafts --------------------------------------------------------
-
-    /// Take a working copy of a scene, so editing happens off air.
-    ///
-    /// The reference designer opens as a modal on one of these, and a draft of
-    /// the scene that is on air is applied on the next take or on an explicit
-    /// apply, never on each keystroke. That is the OBS pitfall of editing the
-    /// programme scene live, turned into a choice.
-    pub fn edit_begin(&self, which: &str, live: bool) -> Result<Draft> {
-        let mut inner = self.inner.lock();
-        let scene = find::scene(&inner.doc, which)?.clone();
-        let draft =
-            Draft { id: Id::new(), of: scene.id, name: scene.name.clone(), live, scene };
-        inner.drafts.push(draft.clone());
-        Ok(draft)
-    }
-
-    /// The draft itself, for a command addressed to one.
-    pub fn draft(&self, id: &str) -> Result<Draft> {
-        let inner = self.inner.lock();
-        find_draft(&inner.drafts, id).cloned()
-    }
-
-    /// Change a draft. Nothing is published: a draft is nobody else's business
-    /// until it is applied.
-    pub fn edit_draft(
-        &self,
-        id: &str,
-        f: impl FnOnce(&mut Collection, usize) -> Result<()>,
-    ) -> Result<SceneView> {
-        let mut inner = self.inner.lock();
-        let draft = find_draft(&inner.drafts, id)?.clone();
-        // The draft is edited inside a copy of the whole document, so a
-        // command that looks at another scene (a reference, a layout paste)
-        // sees the collection it belongs to.
-        let mut working = inner.doc.clone();
-        match working.scenes.iter().position(|s| s.id == draft.of) {
-            Some(index) => working.scenes[index] = draft.scene.clone(),
-            None => working.scenes.push(draft.scene.clone()),
-        }
-        let index = working
-            .scenes
-            .iter()
-            .position(|s| s.id == draft.of)
-            .expect("the draft's scene was just put in");
-        f(&mut working, index)?;
-        let scene = working.scenes[index].clone();
-        let view = SceneView::of(&working, &scene);
-        if let Some(d) = inner.drafts.iter_mut().find(|d| d.id == draft.id) {
-            d.scene = scene;
-        }
-        Ok(view)
-    }
-
-    /// Write a draft back into the live document.
-    pub fn edit_apply(&self, client: Option<&str>, id: &str) -> Result<Outcome> {
-        let draft = self.draft(id)?;
-        let outcome = self.edit(client, |doc| {
-            match doc.scenes.iter().position(|s| s.id == draft.of) {
-                Some(index) => doc.scenes[index] = draft.scene.clone(),
-                None => doc.scenes.push(draft.scene.clone()),
-            }
-            Ok(draft.of)
-        })?;
-        self.inner.lock().drafts.retain(|d| d.id != draft.id);
-        let inner = self.inner.lock();
-        let scene = inner.doc.scene(&outcome.0).map(|s| SceneView::of(&inner.doc, s));
-        Ok(Outcome { scene, patch: outcome.1 })
-    }
-
-    /// Throw a draft away.
-    pub fn edit_discard(&self, id: &str) -> Result<Draft> {
-        let mut inner = self.inner.lock();
-        let draft = find_draft(&inner.drafts, id)?.clone();
-        inner.drafts.retain(|d| d.id != draft.id);
-        Ok(draft)
-    }
-
-    /// Every draft that is open, so a UI can offer to come back to one.
-    pub fn drafts(&self) -> Vec<Draft> {
-        self.inner.lock().drafts.clone()
-    }
-
-    /// The drafts waiting on this scene going to air, applied by the take.
-    pub fn apply_drafts_of(&self, client: Option<&str>, scene: Id) -> Vec<Outcome> {
-        let waiting: Vec<Draft> =
-            self.inner.lock().drafts.iter().filter(|d| d.of == scene && !d.live).cloned().collect();
-        waiting
-            .into_iter()
-            .filter_map(|d| self.edit_apply(client, &d.id.to_string()).ok())
-            .collect()
     }
 
     /// The canvas the document is on.
@@ -715,50 +481,10 @@ pub struct PreviewCell {
 }
 
 impl Inner {
-    /// Put a step on the undo stack, merging it into the one before when the
-    /// client marked them as one.
-    fn remember(&mut self, p: Patch) {
-        if self.transaction.is_some() {
-            // Inside a transaction the batch is the step. See `commit`.
-            return;
-        }
-        self.redo.clear();
-        let inverse = p.inverse();
-        let merge = self.group.is_some()
-            && self.undo.last().is_some_and(|last| last.label == p.label);
-        if merge {
-            // The inverse of "a then b" is "inverse of b then inverse of a",
-            // so the newer inverse goes first and the older one is folded into
-            // it: undoing the pair puts everything back where it started.
-            let older = self.undo.pop().expect("just checked");
-            let mut merged = inverse;
-            merged.merge(&older);
-            self.push_undo(merged);
-        } else {
-            self.push_undo(inverse);
-        }
-    }
-
-    /// One step onto the undo stack, and the stack kept to its depth.
-    ///
-    /// Every push goes through here. A transaction's commit used to push its
-    /// one step directly and skip the trim, so a core that ran on transactions
-    /// (the designer's drag does, and so does every `scene.transaction`) kept
-    /// every step it had ever made.
-    fn push_undo(&mut self, step: Patch) {
-        self.undo.push(step);
-        if self.undo.len() > UNDO_DEPTH {
-            self.undo.remove(0);
-        }
-    }
-
     /// Write the document out. A failure is loud in the log and does not fail
     /// the command: the show is in memory and on air, and refusing an edit
     /// because a disk is full would take a working mixer off the air.
     fn save(&self) {
-        if self.transaction.is_some() {
-            return;
-        }
         let Some(path) = &self.path else { return };
         if let Err(e) = store::save(path, &self.doc) {
             tracing::error!(?e, path = %path.display(), "could not save the scene collection");
@@ -790,21 +516,6 @@ fn apply(doc: &mut Collection, p: &Patch) -> Result<()> {
     Ok(())
 }
 
-fn find_draft<'a>(drafts: &'a [Draft], id: &str) -> Result<&'a Draft> {
-    let key = id.trim();
-    drafts
-        .iter()
-        .find(|d| d.id.to_string() == key)
-        .ok_or_else(|| {
-            let open: Vec<String> =
-                drafts.iter().map(|d| format!("{} (of {})", d.id, d.name)).collect();
-            anyhow::anyhow!(
-                "there is no draft {key:?}. Open one with scene.edit.begin. Open drafts: {}",
-                if open.is_empty() { "none".into() } else { open.join(", ") }
-            )
-        })
-}
-
 /// Every source an item draws, itself and its children.
 fn sources_of(item: &crate::scene::document::Item) -> Vec<String> {
     let mut out = Vec::new();
@@ -817,5 +528,7 @@ fn sources_of(item: &crate::scene::document::Item) -> Vec<String> {
     out
 }
 
+#[cfg(test)]
+mod collab_tests;
 #[cfg(test)]
 mod tests;
