@@ -85,8 +85,8 @@ The server declares the tasks extension in `initialize`:
 
 A client that speaks it reads a long running call through the protocol. One
 that does not gets the same `{task_id, poll_interval_ms}` body and calls the
-`task_get` tool, which `search_tools` finds. `task_get` is deliberately not in
-the hot list: that list is capped at twelve tools and charged for on every
+`task_get` tool, which `search_tools` finds and `call_tool` runs. `task_get` is deliberately not in
+the hot list: that list is capped at fourteen tools and charged for on every
 call.
 
 ## For a method author

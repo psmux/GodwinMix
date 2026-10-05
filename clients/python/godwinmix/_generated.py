@@ -804,6 +804,13 @@ class DestinationRefusal(TypedDict, total=False):
     message: str
     need: Union[Cost, None]
 
+class Detected(TypedDict, total=False):
+    found: Optional[str]
+    # What was found: the command's path, or the config folder.
+    installed: bool
+    name: str
+    tool: AgentTool
+
 class DeviceToken(TypedDict, total=False):
     """One device token, without its secret."""
 
@@ -1077,6 +1084,16 @@ class FieldValue(TypedDict, total=False):
     type: FieldType
     value: str
     # What is on screen: the source's own value, the brand colour or the default, in that order.
+
+class FileWrite(TypedDict, total=False):
+    """One file a setup writes."""
+
+    action: Action
+    backup: Optional[str]
+    # Where the file was copied before it was changed.
+    path: str
+    what: str
+    # In words: "the godwinmix MCP server", "the godwinmix-design skill".
 
 class Filter(TypedDict, total=False):
     """One filter in an item's chain."""
@@ -2750,7 +2767,37 @@ class SetSpec(TypedDict, total=False):
     settings: Dict[str, Any]
     # The layout's settings: `presenter_scale` (0.3 to 1), `presenter_x` (0 to 1), `screen` (green, blue, none).
 
+class Setup(TypedDict, total=False):
+    """What a setup did, or would do."""
+
+    applied: bool
+    entry: Any
+    # The MCP entry, for a client nothing is written for.
+    name: str
+    notes: List[str]
+    prompt: str
+    # A first thing to ask it.
+    scope: SetupScope
+    start: str
+    # How to start the tool afterwards.
+    tool: AgentTool
+    writes: List[FileWrite]
+
 class SetupRequest(TypedDict, total=False):
+    """`agent.setup`."""
+
+    dir: Optional[str]
+    # The project folder, for `scope: project`. An absolute path.
+    dry_run: bool
+    # Answer every file it would write, and write nothing. The dispatcher reads it too, as it does on every destructive method.
+    env: Dict[str, Any]
+    # Environment for `godwinmix mcp`, such as GODWINMIX_URL for a mixer that is not the desktop app's. Written into the tool's config as given.
+    scope: SetupScope
+    # `user` (the default) writes into the home folder, `project` into `dir`.
+    tool: AgentTool
+    # claude, opencode, pi, codex, gemini, cursor, vscode or other.
+
+class SetupRequest2(TypedDict, total=False):
     """`setup.start` and `setup.get`: one piece by name."""
 
     piece: str
@@ -3347,7 +3394,7 @@ class TokenInfo(TypedDict, total=False):
     # "none" or "required": whether destructive calls need a confirm token.
     id: str
     profile: str
-    # MCP tool profile this token is meant for: "standard" or "minimal".
+    # MCP tool profile this token is meant for: "standard", "minimal" or "headend".
     rehearsal: bool
     scopes: List[str]
 
@@ -3642,11 +3689,17 @@ class FeedRecoveredEvent(TypedDict, total=False):
     id: str
     # The feed.
 
+# What a write does to a file.
+Action = Literal['create', 'merge', 'update', 'unchanged']
+
 # What pressing the button does.
 ActionKind = Literal['set-config', 'install-plugin', 'enable-plugin', 'open', 'retry', 'restart', 'setup', 'copy']
 
 # `ext.agent`. `true` takes the default thresholds; an object moves them.
 AgentExt = Union[bool, Dict[str, Any]]
+
+# The agent tools this mixer knows how to set up.
+AgentTool = Union[Literal['claude', 'opencode', 'pi', 'codex', 'gemini', 'cursor', 'vscode'], Literal['other']]
 
 # What an alarm is about.
 AlarmKind = Literal['no-input', 'stall', 'black', 'freeze', 'silence', 'cc-errors', 'loss', 'output-failed', 'governor-refused', 'shed']
@@ -3746,6 +3799,9 @@ RestartHow = Literal['supervised', 'none']
 # What a token may reach. Ordered: `admin` implies `operate` implies `read`. `Plugin` is the exception and sits below the ladder on purpose. It is what a plugin's own per instance token carries, and it grants exactly one thing: calling that plugin's own tools. It implies no reading and no operating, so a plugin that tries `program.take` is refused with -32002, which is what 04 section 8 asks for. Which plugin a token belongs to is `Token::plugin`, beside the scope rather than inside it, so `Scope` stays `Copy` and the method table stays a table of constants.
 Scope = Literal['plugin', 'read', 'operate', 'admin']
 
+# For the user, in their home folder, or for one project folder.
+SetupScope = Literal['user', 'project']
+
 # Where a piece stands.
 SetupState = Literal['ready', 'missing', 'running', 'failed', 'unavailable']
 
@@ -3784,7 +3840,9 @@ Zone = Literal['full', 'lower-third', 'bug', 'top', 'bottom', 'center', 'overlay
 METHODS = (
     {"name": "adbreak.end", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/adbreak/end"), "summary": 'Cut a running ad short, or disarm one that is scheduled.'},
     {"name": "adbreak.start", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/adbreak/start"), "summary": 'Interrupt the programme with a clip, then rejoin live when it ends.'},
+    {"name": "agent.setup", "scope": "admin", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/agent/setup"), "summary": "Set an AI agent tool up to use this mixer: its MCP config gets one entry, godwinmix, that runs this mixer's own executable, and its skills folder gets the GodwinMix skills. Other entries are kept and a changed file is copied aside first. dry_run answers every file it would write. The answer says how to start the tool and a first thing to ask it."},
     {"name": "agent.state", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/agent/state"), "summary": "The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing."},
+    {"name": "agent.tools", "scope": "admin", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/agent/tools"), "summary": 'The AI agent tools this mixer can set up, the ones installed on its machine first, each with what was found: a command on PATH or a config folder.'},
     {"name": "channel.add", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/channels"), "summary": 'Make a channel and its first key, which is in this answer. channel.key.reveal reads it again later.'},
     {"name": "channel.certificate.generate", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/channels/certificate/generate"), "summary": "Make a self signed certificate for RTMPS, for this machine's addresses unless names are given. Encoders must be told to accept it; one from a certificate authority needs no such step."},
     {"name": "channel.certificate.set", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/channels/certificate/set"), "summary": 'Give RTMPS a certificate: the PEM of the certificate (and its chain) and of its private key, as a certificate authority issued them. Checked before it is kept; the key is sealed and never read back.'},
@@ -4073,6 +4131,28 @@ class GeneratedMethods:
             params["return_to"] = return_to
         return await self._call("adbreak.start", params)
 
+    async def agent_setup(
+        self,
+        tool: AgentTool,
+        *,
+        dir: Optional[str] = None,
+        dry_run: Optional[bool] = None,
+        env: Optional[Dict[str, Any]] = None,
+        scope: Optional[SetupScope] = None,
+    ) -> Setup:
+        """Set an AI agent tool up to use this mixer: its MCP config gets one entry, godwinmix, that runs this mixer's own executable, and its skills folder gets the GodwinMix skills. Other entries are kept and a changed file is copied aside first. dry_run answers every file it would write. The answer says how to start the tool and a first thing to ask it."""
+        params: Dict[str, Any] = {}
+        params["tool"] = tool
+        if dir is not None:
+            params["dir"] = dir
+        if dry_run is not None:
+            params["dry_run"] = dry_run
+        if env is not None:
+            params["env"] = env
+        if scope is not None:
+            params["scope"] = scope
+        return await self._call("agent.setup", params)
+
     async def agent_state(
         self,
         *,
@@ -4083,6 +4163,13 @@ class GeneratedMethods:
         if response_format is not None:
             params["response_format"] = response_format
         return await self._call("agent.state", params)
+
+    async def agent_tools(
+        self,
+    ) -> List[Detected]:
+        """The AI agent tools this mixer can set up, the ones installed on its machine first, each with what was found: a command on PATH or a config folder."""
+        params: Dict[str, Any] = {}
+        return await self._call("agent.tools", params)
 
     async def channel_add(
         self,

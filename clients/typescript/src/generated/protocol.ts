@@ -12,6 +12,9 @@
 export const API_LEVEL = 1;
 export const API_COMPATIBLE = 1;
 
+/** What a write does to a file. */
+export type Action = "create" | "merge" | "update" | "unchanged";
+
 /** What pressing the button does. */
 export type ActionKind = "set-config" | "install-plugin" | "enable-plugin" | "open" | "retry" | "restart" | "setup" | "copy";
 
@@ -116,6 +119,9 @@ export type AgentExt = boolean | {
 export interface AgentStateRequest {
   response_format?: ResponseFormat;
 }
+
+/** The agent tools this mixer knows how to set up. */
+export type AgentTool = "claude" | "opencode" | "pi" | "codex" | "gemini" | "cursor" | "vscode" | "other";
 
 /** One condition that holds now. */
 export interface Alarm {
@@ -701,6 +707,13 @@ export interface DestinationRefusal {
 /** Where a destination has got to. */
 export type DestinationState = "off" | "waiting" | "connecting" | "live" | "reconnecting" | "failed";
 
+export interface Detected {
+  found?: string | null;
+  installed: boolean;
+  name: string;
+  tool: AgentTool;
+}
+
 /** One device token, without its secret. */
 export interface DeviceToken {
   created: string;
@@ -932,6 +945,14 @@ export interface FieldValue {
   set: boolean;
   type: FieldType;
   value: string;
+}
+
+/** One file a setup writes. */
+export interface FileWrite {
+  action: Action;
+  backup?: string | null;
+  path: string;
+  what: string;
 }
 
 /** One filter in an item's chain. */
@@ -2447,10 +2468,35 @@ export interface SetSpec {
   settings?: Record<string, unknown>;
 }
 
-/** `setup.start` and `setup.get`: one piece by name. */
+/** What a setup did, or would do. */
+export interface Setup {
+  applied: boolean;
+  entry?: unknown;
+  name: string;
+  notes: string[];
+  prompt: string;
+  scope: SetupScope;
+  start: string;
+  tool: AgentTool;
+  writes: FileWrite[];
+}
+
+/** `agent.setup`. */
 export interface SetupRequest {
+  dir?: string | null;
+  dry_run?: boolean;
+  env?: Record<string, unknown>;
+  scope?: SetupScope;
+  tool: AgentTool;
+}
+
+/** `setup.start` and `setup.get`: one piece by name. */
+export interface SetupRequest2 {
   piece: string;
 }
+
+/** For the user, in their home folder, or for one project folder. */
+export type SetupScope = "user" | "project";
 
 /** Where a piece stands. */
 export type SetupState = "ready" | "missing" | "running" | "failed" | "unavailable";
@@ -3263,7 +3309,9 @@ export interface FeedRecoveredEvent {
 export interface MethodParams {
   "adbreak.end": Record<string, never>;
   "adbreak.start": AdBreakRequest;
+  "agent.setup": SetupRequest;
   "agent.state": AgentStateRequest;
+  "agent.tools": Record<string, never>;
   "channel.add": ChannelAddRequest;
   "channel.certificate.generate": CertificateGenerateRequest;
   "channel.certificate.set": CertificateSetRequest;
@@ -3423,9 +3471,9 @@ export interface MethodParams {
   "scene.transaction.commit": Record<string, never>;
   "scene.undo": HistoryRequest2;
   "scene.validate": ValidateRequest;
-  "setup.get": SetupRequest;
+  "setup.get": SetupRequest2;
   "setup.list": Record<string, never>;
-  "setup.start": SetupRequest;
+  "setup.start": SetupRequest2;
   "show.add": ShowAddRequest;
   "show.add_many": ShowAddManyRequest;
   "show.list": Record<string, never>;
@@ -3472,7 +3520,9 @@ export interface MethodParams {
 export interface MethodResults {
   "adbreak.end": Record<string, unknown>;
   "adbreak.start": Record<string, unknown>;
+  "agent.setup": Setup;
   "agent.state": Record<string, unknown>;
+  "agent.tools": Detected[];
   "channel.add": ChannelAdded;
   "channel.certificate.generate": CertificateInfo;
   "channel.certificate.set": CertificateInfo;
@@ -3732,7 +3782,9 @@ export interface MethodInfo {
 export const METHODS: readonly MethodInfo[] = [
   { name: "adbreak.end", summary: "Cut a running ad short, or disarm one that is scheduled.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/adbreak/end" } },
   { name: "adbreak.start", summary: "Interrupt the programme with a clip, then rejoin live when it ends.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/adbreak/start" } },
+  { name: "agent.setup", summary: "Set an AI agent tool up to use this mixer: its MCP config gets one entry, godwinmix, that runs this mixer's own executable, and its skills folder gets the GodwinMix skills. Other entries are kept and a changed file is copied aside first. dry_run answers every file it would write. The answer says how to start the tool and a first thing to ask it.", scope: "admin", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/agent/setup" } },
   { name: "agent.state", summary: "The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/agent/state" } },
+  { name: "agent.tools", summary: "The AI agent tools this mixer can set up, the ones installed on its machine first, each with what was found: a command on PATH or a config folder.", scope: "admin", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/agent/tools" } },
   { name: "channel.add", summary: "Make a channel and its first key, which is in this answer. channel.key.reveal reads it again later.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/channels" } },
   { name: "channel.certificate.generate", summary: "Make a self signed certificate for RTMPS, for this machine's addresses unless names are given. Encoders must be told to accept it; one from a certificate authority needs no such step.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/channels/certificate/generate" } },
   { name: "channel.certificate.set", summary: "Give RTMPS a certificate: the PEM of the certificate (and its chain) and of its private key, as a certificate authority issued them. Checked before it is kept; the key is sealed and never read back.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/channels/certificate/set" } },
@@ -4009,9 +4061,19 @@ export class GeneratedMethods {
     return this._call("adbreak.start", params as unknown as Record<string, unknown>) as Promise<Record<string, unknown>>;
   }
 
+  /** Set an AI agent tool up to use this mixer: its MCP config gets one entry, godwinmix, that runs this mixer's own executable, and its skills folder gets the GodwinMix skills. Other entries are kept and a changed file is copied aside first. dry_run answers every file it would write. The answer says how to start the tool and a first thing to ask it. */
+  agentSetup(params: SetupRequest): Promise<Setup> {
+    return this._call("agent.setup", params as unknown as Record<string, unknown>) as Promise<Setup>;
+  }
+
   /** The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing. */
   agentState(params: AgentStateRequest = {}): Promise<Record<string, unknown>> {
     return this._call("agent.state", params as unknown as Record<string, unknown>) as Promise<Record<string, unknown>>;
+  }
+
+  /** The AI agent tools this mixer can set up, the ones installed on its machine first, each with what was found: a command on PATH or a config folder. */
+  agentTools(): Promise<Detected[]> {
+    return this._call("agent.tools", {}) as Promise<Detected[]>;
   }
 
   /** Make a channel and its first key, which is in this answer. channel.key.reveal reads it again later. */
@@ -4810,7 +4872,7 @@ export class GeneratedMethods {
   }
 
   /** Where one piece stands, without starting anything. */
-  setupGet(params: SetupRequest): Promise<SetupStatus> {
+  setupGet(params: SetupRequest2): Promise<SetupStatus> {
     return this._call("setup.get", params as unknown as Record<string, unknown>) as Promise<SetupStatus>;
   }
 
@@ -4820,7 +4882,7 @@ export class GeneratedMethods {
   }
 
   /** Set a piece up now, or join the set up already running, and answer at once with where it stands. Progress follows as `event/setup.changed`. Sources waiting on the piece start by themselves when it is ready. */
-  setupStart(params: SetupRequest): Promise<SetupStatus> {
+  setupStart(params: SetupRequest2): Promise<SetupStatus> {
     return this._call("setup.start", params as unknown as Record<string, unknown>) as Promise<SetupStatus>;
   }
 

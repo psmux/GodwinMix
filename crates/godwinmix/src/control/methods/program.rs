@@ -116,7 +116,7 @@ pub fn register(reg: &mut Registry<Call>) {
         .result(schema_of::<GoLiveResult>)
         .tool(
             "go_live",
-            Tier::Standard,
+            Tier::Search,
             "One call to put a web page on air: add the page as a web source, add the RTMP \
              destination, and take the page to programme as soon as it renders. Use it when \
              someone says \"stream this page to that RTMP URL\" and nothing is set up yet. \

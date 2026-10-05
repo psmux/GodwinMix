@@ -5,10 +5,11 @@ air a minute later, designed, branded and checked. The agent writes or picks
 an [SVG template](write-an-svg-template.md), the mixer draws it with no
 browser, and the agent looks at the result before it tells you it is done.
 
-This works with Claude Code, opencode, pi, Codex, Gemini CLI, Cursor and
-any other agent that speaks MCP or runs commands. A small model does the pack
-and the field changes well; designing a new template from nothing wants a
-stronger one.
+This works with Claude Code, opencode, pi, Codex, Gemini CLI, Cursor, VS
+Code and any other agent that speaks MCP or runs commands. A free model in
+opencode put a pack lower third on air, changed its words and cut between
+cameras; designing a new template or a studio set from nothing went better
+with a stronger one.
 
 To keep what the agent makes, and to make backgrounds, tickers, web graphics,
 clips and virtual sets too, have it save each into the Graphics gallery: see
@@ -16,32 +17,37 @@ clips and virtual sets too, have it save each into the Graphics gallery: see
 
 ## 1. Connect the agent and give it the skill
 
-In GodwinMix, **Help > Connect an AI agent** shows the lines for your agent,
-written for your computer: run them and you are done. Every agent, and a mixer
-on another machine, is in [connect an AI agent](connect-an-ai-agent.md). For
-Claude Code it is:
+In GodwinMix, **Help > Connect an AI agent**, pick your agent and press **Set
+up**. It shows the files it will write, and writes them when you say so: the
+agent's MCP entry for this mixer and the three skills. From a terminal it is
+one line:
 
 ```sh
-claude mcp add godwinmix -- godwinmix mcp
+godwinmix agent setup claude          # or opencode, pi, codex, gemini, cursor, vscode
 ```
 
-Then install the skills. `godwinmix-design` is the one that teaches graphics:
-when to use a text source, a template or OGraf, the pack and its fields, how a
-template is written, safe areas, how to put one on a scene with an enter and an
-exit, and how to look at it.
+Every agent, every system and a mixer on another machine are in [connect an
+AI agent](connect-an-ai-agent.md).
 
-```sh
-gmx skill install --for claude          # or opencode, pi, codex, gemini
-```
-
-The template tools are behind `search_tools`, so they cost nothing in the tool
-list until the agent needs them. The skill names them, so the agent calls them
-directly.
+`godwinmix-design` is the skill that teaches graphics: the pack and its
+fields, how a template is written, safe areas, placing one on the scene that
+is on air with an enter and an exit, tickers, backgrounds, the virtual set,
+and how to look at the result. The tools it names (`list_templates`,
+`save_template`, `add_source`, `add_scene_item`, `set_scene_item`,
+`create_scene_from`, `snapshot`) are in the standard tool list; the rest run
+through `call_tool`.
 
 ## 2. Ask for what you want
 
-Say what it is for, what it says and what it looks like. Some requests that
-work:
+Say what it is for, what it says and what it looks like. These were run
+against a real mixer with Claude Code (Opus) and opencode (a free model); the
+results are in [connect an AI agent](connect-an-ai-agent.md#prompts-that-work).
+
+* "Add a lower third that says Ana Silva, Producer, in my brand blue, and put
+  it on air."
+* "Make an animated news ticker with these three headlines: ..."
+* "Design a background for my presenter."
+* "Make me a modern news studio set and put me in it, no green screen."
 
 * "Put a lower third on the studio scene for Ada Lovelace, Analyst, Engine
   Research. Slide it in from the left."
@@ -55,16 +61,25 @@ work:
 
 ## 3. What the agent does
 
-For a pack graphic it makes five calls:
+For a pack graphic it makes five or six calls:
 
-1. `list_templates`, once, to see what there is and what each field is called.
-2. `add_source` with `uri: "template:breaking-news"` and its words in
+1. `agent_state`, to see what is on air. When that is a camera rather than a
+   scene, `create_scene_from {"sources": ["cam1"], "name": "Live"}` and
+   `take {"scene": "Live"}` first; the picture does not change.
+2. `list_templates`, once, to see what there is and what each field is called.
+3. `add_source` with `uri: "template:breaking-news"` and its words in
    `params.fields`.
-3. `add_scene_item` with the item over the whole canvas, `visible: false`, and
-   an `enter` and an `exit`.
-4. A look: `arm_preview` and `preview_frame`, which answers with the picture
-   itself, or `snapshot` of the programme once it is shown.
-5. `set_scene_item` with `visible: true` when you say go.
+4. `add_scene_item` on that scene. With no `transform` a template covers the
+   whole canvas, which is where it was designed to sit. `visible: false` with
+   an `enter` and an `exit` places it hidden.
+5. `set_scene_item` with `visible: true` when you say go, then a look with
+   `snapshot` of the programme.
+
+A ticker is a `ticker:` source with `params.items`, placed as a bar along the
+bottom. A background is a full screen template saved with `save_template`. A
+virtual set is `create_scene_from` with layout `virtual-set`: the background,
+the camera, and `settings.screen: "none"` when there is no green screen, which
+cuts the person out with a model. There is no separate virtual set feature.
 
 After that, each change of words is one `set_source` with just the fields that
 changed. It reaches the screen on the next frame.
@@ -104,9 +119,14 @@ third. 320 wide, about 84 tokens, is enough to see where things are.
 
 ## When it goes wrong
 
-* The agent puts the graphic in a grid cell instead of over the canvas. It
-  left out `transform`. Tell it to place the item at 0, 0 with the canvas size
-  from `core_info`; the skill says so too.
+* The graphic sits in half the picture. It is not a template (a picture, a
+  web page) and was placed with no `transform`, so it took the next grid
+  cell. Tell the agent to place it at 0, 0 with the canvas size.
+* "There is no scene called studio". What is on air is a camera, not a scene;
+  the refusal says to make one with `create_scene_from`, and agents do.
+* The set has no presenter in it, with "ONNX Runtime is not on this machine".
+  The person cutout needs ONNX Runtime, which the desktop installers carry; a
+  mixer built from source needs it installed or `ORT_DYLIB_PATH` set.
 * The words are tiny. They were shrunk to fit a long headline. Ask for a
   shorter one, or for the two line strap.
 * The agent reaches for OGraf for a lower third. Point it at the skill: OGraf

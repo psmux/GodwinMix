@@ -249,6 +249,8 @@ const ASSETS: &[(&str, &str)] = &[
     // menu. Data, fetched when a menu first opens.
     ("shell/menus.json", include_str!("../../../ui/shell/menus.json")),
     ("shell/agents.js", include_str!("../../../ui/shell/agents.js")),
+    ("shell/agents-setup.js", include_str!("../../../ui/shell/agents-setup.js")),
+    ("shell/agents-manual.js", include_str!("../../../ui/shell/agents-manual.js")),
     ("shell/devices.js", include_str!("../../../ui/shell/devices.js")),
     ("shell/devices-list.js", include_str!("../../../ui/shell/devices-list.js")),
     ("shell/menu-actions.js", include_str!("../../../ui/shell/menu-actions.js")),
@@ -371,6 +373,8 @@ const DEV_ASSETS: &[(&str, &str)] = &[
     // against stubs. No camera and no socket.
     ("test/browser-devices.js", include_str!("../../../ui/test/browser-devices.js")),
     ("test/lan-devices.js", include_str!("../../../ui/test/lan-devices.js")),
+    // Help > Connect an AI agent against a fake client.
+    ("test/agents.js", include_str!("../../../ui/test/agents.js")),
     ("test/browser-channel.js", include_str!("../../../ui/test/browser-channel.js")),
     ("test/phone-camera.js", include_str!("../../../ui/test/phone-camera.js")),
     // The designer kits' behaviour, as the reference implementation answered

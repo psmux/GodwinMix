@@ -58,6 +58,31 @@
       }
     },
     "schemas": {
+      "Action": {
+        "description": "What a write does to a file.",
+        "oneOf": [
+          {
+            "const": "create",
+            "description": "There was no file.",
+            "type": "string"
+          },
+          {
+            "const": "merge",
+            "description": "The file is there and gets the entry beside what it has.",
+            "type": "string"
+          },
+          {
+            "const": "update",
+            "description": "The file has a `godwinmix` entry that differs, and it is replaced.",
+            "type": "string"
+          },
+          {
+            "const": "unchanged",
+            "description": "The file already says exactly this.",
+            "type": "string"
+          }
+        ]
+      },
       "ActionKind": {
         "description": "What pressing the button does.",
         "oneOf": [
@@ -454,6 +479,28 @@
           }
         },
         "type": "object"
+      },
+      "AgentTool": {
+        "description": "The agent tools this mixer knows how to set up.",
+        "oneOf": [
+          {
+            "enum": [
+              "claude",
+              "opencode",
+              "pi",
+              "codex",
+              "gemini",
+              "cursor",
+              "vscode"
+            ],
+            "type": "string"
+          },
+          {
+            "const": "other",
+            "description": "Any other MCP client: nothing is written, the entry is shown to paste.",
+            "type": "string"
+          }
+        ]
       },
       "Alarm": {
         "description": "One condition that holds now.",
@@ -2924,6 +2971,32 @@
           }
         ]
       },
+      "Detected": {
+        "properties": {
+          "found": {
+            "description": "What was found: the command's path, or the config folder.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "installed": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "tool": {
+            "$ref": "#/components/schemas/AgentTool"
+          }
+        },
+        "required": [
+          "tool",
+          "name",
+          "installed"
+        ],
+        "type": "object"
+      },
       "DeviceToken": {
         "description": "One device token, without its secret.",
         "properties": {
@@ -3818,6 +3891,34 @@
           "default",
           "value",
           "set"
+        ],
+        "type": "object"
+      },
+      "FileWrite": {
+        "description": "One file a setup writes.",
+        "properties": {
+          "action": {
+            "$ref": "#/components/schemas/Action"
+          },
+          "backup": {
+            "description": "Where the file was copied before it was changed.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "path": {
+            "type": "string"
+          },
+          "what": {
+            "description": "In words: \"the godwinmix MCP server\", \"the godwinmix-design skill\".",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "action",
+          "what"
         ],
         "type": "object"
       },
@@ -9442,7 +9543,96 @@
         ],
         "type": "object"
       },
+      "Setup": {
+        "description": "What a setup did, or would do.",
+        "properties": {
+          "applied": {
+            "type": "boolean"
+          },
+          "entry": {
+            "description": "The MCP entry, for a client nothing is written for."
+          },
+          "name": {
+            "type": "string"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "prompt": {
+            "description": "A first thing to ask it.",
+            "type": "string"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/SetupScope"
+          },
+          "start": {
+            "description": "How to start the tool afterwards.",
+            "type": "string"
+          },
+          "tool": {
+            "$ref": "#/components/schemas/AgentTool"
+          },
+          "writes": {
+            "items": {
+              "$ref": "#/components/schemas/FileWrite"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "tool",
+          "name",
+          "scope",
+          "writes",
+          "start",
+          "prompt",
+          "notes",
+          "applied"
+        ],
+        "type": "object"
+      },
       "SetupRequest": {
+        "additionalProperties": false,
+        "description": "`agent.setup`.",
+        "properties": {
+          "dir": {
+            "default": null,
+            "description": "The project folder, for `scope: project`. An absolute path.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "dry_run": {
+            "default": false,
+            "description": "Answer every file it would write, and write nothing. The dispatcher\nreads it too, as it does on every destructive method.",
+            "type": "boolean"
+          },
+          "env": {
+            "additionalProperties": true,
+            "default": {},
+            "description": "Environment for `godwinmix mcp`, such as GODWINMIX_URL for a mixer\nthat is not the desktop app's. Written into the tool's config as given.",
+            "type": "object"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/SetupScope",
+            "default": "user",
+            "description": "`user` (the default) writes into the home folder, `project` into `dir`."
+          },
+          "tool": {
+            "$ref": "#/components/schemas/AgentTool",
+            "description": "claude, opencode, pi, codex, gemini, cursor, vscode or other."
+          }
+        },
+        "required": [
+          "tool"
+        ],
+        "type": "object"
+      },
+      "SetupRequest2": {
         "description": "`setup.start` and `setup.get`: one piece by name.",
         "properties": {
           "piece": {
@@ -9454,6 +9644,14 @@
           "piece"
         ],
         "type": "object"
+      },
+      "SetupScope": {
+        "description": "For the user, in their home folder, or for one project folder.",
+        "enum": [
+          "user",
+          "project"
+        ],
+        "type": "string"
       },
       "SetupState": {
         "description": "Where a piece stands.",
@@ -11458,7 +11656,7 @@
             "type": "string"
           },
           "profile": {
-            "description": "MCP tool profile this token is meant for: \"standard\" or \"minimal\".",
+            "description": "MCP tool profile this token is meant for: \"standard\", \"minimal\" or \"headend\".",
             "type": "string"
           },
           "rehearsal": {
@@ -12227,6 +12425,44 @@
         "x-scope": "operate"
       }
     },
+    "/api/v1/agent/setup": {
+      "post": {
+        "description": "JSON-RPC method `agent.setup`. Needs the `admin` scope. Destructive: accepts `dry_run: true`, and on a token whose policy is `confirm = required` it is refused once with -32020 and a confirm token. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "agent.setup",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetupRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Setup"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Set an AI agent tool up to use this mixer: its MCP config gets one entry, godwinmix, that runs this mixer's own executable, and its skills folder gets the GodwinMix skills. Other entries are kept and a changed file is copied aside first. dry_run answers every file it would write. The answer says how to start the tool and a first thing to ask it.",
+        "tags": [
+          "agent"
+        ],
+        "x-destructive": true,
+        "x-idempotent": true,
+        "x-scope": "admin"
+      }
+    },
     "/api/v1/agent/state": {
       "get": {
         "description": "JSON-RPC method `agent.state`. Needs the `read` scope.",
@@ -12253,6 +12489,49 @@
         "x-destructive": false,
         "x-idempotent": true,
         "x-scope": "read"
+      }
+    },
+    "/api/v1/agent/tools": {
+      "post": {
+        "description": "JSON-RPC method `agent.tools`. Needs the `admin` scope.",
+        "operationId": "agent.tools",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {},
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Detected"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "The AI agent tools this mixer can set up, the ones installed on its machine first, each with what was found: a command on PATH or a config folder.",
+        "tags": [
+          "agent"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "admin"
       }
     },
     "/api/v1/channels": {
@@ -18267,7 +18546,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/SetupRequest"
+                "$ref": "#/components/schemas/SetupRequest2"
               }
             }
           },

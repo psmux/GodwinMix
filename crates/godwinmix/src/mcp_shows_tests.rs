@@ -12,19 +12,49 @@ fn names(tools: &[Value]) -> Vec<&str> {
     tools.iter().map(|t| t["name"].as_str().unwrap()).collect()
 }
 
-/// The standard hot list, as a snapshot. Shows first in what it is for, in
-/// method order on the wire so a prompt cache survives a reconnect. A change
-/// here is a change to what every agent is charged for on every call, so it
-/// is made on purpose or not at all.
-#[test]
-fn the_standard_hot_list_is_the_shows_and_the_live_mix() {
-    let s = server(Profile::Standard);
-    let tools = s.tools();
+/// The hot lists, as snapshots, in method order on the wire so a prompt
+/// cache survives a reconnect. A change here is a change to what every agent
+/// is charged for on every call, so it is made on purpose or not at all.
+///
+/// `standard` is the live mix with its graphics and scenes, because that is
+/// what people ask an agent for. The shows that serve a headend are their own
+/// profile, `headend`, and `call_tool` reaches them from either.
+fn hot_list(profile: Profile, rows: &[(&str, &str)]) {
+    let s = server(profile);
     let registered = |method: &str| s.registry.get(method).is_some();
-    let expected: Vec<&str> = [
+    let expected: Vec<&str> = rows
+        .iter()
+        // A row whose method has not been registered in this build is not a
+        // tool yet.
+        .filter(|(method, _)| registered(method))
+        .map(|(_, tool)| *tool)
+        .chain(["call_tool", "search_tools"])
+        .collect();
+    assert_eq!(names(&s.tools()), expected, "{}", profile.as_str());
+}
+
+#[test]
+fn the_standard_hot_list_is_the_live_mix_and_its_graphics() {
+    hot_list(Profile::Standard, &[
         ("agent.state", "agent_state"),
-        ("program.golive", "go_live"),
         ("program.revert", "revert"),
+        ("program.take", "take"),
+        ("scene.create_from", "create_scene_from"),
+        ("scene.item.add", "add_scene_item"),
+        ("scene.item.set", "set_scene_item"),
+        ("snapshot.get", "snapshot"),
+        ("source.add", "add_source"),
+        ("source.list", "list_sources"),
+        ("source.set", "set_source"),
+        ("template.list", "list_templates"),
+        ("template.save", "save_template"),
+    ]);
+}
+
+#[test]
+fn the_headend_hot_list_is_the_shows() {
+    hot_list(Profile::Headend, &[
+        ("agent.state", "agent_state"),
         ("program.take", "take"),
         ("show.add_many", "add_shows"),
         ("show.list", "list_shows"),
@@ -33,16 +63,7 @@ fn the_standard_hot_list_is_the_shows_and_the_live_mix() {
         ("show.stats", "show_stats"),
         ("source.add", "add_source"),
         ("source.list", "list_sources"),
-    ]
-    .into_iter()
-    // A row whose method has not been registered in this build is not a
-    // tool yet. Once every method in the contract exists this filter keeps
-    // nothing out and the list is exactly the twelve.
-    .filter(|(method, _)| registered(method))
-    .map(|(_, tool)| tool)
-    .chain(["search_tools"])
-    .collect();
-    assert_eq!(names(&tools), expected);
+    ]);
 }
 
 /// Every row of the binding table whose method exists is a tool with a self
