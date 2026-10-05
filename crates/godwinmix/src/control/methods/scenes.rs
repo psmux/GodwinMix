@@ -22,6 +22,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::sync::Arc;
 
+mod conflicts;
 pub(crate) mod edit;
 mod graphics;
 mod items;
@@ -211,8 +212,12 @@ pub(crate) fn answered(outcome: Outcome) -> Result<Value, RpcError> {
 
 /// A refusal from the scene server already names the state and the next step
 /// (the valid names, the open drafts, what a layout takes), so it passes
-/// through rather than being rewritten.
+/// through rather than being rewritten. One that is about somebody else's
+/// change also carries the records in the way in `data`. See `conflicts.rs`.
 pub(crate) fn scene_error(call: &Call, e: anyhow::Error) -> RpcError {
+    if let Some(refusal) = conflicts::refusal(call, &e) {
+        return refusal;
+    }
     let text = format!("{e:#}");
     let code = if text.contains("there is no") { ErrorCode::NotFound } else { ErrorCode::NotInState };
     RpcError::new(code, text).with("method", call.method)
@@ -223,9 +228,11 @@ pub(crate) fn server(call: &Call) -> &Arc<SceneServer> {
     &call.app.scenes
 }
 
-/// Who asked, so a client can suppress the echo of its own edits.
+/// Who asked: the device or connection, not just its token. Patches carry it
+/// so a client suppresses the echo of its own edits and of nobody else's, and
+/// it is whose undo stack a change goes on.
 pub(crate) fn client(call: &Call) -> Option<String> {
-    Some(call.token.id.clone())
+    Some(call.client.clone())
 }
 
 async fn add(call: Call, params: Value) -> Result<Value, RpcError> {

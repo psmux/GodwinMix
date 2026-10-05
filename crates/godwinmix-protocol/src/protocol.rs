@@ -44,6 +44,7 @@ pub fn events() -> Vec<EventDef> {
     all.extend(crate::rendition::events());
     all.extend(crate::shows::events());
     all.extend(crate::feeds::events());
+    all.extend(crate::presence::events());
     all.push(health_event());
     all
 }
@@ -714,6 +715,15 @@ fn envelope() -> Value {
                 "type": "string",
                 "description": "The confirm_token from a -32020 refusal, valid 30 seconds. \
                                 Only a token whose policy is confirm = required needs it."
+            },
+            "client_id": {
+                "type": "string", "maxLength": 32, "pattern": "^[a-z0-9-]+$",
+                "description": "A name for this device or connection. The core makes it \
+                                <token id>.<client_id> and that is who the call is from: \
+                                the source_client on its scene patches, the owner of its \
+                                undo stack and drafts, its name in presence. A /rpc \
+                                connection has one already; over HTTP without it the \
+                                caller is the token id alone."
             }
         }
     })

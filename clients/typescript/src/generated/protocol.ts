@@ -146,6 +146,12 @@ export type Align = "top-left" | "top-center" | "top-right" | "center-left" | "c
 /** When a change to a key takes effect. */
 export type Applies = "live" | "next_source" | "restart";
 
+/** `scene.edit.apply`. */
+export interface ApplyDraftRequest {
+  draft: string;
+  force?: boolean;
+}
+
 /** `scene.apply_graphic`. */
 export interface ApplyGraphicRequest {
   frame?: boolean;
@@ -579,6 +585,7 @@ export interface CoreInfo {
   api_compatible: number;
   api_level: number;
   canvas: CanvasInfo;
+  client_id?: string | null;
   core: string;
   executable?: string | null;
   features: string[];
@@ -724,8 +731,10 @@ export interface DiscoverRequest2 {
 
 /** `scene.edit.begin`. */
 export interface DraftRecord {
+  base_seq: number;
   draft: string;
   live: boolean;
+  owner?: string | null;
   scene: string;
   view?: SceneView | null;
 }
@@ -1123,6 +1132,11 @@ export type HealthState = "ok" | "warning" | "alarm" | "off";
 /** `program.history`. */
 export interface HistoryRequest {
   limit?: number | null;
+}
+
+/** `scene.undo` and `scene.redo`. */
+export interface HistoryRequest2 {
+  force?: boolean;
 }
 
 /** `scene.undo` and `scene.redo`. */
@@ -1838,6 +1852,28 @@ export interface PluginUpdated {
   to: string;
 }
 
+/** One client connected to `/rpc`. */
+export interface PresenceClient {
+  client_id: string;
+  device: string;
+  label?: string | null;
+  scene?: string | null;
+  since_ms: number;
+  token: string;
+  you?: boolean;
+}
+
+/** `presence.list`, and the payload of `event/presence.changed`. */
+export interface PresenceList {
+  clients: PresenceClient[];
+}
+
+/** `presence.set`: what this connection tells everybody else about itself. */
+export interface PresenceSetRequest {
+  label?: string | null;
+  scene?: string | null;
+}
+
 /** A preset named by id. */
 export interface PresetRef {
   preset: string;
@@ -2545,6 +2581,7 @@ export interface SubscribeRequest {
 
 /** What `core.subscribe` answers with, before the snapshot arrives. */
 export interface SubscribeResult {
+  client_id?: string | null;
   events: string[];
   ignored_ext: string[];
   seq: number;
@@ -3055,6 +3092,8 @@ export interface MethodParams {
   "plugin.settings.set": SetSettingsRequest;
   "plugin.stats": Record<string, never>;
   "plugin.update": UpdatePluginRequest;
+  "presence.list": Record<string, never>;
+  "presence.set": PresenceSetRequest;
   "preset.apply": ApplyRequest;
   "preset.list": Record<string, never>;
   "preset.save": SaveRequest;
@@ -3076,7 +3115,7 @@ export interface MethodParams {
   "scene.apply_layout": ApplyLayoutRequest;
   "scene.create_from": CreateFromRequest;
   "scene.duplicate": DuplicateSceneRequest;
-  "scene.edit.apply": DraftRequest;
+  "scene.edit.apply": ApplyDraftRequest;
   "scene.edit.begin": EditBeginRequest;
   "scene.edit.discard": DraftRequest;
   "scene.export": ExportRequest2;
@@ -3112,13 +3151,13 @@ export interface MethodParams {
   "scene.params.set": ParamsRequest;
   "scene.preview.frame": PreviewFrameRequest;
   "scene.preview.set": PreviewRequest;
-  "scene.redo": Record<string, never>;
+  "scene.redo": HistoryRequest2;
   "scene.remove": SceneRequest;
   "scene.rename": RenameSceneRequest;
   "scene.transaction.abort": Record<string, never>;
   "scene.transaction.begin": Record<string, never>;
   "scene.transaction.commit": Record<string, never>;
-  "scene.undo": Record<string, never>;
+  "scene.undo": HistoryRequest2;
   "scene.validate": ValidateRequest;
   "setup.get": SetupRequest;
   "setup.list": Record<string, never>;
@@ -3249,6 +3288,8 @@ export interface MethodResults {
   "plugin.settings.set": PluginSettings;
   "plugin.stats": StatsListing;
   "plugin.update": PluginUpdated;
+  "presence.list": PresenceList;
+  "presence.set": PresenceList;
   "preset.apply": ApplyResult;
   "preset.list": Record<string, unknown>;
   "preset.save": Record<string, unknown>;
@@ -3392,6 +3433,7 @@ export interface EventPayloads {
   "show.health": ShowHealthEvent;
   "feed.failed": FeedFailedEvent;
   "feed.recovered": FeedRecoveredEvent;
+  "presence.changed": PresenceList;
   "health": HealthEvent;
 }
 
@@ -3493,6 +3535,8 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "plugin.settings.set", summary: "Change a plugin's settings. A plugin that cannot take a change while running says so rather than being restarted behind your back.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/plugins/{id}/settings" } },
   { name: "plugin.stats", summary: "Per instance cpu, memory, media latency, dropped buffers and restarts, refreshed once a second.", scope: "read", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/plugins/{id}/stats" } },
   { name: "plugin.update", summary: "Fetch a newer build of a plugin, install it beside the one that is running, and prove it starts. A build that does not answer `initialize` within ten seconds is rolled back and the plugin that was working stays working.", scope: "admin", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/plugins/{id}/update" } },
+  { name: "presence.list", summary: "Every client connected to /rpc: its client id, token, label, device, the scene it says it is editing and when it connected. `you` marks the caller.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/presence/list" } },
+  { name: "presence.set", summary: "Tell everybody else which scene this connection is editing, or none, and optionally a name for the device. Changes nothing on air.", scope: "read", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/presence/set" } },
   { name: "preset.apply", summary: "Put a preset on this core: its config, its scenes, its layout, its theme and its gallery mode. Pass dry_run to get the plan and write nothing.", scope: "admin", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/preset/apply" } },
   { name: "preset.list", summary: "Every preset this core can apply: the six built in, plus anything installed beside the binary or under ~/.godwinmix/presets.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/preset/list" } },
   { name: "preset.save", summary: "Turn this core's working setup into a preset directory somebody else can apply. Stream keys and the control token are replaced with placeholders.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/preset/save" } },
@@ -3514,7 +3558,7 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "scene.apply_layout", summary: "Apply a layout, making a scene or reshaping one that exists. Applying onto an existing scene keeps the item ids, so the change is a ramp and not a cut.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/apply_layout" } },
   { name: "scene.create_from", summary: "A scene from a set of sources, laid out by the built in layout for that count (full, two-box, three-box, quad, then a grid) or by a named one. Pictures from the media library become sources, and a keyed layout such as virtual-set guesses its key colour from the camera.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/create_from" } },
   { name: "scene.duplicate", summary: "A copy of a scene with new ids throughout, so editing the copy cannot touch the original.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/{id}/duplicate" } },
-  { name: "scene.edit.apply", summary: "Write a draft back into the live document.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/edit/apply" } },
+  { name: "scene.edit.apply", summary: "Write a draft back into the live document. Refused, with what changed and who changed it, when somebody changed the scene after the draft was taken; force: true applies it anyway.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/edit/apply" } },
   { name: "scene.edit.begin", summary: "Take a working copy of a scene. Editing is off air by default: the draft is written back on the next take of that scene, or when you apply it.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/edit/begin" } },
   { name: "scene.edit.discard", summary: "Throw a draft away. The live document is untouched.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/edit/discard" } },
   { name: "scene.export", summary: "The whole collection: as JSON, or as a zip bundle carrying its assets with a hash each, which is what you send somebody.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/scenes/export" } },
@@ -3550,13 +3594,13 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "scene.params.set", summary: "Set the collection's parameter values, declaring any that are new. A `{{name}}` in any string property of any item follows them, so one call changes every lower third that uses it.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/params/set" } },
   { name: "scene.preview.frame", summary: "A still of the armed scene as base64 JPEG, the floor every client has.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/scenes/preview/frame" } },
   { name: "scene.preview.set", summary: "Arm a scene. The armed scene is the preview, and program.take with no argument takes it.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/preview/set" } },
-  { name: "scene.redo", summary: "Put back what undo took away.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/redo" } },
+  { name: "scene.redo", summary: "Put back what your undo took away.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/redo" } },
   { name: "scene.remove", summary: "Delete a scene. What is on air is not touched.", scope: "operate", mutating: true, destructive: true, rest: { method: "DELETE", path: "/api/v1/scenes/{id}" } },
   { name: "scene.rename", summary: "Change a scene's name, its colour, or both. Names and colours live on the document, so every client, the tally and an agent see the same ones.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/{id}/rename" } },
-  { name: "scene.transaction.abort", summary: "Throw the batch away. The document goes back to where it was when the batch opened.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/transaction/abort" } },
-  { name: "scene.transaction.begin", summary: "Start a batch. Everything until the commit applies on one frame or not at all, and undoes in one step.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/transaction/begin" } },
+  { name: "scene.transaction.abort", summary: "Throw your batch away. What you changed in it goes back to where it was, except where somebody else has changed it since.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/transaction/abort" } },
+  { name: "scene.transaction.begin", summary: "Start a batch. Everything you do until the commit applies on one frame or not at all, and undoes in one step. Other clients' edits go on meanwhile.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/transaction/begin" } },
   { name: "scene.transaction.commit", summary: "Apply the batch.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/transaction/commit" } },
-  { name: "scene.undo", summary: "Undo the last change. A drag marked with scene.history.mark undoes as one step.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/undo" } },
+  { name: "scene.undo", summary: "Undo your last change. Each client has its own stack, so this never takes back somebody else's. A drag marked with scene.history.mark undoes as one step.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/scenes/undo" } },
   { name: "scene.validate", summary: "Overlaps, items off the canvas, safe area breaches and missing sources: what to fix before saying a scene is done.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/scenes/validate" } },
   { name: "setup.get", summary: "Where one piece stands, without starting anything.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/setup" } },
   { name: "setup.list", summary: "Where each piece the mixer sets up on first use stands: the browser renderer (`web`) and every first party plugin this copy carries.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/setup/list" } },
@@ -3645,6 +3689,7 @@ export const EVENT_NAMES: readonly EventName[] = [
   "show.health",
   "feed.failed",
   "feed.recovered",
+  "presence.changed",
   "health",
 ];
 
@@ -4086,6 +4131,16 @@ export class GeneratedMethods {
     return this._call("plugin.update", params as unknown as Record<string, unknown>) as Promise<PluginUpdated>;
   }
 
+  /** Every client connected to /rpc: its client id, token, label, device, the scene it says it is editing and when it connected. `you` marks the caller. */
+  presenceList(): Promise<PresenceList> {
+    return this._call("presence.list", {}) as Promise<PresenceList>;
+  }
+
+  /** Tell everybody else which scene this connection is editing, or none, and optionally a name for the device. Changes nothing on air. */
+  presenceSet(params: PresenceSetRequest = {}): Promise<PresenceList> {
+    return this._call("presence.set", params as unknown as Record<string, unknown>) as Promise<PresenceList>;
+  }
+
   /** Put a preset on this core: its config, its scenes, its layout, its theme and its gallery mode. Pass dry_run to get the plan and write nothing. */
   presetApply(params: ApplyRequest): Promise<ApplyResult> {
     return this._call("preset.apply", params as unknown as Record<string, unknown>) as Promise<ApplyResult>;
@@ -4191,8 +4246,8 @@ export class GeneratedMethods {
     return this._call("scene.duplicate", params as unknown as Record<string, unknown>) as Promise<SceneView>;
   }
 
-  /** Write a draft back into the live document. */
-  sceneEditApply(params: DraftRequest): Promise<Record<string, unknown>> {
+  /** Write a draft back into the live document. Refused, with what changed and who changed it, when somebody changed the scene after the draft was taken; force: true applies it anyway. */
+  sceneEditApply(params: ApplyDraftRequest): Promise<Record<string, unknown>> {
     return this._call("scene.edit.apply", params as unknown as Record<string, unknown>) as Promise<Record<string, unknown>>;
   }
 
@@ -4371,9 +4426,9 @@ export class GeneratedMethods {
     return this._call("scene.preview.set", params as unknown as Record<string, unknown>) as Promise<Record<string, unknown>>;
   }
 
-  /** Put back what undo took away. */
-  sceneRedo(): Promise<HistoryStep> {
-    return this._call("scene.redo", {}) as Promise<HistoryStep>;
+  /** Put back what your undo took away. */
+  sceneRedo(params: HistoryRequest2 = {}): Promise<HistoryStep> {
+    return this._call("scene.redo", params as unknown as Record<string, unknown>) as Promise<HistoryStep>;
   }
 
   /** Delete a scene. What is on air is not touched. */
@@ -4386,12 +4441,12 @@ export class GeneratedMethods {
     return this._call("scene.rename", params as unknown as Record<string, unknown>) as Promise<SceneView>;
   }
 
-  /** Throw the batch away. The document goes back to where it was when the batch opened. */
+  /** Throw your batch away. What you changed in it goes back to where it was, except where somebody else has changed it since. */
   sceneTransactionAbort(): Promise<Record<string, unknown>> {
     return this._call("scene.transaction.abort", {}) as Promise<Record<string, unknown>>;
   }
 
-  /** Start a batch. Everything until the commit applies on one frame or not at all, and undoes in one step. */
+  /** Start a batch. Everything you do until the commit applies on one frame or not at all, and undoes in one step. Other clients' edits go on meanwhile. */
   sceneTransactionBegin(): Promise<Record<string, unknown>> {
     return this._call("scene.transaction.begin", {}) as Promise<Record<string, unknown>>;
   }
@@ -4401,9 +4456,9 @@ export class GeneratedMethods {
     return this._call("scene.transaction.commit", {}) as Promise<Record<string, unknown>>;
   }
 
-  /** Undo the last change. A drag marked with scene.history.mark undoes as one step. */
-  sceneUndo(): Promise<HistoryStep> {
-    return this._call("scene.undo", {}) as Promise<HistoryStep>;
+  /** Undo your last change. Each client has its own stack, so this never takes back somebody else's. A drag marked with scene.history.mark undoes as one step. */
+  sceneUndo(params: HistoryRequest2 = {}): Promise<HistoryStep> {
+    return this._call("scene.undo", params as unknown as Record<string, unknown>) as Promise<HistoryStep>;
   }
 
   /** Overlaps, items off the canvas, safe area breaches and missing sources: what to fix before saying a scene is done. */

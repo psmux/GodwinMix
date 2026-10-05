@@ -18,6 +18,7 @@ import { Inspector } from "./inspector.js";
 import { Catalogue } from "./catalogue.js";
 import { operations } from "./ops.js";
 import { fillNote, notRunning, sourcesOf } from "../scenes/fix-note.js";
+import { othersHere, staleDraft } from "./others.js";
 
 let styled = false;
 
@@ -78,6 +79,8 @@ export class Composer {
       onChanged: (answer) => (answer && Array.isArray(answer.records) ? this.useView(answer) : this.reread()),
     });
 
+    // Who else has this scene open, in the bar, and this page in their list.
+    this.others = othersHere(this.client, this.scene);
     this.dialog = modal({
       // The name, from wherever it can be had. `this.scene` is an id, and an
       // id in a title bar tells the person at the desk nothing.
@@ -176,7 +179,7 @@ export class Composer {
 
   body() {
     this.note = el("span.sm.faint.grow");
-    this.bar = el("div.composer-bar.row", {}, [...this.tools(), el("span.grow"), this.note, ...this.toggles()]);
+    this.bar = el("div.composer-bar.row", {}, [...this.tools(), el("span.grow"), this.others.el, this.note, ...this.toggles()]);
     const side = el("div.composer-side", {}, [this.inspector.el]);
     this.health = el("div.composer-health", { role: "status", hidden: true });
     return el("div.composer-body", {}, [this.bar, this.health, this.canvas.el, side]);
@@ -333,16 +336,21 @@ export class Composer {
 
   // ---------------------------------------------------------------- finish
 
+  /** Throw the draft away and take a fresh one from the scene as it is now. */
+  async reopen() {
+    if (this.draft) await this.scenes.editDiscard(this.draft);
+    const begun = await this.begin();
+    this.canvas.draft = this.draft;
+    this.useView(begun.view || (await this.read()));
+    // A new draft, or none: the picture has to be pointed at it again.
+    await this.picture();
+  }
+
   async setLive(wanted) {
     if (wanted === this.live) return;
     try {
-      if (this.draft) await this.scenes.editDiscard(this.draft);
       this.live = wanted;
-      const begun = await this.begin();
-      this.canvas.draft = this.draft;
-      this.useView(begun.view || (await this.read()));
-      // A new draft, or none: the picture has to be pointed at it again.
-      await this.picture();
+      await this.reopen();
       toast({
         text: wanted
           ? "Editing on air. Every change goes out as you make it."
@@ -353,10 +361,10 @@ export class Composer {
     }
   }
 
-  async apply() {
+  async apply(force = false) {
     try {
       if (this.draft) {
-        await this.scenes.editApply(this.draft);
+        await this.scenes.editApply(this.draft, force);
         this.draft = null;
         this.scenes.undo.record("Applied the composer's changes");
       }
@@ -367,6 +375,8 @@ export class Composer {
       const onAir = !!name && this.client.state.scene === name;
       toast({ text: onAir ? "Applied. It is on air now." : "Applied. Tap the scene to put it on air." });
     } catch (e) {
+      // Somebody changed the scene while it was open here. Asked, not toasted.
+      if (!force && e && e.data && e.data.conflict === "draft") return staleDraft(this, e);
       errorToast(e, "Apply");
     }
   }
@@ -425,6 +435,7 @@ export class Composer {
   close() {
     for (const off of this.offs || []) off();
     this.offs = [];
+    if (this.others) this.others.stop();
     if (this.canvas) this.canvas.destroy();
     // A draft nobody applied is nobody's business. Leaving it open would hold
     // a copy of the scene in the core until the process restarted.

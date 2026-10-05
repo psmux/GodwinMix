@@ -11,11 +11,15 @@
 //! not, there were no sequence numbers, and a client that fell behind was
 //! told nothing.
 
+mod who;
+
+pub use who::Who;
+
 use godwinmix_protocol::rpc::{self, MeterBatch, Subscription};
 use godwinmix_protocol::scope::Token;
 use godwinmix_protocol::{Flush, Resync, Snapshot, SubscribeRequest, SubscribeResult, Tally};
 use godwinmix_protocol::types::Event;
-use crate::control::call::dispatch;
+use crate::control::call::dispatch_as;
 use crate::control::{Ctx, RunningTime};
 use godwinmix_core::multiview::{
     MultiviewRequest, MultiviewSubscription, PreviewRequest, PreviewSubscription,
@@ -51,6 +55,10 @@ struct Connection {
     tx: Sink,
     ctx: Ctx,
     token: Token,
+    /// This connection's own name, and the client id it makes with the
+    /// token: what its calls are from. See `ws/who.rs`.
+    name: String,
+    client_id: String,
     /// None until `core.subscribe` arrives. A client may call methods without
     /// ever subscribing, which is what the CLI and an agent do.
     sub: Option<Subscription>,
@@ -94,13 +102,18 @@ struct Connection {
     push: crate::control::push::Push,
 }
 
-pub async fn serve_rpc(socket: WebSocket, ctx: Ctx, token: Token) {
+pub async fn serve_rpc(socket: WebSocket, ctx: Ctx, token: Token, who: Who) {
     let (tx, mut rx) = socket.split();
     let mut events = ctx.app.mixer.subscribe();
+    let client_id = godwinmix_protocol::presence::client_id(&token.id, &who.name);
+    // This connection's seat in presence.list, given back when the loop ends.
+    let _here = ctx.app.presence.join(&client_id, &token, who.user_agent.as_deref());
     let mut conn = Connection {
         tx,
         ctx,
         token,
+        name: who.name,
+        client_id,
         sub: None,
         meters: MeterBatch::default(),
         seq: 0,
@@ -132,6 +145,10 @@ pub async fn serve_rpc(socket: WebSocket, ctx: Ctx, token: Token) {
     // would mean missing the patches raised between subscribing and the next
     // poll. Nothing is written to a client that did not ask for `scene.*`.
     let mut patches = conn.ctx.app.scenes.subscribe();
+    // Who else is connected. Unlike the patches, taken only once this client
+    // subscribes to `presence.changed`: holding a receiver is what makes the
+    // core announce a change at all, so nobody asking costs nothing.
+    let mut presence: Option<broadcast::Receiver<()>> = None;
 
     // Why this socket ended, said once at the bottom. Three testers watched
     // the page's "Disconnected from the mixer" dialog sit there while the
@@ -160,6 +177,9 @@ pub async fn serve_rpc(socket: WebSocket, ctx: Ctx, token: Token) {
                         asked_preview = conn.wants_preview;
                         preview = asked_preview
                             .map(|req| conn.ctx.app.multiview.subscribe_preview(req));
+                    }
+                    if conn.wants_presence() != presence.is_some() {
+                        presence = conn.wants_presence().then(|| conn.ctx.app.presence.subscribe());
                     }
                 }
                 Some(Ok(_)) => {}
@@ -232,6 +252,26 @@ pub async fn serve_rpc(socket: WebSocket, ctx: Ctx, token: Token) {
                 }
                 Err(broadcast::error::RecvError::Closed) => break 'client "the scene document's channel closed",
             },
+            // Somebody came, went, or said what they are editing. A lag only
+            // means several changes at once, and the list sent is the whole
+            // list either way.
+            told = async {
+                match presence.as_mut() {
+                    Some(p) => p.recv().await,
+                    None => std::future::pending().await,
+                }
+            } => {
+                if matches!(told, Err(broadcast::error::RecvError::Closed)) {
+                    presence = None;
+                    continue;
+                }
+                if let Some(p) = presence.as_mut() {
+                    while p.try_recv().is_ok() {}
+                }
+                if conn.send_presence().await.is_err() || conn.flush().await.is_err() {
+                    break 'client "a presence change could not be written";
+                }
+            },
             frame = async {
                 match mosaic.as_mut() {
                     Some(m) => m.recv().await,
@@ -274,7 +314,7 @@ pub async fn serve_rpc(socket: WebSocket, ctx: Ctx, token: Token) {
     };
     // Info rather than debug: a page that says it is disconnected while the
     // mixer is up is a support call, and this is the line that answers it.
-    info!(client = %conn.token.id, why, "rpc client disconnected");
+    info!(client = %conn.client_id, why, "rpc client disconnected");
 }
 
 impl Connection {
@@ -365,11 +405,12 @@ impl Connection {
         // client is holding, exactly as they do on /api/v1.
         let answer = godwinmix_core::observe::with_trace_id(
             id,
-            dispatch(
+            dispatch_as(
                 &self.ctx.registry,
                 &self.ctx.app,
                 &self.ctx.snapshots,
                 &self.token,
+                Some(&self.name),
                 &trace_id,
                 &request.method,
                 request.params,
@@ -436,6 +477,7 @@ impl Connection {
             seq: self.seq,
             events: patterns,
             ignored_ext: ignored,
+            client_id: Some(self.client_id.clone()),
         })
         .map_err(|_| ())
     }
@@ -459,6 +501,7 @@ impl Connection {
         .await?;
         self.send_layout(&status.multiview).await?;
         self.send_tally().await?;
+        self.send_presence().await?;
         self.flush().await
     }
 

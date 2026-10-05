@@ -10,6 +10,7 @@ import { errorToast } from "../../shell/toast.js";
 import { programLabel } from "../../client/store.js";
 import { menubar } from "../../shell/menubar.js";
 import { showTabs } from "../../shell/show-tabs.js";
+import { presenceButton } from "../../shell/presence.js";
 
 class HeaderPanel extends HTMLElement {
   static get panel() {
@@ -49,6 +50,9 @@ class HeaderPanel extends HTMLElement {
       el("div.row", { style: { width: "110px" } }, [this.meter]),
       this.peak,
       el("span.grow"),
+      // How many other people are operating this mixer, from a phone or a
+      // desk. Hidden while there is nobody else.
+      presenceButton(this.client),
       this.uptime,
       this.backend,
       el("button.btn", {

@@ -32,6 +32,7 @@ mod nodes;
 mod outputs;
 mod preview;
 pub(crate) mod plugins;
+mod presence;
 pub mod presets;
 pub mod renditions;
 pub(crate) mod program;
@@ -79,6 +80,7 @@ pub fn registry() -> Registry<Call> {
     agent::register(&mut reg);
     filters::register(&mut reg);
     scenes::register(&mut reg);
+    presence::register(&mut reg);
     preview::register(&mut reg);
     plugins::register(&mut reg);
     channels::register(&mut reg);
@@ -118,6 +120,7 @@ fn register_core(reg: &mut Registry<Call>) {
                     limits: call.app.limits.clone(),
                     canvas: call.app.canvas,
                     token: Some(call.token.info()),
+                    client_id: Some(call.client.clone()),
                     rehearsal: call.app.rehearsal,
                     ui: presets::ui_defaults(),
                     supervised: lifecycle::supervised(),

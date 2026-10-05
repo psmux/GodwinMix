@@ -385,6 +385,28 @@ pub struct MarkRequest {
     pub label: Option<String>,
 }
 
+/// `scene.edit.apply`.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct ApplyDraftRequest {
+    pub draft: String,
+    /// Apply even though the scene changed after the draft was taken, which
+    /// replaces those changes with the draft. Without it such an apply is
+    /// refused with the changes listed in `data.conflicts`.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub force: bool,
+}
+
+/// `scene.undo` and `scene.redo`.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+pub struct HistoryRequest {
+    /// Go ahead even where somebody else changed the same item after you,
+    /// putting your version back over theirs. Without it such a step is
+    /// refused with who changed what in `data.conflicts`, and stays on your
+    /// stack.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub force: bool,
+}
+
 
 /// `source.group`.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
