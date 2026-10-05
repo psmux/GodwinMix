@@ -17,7 +17,6 @@
 //! its user folder where each system keeps application data.
 
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Map, Value};
 use std::path::{Path, PathBuf};
 
 pub use super::dirs::Dirs;
@@ -139,30 +138,6 @@ impl AgentTool {
                 skills: Some(if user { at(&[".copilot", "skills"]) } else { at(&[".github", "skills"]) }),
             },
             Self::Other => Target { mcp: None, skills: None },
-        }
-    }
-
-    /// This tool's entry for the mixer at `exe`, with `env` when the mixer
-    /// cannot be found without it.
-    pub fn entry(self, exe: &str, env: &Map<String, Value>) -> Value {
-        let env_value = Value::Object(env.clone());
-        let mut entry = match self {
-            Self::Opencode => json!({ "type": "local", "command": [exe, "mcp"], "enabled": true }),
-            Self::Claude | Self::Vscode => json!({ "type": "stdio", "command": exe, "args": ["mcp"] }),
-            _ => json!({ "command": exe, "args": ["mcp"] }),
-        };
-        if !env.is_empty() {
-            let key = if self == Self::Opencode { "environment" } else { "env" };
-            entry[key] = env_value;
-        }
-        entry
-    }
-
-    /// What a new file starts as, before the entry goes in.
-    pub fn seed(self) -> Value {
-        match self {
-            Self::Opencode => json!({ "$schema": "https://opencode.ai/config.json" }),
-            _ => json!({}),
         }
     }
 }

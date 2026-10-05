@@ -14,6 +14,7 @@
 
 pub mod detect;
 mod dirs;
+mod entry;
 mod files;
 pub mod merge;
 pub mod targets;
@@ -95,7 +96,7 @@ pub fn plan(req: &SetupRequest, exe: &Path, dirs: &Dirs) -> Result<Setup, String
     let mut writes = Vec::new();
     if let Some((path, format)) = &target.mcp {
         let mut mcp = files::mcp_write(path, *format, &entry, req.tool.seed())?;
-        if let Some(rules) = rules_file(req.tool, req.scope, dirs, &project) {
+        if let Some(rules) = entry::rules_file(req.tool, req.scope, dirs, &project) {
             writes.push(files::rules_write(&rules, &mut mcp)?);
         }
         writes.insert(0, mcp);
@@ -116,23 +117,12 @@ pub fn plan(req: &SetupRequest, exe: &Path, dirs: &Dirs) -> Result<Setup, String
         name: req.tool.name(),
         scope: req.scope,
         writes,
-        start: start(req.tool, req.scope, &project),
+        start: entry::start(req.tool, req.scope, &project),
         prompt: FIRST_PROMPT.into(),
         entry: (req.tool == AgentTool::Other).then(|| serde_json::json!({ "mcpServers": { merge::NAME: entry } })),
         notes,
         applied: false,
     })
-}
-
-/// A few lines read into every opencode session, named in its config's
-/// `instructions`. A free model in opencode asked "what is on air right now?"
-/// checked the clock and asked which country; it never thought of the mixer.
-fn rules_file(tool: AgentTool, scope: SetupScope, dirs: &Dirs, project: &Path) -> Option<PathBuf> {
-    match (tool, scope) {
-        (AgentTool::Opencode, SetupScope::User) => Some(dirs.home.join(".config").join("opencode").join("godwinmix.md")),
-        (AgentTool::Opencode, SetupScope::Project) => Some(project.join(".opencode").join("godwinmix.md")),
-        _ => None,
-    }
 }
 
 fn project_dir(req: &SetupRequest) -> Result<PathBuf, String> {
@@ -148,19 +138,10 @@ fn project_dir(req: &SetupRequest) -> Result<PathBuf, String> {
     }
 }
 
-fn start(tool: AgentTool, scope: SetupScope, project: &Path) -> String {
-    let there = match scope {
-        SetupScope::Project => format!("In a terminal in {}, run", project.display()),
-        SetupScope::User => "In a terminal, run".into(),
-    };
-    match tool {
-        AgentTool::Cursor => "Restart Cursor and check godwinmix is switched on under Settings > MCP.".into(),
-        AgentTool::Vscode => "Reload VS Code and open Copilot Chat in Agent mode; godwinmix is in its tools.".into(),
-        AgentTool::Other => "Paste the entry into your client's MCP settings and restart it.".into(),
-        t => format!("{there} `{}`.", t.command().unwrap_or_default()),
-    }
-}
-
 #[cfg(test)]
 #[path = "tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "tests_more.rs"]
+mod tests_more;
