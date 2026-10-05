@@ -154,7 +154,7 @@ async fn mp2_sound_is_refused_with_the_next_step_and_served_once_a_rendition_mak
     }
     let (dir, port) = folder_with_relay("hls-direct-mp2");
     let source = staged_ingest(&dir);
-    let st = start(dir.clone(), port, &[]).await;
+    let st = start_alone(dir.clone(), port, &[]).await;
     let mut ws = rpc(&st, "").await;
     let _ = call(&mut ws, 1, "channel.remove", json!({"id": "live"})).await;
     let input = free_udp();

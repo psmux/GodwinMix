@@ -15,6 +15,49 @@ pub struct Running {
     child: Child,
     pub url: String,
     pub dir: PathBuf,
+    _turn: Turn,
+}
+
+/// Stations share the machine, except a test that needs the governor to
+/// find room: it waits until no other station runs, and none starts until
+/// it is done. A four core runner running a handful of stations at once had
+/// no CPU free, and the governor refused even a sound decode for four
+/// minutes, which is the governor being right about a machine that is full.
+static MACHINE: std::sync::RwLock<()> = std::sync::RwLock::new(());
+
+thread_local! {
+    /// Stations this thread holds a share for. A test that starts a second
+    /// station while it has one must not queue behind a waiting writer.
+    static SHARES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// Held for what dropping it releases, never read.
+#[allow(dead_code)]
+enum Turn {
+    Shared(Option<std::sync::RwLockReadGuard<'static, ()>>),
+    Alone(std::sync::RwLockWriteGuard<'static, ()>),
+}
+
+impl Turn {
+    fn shared() -> Turn {
+        let first = SHARES.with(|n| {
+            n.set(n.get() + 1);
+            n.get() == 1
+        });
+        Turn::Shared(first.then(|| MACHINE.read().unwrap_or_else(|e| e.into_inner())))
+    }
+
+    fn alone() -> Turn {
+        Turn::Alone(MACHINE.write().unwrap_or_else(|e| e.into_inner()))
+    }
+}
+
+impl Drop for Turn {
+    fn drop(&mut self) {
+        if let Turn::Shared(_) = self {
+            SHARES.with(|n| n.set(n.get().saturating_sub(1)));
+        }
+    }
 }
 
 impl Drop for Running {
@@ -65,6 +108,16 @@ pub fn folder(name: &str) -> (PathBuf, u16) {
 /// Start the binary on `dir`'s config with `extra` flags, and wait until it
 /// answers `core.status`.
 pub async fn start(dir: PathBuf, port: u16, extra: &[&str]) -> Running {
+    launch(dir, port, extra, Turn::shared()).await
+}
+
+/// [`start`], with no other station running on the machine until it is
+/// dropped.
+pub async fn start_alone(dir: PathBuf, port: u16, extra: &[&str]) -> Running {
+    launch(dir, port, extra, Turn::alone()).await
+}
+
+async fn launch(dir: PathBuf, port: u16, extra: &[&str], turn: Turn) -> Running {
     let mut cmd = Command::new(BIN);
     cmd.arg("--config").arg(dir.join("godwinmix.toml")).args(extra).args(["--log-format", "json"]);
     cmd.env("GODWINMIX_RUNTIME_DIR", dir.join("runtime")).env_remove("GODWINMIX_TOKEN");
@@ -73,7 +126,7 @@ pub async fn start(dir: PathBuf, port: u16, extra: &[&str]) -> Running {
     cmd.stdout(Stdio::null()).stderr(Stdio::from(std::fs::File::create(dir.join("log.jsonl")).unwrap()));
     #[cfg(unix)]
     std::os::unix::process::CommandExt::process_group(&mut cmd, 0);
-    let running = Running { child: cmd.spawn().unwrap(), url: format!("127.0.0.1:{port}"), dir };
+    let running = Running { child: cmd.spawn().unwrap(), url: format!("127.0.0.1:{port}"), dir, _turn: turn };
     let started = Instant::now();
     loop {
         if get(&running, "/api/v1/core/status").await.get("uptime_secs").is_some() {
