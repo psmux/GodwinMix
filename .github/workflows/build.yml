@@ -93,12 +93,15 @@ jobs:
           # nightly runs them with no slack.
           GODWINMIX_TIMING_SLACK: 3
         run: |
-          # The macOS runner is a three core virtual machine, and three tests
-          # each running live encoders at once starved one another: RIST,
-          # SRT and HEVC tests that pass alone there decoded a frame or two.
-          # Two at a time leaves a core for the pipelines the tests start.
+          # The macOS runner is a three core virtual machine and the Windows
+          # one has four, and as many tests as cores, each running live
+          # encoders, starved one another: RIST, SRT and HEVC tests that pass
+          # alone there decoded a frame or two. One test fewer than cores
+          # leaves a core for the pipelines the tests start.
           if [ "${{ runner.os }}" = "macOS" ]; then
             export RUST_TEST_THREADS=2
+          elif [ "${{ runner.os }}" = "Windows" ]; then
+            export RUST_TEST_THREADS=3
           fi
           if [ "${{ runner.os }}" = "Linux" ]; then
             xvfb-run -a cargo test --profile ci --locked --workspace --no-fail-fast
