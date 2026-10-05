@@ -59,7 +59,9 @@ async fn two_people_on_one_token_are_two_clients_with_their_own_undo() {
     assert_eq!(refused["data"]["conflict"], "undo", "{refused}");
     assert_eq!(refused["data"]["conflicts"][0]["changed_by"], laptop.client_id.as_str(), "{refused}");
     phone.call("scene.undo", json!({"force": true})).await.expect("forced");
-    assert_eq!(x_of(&mut laptop, "right").await, 0.0);
+    // Forced, the phone's undo puts back what was there before its own move,
+    // which was the laptop's first position.
+    assert_eq!(x_of(&mut laptop, "right").await, 200.0);
 
     // The laptop goes, and the phone is told.
     drop(laptop);
