@@ -1,5 +1,5 @@
-//! What the station answers itself: `show.*`, `channel.*`, the governor,
-//! and a channel's rendition plan. Everything else belongs to a show.
+//! What the station answers itself: `show.*`, `channel.*`, `token.*`, the
+//! governor, and a channel's rendition plan. Everything else belongs to a show.
 //!
 //! The scopes are the method table's, the same one every show checks
 //! against, so a token reaches exactly what it would in a single process.
@@ -24,6 +24,7 @@ pub fn registry() -> &'static Registry<Call> {
 pub fn answers(method: &str, params: &Value) -> bool {
     method.starts_with("show.")
         || method.starts_with("channel.")
+        || method.starts_with("token.")
         || method == "governor.status"
         || method == "governor.calibrate"
         || (method == "rendition.plan"
@@ -42,7 +43,11 @@ pub async fn call(st: &Arc<Station>, token: &Token, method: &str, params: Value)
     if !token.has(def.scope) {
         return Err(RpcError::scope(method, def.scope.as_str(), &token.scope_names()));
     }
+    if st.tokens.revoked(token) {
+        return Err(crate::control::call::revoked(token));
+    }
     match method {
+        m if m.starts_with("token.") => crate::devices::call(&st.tokens, m, params).await,
         m if m.starts_with("show.") => super::shows_call::call(st, m, params).await,
         m if m.starts_with("channel.") => super::channel_calls::call(st, token, m, params).await,
         "governor.status" => {

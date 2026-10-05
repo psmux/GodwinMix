@@ -107,7 +107,10 @@ pub async fn serve_rpc(socket: WebSocket, ctx: Ctx, token: Token, who: Who) {
     let mut events = ctx.app.mixer.subscribe();
     let client_id = godwinmix_protocol::presence::client_id(&token.id, &who.name);
     // This connection's seat in presence.list, given back when the loop ends.
-    let _here = ctx.app.presence.join(&client_id, &token, who.user_agent.as_deref());
+    // A device token's label, so the others see "Sam's phone" rather than
+    // the token's slug.
+    let label = ctx.app.tokens.devices().and_then(|d| d.list().into_iter().find(|t| t.id == token.id)).map(|t| t.label);
+    let _here = ctx.app.presence.join(&client_id, &token, label, who.user_agent.as_deref());
     let mut conn = Connection {
         tx,
         ctx,

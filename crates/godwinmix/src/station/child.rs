@@ -43,6 +43,11 @@ pub fn command(launch: &Launch, start: &Start) -> Command {
     if let Some(dir) = &launch.calibration {
         cmd.env(godwinmix_core::render::CALIBRATION_ENV, dir);
     }
+    // The station's device tokens, so a phone the station let in is let in
+    // by the show its calls are relayed to.
+    if let Some(path) = crate::devices::station_file() {
+        cmd.env(crate::devices::PATH_ENV, path);
+    }
     // What the station's port answers HTTPS with, for the show's `core.info`.
     if let Some(json) = crate::tls::info().and_then(|info| serde_json::to_string(&info).ok()) {
         cmd.env(crate::tls::INFO_ENV, json);

@@ -2918,6 +2918,32 @@
         }
       ]
     },
+    "DeviceToken": {
+      "description": "One device token, without its secret.",
+      "properties": {
+        "created": {
+          "description": "When it was made, RFC 3339 in UTC.",
+          "type": "string"
+        },
+        "id": {
+          "description": "Recorded against every take in `program.history`, like any token id.",
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "scope": {
+          "$ref": "#/$defs/Scope"
+        }
+      },
+      "required": [
+        "id",
+        "label",
+        "scope",
+        "created"
+      ],
+      "type": "object"
+    },
     "DeviceTotal": {
       "description": "Use of one hardware device by a plan.",
       "properties": {
@@ -8404,6 +8430,16 @@
       ],
       "type": "object"
     },
+    "Scope": {
+      "description": "What a token may reach. Ordered: `admin` implies `operate` implies `read`.\n\n`Plugin` is the exception and sits below the ladder on purpose. It is what\na plugin's own per instance token carries, and it grants exactly one thing:\ncalling that plugin's own tools. It implies no reading and no operating, so\na plugin that tries `program.take` is refused with -32002, which is what 04\nsection 8 asks for. Which plugin a token belongs to is `Token::plugin`,\nbeside the scope rather than inside it, so `Scope` stays `Copy` and the\nmethod table stays a table of constants.",
+      "enum": [
+        "plugin",
+        "read",
+        "operate",
+        "admin"
+      ],
+      "type": "string"
+    },
     "SearchRequest": {
       "description": "`plugin.search`.",
       "properties": {
@@ -10902,6 +10938,62 @@
       ],
       "type": "object"
     },
+    "TokenCreateRequest": {
+      "description": "`token.create`.",
+      "properties": {
+        "id": {
+          "description": "A slug to use as the id. Made from the label when absent, with `-2`,\n`-3` on the end when that one is taken.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "label": {
+          "description": "What a person calls the device: \"Sam's phone\". Defaults to \"Phone\".",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "scope": {
+          "$ref": "#/$defs/Scope",
+          "default": "operate",
+          "description": "`read`, `operate` (the default) or `admin`."
+        }
+      },
+      "type": "object"
+    },
+    "TokenCreated": {
+      "description": "What `token.create` answers with. The only time the secret is shown.",
+      "properties": {
+        "created": {
+          "description": "When it was made, RFC 3339 in UTC.",
+          "type": "string"
+        },
+        "id": {
+          "description": "Recorded against every take in `program.history`, like any token id.",
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "scope": {
+          "$ref": "#/$defs/Scope"
+        },
+        "token": {
+          "description": "The secret. Send it as `Authorization: Bearer <token>`, or open the\npage at `https://<host>:<port>/#token=<token>`. It cannot be read back.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "label",
+        "scope",
+        "created",
+        "token"
+      ],
+      "type": "object"
+    },
     "TokenInfo": {
       "description": "What the calling token is allowed to do, echoed back so a surface can grey\nout what it cannot reach instead of discovering it at the first refusal.",
       "properties": {
@@ -10932,6 +11024,46 @@
         "confirm",
         "rehearsal",
         "profile"
+      ],
+      "type": "object"
+    },
+    "TokenList": {
+      "description": "`token.list`.",
+      "properties": {
+        "tokens": {
+          "items": {
+            "$ref": "#/$defs/DeviceToken"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "tokens"
+      ],
+      "type": "object"
+    },
+    "TokenRevokeRequest": {
+      "description": "`token.revoke`.",
+      "properties": {
+        "id": {
+          "description": "The device token's id, from `token.list`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object"
+    },
+    "TokenRevoked": {
+      "description": "What `token.revoke` answers with.",
+      "properties": {
+        "revoked": {
+          "$ref": "#/$defs/DeviceToken"
+        }
+      },
+      "required": [
+        "revoked"
       ],
       "type": "object"
     },
@@ -17367,6 +17499,65 @@
       "scope": "operate",
       "since": "1",
       "summary": "Check an SVG template and write it into the media library."
+    },
+    {
+      "destructive": false,
+      "idempotent": false,
+      "mutating": true,
+      "name": "token.create",
+      "params": {
+        "$ref": "#/$defs/TokenCreateRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/token/create"
+      },
+      "result": {
+        "$ref": "#/$defs/TokenCreated"
+      },
+      "scope": "admin",
+      "since": "1",
+      "summary": "Make a token for one phone or tablet, with the read, operate (the default) or admin scope. The secret is in this answer and nowhere else: the mixer keeps only a digest of it. Open the page at https://<host>:<port>/#token=<token> to sign the device in."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mutating": false,
+      "name": "token.list",
+      "params": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      },
+      "rest": {
+        "method": "GET",
+        "path": "/api/v1/token/list"
+      },
+      "result": {
+        "$ref": "#/$defs/TokenList"
+      },
+      "scope": "admin",
+      "since": "1",
+      "summary": "Every device token: its id, label, scope and when it was made. Never a secret."
+    },
+    {
+      "destructive": true,
+      "idempotent": true,
+      "mutating": true,
+      "name": "token.revoke",
+      "params": {
+        "$ref": "#/$defs/TokenRevokeRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/token/revoke"
+      },
+      "result": {
+        "$ref": "#/$defs/TokenRevoked"
+      },
+      "scope": "admin",
+      "since": "1",
+      "summary": "Take a device token back. The device's next call is refused, including on a connection it already has open."
     },
     {
       "destructive": false,

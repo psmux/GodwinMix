@@ -223,6 +223,9 @@ Keys accepted on every method, handled before a method runs.
 | `template.get` | `GET /api/v1/template` | read |  | 1 | One template, with its SVG as written. |
 | `template.list` | `GET /api/v1/template/list` | read |  | 1 | The graphic templates: the built in pack and the SVG templates in the media library, each with its fields. |
 | `template.save` | `POST /api/v1/template/save` | operate |  | 1 | Check an SVG template and write it into the media library. |
+| `token.create` | `POST /api/v1/token/create` | admin |  | 1 | Make a token for one phone or tablet, with the read, operate (the default) or admin scope. The secret is in this answer and nowhere else: the mixer keeps only a digest of it. Open the page at https://<host>:<port>/#token=<token> to sign the device in. |
+| `token.list` | `GET /api/v1/token/list` | admin |  | 1 | Every device token: its id, label, scope and when it was made. Never a secret. |
+| `token.revoke` | `POST /api/v1/token/revoke` | admin | yes | 1 | Take a device token back. The device's next call is refused, including on a connection it already has open. |
 | `tool.call` | `POST /api/v1/tool/call` | operate |  | 1 | Call one of a plugin's tools, in MCP's shape. The name is `<plugin>/<tool>`, or the bare tool name when only one plugin has it. |
 | `vitals.get` | `GET /api/v1/vitals` | read |  | 1 | This show's health (its state and alarms, null in the first second) and the thresholds they are judged by. |
 | `vitals.set` | `POST /api/v1/vitals/set` | operate |  | 1 | Change the alarm thresholds, or whether a mosaic is kept up for the black and freeze checks while nobody is looking. Fields left out keep their defaults; a duration of 0 switches that check off. Applies within a second. |
@@ -3358,6 +3361,53 @@ MCP tool `save_template` in the `search` profile: readOnlyHint false, destructiv
   },
   "result": {
     "$ref": "#/$defs/TemplateSaved"
+  }
+}
+```
+
+#### `token.create`
+
+Make a token for one phone or tablet, with the read, operate (the default) or admin scope. The secret is in this answer and nowhere else: the mixer keeps only a digest of it. Open the page at https://<host>:<port>/#token=<token> to sign the device in.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/TokenCreateRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/TokenCreated"
+  }
+}
+```
+
+#### `token.list`
+
+Every device token: its id, label, scope and when it was made. Never a secret.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "$ref": "#/$defs/TokenList"
+  }
+}
+```
+
+#### `token.revoke`
+
+Take a device token back. The device's next call is refused, including on a connection it already has open.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/TokenRevokeRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/TokenRevoked"
   }
 }
 ```

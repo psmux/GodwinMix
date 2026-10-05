@@ -701,6 +701,14 @@ export interface DestinationRefusal {
 /** Where a destination has got to. */
 export type DestinationState = "off" | "waiting" | "connecting" | "live" | "reconnecting" | "failed";
 
+/** One device token, without its secret. */
+export interface DeviceToken {
+  created: string;
+  id: string;
+  label: string;
+  scope: Scope;
+}
+
 /** Use of one hardware device by a plan. */
 export interface DeviceTotal {
   millis: number;
@@ -2120,6 +2128,19 @@ export interface SceneView {
   records: ProtocolRecord[];
 }
 
+/**
+ * What a token may reach. Ordered: `admin` implies `operate` implies `read`.
+ *
+ * `Plugin` is the exception and sits below the ladder on purpose. It is what
+ * a plugin's own per instance token carries, and it grants exactly one thing:
+ * calling that plugin's own tools. It implies no reading and no operating, so
+ * a plugin that tries `program.take` is refused with -32002, which is what 04
+ * section 8 asks for. Which plugin a token belongs to is `Token::plugin`,
+ * beside the scope rather than inside it, so `Scope` stays `Copy` and the
+ * method table stays a table of constants.
+ */
+export type Scope = "plugin" | "read" | "operate" | "admin";
+
 /** `plugin.search`. */
 export interface SearchRequest {
   term?: string;
@@ -2738,6 +2759,22 @@ export interface TlsInfo {
   urls: string[];
 }
 
+/** `token.create`. */
+export interface TokenCreateRequest {
+  id?: string | null;
+  label?: string | null;
+  scope?: Scope;
+}
+
+/** What `token.create` answers with. The only time the secret is shown. */
+export interface TokenCreated {
+  created: string;
+  id: string;
+  label: string;
+  scope: Scope;
+  token: string;
+}
+
 /**
  * What the calling token is allowed to do, echoed back so a surface can grey
  * out what it cannot reach instead of discovering it at the first refusal.
@@ -2748,6 +2785,21 @@ export interface TokenInfo {
   profile: string;
   rehearsal: boolean;
   scopes: string[];
+}
+
+/** `token.list`. */
+export interface TokenList {
+  tokens: DeviceToken[];
+}
+
+/** `token.revoke`. */
+export interface TokenRevokeRequest {
+  id: string;
+}
+
+/** What `token.revoke` answers with. */
+export interface TokenRevoked {
+  revoked: DeviceToken;
 }
 
 /** `tool.call`. */
@@ -3196,6 +3248,9 @@ export interface MethodParams {
   "template.get": TemplateGetRequest;
   "template.list": Record<string, never>;
   "template.save": TemplateSaveRequest;
+  "token.create": TokenCreateRequest;
+  "token.list": Record<string, never>;
+  "token.revoke": TokenRevokeRequest;
   "tool.call": ToolCallRequest;
   "vitals.get": Record<string, never>;
   "vitals.set": VitalsConfig;
@@ -3392,6 +3447,9 @@ export interface MethodResults {
   "template.get": TemplateDoc;
   "template.list": TemplateList;
   "template.save": TemplateSaved;
+  "token.create": TokenCreated;
+  "token.list": TokenList;
+  "token.revoke": TokenRevoked;
   "tool.call": Record<string, unknown>;
   "vitals.get": Record<string, unknown>;
   "vitals.set": Record<string, unknown>;
@@ -3639,6 +3697,9 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "template.get", summary: "One template, with its SVG as written.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/template" } },
   { name: "template.list", summary: "The graphic templates: the built in pack and the SVG templates in the media library, each with its fields.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/template/list" } },
   { name: "template.save", summary: "Check an SVG template and write it into the media library.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/template/save" } },
+  { name: "token.create", summary: "Make a token for one phone or tablet, with the read, operate (the default) or admin scope. The secret is in this answer and nowhere else: the mixer keeps only a digest of it. Open the page at https://<host>:<port>/#token=<token> to sign the device in.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/token/create" } },
+  { name: "token.list", summary: "Every device token: its id, label, scope and when it was made. Never a secret.", scope: "admin", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/token/list" } },
+  { name: "token.revoke", summary: "Take a device token back. The device's next call is refused, including on a connection it already has open.", scope: "admin", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/token/revoke" } },
   { name: "tool.call", summary: "Call one of a plugin's tools, in MCP's shape. The name is `<plugin>/<tool>`, or the bare tool name when only one plugin has it.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/tool/call" } },
   { name: "vitals.get", summary: "This show's health (its state and alarms, null in the first second) and the thresholds they are judged by.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/vitals" } },
   { name: "vitals.set", summary: "Change the alarm thresholds, or whether a mosaic is kept up for the black and freeze checks while nobody is looking. Fields left out keep their defaults; a duration of 0 switches that check off. Applies within a second.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/vitals/set" } },
@@ -4649,6 +4710,21 @@ export class GeneratedMethods {
   /** Check an SVG template and write it into the media library. */
   templateSave(params: TemplateSaveRequest): Promise<TemplateSaved> {
     return this._call("template.save", params as unknown as Record<string, unknown>) as Promise<TemplateSaved>;
+  }
+
+  /** Make a token for one phone or tablet, with the read, operate (the default) or admin scope. The secret is in this answer and nowhere else: the mixer keeps only a digest of it. Open the page at https://<host>:<port>/#token=<token> to sign the device in. */
+  tokenCreate(params: TokenCreateRequest = {}): Promise<TokenCreated> {
+    return this._call("token.create", params as unknown as Record<string, unknown>) as Promise<TokenCreated>;
+  }
+
+  /** Every device token: its id, label, scope and when it was made. Never a secret. */
+  tokenList(): Promise<TokenList> {
+    return this._call("token.list", {}) as Promise<TokenList>;
+  }
+
+  /** Take a device token back. The device's next call is refused, including on a connection it already has open. */
+  tokenRevoke(params: TokenRevokeRequest): Promise<TokenRevoked> {
+    return this._call("token.revoke", params as unknown as Record<string, unknown>) as Promise<TokenRevoked>;
   }
 
   /** Call one of a plugin's tools, in MCP's shape. The name is `<plugin>/<tool>`, or the bare tool name when only one plugin has it. */

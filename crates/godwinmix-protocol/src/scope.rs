@@ -213,10 +213,14 @@ impl Token {
 /// one holds the per instance tokens plugins are given in `GMX_TOKEN`: they
 /// come and go with the instances, and they are shared between clones of this
 /// type so the control server and the loader see the same set.
+///
+/// Beside them, when the binary attaches one, the device registry: tokens an
+/// admin made with `token.create` for a phone or a tablet. See `devices`.
 #[derive(Debug, Clone, Default)]
 pub struct Tokens {
     entries: Vec<Token>,
     minted: Arc<parking_lot::Mutex<Vec<Token>>>,
+    devices: Option<Arc<dyn crate::devices::DeviceRegistry>>,
     /// True when the core was started with `--rehearsal`.
     pub rehearsal_core: bool,
 }
@@ -243,7 +247,32 @@ impl AuthFailure {
 
 impl Tokens {
     pub fn new(entries: Vec<Token>, rehearsal_core: bool) -> Self {
-        Self { entries, minted: Arc::default(), rehearsal_core }
+        Self { entries, minted: Arc::default(), devices: None, rehearsal_core }
+    }
+
+    /// Accept device tokens from `registry` as well.
+    pub fn with_devices(mut self, registry: Arc<dyn crate::devices::DeviceRegistry>) -> Self {
+        self.devices = Some(registry);
+        self
+    }
+
+    /// The device registry, for `token.create`, `token.list` and
+    /// `token.revoke`. None on a core that has none attached.
+    pub fn devices(&self) -> Option<&Arc<dyn crate::devices::DeviceRegistry>> {
+        self.devices.as_ref()
+    }
+
+    /// True when `token` is a device token that was revoked after it was
+    /// presented. Checked on every call, so an open connection loses its
+    /// reach the moment the token goes.
+    pub fn revoked(&self, token: &Token) -> bool {
+        self.devices.as_ref().is_some_and(|d| d.revoked(token))
+    }
+
+    /// Whether `id` names a configured or minted token, so a device token is
+    /// never given an id somebody else's history already uses.
+    pub fn id_in_use(&self, id: &str) -> bool {
+        self.entries.iter().chain(self.minted.lock().iter()).any(|t| t.id == id)
     }
 
     /// Mint the token one plugin instance is given in `GMX_TOKEN`.
@@ -331,6 +360,11 @@ impl Tokens {
                 found = Some(entry.clone());
             }
         }
+        // A device token belongs to the core that made it, rehearsal or live.
+        let found = found.or_else(|| {
+            let device = self.devices.as_ref()?.find(presented)?;
+            Some(Token { rehearsal: self.rehearsal_core, ..device })
+        });
         let Some(token) = found else { return Err(AuthFailure::Wrong) };
         // 09 section 5 item 14: an agent must not have to know which core it
         // is talking to, so the credential decides and the mismatch is refused

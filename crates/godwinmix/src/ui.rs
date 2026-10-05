@@ -233,6 +233,8 @@ const ASSETS: &[(&str, &str)] = &[
     // menu. Data, fetched when a menu first opens.
     ("shell/menus.json", include_str!("../../../ui/shell/menus.json")),
     ("shell/agents.js", include_str!("../../../ui/shell/agents.js")),
+    ("shell/devices.js", include_str!("../../../ui/shell/devices.js")),
+    ("shell/devices-list.js", include_str!("../../../ui/shell/devices-list.js")),
     ("shell/menu-actions.js", include_str!("../../../ui/shell/menu-actions.js")),
     ("shell/project.js", include_str!("../../../ui/shell/project.js")),
     ("shell/project-open.js", include_str!("../../../ui/shell/project-open.js")),
@@ -351,6 +353,7 @@ const DEV_ASSETS: &[(&str, &str)] = &[
     // This browser's camera: the publisher's parts and the browser channel,
     // against stubs. No camera and no socket.
     ("test/browser-devices.js", include_str!("../../../ui/test/browser-devices.js")),
+    ("test/lan-devices.js", include_str!("../../../ui/test/lan-devices.js")),
     ("test/browser-channel.js", include_str!("../../../ui/test/browser-channel.js")),
     // The designer kits' behaviour, as the reference implementation answered
     // it. The TypeScript and Python suites read the same file from the
@@ -795,7 +798,7 @@ mod tests {
     }
 
     #[test]
-    fn the_page_a_volunteer_opens_stays_under_360_kb() {
+    fn the_page_a_volunteer_opens_stays_under_372_kb() {
         // The budget from 07 Phase 3, against the set it was written about:
         // what a browser fetches to put a usable mixer on screen.
         //
@@ -808,6 +811,10 @@ mod tests {
         // eager set is what is measured here, the whole directory is measured
         // below, and `the_designer_is_not_in_the_eager_set` keeps the line
         // between them where it is.
+        //
+        // Raised to 372 kB for the two things a phone signed in from a code
+        // needs on this page: taking the token out of the address, and the
+        // button saying who else is here. Measured at 361 kB.
         //
         // Raised to 360 kB for touch.css, which is the phone's layout and so
         // belongs on exactly this page: measured at 353 kB. touch.js, the long
@@ -830,8 +837,8 @@ mod tests {
             bytes += source_of(extra).map(|b| b.len()).unwrap_or(0);
         }
         assert!(
-            bytes < 360 * 1024,
-            "the page loads {} files and {bytes} bytes, over the 360 kB budget",
+            bytes < 372 * 1024,
+            "the page loads {} files and {bytes} bytes, over the 372 kB budget",
             eager.len()
         );
     }
@@ -911,6 +918,8 @@ mod tests {
         reachable.extend(closure_of("panels/composer/cutout.js"));
         // Help > Connect an AI agent, on its first press.
         reachable.extend(closure_of("shell/agents.js"));
+        // Help > Open on another device, on its first press.
+        reachable.extend(closure_of("shell/devices.js"));
         reachable.extend(closure_of("panels/outputs/destination.js"));
         reachable.extend(closure_of("panels/channels/panel.js"));
         reachable.extend(closure_of("shell/sandbox.js"));

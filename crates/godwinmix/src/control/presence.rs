@@ -43,9 +43,9 @@ impl Presence {
     }
 
     /// Take a seat. Dropping what this returns gives it back.
-    pub fn join(self: &Arc<Self>, client_id: &str, token: &Token, user_agent: Option<&str>) -> Here {
+    pub fn join(self: &Arc<Self>, client_id: &str, token: &Token, token_label: Option<String>, user_agent: Option<&str>) -> Here {
         let key = self.next.fetch_add(1, Ordering::Relaxed);
-        self.seats.lock().insert(key, Seat::new(client_id, token, user_agent));
+        self.seats.lock().insert(key, Seat::new(client_id, token, token_label, user_agent));
         self.announce();
         Here { presence: self.clone(), key }
     }

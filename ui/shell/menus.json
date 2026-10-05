@@ -298,6 +298,10 @@
           "title": "Keyboard shortcuts"
         },
         {
+          "command": "help.devices",
+          "title": "Open on another device…"
+        },
+        {
           "command": "help.agents",
           "title": "Connect an AI agent"
         },

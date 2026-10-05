@@ -18,11 +18,13 @@ pub(super) struct Seat {
 }
 
 impl Seat {
-    pub fn new(client_id: &str, token: &Token, user_agent: Option<&str>) -> Seat {
+    /// `token_label` is the label a device token was made with; a token from
+    /// the config file has none.
+    pub fn new(client_id: &str, token: &Token, token_label: Option<String>, user_agent: Option<&str>) -> Seat {
         Seat {
             client_id: client_id.to_string(),
             token: token.id.clone(),
-            token_label: token_label(token),
+            token_label,
             label: None,
             device: device_of(user_agent.unwrap_or("")),
             scene: None,
@@ -56,13 +58,6 @@ impl Seat {
     fn label(&self) -> Option<String> {
         self.label.clone().or_else(|| self.token_label.clone())
     }
-}
-
-/// The label a token carries, for presence to show beside its connections.
-/// Tokens from the config file have none; a token minted at run time with a
-/// label is where one comes from.
-fn token_label(_token: &Token) -> Option<String> {
-    None
 }
 
 fn now_ms() -> u64 {
