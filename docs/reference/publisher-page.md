@@ -131,4 +131,4 @@ At `/join/` the controls are at least 48 pixels tall, text fields use a 16
 pixel font so Safari does not zoom into them, nothing depends on hover, and
 at 480 pixels wide or less the buttons sit two to a row with Go live across
 the whole width. The picture box takes the shape of the picture, upright or
-on its side, and is never taller than 60% of the screen.
+on its side, and is never taller than 45% of the screen, so the controls stay close under it on a phone held upright.

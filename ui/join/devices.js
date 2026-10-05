@@ -57,7 +57,7 @@ export async function listDevices(md = navigator.mediaDevices) {
 
 /**
  * Is this a phone or a tablet held upright? A touch screen taller than it is
- * wide. A narrow window on a laptop is not: its webcam is still landscape.
+ * wide. A narrow window on a laptop is not: its webcam still sends a wide picture.
  */
 export function upright(win = typeof window !== "undefined" ? window : null) {
   return !!(win && win.matchMedia && win.matchMedia("(pointer: coarse) and (orientation: portrait)").matches);

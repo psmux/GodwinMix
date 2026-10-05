@@ -36,15 +36,16 @@ pub fn available() -> bool {
     VP8_NEEDED.iter().all(|e| gmx_netkit::elements::exists(e)) && encoder_name().is_some()
 }
 
-/// The video the answer may take: H.264 always, VP8 too when `vp8`. H.264
-/// is listed first, so a publisher offering both is answered with it and
-/// its picture is never decoded.
-pub fn video_caps(vp8: bool) -> String {
-    let h264 = "application/x-rtp,media=video,encoding-name=H264,clock-rate=90000";
+/// The one video codec the answer takes: VP8 when `vp8` (an offer with no
+/// H.264 in it), H.264 otherwise, so a publisher that can send H.264 does
+/// and its picture is never decoded. One and not both, because the stream
+/// `webrtcbin` hands out says which codec it is only by the caps the
+/// transceiver was made with.
+pub fn video_caps(vp8: bool) -> &'static str {
     if vp8 {
-        format!("{h264};application/x-rtp,media=video,encoding-name=VP8,clock-rate=90000")
+        "application/x-rtp,media=video,encoding-name=VP8,clock-rate=90000"
     } else {
-        h264.to_string()
+        "application/x-rtp,media=video,encoding-name=H264,clock-rate=90000"
     }
 }
 
