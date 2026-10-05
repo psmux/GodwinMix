@@ -15,6 +15,8 @@
 //! library. See `docs/reference/graphics-for-agents.md`.
 
 pub mod check;
+pub mod fields;
+pub mod library;
 pub mod meta;
 pub mod pack;
 pub mod problem;

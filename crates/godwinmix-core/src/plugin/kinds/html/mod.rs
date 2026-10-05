@@ -15,21 +15,20 @@ pub mod opaque;
 pub mod page;
 pub mod params;
 pub mod renderer;
+pub mod wire;
+mod source;
 
-use super::layer::assemble_layer;
-use super::BuildCtx;
-use crate::caps::CanvasCaps;
-use crate::config::Params;
-use crate::overlay::carrier::Carrier;
+/// What `source` needs from the kinds module.
+mod layer_parts {
+    pub use super::super::layer::assemble_layer;
+    pub use super::super::BuildCtx;
+}
+
 use crate::overlay::Layer;
-use crate::plugin::source::{unknown_method, Provide, Source, SourceRequest};
-use crate::plugin::{Capability, CapabilitySet, Configure, Health, Hello, Manifest, MediaDecl, MediaEnds, PluginState, ProvideKind, Ready, StreamMode, Tier, API_LEVEL};
-use anyhow::{Context, Result};
-use params::HtmlParams;
-use renderer::Renderer;
-use serde_json::{json, Value};
-use std::sync::atomic::Ordering;
-use std::sync::Arc;
+use crate::plugin::source::{Provide, Source, SourceRequest};
+use crate::plugin::{Capability, CapabilitySet, Manifest, MediaDecl, ProvideKind, StreamMode, Tier, API_LEVEL};
+use anyhow::Result;
+use source::HtmlSource;
 
 pub use params::schema;
 
@@ -55,149 +54,7 @@ fn claims(uri: &str) -> Option<u16> {
 
 fn new(req: SourceRequest<'_>) -> Result<Box<dyn Source>> {
     let params = params::validate(&req.cfg.effective_params())?;
-    Ok(Box::new(HtmlSource { ctx: req.ctx(), params, layer: Layer::new(true), carrier: None, opaque: None, renderer: None, on_air: false, stopped: false }))
-}
-
-pub struct HtmlSource {
-    ctx: BuildCtx,
-    params: HtmlParams,
-    layer: Arc<Layer>,
-    carrier: Option<Arc<Carrier>>,
-    /// Set for a design that covers the picture, which goes to the
-    /// compositor rather than the board. See `opaque`.
-    opaque: Option<Arc<opaque::Opaque>>,
-    renderer: Option<Renderer>,
-    /// Whether an item showing this is on the programme, as the mixer last
-    /// said with `cue`.
-    on_air: bool,
-    /// Set by `stop`, so a renderer that was asked to go is not reported as
-    /// one that went by itself.
-    stopped: bool,
-}
-
-impl HtmlSource {
-    /// Start the renderer if it is not running.
-    fn ensure_renderer(&mut self) -> Result<()> {
-        if self.renderer.as_ref().is_some_and(|r| !r.ended()) {
-            return Ok(());
-        }
-        self.renderer = None;
-        let carrier = self.carrier.clone().context("the graphic's pipeline is not built yet")?;
-        let page = self.params.template.file.clone().context("the template has no file to load")?;
-        let state = self.params.state(self.on_air);
-        let fps = if self.params.fps > 0 { self.params.fps } else { self.params.template.fps.unwrap_or(0) };
-        let to = frames::Target { layer: self.layer.clone(), carrier, opaque: self.opaque.clone() };
-        let page = renderer::Page::template(&page, fps, self.opaque.is_some());
-        let r = Renderer::start(&self.ctx.id, &page, &self.ctx.canvas, &self.ctx.browser, to, state)?;
-        self.renderer = Some(r);
-        self.stopped = false;
-        Ok(())
-    }
-
-    fn tell(&self) {
-        if let Some(r) = &self.renderer {
-            r.send(self.params.state(self.on_air));
-        }
-    }
-}
-
-impl Source for HtmlSource {
-    fn manifest(&self) -> &Manifest {
-        &MANIFEST
-    }
-
-    fn initialize(&mut self, hello: Hello) -> Result<Ready> {
-        self.params = params::validate(&hello.params)?;
-        self.ctx.canvas = hello.canvas;
-        Ok(Ready { manifest: MANIFEST, latency_ms: 0, capabilities: MANIFEST.capabilities })
-    }
-
-    fn start(&mut self, canvas: &CanvasCaps, thumb: bool) -> Result<MediaEnds> {
-        self.ctx.canvas = canvas.clone();
-        let carrier = Arc::new(Carrier::build(&self.ctx.id, canvas)?);
-        // A design that covers the picture goes to the compositor like a
-        // camera, in its place in the stack, and the board leaves it alone.
-        let ends = if self.params.template.info.opaque {
-            let o = opaque::Opaque::build(&self.ctx.id, canvas)?;
-            let ends = o.assemble(&self.ctx, thumb)?;
-            o.keep_alive(&self.ctx.id);
-            self.opaque = Some(o);
-            ends
-        } else {
-            let ends = assemble_layer(&self.ctx, thumb, &carrier, &self.layer)?;
-            carrier.show(self.layer.picture().as_deref());
-            ends
-        };
-        self.carrier = Some(carrier);
-        self.renderer = None;
-        self.ensure_renderer()?;
-        Ok(ends)
-    }
-
-    fn stop(&mut self) -> Result<()> {
-        self.stopped = true;
-        self.renderer = None;
-        if let Some(o) = self.opaque.take() {
-            o.stop();
-        }
-        Ok(())
-    }
-
-    /// New words in place, with no reload. A different page is loaded again.
-    fn configure(&mut self, params: &Params) -> Result<Configure> {
-        let p = params::validate(params)?;
-        if p.template.info.opaque != self.params.template.info.opaque {
-            return Ok(Configure::RestartRequired("a design that covers the picture is drawn by the compositor, one that does not by the overlay board".into()));
-        }
-        let other_page = p.template != self.params.template || p.fps != self.params.fps;
-        self.params = p;
-        if other_page && self.carrier.is_some() {
-            self.renderer = None;
-            self.ensure_renderer()?;
-        } else {
-            self.tell();
-        }
-        Ok(Configure::Applied)
-    }
-
-    fn health(&self) -> Health {
-        let running = self.renderer.as_ref().is_some_and(|r| !r.ended());
-        Health::of(if running { PluginState::Running } else { PluginState::Starting })
-    }
-
-    fn call(&mut self, method: &str, params: Value) -> Result<Value> {
-        match method {
-            // The pipeline went to NULL and back: show the carrier again, and
-            // start the renderer if it had gone.
-            "restart" => {
-                if let Some(c) = &self.carrier {
-                    c.show(self.layer.picture().as_deref());
-                }
-                self.ensure_renderer()?;
-                Ok(Value::Null)
-            }
-            // The mixer: an item showing this went on or came off the air.
-            "cue" => {
-                self.on_air = params.get("on_air").and_then(Value::as_bool).unwrap_or(false);
-                self.tell();
-                Ok(json!({ "in": self.params.is_in(self.on_air) }))
-            }
-            "state" => {
-                let frames = self.renderer.as_ref().map(|r| r.feed.frames.load(Ordering::Relaxed)).unwrap_or(0);
-                let state: Value = serde_json::from_str(&self.params.state(self.on_air)).unwrap_or(Value::Null);
-                Ok(json!({ "state": state, "frames": frames, "on_air": self.on_air }))
-            }
-            other => Err(unknown_method(&MANIFEST, other, &["restart", "cue", "state"])),
-        }
-    }
-
-    fn exited(&mut self) -> Option<String> {
-        let gone = !self.stopped && self.renderer.as_ref().is_some_and(|r| r.ended());
-        gone.then(|| {
-            self.stopped = true;
-            "the browser renderer drawing the graphic stopped".to_string()
-        })
-    }
+    Ok(Box::new(HtmlSource::new(req.ctx(), params, Layer::new(true))))
 }
 
 #[cfg(test)]

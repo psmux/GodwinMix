@@ -17,6 +17,7 @@
 //! those, and they must return immediately without touching anything else.
 //! Everything written to stdout is stream data; all logging goes to stderr.
 
+mod area;
 mod control;
 mod graphic;
 mod mux;
