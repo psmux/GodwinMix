@@ -184,7 +184,8 @@ pub fn revoked(token: &Token) -> RpcError {
     RpcError::new(
         ErrorCode::Scope,
         format!(
-            "the device token '{}' was revoked. Ask whoever runs this mixer for a new one,              or scan the code under Help, Open on another device, again.",
+            "the device token '{}' was revoked. Ask whoever runs this mixer for a new one, \
+             or scan the code under Help, Open on another device, again.",
             token.id
         ),
     )
