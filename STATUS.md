@@ -1,5 +1,75 @@
 # Where GodwinMix stands
 
+## Two phones that aborted the show, 2026-10-05
+
+In an end to end test of the installed 0.2.1 app, two headless Chrome phones
+published their fake cameras on `/join/`, both went live, both became sources,
+and within seconds the show process aborted, three times in a few minutes
+(0xc0000409 twice, and a 0xc0000374 that was the Quick Sync plugin's own heap
+fault at start). Its stderr ended in hundreds of `gst_segment_to_running_time:
+assertion 'segment->format == format' failed` and then `gstvideoaggregator.c:1898:
+gst_video_aggregator_fill_queues: assertion failed: (start_running_time != -1
+&& end_running_time != -1)`. The lines just before named the element:
+`slot-q-0:sink Got data flow before segment event`, then the same for
+`slot-crop-0`, `slot-flip-0` and `vmix:sink_1`.
+
+**What it was.** Not the trimmed GStreamer and not the release build. It came
+back on a debug build with the full GStreamer install the first time two
+phones joined a show of eight test patterns with one on air, and as a unit test
+with nothing but test patterns. The show had more sources than the compositor
+has slots (eight). A source being added takes a slot as it is added, and with
+the pool full it took the first slot not holding itself, which was the one on
+air. The next apply put the source on air back on that slot. Each move flushes
+the slot's chain, and the flush was sent into the slot's queue, under the
+valve at its head. A flush takes the segment off every pad it passes, so the
+queue lost it, but the valve's own pad was never told. The source coming back
+brought the very same segment, the valve did not send a segment it believed it
+had already sent, and its next frame reached the compositor with none. Before
+the SRTP fix no phone ever sent a frame, so no source was ever added, and
+nothing crashed.
+
+**What changed.** The slot is flushed from the valve's own pad
+(`gstutil::wake_below`), so the valve sends the segment again whatever comes
+next. A source being added never takes a slot that is on the canvas. The valve
+shuts before the flush: a frame meeting a flushing slot came back `FLUSHING`
+through the source's one pad tee and paused the source's queue for good, which
+left a test pattern black on air after a round of takes (this was there before
+too, with the flush sent into the queue). And two guards, so a source can never
+take the show down this way again: each slot's queue sends a segment down if a
+frame arrives without one (`mixer::slot_guard`), and each source's proxy sink
+holds back a segment that is not in time and any buffer with no segment or no
+timestamp, posts an error from that source's pipeline, and the mixer restarts
+that source alone (`input::boundary`).
+
+**Measured.** `mixer::tests::full_pool` binds a source back to the slot it has
+just left: it aborted three runs in three with the old flush and passes with
+the new one. `mixer::tests::flush_window` counts a source's frames in the second
+after a flush: 30 with the valve shut first, 0 with it open, by either route.
+`mixer::tests::odd_segment` pushes a byte segment into a source's proxy sink
+and the source is restarted while the programme keeps 30 frames a second. End
+to end on a debug core bound to the LAN address, eight test patterns with one
+on air and then two Chrome phones on `/join/`: the build before this aborted
+the show as each phone joined (0xc0000409, the same lines as the app's log).
+The build after kept both phones live for three minutes, twice: once on the
+full GStreamer install (6527 programme frames in 216.6 s) and once on the
+installed app's own trimmed bundle, read in place with a registry of its own
+(6344 frames in 210.5 s). Each phone was taken to air at the start and at the
+end and its picture was there. No `CRITICAL`, no show restart after the first
+start, and none of the new guards' warnings in either log.
+
+**Not done.** On a debug core with twenty sources, after rounds of takes had
+moved phones between slots, a phone taken to air was sometimes black for some
+seconds, and once a test pattern stayed black until it was restarted. The
+second is what the valve now shuts for (`flush_window` shows the mechanism),
+though the round of takes that showed it was not run again on the final build;
+the first is not pinned down, since test patterns in the same rounds
+were drawn and the same phones were drawn a minute later. The trimmed bundle
+was not rebuilt; the installed app's bundle already has the FLV and Matroska
+demuxers, `h264parse`, `aacparse`, the libav, OpenH264 and Opus decoders and
+typefinding, so nothing was added to `dev/gst_trim.py`. Quick Sync still
+corrupts the heap at about one show start in four on this laptop (0xc0000374),
+which the station restarts; that is the driver, not this.
+
 ## The desktop mixer that grew to 12 GB, 2026-10-05
 
 The installed app's mixer ran for 16 and a half hours without a fault. At
