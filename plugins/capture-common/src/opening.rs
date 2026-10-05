@@ -19,7 +19,8 @@
 //! one it replaces to finish before it asks for anything, and an open that
 //! finishes after it was stopped lets go of what it opened straight away.
 
-use std::sync::atomic::{AtomicBool, Ordering};
+mod retry;
+
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
@@ -27,25 +28,8 @@ use std::time::{Duration, Instant};
 use godwinmix_sdk::wire::Health;
 
 use crate::Capture;
-
-/// How long to wait before the first retry of a failed open. Doubles with each
-/// failure up to [`RETRY_MAX`].
-pub const RETRY_FIRST: Duration = Duration::from_secs(1);
-/// The longest wait between two tries. Long enough that a camera unplugged for
-/// the night costs one device scan every half minute, short enough that one
-/// plugged back in is up before anyone goes looking.
-pub const RETRY_MAX: Duration = Duration::from_secs(30);
-
-/// Whether the open has been told to stop. Handed to the open so it can give
-/// up between attempts rather than open a device nobody wants.
-#[derive(Clone, Debug, Default)]
-pub struct Cancel(Arc<AtomicBool>);
-
-impl Cancel {
-    pub fn is_set(&self) -> bool {
-        self.0.load(Ordering::SeqCst)
-    }
-}
+use retry::keep_opening;
+pub use retry::{Cancel, RETRY_FIRST, RETRY_MAX};
 
 /// Where an open stands.
 enum Stage {
@@ -143,9 +127,11 @@ impl Opening {
     }
 
     fn let_go(&self) {
-        self.cancel.0.store(true, Ordering::SeqCst);
-        // Dropped here, which takes the pipeline to NULL.
-        drop(std::mem::replace(&mut *lock(&self.stage), Stage::Stopped));
+        self.cancel.set();
+        // Dropped here, which takes the pipeline to NULL, and after the lock
+        // is let go of, so `health` is never held up by a device.
+        let was = std::mem::replace(&mut *lock(&self.stage), Stage::Stopped);
+        drop(was);
         if let Some(thread) = &self.thread {
             thread.thread().unpark();
         }
@@ -157,42 +143,6 @@ impl Opening {
 impl Drop for Opening {
     fn drop(&mut self) {
         self.let_go();
-    }
-}
-
-/// Try, wait, try again, until the open works or the source is stopped.
-fn keep_opening<F>(stage: &Mutex<Stage>, cancel: &Cancel, mut open: F)
-where
-    F: FnMut(&Cancel) -> Result<Capture, String>,
-{
-    let mut wait = RETRY_FIRST;
-    while !cancel.is_set() {
-        let result = open(cancel);
-        let mut now = lock(stage);
-        // Stopped while the open ran: nobody is going to ask for it now, and
-        // dropping it here hands the device back.
-        if cancel.is_set() {
-            *now = Stage::Stopped;
-            return;
-        }
-        match result {
-            Ok(capture) => {
-                *now = Stage::Open(capture);
-                return;
-            }
-            Err(why) => {
-                *now = Stage::Failed {
-                    why,
-                    next: Instant::now() + wait,
-                }
-            }
-        }
-        drop(now);
-        let until = Instant::now() + wait;
-        while !cancel.is_set() && Instant::now() < until {
-            std::thread::park_timeout(until.saturating_duration_since(Instant::now()));
-        }
-        wait = (wait * 2).min(RETRY_MAX);
     }
 }
 

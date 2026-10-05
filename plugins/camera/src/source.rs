@@ -192,10 +192,12 @@ mod tests {
         assert_eq!(source.settings.label, "Camera 1");
     }
 
+    /// A camera that cannot be opened, so nothing is written to this test's
+    /// stdout, which is where the container transport would send a picture.
     #[test]
-    fn start_answers_at_once_and_the_picture_follows() {
+    fn start_answers_at_once_and_a_failed_open_is_reported_by_health() {
         let mut source = CameraSource::new();
-        source.adopt(&ready());
+        source.settings = Settings::from(&json!({"element": "gmx-no-such-camera"}));
         let params: StartParams = serde_json::from_value(json!({
             "canvas": {"width": 320, "height": 180, "fps": 30},
             "transport": "container", "media": ""
@@ -204,16 +206,17 @@ mod tests {
         let asked = std::time::Instant::now();
         source.start(&params).expect("start answers");
         assert!(asked.elapsed() < Duration::from_millis(200), "start waited for the camera");
-        let first = source.health();
-        assert!(first.detail.as_deref().unwrap_or_default().contains("opening"), "{first:?}");
-        let opened = (0..300).any(|_| {
+        let failing = (0..500).any(|_| {
             std::thread::sleep(Duration::from_millis(20));
-            source.opening.as_ref().is_some_and(|o| o.is_open())
+            source.health().state == HealthState::Failing
         });
-        assert!(opened, "the test pattern never opened: {:?}", source.health());
+        let health = source.health();
+        assert!(failing, "{health:?}");
+        let detail = health.detail.unwrap_or_default();
+        assert!(detail.contains("gmx-no-such-camera") && detail.contains("try"), "{detail}");
         // A setting that reopens it answers at once too.
         let asked = std::time::Instant::now();
-        source.configure(json!({"element": "videotestsrc", "resolution": "320x180"})).unwrap();
+        source.configure(json!({"element": "gmx-no-such-camera", "framerate": 25})).unwrap();
         assert!(asked.elapsed() < Duration::from_millis(200), "configure waited for the camera");
         source.stop().unwrap();
         assert!(source.opening.is_none());
