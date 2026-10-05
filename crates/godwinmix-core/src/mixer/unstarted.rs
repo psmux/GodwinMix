@@ -10,9 +10,19 @@
 //! So the mixer keeps each one here with the error it failed with and the
 //! button that fixes it, when the error carries one. A source that starts
 //! later, however it gets there, leaves the list.
+//!
+//! And it is tried again, unless it waits on a piece being set up, which
+//! starts it when the piece is ready. On 2026-10-05 a USB webcam answered
+//! `start` after more than five seconds at every boot of the desktop app.
+//! Each time the core gave up on it, kept it here, and never asked again, so
+//! the camera was missing from every show until somebody added it by hand.
+//! The wait between tries is `backoff::unstarted_delay`.
 
+use super::{backoff, Command, Mixer};
 use crate::config::SourceConfig;
+use crate::state::{Event, SourceId, SourceState};
 use godwinmix_protocol::ErrorAction;
+use tracing::{debug, info};
 
 /// One source that could not be started, as it was asked for.
 #[derive(Debug, Clone)]
@@ -52,6 +62,50 @@ impl UnstartedList {
     /// is still asked for next time.
     pub fn configs(&self) -> impl Iterator<Item = &SourceConfig> {
         self.0.iter().map(|u| &u.config)
+    }
+}
+
+impl Mixer {
+    /// Ask for an unstarted source again after the backoff, counting the
+    /// failure. The count is the rebuild one, which the supervisor clears
+    /// once the source has been live, so a source that came up and later
+    /// failed again starts from the short waits.
+    pub(super) fn retry_unstarted_later(&mut self, id: &SourceId) {
+        // It was said to be connecting before the build began, and it is
+        // not: a page following the stream should not wait on it.
+        let _ = self.events.send(Event::SourceStateChanged {
+            source: id.clone(),
+            state: SourceState::Failed,
+        });
+        let failures = self.rebuild_failures.entry(id.clone()).or_insert(0);
+        let delay = backoff::unstarted_delay(&self.cfg.stall, *failures);
+        *failures += 1;
+        info!(source = %id, failures = *failures, ?delay, "the source did not start; trying it again later");
+        let handle = self.handle.clone();
+        let again = id.clone();
+        self.rt.spawn(async move {
+            tokio::time::sleep(delay).await;
+            let _ = handle.send(Command::RetryUnstarted(again));
+        });
+    }
+
+    /// The backoff has run out: build it again, unless it has started, been
+    /// removed or been asked for again by somebody meanwhile.
+    pub(super) fn retry_unstarted(&mut self, id: &SourceId) {
+        let busy = self.sources.iter().any(|s| &s.input.id == id)
+            || self.pending.iter().any(|c| &c.id == id)
+            || self.rebuilding.contains_key(id);
+        let Some(cfg) = self.unstarted.configs().find(|c| &c.id == id).cloned() else {
+            return;
+        };
+        if busy {
+            return;
+        }
+        info!(source = %id, "trying a source that did not start again");
+        // A failure notes it again and arms the next try; see `note_unstarted`.
+        if let Err(e) = self.begin_add_source(cfg, None) {
+            debug!(source = %id, ?e, "the source still did not start");
+        }
     }
 }
 
