@@ -91,6 +91,7 @@ fn run(lib: &'static Lib, sock: Socket, admit: &Admit, hub: &Hub, gone: Arc<Atom
     let _ = src.push_buffer(gst::Buffer::from_mut_slice(crate::flv::header()));
     let reader = hub.subscribe(&admit.app, &admit.stream);
     let mut zero: Option<u32> = None;
+    let mut order = VideoFirst::default();
     let outcome = loop {
         if gone.load(Ordering::Relaxed) {
             break Err("the player stopped taking the stream".to_string());
@@ -103,14 +104,58 @@ fn run(lib: &'static Lib, sock: Socket, admit: &Admit, hub: &Hub, gone: Arc<Atom
             Recv::Timeout => continue,
             Recv::Ended => break Ok(()),
         };
-        let ts = tag.timestamp_ms.saturating_sub(*zero.get_or_insert(tag.timestamp_ms));
-        let bytes = match tag.kind {
-            TagKind::Video => crate::flv::video(ts, &tag.payload),
-            TagKind::Audio => crate::flv::audio(ts, &tag.payload),
-            TagKind::Script => continue,
-        };
-        let _ = src.push_buffer(gst::Buffer::from_mut_slice(bytes));
+        let base = *zero.get_or_insert(tag.timestamp_ms);
+        for tag in order.take(tag) {
+            let ts = tag.timestamp_ms.saturating_sub(base);
+            let bytes = match tag.kind {
+                TagKind::Video => crate::flv::video(ts, &tag.payload),
+                TagKind::Audio => crate::flv::audio(ts, &tag.payload),
+                TagKind::Script => continue,
+            };
+            let _ = src.push_buffer(gst::Buffer::from_mut_slice(bytes));
+        }
     };
     pipe.stop();
     outcome
+}
+
+/// Sound held back until the first picture has gone in.
+///
+/// `flvdemux` makes a pad for each kind the first time it sees one, and the
+/// muxer writes its first PMT with the pads it has. When sound went in
+/// first, the PMT a player read named only the sound: its `tsdemux` had no
+/// picture to offer, and a Windows runner's player decoded nothing in ten
+/// seconds. Holding the sound until the picture is in puts both in the first
+/// table. A stream with no picture is let through after `HOLD_AT_MOST` tags.
+#[derive(Default)]
+struct VideoFirst {
+    seen_video: bool,
+    held: Vec<crate::media_tag::MediaTag>,
+}
+
+const HOLD_AT_MOST: usize = 100;
+
+impl VideoFirst {
+    fn take(&mut self, tag: crate::media_tag::MediaTag) -> Vec<crate::media_tag::MediaTag> {
+        if self.seen_video {
+            return vec![tag];
+        }
+        match tag.kind {
+            TagKind::Video => {
+                self.seen_video = true;
+                let mut out = vec![tag];
+                out.append(&mut self.held);
+                out
+            }
+            _ if self.held.len() + 1 >= HOLD_AT_MOST => {
+                self.seen_video = true;
+                self.held.push(tag);
+                std::mem::take(&mut self.held)
+            }
+            _ => {
+                self.held.push(tag);
+                Vec::new()
+            }
+        }
+    }
 }
