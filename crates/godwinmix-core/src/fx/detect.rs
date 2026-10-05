@@ -71,6 +71,7 @@ pub fn measure(path: &Path) -> Result<Measured> {
     let alpha = Arc::new(Mutex::new(false));
     let seen = alpha.clone();
     if let Some(dec) = pipeline.by_name("dec") {
+        super::player::software_only(&dec);
         dec.connect_pad_added(move |_, pad| {
             let caps = pad.current_caps().unwrap_or_else(|| pad.query_caps(None));
             if let Ok(info) = gst_video::VideoInfo::from_caps(&caps) {

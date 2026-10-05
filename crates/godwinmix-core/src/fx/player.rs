@@ -52,6 +52,7 @@ impl Player {
         let uri = gst::glib::filename_to_uri(path, None).context("the clip's path is not a file")?;
         let decode = make("uridecodebin", "fx-decode")?;
         decode.set_property("uri", uri.as_str());
+        software_only(&decode);
         let caps = gst::Caps::builder("video/x-raw")
             .field("format", "AYUV")
             .field("width", size.0)
@@ -97,6 +98,15 @@ impl Player {
     pub fn stop(&self) {
         self.shared.done.store(true, Ordering::Release);
     }
+}
+
+/// Decode on the CPU. A clip here is small and short, and a hardware decoder
+/// is a plugin to load in the middle of a show: on Windows the Quick Sync
+/// one has been seen to corrupt the heap of the process that loads it.
+/// `force-sw-decoders` is in decodebin from GStreamer 1.22; an older one
+/// keeps its own choice.
+pub fn software_only(decode: &gst::Element) {
+    crate::probe::set_bool(decode, "force-sw-decoders", true);
 }
 
 /// Video to the chain, anything else to a sink that throws it away.

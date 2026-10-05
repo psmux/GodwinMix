@@ -574,6 +574,15 @@ def plugin_elements(plugins: Path) -> set[str]:
 # picked from a list, a decoder recognised by name, a constant.
 CODE_EXTRA = [
     "curlhttpsrc", "vp8alphadecodebin", "vp9alphadecodebin",
+    # The fx library (crates/godwinmix-core/src/fx). Its pipelines are built
+    # from launch strings the scan does not read. The VP8 and VP9 decoders are
+    # what the alpha decode bins above run inside, and what a WebM light leak
+    # or stinger needs; avdec_prores and avdec_qtrle come with the libav plugin
+    # the catalogue keeps already, named here so a trimmed tree that loses
+    # them fails the check. The GL four run a shader transition on the GPU;
+    # without them a shader runs its software version or as a dissolve.
+    "vp8dec", "vp9dec", "avdec_prores", "avdec_qtrle",
+    "glupload", "glcolorconvert", "glshader", "gldownload",
     "nicesrc", "nicesink", "rtmpsink", "rtmpsrc", "ristsrc",
     # What decodebin picks for a picture in the library. Never named in the
     # code, so the scan cannot find them, and without pngdec a PNG fell to

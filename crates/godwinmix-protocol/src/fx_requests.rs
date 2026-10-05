@@ -16,7 +16,7 @@ pub struct FxListRequest {
 #[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
 pub struct FxList {
     pub fx: Vec<FxEntry>,
-    /// Folders under `fx/` that would not read, each with the reason.
+    /// Item folders that would not read, each with the reason.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub errors: Vec<String>,
     /// Whether GStreamer GL runs here, which decides `runs` for a shader.

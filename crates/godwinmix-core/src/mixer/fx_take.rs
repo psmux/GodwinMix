@@ -49,8 +49,8 @@ impl Mixer {
     /// frame. False for anything else, which goes ahead at once.
     pub(super) fn defer_fx(&mut self, id: u64, spec: &TransitionSpec, x: &Crossing) -> bool {
         let Kind::Fx(plan) = &spec.kind else { return false };
-        let Look::Clip { path, .. } = &plan.look else { return false };
-        let player = match Player::start(path, (self.canvas.width, self.canvas.height)) {
+        let Look::Clip { path, mode, .. } = &plan.look else { return false };
+        let player = match Player::start(path, crate::fx::decode_size(*mode, (self.canvas.width, self.canvas.height))) {
             Ok(p) => p,
             Err(e) => {
                 warn!(fx = %plan.name, error = %format!("{e:#}"), "the clip would not open; the take is a cut");
