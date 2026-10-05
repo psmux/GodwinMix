@@ -193,12 +193,40 @@ pub fn list(classes: &[&str]) -> Result<Vec<Found>, String> {
     if monitor.start().is_err() {
         return Ok(Vec::new());
     }
+    wait_until_started(&monitor);
     let devices = monitor.devices();
     monitor.stop();
     let found: Vec<Found> = devices.into_iter().map(describe).collect();
     let keys: Vec<(String, Option<String>)> = found.iter().map(|f| (f.name.clone(), f.api.clone())).collect();
     let keep = once_each(&keys);
     Ok(found.into_iter().zip(keep).filter_map(|(f, k)| k.then_some(f)).collect())
+}
+
+/// `GST_MESSAGE_DEVICE_MONITOR_STARTED`, which the bindings only name with
+/// their `v1_28` feature, and this workspace builds against older releases.
+const MONITOR_STARTED: u32 = 0x8000_0009;
+
+/// Since 1.28 a monitor starts its providers on a thread of its own and says
+/// so on its bus when they are up. Before 1.28.3 neither `devices()` nor
+/// `stop()` waited for that thread, so the list could come back short and
+/// the stop raced the start: on Ubuntu 26.04, which ships 1.28.2, the sound
+/// plugin died with "double free or corruption" listing its inputs. Waiting
+/// here for the message (five seconds at most) is what 1.28.3 does itself.
+/// An older GStreamer starts in the call and never sends it, so it is not
+/// waited for there.
+fn wait_until_started(monitor: &gst::DeviceMonitor) {
+    use gst::glib::translate::IntoGlib;
+    if gst::version() < (1, 28, 0, 0) {
+        return;
+    }
+    let bus = monitor.bus();
+    let until = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while let Some(left) = until.checked_duration_since(std::time::Instant::now()) {
+        let Some(msg) = bus.timed_pop(gst::ClockTime::from_nseconds(left.as_nanos() as u64)) else { return };
+        if msg.type_().into_glib() == MONITOR_STARTED {
+            return;
+        }
+    }
 }
 
 /// Windows reports one camera twice, through Media Foundation and through the

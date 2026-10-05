@@ -23,7 +23,7 @@ pub fn register(reg: &mut Registry<Call>) {
             .result(schema_of::<TemplateList>)
             .tool(
                 "list_templates",
-                Tier::Search,
+                Tier::Standard,
                 "Every graphic template this mixer can draw: the built in pack (news lower third, breaking \
                  news bar, headline strap, score bug, logo bug, title card, quote card, location tag) and any \
                  SVG template in the media library. Each comes with its `uri` for `add_source` and its \
@@ -49,7 +49,7 @@ pub fn register(reg: &mut Registry<Call>) {
             .not_idempotent()
             .tool(
                 "save_template",
-                Tier::Search,
+                Tier::Standard,
                 "Write an SVG graphic template into the mixer's media library, after checking it renders: it \
                  needs a viewBox, field names in {{double braces}}, and no address on the network. The answer \
                  has the fields it found and the `uri` to add it by. With `replace` true it writes over a \

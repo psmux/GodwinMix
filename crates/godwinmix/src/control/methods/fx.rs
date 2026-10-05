@@ -39,8 +39,9 @@ async fn blocking<T: Send + 'static>(f: impl FnOnce() -> anyhow::Result<T> + Sen
         .map_err(|e| RpcError::new(ErrorCode::InvalidParams, format!("{e:#}")).with("list", "fx.list"))
 }
 
-fn media(call: &Call) -> PathBuf {
-    call.app.library.dir().to_path_buf()
+/// The library: the gallery's folder.
+fn media(_call: &Call) -> PathBuf {
+    godwinmix_core::gallery::dir()
 }
 
 async fn list(call: Call, params: Value) -> Result<Value, RpcError> {
@@ -67,10 +68,10 @@ async fn list(call: Call, params: Value) -> Result<Value, RpcError> {
 /// Import inline when it is quick, and as a task when it is not: a pack of
 /// twenty clips takes longer than any call may hold a client.
 pub async fn import_now(app: &AppState, req: FxImportRequest) -> Result<Value, RpcError> {
-    let dir = app.library.dir().to_path_buf();
+    let (root, media) = (godwinmix_core::gallery::dir(), app.library.dir().to_path_buf());
     let (tx, mut rx) = tokio::sync::oneshot::channel();
     tokio::task::spawn_blocking(move || {
-        let _ = tx.send(fx::import::import(&dir, &req));
+        let _ = tx.send(fx::import::import(&root, &media, &req));
     });
     match tokio::time::timeout(std::time::Duration::from_secs(4), &mut rx).await {
         Ok(Ok(Ok(done))) => body(done),

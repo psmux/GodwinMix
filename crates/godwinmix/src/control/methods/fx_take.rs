@@ -18,8 +18,7 @@ pub fn spec_for(call: &Call, asked: &Transition, plugins: &[String]) -> Result<O
     if built_in || plugins.iter().any(|p| p.eq_ignore_ascii_case(&name)) {
         return Ok(None);
     }
-    let dir = call.app.library.dir().to_path_buf();
-    let Ok((m, folder)) = library::find(&dir, &name) else { return Ok(None) };
+    let Ok((m, folder)) = library::find(&media(call), &name) else { return Ok(None) };
     if !m.transition {
         return Err(RpcError::invalid_params(format!(
             "{} is an effect, not a transition: fire it with fx.fire {{\"name\": \"{}\"}}, or let takes use it with fx.set {{\"name\": \"{}\", \"transition\": true}}",
@@ -38,13 +37,13 @@ pub fn spec_for(call: &Call, asked: &Transition, plugins: &[String]) -> Result<O
 
 /// Every fx item a take may name.
 pub fn transition_names(call: &Call) -> Vec<String> {
-    let (all, _) = library::list(call.app.library.dir());
+    let (all, _) = library::list(&media(call));
     all.into_iter().filter(|(m, _)| m.transition).map(|(m, _)| m.name).collect()
 }
 
 /// The fx items as `program.transitions` lists them, origin `fx`.
 pub fn catalogue(call: &Call) -> Vec<TransitionEntry> {
-    let (all, _) = library::list(call.app.library.dir());
+    let (all, _) = library::list(&media(call));
     all.into_iter()
         .filter(|(m, _)| m.transition)
         .map(|(m, _)| TransitionEntry {
@@ -69,5 +68,5 @@ pub fn assigned(call: &Call, req: &godwinmix_protocol::requests::TakeRequest) ->
         (None, Some(name)) => Some(name),
         (None, None) => call.app.scenes.armed().and_then(|id| call.app.scenes.scene(&id.to_string()).ok()).map(|s| s.name),
     };
-    fx::assign::for_scene(call.app.library.dir(), scene.as_deref()).map(Transition::Named)
+    fx::assign::for_scene(&media(call), scene.as_deref()).map(Transition::Named)
 }

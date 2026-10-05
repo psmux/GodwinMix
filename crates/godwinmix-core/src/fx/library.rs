@@ -10,22 +10,17 @@ use std::path::{Path, PathBuf};
 /// The manifest's file name inside an item's folder.
 pub const MANIFEST: &str = "graphic.toml";
 
-/// Where the library is for a media folder: the gallery's folder, so the
-/// gallery lists every transition and effect with its other designs.
-pub fn root(media: &Path) -> PathBuf {
-    media.join("graphics")
-}
-
 /// Every item, sorted by name, and a sentence for each folder that would not
 /// read. Writes the starter set first where it is missing.
-pub fn list(media: &Path) -> (Vec<(FxManifest, PathBuf)>, Vec<String>) {
-    let root = root(media);
+/// `root` is the gallery's folder (`gallery::dir()`), so the gallery lists
+/// every transition and effect with its other designs.
+pub fn list(root: &Path) -> (Vec<(FxManifest, PathBuf)>, Vec<String>) {
     let mut errors = Vec::new();
-    if let Err(e) = starter::install(&root) {
+    if let Err(e) = starter::install(root) {
         errors.push(format!("the starter set could not be written: {e:#}"));
     }
     let mut found = Vec::new();
-    let Ok(entries) = std::fs::read_dir(&root) else { return (found, errors) };
+    let Ok(entries) = std::fs::read_dir(root) else { return (found, errors) };
     for dir in entries.flatten().map(|e| e.path()).filter(|p| p.is_dir()) {
         match read(&dir) {
             Ok(Some(m)) => found.push((m, dir)),
@@ -51,8 +46,8 @@ pub fn read(dir: &Path) -> Result<Option<FxManifest>> {
 }
 
 /// The item called `name`, or an error that lists the names there are.
-pub fn find(media: &Path, name: &str) -> Result<(FxManifest, PathBuf)> {
-    let (all, _) = list(media);
+pub fn find(root: &Path, name: &str) -> Result<(FxManifest, PathBuf)> {
+    let (all, _) = list(root);
     let wanted = slug(name);
     if let Some(hit) = all.iter().find(|(m, _)| m.name == wanted) {
         return Ok(hit.clone());
@@ -75,8 +70,8 @@ pub fn save(dir: &Path, m: &FxManifest) -> Result<()> {
 
 /// Take an item out of the library. A starter item is refused: it would be
 /// written back the next time the library is read.
-pub fn remove(media: &Path, name: &str) -> Result<()> {
-    let (m, dir) = find(media, name)?;
+pub fn remove(root: &Path, name: &str) -> Result<()> {
+    let (m, dir) = find(root, name)?;
     if starter::is_starter(&m.name) {
         bail!("{} ships with the mixer and comes back when the library is read. Turn it off instead with fx.set {{\"transition\": false, \"effect\": false}}", m.name);
     }

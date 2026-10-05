@@ -15,22 +15,22 @@ use std::path::{Path, PathBuf};
 const MEDIA: &[&str] = &["webm", "mov", "mp4", "m4v", "mkv", "avi", "gif", "png", "jpg", "jpeg", "tif", "tiff", "bmp", "webp"];
 const SHADERS: &[&str] = &["glsl", "frag", "fs"];
 
-/// Import what `req.path` names into the library under `media`.
-pub fn import(media: &Path, req: &FxImportRequest) -> Result<FxImported> {
+/// Import what `req.path` names into the library at `root`. A relative
+/// path is a name in the media folder `media`.
+pub fn import(root: &Path, media: &Path, req: &FxImportRequest) -> Result<FxImported> {
     let path = locate(media, &req.path)?;
-    let root = library::root(media);
-    std::fs::create_dir_all(&root).with_context(|| format!("making {}", root.display()))?;
+    std::fs::create_dir_all(root).with_context(|| format!("making {}", root.display()))?;
     let mut done = FxImported::default();
     if path.extension().is_some_and(|e| e.eq_ignore_ascii_case("zip")) {
-        let unpacked = unzip(&path, &root)?;
-        let result = folder(&unpacked, &root, req, &mut done);
+        let unpacked = unzip(&path, root)?;
+        let result = folder(&unpacked, root, req, &mut done);
         let _ = std::fs::remove_dir_all(&unpacked);
         result?;
     } else if path.is_dir() {
-        folder(&path, &root, req, &mut done)?;
+        folder(&path, root, req, &mut done)?;
     } else {
         let licence = licence_beside(&path);
-        match file(&path, &root, req, req.name.as_deref(), licence.as_ref()) {
+        match file(&path, root, req, req.name.as_deref(), licence.as_ref()) {
             Ok(entry) => done.imported.push(entry),
             Err(e) => bail!("{} was not imported: {e:#}", path.display()),
         }

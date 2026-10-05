@@ -8,6 +8,7 @@
 
 pub mod build;
 pub mod agent;
+pub mod agent_setup;
 pub mod bundle;
 pub mod chaos;
 pub mod codec;

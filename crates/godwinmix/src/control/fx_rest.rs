@@ -26,7 +26,7 @@ pub async fn preview(State(ctx): State<Ctx>, Path(name): Path<String>, Query(q):
     if let Err(f) = ctx.app.tokens.authenticate(presented.as_deref()) {
         return unauthorised(f.message(), &trace_id);
     }
-    let dir = ctx.app.library.dir().to_path_buf();
+    let dir = godwinmix_core::gallery::dir();
     let name = name.trim_end_matches(".jpg").to_string();
     let made = tokio::task::spawn_blocking(move || {
         let (m, folder) = library::find(&dir, &name)?;
@@ -54,7 +54,7 @@ pub async fn upload(State(ctx): State<Ctx>, Query(q): Query<HashMap<String, Stri
         return error_response(&RpcError::invalid_params("fx upload needs the file name in the query: POST /api/v1/fx/upload?name=pack.zip with the file as the body."), &trace_id);
     };
     let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or(0);
-    let dir = library::root(ctx.app.library.dir()).join(".uploads").join(stamp.to_string());
+    let dir = godwinmix_core::gallery::dir().join(".uploads").join(stamp.to_string());
     if let Err(e) = crate::control::upload::store(&dir, &name, body).await {
         return error_response(&e, &trace_id);
     }

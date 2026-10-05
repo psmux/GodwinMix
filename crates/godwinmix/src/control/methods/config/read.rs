@@ -115,6 +115,8 @@ pub(super) fn config_file(call: &Call) -> Result<PathBuf, RpcError> {
 pub(super) struct FileState {
     table: toml::Table,
     file: Value,
+    /// `file` with its relative paths made absolute, for comparing.
+    resolved: Value,
     running: Value,
     defaults: Value,
     overrides: BTreeMap<String, String>,
@@ -126,13 +128,26 @@ impl FileState {
             .map_err(|e| RpcError::internal(format!("reading {}: {e}", path.display())))?;
         let table: toml::Table = toml::from_str(&text).map_err(|e| unreadable(path, &e))?;
         let cfg = Config::from_toml(&text, &path.display().to_string()).map_err(|e| unreadable(path, &e))?;
+        // The running config came through `Config::load`, which puts a
+        // relative media folder beside the file; the same here, or an
+        // unchanged `media.dir` would always read as waiting for a restart.
+        let mut resolved = cfg.clone();
+        resolved.resolve_beside(path);
+        let resolved = to_json(&resolved);
         let held = held().read();
-        let running = held.as_ref().map(|h| to_json(&h.running)).unwrap_or_else(|| to_json(&cfg));
+        let running = held.as_ref().map(|h| to_json(&h.running)).unwrap_or_else(|| resolved.clone());
         let mut overrides = held.as_ref().map(|h| h.overrides.clone()).unwrap_or_default();
         if godwinmix_core::config::env_var("TOKEN").is_some_and(|t| !t.trim().is_empty()) {
             overrides.insert("control.token".into(), "GODWINMIX_TOKEN".into());
         }
-        Ok(Self { table, file: to_json(&cfg), running, defaults: schema::defaults(), overrides })
+        Ok(Self {
+            table,
+            file: to_json(&cfg),
+            resolved,
+            running,
+            defaults: schema::defaults(),
+            overrides,
+        })
     }
 
     fn describe(&self, k: &godwinmix_core::config::keys::Key) -> ConfigKey {
@@ -152,7 +167,7 @@ impl FileState {
     }
 
     fn is_pending(&self, k: &godwinmix_core::config::keys::Key) -> bool {
-        k.applies == Applies::Restart && lookup(&self.file, k.key) != lookup(&self.running, k.key)
+        k.applies == Applies::Restart && lookup(&self.resolved, k.key) != lookup(&self.running, k.key)
     }
 
     /// Every key waiting for a restart.

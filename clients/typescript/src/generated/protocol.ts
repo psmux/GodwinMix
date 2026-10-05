@@ -12,6 +12,9 @@
 export const API_LEVEL = 1;
 export const API_COMPATIBLE = 1;
 
+/** What a write does to a file. */
+export type Action = "create" | "merge" | "update" | "unchanged";
+
 /** What pressing the button does. */
 export type ActionKind = "set-config" | "install-plugin" | "enable-plugin" | "open" | "retry" | "restart" | "setup" | "copy";
 
@@ -116,6 +119,9 @@ export type AgentExt = boolean | {
 export interface AgentStateRequest {
   response_format?: ResponseFormat;
 }
+
+/** The agent tools this mixer knows how to set up. */
+export type AgentTool = "claude" | "opencode" | "pi" | "codex" | "gemini" | "cursor" | "vscode" | "other";
 
 /** One condition that holds now. */
 export interface Alarm {
@@ -701,6 +707,13 @@ export interface DestinationRefusal {
 /** Where a destination has got to. */
 export type DestinationState = "off" | "waiting" | "connecting" | "live" | "reconnecting" | "failed";
 
+export interface Detected {
+  found?: string | null;
+  installed: boolean;
+  name: string;
+  tool: AgentTool;
+}
+
 /** One device token, without its secret. */
 export interface DeviceToken {
   created: string;
@@ -934,6 +947,14 @@ export interface FieldValue {
   value: string;
 }
 
+/** One file a setup writes. */
+export interface FileWrite {
+  action: Action;
+  backup?: string | null;
+  path: string;
+  what: string;
+}
+
 /** One filter in an item's chain. */
 export interface Filter {
   enabled?: boolean;
@@ -1146,6 +1167,187 @@ export interface FxSetRequest {
 export interface FxSkipped {
   file: string;
   reason: string;
+}
+
+/** `gallery.duplicate`. */
+export interface GalleryDuplicateRequest {
+  id?: string;
+  name?: string | null;
+}
+
+/** `gallery.edit`: change what is said about an item, or its field values. */
+export interface GalleryEditRequest {
+  description?: string | null;
+  id?: string;
+  name?: string | null;
+  tags?: unknown;
+  values?: Record<string, unknown> | null;
+  zone?: string | null;
+}
+
+/** `gallery.export`: items as one zip to carry to another mixer. */
+export interface GalleryExportRequest {
+  ids?: unknown;
+  path?: string | null;
+}
+
+/** The answer to `gallery.export`. */
+export interface GalleryExported {
+  ids: string[];
+  path: string;
+  size_bytes: number;
+  url: string;
+}
+
+/** One item by id: `gallery.remove`. */
+export interface GalleryIdRequest {
+  id?: string;
+}
+
+/** `gallery.import`: files made elsewhere, checked one by one. */
+export interface GalleryImportRequest {
+  data?: string | null;
+  filename?: string | null;
+  path?: string | null;
+  replace?: boolean;
+}
+
+/** The answer to `gallery.import`. */
+export interface GalleryImported {
+  added: GalleryItem[];
+  refused: Refused[];
+}
+
+/** One item, as `gallery.list` describes it. */
+export interface GalleryItem {
+  description?: string;
+  fields?: TemplateField[];
+  id: string;
+  kind: GalleryKind;
+  made_by?: string;
+  moves: boolean;
+  moving?: string | null;
+  name: string;
+  origin: Origin;
+  placed?: string[];
+  saved?: string;
+  tags?: string[];
+  transparent: boolean;
+  uri?: string | null;
+  values?: Record<string, unknown>;
+  zone: Zone;
+}
+
+/** What an item is, which decides how it is drawn and how it is added. */
+export type GalleryKind = "template" | "image" | "clip" | "html" | "ograf" | "ticker" | "text" | "set" | "transition" | "effect";
+
+/** The answer to `gallery.list`. */
+export interface GalleryList {
+  dir: string;
+  errors?: string[];
+  items: GalleryItem[];
+  total: number;
+}
+
+/** `gallery.list`. */
+export interface GalleryListRequest {
+  kind?: string | null;
+  limit?: number | null;
+  query?: string | null;
+}
+
+/**
+ * `gallery.place`: add an item to a scene in its zone. Hidden unless
+ * `visible`; `gallery.show` takes it on air.
+ */
+export interface GalleryPlaceRequest {
+  camera?: string | null;
+  id?: string;
+  scene?: string | null;
+  values?: Record<string, unknown> | null;
+  visible?: boolean | null;
+  zone?: string | null;
+}
+
+/** The answer to `gallery.place`. */
+export interface GalleryPlaced {
+  id: string;
+  item?: string | null;
+  new_scene: boolean;
+  next: string;
+  scene: string;
+  source?: string | null;
+  updated: boolean;
+  visible: boolean;
+}
+
+/** The answer to `gallery.preview`. */
+export interface GalleryPreview {
+  caption: string;
+  encoding: string;
+  format: string;
+  from: string;
+  height: number;
+  id: string;
+  image: string;
+  width: number;
+}
+
+/** `gallery.preview`: a picture of an item, drawn on demand. */
+export interface GalleryPreviewRequest {
+  background?: string | null;
+  id?: string;
+  values?: Record<string, unknown> | null;
+  width?: number | null;
+}
+
+/**
+ * `gallery.save`: one call for any kind. Give exactly one of `svg`, `html`,
+ * `data`, `file`, `source` or `set`; the kind is worked out from it.
+ */
+export interface GallerySaveRequest {
+  data?: string | null;
+  description?: string | null;
+  file?: string | null;
+  filename?: string | null;
+  files?: Record<string, unknown> | null;
+  html?: string | null;
+  kind?: string | null;
+  made_by?: string | null;
+  moves?: boolean | null;
+  name?: string;
+  replace?: boolean;
+  set?: SetSpec | null;
+  source?: unknown;
+  svg?: string | null;
+  tags?: unknown;
+  transparent?: boolean | null;
+  values?: Record<string, unknown> | null;
+  zone?: string | null;
+}
+
+/** The answer to `gallery.save`, `gallery.edit` and `gallery.duplicate`. */
+export interface GallerySaved {
+  item: GalleryItem;
+  next: string;
+  path: string;
+  redrawn?: string[];
+  warnings?: string[];
+}
+
+/** `gallery.show`: take a placed item on air, or off. */
+export interface GalleryShowRequest {
+  id?: string;
+  scene?: string | null;
+  visible?: boolean | null;
+}
+
+/** The answer to `gallery.show`. */
+export interface GalleryShown {
+  item: string;
+  scene: string;
+  took?: boolean;
+  visible: boolean;
 }
 
 /** One item's derived box. */
@@ -1742,6 +1944,9 @@ export interface Ograf {
   version?: string | null;
 }
 
+/** Where an item came from. */
+export type Origin = "shipped" | "agent" | "uploaded";
+
 export type OutputState = "connecting" | "live" | "reconnecting" | "failed";
 
 /** What one output is doing. */
@@ -2073,6 +2278,13 @@ export interface ProtocolRecord {
 }
 export type { ProtocolRecord as Record };
 
+/** One file the import would not take. */
+export interface Refused {
+  file: string;
+  fix: string;
+  reason: string;
+}
+
 /** One asset an import could not put back. */
 export interface Relink {
   asset: Id;
@@ -2365,10 +2577,43 @@ export interface SetSourceRequest {
   transport?: BridgeTransport | null;
 }
 
-/** `setup.start` and `setup.get`: one piece by name. */
+/** The pictures and settings of a virtual set. */
+export interface SetSpec {
+  background: string;
+  foreground?: string | null;
+  layout?: string | null;
+  settings?: Record<string, unknown>;
+}
+
+/** What a setup did, or would do. */
+export interface Setup {
+  applied: boolean;
+  entry?: unknown;
+  name: string;
+  notes: string[];
+  prompt: string;
+  scope: SetupScope;
+  start: string;
+  tool: AgentTool;
+  writes: FileWrite[];
+}
+
+/** `agent.setup`. */
 export interface SetupRequest {
+  dir?: string | null;
+  dry_run?: boolean;
+  env?: Record<string, unknown>;
+  scope?: SetupScope;
+  tool: AgentTool;
+}
+
+/** `setup.start` and `setup.get`: one piece by name. */
+export interface SetupRequest2 {
   piece: string;
 }
+
+/** For the user, in their home folder, or for one project folder. */
+export type SetupScope = "user" | "project";
 
 /** Where a piece stands. */
 export type SetupState = "ready" | "missing" | "running" | "failed" | "unavailable";
@@ -3061,6 +3306,9 @@ export interface VitalsConfig {
   window_secs?: number;
 }
 
+/** Where an item sits on the canvas when it is placed. */
+export type Zone = "full" | "lower-third" | "bug" | "top" | "bottom" | "center" | "overlay";
+
 export interface ProgramTookEvent {
   at_running_time_ms?: number;
   duration_ms?: number;
@@ -3178,7 +3426,9 @@ export interface FeedRecoveredEvent {
 export interface MethodParams {
   "adbreak.end": Record<string, never>;
   "adbreak.start": AdBreakRequest;
+  "agent.setup": SetupRequest;
   "agent.state": AgentStateRequest;
+  "agent.tools": Record<string, never>;
   "channel.add": ChannelAddRequest;
   "channel.certificate.generate": CertificateGenerateRequest;
   "channel.certificate.set": CertificateSetRequest;
@@ -3229,6 +3479,16 @@ export interface MethodParams {
   "fx.preview": FxNameRequest;
   "fx.remove": FxNameRequest;
   "fx.set": FxSetRequest;
+  "gallery.duplicate": GalleryDuplicateRequest;
+  "gallery.edit": GalleryEditRequest;
+  "gallery.export": GalleryExportRequest;
+  "gallery.import": GalleryImportRequest;
+  "gallery.list": GalleryListRequest;
+  "gallery.place": GalleryPlaceRequest;
+  "gallery.preview": GalleryPreviewRequest;
+  "gallery.remove": GalleryIdRequest;
+  "gallery.save": GallerySaveRequest;
+  "gallery.show": GalleryShowRequest;
   "governor.calibrate": CalibrateRequest;
   "governor.status": Record<string, never>;
   "log.gst": LogGstRequest;
@@ -3335,9 +3595,9 @@ export interface MethodParams {
   "scene.transaction.commit": Record<string, never>;
   "scene.undo": HistoryRequest2;
   "scene.validate": ValidateRequest;
-  "setup.get": SetupRequest;
+  "setup.get": SetupRequest2;
   "setup.list": Record<string, never>;
-  "setup.start": SetupRequest;
+  "setup.start": SetupRequest2;
   "show.add": ShowAddRequest;
   "show.add_many": ShowAddManyRequest;
   "show.list": Record<string, never>;
@@ -3384,7 +3644,9 @@ export interface MethodParams {
 export interface MethodResults {
   "adbreak.end": Record<string, unknown>;
   "adbreak.start": Record<string, unknown>;
+  "agent.setup": Setup;
   "agent.state": Record<string, unknown>;
+  "agent.tools": Detected[];
   "channel.add": ChannelAdded;
   "channel.certificate.generate": CertificateInfo;
   "channel.certificate.set": CertificateInfo;
@@ -3435,6 +3697,16 @@ export interface MethodResults {
   "fx.preview": FxPreview;
   "fx.remove": Record<string, unknown>;
   "fx.set": FxEntry;
+  "gallery.duplicate": GallerySaved;
+  "gallery.edit": GallerySaved;
+  "gallery.export": GalleryExported;
+  "gallery.import": GalleryImported;
+  "gallery.list": GalleryList;
+  "gallery.place": GalleryPlaced;
+  "gallery.preview": GalleryPreview;
+  "gallery.remove": Record<string, unknown>;
+  "gallery.save": GallerySaved;
+  "gallery.show": GalleryShown;
   "governor.calibrate": CalibrateResult;
   "governor.status": GovernorStatus;
   "log.gst": LogGstResult;
@@ -3641,7 +3913,9 @@ export interface MethodInfo {
 export const METHODS: readonly MethodInfo[] = [
   { name: "adbreak.end", summary: "Cut a running ad short, or disarm one that is scheduled.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/adbreak/end" } },
   { name: "adbreak.start", summary: "Interrupt the programme with a clip, then rejoin live when it ends.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/adbreak/start" } },
+  { name: "agent.setup", summary: "Set an AI agent tool up to use this mixer: its MCP config gets one entry, godwinmix, that runs this mixer's own executable, and its skills folder gets the GodwinMix skills. Other entries are kept and a changed file is copied aside first. dry_run answers every file it would write. The answer says how to start the tool and a first thing to ask it.", scope: "admin", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/agent/setup" } },
   { name: "agent.state", summary: "The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/agent/state" } },
+  { name: "agent.tools", summary: "The AI agent tools this mixer can set up, the ones installed on its machine first, each with what was found: a command on PATH or a config folder.", scope: "admin", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/agent/tools" } },
   { name: "channel.add", summary: "Make a channel and its first key, which is in this answer. channel.key.reveal reads it again later.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/channels" } },
   { name: "channel.certificate.generate", summary: "Make a self signed certificate for RTMPS, for this machine's addresses unless names are given. Encoders must be told to accept it; one from a certificate authority needs no such step.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/channels/certificate/generate" } },
   { name: "channel.certificate.set", summary: "Give RTMPS a certificate: the PEM of the certificate (and its chain) and of its private key, as a certificate authority issued them. Checked before it is kept; the key is sealed and never read back.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/channels/certificate/set" } },
@@ -3692,6 +3966,16 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "fx.preview", summary: "A moving preview of an item: twelve frames side by side in one JPEG, made once and kept.", scope: "read", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/fx/preview" } },
   { name: "fx.remove", summary: "Delete an imported item from the library. The starter set cannot be deleted.", scope: "operate", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/fx/remove" } },
   { name: "fx.set", summary: "Change an imported item: its blend, its cut point, its length, whether it is a transition or an effect.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/fx/set" } },
+  { name: "gallery.duplicate", summary: "Copy an item, shipped ones included, under a new name.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/gallery/duplicate" } },
+  { name: "gallery.edit", summary: "Change an item's name, tags, description, zone or the values it fills its fields with.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/gallery/edit" } },
+  { name: "gallery.export", summary: "Write gallery items to one zip on the mixer, to carry a look to another mixer.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/gallery/export" } },
+  { name: "gallery.import", summary: "Take files into the gallery: a gallery zip, an SVG, an HTML page or folder, an OGraf package, a picture or a clip. Each is checked; refused ones say why and how to fix them.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/gallery/import" } },
+  { name: "gallery.list", summary: "The Graphics gallery: every lower third, background, ticker, bug, title card, page, clip and virtual set, made here or shipped, with what each is and where it goes.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/gallery/list" } },
+  { name: "gallery.place", summary: "Add a gallery item to a scene in its zone (a lower third low on the left, a background under everything, a bug in the corner), hidden until gallery.show. A set becomes a new scene.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/gallery/place" } },
+  { name: "gallery.preview", summary: "A picture of a gallery item as it would land on the canvas, transparent parts over a checkerboard, drawn on demand.", scope: "read", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/gallery/preview" } },
+  { name: "gallery.remove", summary: "Delete a saved item and its files. Refused while a source shows it.", scope: "operate", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/gallery/remove" } },
+  { name: "gallery.save", summary: "Save a graphic of any kind into the gallery with a name, tags and a description: an SVG template, an HTML page, a picture or clip, a ticker or text, or a virtual set.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/gallery/save" } },
+  { name: "gallery.show", summary: "Show a placed gallery item on air, or hide it, taking its scene when that scene is not on air. For a set, take its scene.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/gallery/show" } },
   { name: "governor.calibrate", summary: "Measure this machine's encoders again, in the background, a few seconds of every core. Refused while anything is on air unless `confirm` is true.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/governor/calibrate" } },
   { name: "governor.status", summary: "The resource governor: when this machine was measured, what is in use and free on the CPU and each GPU encoder, and what was shed to keep the programme whole.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/governor/status" } },
   { name: "log.gst", summary: "Raise GStreamer's own debug categories for a while, then let them fall back on their own.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/log/gst" } },
@@ -3915,9 +4199,19 @@ export class GeneratedMethods {
     return this._call("adbreak.start", params as unknown as Record<string, unknown>) as Promise<Record<string, unknown>>;
   }
 
+  /** Set an AI agent tool up to use this mixer: its MCP config gets one entry, godwinmix, that runs this mixer's own executable, and its skills folder gets the GodwinMix skills. Other entries are kept and a changed file is copied aside first. dry_run answers every file it would write. The answer says how to start the tool and a first thing to ask it. */
+  agentSetup(params: SetupRequest): Promise<Setup> {
+    return this._call("agent.setup", params as unknown as Record<string, unknown>) as Promise<Setup>;
+  }
+
   /** The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing. */
   agentState(params: AgentStateRequest = {}): Promise<Record<string, unknown>> {
     return this._call("agent.state", params as unknown as Record<string, unknown>) as Promise<Record<string, unknown>>;
+  }
+
+  /** The AI agent tools this mixer can set up, the ones installed on its machine first, each with what was found: a command on PATH or a config folder. */
+  agentTools(): Promise<Detected[]> {
+    return this._call("agent.tools", {}) as Promise<Detected[]>;
   }
 
   /** Make a channel and its first key, which is in this answer. channel.key.reveal reads it again later. */
@@ -4168,6 +4462,56 @@ export class GeneratedMethods {
   /** Change an imported item: its blend, its cut point, its length, whether it is a transition or an effect. */
   fxSet(params: FxSetRequest): Promise<FxEntry> {
     return this._call("fx.set", params as unknown as Record<string, unknown>) as Promise<FxEntry>;
+  }
+
+  /** Copy an item, shipped ones included, under a new name. */
+  galleryDuplicate(params: GalleryDuplicateRequest = {}): Promise<GallerySaved> {
+    return this._call("gallery.duplicate", params as unknown as Record<string, unknown>) as Promise<GallerySaved>;
+  }
+
+  /** Change an item's name, tags, description, zone or the values it fills its fields with. */
+  galleryEdit(params: GalleryEditRequest = {}): Promise<GallerySaved> {
+    return this._call("gallery.edit", params as unknown as Record<string, unknown>) as Promise<GallerySaved>;
+  }
+
+  /** Write gallery items to one zip on the mixer, to carry a look to another mixer. */
+  galleryExport(params: GalleryExportRequest = {}): Promise<GalleryExported> {
+    return this._call("gallery.export", params as unknown as Record<string, unknown>) as Promise<GalleryExported>;
+  }
+
+  /** Take files into the gallery: a gallery zip, an SVG, an HTML page or folder, an OGraf package, a picture or a clip. Each is checked; refused ones say why and how to fix them. */
+  galleryImport(params: GalleryImportRequest = {}): Promise<GalleryImported> {
+    return this._call("gallery.import", params as unknown as Record<string, unknown>) as Promise<GalleryImported>;
+  }
+
+  /** The Graphics gallery: every lower third, background, ticker, bug, title card, page, clip and virtual set, made here or shipped, with what each is and where it goes. */
+  galleryList(params: GalleryListRequest = {}): Promise<GalleryList> {
+    return this._call("gallery.list", params as unknown as Record<string, unknown>) as Promise<GalleryList>;
+  }
+
+  /** Add a gallery item to a scene in its zone (a lower third low on the left, a background under everything, a bug in the corner), hidden until gallery.show. A set becomes a new scene. */
+  galleryPlace(params: GalleryPlaceRequest = {}): Promise<GalleryPlaced> {
+    return this._call("gallery.place", params as unknown as Record<string, unknown>) as Promise<GalleryPlaced>;
+  }
+
+  /** A picture of a gallery item as it would land on the canvas, transparent parts over a checkerboard, drawn on demand. */
+  galleryPreview(params: GalleryPreviewRequest = {}): Promise<GalleryPreview> {
+    return this._call("gallery.preview", params as unknown as Record<string, unknown>) as Promise<GalleryPreview>;
+  }
+
+  /** Delete a saved item and its files. Refused while a source shows it. */
+  galleryRemove(params: GalleryIdRequest = {}): Promise<Record<string, unknown>> {
+    return this._call("gallery.remove", params as unknown as Record<string, unknown>) as Promise<Record<string, unknown>>;
+  }
+
+  /** Save a graphic of any kind into the gallery with a name, tags and a description: an SVG template, an HTML page, a picture or clip, a ticker or text, or a virtual set. */
+  gallerySave(params: GallerySaveRequest = {}): Promise<GallerySaved> {
+    return this._call("gallery.save", params as unknown as Record<string, unknown>) as Promise<GallerySaved>;
+  }
+
+  /** Show a placed gallery item on air, or hide it, taking its scene when that scene is not on air. For a set, take its scene. */
+  galleryShow(params: GalleryShowRequest = {}): Promise<GalleryShown> {
+    return this._call("gallery.show", params as unknown as Record<string, unknown>) as Promise<GalleryShown>;
   }
 
   /** Measure this machine's encoders again, in the background, a few seconds of every core. Refused while anything is on air unless `confirm` is true. */
@@ -4701,7 +5045,7 @@ export class GeneratedMethods {
   }
 
   /** Where one piece stands, without starting anything. */
-  setupGet(params: SetupRequest): Promise<SetupStatus> {
+  setupGet(params: SetupRequest2): Promise<SetupStatus> {
     return this._call("setup.get", params as unknown as Record<string, unknown>) as Promise<SetupStatus>;
   }
 
@@ -4711,7 +5055,7 @@ export class GeneratedMethods {
   }
 
   /** Set a piece up now, or join the set up already running, and answer at once with where it stands. Progress follows as `event/setup.changed`. Sources waiting on the piece start by themselves when it is ready. */
-  setupStart(params: SetupRequest): Promise<SetupStatus> {
+  setupStart(params: SetupRequest2): Promise<SetupStatus> {
     return this._call("setup.start", params as unknown as Record<string, unknown>) as Promise<SetupStatus>;
   }
 

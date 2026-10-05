@@ -58,6 +58,10 @@ pub enum AgentCmd {
         #[arg(long)]
         json: bool,
     },
+    /// Set an AI agent tool up to use this mixer: its MCP config and the skills.
+    Setup(super::agent_setup::SetupArgs),
+    /// The agent tools on this machine, installed ones first.
+    Tools,
 }
 
 /// Tokens for a JSON document, at the four bytes to a token the plan uses.
@@ -74,7 +78,7 @@ pub fn image_tokens(width: u32, height: u32) -> u32 {
 /// what lets CI compare it against a committed number.
 pub fn tool_sizes() -> Vec<(Profile, usize, usize)> {
     let registry = crate::control::methods::registry();
-    [Profile::Standard, Profile::Minimal]
+    [Profile::Standard, Profile::Minimal, Profile::Headend]
         .into_iter()
         .map(|p| {
             let tools = mcp_tools::tools(&registry, p);
@@ -143,7 +147,11 @@ impl Baseline {
 }
 
 pub async fn run(cmd: AgentCmd) -> Result<()> {
-    let AgentCmd::Cost { url, token, write_baseline, json: as_json } = cmd;
+    let (url, token, write_baseline, as_json) = match cmd {
+        AgentCmd::Cost { url, token, write_baseline, json } => (url, token, write_baseline, json),
+        AgentCmd::Setup(args) => return super::agent_setup::run(args),
+        AgentCmd::Tools => return super::agent_setup::tools(),
+    };
     let (url, token) = crate::address::resolve(url, token);
     let client = reqwest::Client::new();
 

@@ -24,6 +24,7 @@ pub mod assign;
 pub mod clip;
 pub mod detect;
 pub mod frame;
+pub mod gallery_import;
 pub mod import;
 pub mod library;
 pub mod matte;

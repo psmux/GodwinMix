@@ -10,8 +10,8 @@ const FILE: &str = "fx-assign.json";
 
 /// What is assigned. An unreadable file is nothing assigned, so a take is
 /// never refused for it.
-pub fn load(media: &Path) -> FxAssignments {
-    std::fs::read_to_string(super::library::root(media).join(FILE))
+pub fn load(root: &Path) -> FxAssignments {
+    std::fs::read_to_string(root.join(FILE))
         .ok()
         .and_then(|t| serde_json::from_str(&t).ok())
         .unwrap_or_default()
@@ -19,8 +19,8 @@ pub fn load(media: &Path) -> FxAssignments {
 
 /// Set or clear the transition for `scene`, or the default when `scene` is
 /// `None`, and answer what is assigned now.
-pub fn set(media: &Path, scene: Option<&str>, transition: Option<&str>) -> Result<FxAssignments> {
-    let mut a = load(media);
+pub fn set(root: &Path, scene: Option<&str>, transition: Option<&str>) -> Result<FxAssignments> {
+    let mut a = load(root);
     let name = transition.map(|t| t.trim().to_lowercase()).filter(|t| !t.is_empty());
     match (scene, name) {
         (None, n) => a.default = n,
@@ -31,8 +31,7 @@ pub fn set(media: &Path, scene: Option<&str>, transition: Option<&str>) -> Resul
             a.scenes.remove(s);
         }
     }
-    let root = super::library::root(media);
-    std::fs::create_dir_all(&root).with_context(|| format!("making {}", root.display()))?;
+    std::fs::create_dir_all(root).with_context(|| format!("making {}", root.display()))?;
     let part = root.join(".fx-assign.json.part");
     std::fs::write(&part, serde_json::to_string_pretty(&a)? + "\n").context("writing fx-assign.json")?;
     std::fs::rename(&part, root.join(FILE)).context("saving fx-assign.json")?;
@@ -40,7 +39,7 @@ pub fn set(media: &Path, scene: Option<&str>, transition: Option<&str>) -> Resul
 }
 
 /// The transition for a take of `scene`: the scene's own, then the default.
-pub fn for_scene(media: &Path, scene: Option<&str>) -> Option<String> {
-    let a = load(media);
+pub fn for_scene(root: &Path, scene: Option<&str>) -> Option<String> {
+    let a = load(root);
     scene.and_then(|s| a.scenes.get(s).cloned()).or(a.default)
 }

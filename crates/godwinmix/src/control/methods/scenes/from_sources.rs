@@ -43,7 +43,7 @@ pub fn register(reg: &mut Registry<Call>) {
         .not_idempotent()
         .tool(
             "create_scene_from",
-            Tier::Search,
+            Tier::Standard,
             "Make a scene out of a list of sources in one call. With no `layout` the count \
              picks one: one source fills the canvas, two make a two box, three a three \
              box, four a quad, more a grid. A source may also be a media library file \

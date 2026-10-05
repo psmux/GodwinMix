@@ -58,6 +58,31 @@
       }
     },
     "schemas": {
+      "Action": {
+        "description": "What a write does to a file.",
+        "oneOf": [
+          {
+            "const": "create",
+            "description": "There was no file.",
+            "type": "string"
+          },
+          {
+            "const": "merge",
+            "description": "The file is there and gets the entry beside what it has.",
+            "type": "string"
+          },
+          {
+            "const": "update",
+            "description": "The file has a `godwinmix` entry that differs, and it is replaced.",
+            "type": "string"
+          },
+          {
+            "const": "unchanged",
+            "description": "The file already says exactly this.",
+            "type": "string"
+          }
+        ]
+      },
       "ActionKind": {
         "description": "What pressing the button does.",
         "oneOf": [
@@ -454,6 +479,28 @@
           }
         },
         "type": "object"
+      },
+      "AgentTool": {
+        "description": "The agent tools this mixer knows how to set up.",
+        "oneOf": [
+          {
+            "enum": [
+              "claude",
+              "opencode",
+              "pi",
+              "codex",
+              "gemini",
+              "cursor",
+              "vscode"
+            ],
+            "type": "string"
+          },
+          {
+            "const": "other",
+            "description": "Any other MCP client: nothing is written, the entry is shown to paste.",
+            "type": "string"
+          }
+        ]
       },
       "Alarm": {
         "description": "One condition that holds now.",
@@ -2924,6 +2971,32 @@
           }
         ]
       },
+      "Detected": {
+        "properties": {
+          "found": {
+            "description": "What was found: the command's path, or the config folder.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "installed": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "tool": {
+            "$ref": "#/components/schemas/AgentTool"
+          }
+        },
+        "required": [
+          "tool",
+          "name",
+          "installed"
+        ],
+        "type": "object"
+      },
       "DeviceToken": {
         "description": "One device token, without its secret.",
         "properties": {
@@ -3821,6 +3894,34 @@
         ],
         "type": "object"
       },
+      "FileWrite": {
+        "description": "One file a setup writes.",
+        "properties": {
+          "action": {
+            "$ref": "#/components/schemas/Action"
+          },
+          "backup": {
+            "description": "Where the file was copied before it was changed.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "path": {
+            "type": "string"
+          },
+          "what": {
+            "description": "In words: \"the godwinmix MCP server\", \"the godwinmix-design skill\".",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "action",
+          "what"
+        ],
+        "type": "object"
+      },
       "Filter": {
         "additionalProperties": false,
         "description": "One filter in an item's chain.",
@@ -4522,7 +4623,7 @@
             "description": "The transition a take uses when it names none, overall and by scene."
           },
           "errors": {
-            "description": "Folders under `fx/` that would not read, each with the reason.",
+            "description": "Item folders that would not read, each with the reason.",
             "items": {
               "type": "string"
             },
@@ -4694,6 +4795,807 @@
         "required": [
           "file",
           "reason"
+        ],
+        "type": "object"
+      },
+      "GalleryDuplicateRequest": {
+        "description": "`gallery.duplicate`.",
+        "properties": {
+          "id": {
+            "default": "",
+            "type": "string"
+          },
+          "name": {
+            "default": null,
+            "description": "The copy's name. Default: the name with \"copy\" after it.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "GalleryEditRequest": {
+        "additionalProperties": false,
+        "description": "`gallery.edit`: change what is said about an item, or its field values.",
+        "properties": {
+          "description": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "default": "",
+            "type": "string"
+          },
+          "name": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tags": {
+            "default": null
+          },
+          "values": {
+            "additionalProperties": true,
+            "default": null,
+            "description": "Field values to keep with the item; `null` drops one.",
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "zone": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "GalleryExportRequest": {
+        "description": "`gallery.export`: items as one zip to carry to another mixer.",
+        "properties": {
+          "ids": {
+            "default": null,
+            "description": "The ids, as a list or one string with commas. Default: every item\nthat was not shipped with the mixer."
+          },
+          "path": {
+            "default": null,
+            "description": "Where to write the zip on the mixer. Default: the gallery's\n`exports` folder.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "GalleryExported": {
+        "description": "The answer to `gallery.export`.",
+        "properties": {
+          "ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "path": {
+            "type": "string"
+          },
+          "size_bytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "url": {
+            "description": "Where a browser downloads it from this mixer.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "size_bytes",
+          "ids",
+          "url"
+        ],
+        "type": "object"
+      },
+      "GalleryIdRequest": {
+        "description": "One item by id: `gallery.remove`.",
+        "properties": {
+          "id": {
+            "default": "",
+            "description": "The item's id from `gallery.list`.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "GalleryImportRequest": {
+        "description": "`gallery.import`: files made elsewhere, checked one by one.",
+        "properties": {
+          "data": {
+            "default": null,
+            "description": "The same as base64, with `filename`.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "filename": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "path": {
+            "default": null,
+            "description": "A file or a folder on the mixer: a gallery zip, an SVG, an HTML page\nor a folder or zip with one, an OGraf package, a PNG or WebP, a WebM\nor MOV. A folder of several of these imports each.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "replace": {
+            "default": false,
+            "description": "Write over items with the same id.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "GalleryImported": {
+        "description": "The answer to `gallery.import`.",
+        "properties": {
+          "added": {
+            "items": {
+              "$ref": "#/components/schemas/GalleryItem"
+            },
+            "type": "array"
+          },
+          "refused": {
+            "items": {
+              "$ref": "#/components/schemas/Refused"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "added",
+          "refused"
+        ],
+        "type": "object"
+      },
+      "GalleryItem": {
+        "description": "One item, as `gallery.list` describes it.",
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "fields": {
+            "description": "The fields a template or OGraf graphic has, with their defaults.",
+            "items": {
+              "$ref": "#/components/schemas/TemplateField"
+            },
+            "type": "array"
+          },
+          "id": {
+            "description": "The slug every other gallery method takes: `storm-lower-third`.",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/GalleryKind"
+          },
+          "made_by": {
+            "description": "Who or what saved it, in its own words: `claude-code`, `opencode`.",
+            "type": "string"
+          },
+          "moves": {
+            "description": "Whether it moves by itself: a clip, a page, a ticker.",
+            "type": "boolean"
+          },
+          "moving": {
+            "description": "A file of the item a page plays as its moving preview, served at\n`/api/v1/gallery/{id}/files/{moving}`: a clip itself, or the item's\nown `preview.webm`.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "origin": {
+            "$ref": "#/components/schemas/Origin"
+          },
+          "placed": {
+            "description": "The sources on this mixer drawing it now.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "saved": {
+            "description": "When it was saved, as RFC 3339, when known.",
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "transparent": {
+            "description": "Whether the picture under it shows through anywhere.",
+            "type": "boolean"
+          },
+          "uri": {
+            "description": "The address `source.add` takes for it, when it is one source.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "values": {
+            "additionalProperties": true,
+            "description": "The values this item fills its fields with, over the defaults.",
+            "type": "object"
+          },
+          "zone": {
+            "$ref": "#/components/schemas/Zone"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "kind",
+          "zone",
+          "moves",
+          "transparent",
+          "origin"
+        ],
+        "type": "object"
+      },
+      "GalleryKind": {
+        "description": "What an item is, which decides how it is drawn and how it is added.",
+        "oneOf": [
+          {
+            "const": "template",
+            "description": "An SVG with `{{fields}}`, drawn by the mixer (`template:`).",
+            "type": "string"
+          },
+          {
+            "const": "image",
+            "description": "A still picture: PNG, WebP, JPEG, or an SVG with no fields.",
+            "type": "string"
+          },
+          {
+            "const": "clip",
+            "description": "A moving picture: WebM, MOV or MP4, with alpha or without.",
+            "type": "string"
+          },
+          {
+            "const": "html",
+            "description": "A web page, drawn by the browser source.",
+            "type": "string"
+          },
+          {
+            "const": "ograf",
+            "description": "An OGraf package (`graphic.ograf.json` beside its web component).",
+            "type": "string"
+          },
+          {
+            "const": "ticker",
+            "description": "A crawl of words, kept as the `ticker:` source it adds.",
+            "type": "string"
+          },
+          {
+            "const": "text",
+            "description": "Words in a box, kept as the `text:` source it adds.",
+            "type": "string"
+          },
+          {
+            "const": "set",
+            "description": "A virtual set: a background, a foreground, and the layout settings\nthat `scene.create_from` turns into a new scene around a presenter.",
+            "type": "string"
+          },
+          {
+            "const": "transition",
+            "description": "A stinger, a luma wipe or a shader played by a take. Listed and\npreviewed here; played by the transition methods, not placed.",
+            "type": "string"
+          },
+          {
+            "const": "effect",
+            "description": "An overlay fired on demand: a light leak, bokeh, a glitch. Listed and\npreviewed here; fired by the effect methods, not placed.",
+            "type": "string"
+          }
+        ]
+      },
+      "GalleryList": {
+        "description": "The answer to `gallery.list`.",
+        "properties": {
+          "dir": {
+            "description": "The folder saved items live in, on the mixer.",
+            "type": "string"
+          },
+          "errors": {
+            "description": "Folders that look like items and would not read, and why.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/GalleryItem"
+            },
+            "type": "array"
+          },
+          "total": {
+            "description": "How many items match before `limit` cut the list.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "dir",
+          "total"
+        ],
+        "type": "object"
+      },
+      "GalleryListRequest": {
+        "description": "`gallery.list`.",
+        "properties": {
+          "kind": {
+            "default": null,
+            "description": "Only this kind: template, image, clip, html, ograf, ticker, text, set.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "limit": {
+            "default": null,
+            "description": "At most this many. Default 50.",
+            "format": "uint",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "query": {
+            "default": null,
+            "description": "Words to look for in the name, tags, description and kind:\n`\"lower third\"`, `\"red news\"`, `\"background\"`.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "GalleryPlaceRequest": {
+        "additionalProperties": false,
+        "description": "`gallery.place`: add an item to a scene in its zone. Hidden unless\n`visible`; `gallery.show` takes it on air.",
+        "properties": {
+          "camera": {
+            "default": null,
+            "description": "For a set: the camera source standing in it. Default: the source on\nair.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "default": "",
+            "type": "string"
+          },
+          "scene": {
+            "default": null,
+            "description": "The scene to add it to. Default: the scene on air.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "values": {
+            "additionalProperties": true,
+            "default": null,
+            "description": "Field values for this placement, over the item's own.",
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "visible": {
+            "default": null,
+            "description": "Show it at once. Default false: placed hidden, ready to take.",
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "zone": {
+            "default": null,
+            "description": "Where on the canvas, over the item's own zone: full, lower-third,\nbug, top, bottom, center, overlay.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "GalleryPlaced": {
+        "description": "The answer to `gallery.place`.",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "item": {
+            "description": "The scene item's name, for `gallery.show` and `scene.item.set`.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "new_scene": {
+            "description": "True for a set, which becomes a scene of its own.",
+            "type": "boolean"
+          },
+          "next": {
+            "type": "string"
+          },
+          "scene": {
+            "type": "string"
+          },
+          "source": {
+            "description": "The source drawing it. For a set, the scene's sources are in `scene`.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "updated": {
+            "description": "True when it was on the scene already, and only its values changed.",
+            "type": "boolean"
+          },
+          "visible": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "scene",
+          "visible",
+          "updated",
+          "new_scene",
+          "next"
+        ],
+        "type": "object"
+      },
+      "GalleryPreview": {
+        "description": "The answer to `gallery.preview`.",
+        "properties": {
+          "caption": {
+            "description": "One line about the picture, for a model reading it.",
+            "type": "string"
+          },
+          "encoding": {
+            "type": "string"
+          },
+          "format": {
+            "type": "string"
+          },
+          "from": {
+            "description": "How it was made: `drawn` by the mixer now, `poster` (the item's own\npreview file), `source` (a frame of a source drawing it), or `card`\n(a placeholder naming the kind, when nothing could draw it here).",
+            "type": "string"
+          },
+          "height": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "id": {
+            "type": "string"
+          },
+          "image": {
+            "description": "The JPEG, base64.",
+            "type": "string"
+          },
+          "width": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "width",
+          "height",
+          "image",
+          "encoding",
+          "format",
+          "from",
+          "caption"
+        ],
+        "type": "object"
+      },
+      "GalleryPreviewRequest": {
+        "description": "`gallery.preview`: a picture of an item, drawn on demand.",
+        "properties": {
+          "background": {
+            "default": null,
+            "description": "What shows through the transparent parts: `checker` (the default),\n`black`, `white`, or a colour `#rrggbb`.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "default": "",
+            "type": "string"
+          },
+          "values": {
+            "additionalProperties": true,
+            "default": null,
+            "description": "Field values to try, over the item's own, without saving them.",
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "width": {
+            "default": null,
+            "description": "Pixels wide, 64 to 1920. Default 960, which is what reading a lower\nthird needs.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "GallerySaveRequest": {
+        "additionalProperties": false,
+        "description": "`gallery.save`: one call for any kind. Give exactly one of `svg`, `html`,\n`data`, `file`, `source` or `set`; the kind is worked out from it.",
+        "properties": {
+          "data": {
+            "default": null,
+            "description": "A picture or a clip as base64, or as a `data:` URI.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "description": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "file": {
+            "default": null,
+            "description": "A file or a folder on the mixer's machine: an SVG, a picture, a clip,\nan HTML page or a folder holding one, an OGraf package, a zip.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "filename": {
+            "default": null,
+            "description": "The name `data` had, for its type: `logo.png`, `sting.webm`.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "files": {
+            "additionalProperties": true,
+            "default": null,
+            "description": "More files an HTML page loads, by name: text, or a `data:` URI.",
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "html": {
+            "default": null,
+            "description": "A whole HTML page, with its CSS and script inline. Transparent where\nthe page has no background.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "kind": {
+            "default": null,
+            "description": "template, image, clip, html, ograf, ticker, text or set. Usually left\nout: it is worked out from what you give.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "made_by": {
+            "default": null,
+            "description": "Who made it, in a word: `claude-code`, `opencode`, `pi`.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "moves": {
+            "default": null,
+            "description": "Say it moves, or does not, when the gallery would guess wrong.",
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "name": {
+            "default": "",
+            "description": "What people call it: `\"Storm warning lower third\"`. The id is made\nfrom it.",
+            "type": "string"
+          },
+          "replace": {
+            "default": false,
+            "description": "Write over an item with the same id. Every source drawing it is drawn\nagain.",
+            "type": "boolean"
+          },
+          "set": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SetSpec"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "A virtual set: `{\"background\": ..., \"foreground\": ..., \"settings\":\n{...}}`. Each picture is a gallery id, a media file, a path or a\n`data:` URI."
+          },
+          "source": {
+            "default": null,
+            "description": "A ticker or text source as `source.add` takes it: `{\"uri\":\n\"ticker:\", \"params\": {...}}`."
+          },
+          "svg": {
+            "default": null,
+            "description": "A whole SVG document. With `{{fields}}` in it, it is a template;\nwithout, a picture.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tags": {
+            "default": null,
+            "description": "Words to find it by: `[\"news\", \"red\"]`, or `\"news, red\"`."
+          },
+          "transparent": {
+            "default": null,
+            "description": "Say it has transparency, or not, when the gallery would guess wrong.",
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "values": {
+            "additionalProperties": true,
+            "default": null,
+            "description": "What to fill a template's fields with, by name.",
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "zone": {
+            "default": null,
+            "description": "Where it goes when placed: full (a background), lower-third, bug,\ntop, bottom, center, overlay. Worked out when left out.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "GallerySaved": {
+        "description": "The answer to `gallery.save`, `gallery.edit` and `gallery.duplicate`.",
+        "properties": {
+          "item": {
+            "$ref": "#/components/schemas/GalleryItem"
+          },
+          "next": {
+            "description": "What to call next.",
+            "type": "string"
+          },
+          "path": {
+            "description": "The folder it was written to.",
+            "type": "string"
+          },
+          "redrawn": {
+            "description": "Sources drawing it that were drawn again.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "warnings": {
+            "description": "Things that did not stop the save and are worth fixing.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "item",
+          "path",
+          "next"
+        ],
+        "type": "object"
+      },
+      "GalleryShowRequest": {
+        "additionalProperties": false,
+        "description": "`gallery.show`: take a placed item on air, or off.",
+        "properties": {
+          "id": {
+            "default": "",
+            "description": "The gallery id, the source id or the scene item's name.",
+            "type": "string"
+          },
+          "scene": {
+            "default": null,
+            "description": "Default: the scene on air.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "visible": {
+            "default": null,
+            "description": "True to show, false to hide. Default true.",
+            "type": [
+              "boolean",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "GalleryShown": {
+        "description": "The answer to `gallery.show`.",
+        "properties": {
+          "item": {
+            "type": "string"
+          },
+          "scene": {
+            "type": "string"
+          },
+          "took": {
+            "description": "For a set: the scene was taken to the programme rather than an item\nshown.",
+            "type": "boolean"
+          },
+          "visible": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "scene",
+          "item",
+          "visible"
         ],
         "type": "object"
       },
@@ -6902,6 +7804,26 @@
         },
         "type": "object"
       },
+      "Origin": {
+        "description": "Where an item came from.",
+        "oneOf": [
+          {
+            "const": "shipped",
+            "description": "Built into the mixer: the template pack and the starter designs.\nRead only; duplicate one to change it.",
+            "type": "string"
+          },
+          {
+            "const": "agent",
+            "description": "Saved by an AI agent or a script through `gallery.save`.",
+            "type": "string"
+          },
+          {
+            "const": "uploaded",
+            "description": "A file a person added: an upload, an import, a template saved in the\nmedia library.",
+            "type": "string"
+          }
+        ]
+      },
       "OutputState": {
         "enum": [
           "connecting",
@@ -8108,6 +9030,28 @@
         ],
         "type": "object"
       },
+      "Refused": {
+        "description": "One file the import would not take.",
+        "properties": {
+          "file": {
+            "type": "string"
+          },
+          "fix": {
+            "description": "What to do about it.",
+            "type": "string"
+          },
+          "reason": {
+            "description": "What was wrong with it.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file",
+          "reason",
+          "fix"
+        ],
+        "type": "object"
+      },
       "Relink": {
         "description": "One asset an import could not put back.",
         "properties": {
@@ -9094,7 +10038,131 @@
         ],
         "type": "object"
       },
+      "SetSpec": {
+        "description": "The pictures and settings of a virtual set.",
+        "properties": {
+          "background": {
+            "description": "The plate behind the presenter.",
+            "type": "string"
+          },
+          "foreground": {
+            "default": null,
+            "description": "A desk or a frame in front of the presenter, transparent elsewhere.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "layout": {
+            "default": null,
+            "description": "The layout. Default `virtual-set`.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "settings": {
+            "additionalProperties": true,
+            "default": {},
+            "description": "The layout's settings: `presenter_scale` (0.3 to 1), `presenter_x`\n(0 to 1), `screen` (green, blue, none).",
+            "type": "object"
+          }
+        },
+        "required": [
+          "background"
+        ],
+        "type": "object"
+      },
+      "Setup": {
+        "description": "What a setup did, or would do.",
+        "properties": {
+          "applied": {
+            "type": "boolean"
+          },
+          "entry": {
+            "description": "The MCP entry, for a client nothing is written for."
+          },
+          "name": {
+            "type": "string"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "prompt": {
+            "description": "A first thing to ask it.",
+            "type": "string"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/SetupScope"
+          },
+          "start": {
+            "description": "How to start the tool afterwards.",
+            "type": "string"
+          },
+          "tool": {
+            "$ref": "#/components/schemas/AgentTool"
+          },
+          "writes": {
+            "items": {
+              "$ref": "#/components/schemas/FileWrite"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "tool",
+          "name",
+          "scope",
+          "writes",
+          "start",
+          "prompt",
+          "notes",
+          "applied"
+        ],
+        "type": "object"
+      },
       "SetupRequest": {
+        "additionalProperties": false,
+        "description": "`agent.setup`.",
+        "properties": {
+          "dir": {
+            "default": null,
+            "description": "The project folder, for `scope: project`. An absolute path.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "dry_run": {
+            "default": false,
+            "description": "Answer every file it would write, and write nothing. The dispatcher\nreads it too, as it does on every destructive method.",
+            "type": "boolean"
+          },
+          "env": {
+            "additionalProperties": true,
+            "default": {},
+            "description": "Environment for `godwinmix mcp`, such as GODWINMIX_URL for a mixer\nthat is not the desktop app's. Written into the tool's config as given.",
+            "type": "object"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/SetupScope",
+            "default": "user",
+            "description": "`user` (the default) writes into the home folder, `project` into `dir`."
+          },
+          "tool": {
+            "$ref": "#/components/schemas/AgentTool",
+            "description": "claude, opencode, pi, codex, gemini, cursor, vscode or other."
+          }
+        },
+        "required": [
+          "tool"
+        ],
+        "type": "object"
+      },
+      "SetupRequest2": {
         "description": "`setup.start` and `setup.get`: one piece by name.",
         "properties": {
           "piece": {
@@ -9106,6 +10174,14 @@
           "piece"
         ],
         "type": "object"
+      },
+      "SetupScope": {
+        "description": "For the user, in their home folder, or for one project folder.",
+        "enum": [
+          "user",
+          "project"
+        ],
+        "type": "string"
       },
       "SetupState": {
         "description": "Where a piece stands.",
@@ -11110,7 +12186,7 @@
             "type": "string"
           },
           "profile": {
-            "description": "MCP tool profile this token is meant for: \"standard\" or \"minimal\".",
+            "description": "MCP tool profile this token is meant for: \"standard\", \"minimal\" or \"headend\".",
             "type": "string"
           },
           "rehearsal": {
@@ -11740,6 +12816,46 @@
           }
         },
         "type": "object"
+      },
+      "Zone": {
+        "description": "Where an item sits on the canvas when it is placed.",
+        "oneOf": [
+          {
+            "const": "full",
+            "description": "The whole canvas, under everything else: a background.",
+            "type": "string"
+          },
+          {
+            "const": "lower-third",
+            "description": "The lower third, inside title safe.",
+            "type": "string"
+          },
+          {
+            "const": "bug",
+            "description": "A corner bug: top right, inside title safe.",
+            "type": "string"
+          },
+          {
+            "const": "top",
+            "description": "A strip across the top.",
+            "type": "string"
+          },
+          {
+            "const": "bottom",
+            "description": "A strip across the bottom: a ticker.",
+            "type": "string"
+          },
+          {
+            "const": "center",
+            "description": "The middle of the canvas: a title card, a quote.",
+            "type": "string"
+          },
+          {
+            "const": "overlay",
+            "description": "Over the whole canvas, on top: a graphic laid out on a full frame\nwith transparency where there is nothing.",
+            "type": "string"
+          }
+        ]
       }
     },
     "securitySchemes": {
@@ -11839,6 +12955,44 @@
         "x-scope": "operate"
       }
     },
+    "/api/v1/agent/setup": {
+      "post": {
+        "description": "JSON-RPC method `agent.setup`. Needs the `admin` scope. Destructive: accepts `dry_run: true`, and on a token whose policy is `confirm = required` it is refused once with -32020 and a confirm token. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "agent.setup",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetupRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Setup"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Set an AI agent tool up to use this mixer: its MCP config gets one entry, godwinmix, that runs this mixer's own executable, and its skills folder gets the GodwinMix skills. Other entries are kept and a changed file is copied aside first. dry_run answers every file it would write. The answer says how to start the tool and a first thing to ask it.",
+        "tags": [
+          "agent"
+        ],
+        "x-destructive": true,
+        "x-idempotent": true,
+        "x-scope": "admin"
+      }
+    },
     "/api/v1/agent/state": {
       "get": {
         "description": "JSON-RPC method `agent.state`. Needs the `read` scope.",
@@ -11865,6 +13019,49 @@
         "x-destructive": false,
         "x-idempotent": true,
         "x-scope": "read"
+      }
+    },
+    "/api/v1/agent/tools": {
+      "post": {
+        "description": "JSON-RPC method `agent.tools`. Needs the `admin` scope.",
+        "operationId": "agent.tools",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {},
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Detected"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "The AI agent tools this mixer can set up, the ones installed on its machine first, each with what was found: a command on PATH or a config folder.",
+        "tags": [
+          "agent"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "admin"
       }
     },
     "/api/v1/channels": {
@@ -13705,6 +14902,376 @@
         ],
         "x-destructive": false,
         "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/gallery/duplicate": {
+      "post": {
+        "description": "JSON-RPC method `gallery.duplicate`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "gallery.duplicate",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GalleryDuplicateRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GallerySaved"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Copy an item, shipped ones included, under a new name.",
+        "tags": [
+          "gallery"
+        ],
+        "x-destructive": false,
+        "x-idempotent": false,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/gallery/edit": {
+      "post": {
+        "description": "JSON-RPC method `gallery.edit`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "gallery.edit",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GalleryEditRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GallerySaved"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Change an item's name, tags, description, zone or the values it fills its fields with.",
+        "tags": [
+          "gallery"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/gallery/export": {
+      "post": {
+        "description": "JSON-RPC method `gallery.export`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "gallery.export",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GalleryExportRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GalleryExported"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Write gallery items to one zip on the mixer, to carry a look to another mixer.",
+        "tags": [
+          "gallery"
+        ],
+        "x-destructive": false,
+        "x-idempotent": false,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/gallery/import": {
+      "post": {
+        "description": "JSON-RPC method `gallery.import`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "gallery.import",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GalleryImportRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GalleryImported"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Take files into the gallery: a gallery zip, an SVG, an HTML page or folder, an OGraf package, a picture or a clip. Each is checked; refused ones say why and how to fix them.",
+        "tags": [
+          "gallery"
+        ],
+        "x-destructive": false,
+        "x-idempotent": false,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/gallery/list": {
+      "get": {
+        "description": "JSON-RPC method `gallery.list`. Needs the `read` scope.",
+        "operationId": "gallery.list",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GalleryList"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "The Graphics gallery: every lower third, background, ticker, bug, title card, page, clip and virtual set, made here or shipped, with what each is and where it goes.",
+        "tags": [
+          "gallery"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
+    "/api/v1/gallery/place": {
+      "post": {
+        "description": "JSON-RPC method `gallery.place`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "gallery.place",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GalleryPlaceRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GalleryPlaced"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Add a gallery item to a scene in its zone (a lower third low on the left, a background under everything, a bug in the corner), hidden until gallery.show. A set becomes a new scene.",
+        "tags": [
+          "gallery"
+        ],
+        "x-destructive": false,
+        "x-idempotent": false,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/gallery/preview": {
+      "post": {
+        "description": "JSON-RPC method `gallery.preview`. Needs the `read` scope.",
+        "operationId": "gallery.preview",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GalleryPreviewRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GalleryPreview"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "A picture of a gallery item as it would land on the canvas, transparent parts over a checkerboard, drawn on demand.",
+        "tags": [
+          "gallery"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
+    "/api/v1/gallery/remove": {
+      "post": {
+        "description": "JSON-RPC method `gallery.remove`. Needs the `operate` scope. Destructive: accepts `dry_run: true`, and on a token whose policy is `confirm = required` it is refused once with -32020 and a confirm token. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "gallery.remove",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GalleryIdRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Delete a saved item and its files. Refused while a source shows it.",
+        "tags": [
+          "gallery"
+        ],
+        "x-destructive": true,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/gallery/save": {
+      "post": {
+        "description": "JSON-RPC method `gallery.save`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "gallery.save",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GallerySaveRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GallerySaved"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Save a graphic of any kind into the gallery with a name, tags and a description: an SVG template, an HTML page, a picture or clip, a ticker or text, or a virtual set.",
+        "tags": [
+          "gallery"
+        ],
+        "x-destructive": false,
+        "x-idempotent": false,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/gallery/show": {
+      "post": {
+        "description": "JSON-RPC method `gallery.show`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "gallery.show",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GalleryShowRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GalleryShown"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Show a placed gallery item on air, or hide it, taking its scene when that scene is not on air. For a set, take its scene.",
+        "tags": [
+          "gallery"
+        ],
+        "x-destructive": false,
+        "x-idempotent": false,
         "x-scope": "operate"
       }
     },
@@ -17765,7 +19332,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/SetupRequest"
+                "$ref": "#/components/schemas/SetupRequest2"
               }
             }
           },

@@ -33,7 +33,9 @@ pub fn settle(gl: &Gl, old: &Pic<'_>, planes: &mut Planes<'_>, t: f64, wait: Dur
     while Instant::now() < deadline && !gl.has_failed() {
         std::thread::sleep(Duration::from_millis(15));
         if gl.answered_now() {
-            gl.mix(old, planes, t);
+            // One frame went up, so this answer is its answer: draw it and
+            // send nothing more, or the next call would meet this one's echo.
+            gl.draw_latest(planes);
             return true;
         }
     }

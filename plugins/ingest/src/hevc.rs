@@ -92,13 +92,21 @@ mod tests {
     fn hvcc(width: u32, height: u32) -> Vec<u8> {
         gmx_netkit::init().unwrap();
         let line = format!(
-            "videotestsrc num-buffers=1 ! video/x-raw,format=I420,width={width},height={height} ! x265enc \
-             ! h265parse ! video/x-h265,stream-format=hvc1,alignment=au ! appsink name=out"
+            "videotestsrc num-buffers=1 ! video/x-raw,format=I420,width={width},height={height} \
+             ! x265enc speed-preset=ultrafast tune=zerolatency ! h265parse ! video/x-h265,stream-format=hvc1,alignment=au \
+             ! appsink name=out sync=false"
         );
+        // Ultrafast and no lookahead: the header is all this reads, and with
+        // x265's defaults the frame did not come out in ten seconds on a
+        // Windows runner while the rest of the suite ran, though it took half
+        // a second alone.
         let p = gst::parse::launch(&line).unwrap();
         let sink = p.downcast_ref::<gst::Bin>().unwrap().by_name("out").unwrap().downcast::<gstreamer_app::AppSink>().unwrap();
         p.set_state(gst::State::Playing).unwrap();
-        let sample = sink.try_pull_sample(gst::ClockTime::from_seconds(10)).expect("x265 made a frame");
+        let sample = sink.try_pull_sample(gst::ClockTime::from_seconds(10)).unwrap_or_else(|| {
+            let said = p.bus().and_then(|b| b.pop_filtered(&[gst::MessageType::Error])).map(|m| format!("{m:?}"));
+            panic!("x265 made no frame in ten seconds; the bus said {said:?}")
+        });
         let data = sample.caps().unwrap().structure(0).unwrap().get::<gst::Buffer>("codec_data").unwrap();
         let _ = p.set_state(gst::State::Null);
         let v = data.map_readable().unwrap().to_vec();

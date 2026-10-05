@@ -17,11 +17,14 @@ const REPO: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
 /// The ingest plugin as a folder `plugin.add` takes: its manifest and what
 /// it reads, and its binary built in the same profile as the station's.
 pub fn staged_ingest(dir: &Path) -> PathBuf {
-    let release = BIN.contains("/release/");
+    // The station binary sits in target/<profile dir>/, and the plugin has to
+    // land beside it: CI tests with `--profile ci`, which is neither debug
+    // nor release, and the binary looked for in target/ci/ was never built.
+    let profile = Path::new(BIN).parent().and_then(|p| p.file_name()).and_then(|n| n.to_str()).unwrap_or("debug");
     let mut cargo = Command::new(std::env::var("CARGO").unwrap_or_else(|_| "cargo".into()));
     cargo.current_dir(REPO).args(["build", "-q", "-p", "gmx-ingest"]);
-    if release {
-        cargo.arg("--release");
+    if profile != "debug" {
+        cargo.args(["--profile", profile]);
     }
     assert!(cargo.status().unwrap().success(), "gmx-ingest did not build");
     let built = Path::new(BIN).with_file_name(format!("gmx-ingest{}", std::env::consts::EXE_SUFFIX));

@@ -32,15 +32,18 @@ jobs:
     name: mixer (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     # A hung test must not hold a runner for the six hours GitHub allows. 90
-    # rather than 45 because of what Windows costs: the GStreamer MSIs come
-    # down through chocolatey, a cold cargo cache builds the whole workspace
+    # rather than 45 because of what Windows costs: the GStreamer installer comes
+    # down at half a gigabyte, a cold cargo cache builds the whole workspace
     # with MSVC, and the test step alone measured 31 minutes on the first
     # Windows run. `platforms.yml` has been at 90 for the same reason.
     timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        # 26.04 rather than ubuntu-latest, which is still 24.04: its GStreamer
+        # is 1.24, and the mixer is written and tested against 1.28, which is
+        # what 26.04 ships.
+        os: [ubuntu-26.04, macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -61,21 +64,13 @@ jobs:
           echo "PKG_CONFIG_PATH=$(brew --prefix gstreamer)/lib/pkgconfig:$(brew --prefix)/lib/pkgconfig" >> "$GITHUB_ENV"
 
       # Windows has no package of the MSVC runtime that cargo can find on its
-      # own. The chocolatey packages install the official MSIs under Program
-      # Files and the three variables below are what the gstreamer crate's
-      # build script looks at. This is also the step that will bundle a trimmed
-      # GStreamer into the Tauri .msi when Phase 3 lands: the target is a 150 MB
-      # installer against the 527 MB the stock runtime installer costs, and
-      # until then a Windows user installs GStreamer themselves.
+      # own. The script installs the official 1.28 installer, full type, under
+      # Program Files and sets the three variables the gstreamer crate's build
+      # script looks at. It says why not chocolatey.
       - name: GStreamer (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
-        run: |
-          choco install -y --no-progress gstreamer gstreamer-devel
-          $gst = "C:\Program Files\gstreamer\1.0\msvc_x86_64"
-          "PKG_CONFIG_PATH=$gst\lib\pkgconfig" | Out-File -FilePath $env:GITHUB_ENV -Append
-          "GSTREAMER_1_0_ROOT_MSVC_X86_64=$gst\" | Out-File -FilePath $env:GITHUB_ENV -Append
-          "$gst\bin" | Out-File -FilePath $env:GITHUB_PATH -Append
+        run: ./dev/install-gstreamer-windows.ps1
 
       - name: Build
         run: cargo build --release --locked -p godwinmix --bins
@@ -98,6 +93,16 @@ jobs:
           # nightly runs them with no slack.
           GODWINMIX_TIMING_SLACK: 3
         run: |
+          # The macOS runner is a three core virtual machine and the Windows
+          # one has four, and as many tests as cores, each running live
+          # encoders, starved one another: RIST, SRT and HEVC tests that pass
+          # alone there decoded a frame or two. One test fewer than cores
+          # leaves a core for the pipelines the tests start.
+          if [ "${{ runner.os }}" = "macOS" ]; then
+            export RUST_TEST_THREADS=2
+          elif [ "${{ runner.os }}" = "Windows" ]; then
+            export RUST_TEST_THREADS=3
+          fi
           if [ "${{ runner.os }}" = "Linux" ]; then
             xvfb-run -a cargo test --profile ci --locked --workspace --no-fail-fast
           else
@@ -213,7 +218,7 @@ jobs:
   # hardware element is present, instead of silently falling back.
   linux-software:
     name: linux, no GPU, software codecs
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
@@ -246,6 +251,17 @@ jobs:
           name: gst-dot-software
           path: target/gst-dot/
           if-no-files-found: ignore
+
+      # The station tests run real stations in folders under /tmp, and what
+      # their shows logged is the only account of a governor's decisions.
+      - name: What the stations of a failed station test logged
+        if: failure()
+        run: |
+          for f in $(find /tmp -maxdepth 6 -path '/tmp/gmx-station-test-*' \( -name 'log.jsonl' -o -name 'godwinmix.log' \) 2>/dev/null); do
+            echo "::group::$f"
+            grep -iE 'governor|refus|admit|ticket|died|output|warn|error' "$f" | cut -c1-400 | tail -60
+            echo "::endgroup::"
+          done
 
       - name: What the probe picked
         run: |
@@ -312,7 +328,7 @@ jobs:
 
   clippy:
     name: clippy
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
