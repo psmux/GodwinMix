@@ -1,11 +1,13 @@
 //! Transitions and effects from packs: stinger clips with alpha, light leaks
 //! and film burns on black, luma matte wipes and GLSL shader transitions.
 //!
-//! Each one lives in the media library as a folder of its own,
-//! `fx/<name>/`, holding the media file and an `fx.json` that is a
-//! [`FxManifest`]. That folder is the whole format: a person or an agent can
-//! write one by hand, copy one to another machine, or zip a few and import
-//! the zip. `docs/reference/fx.md` has the format and every method.
+//! Each one is a gallery item: a folder of its own in the gallery's folder,
+//! `graphics/<name>/` in the media library, holding the media file and a
+//! `graphic.toml` whose `kind` is `transition` or `effect`. That folder is
+//! the whole format: a person or an agent can write one by hand, copy one to
+//! another machine, or zip a few and import the zip. [`FxManifest`] is how
+//! the methods carry it. `docs/reference/fx.md` has the format and every
+//! method.
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -45,7 +47,7 @@ pub enum FxBlend {
     Luma,
 }
 
-/// `fx.json`: one transition or effect, as its folder describes it.
+/// One transition or effect, as its folder's `graphic.toml` describes it.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct FxManifest {
     /// The slug every method and a take names it by, such as `light-leak`.

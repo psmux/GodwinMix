@@ -107,3 +107,17 @@ pub fn unzip(zip: &Path, root: &Path) -> Result<PathBuf> {
     }
     Ok(out)
 }
+
+/// Folders holding eight or more stills whose names end in a number: an
+/// image sequence, which would otherwise import as one matte a frame.
+pub fn sequences(paths: &[PathBuf]) -> Vec<PathBuf> {
+    let mut count: std::collections::BTreeMap<PathBuf, usize> = Default::default();
+    for p in paths {
+        let still = ["png", "jpg", "jpeg", "tif", "tiff", "bmp", "webp"].contains(&super::ext(p).as_str());
+        let numbered = p.file_stem().and_then(|s| s.to_str()).and_then(|s| s.chars().last()).is_some_and(|c| c.is_ascii_digit());
+        if let (true, true, Some(dir)) = (still, numbered, p.parent()) {
+            *count.entry(dir.to_path_buf()).or_default() += 1;
+        }
+    }
+    count.into_iter().filter(|(_, n)| *n >= 8).map(|(d, _)| d).collect()
+}

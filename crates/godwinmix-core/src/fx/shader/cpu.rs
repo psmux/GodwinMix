@@ -62,7 +62,8 @@ fn glitch_slice(old: &Pic<'_>, f: &mut Planes<'_>, t: f64) {
 }
 
 /// Rings run out from the centre and the new scene comes up through them.
-/// `ripple.glsl`.
+/// `ripple.glsl`. The wave is smooth, so its offset is worked out once per
+/// four by four block of luma and every pixel in the block moves the same.
 fn ripple(old: &Pic<'_>, f: &mut Planes<'_>, t: f64) {
     let (w, h) = (f.width as usize, f.height as usize);
     let p = t as f32;
@@ -71,27 +72,39 @@ fn ripple(old: &Pic<'_>, f: &mut Planes<'_>, t: f64) {
         let x = ((p - 0.25) / 0.5).clamp(0.0, 1.0);
         (x * x * (3.0 - 2.0 * x) * 255.0) as u32
     };
-    // The wave by distance from the centre, in a table, so a pixel is a
-    // square root and a lookup.
-    let table: Vec<f32> = (0..=1024).map(|i| (i as f32 / 1024.0 * 28.0 - p * 40.0).sin() * amp).collect();
+    let (bw, bh) = (w.div_ceil(4), h.div_ceil(4));
+    // Offsets in luma pixels, by block.
+    let mut offset = vec![(0i32, 0i32); bw * bh];
+    for by in 0..bh {
+        let dy = (by as f32 * 4.0 + 2.0) / h as f32 - 0.5;
+        for bx in 0..bw {
+            let dx = (bx as f32 * 4.0 + 2.0) / w as f32 - 0.5;
+            let dist = (dx * dx + dy * dy).sqrt().max(1e-4);
+            let wave = (dist * 28.0 - p * 40.0).sin() * amp;
+            offset[by * bw + bx] = ((dx / dist * wave * w as f32) as i32, (dy / dist * wave * h as f32) as i32);
+        }
+    }
     let new: [Vec<u8>; 3] = [f.y.to_vec(), f.u.to_vec(), f.v.to_vec()];
-    for (plane, rows, cols) in [(0usize, h, w), (1, h / 2, w / 2), (2, h / 2, w / 2)] {
+    for (plane, shift) in [(0usize, 0u32), (1, 1), (2, 1)] {
+        let (rows, cols) = (h >> shift, w >> shift);
         let (dst, ds) = match plane {
             0 => (&mut *f.y, f.strides[0]),
             1 => (&mut *f.u, f.strides[1]),
             _ => (&mut *f.v, f.strides[2]),
         };
-        let (o, os) = ([old.y, old.u, old.v][plane], old.strides[plane]);
+        let (o, os, n) = ([old.y, old.u, old.v][plane], old.strides[plane], &new[plane]);
         for y in 0..rows {
-            let dy = (y as f32 + 0.5) / rows as f32 - 0.5;
-            for x in 0..cols {
-                let dx = (x as f32 + 0.5) / cols as f32 - 0.5;
-                let dist = (dx * dx + dy * dy).sqrt().max(1e-4);
-                let wave = table[((dist * 1024.0) as usize).min(1024)];
-                let sx = ((x as f32 + dx / dist * wave * cols as f32) as isize).clamp(0, cols as isize - 1) as usize;
-                let sy = ((y as f32 + dy / dist * wave * rows as f32) as isize).clamp(0, rows as isize - 1) as usize;
-                let (a, b) = (o[sy * os + sx] as u32, new[plane][sy * ds + sx] as u32);
-                dst[y * ds + x] = ((a * (255 - up) + b * up + 127) / 255) as u8;
+            let brow = ((y << shift) >> 2) * bw;
+            let line = &mut dst[y * ds..y * ds + cols];
+            for (x, out) in line.iter_mut().enumerate() {
+                let (ox, oy) = offset[brow + ((x << shift) >> 2)];
+                let sx = (x as i32 + (ox >> shift)).clamp(0, cols as i32 - 1) as usize;
+                let sy = (y as i32 + (oy >> shift)).clamp(0, rows as i32 - 1) as usize;
+                *out = match up {
+                    0 => o[sy * os + sx],
+                    255 => n[sy * ds + sx],
+                    _ => ((o[sy * os + sx] as u32 * (255 - up) + n[sy * ds + sx] as u32 * up + 127) / 255) as u8,
+                };
             }
         }
     }

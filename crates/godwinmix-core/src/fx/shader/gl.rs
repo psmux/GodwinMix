@@ -37,6 +37,8 @@ pub struct Gl {
     latest: Mutex<Option<gst::Buffer>>,
     failed: Arc<AtomicBool>,
     ratio: f32,
+    /// Stopped already, by `close`, so dropping it has nothing to do.
+    closed: AtomicBool,
 }
 
 impl Gl {
@@ -57,7 +59,7 @@ impl Gl {
         src.set_caps(Some(&stacked.to_caps()?));
         shader.set_property("fragment", fragment);
         let ratio = size.0 as f32 / size.1.max(1) as f32;
-        let gl = Gl { pipeline, src, sink, shader, stacked, latest: Mutex::new(None), failed: Arc::default(), ratio };
+        let gl = Gl { pipeline, src, sink, shader, stacked, latest: Mutex::new(None), failed: Arc::default(), ratio, closed: AtomicBool::new(false) };
         gl.uniforms(0.0);
         // Not waited for: the GL context is made when the first frame
         // arrives, and a shader that will not compile says so on the bus,
@@ -109,6 +111,20 @@ impl Gl {
         self.latest.lock().is_some()
     }
 
+    /// Drop every answer so far, for a caller about to wait for a new one.
+    pub fn forget(&self) {
+        while self.sink.try_pull_sample(gst::ClockTime::ZERO).is_some() {}
+        *self.latest.lock() = None;
+    }
+
+    /// Take in what has come back, without drawing it.
+    pub fn answered_now(&self) -> bool {
+        while let Some(s) = self.sink.try_pull_sample(gst::ClockTime::ZERO) {
+            *self.latest.lock() = s.buffer_owned();
+        }
+        self.answered()
+    }
+
     pub fn has_failed(&self) -> bool {
         self.failed.load(Ordering::Acquire)
     }
@@ -151,8 +167,22 @@ impl Gl {
     }
 }
 
+impl Gl {
+    /// Stop the pipeline now, on this thread, for a caller that may wait:
+    /// the GL probe and the preview strip, which run on a worker. A process
+    /// that ends right after must not have a GL context still going down on
+    /// a thread of its own.
+    pub fn close(self) {
+        self.closed.store(true, Ordering::Release);
+        let _ = self.pipeline.set_state(gst::State::Null);
+    }
+}
+
 impl Drop for Gl {
     fn drop(&mut self) {
+        if self.closed.load(Ordering::Acquire) {
+            return;
+        }
         let pipeline = self.pipeline.clone();
         let _ = std::thread::Builder::new().name("gmx-fx-gl-stop".into()).spawn(move || {
             let _ = pipeline.set_state(gst::State::Null);

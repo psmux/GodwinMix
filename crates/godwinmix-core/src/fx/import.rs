@@ -58,7 +58,13 @@ fn locate(media: &Path, asked: &str) -> Result<PathBuf> {
 /// Every item in a folder: folders with a `graphic.toml` as they are, and every
 /// media file or shader, two levels down.
 fn folder(dir: &Path, root: &Path, req: &FxImportRequest, done: &mut FxImported) -> Result<()> {
-    for path in walk(dir, 3) {
+    let found = walk(dir, 3);
+    let runs = sequences(&found);
+    for seq in &runs {
+        let reason = "a numbered sequence of stills, which is a clip with no frame rate. Make it a MOV with PNG frames, or ProRes 4444, and import that".to_string();
+        done.skipped.push(FxSkipped { file: seq.display().to_string(), reason });
+    }
+    for path in found.into_iter().filter(|p| !p.parent().is_some_and(|d| runs.iter().any(|s| s == d))) {
         let skip = |reason: String| FxSkipped { file: path.display().to_string(), reason };
         if path.is_dir() {
             match copy_item(&path, root, req.replace) {
@@ -139,4 +145,4 @@ fn file(path: &Path, root: &Path, req: &FxImportRequest, name: Option<&str>, lic
 
 #[path = "import_describe.rs"]
 mod describe;
-use describe::{copy_item, describe, licence_beside, licence_in, unzip};
+use describe::{copy_item, describe, licence_beside, licence_in, sequences, unzip};

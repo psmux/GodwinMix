@@ -73,7 +73,7 @@ pub fn fire(plan: &Plan, board: &Arc<Board>, canvas: (i32, i32), opacity: f64) -
     let Look::Clip { path, mode, .. } = &plan.look else {
         anyhow::bail!("{} is a {}, which changes one scene into another and cannot play on its own. Fire an overlay or a stinger, or use it in a take", plan.name, plan.look.word())
     };
-    let player = player::Player::start(path, canvas)?;
+    let player = player::Player::start(path, decode_size(*mode, canvas))?;
     let pass: Arc<dyn Pass> = Arc::new(clip::ClipPass::new(&plan.name, &player, *mode, opacity, None, plan.duration_ms));
     let id = board.add_pass(pass);
     let weak = Arc::downgrade(board);
@@ -93,7 +93,7 @@ pub fn transition(plan: &Plan, board: &Arc<Board>, canvas: (i32, i32), window: (
         Look::Clip { path, mode, .. } => {
             let player = match started {
                 Some(p) => p,
-                None => player::Player::start(path, canvas)?,
+                None => player::Player::start(path, decode_size(*mode, canvas))?,
             };
             let pass = clip::ClipPass::new(&plan.name, &player, *mode, 1.0, Some(window.0), plan.duration_ms);
             (Arc::new(pass), Some(player))
@@ -117,4 +117,16 @@ pub fn transition(plan: &Plan, board: &Arc<Board>, canvas: (i32, i32), window: (
         });
     }
     Ok(Running { pass: id, player, board: Arc::downgrade(board) })
+}
+
+/// The size a clip is decoded at. A stinger by its alpha keeps the canvas
+/// size, because its edges are drawn graphics. Light for Screen, Add or a
+/// luma key is soft by nature and is decoded at half the size and stretched,
+/// which reads a quarter of the bytes each frame and decodes four times
+/// faster, and nobody can see the difference in a light leak.
+pub fn decode_size(mode: crate::overlay::modes::Mode, canvas: (i32, i32)) -> (i32, i32) {
+    match mode {
+        crate::overlay::modes::Mode::Normal => canvas,
+        _ => ((canvas.0 / 4 * 2).max(2), (canvas.1 / 4 * 2).max(2)),
+    }
 }

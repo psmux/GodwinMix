@@ -11,6 +11,8 @@
 use super::detect::{self, Measured, SMALL};
 use super::frame::Pic;
 use super::plan::{Look, Plan};
+use super::matte::dissolve;
+use super::shader::{gl::Gl, probe};
 use super::Mix;
 use crate::overlay::blend::{Draw, Planes, Rect, Source};
 use crate::overlay::modes;
@@ -68,8 +70,14 @@ pub fn render(m: &FxManifest, dir: &Path, measured: Option<&Measured>) -> Result
             let plane = super::matte::decode(path, (W as i32, H as i32))?;
             Some(Box::new(super::matte::Matte::from_plane(plane, W, *softness as f64 / 1000.0, *invert)))
         }
-        Look::Shader { name, source } => Some(Box::new(super::shader::ShaderMix::start(name, source, (W as i32, H as i32)))),
+        Look::Shader { name, .. } => Some(Box::new(Software(super::shader::cpu::find(name)))),
         Look::Clip { .. } => None,
+    };
+    // A shader is drawn the way it will run: on the GPU where GL runs, here
+    // on this thread and stopped before the strip is written.
+    let gpu = match &plan.look {
+        Look::Shader { source, .. } if probe::available() => super::shader::fragment(source).and_then(|f| Gl::start(&f, (W as i32, H as i32))).ok(),
+        _ => None,
     };
     let (blue, orange) = (scene(160, 100, 40), scene(70, 190, 70));
     let mut strip = vec![0u8; W * FRAMES as usize * H * 3];
@@ -84,15 +92,18 @@ pub fn render(m: &FxManifest, dir: &Path, measured: Option<&Measured>) -> Result
             let whole = Rect::new(0, 0, W as i32, H as i32);
             modes::draw(&mut planes, &Source { data: &c.frames[k], stride: W * 4 }, &Draw { window: whole, to: whole, clip: whole, alpha: 255 }, *mode);
         }
-        if let Some(mix) = &mix {
-            let old = Pic { y: &blue[0], u: &blue[1], v: &blue[2], strides: [W, W / 2, W / 2] };
-            mix.mix(&old, &mut planes, t);
-            if matches!(plan.look, Look::Shader { .. }) {
-                std::thread::sleep(std::time::Duration::from_millis(40));
-                mix.mix(&old, &mut planes, t);
+        let old = Pic { y: &blue[0], u: &blue[1], v: &blue[2], strides: [W, W / 2, W / 2] };
+        match (&gpu, &mix) {
+            (Some(gl), _) => {
+                probe::settle(gl, &old, &mut planes, t, std::time::Duration::from_secs(1));
             }
+            (None, Some(mix)) => mix.mix(&old, &mut planes, t),
+            _ => {}
         }
         rgb(&f, &mut strip, i);
+    }
+    if let Some(gl) = gpu {
+        gl.close();
     }
     let mid = FRAMES as usize / 2;
     let row = W * FRAMES as usize * 3;
@@ -120,6 +131,18 @@ fn rgb(f: &[Vec<u8>; 3], strip: &mut [u8], index: usize) {
             for (c, value) in px.iter().enumerate() {
                 strip[at + c] = value.clamp(0.0, 255.0) as u8;
             }
+        }
+    }
+}
+
+/// A shader's software version for the strip, or a dissolve.
+struct Software(Option<super::shader::cpu::Shader>);
+
+impl Mix for Software {
+    fn mix(&self, old: &Pic<'_>, f: &mut Planes<'_>, t: f64) {
+        match self.0 {
+            Some(s) => s(old, f, t),
+            None => dissolve(old, f, t),
         }
     }
 }

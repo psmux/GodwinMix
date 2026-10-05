@@ -136,10 +136,13 @@ pub fn dissolve(old: &Pic<'_>, f: &mut Planes<'_>, t: f64) {
 pub fn decode(path: &Path, size: (i32, i32)) -> Result<Vec<u8>> {
     let uri = gst::glib::filename_to_uri(path, None).context("the matte's path is not a file")?;
     let desc = format!(
-        "uridecodebin uri=\"{uri}\" ! videoconvert ! videoscale ! video/x-raw,format=GRAY8,width={},height={},pixel-aspect-ratio=1/1 ! appsink name=out sync=false max-buffers=1",
+        "uridecodebin name=dec uri=\"{uri}\" ! videoconvert ! videoscale ! video/x-raw,format=GRAY8,width={},height={},pixel-aspect-ratio=1/1 ! appsink name=out sync=false max-buffers=1",
         size.0, size.1
     );
     let pipeline = gst::parse::launch(&desc)?.downcast::<gst::Pipeline>().map_err(|_| anyhow::anyhow!("not a pipeline"))?;
+    if let Some(dec) = pipeline.by_name("dec") {
+        super::player::software_only(&dec);
+    }
     let sink = pipeline.by_name("out").context("no sink")?.downcast::<gst_app::AppSink>().map_err(|_| anyhow::anyhow!("not an appsink"))?;
     pipeline.set_state(gst::State::Playing)?;
     let sample = sink.try_pull_preroll(gst::ClockTime::from_seconds(10));
