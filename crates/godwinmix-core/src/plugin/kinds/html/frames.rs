@@ -26,6 +26,7 @@ use std::time::Duration;
 
 const MAGIC: &[u8; 4] = b"GMXF";
 const PATCH: &[u8; 4] = b"GMXP";
+const WHOLE: &[u8; 4] = b"GMXI";
 const HEADER: usize = 28;
 /// The largest page the renderer is ever asked for, as a check on a header.
 const MAX_SIDE: u32 = 8192;
@@ -56,9 +57,9 @@ impl Feed {
 
 /// Read frames from `pipe` until it closes, and keep the carrier current.
 pub fn start(id: &str, pipe: Box<dyn Read + Send>, layer: Arc<Layer>, carrier: Arc<Carrier>, feed: Arc<Feed>) {
-    let (l, f) = (layer.clone(), feed.clone());
+    let (l, f, c) = (layer.clone(), feed.clone(), carrier.clone());
     let reader = std::thread::Builder::new().name(format!("gmx-html-{id}")).spawn(move || {
-        let why = read(pipe, &l, &f);
+        let why = read(pipe, &l, &c, &f);
         tracing::debug!(reason = %why, "the HTML renderer's pictures stopped");
         f.end();
     });
@@ -69,7 +70,7 @@ pub fn start(id: &str, pipe: Box<dyn Read + Send>, layer: Arc<Layer>, carrier: A
     let _ = std::thread::Builder::new().name(format!("gmx-html-carrier-{id}")).spawn(move || refresh(&layer, &carrier, &feed));
 }
 
-fn read(mut pipe: Box<dyn Read + Send>, layer: &Layer, feed: &Feed) -> String {
+fn read(mut pipe: Box<dyn Read + Send>, layer: &Layer, carrier: &Carrier, feed: &Feed) -> String {
     let mut header = [0u8; HEADER];
     // The whole box last sent, kept to copy patches into.
     let mut held: Option<(Area, Vec<u8>)> = None;
@@ -78,9 +79,17 @@ fn read(mut pipe: Box<dyn Read + Send>, layer: &Layer, feed: &Feed) -> String {
             return e.to_string();
         }
         let Some((page, area)) = parse(&header) else { return "a frame that is not one".into() };
-        let mut data = vec![0u8; area.w as usize * area.h as usize * 4];
+        let whole_frame = &header[..4] == WHOLE;
+        let bytes = if whole_frame { area.w as usize * area.h as usize * 3 / 2 } else { area.w as usize * area.h as usize * 4 };
+        let mut data = vec![0u8; bytes];
         if let Err(e) = pipe.read_exact(&mut data) {
             return e.to_string();
+        }
+        if whole_frame {
+            // A design that covers the picture: straight to the compositor.
+            carrier.show_i420(&data, area.w, area.h);
+            feed.frames.fetch_add(1, Ordering::Relaxed);
+            continue;
         }
         let whole = if &header[..4] == PATCH {
             let Some((at, pixels)) = held.as_mut() else { continue };
@@ -101,7 +110,7 @@ fn read(mut pipe: Box<dyn Read + Send>, layer: &Layer, feed: &Feed) -> String {
 
 /// The page size and the box a header describes.
 pub fn parse(h: &[u8; HEADER]) -> Option<((u32, u32), Area)> {
-    if &h[..4] != MAGIC && &h[..4] != PATCH {
+    if &h[..4] != MAGIC && &h[..4] != PATCH && &h[..4] != WHOLE {
         return None;
     }
     let n = |i: usize| u32::from_le_bytes([h[4 + i * 4], h[5 + i * 4], h[6 + i * 4], h[7 + i * 4]]);

@@ -46,7 +46,7 @@ pub struct TransparentPage {
 
 impl TransparentPage {
     pub fn new(ctx: BuildCtx, url: String) -> TransparentPage {
-        let page = Page { url, fps: 0, offline: false, designed: false };
+        let page = Page { url, fps: 0, offline: false, designed: false, opaque: false };
         TransparentPage { ctx, page, layer: Layer::new(true), carrier: None, renderer: None, stopped: false }
     }
 
