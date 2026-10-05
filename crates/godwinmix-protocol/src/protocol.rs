@@ -624,6 +624,7 @@ fn method_entry<C>(m: &crate::method::MethodDef<C>, g: &mut SchemaGenerator) -> 
                 "profile": match mcp.tier {
                     crate::method::Tier::Minimal => "minimal",
                     crate::method::Tier::Standard => "standard",
+                    crate::method::Tier::Headend => "headend",
                     crate::method::Tier::Search => "search",
                 },
                 "readOnlyHint": !m.mutating,

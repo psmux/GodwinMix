@@ -11005,7 +11005,7 @@
           "type": "string"
         },
         "profile": {
-          "description": "MCP tool profile this token is meant for: \"standard\" or \"minimal\".",
+          "description": "MCP tool profile this token is meant for: \"standard\", \"minimal\" or \"headend\".",
           "type": "string"
         },
         "rehearsal": {
@@ -15259,7 +15259,7 @@
       "mcp": {
         "destructiveHint": false,
         "idempotentHint": true,
-        "profile": "standard",
+        "profile": "search",
         "readOnlyHint": false,
         "tool": "go_live"
       },
@@ -15592,7 +15592,7 @@
       "mcp": {
         "destructiveHint": false,
         "idempotentHint": false,
-        "profile": "search",
+        "profile": "standard",
         "readOnlyHint": false,
         "tool": "create_scene_from"
       },
@@ -15838,7 +15838,7 @@
       "mcp": {
         "destructiveHint": false,
         "idempotentHint": true,
-        "profile": "search",
+        "profile": "standard",
         "readOnlyHint": false,
         "tool": "add_scene_item"
       },
@@ -16182,7 +16182,7 @@
       "mcp": {
         "destructiveHint": false,
         "idempotentHint": true,
-        "profile": "search",
+        "profile": "standard",
         "readOnlyHint": false,
         "tool": "set_scene_item"
       },
@@ -16680,7 +16680,7 @@
       "mcp": {
         "destructiveHint": false,
         "idempotentHint": false,
-        "profile": "standard",
+        "profile": "headend",
         "readOnlyHint": false,
         "tool": "add_shows"
       },
@@ -16706,7 +16706,7 @@
       "mcp": {
         "destructiveHint": false,
         "idempotentHint": true,
-        "profile": "standard",
+        "profile": "headend",
         "readOnlyHint": true,
         "tool": "list_shows"
       },
@@ -16786,7 +16786,7 @@
       "mcp": {
         "destructiveHint": false,
         "idempotentHint": true,
-        "profile": "standard",
+        "profile": "headend",
         "readOnlyHint": false,
         "tool": "set_show_output"
       },
@@ -16890,7 +16890,7 @@
       "mcp": {
         "destructiveHint": false,
         "idempotentHint": true,
-        "profile": "standard",
+        "profile": "headend",
         "readOnlyHint": false,
         "tool": "set_show"
       },
@@ -16942,7 +16942,7 @@
       "mcp": {
         "destructiveHint": false,
         "idempotentHint": true,
-        "profile": "standard",
+        "profile": "headend",
         "readOnlyHint": true,
         "tool": "show_stats"
       },
@@ -16994,7 +16994,7 @@
       "mcp": {
         "destructiveHint": false,
         "idempotentHint": true,
-        "profile": "search",
+        "profile": "standard",
         "readOnlyHint": true,
         "tool": "snapshot"
       },
@@ -17298,7 +17298,7 @@
       "mcp": {
         "destructiveHint": false,
         "idempotentHint": true,
-        "profile": "search",
+        "profile": "standard",
         "readOnlyHint": false,
         "tool": "set_source"
       },
@@ -17452,7 +17452,7 @@
       "mcp": {
         "destructiveHint": false,
         "idempotentHint": true,
-        "profile": "search",
+        "profile": "standard",
         "readOnlyHint": true,
         "tool": "list_templates"
       },
@@ -17480,7 +17480,7 @@
       "mcp": {
         "destructiveHint": false,
         "idempotentHint": false,
-        "profile": "search",
+        "profile": "standard",
         "readOnlyHint": false,
         "tool": "save_template"
       },

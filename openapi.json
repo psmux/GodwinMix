@@ -10580,7 +10580,7 @@
             "type": "string"
           },
           "profile": {
-            "description": "MCP tool profile this token is meant for: \"standard\" or \"minimal\".",
+            "description": "MCP tool profile this token is meant for: \"standard\", \"minimal\" or \"headend\".",
             "type": "string"
           },
           "rehearsal": {

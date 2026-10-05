@@ -74,7 +74,7 @@ pub fn image_tokens(width: u32, height: u32) -> u32 {
 /// what lets CI compare it against a committed number.
 pub fn tool_sizes() -> Vec<(Profile, usize, usize)> {
     let registry = crate::control::methods::registry();
-    [Profile::Standard, Profile::Minimal]
+    [Profile::Standard, Profile::Minimal, Profile::Headend]
         .into_iter()
         .map(|p| {
             let tools = mcp_tools::tools(&registry, p);

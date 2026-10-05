@@ -205,7 +205,7 @@ fn register_snapshot(reg: &mut Registry<Call>) {
         .rest_at("GET", "/api/v1/snapshot/{id}")
         .tool(
             "snapshot",
-            Tier::Search,
+            Tier::Standard,
             "Look at the pictures. Returns a JPEG you can view directly. `id` is \"sheet\" \
              for a contact sheet of every source and the programme side by side (the best \
              first look), \"program\" for what is going out right now, or a source id for \
