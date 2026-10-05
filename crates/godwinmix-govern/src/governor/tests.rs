@@ -149,6 +149,9 @@ fn a_shows_measured_work_is_not_counted_twice_by_its_station() {
     // The station's sampler sees show a's encoder as another program.
     still(&g, 100, 3000);
     assert_eq!(g.headroom(None).cpu_millicores, 8000 - 666 - 3000 - 3000, "counted twice");
+    // The show says what it measures; the sampler's next reading has it.
     g.set_elsewhere(3000);
+    let r = crate::load::Reading { system_millicores: 3100, own_millicores: 100, ..Default::default() };
+    g.load_cell().store(&crate::load::Window::new(10).push(r.with_elsewhere(g.load_cell().elsewhere())));
     assert_eq!(g.headroom(None).cpu_millicores, 8000 - 666 - 3100, "once, as the station's own");
 }
