@@ -8,12 +8,16 @@
 //! export wants the same writer and a reader beside it, so both live here and
 //! the bundle uses them.
 //!
-//! What it does not do: zip64, encryption, compressed members. A member over
-//! 4 GiB is refused rather than written wrongly, and a compressed member read
-//! back names the method and says what wrote it. A collection is JSON and
+//! What it does not do: zip64, encryption, or any compression but deflate,
+//! which it reads (zip_inflate.rs) and never writes. A member over 4 GiB is
+//! refused rather than written wrongly, and a member compressed some other
+//! way names the method. A collection is JSON and
 //! pictures, so nothing here is a limit anybody meets.
 
 use std::collections::BTreeMap;
+
+#[path = "zip_inflate.rs"]
+mod inflate;
 use std::sync::LazyLock;
 
 /// Signatures, so the arithmetic below reads as the format does.
@@ -140,6 +144,7 @@ pub fn read(bytes: &[u8]) -> Result<BTreeMap<String, Vec<u8>>, ZipError> {
             return Err(ZipError::Truncated);
         }
         let method = u16::from_le_bytes([header[10], header[11]]);
+        let packed = u32::from_le_bytes([header[20], header[21], header[22], header[23]]) as usize;
         let size = u32::from_le_bytes([header[24], header[25], header[26], header[27]]) as usize;
         let name_len = u16::from_le_bytes([header[28], header[29]]) as usize;
         let extra_len = u16::from_le_bytes([header[30], header[31]]) as usize;
@@ -153,7 +158,7 @@ pub fn read(bytes: &[u8]) -> Result<BTreeMap<String, Vec<u8>>, ZipError> {
             // A directory entry carries no bytes. The paths do the nesting.
             continue;
         }
-        if method != 0 {
+        if method != 0 && method != 8 {
             return Err(ZipError::Compressed { name, method });
         }
         let local = bytes.get(offset..offset + 30).ok_or(ZipError::Truncated)?;
@@ -166,11 +171,15 @@ pub fn read(bytes: &[u8]) -> Result<BTreeMap<String, Vec<u8>>, ZipError> {
         let local_name = u16::from_le_bytes([local[26], local[27]]) as usize;
         let local_extra = u16::from_le_bytes([local[28], local[29]]) as usize;
         let from = offset + 30 + local_name + local_extra;
-        let data = bytes.get(from..from + size).ok_or(ZipError::Truncated)?;
-        if crc32(data) != u32::from_le_bytes([header[16], header[17], header[18], header[19]]) {
+        let raw = bytes.get(from..from + packed).ok_or(ZipError::Truncated)?;
+        let data = match method {
+            8 => inflate::inflate(raw, size).ok_or_else(|| ZipError::Corrupt { name: name.clone() })?,
+            _ => raw.to_vec(),
+        };
+        if data.len() != size || crc32(&data) != u32::from_le_bytes([header[16], header[17], header[18], header[19]]) {
             return Err(ZipError::Corrupt { name });
         }
-        out.insert(name, data.to_vec());
+        out.insert(name, data);
     }
     Ok(out)
 }
@@ -205,7 +214,7 @@ impl std::fmt::Display for ZipError {
             ZipError::Compressed { name, method } => write!(
                 f,
                 "{name} inside this archive is compressed (method {method}), and \
-                 this reader takes stored entries only. Unpack the archive with \
+                 this reader takes stored and deflated entries only. Unpack the archive with \
                  `unzip` and import the directory instead."
             ),
         }

@@ -1,0 +1,12 @@
+{
+  "name": "bokeh",
+  "title": "Bokeh sweep",
+  "kind": "overlay",
+  "blend": "screen",
+  "file": "bokeh.webm",
+  "duration_ms": 3000,
+  "transition": false,
+  "effect": true,
+  "licence": "Apache-2.0",
+  "source": "made for GodwinMix by dev/make-starter-fx.py"
+}

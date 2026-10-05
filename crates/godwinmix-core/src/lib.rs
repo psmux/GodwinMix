@@ -47,6 +47,7 @@ pub mod catalogue;
 pub mod config;
 pub mod convert;
 pub mod encoder;
+pub mod fx;
 pub mod graphics;
 pub mod gstutil;
 pub mod hls;
