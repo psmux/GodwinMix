@@ -9,8 +9,9 @@
 //! On Windows the first try goes through Kernel Streaming. Measured on a
 //! laptop with a USB2.0 FHD UVC WebCam on 2026-10-05: listing the cameras
 //! through Kernel Streaming alone took 40 ms against 2.4 s for Media
-//! Foundation's first probe, and 30 frames of 1080p took 0.8 to 1.1 s through
-//! `ksvideosrc` against 3.6 s through `mfvideosrc`. With another app holding
+//! Foundation's first probe, and a whole `gst-launch-1.0` run to 30 frames of
+//! 1080p took 1.8 to 2.1 s with `ksvideosrc` against 4.6 s with
+//! `mfvideosrc`. With another app holding
 //! the camera, `ksvideosrc` said "device already in use" after 0.4 s and
 //! `mfvideosrc` said "Internal data stream error" after 6.9 s. Media
 //! Foundation stays as the fallback, for a camera Kernel Streaming cannot see

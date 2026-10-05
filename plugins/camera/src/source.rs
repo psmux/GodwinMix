@@ -2,7 +2,7 @@
 //!
 //! `start` answers at once and the camera opens on a thread of its own; the
 //! picture follows when it is up. On the laptop this was written for, the
-//! open took four seconds for the device monitor and three to seven more for
+//! open took about four seconds for the device monitor and three more for
 //! Media Foundation, and the core gives `start` five. See capture-common's
 //! `opening` for the thread, and `crate::opening` for the order the camera is
 //! asked for in.

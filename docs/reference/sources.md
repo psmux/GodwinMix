@@ -32,6 +32,20 @@ beside the config file. Once that file exists it is the authoritative list:
 merging it with the config's own `[[sources]]` would mean a source deleted in the
 UI reappearing at the next restart. Delete the file to go back to the config.
 
+### When a source does not start
+
+A source that cannot be built when the show starts (a camera whose plugin did
+not answer `start` within five seconds, a file not there yet) stays in the
+runtime list and in `source.missing` with its error, and is tried again by
+itself. The first three tries follow the restart delay, half a second growing
+towards ten; after `stall.rebuild_attempts` (3) failures the wait is
+`stall.rebuild_backoff_secs` (30), doubling to `stall.rebuild_backoff_max_secs`
+(300). It reads `failed` in `event/source.state` between tries, and the log
+says `the source did not start; trying it again later` with the count and the
+wait. A source waiting on a piece being set up, a plugin or the browser
+renderer, is not on this clock: it starts when the piece is ready. Removing
+the source stops the tries.
+
 ### When a source stops delivering
 
 The supervisor watches every source's own output. A source that has produced
