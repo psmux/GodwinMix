@@ -795,6 +795,16 @@ class DestinationRefusal(TypedDict, total=False):
     message: str
     need: Union[Cost, None]
 
+class DeviceToken(TypedDict, total=False):
+    """One device token, without its secret."""
+
+    created: str
+    # When it was made, RFC 3339 in UTC.
+    id: str
+    # Recorded against every take in `program.history`, like any token id.
+    label: str
+    scope: Scope
+
 class DeviceTotal(TypedDict, total=False):
     """Use of one hardware device by a plan."""
 
@@ -3001,6 +3011,28 @@ class TlsInfo(TypedDict, total=False):
     urls: List[str]
     # `https://` addresses this mixer can be opened at, the LAN one first.
 
+class TokenCreateRequest(TypedDict, total=False):
+    """`token.create`."""
+
+    id: Optional[str]
+    # A slug to use as the id. Made from the label when absent, with `-2`, `-3` on the end when that one is taken.
+    label: Optional[str]
+    # What a person calls the device: "Sam's phone". Defaults to "Phone".
+    scope: Scope
+    # `read`, `operate` (the default) or `admin`.
+
+class TokenCreated(TypedDict, total=False):
+    """What `token.create` answers with. The only time the secret is shown."""
+
+    created: str
+    # When it was made, RFC 3339 in UTC.
+    id: str
+    # Recorded against every take in `program.history`, like any token id.
+    label: str
+    scope: Scope
+    token: str
+    # The secret. Send it as `Authorization: Bearer <token>`, or open the page at `https://<host>:<port>/#token=<token>`. It cannot be read back.
+
 class TokenInfo(TypedDict, total=False):
     """What the calling token is allowed to do, echoed back so a surface can grey out what it cannot reach instead of discovering it at the first refusal."""
 
@@ -3011,6 +3043,22 @@ class TokenInfo(TypedDict, total=False):
     # MCP tool profile this token is meant for: "standard" or "minimal".
     rehearsal: bool
     scopes: List[str]
+
+class TokenList(TypedDict, total=False):
+    """`token.list`."""
+
+    tokens: List[DeviceToken]
+
+class TokenRevokeRequest(TypedDict, total=False):
+    """`token.revoke`."""
+
+    id: str
+    # The device token's id, from `token.list`.
+
+class TokenRevoked(TypedDict, total=False):
+    """What `token.revoke` answers with."""
+
+    revoked: DeviceToken
 
 class ToolCallRequest(TypedDict, total=False):
     """`tool.call`."""
@@ -3382,6 +3430,9 @@ ResponseFormat = Literal['concise', 'detailed']
 # How a core that exits gets started again.
 RestartHow = Literal['supervised', 'none']
 
+# What a token may reach. Ordered: `admin` implies `operate` implies `read`. `Plugin` is the exception and sits below the ladder on purpose. It is what a plugin's own per instance token carries, and it grants exactly one thing: calling that plugin's own tools. It implies no reading and no operating, so a plugin that tries `program.take` is refused with -32002, which is what 04 section 8 asks for. Which plugin a token belongs to is `Token::plugin`, beside the scope rather than inside it, so `Scope` stays `Copy` and the method table stays a table of constants.
+Scope = Literal['plugin', 'read', 'operate', 'admin']
+
 # Where a piece stands.
 SetupState = Literal['ready', 'missing', 'running', 'failed', 'unavailable']
 
@@ -3602,6 +3653,9 @@ METHODS = (
     {"name": "template.get", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/template"), "summary": 'One template, with its SVG as written.'},
     {"name": "template.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/template/list"), "summary": 'The graphic templates: the built in pack and the SVG templates in the media library, each with its fields.'},
     {"name": "template.save", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/template/save"), "summary": 'Check an SVG template and write it into the media library.'},
+    {"name": "token.create", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/token/create"), "summary": 'Make a token for one phone or tablet, with the read, operate (the default) or admin scope. The secret is in this answer and nowhere else: the mixer keeps only a digest of it. Open the page at https://<host>:<port>/#token=<token> to sign the device in.'},
+    {"name": "token.list", "scope": "admin", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/token/list"), "summary": 'Every device token: its id, label, scope and when it was made. Never a secret.'},
+    {"name": "token.revoke", "scope": "admin", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/token/revoke"), "summary": "Take a device token back. The device's next call is refused, including on a connection it already has open."},
     {"name": "tool.call", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/tool/call"), "summary": "Call one of a plugin's tools, in MCP's shape. The name is `<plugin>/<tool>`, or the bare tool name when only one plugin has it."},
     {"name": "vitals.get", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/vitals"), "summary": "This show's health (its state and alarms, null in the first second) and the thresholds they are judged by."},
     {"name": "vitals.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/vitals/set"), "summary": 'Change the alarm thresholds, or whether a mosaic is kept up for the black and freeze checks while nobody is looking. Fields left out keep their defaults; a duration of 0 switches that check off. Applies within a second.'},
@@ -6256,6 +6310,39 @@ class GeneratedMethods:
         if replace is not None:
             params["replace"] = replace
         return await self._call("template.save", params)
+
+    async def token_create(
+        self,
+        *,
+        id: Optional[str] = None,
+        label: Optional[str] = None,
+        scope: Optional[Scope] = None,
+    ) -> TokenCreated:
+        """Make a token for one phone or tablet, with the read, operate (the default) or admin scope. The secret is in this answer and nowhere else: the mixer keeps only a digest of it. Open the page at https://<host>:<port>/#token=<token> to sign the device in."""
+        params: Dict[str, Any] = {}
+        if id is not None:
+            params["id"] = id
+        if label is not None:
+            params["label"] = label
+        if scope is not None:
+            params["scope"] = scope
+        return await self._call("token.create", params)
+
+    async def token_list(
+        self,
+    ) -> TokenList:
+        """Every device token: its id, label, scope and when it was made. Never a secret."""
+        params: Dict[str, Any] = {}
+        return await self._call("token.list", params)
+
+    async def token_revoke(
+        self,
+        id: str,
+    ) -> TokenRevoked:
+        """Take a device token back. The device's next call is refused, including on a connection it already has open."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        return await self._call("token.revoke", params)
 
     async def tool_call(
         self,

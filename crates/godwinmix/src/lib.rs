@@ -23,6 +23,7 @@ pub mod channels;
 pub mod cli;
 pub mod control;
 pub mod ctl;
+pub mod devices;
 pub mod feeds;
 mod job;
 pub mod mcp;

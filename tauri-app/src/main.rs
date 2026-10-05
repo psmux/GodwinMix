@@ -15,6 +15,8 @@
 //   * a tray icon, a menu, remembered window geometry, one instance;
 //   * two ways out, as menu items and as `godwinmix://quit` and
 //     `godwinmix://quit-all` navigations from the page;
+//   * "Let other devices on this network connect", off by default, which
+//     binds the mixer to every network on a port it keeps (see `lan`);
 //   * a restart of the mixer on this computer, from the menu, from a
 //     `godwinmix://restart` navigation, and whenever the mixer exits asking
 //     for one (`core.restart`).
@@ -26,6 +28,7 @@
 
 mod commands;
 mod core_link;
+mod lan;
 mod page_menu;
 mod plugins;
 mod restart;

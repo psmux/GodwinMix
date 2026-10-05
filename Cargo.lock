@@ -1485,6 +1485,7 @@ dependencies = [
  "libc",
  "parking_lot",
  "reqwest",
+ "ring",
  "schemars",
  "serde",
  "serde_json",

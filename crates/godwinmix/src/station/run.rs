@@ -27,7 +27,9 @@ pub struct Options {
 pub async fn run(opts: Options) -> Result<()> {
     let cfg = Config::load(&opts.config).with_context(|| format!("could not load {}", opts.config.display()))?;
     let bind = opts.bind.clone().unwrap_or_else(|| cfg.control.bind.clone());
-    let tokens = Arc::new(cfg.tokens(opts.rehearsal));
+    // The station keeps the machine's device tokens and answers `token.*`;
+    // every show reads the same file (see `child::command`).
+    let tokens = Arc::new(cfg.tokens(opts.rehearsal).with_devices(crate::devices::for_station(&opts.config)));
     crate::ui::configure(cfg.control.ui_dir.as_deref(), cfg.control.plugins_dir.as_deref());
     let _ = godwinmix_core::catalogue::init(Some(&cfg), opts.codecs.as_deref());
     let runtime = core_observe::runtime_dir(&opts.config);
