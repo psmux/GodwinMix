@@ -10,6 +10,10 @@ any other agent that speaks MCP or runs commands. A small model does the pack
 and the field changes well; designing a new template from nothing wants a
 stronger one.
 
+To keep what the agent makes, and to make backgrounds, tickers, web graphics,
+clips and virtual sets too, have it save each into the Graphics gallery: see
+[build your own graphics gallery with an AI agent](build-a-graphics-gallery-with-ai.md).
+
 ## 1. Connect the agent and give it the skill
 
 In GodwinMix, **Help > Connect an AI agent** shows the lines for your agent,

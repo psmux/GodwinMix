@@ -1847,6 +1847,363 @@ pub struct Frame {
     pub w: f64,
 }
 
+/// `gallery.duplicate`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct GalleryDuplicateRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    /// The copy's name. Default: the name with "copy" after it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+}
+
+/// `gallery.edit`: change what is said about an item, or its field values.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct GalleryEditRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    pub tags: Value,
+    /// Field values to keep with the item; `null` drops one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub values: Option<BTreeMap<String, Value>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub zone: Option<String>,
+}
+
+/// `gallery.export`: items as one zip to carry to another mixer.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct GalleryExportRequest {
+    /// The ids, as a list or one string with commas. Default: every item
+    /// that was not shipped with the mixer.
+    pub ids: Value,
+    /// Where to write the zip on the mixer. Default: the gallery's
+    /// `exports` folder.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+}
+
+/// The answer to `gallery.export`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct GalleryExported {
+    pub ids: Vec<String>,
+    pub path: String,
+    pub size_bytes: u64,
+    /// Where a browser downloads it from this mixer.
+    pub url: String,
+}
+
+/// One item by id: `gallery.remove`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct GalleryIdRequest {
+    /// The item's id from `gallery.list`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+}
+
+/// `gallery.import`: files made elsewhere, checked one by one.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct GalleryImportRequest {
+    /// The same as base64, with `filename`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub data: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub filename: Option<String>,
+    /// A file or a folder on the mixer: a gallery zip, an SVG, an HTML page
+    /// or a folder or zip with one, an OGraf package, a PNG or WebP, a WebM
+    /// or MOV. A folder of several of these imports each.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+    /// Write over items with the same id.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub replace: Option<bool>,
+}
+
+/// The answer to `gallery.import`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct GalleryImported {
+    pub added: Vec<GalleryItem>,
+    pub refused: Vec<Refused>,
+}
+
+/// One item, as `gallery.list` describes it.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct GalleryItem {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    /// The fields a template or OGraf graphic has, with their defaults.
+    pub fields: Vec<TemplateField>,
+    /// The slug every other gallery method takes: `storm-lower-third`.
+    pub id: String,
+    pub kind: GalleryKind,
+    /// Who or what saved it, in its own words: `claude-code`, `opencode`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub made_by: Option<String>,
+    /// Whether it moves by itself: a clip, a page, a ticker.
+    pub moves: bool,
+    /// A file of the item a page plays as its moving preview, served at
+    /// `/api/v1/gallery/{id}/files/{moving}`: a clip itself, or the item's
+    /// own `preview.webm`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub moving: Option<String>,
+    pub name: String,
+    pub origin: Origin,
+    /// The sources on this mixer drawing it now.
+    pub placed: Vec<String>,
+    /// When it was saved, as RFC 3339, when known.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub saved: Option<String>,
+    pub tags: Vec<String>,
+    /// Whether the picture under it shows through anywhere.
+    pub transparent: bool,
+    /// The address `source.add` takes for it, when it is one source.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub uri: Option<String>,
+    /// The values this item fills its fields with, over the defaults.
+    pub values: BTreeMap<String, Value>,
+    pub zone: Zone,
+}
+
+/// What an item is, which decides how it is drawn and how it is added.
+pub type GalleryKind = String;
+/// The values api_level 1 knows for [`GalleryKind`].
+pub const GALLERY_KIND_VALUES: &[&str] = &["template", "image", "clip", "html", "ograf", "ticker", "text", "set", "transition", "effect"];
+
+/// The answer to `gallery.list`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct GalleryList {
+    /// The folder saved items live in, on the mixer.
+    pub dir: String,
+    /// Folders that look like items and would not read, and why.
+    pub errors: Vec<String>,
+    pub items: Vec<GalleryItem>,
+    /// How many items match before `limit` cut the list.
+    pub total: i64,
+}
+
+/// `gallery.list`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct GalleryListRequest {
+    /// Only this kind: template, image, clip, html, ograf, ticker, text, set.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
+    /// At most this many. Default 50.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub limit: Option<i64>,
+    /// Words to look for in the name, tags, description and kind:
+    /// `"lower third"`, `"red news"`, `"background"`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub query: Option<String>,
+}
+
+/// `gallery.place`: add an item to a scene in its zone. Hidden unless
+/// `visible`; `gallery.show` takes it on air.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct GalleryPlaceRequest {
+    /// For a set: the camera source standing in it. Default: the source on
+    /// air.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub camera: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    /// The scene to add it to. Default: the scene on air.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scene: Option<String>,
+    /// Field values for this placement, over the item's own.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub values: Option<BTreeMap<String, Value>>,
+    /// Show it at once. Default false: placed hidden, ready to take.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub visible: Option<bool>,
+    /// Where on the canvas, over the item's own zone: full, lower-third,
+    /// bug, top, bottom, center, overlay.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub zone: Option<String>,
+}
+
+/// The answer to `gallery.place`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct GalleryPlaced {
+    pub id: String,
+    /// The scene item's name, for `gallery.show` and `scene.item.set`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub item: Option<String>,
+    /// True for a set, which becomes a scene of its own.
+    pub new_scene: bool,
+    pub next: String,
+    pub scene: String,
+    /// The source drawing it. For a set, the scene's sources are in `scene`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+    /// True when it was on the scene already, and only its values changed.
+    pub updated: bool,
+    pub visible: bool,
+}
+
+/// The answer to `gallery.preview`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct GalleryPreview {
+    /// One line about the picture, for a model reading it.
+    pub caption: String,
+    pub encoding: String,
+    pub format: String,
+    /// How it was made: `drawn` by the mixer now, `poster` (the item's own
+    /// preview file), `source` (a frame of a source drawing it), or `card`
+    /// (a placeholder naming the kind, when nothing could draw it here).
+    pub from: String,
+    pub height: u32,
+    pub id: String,
+    /// The JPEG, base64.
+    pub image: String,
+    pub width: u32,
+}
+
+/// `gallery.preview`: a picture of an item, drawn on demand.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct GalleryPreviewRequest {
+    /// What shows through the transparent parts: `checker` (the default),
+    /// `black`, `white`, or a colour `#rrggbb`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub background: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    /// Field values to try, over the item's own, without saving them.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub values: Option<BTreeMap<String, Value>>,
+    /// Pixels wide, 64 to 1920. Default 960, which is what reading a lower
+    /// third needs.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub width: Option<u32>,
+}
+
+/// `gallery.save`: one call for any kind. Give exactly one of `svg`, `html`,
+/// `data`, `file`, `source` or `set`; the kind is worked out from it.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct GallerySaveRequest {
+    /// A picture or a clip as base64, or as a `data:` URI.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub data: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    /// A file or a folder on the mixer's machine: an SVG, a picture, a clip,
+    /// an HTML page or a folder holding one, an OGraf package, a zip.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file: Option<String>,
+    /// The name `data` had, for its type: `logo.png`, `sting.webm`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub filename: Option<String>,
+    /// More files an HTML page loads, by name: text, or a `data:` URI.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub files: Option<BTreeMap<String, Value>>,
+    /// A whole HTML page, with its CSS and script inline. Transparent where
+    /// the page has no background.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub html: Option<String>,
+    /// template, image, clip, html, ograf, ticker, text or set. Usually left
+    /// out: it is worked out from what you give.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
+    /// Who made it, in a word: `claude-code`, `opencode`, `pi`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub made_by: Option<String>,
+    /// Say it moves, or does not, when the gallery would guess wrong.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub moves: Option<bool>,
+    /// What people call it: `"Storm warning lower third"`. The id is made
+    /// from it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// Write over an item with the same id. Every source drawing it is drawn
+    /// again.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub replace: Option<bool>,
+    /// A virtual set: `{"background": ..., "foreground": ..., "settings":
+    /// {...}}`. Each picture is a gallery id, a media file, a path or a
+    /// `data:` URI.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub set: Option<SetSpec>,
+    /// A ticker or text source as `source.add` takes it: `{"uri":
+    /// "ticker:", "params": {...}}`.
+    pub source: Value,
+    /// A whole SVG document. With `{{fields}}` in it, it is a template;
+    /// without, a picture.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub svg: Option<String>,
+    /// Words to find it by: `["news", "red"]`, or `"news, red"`.
+    pub tags: Value,
+    /// Say it has transparency, or not, when the gallery would guess wrong.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub transparent: Option<bool>,
+    /// What to fill a template's fields with, by name.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub values: Option<BTreeMap<String, Value>>,
+    /// Where it goes when placed: full (a background), lower-third, bug,
+    /// top, bottom, center, overlay. Worked out when left out.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub zone: Option<String>,
+}
+
+/// The answer to `gallery.save`, `gallery.edit` and `gallery.duplicate`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct GallerySaved {
+    pub item: GalleryItem,
+    /// What to call next.
+    pub next: String,
+    /// The folder it was written to.
+    pub path: String,
+    /// Sources drawing it that were drawn again.
+    pub redrawn: Vec<String>,
+    /// Things that did not stop the save and are worth fixing.
+    pub warnings: Vec<String>,
+}
+
+/// `gallery.show`: take a placed item on air, or off.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct GalleryShowRequest {
+    /// The gallery id, the source id or the scene item's name.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    /// Default: the scene on air.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scene: Option<String>,
+    /// True to show, false to hide. Default true.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub visible: Option<bool>,
+}
+
+/// The answer to `gallery.show`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct GalleryShown {
+    pub item: String,
+    pub scene: String,
+    /// For a set: the scene was taken to the programme rather than an item
+    /// shown.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub took: Option<bool>,
+    pub visible: bool,
+}
+
 /// One item's derived box.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -2877,6 +3234,11 @@ pub struct Ograf {
     pub version: Option<String>,
 }
 
+/// Where an item came from.
+pub type Origin = String;
+/// The values api_level 1 knows for [`Origin`].
+pub const ORIGIN_VALUES: &[&str] = &["shipped", "agent", "uploaded"];
+
 pub type OutputState = String;
 /// The values api_level 1 knows for [`OutputState`].
 pub const OUTPUT_STATE_VALUES: &[&str] = &["connecting", "live", "reconnecting", "failed"];
@@ -3454,6 +3816,17 @@ pub struct Record {
     pub parent: Option<Id>,
 }
 
+/// One file the import would not take.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Refused {
+    pub file: String,
+    /// What to do about it.
+    pub fix: String,
+    /// What was wrong with it.
+    pub reason: String,
+}
+
 /// One asset an import could not put back.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -3955,6 +4328,23 @@ pub struct SetSourceRequest {
     /// How a remote source's media travels: `rtp`, `srt` or `whip`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub transport: Option<BridgeTransport>,
+}
+
+/// The pictures and settings of a virtual set.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SetSpec {
+    /// The plate behind the presenter.
+    pub background: String,
+    /// A desk or a frame in front of the presenter, transparent elsewhere.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub foreground: Option<String>,
+    /// The layout. Default `virtual-set`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub layout: Option<String>,
+    /// The layout's settings: `presenter_scale` (0.3 to 1), `presenter_x`
+    /// (0 to 1), `screen` (green, blue, none).
+    pub settings: BTreeMap<String, Value>,
 }
 
 /// `setup.start` and `setup.get`: one piece by name.
@@ -5199,6 +5589,11 @@ pub struct VitalsConfig {
     pub window_secs: Option<f64>,
 }
 
+/// Where an item sits on the canvas when it is placed.
+pub type Zone = String;
+/// The values api_level 1 knows for [`Zone`].
+pub const ZONE_VALUES: &[&str] = &["full", "lower-third", "bug", "top", "bottom", "center", "overlay"];
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ProgramTookEvent {
@@ -5408,7 +5803,7 @@ pub struct MethodInfo {
     pub rest: Option<(&'static str, &'static str)>,
 }
 
-pub const METHODS: [MethodInfo; 195] = [
+pub const METHODS: [MethodInfo; 205] = [
     MethodInfo { name: "adbreak.end", summary: "Cut a running ad short, or disarm one that is scheduled.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/end")) },
     MethodInfo { name: "adbreak.start", summary: "Interrupt the programme with a clip, then rejoin live when it ends.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/start")) },
     MethodInfo { name: "agent.state", summary: "The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/agent/state")) },
@@ -5455,6 +5850,16 @@ pub const METHODS: [MethodInfo; 195] = [
     MethodInfo { name: "filter.list", summary: "Every filter in place, with what it is and where it sits.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/filters")) },
     MethodInfo { name: "filter.remove", summary: "Take a filter out of the pipeline.", scope: "operate", mutating: true, destructive: true, rest: Some(("DELETE", "/api/v1/filters/{id}")) },
     MethodInfo { name: "filter.set", summary: "Change a filter's settings in place. A filter that cannot take the change while running says so rather than being restarted behind your back.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/filters/{id}/set")) },
+    MethodInfo { name: "gallery.duplicate", summary: "Copy an item, shipped ones included, under a new name.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/gallery/duplicate")) },
+    MethodInfo { name: "gallery.edit", summary: "Change an item's name, tags, description, zone or the values it fills its fields with.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/gallery/edit")) },
+    MethodInfo { name: "gallery.export", summary: "Write gallery items to one zip on the mixer, to carry a look to another mixer.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/gallery/export")) },
+    MethodInfo { name: "gallery.import", summary: "Take files into the gallery: a gallery zip, an SVG, an HTML page or folder, an OGraf package, a picture or a clip. Each is checked; refused ones say why and how to fix them.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/gallery/import")) },
+    MethodInfo { name: "gallery.list", summary: "The Graphics gallery: every lower third, background, ticker, bug, title card, page, clip and virtual set, made here or shipped, with what each is and where it goes.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/gallery/list")) },
+    MethodInfo { name: "gallery.place", summary: "Add a gallery item to a scene in its zone (a lower third low on the left, a background under everything, a bug in the corner), hidden until gallery.show. A set becomes a new scene.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/gallery/place")) },
+    MethodInfo { name: "gallery.preview", summary: "A picture of a gallery item as it would land on the canvas, transparent parts over a checkerboard, drawn on demand.", scope: "read", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/gallery/preview")) },
+    MethodInfo { name: "gallery.remove", summary: "Delete a saved item and its files. Refused while a source shows it.", scope: "operate", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/gallery/remove")) },
+    MethodInfo { name: "gallery.save", summary: "Save a graphic of any kind into the gallery with a name, tags and a description: an SVG template, an HTML page, a picture or clip, a ticker or text, or a virtual set.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/gallery/save")) },
+    MethodInfo { name: "gallery.show", summary: "Show a placed gallery item on air, or hide it, taking its scene when that scene is not on air. For a set, take its scene.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/gallery/show")) },
     MethodInfo { name: "governor.calibrate", summary: "Measure this machine's encoders again, in the background, a few seconds of every core. Refused while anything is on air unless `confirm` is true.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/governor/calibrate")) },
     MethodInfo { name: "governor.status", summary: "The resource governor: when this machine was measured, what is in use and free on the CPU and each GPU encoder, and what was shed to keep the programme whole.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/governor/status")) },
     MethodInfo { name: "log.gst", summary: "Raise GStreamer's own debug categories for a while, then let them fall back on their own.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/log/gst")) },
@@ -6143,6 +6548,56 @@ impl Client {
     /// Change a filter's settings in place. A filter that cannot take the change while running says so rather than being restarted behind your back.
     pub async fn filter_set(&self, params: &SetFilterRequest) -> Result<FilterRecord> {
         self.call("filter.set", params).await
+    }
+
+    /// Copy an item, shipped ones included, under a new name.
+    pub async fn gallery_duplicate(&self, params: &GalleryDuplicateRequest) -> Result<GallerySaved> {
+        self.call("gallery.duplicate", params).await
+    }
+
+    /// Change an item's name, tags, description, zone or the values it fills its fields with.
+    pub async fn gallery_edit(&self, params: &GalleryEditRequest) -> Result<GallerySaved> {
+        self.call("gallery.edit", params).await
+    }
+
+    /// Write gallery items to one zip on the mixer, to carry a look to another mixer.
+    pub async fn gallery_export(&self, params: &GalleryExportRequest) -> Result<GalleryExported> {
+        self.call("gallery.export", params).await
+    }
+
+    /// Take files into the gallery: a gallery zip, an SVG, an HTML page or folder, an OGraf package, a picture or a clip. Each is checked; refused ones say why and how to fix them.
+    pub async fn gallery_import(&self, params: &GalleryImportRequest) -> Result<GalleryImported> {
+        self.call("gallery.import", params).await
+    }
+
+    /// The Graphics gallery: every lower third, background, ticker, bug, title card, page, clip and virtual set, made here or shipped, with what each is and where it goes.
+    pub async fn gallery_list(&self, params: &GalleryListRequest) -> Result<GalleryList> {
+        self.call("gallery.list", params).await
+    }
+
+    /// Add a gallery item to a scene in its zone (a lower third low on the left, a background under everything, a bug in the corner), hidden until gallery.show. A set becomes a new scene.
+    pub async fn gallery_place(&self, params: &GalleryPlaceRequest) -> Result<GalleryPlaced> {
+        self.call("gallery.place", params).await
+    }
+
+    /// A picture of a gallery item as it would land on the canvas, transparent parts over a checkerboard, drawn on demand.
+    pub async fn gallery_preview(&self, params: &GalleryPreviewRequest) -> Result<GalleryPreview> {
+        self.call("gallery.preview", params).await
+    }
+
+    /// Delete a saved item and its files. Refused while a source shows it.
+    pub async fn gallery_remove(&self, params: &GalleryIdRequest) -> Result<BTreeMap<String, Value>> {
+        self.call("gallery.remove", params).await
+    }
+
+    /// Save a graphic of any kind into the gallery with a name, tags and a description: an SVG template, an HTML page, a picture or clip, a ticker or text, or a virtual set.
+    pub async fn gallery_save(&self, params: &GallerySaveRequest) -> Result<GallerySaved> {
+        self.call("gallery.save", params).await
+    }
+
+    /// Show a placed gallery item on air, or hide it, taking its scene when that scene is not on air. For a set, take its scene.
+    pub async fn gallery_show(&self, params: &GalleryShowRequest) -> Result<GalleryShown> {
+        self.call("gallery.show", params).await
     }
 
     /// Measure this machine's encoders again, in the background, a few seconds of every core. Refused while anything is on air unless `confirm` is true.

@@ -257,6 +257,8 @@ fn the_table_matches_the_scopes_in_the_protocol_document() {
             "core.restart",
             "core.shutdown",
             "filter.remove",
+            // A graphic deleted takes its files with it, like a clip.
+            "gallery.remove",
             "media.remove",
             "node.remove",
             "output.remove",

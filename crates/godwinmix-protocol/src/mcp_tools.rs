@@ -33,9 +33,9 @@ fn search_tool(hot: usize, total: usize) -> Value {
         "name": SEARCH_TOOL,
         "description": format!(
             "Find a tool that is not in this list. {hot} of the mixer's {total} tools are \
-             shown; the rest (outputs, media, ad breaks, seeking, snapshots) are reachable \
-             by searching here and then calling the name that comes back. Search by what \
-             you want to do, in plain words: \"stop sending to youtube\", \"play a clip\". \
+             shown; the rest (outputs, the graphics gallery, media, ad breaks, snapshots) are \
+             reachable by searching here and then calling the name that comes back. Search by \
+             what you want to do, in plain words: \"make a lower third\", \"play a clip\". \
              Each match carries its description and input schema, ready to call."
         ),
         "inputSchema": {

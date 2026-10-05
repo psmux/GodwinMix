@@ -123,6 +123,12 @@
         },
         {
           "command": "view.panel",
+          "arg": "core/graphics",
+          "title": "Graphics",
+          "check": "panel"
+        },
+        {
+          "command": "view.panel",
           "arg": "core/alerts",
           "title": "Alerts",
           "check": "panel"
