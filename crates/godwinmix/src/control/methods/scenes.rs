@@ -219,9 +219,30 @@ pub(crate) fn scene_error(call: &Call, e: anyhow::Error) -> RpcError {
     if let Some(refusal) = conflicts::refusal(call, &e) {
         return refusal;
     }
-    let text = format!("{e:#}");
+    let text = with_next_step(format!("{e:#}"));
     let code = if text.contains("there is no") { ErrorCode::NotFound } else { ErrorCode::NotInState };
     RpcError::new(code, text).with("method", call.method)
+}
+
+/// A missing scene's refusal, with the step that usually fixes it: the
+/// programme is a bare source, which has no scene to add to until one is made
+/// from it. Agents asked for a lower third hit this first, every time.
+fn with_next_step(mut text: String) -> String {
+    if text.starts_with("there is no scene called") {
+        text.push_str(
+            ". To draw on what is on air when it is a source, make a scene of it with \
+             create_scene_from {\"sources\": [\"<that source>\"], \"name\": \"Live\"} and take it",
+        );
+    }
+    text
+}
+
+#[cfg(test)]
+#[test]
+fn a_missing_scene_names_the_call_that_makes_one() {
+    let text = with_next_step("there is no scene called \"studio\". This collection has: A".into());
+    assert!(text.contains("create_scene_from"), "{text}");
+    assert_eq!(with_next_step("something else".into()), "something else");
 }
 
 /// The scene server, which every one of these needs.

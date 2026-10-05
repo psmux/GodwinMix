@@ -86,15 +86,15 @@ impl Tool {
             home()?
         };
         Some(match (self, project) {
-            (Self::Claude, true) => root.join(".claude/skills"),
-            (Self::Claude, false) => root.join(".claude/skills"),
-            (Self::Codex, true) => root.join(".codex/skills"),
-            (Self::Codex, false) => root.join(".codex/skills"),
-            (Self::Gemini, true) => root.join(".gemini/skills"),
-            (Self::Gemini, false) => root.join(".gemini/skills"),
-            (Self::Opencode, true) => root.join(".opencode/skills"),
-            (Self::Opencode, false) => root.join(".config/opencode/skills"),
-            (Self::Pi, _) => root.join(".agents/skills"),
+            (Self::Claude, true) => root.join(".claude").join("skills"),
+            (Self::Claude, false) => root.join(".claude").join("skills"),
+            (Self::Codex, true) => root.join(".codex").join("skills"),
+            (Self::Codex, false) => root.join(".codex").join("skills"),
+            (Self::Gemini, true) => root.join(".gemini").join("skills"),
+            (Self::Gemini, false) => root.join(".gemini").join("skills"),
+            (Self::Opencode, true) => root.join(".opencode").join("skills"),
+            (Self::Opencode, false) => root.join(".config").join("opencode").join("skills"),
+            (Self::Pi, _) => root.join(".agents").join("skills"),
         })
     }
 }
