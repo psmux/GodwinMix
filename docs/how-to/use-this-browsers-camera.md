@@ -21,8 +21,12 @@ is one row instead, **This browser's camera**.
 Press **Add**. The browser asks once for the camera and the microphone; allow
 both. It starts sending straight away, and as soon as the mixer has the
 source it is put in the scene you were adding to, the same as a camera on the
-mixer. The source is named after the browser and the system,
-`browser-chrome-macos` for example.
+mixer. The source is named after the browser and the system, with four
+letters of its own on the end, `browser-chrome-macos-k3f9` for example. The
+browser keeps that name, so it comes back as the same source next time.
+
+The last row under **Cameras** is **A phone's camera**, for a phone instead
+of this computer; see [Add a phone's camera](#add-a-phones-camera).
 
 **Microphones and audio** lists this browser's microphones the same way, for
 sound with no picture. The palette (Ctrl+K) has it as well, as Use this
@@ -65,7 +69,9 @@ It opens out by itself when something goes wrong, so the reason is on screen.
 Under the picture, once a second while the bar is open, is what is going
 out: the bit rate, the picture size and frame rate, and the round trip to the
 mixer. It sends 1280x720 at up to 30 frames a second, at most
-2.5 Mbps. On a slow link it keeps the picture size and gives up frame rate.
+2.5 Mbps. On a slow link it keeps the picture size and gives up frame rate,
+because every change of size holds the source on its last picture for a
+second or so while the mixer's decoder starts again at the new size.
 
 ## While it is live
 
@@ -98,7 +104,7 @@ while the first is still live is refused, as before.
 
 A refusal that waiting will not cure stops at once with the mixer's own
 sentence: a key the channel does not have, a channel that is switched off or
-does not take WHIP, or a browser with no H.264.
+does not take WHIP, or a browser that can send neither H.264 nor VP8.
 
 ## Stop
 
@@ -117,15 +123,94 @@ that it reuses the channel. If somebody has switched WHIP off on it, switched
 the channel off, or turned off **Put each live stream in Sources**, it puts
 those back with `channel.set` before it publishes.
 
-The stream on that channel is named after the browser and the system,
-`chrome-macos`, `firefox-windows`, `safari-ios`, so the source is
-`browser-chrome-macos`. Two tabs in the same browser want the same name: the
-second is turned away while the first is live, and keeps trying until the
-first stops.
+The stream on that channel is named after the browser and the system, with
+four letters made up the first time and kept in the browser:
+`chrome-macos-k3f9`, `safari-ios-m7qd`. So the source is
+`browser-chrome-macos-k3f9`, and two laptops or two phones of the same kind
+never ask for the same name. Two tabs in the same browser do: the second is
+turned away while the first is live, and keeps trying until the first stops.
 
-Nothing is decoded on the way in: the picture arrives as H.264, which every
-current browser sends. The sound arrives as Opus and is turned into AAC, as
-for any WHIP publisher on a channel.
+Nothing is decoded on the way in when the picture arrives as H.264, which
+every current desktop browser sends. A browser that offers only VP8, which
+some Android ones do, is taken too where the mixer has a VP8 decoder and an
+H.264 encoder: its picture is decoded and encoded again as H.264, which costs
+the mixer some CPU for as long as that phone is live. The sound arrives as
+Opus and is turned into AAC, as for any WHIP publisher on a channel.
+
+## Add a phone's camera
+
+A phone on the same network as the mixer becomes a source with one scan, and
+needs no app and no operator token. Each phone that scans the code is a
+source of its own, so three phones are three cameras.
+
+1. On the mixer's page, press **Add a source** (Ctrl+N), then **Cameras**,
+   then **Show code** on **A phone's camera**. The first time this makes the
+   **Browser** channel and installs the ingest plugin, as **Add** does above.
+2. Point the phone's camera app at the code and open the link it finds. The
+   link is the mixer's https address with `/join/` on the end, and the
+   channel's key in the part after `#`.
+3. The first time, the phone warns that the connection is not private. The
+   certificate is the mixer's own, made for this machine. The dialog shows the
+   first four pairs of its fingerprint; check them against the phone's
+   certificate details, then go on to the page.
+4. Allow the camera and the microphone. Type a name in **Name** if you like,
+   such as `Ana's phone`; the line under it says the source it becomes,
+   `browser-anas-phone`. Leave it empty and the phone keeps a made up name of
+   its own, `browser-safari-ios-m7qd`.
+5. Press **Go live**. The dialog on the mixer lists the phone as soon as it is
+   live, and the source appears in Sources by itself.
+
+On the phone:
+
+* **Flip camera** switches between the front and the back camera. It is only
+  there on a phone, or a computer, with more than one camera. The front
+  camera's picture is mirrored on the phone, as a selfie camera is, and sent
+  the right way round.
+* Hold the phone the way you want the picture before you press **Go live**.
+  Upright, it sends 720x1280; on its side, 1280x720. Turning it while it is
+  live works, but the source holds its last picture for a second or so while
+  the mixer catches up, so lock the phone's rotation once it is set up.
+* The page keeps the screen on while it is live, where the browser allows it.
+  A phone that locks or switches to another app stops its camera, and the
+  source shows its last picture until the page is back in front. Keep the
+  phone plugged in: the camera, the encoder and a screen that never sleeps
+  drain a battery much faster than a call does.
+* Firefox on Android has no way to keep the screen on. Set the phone's own
+  screen timeout to its longest while it is a camera.
+
+### When the code is not shown
+
+The dialog says why instead of showing a code a phone cannot use:
+
+* **This mixer only listens on this computer.** A phone cannot reach a mixer
+  bound to `127.0.0.1`. In the desktop app, switch on **Let other devices on
+  this network connect** in Settings. On a server, set
+  `[control] bind = "0.0.0.0:8080"` and restart the mixer.
+* **HTTPS is off on this mixer.** A phone's browser gives a page its camera
+  only over https. Turn it back on with `[control.tls] enabled = true` and
+  restart ([Serve the mixer over https](serve-https.md)).
+
+### When the phone says Reconnecting and never goes live
+
+The page reached the mixer, but the picture cannot. WebRTC media goes to the
+mixer over UDP, on one port per phone from 8189 up to 8204 (the ingest
+plugin's `webrtc_port`). A firewall on the mixer's machine that lets the page
+through on its TCP port but not UDP stops the picture. Allow inbound UDP 8189
+to 8204 on the mixer's machine:
+
+```sh
+# Linux with ufw
+sudo ufw allow 8189:8204/udp
+```
+
+```powershell
+# Windows, from an administrator PowerShell
+New-NetFirewallRule -DisplayName "GodwinMix WebRTC" -Direction Inbound -Protocol UDP -LocalPort 8189-8204 -Action Allow
+```
+
+On macOS with the firewall on, allow GodwinMix when the system asks. A guest
+Wi-Fi that keeps devices apart from each other (client isolation) stops it
+too; put the phone on the same network the mixer is on.
 
 ## When the browser says it cannot use a camera
 
@@ -163,7 +248,9 @@ server:
 http://localhost:8080/join/#whip=/whip/browser/laptop&key=<the channel's key>&title=Laptop
 ```
 
-That is how remote guests will join, once invites exist. They do not yet:
+The phone code is the same page with `channel=` in place of `whip=`, so each
+phone picks its own stream name. That is how remote guests will join, once
+invites exist. They do not yet:
 today the link carries the channel's own key, so give it only to someone you
 would give the key to. [The publisher page](../reference/publisher-page.md)
 lists what the link takes.

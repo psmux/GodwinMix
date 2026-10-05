@@ -12,7 +12,8 @@ import { Session } from "./session.js";
 import { LevelMeter } from "./meter.js";
 import { StatsLine } from "./stats.js";
 import { ScreenAwake } from "./wake.js";
-import { flipCamera, facingOf } from "./flip.js";
+import { facingOf } from "./flip.js";
+import { wire } from "./wiring.js";
 
 /**
  * @param {HTMLElement} host
@@ -50,7 +51,7 @@ class Publisher {
     this.stats = new StatsLine(r.stats, () => this.session && this.session.pc);
     this.session = null;
     this.awake = opts.keepAwake ? new ScreenAwake() : null;
-    this.wire();
+    this.unwire = wire(this);
     this.open().then(() => {
       refreshDevices(this);
       if (opts.autostart && (this.tracks.video || this.tracks.audio)) this.startPublishing();
@@ -66,25 +67,6 @@ class Publisher {
       use: (kind, deviceId) => this.switchTo(kind, deviceId),
       destroy: () => this.destroy(),
     };
-  }
-
-  wire() {
-    const r = this.r;
-    r.go.onclick = () => (this.session && this.session.active ? this.stopPublishing() : this.startPublishing());
-    r.camera.onchange = () => this.switchTo("video", r.camera.value);
-    r.mic.onchange = () => this.switchTo("audio", r.mic.value);
-    r.processing.onchange = () => this.switchTo("audio", r.mic.value);
-    r.cameraMute.onclick = () => this.toggle("video");
-    r.micMute.onclick = () => this.toggle("audio");
-    r.flip.onclick = async () => {
-      r.flip.disabled = true;
-      await flipCamera(this).catch(() => {});
-      r.flip.disabled = false;
-    };
-    this.onDevices = () => refreshDevices(this);
-    this.onHidden = () => this.applyVisibility();
-    navigator.mediaDevices.addEventListener("devicechange", this.onDevices);
-    document.addEventListener("visibilitychange", this.onHidden);
   }
 
   async open() {
@@ -160,8 +142,7 @@ class Publisher {
     this.meter.destroy();
     if (this.awake) this.awake.destroy();
     for (const t of Object.values(this.tracks)) if (t) t.stop();
-    navigator.mediaDevices.removeEventListener("devicechange", this.onDevices);
-    document.removeEventListener("visibilitychange", this.onHidden);
+    this.unwire();
     this.r.root.remove();
   }
 }

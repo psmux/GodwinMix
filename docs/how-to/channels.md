@@ -181,8 +181,8 @@ OBS 30 or later, set Service to WHIP, the server to the WHIP URL from Connect
 (`http://192.168.1.20:8080/whip/sunday-service/main`), and the Bearer Token to
 the key. A browser WHIP client takes the same two things.
 
-The picture has to be H.264, which every browser can send; a client set to
-VP8 or VP9 is turned away with a sentence saying so. The sound arrives as
+The picture should be H.264, which every desktop browser can send, and is then never decoded. VP8, which some Android browsers send instead, is taken too and encoded as H.264 on the mixer, at some cost in CPU; a client set to
+VP9 or AV1 alone is turned away with a sentence saying so. The sound arrives as
 Opus and is turned into AAC, the one thing the mixer converts on the way in.
 
 WebRTC's media travels on UDP, on a port from a small range starting at the

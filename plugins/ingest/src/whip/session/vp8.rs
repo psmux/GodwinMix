@@ -12,10 +12,12 @@
 //! which is BSD licensed and ships in every build, otherwise.
 
 use gstreamer as gst;
+use gstreamer::prelude::*;
 
-/// What the VP8 path needs besides an H.264 encoder. Read by `dev/gst_trim.py`,
-/// so the bundled runtime keeps them.
-pub const VP8_NEEDED: &[&str] = &["rtpvp8depay", "vp8dec", "videoconvert", "h264parse", "openh264enc"];
+/// What the VP8 path needs besides an H.264 encoder. Read by `dev/gst_trim.py`
+/// too, so the bundled runtime keeps them; openh264enc is kept already,
+/// because the codec catalogue names it.
+pub const VP8_NEEDED: &[&str] = &["rtpvp8depay", "vp8dec", "videoconvert", "h264parse"];
 
 /// The encoders tried, in order.
 const ENCODERS: &[&str] = &["x264enc", "openh264enc"];
@@ -31,8 +33,7 @@ const GOP: u32 = 60;
 /// Can this machine take VP8 at all? Asked before VP8 goes in the answer, so
 /// a mixer without the elements still refuses with a sentence that says so.
 pub fn available() -> bool {
-    let decode = ["rtpvp8depay", "vp8dec", "videoconvert", "h264parse"];
-    decode.iter().all(|e| gmx_netkit::elements::exists(e)) && encoder_name().is_some()
+    VP8_NEEDED.iter().all(|e| gmx_netkit::elements::exists(e)) && encoder_name().is_some()
 }
 
 /// The video the answer may take: H.264 always, VP8 too when `vp8`. H.264

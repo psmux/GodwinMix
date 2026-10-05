@@ -238,10 +238,10 @@ header. These routes are not behind the control token: the channel's key is
 what lets a publisher in. A refusal is the status and the same sentence an
 RTMP publisher gets, as plain text: `403` for a key or a channel that is off
 or does not take WHIP, `404` for no such channel, `409` for a stream name
-already live, `400` for an offer with no H.264, `503` when the ingest plugin
+already live, `400` for an offer with neither H.264 nor VP8, `503` when the ingest plugin
 is not running.
 
-The video must be H.264, and is never decoded. Opus sound is turned into AAC
+H.264 video is never decoded. VP8, from a browser that offers nothing else, is decoded and encoded as H.264 where the ingest plugin has a VP8 decoder and an H.264 encoder. Opus sound is turned into AAC
 on the way in. WebRTC media uses one UDP port per publisher from the range in
 the `webrtc` row: GStreamer's `webrtcbin` does ICE with libnice, which cannot
 share one UDP port between sessions, so a range is what it allows.
