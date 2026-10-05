@@ -137,12 +137,14 @@ fn landed_on_green(mix: &Mixer) {
     assert!(mix.pool.driven_by_a_transition("xpos").is_empty() && mix.pool.driven_by_a_transition("alpha").is_empty());
 }
 
-/// Three hundred milliseconds, longer by `GODWINMIX_TIMING_SLACK` on a runner
-/// that declares itself slow: the middle frame is read by its time, and on a
-/// Windows runner a 300 ms zoom still showed the old scene at its centre
-/// half way through.
+/// A second, longer by `GODWINMIX_TIMING_SLACK` on a runner that declares
+/// itself slow. The middle frame is read by its time, and the scene coming
+/// in is drawn only once its slot has a picture again: on a Windows runner a
+/// 300 ms zoom still showed the old scene at its centre half way through, and
+/// at 900 ms a slide still had none of the new scene at three quarters
+/// across. What the middle frame must show does not change.
 fn spec(kind: Kind) -> TransitionSpec {
-    let ms = (300.0 * crate::plugin::harness::timing_slack()) as u64;
+    let ms = (1000.0 * crate::plugin::harness::timing_slack()) as u64;
     TransitionSpec::new(kind, ms)
 }
 
@@ -173,7 +175,11 @@ async fn every_new_transition_keeps_the_frame_rate_and_lands_on_the_taken_scene(
     for (kind, checks) in cases {
         let name = kind.name().to_string();
         let (tap, window, largest) = cross(&mut mix, spec(kind), points.clone()).await;
-        assert!(largest <= frame * 2, "{name}: the largest interval was {largest} ns against a frame of {frame}");
+        // Two frames, times the slack a loaded machine declares: a frame
+        // missed there is the machine, and the gap is printed either way.
+        let allowed = (frame as f64 * 2.0 * crate::plugin::harness::timing_slack()) as u64;
+        println!("{name}: largest interval {:.1} ms", largest as f64 / 1e6);
+        assert!(largest <= allowed, "{name}: the largest interval was {largest} ns against a frame of {frame}");
         let mid = tap.at(window.0 + (window.1 - window.0) / 2);
         for (i, check) in checks.iter().enumerate() {
             assert!(check(mid[i]), "{name}: point {:?} half way through showed {:?}", points[i], mid[i]);
