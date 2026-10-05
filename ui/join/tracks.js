@@ -23,10 +23,18 @@ export async function openKind(pub, kind, deviceId, exact) {
   }
   const old = pub.tracks[kind];
   if (old && track) track.enabled = old.enabled;
-  if (old) old.stop();
+  await install(pub, kind, track);
+}
+
+/**
+ * Put `track` in place of the one open now, stopping that one, and on the
+ * wire without a new offer if there is a publish.
+ */
+export async function install(pub, kind, track) {
+  const old = pub.tracks[kind];
+  if (old && old !== track) old.stop();
   pub.tracks[kind] = track;
-  if (track) track.onended = () => (pub.r.error.textContent = `The ${what} stopped. Pick it again, or another one.`);
-  // On the wire without a new offer, if there is a publish.
+  if (track) track.onended = () => (pub.r.error.textContent = `The ${WHAT[kind]} stopped. Pick it again, or another one.`);
   if (pub.session) await pub.session.setTrack(kind, track).catch(() => {});
   pub.paintTracks();
 }
@@ -38,6 +46,8 @@ export async function refreshDevices(pub) {
     const id = (kind) => pub.tracks[kind]?.getSettings?.().deviceId || "";
     fillSelect(pub.r.camera, cameras, pub.tracks.video ? id("video") : "off", "No camera");
     fillSelect(pub.r.mic, mics, id("audio"), "");
+    // A phone has a front and a back camera; one camera has nothing to flip to.
+    pub.r.flip.hidden = cameras.length < 2;
   } catch (e) {
     pub.r.error.textContent = mediaErrorText(e, "list of devices");
   }

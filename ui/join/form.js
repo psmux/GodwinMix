@@ -20,18 +20,26 @@ export function buildForm(labels = {}) {
   r.error = el("div.pub-error.sm", { role: "alert" });
   r.preview = el("video.pub-preview", { muted: true, autoplay: true, playsInline: true, "aria-label": "Camera preview" });
   r.noPicture = el("div.pub-nopicture.dim.sm", { text: "No camera" });
+  r.picture = el("div.pub-picture", {}, [r.preview, r.noPicture]);
+  // The box takes the picture's own shape, so a phone held upright shows
+  // an upright picture rather than a strip in the middle of a wide one.
+  r.preview.addEventListener("resize", () => {
+    const { videoWidth: w, videoHeight: h } = r.preview;
+    if (w && h) r.picture.style.aspectRatio = `${w} / ${h}`;
+  });
   r.level = el("div.pub-level");
   r.camera = el("select", { "aria-label": "Camera" });
   r.mic = el("select", { "aria-label": "Microphone" });
   r.cameraMute = el("button.btn", { type: "button", text: "Turn camera off" });
   r.micMute = el("button.btn", { type: "button", text: "Mute microphone" });
+  r.flip = el("button.btn.pub-flip", { type: "button", text: "Flip camera", hidden: true, title: "The front camera to the back one, and back" });
   r.processing = el("input", { type: "checkbox", checked: true });
   r.go = el("button.btn.primary", { type: "button", text: labels.go || "Go live" });
   r.stats = el("div.pub-stats.sm.dim.num");
   r.root = el("div.pub.col", {}, [
     el("div.row", {}, [r.dot, r.state, r.where]),
     r.error,
-    el("div.pub-picture", {}, [r.preview, r.noPicture]),
+    r.picture,
     el("div.pub-meter", { title: "Microphone level" }, [r.level]),
     field("Camera", r.camera),
     field("Microphone", r.mic),
@@ -39,7 +47,7 @@ export function buildForm(labels = {}) {
       r.processing,
       el("span", { text: "Echo cancellation, noise suppression and automatic gain" }),
     ]),
-    el("div.row.pub-buttons", {}, [r.cameraMute, r.micMute, el("span.grow"), r.go]),
+    el("div.row.pub-buttons", {}, [r.cameraMute, r.micMute, r.flip, el("span.grow.pub-gap"), r.go]),
     r.stats,
   ]);
   return r;
@@ -90,6 +98,6 @@ export function blocked(r, text) {
   if (window.isSecureContext === false) {
     r.error.append(" ", el("a", { href: HTTPS_HELP, target: "_blank", rel: "noopener", text: "How to open the mixer over https." }));
   }
-  for (const b of [r.go, r.cameraMute, r.micMute, r.camera, r.mic, r.processing]) b.disabled = true;
+  for (const b of [r.go, r.cameraMute, r.micMute, r.flip, r.camera, r.mic, r.processing]) b.disabled = true;
   return { state: () => "blocked", active: () => false, stop() {}, setVisible() {}, use() {}, destroy: () => r.root.remove() };
 }

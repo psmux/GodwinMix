@@ -347,6 +347,10 @@ fn make(factory: &str, name: &str) -> Result<gst::Element, String> {
 }
 
 #[cfg(test)]
+#[path = "remux_size_tests.rs"]
+mod size_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
 

@@ -11,6 +11,7 @@ import { summarise, statsText } from "../join/stats.js";
 import { parseLink } from "../join/page.js";
 import { fillSelect, paintState, buildForm } from "../join/form.js";
 import { browserChannelTests } from "./browser-channel.js";
+import { phoneCameraTests } from "./phone-camera.js";
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -42,7 +43,7 @@ function fakeWhip(answers) {
 }
 
 export async function browserDeviceTests(test, eq, ok) {
-  test("H.264 goes first, packetization mode 1 and baseline ahead of the other H.264", () => {
+  test("H.264 goes first, packetization mode 1 and baseline ahead of the other H.264, then VP8", () => {
     const codecs = [
       { mimeType: "video/VP8" },
       { mimeType: "video/H264", sdpFmtpLine: "packetization-mode=0;profile-level-id=42e01f" },
@@ -169,8 +170,8 @@ export async function browserDeviceTests(test, eq, ok) {
   });
 
   test("the /join/ link carries the address, the key and the title in its fragment", () => {
-    eq(parseLink("#whip=%2Fwhip%2Fbrowser%2Fcam&key=abc&title=Pulpit"), { url: "/whip/browser/cam", key: "abc", title: "Pulpit" });
-    eq(parseLink(""), { url: "", key: "", title: "" });
+    eq(parseLink("#whip=%2Fwhip%2Fbrowser%2Fcam&key=abc&title=Pulpit"), { url: "/whip/browser/cam", key: "abc", title: "Pulpit", channel: "" });
+    eq(parseLink(""), { url: "", key: "", title: "", channel: "" });
   });
 
   test("the device lists keep the choice, and No camera is a choice", () => {
@@ -202,4 +203,5 @@ export async function browserDeviceTests(test, eq, ok) {
   });
 
   await browserChannelTests(test, eq, ok);
+  await phoneCameraTests(test, eq, ok);
 }
