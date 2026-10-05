@@ -66,6 +66,9 @@ tower-http = { workspace = true, features = ["fs", "cors", "trace"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 toml = { workspace = true }
+# Codex keeps its MCP servers in TOML that a person also edits by hand, so a
+# setup changes one table and keeps the comments (src/agents/merge.rs).
+toml_edit = { workspace = true }
 schemars = { workspace = true }
 
 anyhow = { workspace = true }

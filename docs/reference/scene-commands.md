@@ -1,7 +1,8 @@
 # Scene commands
 
 Every `scene.*` method, with one example each. These are JSON-RPC calls on
-`/rpc`, REST routes under `/api/v1`, and MCP tools behind `search_tools`; the
+`/rpc`, REST routes under `/api/v1`, and MCP tools (the common ones in the
+standard list, the rest through `search_tools` and `call_tool`); the
 same table generates all three, so nothing here exists on one surface and not
 another.
 

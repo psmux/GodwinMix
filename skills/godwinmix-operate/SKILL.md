@@ -9,14 +9,19 @@ You are directing a live programme. The output never stops, whatever you do.
 Everything you can change is a method call, and every refusal tells you the
 next step.
 
-## No MCP? Run each tool as a command
+## Calling the tools
 
-Every tool this skill names is also a command, with its arguments as one JSON
-object, for an agent that has a shell and no MCP (pi, or any other):
+Over MCP, call the tools by name. A tool that is not in your list runs through
+`call_tool {"name": "list_scenes", "arguments": {}}`, and `search_tools
+{"query": "..."}` finds one by what it does. Every tool in this skill is one of
+the two.
+
+No MCP? Every tool is also a command, with its arguments as one JSON object
+(pi, or any agent with a shell):
 
 ```
 godwinmix tool agent_state
-godwinmix tool add_source '{"name": "lower", "uri": "template:news-lower-third"}'
+godwinmix tool take '{"source": "cam1"}'
 ```
 
 It finds the GodwinMix app's mixer on the same machine by itself. A file goes
@@ -95,8 +100,10 @@ is priced against the governor. Copy unless you were asked for a format.
 Measured on a real station with `gmx mcp` over stdio, twenty UDP feeds:
 five calls in about two seconds, 9 kB read
 for the work itself (dry run, `list_shows`, apply, one `show_stats` of all
-twenty at 5.9 kB). The tool list is 13 kB once per session. `add_shows` and
-`show_stats` are already in it, so do not search for them: a `search_tools`
+twenty at 5.9 kB). For headend work start the server with `godwinmix mcp
+--profile headend`, which puts `add_shows`, `list_shows`, `show_stats`,
+`set_show` and `set_show_output` in the list. In the standard profile run them
+with `call_tool` by name; do not search for them, since a `search_tools`
 answer is about 14 kB, more than the work.
 
 To change one output's format afterwards, `set_show_output` with `id` (the show),
@@ -116,7 +123,8 @@ take {"source": "cam2"}
 
 `take` with no source, or `null`, cuts to the slate. The answer is the new
 programme state, so there is no follow up read. An id that does not exist is
-refused with the ids that would have worked.
+refused with the ids that would have worked. `should_retry: true` in an answer
+means sending the same call again would be safe, not that it failed.
 
 `revert` undoes the last take and puts the shot before back. Use it the moment
 a take turns out wrong rather than working out by hand what was on.
@@ -206,14 +214,15 @@ threshold. Over MCP the same push arrives as
 
 ## A presenter on a green screen, in front of a generated background
 
-A presenter in front of a green or blue screen, put into a studio picture you
-made (with an image tool, say). Five steps, all through tools found with
-`search_tools`:
+A presenter in front of a green or blue screen, or no screen at all, put into
+a studio picture you made. This is the whole virtual set feature; there is no
+other. Five steps:
 
-1. Upload the picture: `POST /api/v1/media/upload?name=newsroom.png` with the
-   file as the body. Make it the canvas shape, 16 by 9. A desk or window frame
-   in front of the presenter is a second upload, a PNG with a transparent
-   background at the canvas size.
+1. The background: a picture uploaded with `godwinmix ctl upload
+   newsroom.png` (16 by 9, the canvas shape), or a full screen SVG template
+   you design and save with `save_template` and add as a source (see
+   `godwinmix-design`). A desk or window frame in front of the presenter is a
+   second one, transparent where the presenter shows through.
 2. `create_scene_from {"sources": ["newsroom.png", "cam1", "desk.png"],
    "layout": "virtual-set", "name": "Presenter"}`. The sources are in slot
    order: background, camera, then what stands in front. With no green

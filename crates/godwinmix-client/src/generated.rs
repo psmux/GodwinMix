@@ -24,6 +24,11 @@ use crate::{Client, Result};
 pub const API_LEVEL: u32 = 1;
 pub const API_COMPATIBLE: u32 = 1;
 
+/// What a write does to a file.
+pub type Action = String;
+/// The values api_level 1 knows for [`Action`].
+pub const ACTION_VALUES: &[&str] = &["create", "merge", "update", "unchanged"];
+
 /// What pressing the button does.
 pub type ActionKind = String;
 /// The values api_level 1 knows for [`ActionKind`].
@@ -241,6 +246,11 @@ pub struct AgentStateRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub response_format: Option<ResponseFormat>,
 }
+
+/// The agent tools this mixer knows how to set up.
+pub type AgentTool = String;
+/// The values api_level 1 knows for [`AgentTool`].
+pub const AGENT_TOOL_VALUES: &[&str] = &["other", "claude", "opencode", "pi", "codex", "gemini", "cursor", "vscode"];
 
 /// One condition that holds now.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -1280,6 +1290,17 @@ pub type DestinationState = String;
 /// The values api_level 1 knows for [`DestinationState`].
 pub const DESTINATION_STATE_VALUES: &[&str] = &["off", "waiting", "connecting", "live", "reconnecting", "failed"];
 
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Detected {
+    /// What was found: the command's path, or the config folder.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub found: Option<String>,
+    pub installed: bool,
+    pub name: String,
+    pub tool: AgentTool,
+}
+
 /// One device token, without its secret.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -1722,6 +1743,19 @@ pub struct FieldValue {
     /// What is on screen: the source's own value, the brand colour or the
     /// default, in that order.
     pub value: String,
+}
+
+/// One file a setup writes.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct FileWrite {
+    pub action: Action,
+    /// Where the file was copied before it was changed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub backup: Option<String>,
+    pub path: String,
+    /// In words: "the godwinmix MCP server", "the godwinmix-design skill".
+    pub what: String,
 }
 
 /// One filter in an item's chain.
@@ -4347,13 +4381,57 @@ pub struct SetSpec {
     pub settings: BTreeMap<String, Value>,
 }
 
-/// `setup.start` and `setup.get`: one piece by name.
+/// What a setup did, or would do.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Setup {
+    pub applied: bool,
+    /// The MCP entry, for a client nothing is written for.
+    pub entry: Value,
+    pub name: String,
+    pub notes: Vec<String>,
+    /// A first thing to ask it.
+    pub prompt: String,
+    pub scope: SetupScope,
+    /// How to start the tool afterwards.
+    pub start: String,
+    pub tool: AgentTool,
+    pub writes: Vec<FileWrite>,
+}
+
+/// `agent.setup`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct SetupRequest {
+    /// The project folder, for `scope: project`. An absolute path.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dir: Option<String>,
+    /// Answer every file it would write, and write nothing. The dispatcher
+    /// reads it too, as it does on every destructive method.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dry_run: Option<bool>,
+    /// Environment for `godwinmix mcp`, such as GODWINMIX_URL for a mixer
+    /// that is not the desktop app's. Written into the tool's config as given.
+    pub env: BTreeMap<String, Value>,
+    /// `user` (the default) writes into the home folder, `project` into `dir`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scope: Option<SetupScope>,
+    /// claude, opencode, pi, codex, gemini, cursor, vscode or other.
+    pub tool: AgentTool,
+}
+
+/// `setup.start` and `setup.get`: one piece by name.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SetupRequest2 {
     /// `web`, or a first party plugin's name such as `camera`.
     pub piece: String,
 }
+
+/// For the user, in their home folder, or for one project folder.
+pub type SetupScope = String;
+/// The values api_level 1 knows for [`SetupScope`].
+pub const SETUP_SCOPE_VALUES: &[&str] = &["user", "project"];
 
 /// Where a piece stands.
 pub type SetupState = String;
@@ -5300,7 +5378,7 @@ pub struct TokenInfo {
     /// "none" or "required": whether destructive calls need a confirm token.
     pub confirm: String,
     pub id: String,
-    /// MCP tool profile this token is meant for: "standard" or "minimal".
+    /// MCP tool profile this token is meant for: "standard", "minimal" or "headend".
     pub profile: String,
     pub rehearsal: bool,
     pub scopes: Vec<String>,
@@ -5803,10 +5881,12 @@ pub struct MethodInfo {
     pub rest: Option<(&'static str, &'static str)>,
 }
 
-pub const METHODS: [MethodInfo; 205] = [
+pub const METHODS: [MethodInfo; 207] = [
     MethodInfo { name: "adbreak.end", summary: "Cut a running ad short, or disarm one that is scheduled.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/end")) },
     MethodInfo { name: "adbreak.start", summary: "Interrupt the programme with a clip, then rejoin live when it ends.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/start")) },
+    MethodInfo { name: "agent.setup", summary: "Set an AI agent tool up to use this mixer: its MCP config gets one entry, godwinmix, that runs this mixer's own executable, and its skills folder gets the GodwinMix skills. Other entries are kept and a changed file is copied aside first. dry_run answers every file it would write. The answer says how to start the tool and a first thing to ask it.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/agent/setup")) },
     MethodInfo { name: "agent.state", summary: "The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/agent/state")) },
+    MethodInfo { name: "agent.tools", summary: "The AI agent tools this mixer can set up, the ones installed on its machine first, each with what was found: a command on PATH or a config folder.", scope: "admin", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/agent/tools")) },
     MethodInfo { name: "channel.add", summary: "Make a channel and its first key, which is in this answer. channel.key.reveal reads it again later.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/channels")) },
     MethodInfo { name: "channel.certificate.generate", summary: "Make a self signed certificate for RTMPS, for this machine's addresses unless names are given. Encoders must be told to accept it; one from a certificate authority needs no such step.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/channels/certificate/generate")) },
     MethodInfo { name: "channel.certificate.set", summary: "Give RTMPS a certificate: the PEM of the certificate (and its chain) and of its private key, as a certificate authority issued them. Checked before it is kept; the key is sealed and never read back.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/channels/certificate/set")) },
@@ -6330,9 +6410,19 @@ impl Client {
         self.call("adbreak.start", params).await
     }
 
+    /// Set an AI agent tool up to use this mixer: its MCP config gets one entry, godwinmix, that runs this mixer's own executable, and its skills folder gets the GodwinMix skills. Other entries are kept and a changed file is copied aside first. dry_run answers every file it would write. The answer says how to start the tool and a first thing to ask it.
+    pub async fn agent_setup(&self, params: &SetupRequest) -> Result<Setup> {
+        self.call("agent.setup", params).await
+    }
+
     /// The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing.
     pub async fn agent_state(&self, params: &AgentStateRequest) -> Result<BTreeMap<String, Value>> {
         self.call("agent.state", params).await
+    }
+
+    /// The AI agent tools this mixer can set up, the ones installed on its machine first, each with what was found: a command on PATH or a config folder.
+    pub async fn agent_tools(&self) -> Result<Vec<Detected>> {
+        self.call("agent.tools", &serde_json::json!({})).await
     }
 
     /// Make a channel and its first key, which is in this answer. channel.key.reveal reads it again later.
@@ -7131,7 +7221,7 @@ impl Client {
     }
 
     /// Where one piece stands, without starting anything.
-    pub async fn setup_get(&self, params: &SetupRequest) -> Result<SetupStatus> {
+    pub async fn setup_get(&self, params: &SetupRequest2) -> Result<SetupStatus> {
         self.call("setup.get", params).await
     }
 
@@ -7141,7 +7231,7 @@ impl Client {
     }
 
     /// Set a piece up now, or join the set up already running, and answer at once with where it stands. Progress follows as `event/setup.changed`. Sources waiting on the piece start by themselves when it is ready.
-    pub async fn setup_start(&self, params: &SetupRequest) -> Result<SetupStatus> {
+    pub async fn setup_start(&self, params: &SetupRequest2) -> Result<SetupStatus> {
         self.call("setup.start", params).await
     }
 

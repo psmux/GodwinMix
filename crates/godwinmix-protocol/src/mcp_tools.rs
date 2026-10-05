@@ -5,38 +5,65 @@
 //! with the `$defs` inlined, and its annotations are read off the same flags
 //! the server enforces, so a `destructiveHint` cannot be a lie.
 //!
-//! Two profiles, because 09 section 5 item 1 puts a number on it: `standard`
-//! is at most twelve hot tools, `minimal` is five for a 4,096 token context,
-//! and everything else is behind `search_tools`. The hot list is a pure
-//! function of the profile, so adding a source or a plugin never changes it
-//! and the client's prompt cache stays valid.
+//! Three profiles, because 09 section 5 item 1 puts a number on it:
+//! `standard` is the live mix with its graphics and scenes, `minimal` is six
+//! tools for a 4,096 token context, `headend` is many shows at once. Everything
+//! else is found with `search_tools` and run with `call_tool`. The hot list is
+//! a pure function of the profile, so adding a source or a plugin never
+//! changes it and the client's prompt cache stays valid.
+//!
+//! `call_tool` exists because most clients only let a model call what is in
+//! its list. Claude Code and opencode both do: a tool `search_tools` found was
+//! one the model could read about and never run, and Claude Opus said so and
+//! stopped. Through `call_tool` every tool is one call away in any client.
 
 use crate::method::{Registry, Tier};
 use crate::scope::Profile;
 use schemars::generate::SchemaSettings;
-use serde_json::{json, Map, Value};
+pub use crate::mcp_schema::inline_refs;
+use crate::mcp_schema::prune;
+use serde_json::{json, Value};
 
 /// The rough token budget, as bytes. Four bytes to a token is the proxy the
-/// plan uses, so 16,000 bytes is about 4,000 tokens and 4,800 is about 1,200.
-pub const STANDARD_BYTES: usize = 16_000;
-pub const MINIMAL_BYTES: usize = 4_800;
+/// plan uses, so 18,500 bytes is about 4,600 tokens and 6,000 is about 1,500.
+/// Both grew when `call_tool` joined every profile and the standard list took
+/// on the graphics and scene tools, because a tool behind a search was a tool
+/// Claude Code and opencode could not run at all.
+pub const STANDARD_BYTES: usize = 18_500;
+pub const MINIMAL_BYTES: usize = 6_000;
 
-/// The most hot tools either profile may carry, `search_tools` included.
-pub const STANDARD_TOOLS: usize = 12;
-pub const MINIMAL_TOOLS: usize = 5;
+/// The most hot tools a profile may carry, `call_tool` and `search_tools`
+/// included. `headend` is held to the standard numbers.
+pub const STANDARD_TOOLS: usize = 14;
+pub const MINIMAL_TOOLS: usize = 6;
 
-/// The one tool that is not a method: it searches the rest.
+/// The two tools that are not methods: one searches the rest, one runs them.
 pub const SEARCH_TOOL: &str = "search_tools";
+pub const CALL_TOOL: &str = "call_tool";
+
+fn call_tool() -> Value {
+    json!({
+        "name": CALL_TOOL,
+        "description": "Run any GodwinMix tool by name, including one that is not in this \
+            list: {\"name\": \"list_scenes\", \"arguments\": {}}. Use it for every tool \
+            search_tools finds.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "name": { "type": "string", "description": "The tool's name, such as get_scene." },
+                "arguments": { "type": "object", "description": "The tool's own arguments." }
+            },
+            "required": ["name"]
+        },
+        "annotations": { "readOnlyHint": false, "destructiveHint": true, "idempotentHint": false }
+    })
+}
 
 fn search_tool(hot: usize, total: usize) -> Value {
     json!({
         "name": SEARCH_TOOL,
         "description": format!(
-            "Find a tool that is not in this list. {hot} of the mixer's {total} tools are \
-             shown; the rest (outputs, the graphics gallery, media, ad breaks, snapshots) are \
-             reachable by searching here and then calling the name that comes back. Search by \
-             what you want to do, in plain words: \"make a lower third\", \"play a clip\". \
-             Each match carries its description and input schema, ready to call."
+            "Find a GodwinMix tool that is not in this list. {hot} of the mixer's {total}              tools are shown; the rest (outputs, the graphics gallery, media, ad breaks, feeds,              filters, layouts) are found here by what you want to do, in plain words: \"make a              lower third\", \"play a clip\". Each match carries its description and input              schema. Run one with call_tool."
         ),
         "inputSchema": {
             "type": "object",
@@ -87,7 +114,13 @@ pub fn all_tools<C>(registry: &Registry<C>) -> Vec<Value> {
         .map(|(_, mut tool)| {
             let one_show = addresses_one_show(tool["method"].as_str().unwrap_or_default());
             if let Some(schema) = tool.get_mut("inputSchema") {
-                *schema = inline_refs(schema, &defs, 0);
+                *schema = prune(&inline_refs(schema, &defs, 0), 0);
+                // The request struct's own doc comment is written for whoever
+                // maintains it; the tool's description is the agent's manual,
+                // and every byte here is paid for on every call.
+                if let Some(map) = schema.as_object_mut() {
+                    map.remove("description");
+                }
                 if one_show {
                     add_show(schema);
                 }
@@ -124,7 +157,10 @@ fn add_show(schema: &mut Value) {
 /// byte identical output and a client's prompt cache survives a reconnect.
 pub fn tools<C>(registry: &Registry<C>, profile: Profile) -> Vec<Value> {
     let wanted = |tier: Tier| {
-        matches!((profile, tier), (_, Tier::Minimal) | (Profile::Standard, Tier::Standard))
+        matches!(
+            (profile, tier),
+            (_, Tier::Minimal) | (Profile::Standard, Tier::Standard) | (Profile::Headend, Tier::Headend)
+        )
     };
     let hot_names: Vec<&str> = registry
         .iter()
@@ -133,13 +169,14 @@ pub fn tools<C>(registry: &Registry<C>, profile: Profile) -> Vec<Value> {
         .map(|b| b.tool)
         .collect();
     let all = all_tools(registry);
-    let total = all.len() + 1;
+    let total = all.len() + 2;
     let mut hot: Vec<Value> = all
         .into_iter()
         .filter(|t| hot_names.contains(&t["name"].as_str().unwrap_or_default()))
         .map(strip_method)
         .map(|tool| if profile == Profile::Minimal { without_show(tool) } else { tool })
         .collect();
+    hot.push(call_tool());
     hot.push(search_tool(hot.len() + 1, total));
     hot
 }
@@ -208,93 +245,8 @@ fn score(tool: &Value, words: &[String]) -> usize {
     score
 }
 
-/// How deep a schema may nest before inlining gives up. A recursive type would
-/// otherwise expand for ever; none of ours is, and a guard is cheaper than
-/// finding out the hard way in a client's context window.
-const MAX_DEPTH: usize = 8;
-
-/// Replace every `$ref: "#/$defs/X"` with the definition itself.
-///
-/// MCP clients want a self contained input schema: most do not resolve `$ref`
-/// at all, and a tool whose schema is one `$ref` reads to a model as a tool
-/// that takes anything.
-pub fn inline_refs(schema: &Value, defs: &Map<String, Value>, depth: usize) -> Value {
-    if depth > MAX_DEPTH {
-        return json!({ "type": "object" });
-    }
-    match schema {
-        Value::Object(map) => {
-            if let Some(name) = map.get("$ref").and_then(Value::as_str).and_then(def_name) {
-                if let Some(target) = defs.get(name) {
-                    let mut inlined = inline_refs(target, defs, depth + 1);
-                    // A sibling `description` on the reference is the field's
-                    // own documentation and beats the type's.
-                    if let (Some(out), Some(doc)) = (inlined.as_object_mut(), map.get("description"))
-                    {
-                        out.insert("description".into(), doc.clone());
-                    }
-                    return inlined;
-                }
-            }
-            let mut out = Map::new();
-            for (key, value) in map {
-                if key == "$defs" {
-                    continue;
-                }
-                out.insert(key.clone(), inline_refs(value, defs, depth + 1));
-            }
-            Value::Object(out)
-        }
-        Value::Array(items) => {
-            Value::Array(items.iter().map(|v| inline_refs(v, defs, depth + 1)).collect())
-        }
-        other => other.clone(),
-    }
-}
-
-fn def_name(reference: &str) -> Option<&str> {
-    reference.strip_prefix("#/$defs/")
-}
-
 /// The bytes a tool list costs, which is what the budget test measures.
 pub fn wire_size(tools: &[Value]) -> usize {
     serde_json::to_string(&json!({ "tools": tools })).map(|s| s.len()).unwrap_or(0)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_ref_is_replaced_by_what_it_points_at() {
-        let defs: Map<String, Value> = serde_json::from_value(json!({
-            "Inner": { "type": "string", "enum": ["a", "b"], "description": "the type's doc" }
-        }))
-        .unwrap();
-        let schema = json!({
-            "type": "object",
-            "properties": { "x": { "$ref": "#/$defs/Inner", "description": "the field's doc" } }
-        });
-        let out = inline_refs(&schema, &defs, 0);
-        assert_eq!(out["properties"]["x"]["type"], "string");
-        assert_eq!(out["properties"]["x"]["enum"][1], "b");
-        // The field's own documentation wins, because that is the one written
-        // about this use of the type.
-        assert_eq!(out["properties"]["x"]["description"], "the field's doc");
-        assert!(out.get("$defs").is_none(), "$defs must not survive inlining");
-    }
-
-    #[test]
-    fn a_ref_that_points_nowhere_is_left_alone_rather_than_dropped() {
-        let out = inline_refs(&json!({ "$ref": "#/$defs/Missing" }), &Map::new(), 0);
-        assert_eq!(out["$ref"], "#/$defs/Missing");
-    }
-
-    #[test]
-    fn inlining_gives_up_rather_than_recursing_for_ever() {
-        let defs: Map<String, Value> =
-            serde_json::from_value(json!({ "Loop": { "$ref": "#/$defs/Loop" } })).unwrap();
-        let out = inline_refs(&json!({ "$ref": "#/$defs/Loop" }), &defs, 0);
-        assert_eq!(out["type"], "object");
-    }
-}

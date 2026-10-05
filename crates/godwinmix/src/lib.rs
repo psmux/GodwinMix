@@ -17,6 +17,7 @@
 //! be a copy of the other. `run` below is what both call.
 
 pub mod address;
+pub mod agents;
 pub mod bundled;
 pub mod bench;
 pub mod channels;
@@ -220,9 +221,10 @@ enum Command {
         token: Option<String>,
         /// How many tools to put in front of the agent.
         ///
-        /// `standard` is twelve hot tools, about 4,000 tokens. `minimal` is
-        /// five, for a model with a small context; everything else is still
-        /// callable by name and findable with `search_tools`.
+        /// `standard` is the live mix, its graphics and its scenes, fourteen
+        /// tools. `minimal` is six, for a model with a small context.
+        /// `headend` is many shows at once. In every one, everything else is
+        /// found with `search_tools` and run with `call_tool`.
         #[arg(long, env = "GODWINMIX_MCP_PROFILE", default_value = "standard")]
         profile: McpProfile,
         /// Serve MCP over Streamable HTTP at this address instead of stdio.
@@ -443,6 +445,7 @@ fn run_test_core() -> Result<()> {
 enum McpProfile {
     Standard,
     Minimal,
+    Headend,
 }
 
 impl From<McpProfile> for godwinmix_protocol::scope::Profile {
@@ -450,6 +453,7 @@ impl From<McpProfile> for godwinmix_protocol::scope::Profile {
         match p {
             McpProfile::Standard => Self::Standard,
             McpProfile::Minimal => Self::Minimal,
+            McpProfile::Headend => Self::Headend,
         }
     }
 }
@@ -619,10 +623,14 @@ pub async fn run() -> Result<()> {
     // that are meant to be piped: MCP's protocol, and `gmx dot | dot -Tsvg`.
     // Levels start from `RUST_LOG` and move at runtime from there: see
     // `godwinmix_core::observe::logs`.
+    // `gmx tool` prints the tool's own answer, refusals included, and an agent
+    // reads both streams of a shell command: a JSON log line repeating the
+    // refusal on stderr is one more thing for a small model to misread.
+    let quiet = matches!(args.command, Some(Command::Tool { .. })).then(|| "error".to_string());
     logs::init(logs::Options {
         format: args.log_format.into(),
         node: config::env_var("NODE"),
-        env_filter: std::env::var("RUST_LOG").ok(),
+        env_filter: std::env::var("RUST_LOG").ok().or(quiet),
     });
 
     // The client subcommands talk to an already-running mixer and need none

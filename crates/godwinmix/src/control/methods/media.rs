@@ -205,13 +205,14 @@ fn register_snapshot(reg: &mut Registry<Call>) {
         .rest_at("GET", "/api/v1/snapshot/{id}")
         .tool(
             "snapshot",
-            Tier::Search,
+            Tier::Standard,
             "Look at the pictures. Returns a JPEG you can view directly. `id` is \"sheet\" \
              for a contact sheet of every source and the programme side by side (the best \
              first look), \"program\" for what is going out right now, or a source id for \
              that one source. `width` scales it down, and smaller is much cheaper to look \
-             at: 320 is enough to tell whether anyone is in the shot. Needs multiview \
-             switched on; the answer says so plainly when it is not.",
+             at: 320 is enough to tell whether anyone is in the shot; 1280 reads a lower \
+             third. Just after a take or a new scene the picture can be a second behind, \
+             so a black first look is worth one more look before it is called a fault.",
         ),
     );
 }

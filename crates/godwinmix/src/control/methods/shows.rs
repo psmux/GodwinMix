@@ -30,7 +30,7 @@ pub fn register(reg: &mut Registry<Call>) {
         .result(schema_of::<ShowList>)
         .tool(
             "list_shows",
-            Tier::Standard,
+            Tier::Headend,
             "The independent programmes this machine runs, each with what is on air and \
              whether it is running. Every other tool works on one show; the station picks \
              the first unless a show is named.",

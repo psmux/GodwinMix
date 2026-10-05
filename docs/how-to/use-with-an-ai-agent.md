@@ -51,33 +51,45 @@ Check it without a client:
 printf '{"jsonrpc":"2.0","id":1,"method":"tools/list"}\n' | godwinmix mcp | jq '.result.tools[].name'
 ```
 
-## Two profiles
+## Three profiles
 
-A tool list is charged for on every single call, so there are two of them.
+A tool list is charged for on every single call, so there are three of them.
 
 | | Tools | About |
 |---|---|---|
-| `--profile standard` (default) | 12 | 13,182 bytes, roughly 3,300 tokens |
-| `--profile minimal` | 5 | roughly 1,200 tokens, for a small context |
+| `--profile standard` (default) | 14 | about 17,800 bytes, roughly 4,500 tokens |
+| `--profile minimal` | 6 | about 5,800 bytes, roughly 1,500 tokens, for a small context |
+| `--profile headend` | 11 | about 16,600 bytes, for many shows at once |
 
 ```sh
 godwinmix mcp --profile minimal          # or GODWINMIX_MCP_PROFILE=minimal
 ```
 
-`minimal` is `agent_state`, `take`, `add_source`, `list_sources` and
-`search_tools`. `standard` adds the shows (`list_shows`, `add_shows`,
-`show_stats`, `set_show`, `set_show_output`), `revert` and `go_live`.
+`minimal` is `agent_state`, `take`, `add_source`, `list_sources`,
+`call_tool` and `search_tools`. `standard` adds the live mix and its graphics:
+`revert`, `set_source`, `list_templates`, `save_template`,
+`create_scene_from`, `add_scene_item`, `set_scene_item` and `snapshot`.
+`headend` adds the shows instead (`list_shows`, `add_shows`, `show_stats`,
+`set_show`, `set_show_output`); start it with `godwinmix mcp --profile
+headend`.
 
-Everything else is still callable by name: outputs, snapshots, media, ad
-breaks, seeking, audio, codecs, channels and their destinations, the governor,
-the project file, and the rest of the show tools (`add_show`, `remove_shows`,
-`start_show`, `stop_show`, `add_show_output`). `search_tools` finds one by
-what you want to do:
+Everything else is one call away: outputs, media, ad breaks, seeking, audio,
+codecs, channels and their destinations, the governor, the project file, and
+the rest of the show tools. `search_tools` finds one by what you want to do,
+and `call_tool` runs it:
 
 ```
 search_tools {"query": "stop sending to youtube"}
-  -> remove_output, with its description and input schema, ready to call
+  -> remove_output, with its description and input schema
+call_tool {"name": "remove_output", "arguments": {"id": "yt"}}
 ```
+
+`call_tool` matters more than it looks. Claude Code and opencode only let a
+model call a tool that is in its list, so before it existed a tool found by
+searching was one the model could read about and could not run; Claude Opus
+said so and stopped. It also forgives the shapes a small model sends: `args`
+for `arguments`, the arguments as JSON text, or the name with the client's
+prefix (`mcp__godwinmix__get_scene`).
 
 The hot list never changes shape at runtime. Adding a source, a plugin or a
 node does not alter it, because plugin tools live behind search. That is what
@@ -133,7 +145,7 @@ What it cost, measured with `gmx mcp` over stdio against a real station
 
 | Step | Calls | Bytes the agent read |
 |---|---|---|
-| `tools/list`, standard profile, 12 tools | 1 | 13,182 |
+| `tools/list`, the profile then in use, 12 tools | 1 | 13,182 |
 | `search_tools` for "add many shows" (not needed: `add_shows` is hot) | 1 | 14,294 |
 | `add_shows` dry run, `list_shows`, `add_shows`, one `show_stats` of 20 | 4 | 9,329 |
 | the whole session, `initialize` included | 5 tool calls | 38,507 read, 6,027 sent |
@@ -155,7 +167,8 @@ it, and one for designing graphics. Each is written for the tool that will
 read it.
 
 ```sh
-gmx skill install --for claude          # or opencode, pi, codex, gemini
+gmx agent setup claude                  # the MCP entry and the skills, for this user
+gmx skill install --for claude          # the skills only: or opencode, pi, codex, gemini
 gmx skill install --for claude --print  # see what it would write first
 ```
 
@@ -168,10 +181,11 @@ safe areas, placing a graphic with an enter and an exit, and looking at it.
 ## Graphics
 
 An agent can design a lower third, a breaking news bar, a score bug or a title
-card and put it on air, drawn by the mixer with no browser. The tools are
-behind `search_tools`: `list_templates`, `get_template`, `save_template`,
-`template_fields`, and `preview_frame`, which answers with the armed preview
-scene as an image the model sees. `add_scene_item` takes `visible`, `enter`
+card and put it on air, drawn by the mixer with no browser. `list_templates`,
+`save_template`, `add_scene_item`, `set_scene_item` and `snapshot` are in the
+standard list; `get_template`, `template_fields` and `preview_frame`, which
+answers with the armed preview scene as an image the model sees, run through
+`call_tool`. `add_scene_item` takes `visible`, `enter`
 and `exit`, so a graphic can be placed hidden and brought on with its own
 movement. A field changed with `set_source` reaches the screen on the next
 frame with no rebuild.

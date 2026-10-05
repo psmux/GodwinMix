@@ -113,17 +113,47 @@ safe areas, placing and looking at a graphic.
 with `--project`); `--for pi` writes to `.agents/skills`, which pi and other
 tools that follow that convention read.
 
+### `gmx agent setup` and `gmx agent tools`
+
+Sets an AI agent tool up to use this mixer: its MCP config gets one entry,
+`godwinmix`, that runs this executable as `godwinmix mcp`, and its skills
+folder gets the three skills. Every other entry in the file is kept, and a
+changed file is copied aside as `<file>.before-godwinmix` first. The same as
+the Set up button in Help > Connect an AI agent (`agent.setup`); see
+[agent setup](agent-setup.md) for every path on every system.
+
+```sh
+gmx agent tools                               # which tools are on this machine
+gmx agent setup claude --dry-run              # what it would write, writing nothing
+gmx agent setup opencode                      # for this user
+gmx agent setup pi --project .                # for the project in this folder
+gmx agent setup cursor --url http://studio-pc:8080 --token T   # a mixer elsewhere
+gmx agent setup other                         # prints the entry for any MCP client
+```
+
+Tools: `claude`, `opencode`, `pi`, `codex`, `gemini`, `cursor`, `vscode`,
+`other`. With `--url` the entry carries `GODWINMIX_URL` (and
+`GODWINMIX_TOKEN` with `--token`); without them the agent finds the desktop
+app's mixer on the same machine by itself.
+
 ### `gmx tool`
 
 Runs one MCP tool by name, with its arguments as a JSON object or `@file`:
 the same tool table `godwinmix mcp` serves, for an agent with a shell and no
-MCP, and for trying a tool by hand. A refusal prints and exits 1.
+MCP, and for trying a tool by hand. A refusal prints and exits 1, and nothing
+but the answer is printed, so an agent reading the shell's output reads the
+answer.
 
 ```sh
 gmx tool list
 gmx tool search_tools '{"query": "lower third"}'
-gmx tool add_source '{"name": "lower", "uri": "template:news-lower-third"}'
+gmx tool call_tool '{"name": "list_scenes", "arguments": {}}'
+gmx tool add_source '{"id": "lower", "uri": "template:news-lower-third"}'
 ```
+
+The single quotes are for bash, zsh and Git Bash, which is what pi and Claude
+Code use on Windows too. In PowerShell 7.3 or newer the same line works; in
+Windows PowerShell 5.1 or `cmd`, put the JSON in a file and pass `@file.json`.
 
 ### `gmx ctl upload`
 
