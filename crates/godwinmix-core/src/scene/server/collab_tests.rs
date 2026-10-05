@@ -4,10 +4,10 @@
 use super::*;
 use crate::scene::document::{Content, Frame, Item, Scene, Vec2};
 
-const PHONE: Option<&str> = Some("default.phone");
-const LAPTOP: Option<&str> = Some("default.laptop");
+pub(super) const PHONE: Option<&str> = Some("default.phone");
+pub(super) const LAPTOP: Option<&str> = Some("default.laptop");
 
-fn server() -> Arc<SceneServer> {
+pub(super) fn server() -> Arc<SceneServer> {
     SceneServer::in_memory(CanvasCaps::new(&crate::config::Canvas {
         width: 1920,
         height: 1080,
@@ -18,7 +18,7 @@ fn server() -> Arc<SceneServer> {
 }
 
 /// A scene called "two" with boxes "left" and "right", added by nobody.
-fn two_box(s: &SceneServer) {
+pub(super) fn two_box(s: &SceneServer) {
     s.edit(None, |doc| {
         let mut scene = Scene::new("two");
         for name in ["left", "right"] {
@@ -33,7 +33,7 @@ fn two_box(s: &SceneServer) {
     .expect("adding a scene");
 }
 
-fn move_to(s: &SceneServer, client: Option<&str>, item: &str, x: f64) {
+pub(super) fn move_to(s: &SceneServer, client: Option<&str>, item: &str, x: f64) {
     s.edit_scene(client, "two", |doc, i| {
         let id = find::item_id_in(&doc.scenes[i], item)?;
         ops::item_mut(&mut doc.scenes[i].items, id).unwrap().transform.position = Vec2::new(x, 0.0);
@@ -42,7 +42,7 @@ fn move_to(s: &SceneServer, client: Option<&str>, item: &str, x: f64) {
     .expect("a move");
 }
 
-fn x_of(s: &SceneServer, item: &str) -> f64 {
+pub(super) fn x_of(s: &SceneServer, item: &str) -> f64 {
     let view = s.scene("two").unwrap();
     let id = view.records.iter().find(|r| match &r.props {
         crate::scene::flat::Props::Item(p) => p.name.as_deref() == Some(item),
@@ -141,61 +141,4 @@ fn an_abort_leaves_alone_what_somebody_else_changed_since() {
     s.abort(PHONE).expect("throwing the phone's batch away");
     assert_eq!(x_of(&s, "left"), 0.0, "the phone's own move stayed");
     assert_eq!(x_of(&s, "right"), 1200.0, "the abort undid the laptop's move");
-}
-
-#[test]
-fn a_draft_over_a_scene_that_changed_since_is_refused_with_what_changed() {
-    let s = server();
-    two_box(&s);
-    let draft = s.edit_begin(PHONE, "two", false).unwrap();
-    assert_eq!(draft.owner.as_deref(), PHONE);
-    s.edit_draft(&draft.id.to_string(), |doc, i| {
-        doc.scenes[i].items.truncate(1);
-        Ok(())
-    })
-    .unwrap();
-    move_to(&s, LAPTOP, "right", 1200.0);
-
-    let err = s.edit_apply(PHONE, &draft.id.to_string(), false).expect_err("stale");
-    let stale = err.downcast_ref::<Stale>().expect("a typed refusal");
-    assert_eq!(stale.base_seq, draft.base_seq);
-    assert!(stale.seq > stale.base_seq);
-    assert_eq!(stale.changes.len(), 1, "{:?}", stale.changes);
-    assert_eq!(stale.changes[0].changed_by.as_deref(), LAPTOP);
-    assert!(err.to_string().contains("scene.edit.discard"), "{err}");
-    assert_eq!(s.scene("two").unwrap().geometry.len(), 2, "a refused apply changed the scene");
-    assert_eq!(s.drafts().len(), 1, "a refused draft has to stay open");
-
-    s.edit_apply(PHONE, &draft.id.to_string(), true).expect("forced");
-    assert_eq!(s.scene("two").unwrap().geometry.len(), 1, "force replaces the scene");
-}
-
-#[test]
-fn a_draft_over_an_untouched_scene_applies_after_unrelated_edits() {
-    let s = server();
-    two_box(&s);
-    s.edit(None, |doc| {
-        doc.scenes.push(Scene::new("other"));
-        Ok(())
-    })
-    .unwrap();
-    let draft = s.edit_begin(PHONE, "two", false).unwrap();
-    s.edit(LAPTOP, |doc| {
-        doc.scenes.push(Scene::new("third"));
-        Ok(())
-    })
-    .unwrap();
-    s.edit_apply(PHONE, &draft.id.to_string(), false).expect("nothing in this scene changed");
-}
-
-#[test]
-fn a_take_leaves_a_stale_draft_open_rather_than_overwriting() {
-    let s = server();
-    two_box(&s);
-    let scene = s.scene("two").unwrap().id;
-    let draft = s.edit_begin(PHONE, "two", false).unwrap();
-    move_to(&s, LAPTOP, "left", 400.0);
-    assert!(s.apply_drafts_of(LAPTOP, scene).is_empty(), "a stale draft was applied by the take");
-    assert_eq!(x_of(&s, "left"), 400.0);
-    assert!(s.draft(&draft.id.to_string()).is_ok(), "the draft should still be open");
 }
