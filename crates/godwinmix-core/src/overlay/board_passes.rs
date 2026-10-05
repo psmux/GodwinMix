@@ -42,7 +42,15 @@ impl Board {
     }
 
     /// The passes for this frame, finished ones dropped.
-    pub(in crate::overlay) fn live_passes(&self) -> Vec<Arc<dyn crate::overlay::pass::Pass>> {
+    pub(in crate::overlay) fn live_passes(&self) -> Vec<(u64, Arc<dyn crate::overlay::pass::Pass>)> {
         self.passes.lock().live()
+    }
+
+    /// What each pass cost this frame. A pass slower than a frame for
+    /// `SLOW_FRAMES` frames running is taken off, and said so once.
+    pub(in crate::overlay) fn passes_spent(&self, costs: &[(u64, std::time::Duration)], budget: std::time::Duration) {
+        for name in self.passes.lock().spent(costs, budget) {
+            tracing::warn!(fx = %name, budget_ms = budget.as_millis() as u64, "an effect took longer than a frame to draw, frame after frame, so it was taken off to keep the programme on time. Use a smaller canvas, a release build, or another effect on this machine");
+        }
     }
 }

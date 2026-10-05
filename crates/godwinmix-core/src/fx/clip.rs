@@ -123,3 +123,12 @@ impl Pass for ClipPass {
         &self.name
     }
 }
+
+/// A pass the board let go of (finished, taken off as too slow, or its
+/// transition settled) tells its player to stop, so a clip nobody draws is
+/// not left decoding.
+impl Drop for ClipPass {
+    fn drop(&mut self) {
+        self.shared.done.store(true, Ordering::Release);
+    }
+}
