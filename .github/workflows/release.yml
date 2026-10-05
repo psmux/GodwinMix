@@ -521,7 +521,10 @@ jobs:
       # written on GitHub is refused.
       - name: The image's name
         id: image
-        run: echo "name=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "name=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+          # The image is tagged by semver without the tag's leading v.
+          echo "tag=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
 
       - name: Release
         uses: softprops/action-gh-release@v2
@@ -535,7 +538,7 @@ jobs:
             Docker, which carries its own GStreamer:
 
                 docker run -d --name godwinmix -p 127.0.0.1:8080:8080 \
-                  -e GODWINMIX_TOKEN=change-me ${{ steps.image.outputs.name }}:${{ github.ref_name }}
+                  -e GODWINMIX_TOKEN=change-me ${{ steps.image.outputs.name }}:${{ steps.image.outputs.tag }}
 
             Desktop: the `.dmg` on macOS; the `-setup.exe` or the `.msi` on
             Windows; the `.deb` on Debian and Ubuntu, or the `.AppImage` on any
