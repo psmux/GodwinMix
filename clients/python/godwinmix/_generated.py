@@ -1161,6 +1161,239 @@ class Frame(TypedDict, total=False):
     h: float
     w: float
 
+class GalleryDuplicateRequest(TypedDict, total=False):
+    """`gallery.duplicate`."""
+
+    id: str
+    name: Optional[str]
+    # The copy's name. Default: the name with "copy" after it.
+
+class GalleryEditRequest(TypedDict, total=False):
+    """`gallery.edit`: change what is said about an item, or its field values."""
+
+    description: Optional[str]
+    id: str
+    name: Optional[str]
+    tags: Any
+    values: Optional[Dict[str, Any]]
+    # Field values to keep with the item; `null` drops one.
+    zone: Optional[str]
+
+class GalleryExportRequest(TypedDict, total=False):
+    """`gallery.export`: items as one zip to carry to another mixer."""
+
+    ids: Any
+    # The ids, as a list or one string with commas. Default: every item that was not shipped with the mixer.
+    path: Optional[str]
+    # Where to write the zip on the mixer. Default: the gallery's `exports` folder.
+
+class GalleryExported(TypedDict, total=False):
+    """The answer to `gallery.export`."""
+
+    ids: List[str]
+    path: str
+    size_bytes: int
+    url: str
+    # Where a browser downloads it from this mixer.
+
+class GalleryIdRequest(TypedDict, total=False):
+    """One item by id: `gallery.remove`."""
+
+    id: str
+    # The item's id from `gallery.list`.
+
+class GalleryImportRequest(TypedDict, total=False):
+    """`gallery.import`: files made elsewhere, checked one by one."""
+
+    data: Optional[str]
+    # The same as base64, with `filename`.
+    filename: Optional[str]
+    path: Optional[str]
+    # A file or a folder on the mixer: a gallery zip, an SVG, an HTML page or a folder or zip with one, an OGraf package, a PNG or WebP, a WebM or MOV. A folder of several of these imports each.
+    replace: bool
+    # Write over items with the same id.
+
+class GalleryImported(TypedDict, total=False):
+    """The answer to `gallery.import`."""
+
+    added: List[GalleryItem]
+    refused: List[Refused]
+
+class GalleryItem(TypedDict, total=False):
+    """One item, as `gallery.list` describes it."""
+
+    description: str
+    fields: List[TemplateField]
+    # The fields a template or OGraf graphic has, with their defaults.
+    id: str
+    # The slug every other gallery method takes: `storm-lower-third`.
+    kind: GalleryKind
+    made_by: str
+    # Who or what saved it, in its own words: `claude-code`, `opencode`.
+    moves: bool
+    # Whether it moves by itself: a clip, a page, a ticker.
+    moving: Optional[str]
+    # A file of the item a page plays as its moving preview, served at `/api/v1/gallery/{id}/files/{moving}`: a clip itself, or the item's own `preview.webm`.
+    name: str
+    origin: Origin
+    placed: List[str]
+    # The sources on this mixer drawing it now.
+    saved: str
+    # When it was saved, as RFC 3339, when known.
+    tags: List[str]
+    transparent: bool
+    # Whether the picture under it shows through anywhere.
+    uri: Optional[str]
+    # The address `source.add` takes for it, when it is one source.
+    values: Dict[str, Any]
+    # The values this item fills its fields with, over the defaults.
+    zone: Zone
+
+class GalleryList(TypedDict, total=False):
+    """The answer to `gallery.list`."""
+
+    dir: str
+    # The folder saved items live in, on the mixer.
+    errors: List[str]
+    # Folders that look like items and would not read, and why.
+    items: List[GalleryItem]
+    total: int
+    # How many items match before `limit` cut the list.
+
+class GalleryListRequest(TypedDict, total=False):
+    """`gallery.list`."""
+
+    kind: Optional[str]
+    # Only this kind: template, image, clip, html, ograf, ticker, text, set.
+    limit: Optional[int]
+    # At most this many. Default 50.
+    query: Optional[str]
+    # Words to look for in the name, tags, description and kind: `"lower third"`, `"red news"`, `"background"`.
+
+class GalleryPlaceRequest(TypedDict, total=False):
+    """`gallery.place`: add an item to a scene in its zone. Hidden unless `visible`; `gallery.show` takes it on air."""
+
+    camera: Optional[str]
+    # For a set: the camera source standing in it. Default: the source on air.
+    id: str
+    scene: Optional[str]
+    # The scene to add it to. Default: the scene on air.
+    values: Optional[Dict[str, Any]]
+    # Field values for this placement, over the item's own.
+    visible: Optional[bool]
+    # Show it at once. Default false: placed hidden, ready to take.
+    zone: Optional[str]
+    # Where on the canvas, over the item's own zone: full, lower-third, bug, top, bottom, center, overlay.
+
+class GalleryPlaced(TypedDict, total=False):
+    """The answer to `gallery.place`."""
+
+    id: str
+    item: Optional[str]
+    # The scene item's name, for `gallery.show` and `scene.item.set`.
+    new_scene: bool
+    # True for a set, which becomes a scene of its own.
+    next: str
+    scene: str
+    source: Optional[str]
+    # The source drawing it. For a set, the scene's sources are in `scene`.
+    updated: bool
+    # True when it was on the scene already, and only its values changed.
+    visible: bool
+
+GalleryPreview = TypedDict("GalleryPreview", {
+    "caption": str,
+    "encoding": str,
+    "format": str,
+    "from": str,
+    "height": int,
+    "id": str,
+    "image": str,
+    "width": int,
+}, total=False)
+
+class GalleryPreviewRequest(TypedDict, total=False):
+    """`gallery.preview`: a picture of an item, drawn on demand."""
+
+    background: Optional[str]
+    # What shows through the transparent parts: `checker` (the default), `black`, `white`, or a colour `#rrggbb`.
+    id: str
+    values: Optional[Dict[str, Any]]
+    # Field values to try, over the item's own, without saving them.
+    width: Optional[int]
+    # Pixels wide, 64 to 1920. Default 960, which is what reading a lower third needs.
+
+class GallerySaveRequest(TypedDict, total=False):
+    """`gallery.save`: one call for any kind. Give exactly one of `svg`, `html`, `data`, `file`, `source` or `set`; the kind is worked out from it."""
+
+    data: Optional[str]
+    # A picture or a clip as base64, or as a `data:` URI.
+    description: Optional[str]
+    file: Optional[str]
+    # A file or a folder on the mixer's machine: an SVG, a picture, a clip, an HTML page or a folder holding one, an OGraf package, a zip.
+    filename: Optional[str]
+    # The name `data` had, for its type: `logo.png`, `sting.webm`.
+    files: Optional[Dict[str, Any]]
+    # More files an HTML page loads, by name: text, or a `data:` URI.
+    html: Optional[str]
+    # A whole HTML page, with its CSS and script inline. Transparent where the page has no background.
+    kind: Optional[str]
+    # template, image, clip, html, ograf, ticker, text or set. Usually left out: it is worked out from what you give.
+    made_by: Optional[str]
+    # Who made it, in a word: `claude-code`, `opencode`, `pi`.
+    moves: Optional[bool]
+    # Say it moves, or does not, when the gallery would guess wrong.
+    name: str
+    # What people call it: `"Storm warning lower third"`. The id is made from it.
+    replace: bool
+    # Write over an item with the same id. Every source drawing it is drawn again.
+    set: Union[SetSpec, None]
+    # A virtual set: `{"background": ..., "foreground": ..., "settings": {...}}`. Each picture is a gallery id, a media file, a path or a `data:` URI.
+    source: Any
+    # A ticker or text source as `source.add` takes it: `{"uri": "ticker:", "params": {...}}`.
+    svg: Optional[str]
+    # A whole SVG document. With `{{fields}}` in it, it is a template; without, a picture.
+    tags: Any
+    # Words to find it by: `["news", "red"]`, or `"news, red"`.
+    transparent: Optional[bool]
+    # Say it has transparency, or not, when the gallery would guess wrong.
+    values: Optional[Dict[str, Any]]
+    # What to fill a template's fields with, by name.
+    zone: Optional[str]
+    # Where it goes when placed: full (a background), lower-third, bug, top, bottom, center, overlay. Worked out when left out.
+
+class GallerySaved(TypedDict, total=False):
+    """The answer to `gallery.save`, `gallery.edit` and `gallery.duplicate`."""
+
+    item: GalleryItem
+    next: str
+    # What to call next.
+    path: str
+    # The folder it was written to.
+    redrawn: List[str]
+    # Sources drawing it that were drawn again.
+    warnings: List[str]
+    # Things that did not stop the save and are worth fixing.
+
+class GalleryShowRequest(TypedDict, total=False):
+    """`gallery.show`: take a placed item on air, or off."""
+
+    id: str
+    # The gallery id, the source id or the scene item's name.
+    scene: Optional[str]
+    # Default: the scene on air.
+    visible: Optional[bool]
+    # True to show, false to hide. Default true.
+
+class GalleryShown(TypedDict, total=False):
+    """The answer to `gallery.show`."""
+
+    item: str
+    scene: str
+    took: bool
+    # For a set: the scene was taken to the programme rather than an item shown.
+    visible: bool
+
 class Geometry(TypedDict, total=False):
     """One item's derived box."""
 
@@ -2176,6 +2409,15 @@ class Record(TypedDict, total=False):
     parent: Union[Id, None]
     # The scene this item is in, or the group item it is a child of. Absent for a scene, which hangs off the document itself.
 
+class Refused(TypedDict, total=False):
+    """One file the import would not take."""
+
+    file: str
+    fix: str
+    # What to do about it.
+    reason: str
+    # What was wrong with it.
+
 class Relink(TypedDict, total=False):
     """One asset an import could not put back."""
 
@@ -2495,6 +2737,18 @@ class SetSourceRequest(TypedDict, total=False):
     # Where it runs: `core`, `in-process`, `sidecar` or `node:<name>`.
     transport: Union[BridgeTransport, None]
     # How a remote source's media travels: `rtp`, `srt` or `whip`.
+
+class SetSpec(TypedDict, total=False):
+    """The pictures and settings of a virtual set."""
+
+    background: str
+    # The plate behind the presenter.
+    foreground: Optional[str]
+    # A desk or a frame in front of the presenter, transparent elsewhere.
+    layout: Optional[str]
+    # The layout. Default `virtual-set`.
+    settings: Dict[str, Any]
+    # The layout's settings: `presenter_scale` (0.3 to 1), `presenter_x` (0 to 1), `screen` (green, blue, none).
 
 class SetupRequest(TypedDict, total=False):
     """`setup.start` and `setup.get`: one piece by name."""
@@ -3446,6 +3700,9 @@ Fit = Literal['none', 'contain', 'cover', 'stretch', 'fit-width', 'fit-height', 
 # Content on the wire. The same four shapes as the tree, except that a group names no children: they are records whose parent is the group.
 FlatContent = Dict[str, Any]
 
+# What an item is, which decides how it is drawn and how it is added.
+GalleryKind = Literal['template', 'image', 'clip', 'html', 'ograf', 'ticker', 'text', 'set', 'transition', 'effect']
+
 # The one word a monitoring wall colours a row by.
 HealthState = Literal['ok', 'warning', 'alarm', 'off']
 
@@ -3466,6 +3723,9 @@ Mode = Literal['replace', 'merge']
 
 # `ext.multiview`. Accepts `false` to mean off, or an object.
 MultiviewExt = Union[bool, Dict[str, Any]]
+
+# Where an item came from.
+Origin = Literal['shipped', 'agent', 'uploaded']
 
 OutputState = Literal['connecting', 'live', 'reconnecting', 'failed']
 
@@ -3518,6 +3778,9 @@ Transition = Union[str, TransitionRequest]
 
 VideoCodec = Union[Literal['h264', 'h265', 'av1', 'vp8', 'vp9', 'mpeg2', 'prores'], Literal['other']]
 
+# Where an item sits on the canvas when it is placed.
+Zone = Literal['full', 'lower-third', 'bug', 'top', 'bottom', 'center', 'overlay']
+
 METHODS = (
     {"name": "adbreak.end", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/adbreak/end"), "summary": 'Cut a running ad short, or disarm one that is scheduled.'},
     {"name": "adbreak.start", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/adbreak/start"), "summary": 'Interrupt the programme with a clip, then rejoin live when it ends.'},
@@ -3565,6 +3828,16 @@ METHODS = (
     {"name": "filter.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/filters"), "summary": 'Every filter in place, with what it is and where it sits.'},
     {"name": "filter.remove", "scope": "operate", "mutating": True, "destructive": True, "rest": ("DELETE", "/api/v1/filters/{id}"), "summary": 'Take a filter out of the pipeline.'},
     {"name": "filter.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/filters/{id}/set"), "summary": "Change a filter's settings in place. A filter that cannot take the change while running says so rather than being restarted behind your back."},
+    {"name": "gallery.duplicate", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/gallery/duplicate"), "summary": 'Copy an item, shipped ones included, under a new name.'},
+    {"name": "gallery.edit", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/gallery/edit"), "summary": "Change an item's name, tags, description, zone or the values it fills its fields with."},
+    {"name": "gallery.export", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/gallery/export"), "summary": 'Write gallery items to one zip on the mixer, to carry a look to another mixer.'},
+    {"name": "gallery.import", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/gallery/import"), "summary": 'Take files into the gallery: a gallery zip, an SVG, an HTML page or folder, an OGraf package, a picture or a clip. Each is checked; refused ones say why and how to fix them.'},
+    {"name": "gallery.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/gallery/list"), "summary": 'The Graphics gallery: every lower third, background, ticker, bug, title card, page, clip and virtual set, made here or shipped, with what each is and where it goes.'},
+    {"name": "gallery.place", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/gallery/place"), "summary": 'Add a gallery item to a scene in its zone (a lower third low on the left, a background under everything, a bug in the corner), hidden until gallery.show. A set becomes a new scene.'},
+    {"name": "gallery.preview", "scope": "read", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/gallery/preview"), "summary": 'A picture of a gallery item as it would land on the canvas, transparent parts over a checkerboard, drawn on demand.'},
+    {"name": "gallery.remove", "scope": "operate", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/gallery/remove"), "summary": 'Delete a saved item and its files. Refused while a source shows it.'},
+    {"name": "gallery.save", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/gallery/save"), "summary": 'Save a graphic of any kind into the gallery with a name, tags and a description: an SVG template, an HTML page, a picture or clip, a ticker or text, or a virtual set.'},
+    {"name": "gallery.show", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/gallery/show"), "summary": 'Show a placed gallery item on air, or hide it, taking its scene when that scene is not on air. For a set, take its scene.'},
     {"name": "governor.calibrate", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/governor/calibrate"), "summary": "Measure this machine's encoders again, in the background, a few seconds of every core. Refused while anything is on air unless `confirm` is true."},
     {"name": "governor.status", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/governor/status"), "summary": 'The resource governor: when this machine was measured, what is in use and free on the CPU and each GPU encoder, and what was shed to keep the programme whole.'},
     {"name": "log.gst", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/log/gst"), "summary": "Raise GStreamer's own debug categories for a while, then let them fall back on their own."},
@@ -4413,6 +4686,233 @@ class GeneratedMethods:
         if params is not None:
             params["params"] = params
         return await self._call("filter.set", params)
+
+    async def gallery_duplicate(
+        self,
+        *,
+        id: Optional[str] = None,
+        name: Optional[str] = None,
+    ) -> GallerySaved:
+        """Copy an item, shipped ones included, under a new name."""
+        params: Dict[str, Any] = {}
+        if id is not None:
+            params["id"] = id
+        if name is not None:
+            params["name"] = name
+        return await self._call("gallery.duplicate", params)
+
+    async def gallery_edit(
+        self,
+        *,
+        description: Optional[str] = None,
+        id: Optional[str] = None,
+        name: Optional[str] = None,
+        tags: Any = None,
+        values: Optional[Dict[str, Any]] = None,
+        zone: Optional[str] = None,
+    ) -> GallerySaved:
+        """Change an item's name, tags, description, zone or the values it fills its fields with."""
+        params: Dict[str, Any] = {}
+        if description is not None:
+            params["description"] = description
+        if id is not None:
+            params["id"] = id
+        if name is not None:
+            params["name"] = name
+        if tags is not None:
+            params["tags"] = tags
+        if values is not None:
+            params["values"] = values
+        if zone is not None:
+            params["zone"] = zone
+        return await self._call("gallery.edit", params)
+
+    async def gallery_export(
+        self,
+        *,
+        ids: Any = None,
+        path: Optional[str] = None,
+    ) -> GalleryExported:
+        """Write gallery items to one zip on the mixer, to carry a look to another mixer."""
+        params: Dict[str, Any] = {}
+        if ids is not None:
+            params["ids"] = ids
+        if path is not None:
+            params["path"] = path
+        return await self._call("gallery.export", params)
+
+    async def gallery_import(
+        self,
+        *,
+        data: Optional[str] = None,
+        filename: Optional[str] = None,
+        path: Optional[str] = None,
+        replace: Optional[bool] = None,
+    ) -> GalleryImported:
+        """Take files into the gallery: a gallery zip, an SVG, an HTML page or folder, an OGraf package, a picture or a clip. Each is checked; refused ones say why and how to fix them."""
+        params: Dict[str, Any] = {}
+        if data is not None:
+            params["data"] = data
+        if filename is not None:
+            params["filename"] = filename
+        if path is not None:
+            params["path"] = path
+        if replace is not None:
+            params["replace"] = replace
+        return await self._call("gallery.import", params)
+
+    async def gallery_list(
+        self,
+        *,
+        kind: Optional[str] = None,
+        limit: Optional[int] = None,
+        query: Optional[str] = None,
+    ) -> GalleryList:
+        """The Graphics gallery: every lower third, background, ticker, bug, title card, page, clip and virtual set, made here or shipped, with what each is and where it goes."""
+        params: Dict[str, Any] = {}
+        if kind is not None:
+            params["kind"] = kind
+        if limit is not None:
+            params["limit"] = limit
+        if query is not None:
+            params["query"] = query
+        return await self._call("gallery.list", params)
+
+    async def gallery_place(
+        self,
+        *,
+        camera: Optional[str] = None,
+        id: Optional[str] = None,
+        scene: Optional[str] = None,
+        values: Optional[Dict[str, Any]] = None,
+        visible: Optional[bool] = None,
+        zone: Optional[str] = None,
+    ) -> GalleryPlaced:
+        """Add a gallery item to a scene in its zone (a lower third low on the left, a background under everything, a bug in the corner), hidden until gallery.show. A set becomes a new scene."""
+        params: Dict[str, Any] = {}
+        if camera is not None:
+            params["camera"] = camera
+        if id is not None:
+            params["id"] = id
+        if scene is not None:
+            params["scene"] = scene
+        if values is not None:
+            params["values"] = values
+        if visible is not None:
+            params["visible"] = visible
+        if zone is not None:
+            params["zone"] = zone
+        return await self._call("gallery.place", params)
+
+    async def gallery_preview(
+        self,
+        *,
+        background: Optional[str] = None,
+        id: Optional[str] = None,
+        values: Optional[Dict[str, Any]] = None,
+        width: Optional[int] = None,
+    ) -> GalleryPreview:
+        """A picture of a gallery item as it would land on the canvas, transparent parts over a checkerboard, drawn on demand."""
+        params: Dict[str, Any] = {}
+        if background is not None:
+            params["background"] = background
+        if id is not None:
+            params["id"] = id
+        if values is not None:
+            params["values"] = values
+        if width is not None:
+            params["width"] = width
+        return await self._call("gallery.preview", params)
+
+    async def gallery_remove(
+        self,
+        *,
+        id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Delete a saved item and its files. Refused while a source shows it."""
+        params: Dict[str, Any] = {}
+        if id is not None:
+            params["id"] = id
+        return await self._call("gallery.remove", params)
+
+    async def gallery_save(
+        self,
+        *,
+        data: Optional[str] = None,
+        description: Optional[str] = None,
+        file: Optional[str] = None,
+        filename: Optional[str] = None,
+        files: Optional[Dict[str, Any]] = None,
+        html: Optional[str] = None,
+        kind: Optional[str] = None,
+        made_by: Optional[str] = None,
+        moves: Optional[bool] = None,
+        name: Optional[str] = None,
+        replace: Optional[bool] = None,
+        set: Optional[Union[SetSpec, None]] = None,
+        source: Any = None,
+        svg: Optional[str] = None,
+        tags: Any = None,
+        transparent: Optional[bool] = None,
+        values: Optional[Dict[str, Any]] = None,
+        zone: Optional[str] = None,
+    ) -> GallerySaved:
+        """Save a graphic of any kind into the gallery with a name, tags and a description: an SVG template, an HTML page, a picture or clip, a ticker or text, or a virtual set."""
+        params: Dict[str, Any] = {}
+        if data is not None:
+            params["data"] = data
+        if description is not None:
+            params["description"] = description
+        if file is not None:
+            params["file"] = file
+        if filename is not None:
+            params["filename"] = filename
+        if files is not None:
+            params["files"] = files
+        if html is not None:
+            params["html"] = html
+        if kind is not None:
+            params["kind"] = kind
+        if made_by is not None:
+            params["made_by"] = made_by
+        if moves is not None:
+            params["moves"] = moves
+        if name is not None:
+            params["name"] = name
+        if replace is not None:
+            params["replace"] = replace
+        if set is not None:
+            params["set"] = set
+        if source is not None:
+            params["source"] = source
+        if svg is not None:
+            params["svg"] = svg
+        if tags is not None:
+            params["tags"] = tags
+        if transparent is not None:
+            params["transparent"] = transparent
+        if values is not None:
+            params["values"] = values
+        if zone is not None:
+            params["zone"] = zone
+        return await self._call("gallery.save", params)
+
+    async def gallery_show(
+        self,
+        *,
+        id: Optional[str] = None,
+        scene: Optional[str] = None,
+        visible: Optional[bool] = None,
+    ) -> GalleryShown:
+        """Show a placed gallery item on air, or hide it, taking its scene when that scene is not on air. For a set, take its scene."""
+        params: Dict[str, Any] = {}
+        if id is not None:
+            params["id"] = id
+        if scene is not None:
+            params["scene"] = scene
+        if visible is not None:
+            params["visible"] = visible
+        return await self._call("gallery.show", params)
 
     async def governor_calibrate(
         self,

@@ -1,6 +1,6 @@
 ---
 name: godwinmix-design
-description: Design on screen graphics for a GodwinMix mixer and put them on air, drawn by the mixer itself with no browser. Use when asked to make, brand, restyle or reword a news lower third, a breaking news bar, a headline strap, a score bug, a logo bug, a title card, a quote card or a location tag, or to choose between a text source, an SVG template and an OGraf page. Covers the built in pack, writing an SVG template with {{fields}} and shrink to fit, safe areas, save_template, placing it on a scene with an enter and an exit, looking at the result with preview_frame, and changing its words on air with set_source.
+description: Design on screen graphics for a GodwinMix mixer, save them into its Graphics gallery and put them on air. Use when asked to make, brand, restyle or reword a lower third, a breaking news bar, a score bug, a logo bug, a title card, a background, a ticker, a web (HTML) graphic, a clip with transparency or a virtual set, or to choose between a text source, an SVG template and a web page. Covers the gallery tools (save_graphic, preview_graphic, place_graphic, show_graphic, list_graphics), the built in pack, writing an SVG template with {{fields}} and shrink to fit, safe areas, looking at your own work, and changing words on air.
 ---
 
 # Designing graphics for a GodwinMix mixer
@@ -18,8 +18,11 @@ object, for an agent that has a shell and no MCP (pi, or any other):
 
 ```
 godwinmix tool agent_state
-godwinmix tool add_source '{"name": "lower", "uri": "template:news-lower-third"}'
+godwinmix tool save_graphic '{"name": "Storm strap", "file": "storm.svg"}'
+godwinmix tool preview_graphic '{"id": "storm-strap"}'
 ```
+
+A tool's picture is written to a file and its path printed: open it to look.
 
 It finds the GodwinMix app's mixer on the same machine by itself. A file goes
 into the media library with `godwinmix ctl upload picture.png`.
@@ -36,6 +39,30 @@ Movement in and out is not a reason to reach for OGraf. Every scene item has
 an `enter` and an `exit` (fade, slide, wipe, zoom), and they move templates
 like anything else. Do not put `<animate>` or CSS animation in a template:
 it is drawn once, as a still.
+
+## The gallery: save, look, fix, place, show
+
+Whatever you make, save it into the Graphics gallery. The person sees it
+there as a card and puts it on air with two clicks, and you can do the same.
+
+1. `save_graphic` with a `name` and ONE of: `svg` (fields make it a
+   template), `html` (a whole page, background transparent), `data` (PNG,
+   WebP, WebM or MOV as base64), `file` (a path; yours is fine, the tool
+   carries it), `source` (`{"uri": "ticker:", "params": {"items": [...]}}`)
+   or `set` (`{"background": "plate.png", "foreground": "desk.png",
+   "settings": {"presenter_scale": 0.8, "presenter_x": 0.62}}`). Add `tags`,
+   a one line `description` and a `zone`: `lower-third`, `full` (a
+   background), `bug`, `bottom` (a ticker), `center`.
+2. `preview_graphic {"id": "<id from the answer>"}` and look. Fix and save
+   again with `"replace": true` until it is right.
+3. `place_graphic {"id": ..., "values": {"headline": "..."}}` puts it on the
+   scene on air, hidden, where its zone says. A set becomes a new scene.
+4. `show_graphic {"id": ...}` puts it on air; `"visible": false` takes it off.
+   `place_graphic` again with new `values` changes its words.
+
+`list_graphics {"query": "red lower third"}` finds what is there; ids that
+are shipped can be copied with `duplicate_graphic`. Every answer has a `next`
+saying what to call.
 
 ## The pack
 

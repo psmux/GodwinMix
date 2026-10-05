@@ -22,6 +22,9 @@ pub struct BrandConfig {
     /// The colour of the panels behind the words. Empty for each
     /// template's own.
     pub panel: String,
+    /// The folder the Graphics gallery keeps its items in. Empty for a
+    /// folder called `graphics` inside the media library.
+    pub gallery: String,
 }
 
 impl BrandConfig {
@@ -49,11 +52,17 @@ impl BrandConfig {
 
 static BRAND: RwLock<Option<BrandConfig>> = RwLock::new(None);
 static LIBRARY: RwLock<Option<PathBuf>> = RwLock::new(None);
+static GALLERY: RwLock<Option<PathBuf>> = RwLock::new(None);
 
 /// Take the brand and the media folder from the config. Called at start.
 pub fn configure(media_dir: &str, brand: &BrandConfig) {
     let dir = PathBuf::from(media_dir);
     let dir = dir.canonicalize().unwrap_or(dir);
+    let gallery = match brand.gallery.trim() {
+        "" => dir.join("graphics"),
+        set => PathBuf::from(set),
+    };
+    *GALLERY.write() = Some(gallery);
     *LIBRARY.write() = Some(dir);
     let brand = match brand.check() {
         Ok(()) => brand.clone(),
@@ -75,4 +84,10 @@ pub fn brand() -> BrandConfig {
 /// only the pack and absolute paths resolve.
 pub fn library() -> Option<PathBuf> {
     LIBRARY.read().clone()
+}
+
+/// The gallery's folder: `[graphics] gallery`, or `graphics` inside the
+/// media library, or `graphics` where the mixer runs when neither was set.
+pub fn gallery() -> PathBuf {
+    GALLERY.read().clone().unwrap_or_else(|| PathBuf::from("graphics"))
 }

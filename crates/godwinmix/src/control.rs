@@ -1584,6 +1584,21 @@ fn page_address(bind: &str) -> String {
     format!("http://{local}/")
 }
 
+/// Where this process's control port listens, once it does. A source on
+/// this machine that reads a file the port serves (an HTML graphic from the
+/// gallery) is given this address.
+static BOUND: parking_lot::RwLock<Option<std::net::SocketAddr>> = parking_lot::RwLock::new(None);
+
+/// The control port's address as a process on this machine reaches it: an
+/// unspecified bind is reached on loopback.
+pub fn bound() -> Option<std::net::SocketAddr> {
+    let addr = (*BOUND.read())?;
+    match addr.ip().is_unspecified() {
+        true => Some(std::net::SocketAddr::from(([127, 0, 0, 1], addr.port()))),
+        false => Some(addr),
+    }
+}
+
 /// The same, on a listener somebody else opened.
 ///
 /// What a test uses to get a port the operating system picked, so two of them
@@ -1598,6 +1613,9 @@ pub async fn serve_with(
     state: AppState,
     tls: Option<tokio_rustls::TlsAcceptor>,
 ) -> Result<()> {
+    if let Ok(addr) = listener.local_addr() {
+        *BOUND.write() = Some(addr);
+    }
     let snapshots =
         Tracker::new(state.snapshot.clone(), state.multiview.clone(), state.mixer.clone());
     spawn_background(state.clone());

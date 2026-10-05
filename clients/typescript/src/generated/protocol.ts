@@ -1031,6 +1031,187 @@ export interface Frame {
   w: number;
 }
 
+/** `gallery.duplicate`. */
+export interface GalleryDuplicateRequest {
+  id?: string;
+  name?: string | null;
+}
+
+/** `gallery.edit`: change what is said about an item, or its field values. */
+export interface GalleryEditRequest {
+  description?: string | null;
+  id?: string;
+  name?: string | null;
+  tags?: unknown;
+  values?: Record<string, unknown> | null;
+  zone?: string | null;
+}
+
+/** `gallery.export`: items as one zip to carry to another mixer. */
+export interface GalleryExportRequest {
+  ids?: unknown;
+  path?: string | null;
+}
+
+/** The answer to `gallery.export`. */
+export interface GalleryExported {
+  ids: string[];
+  path: string;
+  size_bytes: number;
+  url: string;
+}
+
+/** One item by id: `gallery.remove`. */
+export interface GalleryIdRequest {
+  id?: string;
+}
+
+/** `gallery.import`: files made elsewhere, checked one by one. */
+export interface GalleryImportRequest {
+  data?: string | null;
+  filename?: string | null;
+  path?: string | null;
+  replace?: boolean;
+}
+
+/** The answer to `gallery.import`. */
+export interface GalleryImported {
+  added: GalleryItem[];
+  refused: Refused[];
+}
+
+/** One item, as `gallery.list` describes it. */
+export interface GalleryItem {
+  description?: string;
+  fields?: TemplateField[];
+  id: string;
+  kind: GalleryKind;
+  made_by?: string;
+  moves: boolean;
+  moving?: string | null;
+  name: string;
+  origin: Origin;
+  placed?: string[];
+  saved?: string;
+  tags?: string[];
+  transparent: boolean;
+  uri?: string | null;
+  values?: Record<string, unknown>;
+  zone: Zone;
+}
+
+/** What an item is, which decides how it is drawn and how it is added. */
+export type GalleryKind = "template" | "image" | "clip" | "html" | "ograf" | "ticker" | "text" | "set" | "transition" | "effect";
+
+/** The answer to `gallery.list`. */
+export interface GalleryList {
+  dir: string;
+  errors?: string[];
+  items: GalleryItem[];
+  total: number;
+}
+
+/** `gallery.list`. */
+export interface GalleryListRequest {
+  kind?: string | null;
+  limit?: number | null;
+  query?: string | null;
+}
+
+/**
+ * `gallery.place`: add an item to a scene in its zone. Hidden unless
+ * `visible`; `gallery.show` takes it on air.
+ */
+export interface GalleryPlaceRequest {
+  camera?: string | null;
+  id?: string;
+  scene?: string | null;
+  values?: Record<string, unknown> | null;
+  visible?: boolean | null;
+  zone?: string | null;
+}
+
+/** The answer to `gallery.place`. */
+export interface GalleryPlaced {
+  id: string;
+  item?: string | null;
+  new_scene: boolean;
+  next: string;
+  scene: string;
+  source?: string | null;
+  updated: boolean;
+  visible: boolean;
+}
+
+/** The answer to `gallery.preview`. */
+export interface GalleryPreview {
+  caption: string;
+  encoding: string;
+  format: string;
+  from: string;
+  height: number;
+  id: string;
+  image: string;
+  width: number;
+}
+
+/** `gallery.preview`: a picture of an item, drawn on demand. */
+export interface GalleryPreviewRequest {
+  background?: string | null;
+  id?: string;
+  values?: Record<string, unknown> | null;
+  width?: number | null;
+}
+
+/**
+ * `gallery.save`: one call for any kind. Give exactly one of `svg`, `html`,
+ * `data`, `file`, `source` or `set`; the kind is worked out from it.
+ */
+export interface GallerySaveRequest {
+  data?: string | null;
+  description?: string | null;
+  file?: string | null;
+  filename?: string | null;
+  files?: Record<string, unknown> | null;
+  html?: string | null;
+  kind?: string | null;
+  made_by?: string | null;
+  moves?: boolean | null;
+  name?: string;
+  replace?: boolean;
+  set?: SetSpec | null;
+  source?: unknown;
+  svg?: string | null;
+  tags?: unknown;
+  transparent?: boolean | null;
+  values?: Record<string, unknown> | null;
+  zone?: string | null;
+}
+
+/** The answer to `gallery.save`, `gallery.edit` and `gallery.duplicate`. */
+export interface GallerySaved {
+  item: GalleryItem;
+  next: string;
+  path: string;
+  redrawn?: string[];
+  warnings?: string[];
+}
+
+/** `gallery.show`: take a placed item on air, or off. */
+export interface GalleryShowRequest {
+  id?: string;
+  scene?: string | null;
+  visible?: boolean | null;
+}
+
+/** The answer to `gallery.show`. */
+export interface GalleryShown {
+  item: string;
+  scene: string;
+  took?: boolean;
+  visible: boolean;
+}
+
 /** One item's derived box. */
 export interface Geometry {
   height: number;
@@ -1625,6 +1806,9 @@ export interface Ograf {
   version?: string | null;
 }
 
+/** Where an item came from. */
+export type Origin = "shipped" | "agent" | "uploaded";
+
 export type OutputState = "connecting" | "live" | "reconnecting" | "failed";
 
 /** What one output is doing. */
@@ -1956,6 +2140,13 @@ export interface ProtocolRecord {
 }
 export type { ProtocolRecord as Record };
 
+/** One file the import would not take. */
+export interface Refused {
+  file: string;
+  fix: string;
+  reason: string;
+}
+
 /** One asset an import could not put back. */
 export interface Relink {
   asset: Id;
@@ -2246,6 +2437,14 @@ export interface SetSourceRequest {
   params?: Record<string, unknown> | null;
   place?: Place | null;
   transport?: BridgeTransport | null;
+}
+
+/** The pictures and settings of a virtual set. */
+export interface SetSpec {
+  background: string;
+  foreground?: string | null;
+  layout?: string | null;
+  settings?: Record<string, unknown>;
 }
 
 /** `setup.start` and `setup.get`: one piece by name. */
@@ -2944,6 +3143,9 @@ export interface VitalsConfig {
   window_secs?: number;
 }
 
+/** Where an item sits on the canvas when it is placed. */
+export type Zone = "full" | "lower-third" | "bug" | "top" | "bottom" | "center" | "overlay";
+
 export interface ProgramTookEvent {
   at_running_time_ms?: number;
   duration_ms?: number;
@@ -3105,6 +3307,16 @@ export interface MethodParams {
   "filter.list": Record<string, never>;
   "filter.remove": FilterIdRequest;
   "filter.set": SetFilterRequest;
+  "gallery.duplicate": GalleryDuplicateRequest;
+  "gallery.edit": GalleryEditRequest;
+  "gallery.export": GalleryExportRequest;
+  "gallery.import": GalleryImportRequest;
+  "gallery.list": GalleryListRequest;
+  "gallery.place": GalleryPlaceRequest;
+  "gallery.preview": GalleryPreviewRequest;
+  "gallery.remove": GalleryIdRequest;
+  "gallery.save": GallerySaveRequest;
+  "gallery.show": GalleryShowRequest;
   "governor.calibrate": CalibrateRequest;
   "governor.status": Record<string, never>;
   "log.gst": LogGstRequest;
@@ -3304,6 +3516,16 @@ export interface MethodResults {
   "filter.list": FilterListing;
   "filter.remove": FilterRemoved;
   "filter.set": FilterRecord;
+  "gallery.duplicate": GallerySaved;
+  "gallery.edit": GallerySaved;
+  "gallery.export": GalleryExported;
+  "gallery.import": GalleryImported;
+  "gallery.list": GalleryList;
+  "gallery.place": GalleryPlaced;
+  "gallery.preview": GalleryPreview;
+  "gallery.remove": Record<string, unknown>;
+  "gallery.save": GallerySaved;
+  "gallery.show": GalleryShown;
   "governor.calibrate": CalibrateResult;
   "governor.status": GovernorStatus;
   "log.gst": LogGstResult;
@@ -3554,6 +3776,16 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "filter.list", summary: "Every filter in place, with what it is and where it sits.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/filters" } },
   { name: "filter.remove", summary: "Take a filter out of the pipeline.", scope: "operate", mutating: true, destructive: true, rest: { method: "DELETE", path: "/api/v1/filters/{id}" } },
   { name: "filter.set", summary: "Change a filter's settings in place. A filter that cannot take the change while running says so rather than being restarted behind your back.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/filters/{id}/set" } },
+  { name: "gallery.duplicate", summary: "Copy an item, shipped ones included, under a new name.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/gallery/duplicate" } },
+  { name: "gallery.edit", summary: "Change an item's name, tags, description, zone or the values it fills its fields with.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/gallery/edit" } },
+  { name: "gallery.export", summary: "Write gallery items to one zip on the mixer, to carry a look to another mixer.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/gallery/export" } },
+  { name: "gallery.import", summary: "Take files into the gallery: a gallery zip, an SVG, an HTML page or folder, an OGraf package, a picture or a clip. Each is checked; refused ones say why and how to fix them.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/gallery/import" } },
+  { name: "gallery.list", summary: "The Graphics gallery: every lower third, background, ticker, bug, title card, page, clip and virtual set, made here or shipped, with what each is and where it goes.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/gallery/list" } },
+  { name: "gallery.place", summary: "Add a gallery item to a scene in its zone (a lower third low on the left, a background under everything, a bug in the corner), hidden until gallery.show. A set becomes a new scene.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/gallery/place" } },
+  { name: "gallery.preview", summary: "A picture of a gallery item as it would land on the canvas, transparent parts over a checkerboard, drawn on demand.", scope: "read", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/gallery/preview" } },
+  { name: "gallery.remove", summary: "Delete a saved item and its files. Refused while a source shows it.", scope: "operate", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/gallery/remove" } },
+  { name: "gallery.save", summary: "Save a graphic of any kind into the gallery with a name, tags and a description: an SVG template, an HTML page, a picture or clip, a ticker or text, or a virtual set.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/gallery/save" } },
+  { name: "gallery.show", summary: "Show a placed gallery item on air, or hide it, taking its scene when that scene is not on air. For a set, take its scene.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/gallery/show" } },
   { name: "governor.calibrate", summary: "Measure this machine's encoders again, in the background, a few seconds of every core. Refused while anything is on air unless `confirm` is true.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/governor/calibrate" } },
   { name: "governor.status", summary: "The resource governor: when this machine was measured, what is in use and free on the CPU and each GPU encoder, and what was shed to keep the programme whole.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/governor/status" } },
   { name: "log.gst", summary: "Raise GStreamer's own debug categories for a while, then let them fall back on their own.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/log/gst" } },
@@ -3995,6 +4227,56 @@ export class GeneratedMethods {
   /** Change a filter's settings in place. A filter that cannot take the change while running says so rather than being restarted behind your back. */
   filterSet(params: SetFilterRequest): Promise<FilterRecord> {
     return this._call("filter.set", params as unknown as Record<string, unknown>) as Promise<FilterRecord>;
+  }
+
+  /** Copy an item, shipped ones included, under a new name. */
+  galleryDuplicate(params: GalleryDuplicateRequest = {}): Promise<GallerySaved> {
+    return this._call("gallery.duplicate", params as unknown as Record<string, unknown>) as Promise<GallerySaved>;
+  }
+
+  /** Change an item's name, tags, description, zone or the values it fills its fields with. */
+  galleryEdit(params: GalleryEditRequest = {}): Promise<GallerySaved> {
+    return this._call("gallery.edit", params as unknown as Record<string, unknown>) as Promise<GallerySaved>;
+  }
+
+  /** Write gallery items to one zip on the mixer, to carry a look to another mixer. */
+  galleryExport(params: GalleryExportRequest = {}): Promise<GalleryExported> {
+    return this._call("gallery.export", params as unknown as Record<string, unknown>) as Promise<GalleryExported>;
+  }
+
+  /** Take files into the gallery: a gallery zip, an SVG, an HTML page or folder, an OGraf package, a picture or a clip. Each is checked; refused ones say why and how to fix them. */
+  galleryImport(params: GalleryImportRequest = {}): Promise<GalleryImported> {
+    return this._call("gallery.import", params as unknown as Record<string, unknown>) as Promise<GalleryImported>;
+  }
+
+  /** The Graphics gallery: every lower third, background, ticker, bug, title card, page, clip and virtual set, made here or shipped, with what each is and where it goes. */
+  galleryList(params: GalleryListRequest = {}): Promise<GalleryList> {
+    return this._call("gallery.list", params as unknown as Record<string, unknown>) as Promise<GalleryList>;
+  }
+
+  /** Add a gallery item to a scene in its zone (a lower third low on the left, a background under everything, a bug in the corner), hidden until gallery.show. A set becomes a new scene. */
+  galleryPlace(params: GalleryPlaceRequest = {}): Promise<GalleryPlaced> {
+    return this._call("gallery.place", params as unknown as Record<string, unknown>) as Promise<GalleryPlaced>;
+  }
+
+  /** A picture of a gallery item as it would land on the canvas, transparent parts over a checkerboard, drawn on demand. */
+  galleryPreview(params: GalleryPreviewRequest = {}): Promise<GalleryPreview> {
+    return this._call("gallery.preview", params as unknown as Record<string, unknown>) as Promise<GalleryPreview>;
+  }
+
+  /** Delete a saved item and its files. Refused while a source shows it. */
+  galleryRemove(params: GalleryIdRequest = {}): Promise<Record<string, unknown>> {
+    return this._call("gallery.remove", params as unknown as Record<string, unknown>) as Promise<Record<string, unknown>>;
+  }
+
+  /** Save a graphic of any kind into the gallery with a name, tags and a description: an SVG template, an HTML page, a picture or clip, a ticker or text, or a virtual set. */
+  gallerySave(params: GallerySaveRequest = {}): Promise<GallerySaved> {
+    return this._call("gallery.save", params as unknown as Record<string, unknown>) as Promise<GallerySaved>;
+  }
+
+  /** Show a placed gallery item on air, or hide it, taking its scene when that scene is not on air. For a set, take its scene. */
+  galleryShow(params: GalleryShowRequest = {}): Promise<GalleryShown> {
+    return this._call("gallery.show", params as unknown as Record<string, unknown>) as Promise<GalleryShown>;
   }
 
   /** Measure this machine's encoders again, in the background, a few seconds of every core. Refused while anything is on air unless `confirm` is true. */
