@@ -347,6 +347,7 @@ const DEV_ASSETS: &[(&str, &str)] = &[
     // against stubs. No camera and no socket.
     ("test/browser-devices.js", include_str!("../../../ui/test/browser-devices.js")),
     ("test/browser-channel.js", include_str!("../../../ui/test/browser-channel.js")),
+    ("test/phone-camera.js", include_str!("../../../ui/test/phone-camera.js")),
     // The designer kits' behaviour, as the reference implementation answered
     // it. The TypeScript and Python suites read the same file from the
     // repository; the browser reads it from here, because the page has no file
