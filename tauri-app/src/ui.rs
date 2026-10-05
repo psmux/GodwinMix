@@ -102,7 +102,8 @@ pub fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     MenuBuilder::new(app).items(&[&app_menu, &edit, &window]).build()
 }
 
-/// The shell's own submenu: About, updates, connect, restart, folders, quit.
+/// The shell's own submenu: About, updates, connect, restart, whether other
+/// devices may connect, folders, quit.
 pub fn app_submenu(app: &AppHandle) -> tauri::Result<Submenu<tauri::Wry>> {
     let connect = MenuItemBuilder::with_id("connect", "Connect to a mixer...")
         .accelerator("CmdOrCtrl+Shift+C")
@@ -110,6 +111,7 @@ pub fn app_submenu(app: &AppHandle) -> tauri::Result<Submenu<tauri::Wry>> {
     let logs = MenuItemBuilder::with_id("logs", "Open logs folder").build(app)?;
     let config = MenuItemBuilder::with_id("config", "Open config folder").build(app)?;
     let restart = MenuItemBuilder::with_id("restart", "Restart the mixer").build(app)?;
+    let lan = crate::lan::menu_item(app)?;
     let updates = MenuItemBuilder::with_id("updates", "Check for updates...").build(app)?;
     let quit = MenuItemBuilder::with_id("quit", "Quit").accelerator("CmdOrCtrl+Q").build(app)?;
     let quit_all = MenuItemBuilder::with_id("quit-all", "Quit and stop the mixer")
@@ -119,7 +121,7 @@ pub fn app_submenu(app: &AppHandle) -> tauri::Result<Submenu<tauri::Wry>> {
     let about = PredefinedMenuItem::about(app, Some("About GodwinMix"), Some(about_metadata()))?;
     let separator = || PredefinedMenuItem::separator(app);
     SubmenuBuilder::new(app, "GodwinMix")
-        .items(&[&about, &updates, &separator()?, &connect, &restart, &separator()?, &logs, &config, &separator()?, &quit, &quit_all])
+        .items(&[&about, &updates, &separator()?, &connect, &restart, &lan, &separator()?, &logs, &config, &separator()?, &quit, &quit_all])
         .build()
 }
 
@@ -167,6 +169,7 @@ pub fn on_menu(app: &AppHandle, id: &str) {
         "config" => reveal(app, crate::settings::data_dir(app).ok()),
         "updates" => check_for_updates(app.clone()),
         "restart" => crate::restart::from_page(app),
+        crate::lan::MENU_ID => crate::lan::toggle(app),
         "quit" => crate::quit(app, false),
         "quit-all" => crate::quit(app, true),
         _ => {}

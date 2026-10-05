@@ -230,6 +230,8 @@ const ASSETS: &[(&str, &str)] = &[
     // menu. Data, fetched when a menu first opens.
     ("shell/menus.json", include_str!("../../../ui/shell/menus.json")),
     ("shell/agents.js", include_str!("../../../ui/shell/agents.js")),
+    ("shell/devices.js", include_str!("../../../ui/shell/devices.js")),
+    ("shell/devices-list.js", include_str!("../../../ui/shell/devices-list.js")),
     ("shell/menu-actions.js", include_str!("../../../ui/shell/menu-actions.js")),
     ("shell/project.js", include_str!("../../../ui/shell/project.js")),
     ("shell/project-open.js", include_str!("../../../ui/shell/project-open.js")),
@@ -341,6 +343,7 @@ const DEV_ASSETS: &[(&str, &str)] = &[
     // This browser's camera: the publisher's parts and the browser channel,
     // against stubs. No camera and no socket.
     ("test/browser-devices.js", include_str!("../../../ui/test/browser-devices.js")),
+    ("test/lan-devices.js", include_str!("../../../ui/test/lan-devices.js")),
     ("test/browser-channel.js", include_str!("../../../ui/test/browser-channel.js")),
     // The designer kits' behaviour, as the reference implementation answered
     // it. The TypeScript and Python suites read the same file from the
@@ -894,6 +897,8 @@ mod tests {
         reachable.extend(closure_of("panels/composer/cutout.js"));
         // Help > Connect an AI agent, on its first press.
         reachable.extend(closure_of("shell/agents.js"));
+        // Help > Open on another device, on its first press.
+        reachable.extend(closure_of("shell/devices.js"));
         reachable.extend(closure_of("panels/outputs/destination.js"));
         reachable.extend(closure_of("panels/channels/panel.js"));
         reachable.extend(closure_of("shell/sandbox.js"));

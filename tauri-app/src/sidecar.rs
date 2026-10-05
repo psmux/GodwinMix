@@ -73,9 +73,14 @@ pub async fn ensure(app: &AppHandle) -> Result<Local, String> {
     }
 }
 
-/// Start the mixer on this computer and wait until it answers.
+/// Start the mixer on this computer and wait until it answers. On the port
+/// kept for other devices when that setting is on (see `lan`), else on a
+/// fresh one.
 pub async fn start(app: &AppHandle) -> Result<Local, String> {
-    let port = free_port().map_err(|e| format!("no free port to give the mixer: {e}"))?;
+    let port = match crate::lan::kept_port(app).await {
+        Some(port) => port,
+        None => free_port().map_err(|e| format!("no free port to give the mixer: {e}"))?,
+    };
     start_on(app, port).await
 }
 
@@ -86,6 +91,12 @@ pub async fn start_on(app: &AppHandle, port: u16) -> Result<Local, String> {
     let config = crate::settings::config_path(app).map_err(|e| format!("could not find the config folder: {e}"))?;
     let token = crate::settings::local_token(app).map_err(|e| format!("could not make a token: {e}"))?;
     let log = log_file(app)?;
+    let host = crate::lan::bind_host(app);
+    // Never an open port on the network. `local_token` always makes one, so
+    // this is the line that keeps it that way if that ever changes.
+    if host != "127.0.0.1" && token.len() < 32 {
+        return Err("The mixer was not started for other devices: it has no token to ask them for.".into());
+    }
 
     let target = Target::new(format!("http://127.0.0.1:{port}"), token.clone());
     let mut env = environment(app);
@@ -103,7 +114,7 @@ pub async fn start_on(app: &AppHandle, port: u16) -> Result<Local, String> {
             "--config".as_ref(),
             config.as_os_str(),
             "--bind".as_ref(),
-            format!("127.0.0.1:{port}").as_ref(),
+            format!("{host}:{port}").as_ref(),
             // This app starts the mixer again when it exits asking for a
             // restart (see `record`), so core.restart may exit.
             "--supervised".as_ref(),

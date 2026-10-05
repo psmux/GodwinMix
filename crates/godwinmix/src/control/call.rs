@@ -179,6 +179,19 @@ pub fn safety_error(method: &str, refusal: godwinmix_core::safety::Refusal) -> R
     }
 }
 
+/// A device token taken back while its connection stayed open.
+pub fn revoked(token: &Token) -> RpcError {
+    RpcError::new(
+        ErrorCode::Scope,
+        format!(
+            "the device token '{}' was revoked. Ask whoever runs this mixer for a new one,              or scan the code under Help, Open on another device, again.",
+            token.id
+        ),
+    )
+    .with("token", token.id.as_str())
+    .with("revoked", true)
+}
+
 /// Run one method, with everything that has to happen around it.
 ///
 /// Long because the sequence is the contract and splitting it into six
@@ -211,6 +224,9 @@ pub async fn dispatch(
 
     if !token.has(def.scope) {
         return Err(RpcError::scope(method, def.scope.as_str(), &token.scope_names()));
+    }
+    if app.tokens.revoked(token) {
+        return Err(revoked(token));
     }
     if let Some(refusal) = rehearsal_refusal(app, method) {
         return Err(refusal);

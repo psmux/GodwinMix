@@ -43,6 +43,28 @@ pub fn from_page(app: &AppHandle) {
     tauri::async_runtime::spawn(async move { report(&app, restart(&app).await) });
 }
 
+/// "Let other devices on this network connect" changed. The address the
+/// mixer binds is fixed for its life, so it is started again, on the kept
+/// port when the setting is now on and on a fresh one when it is off.
+pub fn after_setting_change(app: &AppHandle) {
+    if app.state::<Shell>().local.lock().unwrap().is_none() {
+        // The window is on a mixer elsewhere, or on none. The setting is
+        // kept, and the next mixer this app starts here uses it.
+        crate::ui::tell(
+            app,
+            "Saved",
+            "No mixer is running on this computer, so the setting applies the next time this app starts one.",
+            MessageDialogKind::Info,
+        );
+        return;
+    }
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let outcome = restart_with(&app, false).await;
+        report(&app, outcome);
+    });
+}
+
 /// The mixer exited asking to be started again.
 pub fn after_exit(app: AppHandle) {
     tauri::async_runtime::spawn(async move { report(&app, restart(&app).await) });
@@ -56,15 +78,19 @@ fn report(app: &AppHandle, outcome: Result<CoreInfo, String>) {
 }
 
 async fn restart(app: &AppHandle) -> Result<CoreInfo, String> {
+    restart_with(app, true).await
+}
+
+async fn restart_with(app: &AppHandle, same_port: bool) -> Result<CoreInfo, String> {
     if RESTARTING.swap(true, Ordering::SeqCst) {
         return Err("The mixer is already restarting. Wait a few seconds for it to come back.".into());
     }
-    let outcome = restart_once(app).await;
+    let outcome = restart_once(app, same_port).await;
     RESTARTING.store(false, Ordering::SeqCst);
     outcome
 }
 
-async fn restart_once(app: &AppHandle) -> Result<CoreInfo, String> {
+async fn restart_once(app: &AppHandle, same_port: bool) -> Result<CoreInfo, String> {
     let old = app.state::<Shell>().local.lock().unwrap().take();
     let Some(old) = old else {
         return Err("This app has not started a mixer on this computer, so there is none for it \
@@ -74,7 +100,8 @@ async fn restart_once(app: &AppHandle) -> Result<CoreInfo, String> {
     };
     let (port, old_base) = (old.port, old.target.base.clone());
     sidecar::stop(app, old).await;
-    let fresh = match sidecar::start_on(app, port).await {
+    let first = if same_port { sidecar::start_on(app, port).await } else { sidecar::start(app).await };
+    let fresh = match first {
         Ok(local) => local,
         Err(first) => sidecar::start(app)
             .await

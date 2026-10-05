@@ -21,6 +21,7 @@ use std::sync::Arc;
 pub mod agent;
 pub mod channel_destinations;
 mod channels;
+mod devices;
 mod feeds;
 mod shows;
 pub mod config;
@@ -89,6 +90,7 @@ pub fn registry() -> Registry<Call> {
     renditions::register(&mut reg);
     shows::register(&mut reg);
     config::register(&mut reg);
+    devices::register(&mut reg);
     vitals::register(&mut reg);
     feeds::register(&mut reg);
     setup::register(&mut reg);
