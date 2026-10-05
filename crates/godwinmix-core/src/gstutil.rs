@@ -1026,7 +1026,7 @@ mod tests {
         let (release, wait) = std::sync::mpsc::channel();
         let wait = std::sync::Mutex::new(wait);
         sink.static_pad("sink").unwrap().add_probe(gst::PadProbeType::BUFFER, move |_, _| {
-            let _ = wait.lock().unwrap().recv_timeout(Duration::from_secs(3));
+            let _ = wait.lock().unwrap().recv_timeout(Duration::from_secs(30));
             gst::PadProbeReturn::Remove
         });
         pipeline.add_many([source.upcast_ref(), &queue, &sink]).unwrap();
@@ -1039,9 +1039,10 @@ mod tests {
         }
         // Until the source is empty and the queue has settled. The source
         // reads empty as soon as its thread takes the last buffer, a moment
-        // before that buffer reaches the queue, and a macOS runner measured
-        // the queue in that moment and found one.
-        let until = std::time::Instant::now() + Duration::from_secs(2);
+        // before that buffer reaches the queue, and runners measured one
+        // there. The sink is held for thirty seconds, not three, so a slow
+        // runner cannot let it go before the queue is read.
+        let until = std::time::Instant::now() + Duration::from_secs(10);
         let settled = || source.current_level_bytes() == 0 && queue.property::<u32>("current-level-buffers") >= 2;
         while !settled() && std::time::Instant::now() < until {
             std::thread::sleep(Duration::from_millis(5));
