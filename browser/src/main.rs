@@ -54,6 +54,9 @@ struct Opts {
     /// Let Chromium use the GPU. Off by default, which rasterises and runs
     /// WebGL in software on every machine.
     gpu: bool,
+    /// No network at all, and the page may read the files beside it: for a
+    /// template that is a local file. See `control::switches`.
+    offline: bool,
     /// Device pixels to a CSS pixel. A graphic designed on a 1920 wide page
     /// is drawn on a 1280 wide canvas at 0.6667, laid out exactly as it was
     /// designed and painted at the canvas's own size.
@@ -64,6 +67,8 @@ struct Opts {
 static GRAPHIC: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 /// Whether Chromium may use the GPU. Set once before CEF starts.
 static GPU: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+/// Whether the page is cut off from the network. Set once before CEF starts.
+static OFFLINE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 fn graphic_mode() -> bool {
     GRAPHIC.load(std::sync::atomic::Ordering::Relaxed)
@@ -87,6 +92,7 @@ fn opts() -> Opts {
         transparent: false,
         graphic: false,
         gpu: false,
+        offline: false,
         scale: 1.0,
     };
     let mut it = std::env::args().skip(1);
@@ -109,6 +115,7 @@ fn opts() -> Opts {
                 o.transparent = true;
             }
             "--gpu" => o.gpu = true,
+            "--offline" => o.offline = true,
             "--scale" => o.scale = val().parse::<f64>().ok().filter(|s| *s > 0.1 && *s <= 4.0).unwrap_or(1.0),
             _ => {} // Chromium's own switches pass through untouched.
         }
@@ -552,7 +559,7 @@ wrap_app! {
                 }
             }
             if graphic_mode() {
-                control::switches(cl);
+                control::switches(cl, OFFLINE.load(std::sync::atomic::Ordering::Relaxed));
             }
             // macOS: the cookie store is encrypted with a key Chromium keeps in
             // the login keychain, and reading it from an app that is not signed
@@ -704,6 +711,7 @@ fn main() {
     let o = opts();
     GRAPHIC.store(o.graphic, std::sync::atomic::Ordering::Relaxed);
     GPU.store(o.gpu, std::sync::atomic::Ordering::Relaxed);
+    OFFLINE.store(o.offline, std::sync::atomic::Ordering::Relaxed);
     let state: State = Arc::new(Mutex::new(Shared {
         width: o.width,
         height: o.height,

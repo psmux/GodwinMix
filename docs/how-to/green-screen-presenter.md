@@ -103,6 +103,26 @@ curl -X POST http://your-mixer:8080/api/v1/sources/cam1/key_color \
   -H 'content-type: application/json' -d '{"x": 0.1, "y": 0.2}'
 ```
 
+## Use a starter set
+
+Two complete sets ship with the mixer, each a moving background and a
+transparent foreground that line up with where the layout stands the
+presenter: `set-newsroom` (a newsroom wall and floor) with the
+`set-newsroom-desk` anchor desk, and `set-studio` (a floor grid running to
+the horizon and a turning ring) with the `set-studio-frame` pillars. Both take
+your colours and your station's name as fields.
+
+```sh
+gmx ctl source add set-bg html:set-newsroom --param fields.station="NEWS 24" --param fields.accent="#d4202c"
+gmx ctl source add set-desk template:set-newsroom-desk --param fields.station="NEWS 24" --param fields.accent="#d4202c"
+gmx ctl rpc scene.create_from '{"sources": ["set-bg", "cam1", "set-desk"], "layout": "virtual-set", "name": "Newsroom"}'
+```
+
+The background moves slowly, at 20 frames a second, and only while the scene
+is on air. How to design a set of your own (sizes, what must be transparent,
+where the presenter stands) is in
+[graphics for agents](../reference/graphics-for-agents.md#virtual-sets).
+
 ## When it does not look right
 
 * **The presenter is on black.** The programme is composited on a GPU
