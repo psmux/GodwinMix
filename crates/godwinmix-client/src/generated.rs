@@ -1697,7 +1697,7 @@ pub struct FeedTestResult {
 /// What a field holds.
 pub type FieldType = String;
 /// The values api_level 1 knows for [`FieldType`].
-pub const FIELD_TYPE_VALUES: &[&str] = &["text", "color"];
+pub const FIELD_TYPE_VALUES: &[&str] = &["text", "color", "image"];
 
 /// One field and what it shows now.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -2327,14 +2327,16 @@ pub struct ItemTransition {
     /// scene's own transition for this item.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub on_take: Option<bool>,
-    /// cut, fade, slide, zoom or wipe.
+    /// cut, fade, slide, zoom, wipe or hold. `hold` keeps the item as it is
+    /// for `duration_ms` and then takes it away, for a graphic whose own
+    /// animation is its way out.
     #[serde(rename = "type")]
     pub r#type: ItemTransitionKind,
 }
 
 pub type ItemTransitionKind = String;
 /// The values api_level 1 knows for [`ItemTransitionKind`].
-pub const ITEM_TRANSITION_KIND_VALUES: &[&str] = &["cut", "fade", "slide", "zoom", "wipe"];
+pub const ITEM_TRANSITION_KIND_VALUES: &[&str] = &["cut", "fade", "slide", "zoom", "wipe", "hold"];
 
 /// `scene.item.align`, `distribute`, `fit_to_canvas`, `cover_canvas`,
 /// `arrange_grid`, `match_size`, `group`.
@@ -4715,18 +4717,66 @@ pub struct TaskView {
 /// or an object naming it.
 pub type TelemetryExt = Value;
 
+/// `template.check`: read a template the way `template.save` and
+/// `source.add` would, without writing anything, and say what to fix.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TemplateCheckRequest {
+    /// An HTML template's whole document.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub html: Option<String>,
+    /// Or a template by name, as `template.list` gives it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// An SVG template's whole document.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub svg: Option<String>,
+}
+
+/// The answer to `template.check`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TemplateChecked {
+    /// True when nothing at level `error` was found.
+    pub ok: bool,
+    pub problems: Vec<TemplateProblem>,
+    /// The template as it reads, when it reads at all.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub template: Option<TemplateInfo>,
+}
+
 /// A template and its SVG.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct TemplateDoc {
+    /// What sort of graphic it is, for a picker: lower-third, ticker, bug,
+    /// score, title, background, foreground, countdown, slate. HTML only.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub category: Option<String>,
     pub description: String,
     pub fields: Vec<TemplateField>,
+    /// `svg` (absent) or `html`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub format: Option<TemplateFormat>,
     pub height: u32,
+    /// The HTML as written, for an HTML template.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub html: Option<String>,
     /// The name `template:<name>` adds it by: a pack name such as
     /// `news-lower-third`, or a library file name such as `my-bar.svg`.
     pub name: String,
+    /// True for a design that covers the whole picture on purpose: a
+    /// background, a title card, a slate. HTML only.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub opaque: Option<bool>,
     pub origin: TemplateOrigin,
-    /// The SVG as written, with its `{{field}}` markers in place.
+    /// How long its own way out takes, in milliseconds. Give the scene item
+    /// `"exit": {"type": "hold", "duration_ms": <this>}` so it stays drawn
+    /// while it plays. HTML only.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub out_ms: Option<u32>,
+    /// The SVG as written, with its `{{field}}` markers in place. Empty for
+    /// an HTML template.
     pub svg: String,
     pub title: String,
     /// The address to give `source.add`.
@@ -4775,6 +4825,11 @@ pub struct TemplateFieldsRequest {
     pub id: String,
 }
 
+/// What a template is written in.
+pub type TemplateFormat = String;
+/// The values api_level 1 knows for [`TemplateFormat`].
+pub const TEMPLATE_FORMAT_VALUES: &[&str] = &["svg", "html"];
+
 /// `template.get`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -4787,13 +4842,29 @@ pub struct TemplateGetRequest {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct TemplateInfo {
+    /// What sort of graphic it is, for a picker: lower-third, ticker, bug,
+    /// score, title, background, foreground, countdown, slate. HTML only.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub category: Option<String>,
     pub description: String,
     pub fields: Vec<TemplateField>,
+    /// `svg` (absent) or `html`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub format: Option<TemplateFormat>,
     pub height: u32,
     /// The name `template:<name>` adds it by: a pack name such as
     /// `news-lower-third`, or a library file name such as `my-bar.svg`.
     pub name: String,
+    /// True for a design that covers the whole picture on purpose: a
+    /// background, a title card, a slate. HTML only.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub opaque: Option<bool>,
     pub origin: TemplateOrigin,
+    /// How long its own way out takes, in milliseconds. Give the scene item
+    /// `"exit": {"type": "hold", "duration_ms": <this>}` so it stays drawn
+    /// while it plays. HTML only.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub out_ms: Option<u32>,
     pub title: String,
     /// The address to give `source.add`.
     pub uri: String,
@@ -4815,11 +4886,26 @@ pub type TemplateOrigin = String;
 /// The values api_level 1 knows for [`TemplateOrigin`].
 pub const TEMPLATE_ORIGIN_VALUES: &[&str] = &["pack", "library"];
 
+/// One thing wrong with a template, and what to do about it.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TemplateProblem {
+    /// What to change, in words a model can act on.
+    pub fix: String,
+    /// `error` stops it being saved or drawn; `warning` is drawn as it is.
+    pub level: String,
+    /// What is wrong, quoting the part of the file it is in.
+    pub problem: String,
+}
+
 /// `template.save`: check an SVG template and write it into the media
 /// library.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct TemplateSaveRequest {
+    /// The whole HTML document of an HTML template, saved as `<name>.html`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub html: Option<String>,
     /// The file name, ending `.svg` or not (it is added). One segment, no
     /// slashes.
     pub name: String,
@@ -4827,8 +4913,10 @@ pub struct TemplateSaveRequest {
     /// is drawn again with the new SVG, on air, with no rebuild.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub replace: Option<bool>,
-    /// The whole SVG document.
-    pub svg: String,
+    /// The whole SVG document. Leave it empty and give `html` to save an
+    /// HTML template.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub svg: Option<String>,
 }
 
 /// The answer to `template.save`.
@@ -5408,7 +5496,7 @@ pub struct MethodInfo {
     pub rest: Option<(&'static str, &'static str)>,
 }
 
-pub const METHODS: [MethodInfo; 195] = [
+pub const METHODS: [MethodInfo; 196] = [
     MethodInfo { name: "adbreak.end", summary: "Cut a running ad short, or disarm one that is scheduled.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/end")) },
     MethodInfo { name: "adbreak.start", summary: "Interrupt the programme with a clip, then rejoin live when it ends.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/start")) },
     MethodInfo { name: "agent.state", summary: "The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/agent/state")) },
@@ -5594,10 +5682,11 @@ pub const METHODS: [MethodInfo; 195] = [
     MethodInfo { name: "task.cancel", summary: "Ask a piece of long running work to stop. Cooperative: the answer says the request landed, not that the work has stopped yet.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/tasks/{id}/cancel")) },
     MethodInfo { name: "task.get", summary: "How a piece of long running work is getting on, and its answer once it has one.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/tasks/{id}")) },
     MethodInfo { name: "task.list", summary: "Every background job this core knows about, newest first.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/tasks")) },
+    MethodInfo { name: "template.check", summary: "Read an SVG or HTML template the way saving or drawing it would, and say what to fix. Writes nothing.", scope: "read", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/template/check")) },
     MethodInfo { name: "template.fields", summary: "A running graphic's fields: each one's label, type, default and what it shows now.", scope: "read", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/template/fields")) },
-    MethodInfo { name: "template.get", summary: "One template, with its SVG as written.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/template")) },
-    MethodInfo { name: "template.list", summary: "The graphic templates: the built in pack and the SVG templates in the media library, each with its fields.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/template/list")) },
-    MethodInfo { name: "template.save", summary: "Check an SVG template and write it into the media library.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/template/save")) },
+    MethodInfo { name: "template.get", summary: "One template, with its SVG or HTML as written.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/template")) },
+    MethodInfo { name: "template.list", summary: "The graphic templates: the built in packs and the SVG and HTML templates in the media library, each with its fields.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/template/list")) },
+    MethodInfo { name: "template.save", summary: "Check an SVG or HTML template and write it into the media library.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/template/save")) },
     MethodInfo { name: "token.create", summary: "Make a token for one phone or tablet, with the read, operate (the default) or admin scope. The secret is in this answer and nowhere else: the mixer keeps only a digest of it. Open the page at https://<host>:<port>/#token=<token> to sign the device in.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/token/create")) },
     MethodInfo { name: "token.list", summary: "Every device token: its id, label, scope and when it was made. Never a secret.", scope: "admin", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/token/list")) },
     MethodInfo { name: "token.revoke", summary: "Take a device token back. The device's next call is refused, including on a connection it already has open.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/token/revoke")) },
@@ -6840,22 +6929,27 @@ impl Client {
         self.call("task.list", &serde_json::json!({})).await
     }
 
+    /// Read an SVG or HTML template the way saving or drawing it would, and say what to fix. Writes nothing.
+    pub async fn template_check(&self, params: &TemplateCheckRequest) -> Result<TemplateChecked> {
+        self.call("template.check", params).await
+    }
+
     /// A running graphic's fields: each one's label, type, default and what it shows now.
     pub async fn template_fields(&self, params: &TemplateFieldsRequest) -> Result<TemplateFields> {
         self.call("template.fields", params).await
     }
 
-    /// One template, with its SVG as written.
+    /// One template, with its SVG or HTML as written.
     pub async fn template_get(&self, params: &TemplateGetRequest) -> Result<TemplateDoc> {
         self.call("template.get", params).await
     }
 
-    /// The graphic templates: the built in pack and the SVG templates in the media library, each with its fields.
+    /// The graphic templates: the built in packs and the SVG and HTML templates in the media library, each with its fields.
     pub async fn template_list(&self) -> Result<TemplateList> {
         self.call("template.list", &serde_json::json!({})).await
     }
 
-    /// Check an SVG template and write it into the media library.
+    /// Check an SVG or HTML template and write it into the media library.
     pub async fn template_save(&self, params: &TemplateSaveRequest) -> Result<TemplateSaved> {
         self.call("template.save", params).await
     }
