@@ -32,8 +32,10 @@ pub struct Opaque {
 }
 
 impl Opaque {
-    pub fn build(id: &str, canvas: &CanvasCaps) -> Result<Arc<Opaque>> {
-        let caps = canvas.video();
+    /// Pictures of `size`, which the normaliser scales to the canvas when it
+    /// is smaller.
+    pub fn build(id: &str, canvas: &CanvasCaps, size: (i32, i32)) -> Result<Arc<Opaque>> {
+        let caps = CanvasCaps::video_at(size.0, size.1, canvas.fps);
         let info = gst_video::VideoInfo::from_caps(&caps).context("the canvas caps are not a video format")?;
         let src = gst_app::AppSrc::builder()
             .name(format!("{id}-page"))
@@ -50,8 +52,8 @@ impl Opaque {
     }
 
     /// Build it, its pipeline and its keep alive.
-    pub fn start(ctx: &BuildCtx, canvas: &CanvasCaps, thumb: bool) -> Result<(Arc<Opaque>, MediaEnds)> {
-        let o = Opaque::build(&ctx.id, canvas)?;
+    pub fn start(ctx: &BuildCtx, size: (i32, i32), thumb: bool) -> Result<(Arc<Opaque>, MediaEnds)> {
+        let o = Opaque::build(&ctx.id, &ctx.canvas, size)?;
         let ends = o.assemble(ctx, thumb)?;
         o.keep_alive(&ctx.id);
         Ok((o, ends))

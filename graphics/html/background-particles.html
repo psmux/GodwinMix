@@ -10,6 +10,7 @@
   "category": "background",
   "opaque": true,
   "fps": 20,
+  "resolution": 0.5,
   "fields": {
     "accent": {"label": "Particle colour", "type": "color", "default": "#38bdf8"},
     "panel":  {"label": "Background colour", "type": "color", "default": "#020617"},
@@ -25,9 +26,11 @@
 </style>
 </head>
 <body>
-  <canvas id="c" width="1920" height="1080"></canvas>
+  <canvas id="c" width="960" height="540"></canvas>
 <script>
   var c = document.getElementById("c"), g = c.getContext("2d"), dots = [], running = false, last = 0, colour = "#38bdf8";
+  // Drawn at half size and stretched by the page: the points are soft anyway.
+  g.scale(0.5, 0.5);
   function seed(n) {
     dots = [];
     for (var i = 0; i < n; i++) dots.push({ x: Math.random() * 1920, y: Math.random() * 1080, r: 1 + Math.random() * 3, v: 10 + Math.random() * 30, w: Math.random() * 6.28 });

@@ -32,13 +32,25 @@ pub struct Page {
     pub designed: bool,
     /// Covers the whole picture: sent whole as I420, to the compositor.
     pub opaque: bool,
+    /// The share of the canvas size it is drawn at.
+    pub resolution: f64,
 }
 
 impl Page {
     /// An HTML template's file.
-    pub fn template(file: &Path, fps: u32, opaque: bool) -> Page {
-        Page { url: crate::input::file_uri(file), fps, offline: true, designed: true, opaque }
+    pub fn template(file: &Path, fps: u32, opaque: bool, resolution: f64) -> Page {
+        Page { url: crate::input::file_uri(file), fps, offline: true, designed: true, opaque, resolution }
     }
+
+    pub fn size(&self, canvas: &CanvasCaps) -> (i32, i32) {
+        drawn_size(canvas, self.resolution)
+    }
+}
+
+/// The size a page is drawn at: the canvas, or a share of it, in even pixels.
+pub fn drawn_size(canvas: &CanvasCaps, resolution: f64) -> (i32, i32) {
+    let r = resolution.clamp(0.25, 1.0);
+    (((canvas.width as f64 * r) as i32) & !1, ((canvas.height as f64 * r) as i32) & !1)
 }
 
 pub struct Renderer {
@@ -90,9 +102,9 @@ fn spec(page: &Page, canvas: &CanvasCaps, browser: &BrowserConfig) -> Result<Exe
         "--url".into(),
         page.url.clone(),
         "--width".into(),
-        canvas.width.to_string(),
+        page.size(canvas).0.to_string(),
         "--height".into(),
-        canvas.height.to_string(),
+        page.size(canvas).1.to_string(),
         "--fps".into(),
         fps.to_string(),
         "--graphic".into(),
@@ -103,8 +115,9 @@ fn spec(page: &Page, canvas: &CanvasCaps, browser: &BrowserConfig) -> Result<Exe
     if page.opaque {
         argv.push("--opaque".into());
     }
-    if page.designed && canvas.width as u32 != DESIGN_WIDTH {
-        argv.extend(["--scale".into(), format!("{:.4}", canvas.width as f64 / DESIGN_WIDTH as f64)]);
+    let width = page.size(canvas).0;
+    if page.designed && width as u32 != DESIGN_WIDTH {
+        argv.extend(["--scale".into(), format!("{:.4}", width as f64 / DESIGN_WIDTH as f64)]);
     }
     argv.extend(browser.args.iter().cloned());
     Ok(ExecSpec { argv, env: browser.env.clone(), pipe_stdin: true, cwd: None })

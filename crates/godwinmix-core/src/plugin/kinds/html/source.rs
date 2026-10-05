@@ -46,7 +46,7 @@ impl HtmlSource {
         let state = self.params.state(self.on_air);
         let fps = if self.params.fps > 0 { self.params.fps } else { self.params.template.fps.unwrap_or(0) };
         let to = frames::Target { layer: self.layer.clone(), carrier, opaque: self.opaque.clone() };
-        let page = renderer::Page::template(&page, fps, self.opaque.is_some());
+        let page = renderer::Page::template(&page, fps, self.opaque.is_some(), self.params.template.resolution);
         let r = Renderer::start(&self.ctx.id, &page, &self.ctx.canvas, &self.ctx.browser, to, state)?;
         self.renderer = Some(r);
         self.stopped = false;
@@ -76,7 +76,8 @@ impl Source for HtmlSource {
         let carrier = Arc::new(Carrier::build(&self.ctx.id, canvas)?);
         // A design that covers the picture goes to the compositor (`opaque`).
         let ends = if self.params.template.info.opaque {
-            let (o, ends) = opaque::Opaque::start(&self.ctx, canvas, thumb)?;
+            let size = renderer::drawn_size(canvas, self.params.template.resolution);
+            let (o, ends) = opaque::Opaque::start(&self.ctx, size, thumb)?;
             self.opaque = Some(o);
             ends
         } else {

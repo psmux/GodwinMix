@@ -38,6 +38,9 @@ pub struct HtmlTemplate {
     pub file: Option<PathBuf>,
     /// The frame rate the design asks for, when it asks.
     pub fps: Option<u32>,
+    /// Drawn at this share of the canvas size and stretched: 1 unless the
+    /// design asks for less.
+    pub resolution: f64,
 }
 
 impl HtmlTemplate {
@@ -48,7 +51,7 @@ impl HtmlTemplate {
             bail!("{}", problem::message(name, &problems));
         }
         let meta = meta.unwrap_or_default();
-        let fps = meta.fps;
+        let (fps, resolution) = (meta.fps, meta.resolution.unwrap_or(1.0));
         let stem = name.trim_end_matches(".html");
         let info = TemplateInfo {
             name: name.into(),
@@ -64,7 +67,7 @@ impl HtmlTemplate {
             out_ms: meta.out_ms,
             opaque: meta.opaque,
         };
-        Ok(HtmlTemplate { info, html, file: None, fps })
+        Ok(HtmlTemplate { info, html, file: None, fps, resolution })
     }
 
     /// The same template as the SVG checks see it, for `fill::check`.

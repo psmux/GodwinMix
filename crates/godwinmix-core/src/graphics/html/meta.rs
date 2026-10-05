@@ -31,6 +31,8 @@ pub struct Meta {
     pub opaque: bool,
     /// The most frames a second the design needs, when it says.
     pub fps: Option<u32>,
+    /// The share of the canvas size the page is drawn at and stretched from.
+    pub resolution: Option<f64>,
     pub fields: Vec<TemplateField>,
 }
 
@@ -81,6 +83,7 @@ pub fn read(html: &str, out: &mut Problems) -> Option<Meta> {
         out_ms,
         opaque: obj.get("opaque").and_then(Value::as_bool).unwrap_or(false),
         fps: fps(obj.get("fps"), out),
+        resolution: resolution(obj.get("resolution"), out),
         fields: fields(text, obj.get("fields"), out),
     })
 }
@@ -92,6 +95,15 @@ fn fps(v: Option<&Value>, out: &mut Problems) -> Option<u32> {
         out.push(error(&format!("fps is {v}"), "give the most frames a second the design needs, a whole number from 1 to 60, such as 20 for a slow background"));
     }
     fps.map(|f| f as u32)
+}
+
+fn resolution(v: Option<&Value>, out: &mut Problems) -> Option<f64> {
+    let v = v?;
+    let r = v.as_f64().filter(|r| (0.25..=1.0).contains(r));
+    if r.is_none() {
+        out.push(error(&format!("resolution is {v}"), "give the share of the canvas size to draw at, 0.25 to 1, such as 0.5 for a soft background; leave it out for full size"));
+    }
+    r
 }
 
 /// The declared fields, in the order the block lists them.
