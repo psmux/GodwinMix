@@ -15,7 +15,7 @@ check it. Every design in the pack passes the check with nothing to say.
 |---|---|---|
 | Words in a box, a crawl | a `text:` or `ticker:` source | almost nothing |
 | A designed graphic that holds still: strap, bug, card, desk | an SVG template, `template:<name>` | almost nothing; drawn once per change |
-| Anything that moves: an animated lower third, a ticker, a clock, a countdown, 3D, a looping background | an HTML template, `html:<name>` | a few percent of a core while it moves, next to nothing while it holds (numbers below) |
+| Anything that moves: an animated lower third, a ticker, a clock, a countdown, 3D, a looping background | an HTML template, `html:<name>` | next to nothing while it holds; 10 to 30 percent of a core for a small moving one, more for full screen motion (numbers below) |
 | A picture with transparency | a PNG or WebP with alpha in the media library | almost nothing |
 | A pre rendered animation (from After Effects, Blender) | WebM with VP9 alpha, or ProRes 4444, in the media library | one video decode |
 
@@ -141,7 +141,7 @@ runs only while it is in.
 
 ```html
 <script type="application/json" id="gmx-template">
-{"title": "Slow glow", "category": "background", "opaque": true, "fps": 20,
+{"title": "Slow glow", "category": "background", "opaque": true, "fps": 20, "resolution": 0.5,
  "fields": {"accent": {"type": "color", "default": "#4f46e5"}, "panel": {"type": "color", "default": "#0b1026"}}}
 </script>
 <style>
@@ -300,10 +300,49 @@ move the presenter. The key is tuned on the scene's `presenter` item; see
 ## What it costs
 
 Measured on the development laptop (Intel Core Ultra 9 285H, 16 cores,
-Windows 11, no GPU used by the renderer), 1080p30 canvas, a percentage of one
-core for the renderer's whole process tree:
+Windows 11, no GPU used by the renderer), release build, 1080p30 canvas,
+percentages of one core.
 
-COSTS_TABLE
+The mixer's own share is the show process over a test pattern scene that
+cost it 16 to 21 percent alone; the renderer's is its whole process tree.
+Twenty seconds each, on air, with other work on the machine (it was 57
+percent busy), so read them as a few points either way.
+
+| Design | Mixer, with it | Renderer |
+|---|---|---|
+| `lower-third-glass`, held after its way in | 29 | 5 |
+| `lower-third-glass`, in and out every 1.5 s | 27 | 12 |
+| `lower-third-bold`, held | 29 | 14 |
+| `ticker-crawl`, crawling | 28 | 9 to 33 |
+| `ticker-flip`, flipping every 5 s | 28 | 29 |
+| `score-bug-live`, clock running | 18 | 1 to 27 |
+| `logo-bug-shine` | 20 | 19 |
+| `countdown-ring`, counting | 21 | 11 to 28 |
+| `logo-spin-3d`, WebGL on the CPU | 22 | 46 to 56 |
+| `background-gradient`, half size | 33 | 47 |
+| `background-particles`, half size | 34 | 33 |
+| `title-card-3d`, WebGL on the CPU | 31 | 83 to 87 |
+| `starting-soon` | 28 | 68 |
+| `set-newsroom`, half size | 40 | 44 |
+| `set-studio`, half size | 35 | 52 |
+
+Where a range is given, two runs differed by that much. What this says:
+
+* A graphic that holds still costs next to nothing in the renderer: it
+  sends nothing. Its first frame and its way in cost a burst.
+* A small moving graphic (a crawl, a clock, a countdown) costs 10 to 30
+  percent of one core, most of it Chromium's own work, not the mixer's.
+* A full screen design that moves costs a third to most of a core, because
+  Chromium composites the whole page in software every frame. `resolution:
+  0.5` halves the backgrounds' cost. On a Raspberry Pi use a still or a
+  WebM loop for a background, and SVG templates for straps.
+* Letting Chromium use the GPU (`[browser] args = ["--gpu"]`) did not help on
+  this laptop's Intel Arc: reading frames back cost more than it saved
+  (the crawl went from 32 to 64 percent).
+
+Before this, a page reached the mixer as a stream at the canvas rate whether
+it moved or not: a blank transparent page took 125 percent of a core, and an
+animated lower third 180.
 
 ## What is not done
 

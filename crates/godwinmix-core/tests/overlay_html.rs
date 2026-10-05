@@ -97,6 +97,31 @@ async fn a_moving_page_moves_on_air() {
     assert!(b > a + 40, "the box moved right between two frames two seconds apart: {a} then {b}");
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_full_screen_design_goes_through_the_compositor_and_stays_live() {
+    let Some(browser) = renderer() else {
+        println!("skipping: no browser renderer here; set GMX_TEST_BROWSER");
+        return;
+    };
+    let dir = scratch("html-opaque");
+    let path = dir.join("cover.html");
+    std::fs::write(&path, r##"<!doctype html><html><head><script type="application/json" id="gmx-template">{"title": "cover", "opaque": true, "fields": {"accent": {"type": "color", "default": "#ff0000"}}}</script>
+<style>html, body { margin: 0; height: 100%; background: var(--accent); }</style></head><body></body></html>"##).unwrap();
+    let (handle, frames, thread, _) = running_with(&browser);
+    add(&handle, SourceConfig::bare("bg", "test://blue")).await;
+    add(&handle, SourceConfig::bare("cover", &format!("html:{}", path.display()))).await;
+    take(&handle, vec![full("bg"), at("cover", 0, 0, 160, 180)]).await;
+    let shown = wait_for(&frames, |f| near(f.yuv(60, 90), RED), Duration::from_secs(12)).await;
+    // Held still, the page sends nothing; it must still be drawn seconds later.
+    settle(4_000).await;
+    let f = frames.latest().expect("programme frames");
+    let (covered, beside) = (f.yuv(60, 90), f.yuv(260, 90));
+    stop(handle, thread);
+    let _ = std::fs::remove_dir_all(&dir);
+    assert!(shown && near(covered, RED), "the page covers its box: {covered:?}");
+    assert!(near(beside, BLUE), "and nothing outside it: {beside:?}");
+}
+
 /// The left edge of the red box on the middle row, in canvas pixels.
 fn red_at(f: &Frame) -> Option<usize> {
     (0..320).find(|x| near(f.yuv(*x, 90), RED))
