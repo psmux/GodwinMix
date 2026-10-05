@@ -402,11 +402,6 @@ impl Server {
             }
             args.remove("id");
             args.remove("task_id");
-            if method.starts_with("scene.") {
-                // The route reads the scene from the path; the same name in
-                // the body too is a duplicate field.
-                args.remove("scene");
-            }
             rest.path.replace("{id}", &id)
         } else {
             rest.path.clone()
@@ -420,6 +415,15 @@ impl Server {
         // could not be reached, which is what a missing argument looks like
         // when the mixer happens to be down too.
         self.check_required(tool, method, &args, &path)?;
+        let mut args = args;
+        if method.starts_with("scene.") && rest.path.contains("{id}") {
+            // The route reads the scene from the path; the same name in the
+            // body too is a duplicate field. Taken out after the check, which
+            // wants to see it.
+            if let Some(map) = args.as_object_mut() {
+                map.remove("scene");
+            }
+        }
         let image = tool == "snapshot";
         let preview = tool == "preview_frame";
         Ok(Plan { verb, path, args, image, preview })

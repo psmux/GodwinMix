@@ -41,8 +41,9 @@ pub struct SetupRequest {
     /// that is not the desktop app's. Written into the tool's config as given.
     #[serde(default)]
     pub env: Map<String, Value>,
-    /// Set by the dispatcher's `dry_run`, never sent.
-    #[serde(skip)]
+    /// Answer every file it would write, and write nothing. The dispatcher
+    /// reads it too, as it does on every destructive method.
+    #[serde(default)]
     pub dry_run: bool,
 }
 

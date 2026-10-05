@@ -8728,6 +8728,11 @@
               "null"
             ]
           },
+          "dry_run": {
+            "default": false,
+            "description": "Answer every file it would write, and write nothing. The dispatcher\nreads it too, as it does on every destructive method.",
+            "type": "boolean"
+          },
           "env": {
             "additionalProperties": true,
             "default": {},
