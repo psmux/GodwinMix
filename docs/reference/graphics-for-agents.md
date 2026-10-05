@@ -48,6 +48,7 @@ template on a scene item with an `enter` and an `exit` slides and fades.
    | `out_ms` | how long the way out takes, in milliseconds |
    | `opaque` | `true` for a design that covers the whole picture on purpose: a background, a title card, a slate |
    | `fps` | the most frames a second it needs, 1 to 60. Say 20 for a slow background |
+   | `resolution` | draw the page at this share of the canvas size, 0.25 to 1, and stretch it. 0.5 costs about a quarter. For soft backgrounds only: words drawn at half size look soft |
 
    Name the colour fields `accent`, `text` and `panel` and the station's
    brand colours (`[graphics]` in the config) fill them when a source does not.
