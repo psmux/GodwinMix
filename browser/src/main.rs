@@ -20,6 +20,7 @@
 mod control;
 mod graphic;
 mod mux;
+mod pixels;
 
 use cef::{args::Args, *};
 use mux::Muxer;
@@ -57,6 +58,8 @@ struct Opts {
     /// No network at all, and the page may read the files beside it: for a
     /// template that is a local file. See `control::switches`.
     offline: bool,
+    /// The page covers the picture: send it whole as I420, not as AYUV boxes.
+    opaque: bool,
     /// Device pixels to a CSS pixel. A graphic designed on a 1920 wide page
     /// is drawn on a 1280 wide canvas at 0.6667, laid out exactly as it was
     /// designed and painted at the canvas's own size.
@@ -93,6 +96,7 @@ fn opts() -> Opts {
         graphic: false,
         gpu: false,
         offline: false,
+        opaque: false,
         scale: 1.0,
     };
     let mut it = std::env::args().skip(1);
@@ -116,6 +120,7 @@ fn opts() -> Opts {
             }
             "--gpu" => o.gpu = true,
             "--offline" => o.offline = true,
+            "--opaque" => o.opaque = true,
             "--scale" => o.scale = val().parse::<f64>().ok().filter(|s| *s > 0.1 && *s <= 4.0).unwrap_or(1.0),
             _ => {} // Chromium's own switches pass through untouched.
         }
@@ -754,7 +759,7 @@ fn main() {
     // Matroska. Stereo 48 kHz is what audio_parameters asks the browser for,
     // so the muxer's caps match what arrives.
     let mux = if o.graphic {
-        let out = graphic::Out::start(o.width, o.height, || {
+        let out = graphic::Out::start(o.width, o.height, o.opaque, || {
             let mut task = Quit::new();
             post_task(ThreadId::UI, Some(&mut task));
         });

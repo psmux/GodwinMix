@@ -32,12 +32,14 @@ pub struct Page {
     pub offline: bool,
     /// Laid out on a 1920 wide page and scaled to the canvas.
     pub designed: bool,
+    /// Covers the whole picture: sent whole as I420, to the compositor.
+    pub opaque: bool,
 }
 
 impl Page {
     /// An HTML template's file.
-    pub fn template(file: &Path, fps: u32) -> Page {
-        Page { url: crate::input::file_uri(file), fps, offline: true, designed: true }
+    pub fn template(file: &Path, fps: u32, opaque: bool) -> Page {
+        Page { url: crate::input::file_uri(file), fps, offline: true, designed: true, opaque }
     }
 }
 
@@ -99,6 +101,9 @@ fn spec(page: &Page, canvas: &CanvasCaps, browser: &BrowserConfig) -> Result<Exe
     ];
     if page.offline {
         argv.push("--offline".into());
+    }
+    if page.opaque {
+        argv.push("--opaque".into());
     }
     if page.designed && canvas.width as u32 != DESIGN_WIDTH {
         argv.extend(["--scale".into(), format!("{:.4}", canvas.width as f64 / DESIGN_WIDTH as f64)]);

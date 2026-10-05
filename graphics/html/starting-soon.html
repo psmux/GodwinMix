@@ -26,12 +26,8 @@
   :root { --accent: #f59e0b; --panel: #111827; --text: #ffffff; }
   html, body { margin: 0; height: 100%; overflow: hidden; background: var(--panel); color: var(--text);
                font-family: Inter, "Segoe UI", "Helvetica Neue", Helvetica, Arial, "DejaVu Sans", sans-serif; }
-  .glow { position: absolute; width: 1300px; height: 1300px; border-radius: 50%; opacity: .5;
-          background: radial-gradient(circle, var(--accent) 0%, transparent 62%);
-          left: 900px; top: -300px; animation: drift 24s ease-in-out infinite alternate paused; }
-  .glow.two { left: -500px; top: 300px; opacity: .3; animation-duration: 33s; background: radial-gradient(circle, #6366f1 0%, transparent 62%); }
-  .gmx-in .glow { animation-play-state: running; }
-  @keyframes drift { to { transform: translate(-300px, 260px) scale(1.15); } }
+  /* The drifting colour is a quarter size canvas stretched to the page. */
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
   .stack { position: absolute; left: 160px; top: 250px; }
   .show { font-size: 34px; font-weight: 700; letter-spacing: 5px; text-transform: uppercase; color: var(--accent); }
   .headline { font-size: 150px; font-weight: 900; letter-spacing: -4px; line-height: 1; margin: 20px 0 28px; }
@@ -45,7 +41,7 @@
 </style>
 </head>
 <body>
-  <div class="glow"></div><div class="glow two"></div>
+  <canvas id="glow" width="480" height="270"></canvas>
   <div class="stack">
     <div class="show" data-field="show">The Evening Programme</div>
     <div class="headline" data-field="headline">Starting soon</div>
@@ -71,6 +67,29 @@
   });
   window.addEventListener("gmx:in", start);
   window.addEventListener("gmx:out", function () { clearInterval(timer); timer = null; });
+
+  // Two glows drifting on slow loops, 20 frames a second, only while in.
+  var cv = document.getElementById("glow"), g = cv.getContext("2d"), on = false, last = 0;
+  function css(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+  function glow(x, y, r, colour, alpha) {
+    var grad = g.createRadialGradient(x, y, 0, x, y, r);
+    grad.addColorStop(0, colour); grad.addColorStop(1, "transparent");
+    g.globalAlpha = alpha; g.fillStyle = grad; g.fillRect(0, 0, 480, 270);
+  }
+  function draw(t) {
+    g.globalAlpha = 1; g.fillStyle = css("--panel"); g.fillRect(0, 0, 480, 270);
+    glow(330 + 70 * Math.sin(t / 12), 40 + 50 * Math.cos(t / 14), 230, css("--accent"), 0.5);
+    glow(90 + 60 * Math.cos(t / 16), 230 + 30 * Math.sin(t / 13), 210, "#6366f1", 0.3);
+  }
+  function frame(ms) {
+    if (!on) return;
+    requestAnimationFrame(frame);
+    if (ms - last < 50) return;
+    last = ms; draw(ms / 1000);
+  }
+  window.addEventListener("gmx:in", function () { if (!on) { on = true; requestAnimationFrame(frame); } });
+  window.addEventListener("gmx:out", function () { on = false; });
+  draw(0);
 </script>
 </body>
 </html>

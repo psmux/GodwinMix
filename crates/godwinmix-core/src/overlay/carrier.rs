@@ -54,6 +54,32 @@ impl Carrier {
         self.src.link(&self.freeze).context("linking the carrier to its freeze")
     }
 
+    /// Send a whole canvas frame already in I420, `width * height` of luma
+    /// then the two chroma planes, as the source's picture: a design that
+    /// covers the screen goes through the compositor like a camera. False when
+    /// it is not the canvas size.
+    pub fn show_i420(&self, data: &[u8], width: u32, height: u32) -> bool {
+        let info = &self.info;
+        if (width, height) != (info.width(), info.height()) || data.len() < (width * height * 3 / 2) as usize {
+            return false;
+        }
+        let Ok(mut buffer) = gst::Buffer::with_size(info.size()) else { return false };
+        {
+            let Some(buf) = buffer.get_mut() else { return false };
+            let Ok(mut frame) = gst_video::VideoFrameRef::from_buffer_ref_writable(buf, info) else { return false };
+            let (w, h) = (width as usize, height as usize);
+            let planes = [(0usize, w, h), (w * h, w / 2, h / 2), (w * h + (w / 2) * (h / 2), w / 2, h / 2)];
+            for (i, (at, pw, ph)) in planes.into_iter().enumerate() {
+                let stride = info.stride()[i] as usize;
+                let Ok(plane) = frame.plane_data_mut(i as u32) else { return false };
+                for row in 0..ph {
+                    plane[row * stride..row * stride + pw].copy_from_slice(&data[at + row * pw..at + (row + 1) * pw]);
+                }
+            }
+        }
+        self.src.push_buffer(buffer).is_ok()
+    }
+
     /// Send `picture`, or an empty grey frame, as the source's still.
     pub fn show(&self, picture: Option<&Picture>) {
         match flatten(&self.info, picture) {
