@@ -96,6 +96,9 @@ pub async fn fetch_rung(st: &Running, master: &str, rung: &str, file: &Path) -> 
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_direct_show_serves_its_feed_as_hls_from_the_station_copied_not_decoded() {
+    if !godwinmix_core::probe::have_or_skip("cmafmux") {
+        return;
+    }
     let (dir, port) = folder_with_relay("hls-direct");
     let source = staged_ingest(&dir);
     let st = start(dir.clone(), port, &[]).await;
@@ -146,6 +149,9 @@ async fn a_direct_show_serves_its_feed_as_hls_from_the_station_copied_not_decode
 /// sound comes out as AAC.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn mp2_sound_is_refused_with_the_next_step_and_served_once_a_rendition_makes_aac() {
+    if !godwinmix_core::probe::have_or_skip("cmafmux") {
+        return;
+    }
     let (dir, port) = folder_with_relay("hls-direct-mp2");
     let source = staged_ingest(&dir);
     let st = start(dir.clone(), port, &[]).await;
