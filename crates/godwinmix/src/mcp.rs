@@ -178,6 +178,9 @@ impl Server {
         if name.starts_with("gmx_") && mcp_tools::method_for(&self.registry, name).is_none() {
             return self.plugin_tool(name, args).await;
         }
+        // A file the agent names on its own machine reaches the mixer
+        // wherever the mixer is. See `mcp_files`.
+        let args = &files::carry(name, args, &self.base);
         let plan = match self.plan(name, args) {
             Ok(p) => p,
             Err(msg) => return error_result(msg),
@@ -622,6 +625,9 @@ fn error_result(text: String) -> Value {
 
 #[path = "mcp_preview.rs"]
 mod preview;
+
+#[path = "mcp_files.rs"]
+mod files;
 
 #[cfg(test)]
 #[path = "mcp_shows_tests.rs"]
