@@ -22,7 +22,7 @@
 // collection agree without any of them being special.
 
 import { el, clear, on } from "../../shell/dom.js";
-import { DragSelect } from "../../shell/pointer.js";
+import { DragSelect, dragHandle } from "../../shell/pointer.js";
 import { Selection } from "../../shell/selection.js";
 import { registerAll } from "../../shell/commands.js";
 import { focusedScene, setFocusedScene, onFocusChanged } from "../../shell/focus.js";
@@ -338,7 +338,7 @@ class ScenesPanel extends HTMLElement {
       },
     });
     const dot = el("span.dot");
-    const bar = el("div.bar", {}, [dot, name]);
+    const bar = el("div.bar", {}, [dragHandle(), dot, name]);
     const chips = el("div.row", {
       style: { flexWrap: "wrap", gap: "3px", padding: "0 6px 6px", minHeight: "0" },
     });

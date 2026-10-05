@@ -10,6 +10,7 @@ import { ICONS, KIND_COLOUR, kindOfSource } from "../../client/kinds.js";
 import { meterElement } from "../../shell/meter.js";
 import { UNITY, gainToPos, gainLabel, fmtPosition } from "../../shell/fader.js";
 import { nameOf, colourOf, isLocal } from "./local.js";
+import { dragHandle } from "../../shell/pointer.js";
 
 /**
  * @param {object} source   a SourceStatus
@@ -29,7 +30,7 @@ export function buildTile(source, deps) {
   const name = el("span.name.grow.ellipsis", { text: nameOf(source) });
   const dot = el("span.dot");
   const gear = el("button.gear", { text: "⚙", title: "Settings", "aria-label": "Settings", "data-nodrag": "" });
-  const bar = el("div.bar", {}, [dot, name, gear]);
+  const bar = el("div.bar", {}, [dragHandle(), dot, name, gear]);
 
   const playback = el("div.playback", { text: source.seekable ? "Clip" : "Continuous live source" });
   node.append(pic, still, kindbox, slot, strip, bar, playback);

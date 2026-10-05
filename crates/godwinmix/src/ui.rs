@@ -252,6 +252,7 @@ const ASSETS: &[(&str, &str)] = &[
     ("shell/picker-setup.js", include_str!("../../../ui/shell/picker-setup.js")),
     ("shell/setup-note.js", include_str!("../../../ui/shell/setup-note.js")),
     ("shell/pointer.js", include_str!("../../../ui/shell/pointer.js")),
+    ("shell/touch.js", include_str!("../../../ui/shell/touch.js")),
     ("shell/registry.js", include_str!("../../../ui/shell/registry.js")),
     ("shell/sandbox.js", include_str!("../../../ui/shell/sandbox.js")),
     ("shell/selection.js", include_str!("../../../ui/shell/selection.js")),
@@ -268,6 +269,7 @@ const ASSETS: &[(&str, &str)] = &[
     ("shell/undo.js", include_str!("../../../ui/shell/undo.js")),
     ("themes/base.css", include_str!("../../../ui/themes/base.css")),
     ("themes/dock.css", include_str!("../../../ui/themes/dock.css")),
+    ("themes/touch.css", include_str!("../../../ui/themes/touch.css")),
     ("themes/dark.css", include_str!("../../../ui/themes/dark.css")),
     ("themes/high-contrast.css", include_str!("../../../ui/themes/high-contrast.css")),
     ("themes/light.css", include_str!("../../../ui/themes/light.css")),
@@ -304,6 +306,7 @@ const DEV_ASSETS: &[(&str, &str)] = &[
     ("test/dock.js", include_str!("../../../ui/test/dock.js")),
     ("test/welcome.js", include_str!("../../../ui/test/welcome.js")),
     ("test/menubar.js", include_str!("../../../ui/test/menubar.js")),
+    ("test/touch.js", include_str!("../../../ui/test/touch.js")),
     // The Channels panel against a stub of the channel contract, as tests and
     // as a page to look at: /test/channels.html?scene=cards&theme=light.
     ("test/channels.js", include_str!("../../../ui/test/channels.js")),
@@ -812,7 +815,7 @@ mod tests {
         let mut bytes: usize = eager.iter().filter_map(|p| source_of(p)).map(|b| b.len()).sum();
         // The page itself and the stylesheets it links, which no module
         // imports and every browser fetches.
-        for extra in ["index.html", "themes/base.css", "themes/dock.css", "themes/dark.css"] {
+        for extra in ["index.html", "themes/base.css", "themes/dock.css", "themes/touch.css", "themes/dark.css"] {
             bytes += source_of(extra).map(|b| b.len()).unwrap_or(0);
         }
         assert!(
@@ -849,7 +852,7 @@ mod tests {
         let mut everything = eager_set();
         everything.extend(closure_of("panels/composer/composer.js"));
         let mut bytes: usize = everything.iter().filter_map(|p| source_of(p)).map(|b| b.len()).sum();
-        for extra in ["index.html", "themes/base.css", "themes/dock.css", "themes/dark.css", "panels/composer/composer.css"] {
+        for extra in ["index.html", "themes/base.css", "themes/dock.css", "themes/touch.css", "themes/dark.css", "panels/composer/composer.css"] {
             bytes += source_of(extra).map(|b| b.len()).unwrap_or(0);
         }
         assert!(bytes < 450 * 1024, "the page with the composer open is {bytes} bytes, over the 450 kB budget");

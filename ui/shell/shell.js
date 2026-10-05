@@ -16,6 +16,7 @@ import { openPicker, pickFromDrop } from "./picker-loader.js";
 import { modal } from "./modal.js";
 import { Workspace } from "./dock.js";
 import { restartBar } from "./restart-check.js";
+import { installTouch } from "./touch.js";
 
 /** Everything a panel might want that is not the client. One object, one import. */
 export const shell = {
@@ -115,6 +116,8 @@ export async function mountShell(client, root) {
 
   shellCommands(client, node);
   shell.keymap.attach(window);
+  // A long press is the right click and a double tap the double click.
+  installTouch();
   connectionBanner(client);
   // Settings written to the file that wait for a restart, and the restart.
   restartBar(client);
