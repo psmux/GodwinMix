@@ -80,6 +80,19 @@ impl Player {
         *self.shared.on_end.lock() = Some(Box::new(f));
     }
 
+    /// Run `f` on the clip's streaming thread when its first frame is ready.
+    /// `f` must only hand the news on, never wait.
+    pub fn on_first_frame(&self, f: impl Fn() + Send + Sync + 'static) {
+        self.sink.set_callbacks(
+            gst_app::AppSinkCallbacks::builder()
+                .new_preroll(move |_| {
+                    f();
+                    Ok(gst::FlowSuccess::Ok)
+                })
+                .build(),
+        );
+    }
+
     /// Stop now, whatever has been drawn.
     pub fn stop(&self) {
         self.shared.done.store(true, Ordering::Release);

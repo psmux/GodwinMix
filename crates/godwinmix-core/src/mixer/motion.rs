@@ -159,6 +159,7 @@ impl Mixer {
             end,
             clip: None,
             slate,
+            fx: None,
         });
     }
 }

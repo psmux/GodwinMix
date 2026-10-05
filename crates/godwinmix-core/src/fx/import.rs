@@ -58,7 +58,6 @@ fn locate(media: &Path, asked: &str) -> Result<PathBuf> {
 /// Every item in a folder: folders with an `fx.json` as they are, and every
 /// media file or shader, two levels down.
 fn folder(dir: &Path, root: &Path, req: &FxImportRequest, done: &mut FxImported) -> Result<()> {
-    let licence = licence_in(dir);
     for path in walk(dir, 3) {
         let skip = |reason: String| FxSkipped { file: path.display().to_string(), reason };
         if path.is_dir() {
@@ -68,7 +67,7 @@ fn folder(dir: &Path, root: &Path, req: &FxImportRequest, done: &mut FxImported)
             }
             continue;
         }
-        let near = licence_beside(&path).or_else(|| licence.clone());
+        let near = path.ancestors().skip(1).take_while(|a| a.starts_with(dir)).find_map(licence_in);
         match file(&path, root, req, None, near.as_ref()) {
             Ok(entry) => done.imported.push(entry),
             Err(e) => done.skipped.push(skip(format!("{e:#}"))),
