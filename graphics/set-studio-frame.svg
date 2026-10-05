@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:gmx="https://godwinmix.dev/ns/template" viewBox="0 0 1920 1080" width="1920" height="1080">
+  <metadata>
+    <gmx:template title="Studio frame" description="Virtual set foreground: two lit pillars at the sides and a low console edge along the bottom, in front of the presenter, framing them without covering them. Transparent everywhere else. Pairs with the set-studio HTML background in the virtual-set layout."/>
+    <gmx:field name="accent" label="Light colour" type="color" default="#06b6d4"/>
+    <gmx:field name="panel" label="Frame colour" type="color" default="#0a0f24"/>
+    <gmx:field name="text" label="Highlight colour" type="color" default="#ffffff"/>
+  </metadata>
+  <defs>
+    <linearGradient id="pillar" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#000000" stop-opacity="0.5"/>
+      <stop offset="1" stop-color="#000000" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="edge" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.18"/>
+      <stop offset="1" stop-color="#000000" stop-opacity="0.45"/>
+    </linearGradient>
+  </defs>
+  <!-- Left and right pillars, slanted so they read as near the camera. -->
+  <path d="M 0 0 L 170 0 L 120 1080 L 0 1080 Z" fill="{{panel}}"/>
+  <path d="M 0 0 L 170 0 L 120 1080 L 0 1080 Z" fill="url(#pillar)"/>
+  <path d="M 150 0 L 162 0 L 113 1080 L 101 1080 Z" fill="{{accent}}"/>
+  <path d="M 1920 0 L 1750 0 L 1800 1080 L 1920 1080 Z" fill="{{panel}}"/>
+  <path d="M 1758 0 L 1770 0 L 1819 1080 L 1807 1080 Z" fill="{{accent}}"/>
+  <!-- The console edge along the bottom, under the presenter's hands. -->
+  <path d="M 120 1000 L 1800 1000 L 1820 1080 L 100 1080 Z" fill="{{panel}}"/>
+  <path d="M 120 1000 L 1800 1000 L 1820 1080 L 100 1080 Z" fill="url(#edge)"/>
+  <rect x="120" y="1000" width="1680" height="5" fill="{{accent}}"/>
+  <rect x="140" y="1012" width="1640" height="2" fill="{{text}}" fill-opacity="0.18"/>
+</svg>

@@ -107,12 +107,17 @@ pub fn item(id: &str, m: &Manifest, file: Option<&Path>) -> GalleryItem {
     let background = m.zone() == Some(godwinmix_protocol::gallery::Zone::Full);
     let transparent = m.transparent.unwrap_or_else(|| !background && detect::transparent(kind, file));
     let zone = m.zone().unwrap_or_else(|| detect::zone(kind, transparent, file.and_then(detect::size)));
+    // A page with a gmx-template block is an HTML template: drawn with its
+    // alpha, its fields and its own way in and out (`html/graphic`).
+    let page = (kind == GalleryKind::Html).then(|| file.and_then(html_template)).flatten();
     let fields = match (kind, file) {
         (GalleryKind::Template, Some(f)) => crate::graphics::pack::load(&f.display().to_string()).map(|t| t.info.fields).unwrap_or_default(),
+        (GalleryKind::Html, _) => page.as_ref().map(|t| t.info.fields.clone()).unwrap_or_default(),
         _ => Vec::new(),
     };
     let uri = match kind {
         GalleryKind::Template => file.map(|f| format!("template:{}", plain(f))),
+        GalleryKind::Html => page.as_ref().and(file).map(|f| format!("html:{}", plain(f))),
         GalleryKind::Image | GalleryKind::Clip => file.map(plain),
         GalleryKind::Ticker | GalleryKind::Text => m.source.as_ref().map(|s| s.uri.clone()),
         _ => None,
@@ -135,6 +140,12 @@ pub fn item(id: &str, m: &Manifest, file: Option<&Path>) -> GalleryItem {
         moving: None,
         placed: Vec::new(),
     }
+}
+
+/// The HTML template at `file`, when the page is one.
+pub fn html_template(file: &Path) -> Option<crate::graphics::html::HtmlTemplate> {
+    let text = std::fs::read_to_string(file).ok()?;
+    text.contains(crate::graphics::html::meta::BLOCK_ID).then(|| crate::graphics::html::pack::load(&plain(file)).ok()).flatten()
 }
 
 /// A path as a source reads it: absolute, and never Windows' `\\?\` form,

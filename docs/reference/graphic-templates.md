@@ -4,6 +4,9 @@ The `template/source` kind, the template file format, the built in pack, the
 methods and the MCP tools. How to write one is in
 [write an SVG template](../how-to/write-an-svg-template.md); how to have an
 agent do it is in [design graphics with an AI agent](../how-to/design-graphics-with-ai.md).
+A template that moves is an HTML template, `html:<name>`, listed and saved by
+the same methods; its format and pack are in
+[graphics for agents](graphics-for-agents.md).
 
 ## `template/source`
 
@@ -115,7 +118,8 @@ the scene item's `enter` and `exit`; see [transitions](transitions.md).
 Built into the binary from `graphics/` in the repository, read only, and
 updated with the mixer. Each is designed on 1920 by 1080, transparent outside
 its graphic, with every word inside title safe (96 to 1824 across, 54 to 1026
-down). Place it over the whole canvas.
+down), except the set foregrounds, which run to the edges. Place it over the
+whole canvas.
 
 | Name | Title | Fields beyond the three colours |
 |---|---|---|
@@ -127,6 +131,8 @@ down). Place it over the whole canvas.
 | `title-card` | Full screen title card | `kicker`, `title`, `subtitle` |
 | `quote-card` | Quote card | `line1`, `line2`, `line3`, `attribution` |
 | `location-tag` | Location and weather tag | `place`, `detail` |
+| `set-newsroom-desk` | Newsroom desk, a virtual set foreground | `station` |
+| `set-studio-frame` | Studio frame, a virtual set foreground | none |
 
 Every one also has `accent`, `text` and `panel`. `template.list` gives each
 field's label and default.
@@ -149,14 +155,15 @@ logged and the three are ignored until it is fixed.
 
 | Method | MCP tool | Scope | What it does |
 |---|---|---|---|
-| `template.list` | `list_templates` | read | the pack and every SVG in the media library with a `{{` or a `<gmx:template>` in it, each with `uri`, size and fields. A library file that would not read is in `errors` with why |
-| `template.get {name}` | `get_template` | read | one template and its `svg` as written |
-| `template.save {name, svg, replace?}` | `save_template` | operate | checks the SVG reads as a template, then writes it into the media library as `name` (`.svg` added). Refuses to write over a file unless `replace`; with `replace`, every source drawing it is drawn again on air, and `redrawn` lists them |
+| `template.list` | `list_templates` | read | both packs, every SVG in the media library with a `{{` or a `<gmx:template>` in it and every `.html` with a `gmx-template` block, each with `uri`, size, `format` (`html` or absent for SVG) and fields. A library file that would not read is in `errors` with why |
+| `template.get {name}` | `get_template` | read | one template and its `svg`, or for an HTML template its `html`, as written |
+| `template.save {name, svg or html, replace?}` | `save_template` | operate | checks the template, then writes it into the media library as `name` (`.svg` or `.html` added). Refuses to write over a file unless `replace`; with `replace`, every source drawing it is drawn again on air, and `redrawn` lists them. An HTML template with an error is refused with `data.problems` |
+| `template.check {svg, html or name}` | `check_template` | read | reads a template the way saving or drawing it would and answers `ok` and `problems`, each with a `fix`. Writes nothing |
 | `template.fields {id}` | `template_fields` | read | a running graphic's fields, each with `value` (what is on screen) and `set` (whether the source set it), and `path`, `params.fields.<name>` |
 | `scene.preview.frame {width?}` | `preview_frame` | read | the armed preview scene as a JPEG, which over MCP is an image the model sees |
 
 `list_templates` and `save_template` are in the standard MCP list;
-`get_template`, `template_fields` and `preview_frame` run through `call_tool`. Adding the graphic is `source.add`
+`get_template`, `check_template`, `template_fields` and `preview_frame` run through `call_tool`. Adding the graphic is `source.add`
 (`add_source`), placing it is `scene.item.add` (`add_scene_item`), which takes
 `visible`, `enter` and `exit`, and changing a field is `source.set`
 (`set_source`).

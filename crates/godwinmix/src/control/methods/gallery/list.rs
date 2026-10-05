@@ -90,7 +90,8 @@ mod tests {
     fn plain_words_find_the_pack_by_what_people_call_it() {
         let (mut all, _) = gallery::store::list(&std::env::temp_dir().join("gmx-gallery-rank"));
         rank(&mut all, "lower third");
-        assert_eq!(all.first().map(|e| e.item.id.as_str()), Some("news-lower-third"));
+        // Several lower thirds ship, a still and moving ones; any of them answers.
+        assert_eq!(all.first().map(|e| e.item.zone), Some(Zone::LowerThird), "{:?}", all.first());
         let (mut all, _) = gallery::store::list(&std::env::temp_dir().join("gmx-gallery-rank"));
         rank(&mut all, "a blue background");
         assert_eq!(all.first().map(|e| e.item.id.as_str()), Some("blue-gradient"));

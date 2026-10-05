@@ -1,0 +1,9 @@
+name = "Bold lower third"
+kind = "html"
+file = "lower-third-bold.html"
+zone = "lower-third"
+moves = true
+transparent = true
+description = "A big name on a solid block with a slanted accent tab for the role. Pushes in from the left with a slight skew, drops out downwards."
+tags = ["news", "name", "bold", "animated"]
+origin = "shipped"

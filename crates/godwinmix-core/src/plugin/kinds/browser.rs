@@ -52,6 +52,12 @@ fn claims(uri: &str) -> Option<u16> {
 }
 
 fn new(req: SourceRequest<'_>) -> Result<Box<dyn Source>> {
+    // A transparent page is drawn in graphic mode and over the picture by the
+    // board; see `html::page`.
+    if super::html::page::wanted(&req.cfg.effective_params()) {
+        let url = crate::input::web_url(req.cfg.uri.as_str()).context("not a web source url")?;
+        return Ok(Box::new(super::html::page::TransparentPage::new(req.ctx(), url)));
+    }
     let sidecar = ExecSpec::browser(req.cfg.uri.as_str(), req.canvas, req.browser)?;
     Ok(Box::new(BrowserSource {
         ctx: req.ctx(),
@@ -198,6 +204,9 @@ pub fn validate(params: &Params) -> Result<()> {
         match key.as_str() {
             "uri" | "url" => {
                 anyhow::ensure!(value.is_str(), "browser/source params.{key} must be a string");
+            }
+            "transparent" => {
+                anyhow::ensure!(value.is_bool(), "browser/source params.transparent is true or false");
             }
             "superimpose" => {
                 let s = value.as_str().unwrap_or_default();

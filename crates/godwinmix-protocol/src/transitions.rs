@@ -19,7 +19,10 @@ pub const EASINGS: &[&str] = &["linear", "ease-in", "ease-out", "ease-in-out"];
 pub const COLOURS: &[&str] = &["black", "white"];
 
 /// What an item's `enter` and `exit` may be.
-pub const ITEM_TRANSITIONS: &[&str] = &["cut", "fade", "slide", "zoom", "wipe"];
+/// `hold` keeps the item drawn as it is for its duration and then takes it
+/// away: the way out for a graphic that animates itself (an HTML template),
+/// which needs to stay on the canvas while its own animation plays.
+pub const ITEM_TRANSITIONS: &[&str] = &["cut", "fade", "slide", "zoom", "wipe", "hold"];
 
 /// The edge an item slides or wipes in from, and out to.
 pub const EDGES: &[&str] = &["left", "right", "top", "bottom"];

@@ -1,0 +1,9 @@
+name = "Glass lower third"
+kind = "html"
+file = "lower-third-glass.html"
+zone = "lower-third"
+moves = true
+transparent = true
+description = "Name and role on a dark glass panel with an accent bar. Wipes in from the left, out the same way."
+tags = ["news", "name", "glass", "animated"]
+origin = "shipped"

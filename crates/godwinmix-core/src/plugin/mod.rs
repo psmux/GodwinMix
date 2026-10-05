@@ -179,6 +179,10 @@ pub enum Capability {
     /// Raw timestamps already use the adopted programme clock and base time.
     /// The mixer must not add its running time again.
     ProgrammeTimeline,
+    /// The source plays its own way in and out: the mixer calls `cue` with
+    /// `{"on_air": true}` when an item showing it goes on the programme and
+    /// `false` when the last one comes off.
+    Cue,
 }
 
 impl Capability {
@@ -193,6 +197,7 @@ impl Capability {
             Self::AudioLayers => "audio-layers",
             Self::Alpha => "alpha",
             Self::ProgrammeTimeline => "programme-timeline",
+            Self::Cue => "cue",
         }
     }
 
@@ -200,7 +205,7 @@ impl Capability {
         Self::ALL.iter().copied().find(|c| c.as_str() == s)
     }
 
-    pub const ALL: [Capability; 9] = [
+    pub const ALL: [Capability; 10] = [
         Self::RestartInPlace,
         Self::LatencyReport,
         Self::Health,
@@ -210,6 +215,7 @@ impl Capability {
         Self::AudioLayers,
         Self::Alpha,
         Self::ProgrammeTimeline,
+        Self::Cue,
     ];
 
     const fn bit(self) -> u32 {

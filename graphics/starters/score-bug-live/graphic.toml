@@ -1,0 +1,9 @@
+name = "Live score bug"
+kind = "html"
+file = "score-bug-live.html"
+zone = "bug"
+moves = true
+transparent = true
+description = "Top left score bug: two teams with their colours, the score, and a match clock that runs by itself from the time you set while running is yes. A changed score flashes."
+tags = ["sport", "score", "clock"]
+origin = "shipped"

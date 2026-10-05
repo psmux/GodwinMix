@@ -934,7 +934,7 @@ export interface FeedTestResult {
 }
 
 /** What a field holds. */
-export type FieldType = "text" | "color";
+export type FieldType = "text" | "color" | "image";
 
 /** One field and what it shows now. */
 export interface FieldValue {
@@ -1509,7 +1509,7 @@ export interface ItemTransition {
   type: ItemTransitionKind;
 }
 
-export type ItemTransitionKind = "cut" | "fade" | "slide" | "zoom" | "wipe";
+export type ItemTransitionKind = "cut" | "fade" | "slide" | "zoom" | "wipe" | "hold";
 
 /**
  * `scene.item.align`, `distribute`, `fit_to_canvas`, `cover_canvas`,
@@ -2908,13 +2908,35 @@ export type TelemetryExt = boolean | {
   hz?: number | null;
 };
 
+/**
+ * `template.check`: read a template the way `template.save` and
+ * `source.add` would, without writing anything, and say what to fix.
+ */
+export interface TemplateCheckRequest {
+  html?: string | null;
+  name?: string | null;
+  svg?: string | null;
+}
+
+/** The answer to `template.check`. */
+export interface TemplateChecked {
+  ok: boolean;
+  problems: TemplateProblem[];
+  template?: TemplateInfo | null;
+}
+
 /** A template and its SVG. */
 export interface TemplateDoc {
+  category?: string | null;
   description: string;
   fields: TemplateField[];
+  format?: TemplateFormat;
   height: number;
+  html?: string | null;
   name: string;
+  opaque?: boolean;
   origin: TemplateOrigin;
+  out_ms?: number | null;
   svg: string;
   title: string;
   uri: string;
@@ -2943,6 +2965,9 @@ export interface TemplateFieldsRequest {
   id: string;
 }
 
+/** What a template is written in. */
+export type TemplateFormat = "svg" | "html";
+
 /** `template.get`. */
 export interface TemplateGetRequest {
   name: string;
@@ -2950,11 +2975,15 @@ export interface TemplateGetRequest {
 
 /** One template, as `template.list` and `template.get` describe it. */
 export interface TemplateInfo {
+  category?: string | null;
   description: string;
   fields: TemplateField[];
+  format?: TemplateFormat;
   height: number;
   name: string;
+  opaque?: boolean;
   origin: TemplateOrigin;
+  out_ms?: number | null;
   title: string;
   uri: string;
   width: number;
@@ -2969,14 +2998,22 @@ export interface TemplateList {
 /** Where a template comes from. */
 export type TemplateOrigin = "pack" | "library";
 
+/** One thing wrong with a template, and what to do about it. */
+export interface TemplateProblem {
+  fix: string;
+  level: string;
+  problem: string;
+}
+
 /**
  * `template.save`: check an SVG template and write it into the media
  * library.
  */
 export interface TemplateSaveRequest {
+  html?: string | null;
   name: string;
   replace?: boolean;
-  svg: string;
+  svg?: string;
 }
 
 /** The answer to `template.save`. */
@@ -3504,6 +3541,7 @@ export interface MethodParams {
   "task.cancel": TaskRequest;
   "task.get": TaskRequest;
   "task.list": Record<string, never>;
+  "template.check": TemplateCheckRequest;
   "template.fields": TemplateFieldsRequest;
   "template.get": TemplateGetRequest;
   "template.list": Record<string, never>;
@@ -3715,6 +3753,7 @@ export interface MethodResults {
   "task.cancel": Record<string, unknown>;
   "task.get": TaskView;
   "task.list": TaskView[];
+  "template.check": TemplateChecked;
   "template.fields": TemplateFields;
   "template.get": TemplateDoc;
   "template.list": TemplateList;
@@ -3977,10 +4016,11 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "task.cancel", summary: "Ask a piece of long running work to stop. Cooperative: the answer says the request landed, not that the work has stopped yet.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/tasks/{id}/cancel" } },
   { name: "task.get", summary: "How a piece of long running work is getting on, and its answer once it has one.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/tasks/{id}" } },
   { name: "task.list", summary: "Every background job this core knows about, newest first.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/tasks" } },
+  { name: "template.check", summary: "Read an SVG or HTML template the way saving or drawing it would, and say what to fix. Writes nothing.", scope: "read", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/template/check" } },
   { name: "template.fields", summary: "A running graphic's fields: each one's label, type, default and what it shows now.", scope: "read", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/template/fields" } },
-  { name: "template.get", summary: "One template, with its SVG as written.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/template" } },
-  { name: "template.list", summary: "The graphic templates: the built in pack and the SVG templates in the media library, each with its fields.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/template/list" } },
-  { name: "template.save", summary: "Check an SVG template and write it into the media library.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/template/save" } },
+  { name: "template.get", summary: "One template, with its SVG or HTML as written.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/template" } },
+  { name: "template.list", summary: "The graphic templates: the built in packs and the SVG and HTML templates in the media library, each with its fields.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/template/list" } },
+  { name: "template.save", summary: "Check an SVG or HTML template and write it into the media library.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/template/save" } },
   { name: "token.create", summary: "Make a token for one phone or tablet, with the read, operate (the default) or admin scope. The secret is in this answer and nowhere else: the mixer keeps only a digest of it. Open the page at https://<host>:<port>/#token=<token> to sign the device in.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/token/create" } },
   { name: "token.list", summary: "Every device token: its id, label, scope and when it was made. Never a secret.", scope: "admin", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/token/list" } },
   { name: "token.revoke", summary: "Take a device token back. The device's next call is refused, including on a connection it already has open.", scope: "admin", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/token/revoke" } },
@@ -5036,22 +5076,27 @@ export class GeneratedMethods {
     return this._call("task.list", {}) as Promise<TaskView[]>;
   }
 
+  /** Read an SVG or HTML template the way saving or drawing it would, and say what to fix. Writes nothing. */
+  templateCheck(params: TemplateCheckRequest = {}): Promise<TemplateChecked> {
+    return this._call("template.check", params as unknown as Record<string, unknown>) as Promise<TemplateChecked>;
+  }
+
   /** A running graphic's fields: each one's label, type, default and what it shows now. */
   templateFields(params: TemplateFieldsRequest): Promise<TemplateFields> {
     return this._call("template.fields", params as unknown as Record<string, unknown>) as Promise<TemplateFields>;
   }
 
-  /** One template, with its SVG as written. */
+  /** One template, with its SVG or HTML as written. */
   templateGet(params: TemplateGetRequest): Promise<TemplateDoc> {
     return this._call("template.get", params as unknown as Record<string, unknown>) as Promise<TemplateDoc>;
   }
 
-  /** The graphic templates: the built in pack and the SVG templates in the media library, each with its fields. */
+  /** The graphic templates: the built in packs and the SVG and HTML templates in the media library, each with its fields. */
   templateList(): Promise<TemplateList> {
     return this._call("template.list", {}) as Promise<TemplateList>;
   }
 
-  /** Check an SVG template and write it into the media library. */
+  /** Check an SVG or HTML template and write it into the media library. */
   templateSave(params: TemplateSaveRequest): Promise<TemplateSaved> {
     return this._call("template.save", params as unknown as Record<string, unknown>) as Promise<TemplateSaved>;
   }

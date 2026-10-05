@@ -27,6 +27,8 @@ pub const PACK: &[(&str, &str)] = pack![
     "title-card",
     "quote-card",
     "location-tag",
+    "set-newsroom-desk",
+    "set-studio-frame",
 ];
 
 /// The pack, read.

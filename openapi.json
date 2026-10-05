@@ -3846,6 +3846,11 @@
             "const": "color",
             "description": "A colour: `#rgb`, `#rrggbb` or `#rrggbbaa`.",
             "type": "string"
+          },
+          {
+            "const": "image",
+            "description": "A picture: the file name of an image in the media library, such as\n`logo.png`. HTML templates only.",
+            "type": "string"
           }
         ]
       },
@@ -6109,7 +6114,7 @@
           },
           "type": {
             "$ref": "#/components/schemas/ItemTransitionKind",
-            "description": "cut, fade, slide, zoom or wipe."
+            "description": "cut, fade, slide, zoom, wipe or hold. `hold` keeps the item as it is\nfor `duration_ms` and then takes it away, for a graphic whose own\nanimation is its way out."
           }
         },
         "required": [
@@ -6123,7 +6128,8 @@
           "fade",
           "slide",
           "zoom",
-          "wipe"
+          "wipe",
+          "hold"
         ],
         "type": "string"
       },
@@ -11256,9 +11262,75 @@
         ],
         "type": "object"
       },
+      "TemplateCheckRequest": {
+        "additionalProperties": false,
+        "description": "`template.check`: read a template the way `template.save` and\n`source.add` would, without writing anything, and say what to fix.",
+        "properties": {
+          "html": {
+            "description": "An HTML template's whole document.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "description": "Or a template by name, as `template.list` gives it.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "svg": {
+            "description": "An SVG template's whole document.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "TemplateChecked": {
+        "description": "The answer to `template.check`.",
+        "properties": {
+          "ok": {
+            "description": "True when nothing at level `error` was found.",
+            "type": "boolean"
+          },
+          "problems": {
+            "items": {
+              "$ref": "#/components/schemas/TemplateProblem"
+            },
+            "type": "array"
+          },
+          "template": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TemplateInfo"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The template as it reads, when it reads at all."
+          }
+        },
+        "required": [
+          "ok",
+          "problems"
+        ],
+        "type": "object"
+      },
       "TemplateDoc": {
         "description": "A template and its SVG.",
         "properties": {
+          "category": {
+            "description": "What sort of graphic it is, for a picker: lower-third, ticker, bug,\nscore, title, background, foreground, countdown, slate. HTML only.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "description": {
             "type": "string"
           },
@@ -11268,20 +11340,44 @@
             },
             "type": "array"
           },
+          "format": {
+            "$ref": "#/components/schemas/TemplateFormat",
+            "description": "`svg` (absent) or `html`."
+          },
           "height": {
             "format": "uint32",
             "minimum": 0,
             "type": "integer"
           },
+          "html": {
+            "description": "The HTML as written, for an HTML template.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "name": {
             "description": "The name `template:<name>` adds it by: a pack name such as\n`news-lower-third`, or a library file name such as `my-bar.svg`.",
             "type": "string"
           },
+          "opaque": {
+            "description": "True for a design that covers the whole picture on purpose: a\nbackground, a title card, a slate. HTML only.",
+            "type": "boolean"
+          },
           "origin": {
             "$ref": "#/components/schemas/TemplateOrigin"
           },
+          "out_ms": {
+            "description": "How long its own way out takes, in milliseconds. Give the scene item\n`\"exit\": {\"type\": \"hold\", \"duration_ms\": <this>}` so it stays drawn\nwhile it plays. HTML only.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
           "svg": {
-            "description": "The SVG as written, with its `{{field}}` markers in place.",
+            "description": "The SVG as written, with its `{{field}}` markers in place. Empty for\nan HTML template.",
             "type": "string"
           },
           "title": {
@@ -11389,6 +11485,21 @@
         ],
         "type": "object"
       },
+      "TemplateFormat": {
+        "description": "What a template is written in.",
+        "oneOf": [
+          {
+            "const": "svg",
+            "description": "An SVG drawn by the mixer once per change and held: a still, the\ncheapest designed graphic there is.",
+            "type": "string"
+          },
+          {
+            "const": "html",
+            "description": "An HTML page drawn by the browser renderer: CSS animation, canvas,\nWebGL, with a way in and a way out. Added by `html:<name>`.",
+            "type": "string"
+          }
+        ]
+      },
       "TemplateGetRequest": {
         "additionalProperties": false,
         "description": "`template.get`.",
@@ -11406,6 +11517,13 @@
       "TemplateInfo": {
         "description": "One template, as `template.list` and `template.get` describe it.",
         "properties": {
+          "category": {
+            "description": "What sort of graphic it is, for a picker: lower-third, ticker, bug,\nscore, title, background, foreground, countdown, slate. HTML only.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "description": {
             "type": "string"
           },
@@ -11414,6 +11532,10 @@
               "$ref": "#/components/schemas/TemplateField"
             },
             "type": "array"
+          },
+          "format": {
+            "$ref": "#/components/schemas/TemplateFormat",
+            "description": "`svg` (absent) or `html`."
           },
           "height": {
             "format": "uint32",
@@ -11424,8 +11546,21 @@
             "description": "The name `template:<name>` adds it by: a pack name such as\n`news-lower-third`, or a library file name such as `my-bar.svg`.",
             "type": "string"
           },
+          "opaque": {
+            "description": "True for a design that covers the whole picture on purpose: a\nbackground, a title card, a slate. HTML only.",
+            "type": "boolean"
+          },
           "origin": {
             "$ref": "#/components/schemas/TemplateOrigin"
+          },
+          "out_ms": {
+            "description": "How long its own way out takes, in milliseconds. Give the scene item\n`\"exit\": {\"type\": \"hold\", \"duration_ms\": <this>}` so it stays drawn\nwhile it plays. HTML only.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
           },
           "title": {
             "type": "string"
@@ -11490,10 +11625,40 @@
           }
         ]
       },
+      "TemplateProblem": {
+        "description": "One thing wrong with a template, and what to do about it.",
+        "properties": {
+          "fix": {
+            "description": "What to change, in words a model can act on.",
+            "type": "string"
+          },
+          "level": {
+            "description": "`error` stops it being saved or drawn; `warning` is drawn as it is.",
+            "type": "string"
+          },
+          "problem": {
+            "description": "What is wrong, quoting the part of the file it is in.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "level",
+          "problem",
+          "fix"
+        ],
+        "type": "object"
+      },
       "TemplateSaveRequest": {
         "additionalProperties": false,
         "description": "`template.save`: check an SVG template and write it into the media\nlibrary.",
         "properties": {
+          "html": {
+            "description": "The whole HTML document of an HTML template, saved as `<name>.html`.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "name": {
             "description": "The file name, ending `.svg` or not (it is added). One segment, no\nslashes.",
             "type": "string"
@@ -11504,13 +11669,13 @@
             "type": "boolean"
           },
           "svg": {
-            "description": "The whole SVG document.",
+            "default": "",
+            "description": "The whole SVG document. Leave it empty and give `html` to save an\nHTML template.",
             "type": "string"
           }
         },
         "required": [
-          "name",
-          "svg"
+          "name"
         ],
         "type": "object"
       },
@@ -19920,7 +20085,45 @@
             "$ref": "#/components/responses/Error"
           }
         },
-        "summary": "One template, with its SVG as written.",
+        "summary": "One template, with its SVG or HTML as written.",
+        "tags": [
+          "template"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
+    "/api/v1/template/check": {
+      "post": {
+        "description": "JSON-RPC method `template.check`. Needs the `read` scope.",
+        "operationId": "template.check",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TemplateCheckRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TemplateChecked"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Read an SVG or HTML template the way saving or drawing it would, and say what to fix. Writes nothing.",
         "tags": [
           "template"
         ],
@@ -19986,7 +20189,7 @@
             "$ref": "#/components/responses/Error"
           }
         },
-        "summary": "The graphic templates: the built in pack and the SVG templates in the media library, each with its fields.",
+        "summary": "The graphic templates: the built in packs and the SVG and HTML templates in the media library, each with its fields.",
         "tags": [
           "template"
         ],
@@ -20024,7 +20227,7 @@
             "$ref": "#/components/responses/Error"
           }
         },
-        "summary": "Check an SVG template and write it into the media library.",
+        "summary": "Check an SVG or HTML template and write it into the media library.",
         "tags": [
           "template"
         ],

@@ -377,6 +377,25 @@ fn find_browser_sidecar(browser: &BrowserConfig) -> Result<Option<std::path::Pat
     Err(plain::web_unavailable(&lookup).into())
 }
 
+/// The browser renderer for an HTML graphic. There is no `wpesrc` fallback
+/// here: graphic mode is the sidecar's alone. With none installed the error
+/// says how to get one, or that it is being built.
+pub fn graphic_renderer(browser: &BrowserConfig) -> Result<std::path::PathBuf> {
+    use crate::setup::{names, plain, starter, web};
+    let lookup = web::lookup(browser);
+    if let Some(found) = lookup.found {
+        return Ok(found);
+    }
+    if lookup.configured_missing.is_some() {
+        return Err(plain::web_configured_missing(&lookup).into());
+    }
+    if lookup.buildable.is_some() {
+        starter::need(names::WEB);
+        return Err(plain::web_setting_up(&lookup).into());
+    }
+    Err(plain::web_unavailable(&lookup).into())
+}
+
 /// What the sidecar found the page playing.
 ///
 /// The fields the mixer acts on, out of the report `--detect-media` writes on
@@ -899,6 +918,22 @@ impl InputPipeline {
     /// client swap, a tool a plugin contributes.
     pub fn call(&self, method: &str, params: serde_json::Value) -> Result<serde_json::Value> {
         self.kind.lock().call(method, params)
+    }
+
+    /// Tell a source that plays its own way in and out whether the programme
+    /// shows it. Never waits: a kind busy in a restart or a call holds its
+    /// lock, and false says it was not told and should be told again. A
+    /// kind that refuses the call has had its answer and is not asked again.
+    pub fn cue(&self, on_air: bool) -> bool {
+        match self.kind.try_lock() {
+            Some(mut kind) => {
+                if let Err(e) = kind.call("cue", serde_json::json!({ "on_air": on_air })) {
+                    tracing::debug!(source = %self.id, error = %e, "a source that declares cue refused it");
+                }
+                true
+            }
+            None => false,
+        }
     }
 
     /// Hand the kind new params while it runs. `Applied` means it took them

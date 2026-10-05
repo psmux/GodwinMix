@@ -45,10 +45,15 @@ pub fn running() -> (MixerHandle, Frames, std::thread::JoinHandle<()>) {
 
 /// The same, and the programme pipeline, for a test that looks inside it.
 pub fn running_with_pipeline() -> (MixerHandle, Frames, std::thread::JoinHandle<()>, gst::Pipeline) {
+    running_with("")
+}
+
+/// The same, with more of the config written after the canvas.
+pub fn running_with(extra: &str) -> (MixerHandle, Frames, std::thread::JoinHandle<()>, gst::Pipeline) {
     gst::init().unwrap();
-    let cfg: Config = toml::from_str(
-        "[canvas]\nwidth = 320\nheight = 180\nfps = 30\nsample_rate = 48000\nchannels = 2\n\n[control]\nbind = \"127.0.0.1:0\"\n",
-    )
+    let cfg: Config = toml::from_str(&format!(
+        "[canvas]\nwidth = 320\nheight = 180\nfps = 30\nsample_rate = 48000\nchannels = 2\n\n[control]\nbind = \"127.0.0.1:0\"\n{extra}",
+    ))
     .unwrap();
     let (mut mix, handle, cmd_rx, _bus_rx) = Mixer::build(cfg).expect("build a mixer");
     let frames = Frames::default();
