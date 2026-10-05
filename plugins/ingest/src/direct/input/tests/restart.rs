@@ -85,7 +85,11 @@ fn an_srt_caller_that_calls_again_with_new_pids_is_followed() {
     assert!(eventually(15, || rx.got.keyframes() >= 3), "the first caller: {:?}", rx.got.last());
     drop(tx);
     let _tx = sender_to(to, 300, 301, 7);
-    follows(&rx, "a new caller with new PIDs", 15);
+    // Longer than the UDP cases: the input rebuilds its listener once the
+    // first caller's connection breaks, and on Windows libsrt keeps the port
+    // bound for a while after that ("Cannot bind to 0.0.0.0:19934"), so the
+    // first retries fail and a later one takes the new caller.
+    follows(&rx, "a new caller with new PIDs", 45);
 }
 
 #[test]
