@@ -565,17 +565,17 @@ class ChannelSetRequest(TypedDict, total=False):
     # RTMPS on or off, and its port.
 
 ChannelStream = TypedDict("ChannelStream", {
-    "audio": Union[StreamAudio, None],
-    "dropped_gops": int,
-    "from": str,
-    "key": Optional[str],
-    "name": str,
-    "protocol": Optional[str],
-    "relay": Optional[str],
-    "since_ms": int,
-    "source": Optional[str],
-    "state": str,
-    "video": Union[StreamVideo, None],
+    "audio": "Union[StreamAudio, None]",
+    "dropped_gops": "int",
+    "from": "str",
+    "key": "Optional[str]",
+    "name": "str",
+    "protocol": "Optional[str]",
+    "relay": "Optional[str]",
+    "since_ms": "int",
+    "source": "Optional[str]",
+    "state": "str",
+    "video": "Union[StreamVideo, None]",
 }, total=False)
 
 class ConfigChanged(TypedDict, total=False):
@@ -2057,10 +2057,10 @@ class PluginSettings(TypedDict, total=False):
     settings: Dict[str, Any]
 
 PluginUpdated = TypedDict("PluginUpdated", {
-    "from": str,
-    "handshake_ms": int,
-    "plugin": PluginRecord,
-    "to": str,
+    "from": "str",
+    "handshake_ms": "int",
+    "plugin": "PluginRecord",
+    "to": "str",
 }, total=False)
 
 class PresenceClient(TypedDict, total=False):
@@ -2557,11 +2557,11 @@ class Show(TypedDict, total=False):
     state: ShowState
 
 ShowAdd = TypedDict("ShowAdd", {
-    "compositing": Optional[bool],
-    "from": Union[ShowFrom, None],
-    "input": Union[InputSpec, None],
-    "name": str,
-    "outputs": List[ShowOutputSpec],
+    "compositing": "Optional[bool]",
+    "from": "Union[ShowFrom, None]",
+    "input": "Union[InputSpec, None]",
+    "name": "str",
+    "outputs": "List[ShowOutputSpec]",
 }, total=False)
 
 class ShowAddManyRequest(TypedDict, total=False):
@@ -2581,11 +2581,11 @@ class ShowAddManyResult(TypedDict, total=False):
     refused: List[ShowRefused]
 
 ShowAddRequest = TypedDict("ShowAddRequest", {
-    "compositing": Optional[bool],
-    "from": Union[ShowFrom, None],
-    "input": Union[InputSpec, None],
-    "name": str,
-    "outputs": List[ShowOutputSpec],
+    "compositing": "Optional[bool]",
+    "from": "Union[ShowFrom, None]",
+    "input": "Union[InputSpec, None]",
+    "name": "str",
+    "outputs": "List[ShowOutputSpec]",
 }, total=False)
 
 class ShowChanged(TypedDict, total=False):
@@ -3343,10 +3343,10 @@ class ChannelRemovedEvent(TypedDict, total=False):
     id: str
 
 ChannelRefusedEvent = TypedDict("ChannelRefusedEvent", {
-    "from": str,
-    "id": str,
-    "stream": str,
-    "why": str,
+    "from": "str",
+    "id": "str",
+    "stream": "str",
+    "why": "str",
 }, total=False)
 
 class AlertEvent(TypedDict, total=False):
