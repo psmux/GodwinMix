@@ -114,9 +114,15 @@ Names in `code` are MCP tools; the CLI is at the end.
    A field the template does not have is refused with the ones it does have in
    `data.fields`.
 
+A colour named but not given ("my brand blue") is not stored anywhere unless
+`[graphics] accent` is set. Pick a fitting one, put it on air as asked, and
+say which hex you used and how to change it, rather than stopping to ask.
+
 ## Look at your own work
 
-Always look once before you tell anyone it is done.
+Always look once before you tell anyone it is done. Just after a take, or
+while the pictures start ("no mosaic frame yet"), wait a second and look
+again before you call anything black.
 
 ```
 arm_preview {"scene": "studio"}
