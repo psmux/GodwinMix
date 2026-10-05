@@ -101,9 +101,19 @@ def iris():
          "-frames:v", "1", "-pix_fmt", "gray", str(out)])
 
 
+def loops():
+    """Each starter's preview strip as a short WebM loop, which the gallery
+    plays while a pointer rests on its card. Run after the strips are drawn:
+    cargo test -p godwinmix-core --test fx_import -- --ignored write_starter_previews
+    """
+    for strip in sorted(ROOT.glob("*/preview-strip.jpg")):
+        run(["-i", str(strip), "-vf", "untile=12x1,setpts=N/(8*TB),format=yuv420p", "-r", "8",
+             "-c:v", "libvpx", "-b:v", "0", "-crf", "30", "-an", str(strip.parent / "preview.webm")])
+
+
 if __name__ == "__main__":
     only = sys.argv[1:]
-    for make in (light_leak, bokeh, glitch, film_burn, iris):
+    for make in (light_leak, bokeh, glitch, film_burn, iris, loops):
         if not only or make.__name__ in only:
             make()
     for f in sorted(ROOT.rglob("*.*")):

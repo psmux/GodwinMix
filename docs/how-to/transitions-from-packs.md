@@ -42,6 +42,10 @@ the shortcuts list.
 On a phone the panel fills the bottom of the screen, two previews to a row,
 and every button is big enough for a thumb.
 
+The Graphics gallery lists every transition and effect too, as those kinds,
+with its still and its loop. Dropping a light leak or a `.glsl` shader on the
+gallery imports it the same way.
+
 ## From the command line
 
 ```bash
@@ -51,15 +55,28 @@ gmx ctl rpc program.take '{"scene": "wide", "transition": "light-leaks-04"}'
 gmx ctl rpc fx.fire '{"name": "bokeh"}'
 ```
 
-`fx.import` answers with what it made and what it skipped:
+`fx.import` answers with what it made and, under `skipped`, any file it did
+not take and why. This is the test pack in
+`crates/godwinmix-core/tests/fixtures/fx-pack.zip`, a film burn and a wipe with
+a licence beside them, with `dir` and the trace left out:
 
 ```json
-{"imported": [{"name": "light-leaks-04", "kind": "overlay", "blend": "screen",
-               "duration_ms": 2400, "cut_at_measured_ms": 1166, "coverage": 0.93,
-               "transition": true, "effect": true, "origin": "library",
-               "preview": "/api/v1/fx/light-leaks-04/preview.jpg", ...}],
- "skipped": [{"file": ".../readme.pdf", "reason": "..."}]}
+{"imported": [
+  {"name": "pack-burn", "title": "Pack Burn", "kind": "overlay", "blend": "screen",
+   "file": "pack-burn.webm", "duration_ms": 1500, "cut_at_measured_ms": 766,
+   "coverage": 1.0, "transition": true, "effect": true, "origin": "library",
+   "licence": "CC0 1.0 Universal: a test pack for GodwinMix, no rights reserved.",
+   "source": "Pack_Burn.webm", "preview": "/api/v1/fx/pack-burn/preview.jpg"},
+  {"name": "pack-wipe", "title": "pack wipe", "kind": "matte", "blend": "normal",
+   "file": "pack-wipe.png", "duration_ms": 1000, "softness": 0.1,
+   "transition": true, "effect": false, "origin": "library",
+   "licence": "CC0 1.0 Universal: a test pack for GodwinMix, no rights reserved.",
+   "source": "pack-wipe.png", "preview": "/api/v1/fx/pack-wipe/preview.jpg"}]}
 ```
+
+The film burn was found to be light on black, so Screen, and its cut is the
+middle of the frames where it covers the picture. The wipe is a grey ramp, so
+a matte. Both took the pack's licence with them.
 
 A big pack answers with a `task_id` instead, because decoding twenty clips
 takes longer than a call may hold you; `task.get` has the same answer when it

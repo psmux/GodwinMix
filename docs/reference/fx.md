@@ -43,10 +43,12 @@ change one scene into another and are transitions only.
 
 ## The folder
 
-Every item is a folder in the gallery's folder, `graphics/` inside the media
-library (`[media] dir`), so the gallery lists, previews, exports and deletes
-transitions and effects with every other design. The folder's name is the
-item's `name`, a slug.
+Every item is a gallery item: a folder in the gallery's folder, `graphics/`
+inside the media library unless `[graphics] gallery` says otherwise, with a
+`graphic.toml` whose `kind` is `transition` or `effect` (the gallery's format
+is [the gallery format](gallery-format.md)). So the gallery lists, previews,
+exports and deletes transitions and effects with every other design, and the
+folder's name is the item's `name`, a slug.
 
 ```
 <media dir>/graphics/
@@ -56,7 +58,8 @@ item's `name`, a slug.
     graphic.toml
     light-leak.webm
     preview.jpg              the middle frame, the still the gallery shows
-    preview-strip.jpg        twelve frames side by side, the moving preview
+    preview-strip.jpg        twelve frames side by side, the picker's moving preview
+    preview.webm             the same twelve frames as a loop, for the gallery's card (starters)
     LICENSE.txt              copied from the pack, when it had one
 ```
 
@@ -123,7 +126,14 @@ much is near white, how much near black, how far from grey.
 * A `.glsl`, `.frag` or `.fs` is a `shader`, checked for a `transition`
   function and a default for each uniform.
 
-Pass `kind`, `blend` or `cut_at_ms` to `fx.import` to decide instead. On the
+Pass `kind`, `blend` or `cut_at_ms` to `fx.import` to decide instead.
+
+The gallery's own Import (`gallery.import`, its Import button, a drop on it)
+takes the same way a `.glsl`, `.frag` or `.fs`, as a shader transition, and a
+clip of light on black with no alpha, as an effect and a transition when it
+covers enough. A clip with alpha stays a gallery clip there, because it is as
+likely to be a moving lower third as a stinger; import it with `fx.import` or
+the Looks panel to make it a stinger. On the
 starter set the measurement agrees with the shipped files to within 34 ms
 (`crates/godwinmix-core/tests/fx_import.rs`).
 
@@ -266,7 +276,8 @@ file that will not decode lists the formats above.
 
 ## The starter set
 
-Seven items ship in the binary from `graphics/starters/`, about 85 KB in all,
+Seven items ship in the binary from `graphics/starters/`, about 280 KB in all,
+86 KB of it the media and the rest the previews the gallery and the picker show,
 every one made for this project by `dev/make-starter-fx.py` with ffmpeg and
 under the repository's licence:
 
