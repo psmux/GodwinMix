@@ -740,6 +740,7 @@ impl SlotPool {
         self.program.add_many(&elements).context("adding a compositor slot")?;
         gst::Element::link_many(elements.iter().collect::<Vec<_>>())
             .context("linking a compositor slot")?;
+        super::slot_guard::guard_slot(index, &gate, &queue)?;
 
         let pad = self
             .vmix
@@ -793,7 +794,12 @@ impl SlotPool {
         if self.slots.iter().any(|s| s.free() && s.holds(&branch.id)) {
             return Ok(());
         }
-        let index = self.free_slot(&branch.id, &[])?;
+        // Never a slot that is on the canvas. With the pool full, the first
+        // slot not holding this source was taken, and that was usually the
+        // one on air: the programme lost its picture the moment a phone
+        // joined, until the next apply took the slot straight back.
+        let on_air: Vec<usize> = self.slots.iter().filter(|s| s.showing()).map(|s| s.index).collect();
+        let index = self.free_slot(&branch.id, &on_air)?;
         // Not counted as a miss: this is the relink that buys every later take
         // its freedom, and it happens while the source has no picture yet.
         self.bind(index, branch, false)?;
@@ -1270,11 +1276,11 @@ impl SlotPool {
         if !slot.pad.pad_flags().contains(gst::PadFlags::EOS) {
             return;
         }
-        let Some(chain) = slot.queue.static_pad("sink") else { return };
+        let Some(chain) = slot.gate.static_pad("src") else { return };
         set_f64(&slot.pad, "alpha", 0.0);
         crate::slow_step!("slot frame barrier", index, gstutil::after_next_frame(&slot.pad));
-        gstutil::wake_chain(&chain);
-        gstutil::resume_chain(&chain);
+        gstutil::wake_below(&chain);
+        gstutil::resume_below(&chain);
         debug!(slot = index, "cleared the end of stream an empty slot was left with");
     }
 
@@ -1354,12 +1360,24 @@ impl SlotPool {
         // that is leaving, which is what the next source on this slot wants
         // anyway: a slot must never open with the last one's picture.
         //
-        // Flushed at the queue rather than at the valve above it. A valve that
-        // is dropping swallows every serialized event, and `FLUSH_STOP` is
+        // Flushed below the valve rather than into it. A valve that is
+        // dropping swallows every serialized event, and `FLUSH_STOP` is
         // serialized while `FLUSH_START` is not, so a flush sent in above a
         // valve this function is about to close goes in and never comes out:
         // the slot stays flushing, the next bind cannot send its sticky events
         // down it, and the programme loses the picture for good.
+        //
+        // Pushed out of the valve's src pad, though, not sent into the queue.
+        // A flush stop takes the segment off every pad it passes, and the
+        // valve's pad has to be one of them. Sent into the queue, the flush
+        // went around it, so the valve still believed the queue had the
+        // segment; a source that came back to the slot it had just lost (a
+        // source added to a full pool takes a slot, and the next apply hands
+        // it straight back) brought the identical segment, the valve did not
+        // send it again, and its next frame reached the compositor with no
+        // segment at all. `gst_video_aggregator_fill_queues` asserts on that,
+        // and the installed app aborted with two phones live on 2026-10-05.
+        // `tests::full_pool` is that case.
         //
         // Out of the picture before any of it, and one frame let out. A pad
         // at alpha 0 is one the compositor does not convert, and a frame
@@ -1371,9 +1389,9 @@ impl SlotPool {
         // this crate's tests in `gst_video_aggregator_fill_queues`.
         set_f64(&self.slots[index].pad, "alpha", 0.0);
         crate::slow_step!("slot frame barrier", index, gstutil::after_next_frame(&self.slots[index].pad));
-        let chain = self.slots[index].queue.static_pad("sink");
+        let chain = self.slots[index].gate.static_pad("src");
         if let Some(pad) = &chain {
-            crate::slow_step!("slot flush", index, gstutil::wake_chain(pad));
+            crate::slow_step!("slot flush", index, gstutil::wake_below(pad));
         }
         // A filter chain belongs to the item that asked for it, not to the
         // slot, so a slot going to a different source loses it here rather
@@ -1381,7 +1399,7 @@ impl SlotPool {
         crate::slow_step!("slot clear_filters", index, self.clear_filters(index));
         let Some(bound) = self.slots[index].bound.take() else {
             if let Some(pad) = &chain {
-                gstutil::resume_chain(pad);
+                gstutil::resume_below(pad);
             }
             return;
         };
@@ -1416,7 +1434,7 @@ impl SlotPool {
         // Back in service. The running time is kept, because every other slot
         // is still on air against it.
         if let Some(pad) = &chain {
-            crate::slow_step!("slot flush stop", index, gstutil::resume_chain(pad));
+            crate::slow_step!("slot flush stop", index, gstutil::resume_below(pad));
             // An empty slot has no next buffer to wait for. End this input
             // after its flush so the live compositor can ignore it immediately.
             // The next binding sends stream-start, which clears the pad's EOS.

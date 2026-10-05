@@ -29,7 +29,9 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tracing::{debug, info, warn};
 
+mod boundary;
 pub mod lifecycle;
+pub use boundary::guard_timeline;
 #[cfg(all(test, not(unix)))]
 mod pipe_tests;
 
