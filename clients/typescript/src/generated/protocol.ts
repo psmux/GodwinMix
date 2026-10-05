@@ -1033,14 +1033,14 @@ export interface Frame {
 
 /** `gallery.duplicate`. */
 export interface GalleryDuplicateRequest {
-  id: string;
+  id?: string;
   name?: string | null;
 }
 
 /** `gallery.edit`: change what is said about an item, or its field values. */
 export interface GalleryEditRequest {
   description?: string | null;
-  id: string;
+  id?: string;
   name?: string | null;
   tags?: unknown;
   values?: Record<string, unknown> | null;
@@ -1063,7 +1063,7 @@ export interface GalleryExported {
 
 /** One item by id: `gallery.remove`. */
 export interface GalleryIdRequest {
-  id: string;
+  id?: string;
 }
 
 /** `gallery.import`: files made elsewhere, checked one by one. */
@@ -1088,6 +1088,7 @@ export interface GalleryItem {
   kind: GalleryKind;
   made_by?: string;
   moves: boolean;
+  moving?: string | null;
   name: string;
   origin: Origin;
   placed?: string[];
@@ -1123,7 +1124,7 @@ export interface GalleryListRequest {
  */
 export interface GalleryPlaceRequest {
   camera?: string | null;
-  id: string;
+  id?: string;
   scene?: string | null;
   values?: Record<string, unknown> | null;
   visible?: boolean | null;
@@ -1157,7 +1158,7 @@ export interface GalleryPreview {
 /** `gallery.preview`: a picture of an item, drawn on demand. */
 export interface GalleryPreviewRequest {
   background?: string | null;
-  id: string;
+  id?: string;
   values?: Record<string, unknown> | null;
   width?: number | null;
 }
@@ -1176,7 +1177,7 @@ export interface GallerySaveRequest {
   kind?: string | null;
   made_by?: string | null;
   moves?: boolean | null;
-  name: string;
+  name?: string;
   replace?: boolean;
   set?: SetSpec | null;
   source?: unknown;
@@ -1198,7 +1199,7 @@ export interface GallerySaved {
 
 /** `gallery.show`: take a placed item on air, or off. */
 export interface GalleryShowRequest {
-  id: string;
+  id?: string;
   scene?: string | null;
   visible?: boolean | null;
 }
@@ -4229,12 +4230,12 @@ export class GeneratedMethods {
   }
 
   /** Copy an item, shipped ones included, under a new name. */
-  galleryDuplicate(params: GalleryDuplicateRequest): Promise<GallerySaved> {
+  galleryDuplicate(params: GalleryDuplicateRequest = {}): Promise<GallerySaved> {
     return this._call("gallery.duplicate", params as unknown as Record<string, unknown>) as Promise<GallerySaved>;
   }
 
   /** Change an item's name, tags, description, zone or the values it fills its fields with. */
-  galleryEdit(params: GalleryEditRequest): Promise<GallerySaved> {
+  galleryEdit(params: GalleryEditRequest = {}): Promise<GallerySaved> {
     return this._call("gallery.edit", params as unknown as Record<string, unknown>) as Promise<GallerySaved>;
   }
 
@@ -4254,27 +4255,27 @@ export class GeneratedMethods {
   }
 
   /** Add a gallery item to a scene in its zone (a lower third low on the left, a background under everything, a bug in the corner), hidden until gallery.show. A set becomes a new scene. */
-  galleryPlace(params: GalleryPlaceRequest): Promise<GalleryPlaced> {
+  galleryPlace(params: GalleryPlaceRequest = {}): Promise<GalleryPlaced> {
     return this._call("gallery.place", params as unknown as Record<string, unknown>) as Promise<GalleryPlaced>;
   }
 
   /** A picture of a gallery item as it would land on the canvas, transparent parts over a checkerboard, drawn on demand. */
-  galleryPreview(params: GalleryPreviewRequest): Promise<GalleryPreview> {
+  galleryPreview(params: GalleryPreviewRequest = {}): Promise<GalleryPreview> {
     return this._call("gallery.preview", params as unknown as Record<string, unknown>) as Promise<GalleryPreview>;
   }
 
   /** Delete a saved item and its files. Refused while a source shows it. */
-  galleryRemove(params: GalleryIdRequest): Promise<Record<string, unknown>> {
+  galleryRemove(params: GalleryIdRequest = {}): Promise<Record<string, unknown>> {
     return this._call("gallery.remove", params as unknown as Record<string, unknown>) as Promise<Record<string, unknown>>;
   }
 
   /** Save a graphic of any kind into the gallery with a name, tags and a description: an SVG template, an HTML page, a picture or clip, a ticker or text, or a virtual set. */
-  gallerySave(params: GallerySaveRequest): Promise<GallerySaved> {
+  gallerySave(params: GallerySaveRequest = {}): Promise<GallerySaved> {
     return this._call("gallery.save", params as unknown as Record<string, unknown>) as Promise<GallerySaved>;
   }
 
   /** Show a placed gallery item on air, or hide it, taking its scene when that scene is not on air. For a set, take its scene. */
-  galleryShow(params: GalleryShowRequest): Promise<GalleryShown> {
+  galleryShow(params: GalleryShowRequest = {}): Promise<GalleryShown> {
     return this._call("gallery.show", params as unknown as Record<string, unknown>) as Promise<GalleryShown>;
   }
 

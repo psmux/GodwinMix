@@ -4171,6 +4171,7 @@
         "description": "`gallery.duplicate`.",
         "properties": {
           "id": {
+            "default": "",
             "type": "string"
           },
           "name": {
@@ -4182,9 +4183,6 @@
             ]
           }
         },
-        "required": [
-          "id"
-        ],
         "type": "object"
       },
       "GalleryEditRequest": {
@@ -4199,6 +4197,7 @@
             ]
           },
           "id": {
+            "default": "",
             "type": "string"
           },
           "name": {
@@ -4228,9 +4227,6 @@
             ]
           }
         },
-        "required": [
-          "id"
-        ],
         "type": "object"
       },
       "GalleryExportRequest": {
@@ -4285,13 +4281,11 @@
         "description": "One item by id: `gallery.remove`.",
         "properties": {
           "id": {
+            "default": "",
             "description": "The item's id from `gallery.list`.",
             "type": "string"
           }
         },
-        "required": [
-          "id"
-        ],
         "type": "object"
       },
       "GalleryImportRequest": {
@@ -4377,6 +4371,13 @@
           "moves": {
             "description": "Whether it moves by itself: a clip, a page, a ticker.",
             "type": "boolean"
+          },
+          "moving": {
+            "description": "A file of the item a page plays as its moving preview, served at\n`/api/v1/gallery/{id}/files/{moving}`: a clip itself, or the item's\nown `preview.webm`.",
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "name": {
             "type": "string"
@@ -4566,6 +4567,7 @@
             ]
           },
           "id": {
+            "default": "",
             "type": "string"
           },
           "scene": {
@@ -4602,9 +4604,6 @@
             ]
           }
         },
-        "required": [
-          "id"
-        ],
         "type": "object"
       },
       "GalleryPlaced": {
@@ -4714,6 +4713,7 @@
             ]
           },
           "id": {
+            "default": "",
             "type": "string"
           },
           "values": {
@@ -4736,9 +4736,6 @@
             ]
           }
         },
-        "required": [
-          "id"
-        ],
         "type": "object"
       },
       "GallerySaveRequest": {
@@ -4818,6 +4815,7 @@
             ]
           },
           "name": {
+            "default": "",
             "description": "What people call it: `\"Storm warning lower third\"`. The id is made\nfrom it.",
             "type": "string"
           },
@@ -4880,9 +4878,6 @@
             ]
           }
         },
-        "required": [
-          "name"
-        ],
         "type": "object"
       },
       "GallerySaved": {
@@ -4926,6 +4921,7 @@
         "description": "`gallery.show`: take a placed item on air, or off.",
         "properties": {
           "id": {
+            "default": "",
             "description": "The gallery id, the source id or the scene item's name.",
             "type": "string"
           },
@@ -4946,9 +4942,6 @@
             ]
           }
         },
-        "required": [
-          "id"
-        ],
         "type": "object"
       },
       "GalleryShown": {

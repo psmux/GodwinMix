@@ -1,7 +1,7 @@
 //! `gallery.preview`: a picture of an item for a model to look at, and the
 //! same picture as bytes for the page's cards.
 //!
-//! Drawn on a blocking thread, two at a time at most, and kept on disk
+//! Drawn on a blocking thread, three at a time at most, and kept on disk
 //! until the item changes, so a gallery of fifty cards opened on a phone
 //! costs fifty small renders once and nothing after.
 
@@ -18,8 +18,11 @@ use serde_json::{Map, Value};
 use std::sync::LazyLock;
 use tokio::sync::Semaphore;
 
-/// At most this many previews drawn at once, whoever asks.
-static DRAWING: LazyLock<Semaphore> = LazyLock::new(|| Semaphore::new(2));
+/// Cards are drawn two at a time. A preview somebody asked for by name (an
+/// agent checking its work, a person editing words) has a lane of its own,
+/// so it never waits behind a page full of cards.
+static CARDS: LazyLock<Semaphore> = LazyLock::new(|| Semaphore::new(2));
+static ASKED: LazyLock<Semaphore> = LazyLock::new(|| Semaphore::new(1));
 
 pub fn register(reg: &mut Registry<Call>) {
     reg.register(
@@ -41,7 +44,7 @@ async fn preview_call(call: Call, params: Value) -> Result<Value, RpcError> {
     let req: GalleryPreviewRequest = call.params(&params)?;
     let backdrop = Backdrop::parse(req.background.as_deref()).map_err(|e| RpcError::invalid_params(e.to_string()).with("field", "background"))?;
     let values = req.values.clone().unwrap_or_default();
-    let (still, item) = draw(&req.id, req.width.unwrap_or(960), backdrop, values).await?;
+    let (still, item) = draw(&req.id, req.width.unwrap_or(960), backdrop, values, &ASKED).await?;
     let caption = format!(
         "{} ({}, {}{}), {} on a {}x{} preview",
         item.name,
@@ -70,10 +73,10 @@ async fn preview_call(call: Call, params: Value) -> Result<Value, RpcError> {
 }
 
 /// Draw `id`, waiting for a turn.
-async fn draw(id: &str, width: u32, backdrop: Backdrop, values: Map<String, Value>) -> Result<(Still, GalleryItem), RpcError> {
+async fn draw(id: &str, width: u32, backdrop: Backdrop, values: Map<String, Value>, lane: &Semaphore) -> Result<(Still, GalleryItem), RpcError> {
     let e = entry(id).await?;
     let item = e.item.clone();
-    let _turn = DRAWING.acquire().await.map_err(|_| RpcError::internal("the preview queue closed"))?;
+    let _turn = lane.acquire().await.map_err(|_| RpcError::internal("the preview queue closed"))?;
     let still = super::blocking("drawing the preview", move || preview::preview(&dir(), &e, width, backdrop, &values))
         .await?
         .map_err(|err| {
@@ -86,6 +89,6 @@ async fn draw(id: &str, width: u32, backdrop: Backdrop, values: Map<String, Valu
 /// The JPEG alone, for `GET /api/v1/gallery/{id}/preview.jpg`.
 pub async fn preview_jpeg(id: &str, width: Option<u32>, background: Option<&str>) -> Result<Vec<u8>, RpcError> {
     let backdrop = Backdrop::parse(background).map_err(|e| RpcError::invalid_params(e.to_string()))?;
-    let (still, _) = draw(id, width.unwrap_or(480), backdrop, Map::new()).await?;
+    let (still, _) = draw(id, width.unwrap_or(480), backdrop, Map::new(), &CARDS).await?;
     Ok(still.jpeg)
 }

@@ -102,7 +102,10 @@ impl Entry {
 /// The wire's description, with every default filled in.
 pub fn item(id: &str, m: &Manifest, file: Option<&Path>) -> GalleryItem {
     let kind = m.kind().unwrap_or(GalleryKind::Image);
-    let transparent = m.transparent.unwrap_or_else(|| detect::transparent(kind, file));
+    // Something said to be a background fills the frame, whatever its file
+    // could carry, unless it says otherwise.
+    let background = m.zone() == Some(godwinmix_protocol::gallery::Zone::Full);
+    let transparent = m.transparent.unwrap_or_else(|| !background && detect::transparent(kind, file));
     let zone = m.zone().unwrap_or_else(|| detect::zone(kind, transparent, file.and_then(detect::size)));
     let fields = match (kind, file) {
         (GalleryKind::Template, Some(f)) => crate::graphics::pack::load(&f.display().to_string()).map(|t| t.info.fields).unwrap_or_default(),

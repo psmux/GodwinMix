@@ -7,7 +7,7 @@ use serde_json::{Map, Value};
 /// `gallery.preview`: a picture of an item, drawn on demand.
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct GalleryPreviewRequest {
-    #[serde(alias = "name")]
+    #[serde(default, alias = "name")]
     pub id: String,
     /// Pixels wide, 64 to 1920. Default 960, which is what reading a lower
     /// third needs.
@@ -45,7 +45,7 @@ pub struct GalleryPreview {
 #[derive(Debug, Clone, Default, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct GalleryPlaceRequest {
-    #[serde(alias = "name")]
+    #[serde(default, alias = "name")]
     pub id: String,
     /// The scene to add it to. Default: the scene on air.
     #[serde(default)]
@@ -90,7 +90,7 @@ pub struct GalleryPlaced {
 #[serde(deny_unknown_fields)]
 pub struct GalleryShowRequest {
     /// The gallery id, the source id or the scene item's name.
-    #[serde(alias = "name", alias = "item")]
+    #[serde(default, alias = "name", alias = "item")]
     pub id: String,
     /// Default: the scene on air.
     #[serde(default)]

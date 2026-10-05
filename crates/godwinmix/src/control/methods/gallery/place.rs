@@ -130,6 +130,16 @@ async fn source_for(call: &Call, e: &Entry, values: Option<&Map<String, Value>>)
     }
     let free = (1..).map(|n| if n == 1 { id.clone() } else { format!("{id}-{n}") }).find(|c| !configs.sources.iter().any(|s| &s.id == c)).unwrap_or(id);
     let added = invoke(call, "source.add", json!({"id": free, "name": e.item.name, "uri": uri, "params": params})).await?;
+    // A page needs the browser, which may still be setting itself up or may
+    // need something installed first. Its own words say which.
+    if let Some(setup) = added.get("setup").filter(|s| s["state"] != "ready" && s["state"] != "done") {
+        return Err(RpcError::not_in_state(format!(
+            "{} is drawn by a browser, and this mixer's browser is not ready: {} Place it again once it is.",
+            e.item.name,
+            setup["message"].as_str().unwrap_or("it is being set up.")
+        ))
+        .with("setup", setup.clone()));
+    }
     Ok(added.get("id").and_then(Value::as_str).unwrap_or(&free).to_string())
 }
 

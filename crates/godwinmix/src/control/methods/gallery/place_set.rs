@@ -25,7 +25,8 @@ pub(super) async fn place(call: &Call, e: &Entry, req: &GalleryPlaceRequest) -> 
         "settings": to_json_map(&spec.settings),
     }))
     .await?;
-    let scene = made.pointer("/scene/name").and_then(Value::as_str).unwrap_or(&e.item.name).to_string();
+    // The answer is the scene itself, flattened, with what was added beside it.
+    let scene = made.get("name").and_then(Value::as_str).unwrap_or(&e.item.name).to_string();
     body(GalleryPlaced {
         id: e.item.id.clone(),
         scene: scene.clone(),

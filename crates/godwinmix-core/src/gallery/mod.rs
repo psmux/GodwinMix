@@ -46,7 +46,7 @@ pub const MAX_ID: usize = 64;
 
 /// The gallery's folder, as the config says.
 pub fn dir() -> PathBuf {
-    crate::graphics::brand::gallery()
+    PathBuf::from(entry::plain(&crate::graphics::brand::gallery()))
 }
 
 /// The id a name makes: lower case letters and digits, with one dash for

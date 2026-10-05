@@ -26,7 +26,7 @@ pub struct GalleryListRequest {
 pub struct GallerySaveRequest {
     /// What people call it: `"Storm warning lower third"`. The id is made
     /// from it.
-    #[serde(alias = "title")]
+    #[serde(default, alias = "title")]
     pub name: String,
     /// template, image, clip, html, ograf, ticker, text or set. Usually left
     /// out: it is worked out from what you give.
@@ -34,11 +34,11 @@ pub struct GallerySaveRequest {
     pub kind: Option<String>,
     /// A whole SVG document. With `{{fields}}` in it, it is a template;
     /// without, a picture.
-    #[serde(default)]
+    #[serde(default, alias = "svg_code", alias = "svg_text")]
     pub svg: Option<String>,
     /// A whole HTML page, with its CSS and script inline. Transparent where
     /// the page has no background.
-    #[serde(default)]
+    #[serde(default, alias = "html_code", alias = "page")]
     pub html: Option<String>,
     /// A picture or a clip as base64, or as a `data:` URI.
     #[serde(default, alias = "base64", alias = "image")]
@@ -127,7 +127,7 @@ pub struct GallerySaved {
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct GalleryIdRequest {
     /// The item's id from `gallery.list`.
-    #[serde(alias = "name")]
+    #[serde(default, alias = "name")]
     pub id: String,
 }
 
@@ -135,6 +135,7 @@ pub struct GalleryIdRequest {
 #[derive(Debug, Clone, Default, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct GalleryEditRequest {
+    #[serde(default)]
     pub id: String,
     #[serde(default, alias = "title")]
     pub name: Option<String>,
@@ -152,7 +153,7 @@ pub struct GalleryEditRequest {
 /// `gallery.duplicate`.
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct GalleryDuplicateRequest {
-    #[serde(alias = "from")]
+    #[serde(default, alias = "from")]
     pub id: String,
     /// The copy's name. Default: the name with "copy" after it.
     #[serde(default)]
