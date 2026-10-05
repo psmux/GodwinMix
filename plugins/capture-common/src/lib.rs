@@ -13,6 +13,7 @@
 //! | [`capture`] | run that pipeline: a bus watch on its own thread, a frame count, and a `health` with a number in it |
 //! | [`devices`] | GStreamer's `DeviceMonitor`, read as `discover` candidates |
 //! | [`fifo`] | the programme FIFO an output receives media on, opened without deadlocking the core |
+//! | [`opening`] | open that capture on a thread of its own, so `start` answers at once, and try again until it works |
 //! | [`space`] | free bytes on the filesystem holding a path |
 //!
 //! Nothing here blocks a streaming thread, and nothing here allocates per
@@ -30,10 +31,12 @@ pub mod capture;
 pub mod devices;
 pub mod elements;
 pub mod fifo;
+pub mod opening;
 pub mod space;
 pub mod wiring;
 
 pub use capture::Capture;
+pub use opening::Opening;
 pub use wiring::Wiring;
 
 /// Start GStreamer once, whoever asks first.

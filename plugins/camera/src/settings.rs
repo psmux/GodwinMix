@@ -65,7 +65,7 @@ impl Settings {
     // Only the tests ask without a device to consult.
     #[cfg(test)]
     pub fn device_caps(&self, canvas: Canvas) -> String {
-        self.device_caps_with(canvas, None)
+        self.device_caps_with(canvas, None, None)
     }
 
     /// The same, with the size chosen for a device that was asked what it can
@@ -74,10 +74,22 @@ impl Settings {
     /// is what is left for a device that could not be asked, and on macOS it
     /// does not do what its comment hopes: `avfvideosrc` takes its own first
     /// mode whenever the request ends in "anything at all".
-    pub fn device_caps_with(&self, canvas: Canvas, auto: Option<(u32, u32)>) -> String {
+    ///
+    /// `floor` is the lowest frame rate worth taking when no `framerate` is
+    /// set, read from the device's own modes. A UVC webcam through Kernel
+    /// Streaming lists 1080p raw at 5 frames a second and 1080p Motion JPEG
+    /// at 30, and raw first would have picked the 5.
+    pub fn device_caps_with(
+        &self,
+        canvas: Canvas,
+        auto: Option<(u32, u32)>,
+        floor: Option<u32>,
+    ) -> String {
         let mut rate = String::new();
         if let Some(fps) = self.framerate {
             rate.push_str(&format!(",framerate={fps}/1"));
+        } else if let Some(least) = floor {
+            rate.push_str(&format!(",framerate=[{least}/1,1000/1]"));
         }
         let sizes: Vec<Option<(u32, u32)>> = match self.size.or(auto) {
             Some(size) => vec![Some(size)],
@@ -220,6 +232,23 @@ mod tests {
         );
         // And something unconstrained at the end, so an odd camera still works.
         assert!(caps.ends_with("video/x-h264"), "{caps}");
+    }
+
+    #[test]
+    fn a_frame_rate_floor_keeps_a_slow_raw_mode_from_winning() {
+        let caps = Settings::from(&json!({})).device_caps_with(canvas(), Some((1920, 1080)), Some(30));
+        assert!(caps.contains("framerate=[30/1,1000/1]"), "{caps}");
+        gstreamer::init().unwrap();
+        let parsed: gstreamer::Caps = caps.parse().expect("the caps parse");
+        let slow: gstreamer::Caps =
+            "video/x-raw,format=YUY2,width=1920,height=1080,framerate=5/1".parse().unwrap();
+        let fast: gstreamer::Caps =
+            "image/jpeg,width=1920,height=1080,framerate=30/1".parse().unwrap();
+        assert!(!parsed.can_intersect(&slow), "{caps}");
+        assert!(parsed.can_intersect(&fast), "{caps}");
+        // A rate the operator set wins over the floor.
+        let set = Settings::from(&json!({"framerate": 25})).device_caps_with(canvas(), None, Some(30));
+        assert!(set.contains("framerate=25/1") && !set.contains('['), "{set}");
     }
 
     #[test]
