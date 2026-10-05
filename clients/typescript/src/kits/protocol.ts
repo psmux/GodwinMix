@@ -393,10 +393,14 @@ export class Prediction {
    * No while we are still holding a newer move for it: that is the echo of
    * something the operator has already dragged past, and drawing it is exactly
    * the rubber band this class exists to remove.
+   *
+   * `own` is false for a patch somebody else made. Its `client_seq` is their
+   * count, not ours, so it never settles our move.
    */
-  accepts(item: string, echoSeq: number): boolean {
+  accepts(item: string, echoSeq: number, own = true): boolean {
     const held = this.pending.get(item);
     if (!held) return true;
+    if (!own) return false;
     return Number(echoSeq || 0) >= held.seq;
   }
 }
