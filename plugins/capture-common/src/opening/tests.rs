@@ -2,7 +2,7 @@ use super::*;
 use godwinmix_sdk::wire::HealthState;
 use gstreamer as gst;
 use gstreamer::prelude::*;
-use std::sync::atomic::AtomicU32;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::mpsc;
 
 fn test_pattern() -> Result<Capture, String> {
