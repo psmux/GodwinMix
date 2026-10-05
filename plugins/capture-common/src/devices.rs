@@ -85,6 +85,11 @@ impl Found {
         out
     }
 
+    /// What the device says it can deliver, every mode of it.
+    pub fn caps(&self) -> Option<gst::Caps> {
+        self.device.caps()
+    }
+
     pub fn element(&self, name: &str) -> Result<gst::Element, String> {
         self.device
             .create_element(Some(name))
@@ -293,6 +298,27 @@ pub fn find(classes: &[&str], wanted: &str) -> Result<Found, String> {
             .collect::<Vec<_>>()
             .join(", ")
     ))
+}
+
+/// The devices one provider lists, without starting a whole monitor.
+///
+/// A monitor starts every provider on the machine. On Windows that includes
+/// Media Foundation, whose first probe in a process took 2.4 s on a laptop
+/// where Kernel Streaming answered in 40 ms. A plugin that knows which
+/// provider it wants asks that one alone. Empty when the provider is not
+/// there or lists nothing under these classes.
+pub fn from_provider(provider: &str, classes: &[&str]) -> Vec<Found> {
+    if crate::init().is_err() {
+        return Vec::new();
+    }
+    let Some(factory) = gst::DeviceProviderFactory::find(provider) else { return Vec::new() };
+    let Some(provider) = factory.get() else { return Vec::new() };
+    provider
+        .devices()
+        .into_iter()
+        .filter(|d| classes.iter().any(|c| d.has_classes(c)))
+        .map(describe)
+        .collect()
 }
 
 /// Whether the platform's monitor lists any device under these classes.

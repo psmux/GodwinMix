@@ -9,7 +9,6 @@
 //! `GMX_PROVIDE` says which of the manifest's two provides this process is.
 
 mod discover;
-mod opening;
 mod pipeline;
 mod settings;
 mod source;

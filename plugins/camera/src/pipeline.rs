@@ -11,130 +11,115 @@
 //! links straight through it at no cost. `videorate` is in there because the
 //! canvas has one frame rate and a camera has another, and the compositor
 //! should never be the thing that notices.
+//!
+//! Which camera, and through which element, is `device`'s question.
 
 use gstreamer as gst;
 use gstreamer::prelude::*;
 
-use godwinmix_capture_common::{capture, devices, elements, wiring};
+use godwinmix_capture_common::{capture, devices, wiring};
 use godwinmix_sdk::wire::{Canvas, Transport};
 
+use crate::device::{self, Chosen, Route};
 use crate::settings::Settings;
 
 /// The element the source is attached to, and where the chain begins.
 const HEAD: &str = "gmx-devcaps";
-/// The capture element, whatever factory it turned out to be.
-pub const SOURCE: &str = "gmx-src";
-
-/// The capture elements to try, in order, on this platform.
-///
-/// Linux is `v4l2src` and nothing else; every camera on Linux is a V4L2
-/// device. macOS is AVFoundation. Windows leads with Media Foundation and
-/// falls back to Kernel Streaming, because `mfvideosrc` has an open startup
-/// bug (gstreamer#2748) that leaves some cameras never producing a first
-/// frame, and `ksvideosrc` is the older path that works.
-pub const CANDIDATES: &[&str] = if cfg!(target_os = "linux") {
-    &["v4l2src"]
-} else if cfg!(target_os = "macos") {
-    &["avfvideosrc"]
-} else if cfg!(target_os = "windows") {
-    &["mfvideosrc", "ksvideosrc"]
-} else {
-    &["videotestsrc"]
-};
 
 /// The chain from the device caps to the canvas caps, without its sink.
 // Only the tests ask without a device to consult.
 #[cfg(test)]
 pub fn chain(settings: &Settings, canvas: Canvas) -> String {
-    chain_for(settings, canvas, None)
+    chain_for(settings, canvas, None, None)
 }
 
-/// The chain, asking for `auto` when the settings name no size of their own.
-pub fn chain_for(settings: &Settings, canvas: Canvas, auto: Option<(u32, u32)>) -> String {
+/// The chain, asking for `auto` when the settings name no size of their own,
+/// and for at least `floor` frames a second when they name no rate.
+pub fn chain_for(
+    settings: &Settings,
+    canvas: Canvas,
+    auto: Option<(u32, u32)>,
+    floor: Option<u32>,
+) -> String {
     format!(
         "capsfilter name={HEAD} caps=\"{}\" ! decodebin name=gmx-decode ! \
          videoconvert ! videoscale ! videorate ! {}",
-        settings.device_caps_with(canvas, auto).replace('"', ""),
+        settings
+            .device_caps_with(canvas, auto, floor)
+            .replace('"', ""),
         wiring::canvas_video_caps(canvas.width, canvas.height, canvas.fps)
     )
 }
 
-/// The whole pipeline, with the camera attached and the addresses bound.
+/// The whole pipeline, with the camera attached and the addresses bound, and
+/// the name of the element the camera was opened with.
 pub fn build(
     settings: &Settings,
     canvas: Canvas,
     transport: Transport,
     address: &str,
-) -> Result<gst::Pipeline, String> {
-    let description = wiring::Wiring::video_only(chain_for(settings, canvas, auto_size(settings, canvas)))
+    route: Route,
+) -> Result<(gst::Pipeline, String), String> {
+    // Asked once. Every look at the device monitor costs a probe of every
+    // provider, which on Windows was 2.4 s for the first one in a process.
+    let chosen = device::choose(settings, route)?;
+    let auto = auto_size(settings, &chosen, canvas);
+    let floor = match (
+        settings.framerate,
+        chosen.caps.as_ref(),
+        settings.size.or(auto),
+    ) {
+        (None, Some(caps), Some(size)) => rate_floor(caps, size, canvas.fps),
+        _ => None,
+    };
+    let description = wiring::Wiring::video_only(chain_for(settings, canvas, auto, floor))
         .description(transport)?;
     let pipeline = capture::build(&description)?;
     wiring::bind(&pipeline, transport, address)?;
-    let source = open(settings)?;
-    attach(&pipeline, &source)?;
-    Ok(pipeline)
+    attach(&pipeline, &chosen.element)?;
+    Ok((pipeline, chosen.via))
 }
 
 /// The size to ask for when the settings name none: chosen from what the
 /// camera says it can do. None for a forced element, which has no device to
-/// ask, and for a camera the monitor cannot see.
-fn auto_size(settings: &Settings, canvas: Canvas) -> Option<(u32, u32)> {
-    if settings.size.is_some() || !settings.element.is_empty() {
+/// ask.
+fn auto_size(settings: &Settings, chosen: &Chosen, canvas: Canvas) -> Option<(u32, u32)> {
+    if settings.size.is_some() {
         return None;
     }
-    let found = devices::find(devices::CAMERA, &settings.device).ok()?;
-    devices::pick_size(&found.sizes(), (canvas.width, canvas.height))
+    devices::pick_size(&chosen.sizes, (canvas.width, canvas.height))
 }
 
-/// Open the camera the settings name.
-///
-/// First choice is GStreamer's own device provider, which knows what this
-/// platform's element calls the property that picks a device and what value it
-/// wants. Second choice, for an operator who forced an element or a machine
-/// whose provider is missing, is the element by name with the id offered to
-/// every property that might take it.
-pub fn open(settings: &Settings) -> Result<gst::Element, String> {
-    if !settings.element.is_empty() {
-        return by_factory(&settings.element, &settings.device);
-    }
-    match devices::find(devices::CAMERA, &settings.device) {
-        Ok(found) => found.element(SOURCE),
-        Err(from_monitor) => {
-            // The monitor works and this is not one of its devices. It has
-            // said which ones there are, and no element by name will do better.
-            if devices::lists_any(devices::CAMERA) {
-                return Err(from_monitor);
-            }
-            let factory = elements::require(
-                "capturing a camera",
-                CANDIDATES,
-                "Install the GStreamer plugin that carries it \
-                 (gstreamer1.0-plugins-good on Debian, gst-plugins-good in Homebrew).",
-            )
-            .map_err(|missing| format!("{from_monitor} {missing}"))?;
-            by_factory(factory, &settings.device)
-        }
-    }
+/// The lowest frame rate worth taking at `size`: the canvas rate, or the best
+/// the device has at that size when that is less. None when the device lists
+/// no rate for that size.
+pub fn rate_floor(caps: &gst::Caps, size: (u32, u32), canvas_fps: u32) -> Option<u32> {
+    let best = caps
+        .iter()
+        .filter(|s| {
+            let w = s.get::<i32>("width").ok();
+            let h = s.get::<i32>("height").ok();
+            w == Some(size.0 as i32) && h == Some(size.1 as i32)
+        })
+        .filter_map(fastest)
+        .max()?;
+    Some(best.min(canvas_fps).max(1))
 }
 
-fn by_factory(factory: &str, device: &str) -> Result<gst::Element, String> {
-    let element = gst::ElementFactory::make(factory)
-        .name(SOURCE)
-        .build()
-        .map_err(|e| format!("this machine has no '{factory}' element: {e}"))?;
-    if !device.is_empty() && elements::point_at(&element, device).is_none() {
-        return Err(format!(
-            "'{factory}' has no property that takes a device id, so '{device}' cannot be \
-             selected with it. Clear the `element` setting and let the plugin choose."
-        ));
+/// The highest whole frame rate one structure offers, however it is written.
+fn fastest(s: &gst::StructureRef) -> Option<u32> {
+    let whole = |f: gst::Fraction| (f.numer().max(0) / f.denom().max(1)) as u32;
+    if let Ok(f) = s.get::<gst::Fraction>("framerate") {
+        return Some(whole(f));
     }
-    // A camera is live: its frames are worth what they were worth when they
-    // were taken, and a pipeline that tried to catch up would show old ones.
-    elements::set_flag(&element, "is-live", true);
-    // `do-timestamp` is left alone: a capture element stamps its frames from
-    // when it took them, and replacing that with a clock reading taken when
-    // the buffer was pushed is a jitter `videorate` downstream then believes.
-    Ok(element)
+    if let Ok(range) = s.get::<gst::FractionRange>("framerate") {
+        return Some(whole(range.max()));
+    }
+    let list = s.get::<gst::List>("framerate").ok()?;
+    list.iter()
+        .filter_map(|v| v.get::<gst::Fraction>().ok())
+        .map(whole)
+        .max()
 }
 
 fn attach(pipeline: &gst::Pipeline, source: &gst::Element) -> Result<(), String> {
@@ -154,73 +139,4 @@ fn attach(pipeline: &gst::Pipeline, source: &gst::Element) -> Result<(), String>
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use serde_json::json;
-
-    fn canvas() -> Canvas {
-        Canvas::new(1280, 720, 30)
-    }
-
-    #[test]
-    fn the_chain_ends_at_the_canvas_contract() {
-        let chain = chain(&Settings::from(&json!({})), canvas());
-        assert!(chain.contains("format=I420"), "{chain}");
-        assert!(
-            chain.contains("width=1280,height=720,framerate=30/1"),
-            "{chain}"
-        );
-        assert!(chain.contains("videorate"), "{chain}");
-        assert!(
-            chain.starts_with(&format!("capsfilter name={HEAD}")),
-            "{chain}"
-        );
-    }
-
-    #[test]
-    fn this_platform_has_a_capture_element_named_for_it() {
-        assert!(!CANDIDATES.is_empty());
-        if cfg!(target_os = "macos") {
-            assert_eq!(CANDIDATES, &["avfvideosrc"]);
-        }
-        if cfg!(target_os = "windows") {
-            assert_eq!(
-                CANDIDATES,
-                &["mfvideosrc", "ksvideosrc"],
-                "the ks fallback must stay"
-            );
-        }
-        if cfg!(target_os = "linux") {
-            assert_eq!(CANDIDATES, &["v4l2src"]);
-        }
-    }
-
-    #[test]
-    fn a_forced_element_that_does_not_exist_names_itself() {
-        godwinmix_capture_common::init().unwrap();
-        let settings = Settings::from(&json!({"element": "v4l2src"}));
-        if elements::exists("v4l2src") {
-            return; // on Linux this is the real path and is tested elsewhere
-        }
-        let err = open(&settings).expect_err("not on this platform");
-        assert!(err.contains("v4l2src"), "{err}");
-    }
-
-    #[test]
-    fn a_test_pattern_builds_a_whole_pipeline_on_any_machine() {
-        godwinmix_capture_common::init().unwrap();
-        let settings = Settings::from(&json!({"element": "videotestsrc"}));
-        let pipeline = build(&settings, canvas(), Transport::Container, "")
-            .expect("a test pattern builds everywhere");
-        assert!(pipeline.by_name(SOURCE).is_some());
-        assert!(pipeline.by_name("gmx-video-queue").is_some());
-    }
-
-    #[test]
-    fn a_socket_transport_with_no_address_is_refused_before_anything_opens() {
-        godwinmix_capture_common::init().unwrap();
-        let settings = Settings::from(&json!({"element": "videotestsrc"}));
-        let err = build(&settings, canvas(), Transport::Unixfd, "").expect_err("no address");
-        assert!(err.contains("container"), "{err}");
-    }
-}
+mod tests;
