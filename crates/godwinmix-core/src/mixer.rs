@@ -2977,6 +2977,21 @@ impl Mixer {
             anyhow::bail!("no such output {}", cfg.id);
         };
         let previous = self.outputs[pos].cfg.clone();
+        // The programme encoder is held through the swap. With this the only
+        // output, the remove let it stop and the add started it again, and
+        // on a loaded Windows runner the new output was linked while the old
+        // encoder was still coming down: "Pads do not have common format",
+        // and the change was refused.
+        let held = self.enc.lease("output.set");
+        let swapped = self.swap_output(cfg, previous);
+        drop(held);
+        self.sync_encoder();
+        swapped
+    }
+
+    /// The remove and the add of `set_output`, putting `previous` back when
+    /// the new config will not attach.
+    fn swap_output(&mut self, cfg: &OutputConfig, previous: OutputConfig) -> Result<()> {
         self.remove_output(&cfg.id)?;
         match self.add_output(cfg) {
             Ok(()) => Ok(()),
