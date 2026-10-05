@@ -31,6 +31,15 @@ foreach ($element in "srtsrc", "x265enc", "cmafmux") {
     if ($LASTEXITCODE -ne 0) { Write-Host "::warning::$element is not in this GStreamer" }
 }
 
+# The first SVG with text on a fresh machine makes fontconfig scan every
+# font and write its cache, which took longer than the ten seconds a picture
+# decode is given, and three graphics tests that started together all failed
+# at once. One render here pays for it before the tests start.
+$svg = Join-Path ([IO.Path]::GetTempPath()) "gmx-warm.svg"
+'<svg xmlns="http://www.w3.org/2000/svg" width="64" height="32"><text x="2" y="20">Warm</text></svg>' | Set-Content -Encoding ascii $svg
+$warm = Measure-Command { & "$gst\bin\gst-launch-1.0.exe" -q filesrc location="$($svg -replace '\\', '/')" ! rsvgdec ! fakesink }
+Write-Host ("fontconfig warmed in {0:N1} s" -f $warm.TotalSeconds)
+
 if ($env:GITHUB_ENV) {
     "PKG_CONFIG_PATH=$gst\lib\pkgconfig" | Out-File -FilePath $env:GITHUB_ENV -Append
     "GSTREAMER_1_0_ROOT_MSVC_X86_64=$gst\" | Out-File -FilePath $env:GITHUB_ENV -Append
