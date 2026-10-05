@@ -626,6 +626,10 @@ mod preview;
 mod shows_tests;
 
 #[cfg(test)]
+#[path = "mcp_schema_tests.rs"]
+mod schema_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
