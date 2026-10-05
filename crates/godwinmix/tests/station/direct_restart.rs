@@ -71,7 +71,7 @@ async fn a_direct_show_follows_a_sender_restarted_with_new_pids_or_the_same_layo
     let asked = call(&mut ws, 2, "plugin.add", json!({"source": source.to_string_lossy()})).await;
     assert!(asked.get("error").is_none(), "{asked}");
     assert!(received(&out, Duration::from_secs(60), 100_000) >= 100_000, "the first sender never reached the output; see {}", dir.join("log.jsonl").display());
-    let transcoded = received(&small, Duration::from_secs(60), 20_000) >= 20_000;
+    let mut transcoded = received(&small, Duration::from_secs(60), 20_000) >= 20_000;
     let show = health(&mut ws, 3).await;
     if !transcoded {
         assert!(refused(&show), "the first sender was never transcoded: {show}");
@@ -95,8 +95,18 @@ async fn a_direct_show_follows_a_sender_restarted_with_new_pids_or_the_same_layo
         eprintln!("{what}: the copy had 50 kB again {:?} after the new sender started", started.elapsed());
         if transcoded {
             let got = received(&small, Duration::from_secs(10), 20_000);
-            assert!(got >= 20_000, "{what}: only {got} bytes of the rendition in 10 s: {}", health(&mut ws, 62).await);
-            eprintln!("{what}: the rendition had 20 kB again {:?} after the new sender started", started.elapsed());
+            // As at the start: on a loaded macOS runner the governor turned
+            // the rendition away when the new sender came ("0.0 cores is
+            // free"), which is the governor doing its job. Anything else is
+            // still a failure.
+            let show = health(&mut ws, 62).await;
+            if got < 20_000 && refused(&show) {
+                eprintln!("{what}: the governor refused the rendition on this machine as loaded now: {show}");
+                transcoded = false;
+            } else {
+                assert!(got >= 20_000, "{what}: only {got} bytes of the rendition in 10 s: {show}");
+                eprintln!("{what}: the rendition had 20 kB again {:?} after the new sender started", started.elapsed());
+            }
         }
         comes_back(&mut ws, what, 20, transcoded).await;
         let show = health(&mut ws, 61).await;
