@@ -113,6 +113,17 @@ starts a mixer with a Python plugin whose first `start` sleeps seven seconds:
 the source fails at boot and is live 6.1 s after the mixer started, with
 nobody asking.
 
+Run on this laptop with a debug core from the branch and the camera plugin
+staged beside it, with the webcam's saved Media Foundation id: the core
+answered the camera's `start` 2.2 s after it began adding the source (process
+start and handshake included) and the first picture was linked 1.1 s later,
+through `ksvideosrc`. With a `gst-launch-1.0 ksvideosrc` holding the camera,
+the source read `connecting` while it was held and went live 3.1 s after the
+holder let go, with nobody touching it. One thing seen on the way: the log
+lines a mixer-held plugin sends as `log` notifications do not reach the
+core's log, so the camera's `would not start: another app is using it` is
+read through `health` and not in `mixer.log`.
+
 ## Backgrounds, agents and releases, 2026-10-04
 
 **A new background with or without a screen.** `matte/filter` cuts a person

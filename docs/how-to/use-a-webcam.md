@@ -71,7 +71,8 @@ machine and scales it to the canvas.
 
 The add answers straight away and the camera opens behind it, so the source
 reads `connecting` for a moment and then `live` when the first frame arrives.
-On a Windows laptop that took about two seconds. A camera that was busy or
+On a Windows laptop with a USB webcam the first frame came about a second
+after the add was answered. A camera that was busy or
 slow when the mixer started is tried again by itself; you do not have to add
 it again.
 
