@@ -125,6 +125,11 @@ jobs:
           GST_GL_DISABLED: 1
           GODWINMIX_TIMING_SLACK: 3
         run: |
+          # Two tests at a time on the three core macOS runner, as build.yml
+          # says why.
+          if [ "${{ runner.os }}" = "macOS" ]; then
+            export RUST_TEST_THREADS=2
+          fi
           if [ "${{ runner.os }}" = "Linux" ]; then
             xvfb-run -a cargo test --profile ci --locked --workspace --no-fail-fast
           else
