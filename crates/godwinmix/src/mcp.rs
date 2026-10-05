@@ -402,6 +402,11 @@ impl Server {
             }
             args.remove("id");
             args.remove("task_id");
+            if method.starts_with("scene.") {
+                // The route reads the scene from the path; the same name in
+                // the body too is a duplicate field.
+                args.remove("scene");
+            }
             rest.path.replace("{id}", &id)
         } else {
             rest.path.clone()

@@ -169,6 +169,7 @@ mod tests {
         let s = super::super::Server::new("http://127.0.0.1:1", None, Profile::Standard);
         let p = s.plan("get_scene", &json!({"scene": "Live"})).unwrap();
         assert_eq!(p.path, "/api/v1/scenes/Live");
+        assert!(p.args.get("scene").is_none(), "the scene is in the path, and twice is a duplicate field");
     }
 
     #[test]

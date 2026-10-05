@@ -136,6 +136,9 @@ def main():
     ap.add_argument("--gmx", default=os.environ.get("GMX", "gmx"), help="the gmx or godwinmix executable")
     ap.add_argument("--start", action="store_true", help="start a throwaway core with two test cameras")
     args = ap.parse_args()
+    if os.sep in args.gmx or "/" in args.gmx:
+        # The core runs in a folder of its own, where a relative path means nothing.
+        args.gmx = os.path.abspath(args.gmx)
     core = None
     if args.start:
         core = Core(args.gmx).wait()

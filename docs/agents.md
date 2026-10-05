@@ -290,20 +290,25 @@ entry:
 ```
 
 The tool list is generated from the method table, so it is whatever the mixer
-in front of you can do, and there are two sizes of it:
+in front of you can do, and there are three shapes of it:
 
 | | tools | about |
 |---|---|---|
-| `--profile standard` (default) | 12 | 13,182 bytes, roughly 3,300 tokens |
-| `--profile minimal` | 5 | roughly 1,200 tokens, for a small context |
+| `--profile standard` (default) | 14 | about 17,800 bytes, roughly 4,500 tokens |
+| `--profile minimal` | 6 | about 5,800 bytes, roughly 1,500 tokens, for a small context |
+| `--profile headend` | 11 | about 16,600 bytes, for many shows at once |
 
-`minimal` is `agent_state`, `take`, `add_source`, `list_sources` and
-`search_tools`; `standard` adds the shows (`list_shows`, `add_shows`,
-`show_stats`, `set_show`, `set_show_output`), `revert` and `go_live`.
-Everything else (outputs, snapshots, media, ad breaks, seeking, audio, codecs,
-channels, the governor, the project file and the rest of the show tools) is
-still callable by name and is found with `search_tools {"query": "..."}` in
-plain words. The hot list never changes shape at runtime, so adding a source
+`minimal` is `agent_state`, `take`, `add_source`, `list_sources`,
+`call_tool` and `search_tools`. `standard` adds what people ask an agent for:
+`revert`, `set_source`, `list_templates`, `save_template`,
+`create_scene_from`, `add_scene_item`, `set_scene_item` and `snapshot`.
+`headend` adds the shows instead (`list_shows`, `add_shows`, `show_stats`,
+`set_show`, `set_show_output`). Everything else (outputs, media, ad breaks,
+seeking, audio, codecs, channels, the governor, the project file and the
+rest of the show tools) is found with `search_tools {"query": "..."}` in plain
+words and run with `call_tool {"name": "...", "arguments": {...}}`. That second
+tool is there because Claude Code and opencode only let a model call a tool in
+its list: a tool found by searching could be read about and never run. The hot list never changes shape at runtime, so adding a source
 or a plugin does not throw away a prompt cache.
 
 Every tool declares `readOnlyHint`, `destructiveHint` and `idempotentHint`,
