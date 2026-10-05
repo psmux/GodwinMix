@@ -38,6 +38,8 @@ pub mod draw;
 mod hold;
 pub mod keyed;
 pub mod layer;
+pub mod modes;
+pub mod pass;
 pub mod picture;
 pub mod place;
 pub mod worker;

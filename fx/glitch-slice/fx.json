@@ -1,0 +1,12 @@
+{
+  "name": "glitch-slice",
+  "title": "Glitch slice",
+  "kind": "shader",
+  "blend": "normal",
+  "file": "glitch-slice.glsl",
+  "duration_ms": 800,
+  "transition": true,
+  "effect": false,
+  "licence": "Apache-2.0",
+  "source": "written for GodwinMix in the gl-transitions form"
+}
