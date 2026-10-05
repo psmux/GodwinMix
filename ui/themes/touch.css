@@ -51,6 +51,7 @@
   .menu .swatches { gap: 8px; flex-wrap: wrap; }
   .menu .swatches button { width: 44px; height: 44px; min-height: 0; }
   .menubar-all { min-width: 44px; min-height: 44px; font-size: 20px; }
+  .menubar-title { min-height: 44px; padding-inline: 10px; }
   .tabs button, .out-tabs button, .picker-rail button { min-height: 44px; }
   .scene-tabs button:not(.btn) { min-height: 44px; }
   .scene-tabs button.scene-edit:not(.btn) { width: 44px; height: 44px; }
@@ -87,7 +88,14 @@
   input[type=range]:disabled::-moz-range-thumb { background: var(--faint); }
 }
 
-/* ------------------------------------------------------- a phone's width */
+/* ------------------------------------------------------- narrow screens */
+
+/* A header with more in it than the window is wide wraps onto a second line.
+   Unwrapped it widened the page, and a tablet zooms a wide page out to fit,
+   which shrinks every target on it. */
+@media (max-width: 1280px) {
+  .header { flex-wrap: wrap; height: auto; min-height: var(--header-h); row-gap: 4px; padding-block: 4px; }
+}
 
 @media (max-width: 760px) {
   /* Dialogs use the whole width and scroll inside, never the page sideways. */
