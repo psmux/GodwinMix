@@ -33,6 +33,14 @@ fn pid_of(dir: &std::path::Path, show: &str) -> Option<i32> {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_show_killed_is_started_again_the_other_runs_on_and_its_share_goes_back() {
     let (dir, port) = folder("kill");
+    // No reserve: this is about the book, a ticket given back and asked for
+    // again, not about how much a machine keeps free. The reserve grows with
+    // how far the load jumps, and a show killed and started again is such a
+    // jump: on a four core runner the restarted show's 0.6 core rendition
+    // was refused with "0.0 cores is free" and never asked for again.
+    let config = dir.join("godwinmix.toml");
+    let text = std::fs::read_to_string(&config).unwrap();
+    std::fs::write(&config, format!("{text}\n[governor]\nreserve_cores = 0\n")).unwrap();
     let st = start_alone(dir.clone(), port, &[]).await;
     let mut ws = rpc(&st, "").await;
     call(&mut ws, 1, "core.subscribe", json!({"events": ["show.*"]})).await;
@@ -95,7 +103,11 @@ async fn a_show_killed_is_started_again_the_other_runs_on_and_its_share_goes_bac
     if now.0 != held.0 {
         let shows = get(&st, "/api/v1/shows").await;
         let governor = get(&st, "/api/v1/governor/status").await;
-        panic!("the restarted show holds its rendition again, once: {now:?} against {held:?} before\nshows: {shows}\ngovernor: {governor}");
+        // What else is taking the machine: the governor's room is what is
+        // left after every other program's recent peak.
+        let sort = if cfg!(target_os = "macos") { "-r" } else { "--sort=-pcpu" };
+        let busy = std::process::Command::new("ps").args(["-Ao", "pid,pcpu,etime,args", sort]).output().map(|o| String::from_utf8_lossy(&o.stdout).lines().take(15).map(|l| l.chars().take(200).collect::<String>()).collect::<Vec<_>>().join("\n")).unwrap_or_default();
+        panic!("the restarted show holds its rendition again, once: {now:?} against {held:?} before\nshows: {shows}\ngovernor: {governor}\nbusiest:\n{busy}");
     }
 
     let main = list["shows"].as_array().unwrap().iter().find(|s| s["id"] == "main").cloned().unwrap();
