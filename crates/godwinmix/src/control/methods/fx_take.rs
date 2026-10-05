@@ -59,3 +59,15 @@ pub fn catalogue(call: &Call) -> Vec<TransitionEntry> {
         })
         .collect()
 }
+
+/// The transition `fx.assign` set for this take, when it named none: its
+/// scene's (the one named, or the armed one) and then the default. A take
+/// of a bare source has no scene and gets the default.
+pub fn assigned(call: &Call, req: &godwinmix_protocol::requests::TakeRequest) -> Option<Transition> {
+    let scene = match (req.source_id(), req.scene_name()) {
+        (Some(_), _) => None,
+        (None, Some(name)) => Some(name),
+        (None, None) => call.app.scenes.armed().and_then(|id| call.app.scenes.scene(&id.to_string()).ok()).map(|s| s.name),
+    };
+    fx::assign::for_scene(call.app.library.dir(), scene.as_deref()).map(Transition::Named)
+}

@@ -48,3 +48,24 @@ pub(super) async fn preview(call: Call, params: Value) -> Result<Value, RpcError
     let (w, h) = fx::detect::SMALL;
     body(FxPreview { url: format!("/api/v1/fx/{}/preview.jpg", out.name), name: out.name, frames: fx::sprite::FRAMES, frame_width: w, frame_height: h, duration_ms: out.duration_ms })
 }
+
+/// `fx.assign`: the transition a take uses when it names none, for a scene
+/// or for every take. The name is checked against everything a take accepts.
+pub(super) async fn assign(call: Call, params: Value) -> Result<Value, RpcError> {
+    let req: FxAssignRequest = call.params(&params)?;
+    if let Some(name) = req.transition.as_deref().map(|t| t.trim().to_lowercase()).filter(|t| !t.is_empty()) {
+        let mut names: Vec<String> = godwinmix_protocol::requests::TRANSITIONS.iter().map(|s| s.to_string()).collect();
+        names.extend(call.app.scenes.transition_names());
+        names.extend(call.app.transition_names());
+        names.extend(take::transition_names(&call));
+        if !names.contains(&name) {
+            return Err(RpcError::invalid_params(format!("no transition called {name:?}. Use one of: {}", names.join(", "))).with("transitions", json!(names)));
+        }
+    }
+    if let Some(scene) = &req.scene {
+        call.app.scenes.scene(scene).map_err(|e| crate::control::methods::scenes::scene_error(&call, e))?;
+    }
+    let dir = media(&call);
+    let assigned = blocking(move || fx::assign::set(&dir, req.scene.as_deref(), req.transition.as_deref())).await?;
+    body(assigned)
+}

@@ -4167,6 +4167,46 @@
         ],
         "type": "object"
       },
+      "FxAssignRequest": {
+        "description": "`fx.assign`: the transition a take uses when it names none.",
+        "properties": {
+          "scene": {
+            "description": "The scene this is for. Absent sets the default for every take.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "transition": {
+            "description": "Any name `program.transitions` lists: a built in one such as `fade`,\nor an fx item such as `light-leak`. Absent or null clears it.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "FxAssignments": {
+        "description": "What `fx.assign` keeps, in the library's `assign.json`.",
+        "properties": {
+          "default": {
+            "description": "Used by a take that names no transition, when its scene has none of\nits own. `cut` is still a cut whatever this says.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "scenes": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "By scene name.",
+            "type": "object"
+          }
+        },
+        "type": "object"
+      },
       "FxBlend": {
         "description": "How a clip is put over the picture.",
         "oneOf": [
@@ -4476,6 +4516,11 @@
       "FxList": {
         "description": "What `fx.list` answers.",
         "properties": {
+          "assigned": {
+            "$ref": "#/components/schemas/FxAssignments",
+            "default": {},
+            "description": "The transition a take uses when it names none, overall and by scene."
+          },
           "errors": {
             "description": "Folders under `fx/` that would not read, each with the reason.",
             "items": {
@@ -13401,6 +13446,44 @@
         "summary": "Change a filter's settings in place. A filter that cannot take the change while running says so rather than being restarted behind your back.",
         "tags": [
           "filter"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/fx/assign": {
+      "post": {
+        "description": "JSON-RPC method `fx.assign`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "fx.assign",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FxAssignRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FxAssignments"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Choose the transition a take uses when it names none, for one scene or for every take.",
+        "tags": [
+          "fx"
         ],
         "x-destructive": false,
         "x-idempotent": true,

@@ -3,7 +3,7 @@
 //! Each file that decodes, or that is a gl-transitions shader, becomes a
 //! folder of its own under `fx/`: a copy of the file, the manifest the
 //! measurement wrote, and the preview strip. A folder that already has an
-//! `fx.json` is copied as it is. A licence or read me found beside the files
+//! `graphic.toml` is copied as it is. A licence or read me found beside the files
 //! is copied into every item made from them, and its first line is kept in
 //! the manifest, so the terms travel with the file.
 
@@ -55,7 +55,7 @@ fn locate(media: &Path, asked: &str) -> Result<PathBuf> {
     Ok(path)
 }
 
-/// Every item in a folder: folders with an `fx.json` as they are, and every
+/// Every item in a folder: folders with a `graphic.toml` as they are, and every
 /// media file or shader, two levels down.
 fn folder(dir: &Path, root: &Path, req: &FxImportRequest, done: &mut FxImported) -> Result<()> {
     for path in walk(dir, 3) {
@@ -76,7 +76,7 @@ fn folder(dir: &Path, root: &Path, req: &FxImportRequest, done: &mut FxImported)
     Ok(())
 }
 
-/// Media files, shaders, and folders holding an `fx.json`, in name order.
+/// Media files, shaders, and folders holding a `graphic.toml`, in name order.
 fn walk(dir: &Path, depth: usize) -> Vec<PathBuf> {
     let mut out = Vec::new();
     let Ok(entries) = std::fs::read_dir(dir) else { return out };
@@ -131,8 +131,8 @@ fn file(path: &Path, root: &Path, req: &FxImportRequest, name: Option<&str>, lic
         manifest.licence = Some(first.clone());
     }
     library::save(&dir, &manifest)?;
-    if let Ok(jpeg) = sprite::render(&manifest, &dir, measured.as_ref()) {
-        let _ = std::fs::write(sprite::path(&dir), jpeg);
+    if let Ok(pictures) = sprite::render(&manifest, &dir, measured.as_ref()) {
+        let _ = sprite::write(&dir, pictures);
     }
     Ok(library::entry(&manifest, &dir))
 }

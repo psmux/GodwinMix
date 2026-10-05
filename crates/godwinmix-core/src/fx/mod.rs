@@ -3,7 +3,7 @@
 //! programme.
 //!
 //! ```text
-//!   fx/<name>/fx.json + clip ---import, measure, preview---> library
+//!   graphics/<name>/graphic.toml + clip ---import, measure, preview---> library
 //!   take {transition: "<name>"} --plan--> curves (the cut) + a pass on the board
 //!   fx.fire {name}               --plan--> a pass on the board, until the clip ends
 //! ```
@@ -15,10 +15,12 @@
 //! of its window. With none of them running the board's probe is not even
 //! on the pad.
 //!
-//! The library is the media library's `fx/` folder, one folder an item, so
-//! the gallery, a file manager and an agent all see the same thing. See
+//! The library is the gallery's folder, `graphics/` in the media library,
+//! one folder an item with a `graphic.toml` whose kind is `transition` or
+//! `effect`, so the gallery, a file manager and an agent all see the same thing. See
 //! `docs/reference/fx.md`.
 
+pub mod assign;
 pub mod clip;
 pub mod detect;
 pub mod frame;
@@ -30,6 +32,7 @@ pub mod plan;
 pub mod shader;
 pub mod sprite;
 pub mod starter;
+pub mod toml_form;
 
 pub use plan::{Look, Plan};
 

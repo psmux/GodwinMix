@@ -21,10 +21,10 @@ use std::path::PathBuf;
 mod tools;
 #[path = "fx_edit.rs"]
 mod edit;
-use edit::{preview, remove, set};
+use edit::{assign, preview, remove, set};
 #[path = "fx_take.rs"]
 mod take;
-pub use take::{catalogue, spec_for, transition_names};
+pub use take::{assigned, catalogue, spec_for, transition_names};
 
 pub fn register(reg: &mut Registry<Call>) {
     tools::register(reg);
@@ -46,10 +46,11 @@ fn media(call: &Call) -> PathBuf {
 async fn list(call: Call, params: Value) -> Result<Value, RpcError> {
     let req: FxListRequest = call.params(&params)?;
     let dir = media(&call);
-    let (fx, errors, gpu) = blocking(move || {
+    let (fx, errors, gpu, assigned) = blocking(move || {
         let (all, errors) = library::list(&dir);
         let gpu = fx::shader::probe::available();
-        Ok((all.iter().map(|(m, d)| library::entry(m, d)).collect::<Vec<_>>(), errors, gpu))
+        let assigned = fx::assign::load(&dir);
+        Ok((all.iter().map(|(m, d)| library::entry(m, d)).collect::<Vec<_>>(), errors, gpu, assigned))
     })
     .await?;
     let fx = fx
@@ -60,7 +61,7 @@ async fn list(call: Call, params: Value) -> Result<Value, RpcError> {
             _ => true,
         })
         .collect();
-    body(FxList { fx, errors, gpu })
+    body(FxList { fx, errors, gpu, assigned })
 }
 
 /// Import inline when it is quick, and as a task when it is not: a pack of

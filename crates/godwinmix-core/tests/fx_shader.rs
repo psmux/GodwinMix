@@ -16,7 +16,7 @@ fn frame(y: u8, u: u8, v: u8) -> [Vec<u8>; 3] {
 }
 
 fn shader(name: &str) -> String {
-    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(format!("../../fx/{name}/{name}.glsl"));
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(format!("../../graphics/starters/{name}/{name}.glsl"));
     std::fs::read_to_string(path).unwrap()
 }
 

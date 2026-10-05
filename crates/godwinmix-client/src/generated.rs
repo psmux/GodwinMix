@@ -1847,6 +1847,31 @@ pub struct Frame {
     pub w: f64,
 }
 
+/// `fx.assign`: the transition a take uses when it names none.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct FxAssignRequest {
+    /// The scene this is for. Absent sets the default for every take.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scene: Option<String>,
+    /// Any name `program.transitions` lists: a built in one such as `fade`,
+    /// or an fx item such as `light-leak`. Absent or null clears it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub transition: Option<String>,
+}
+
+/// What `fx.assign` keeps, in the library's `assign.json`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct FxAssignments {
+    /// Used by a take that names no transition, when its scene has none of
+    /// its own. `cut` is still a cut whatever this says.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub default: Option<String>,
+    /// By scene name.
+    pub scenes: BTreeMap<String, Value>,
+}
+
 /// How a clip is put over the picture.
 pub type FxBlend = String;
 /// The values api_level 1 knows for [`FxBlend`].
@@ -1978,6 +2003,9 @@ pub const FX_KIND_VALUES: &[&str] = &["stinger", "overlay", "matte", "shader"];
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct FxList {
+    /// The transition a take uses when it names none, overall and by scene.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub assigned: Option<FxAssignments>,
     /// Folders under `fx/` that would not read, each with the reason.
     pub errors: Vec<String>,
     pub fx: Vec<FxEntry>,
@@ -5607,7 +5635,7 @@ pub struct MethodInfo {
     pub rest: Option<(&'static str, &'static str)>,
 }
 
-pub const METHODS: [MethodInfo; 201] = [
+pub const METHODS: [MethodInfo; 202] = [
     MethodInfo { name: "adbreak.end", summary: "Cut a running ad short, or disarm one that is scheduled.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/end")) },
     MethodInfo { name: "adbreak.start", summary: "Interrupt the programme with a clip, then rejoin live when it ends.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/start")) },
     MethodInfo { name: "agent.state", summary: "The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/agent/state")) },
@@ -5654,6 +5682,7 @@ pub const METHODS: [MethodInfo; 201] = [
     MethodInfo { name: "filter.list", summary: "Every filter in place, with what it is and where it sits.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/filters")) },
     MethodInfo { name: "filter.remove", summary: "Take a filter out of the pipeline.", scope: "operate", mutating: true, destructive: true, rest: Some(("DELETE", "/api/v1/filters/{id}")) },
     MethodInfo { name: "filter.set", summary: "Change a filter's settings in place. A filter that cannot take the change while running says so rather than being restarted behind your back.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/filters/{id}/set")) },
+    MethodInfo { name: "fx.assign", summary: "Choose the transition a take uses when it names none, for one scene or for every take.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/fx/assign")) },
     MethodInfo { name: "fx.fire", summary: "Play an effect over the programme once: drawn on top of whatever is on air until its clip ends.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/fx/fire")) },
     MethodInfo { name: "fx.import", summary: "Import a transition or effect from a file, a folder or a zip on the mixer's machine, measuring what it is and where it covers the picture.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/fx/import")) },
     MethodInfo { name: "fx.list", summary: "The imported transitions and effects, with what each is and whether it runs on the GPU here.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/fx/list")) },
@@ -6348,6 +6377,11 @@ impl Client {
     /// Change a filter's settings in place. A filter that cannot take the change while running says so rather than being restarted behind your back.
     pub async fn filter_set(&self, params: &SetFilterRequest) -> Result<FilterRecord> {
         self.call("filter.set", params).await
+    }
+
+    /// Choose the transition a take uses when it names none, for one scene or for every take.
+    pub async fn fx_assign(&self, params: &FxAssignRequest) -> Result<FxAssignments> {
+        self.call("fx.assign", params).await
     }
 
     /// Play an effect over the programme once: drawn on top of whatever is on air until its clip ends.

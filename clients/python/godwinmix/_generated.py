@@ -1161,6 +1161,22 @@ class Frame(TypedDict, total=False):
     h: float
     w: float
 
+class FxAssignRequest(TypedDict, total=False):
+    """`fx.assign`: the transition a take uses when it names none."""
+
+    scene: Optional[str]
+    # The scene this is for. Absent sets the default for every take.
+    transition: Optional[str]
+    # Any name `program.transitions` lists: a built in one such as `fade`, or an fx item such as `light-leak`. Absent or null clears it.
+
+class FxAssignments(TypedDict, total=False):
+    """What `fx.assign` keeps, in the library's `assign.json`."""
+
+    default: Optional[str]
+    # Used by a take that names no transition, when its scene has none of its own. `cut` is still a cut whatever this says.
+    scenes: Dict[str, Any]
+    # By scene name.
+
 class FxEntry(TypedDict, total=False):
     """One item in `fx.list`: the manifest, and what this machine makes of it."""
 
@@ -1244,6 +1260,8 @@ class FxImported(TypedDict, total=False):
 class FxList(TypedDict, total=False):
     """What `fx.list` answers."""
 
+    assigned: FxAssignments
+    # The transition a take uses when it names none, overall and by scene.
     errors: List[str]
     # Folders under `fx/` that would not read, each with the reason.
     fx: List[FxEntry]
@@ -3701,6 +3719,7 @@ METHODS = (
     {"name": "filter.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/filters"), "summary": 'Every filter in place, with what it is and where it sits.'},
     {"name": "filter.remove", "scope": "operate", "mutating": True, "destructive": True, "rest": ("DELETE", "/api/v1/filters/{id}"), "summary": 'Take a filter out of the pipeline.'},
     {"name": "filter.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/filters/{id}/set"), "summary": "Change a filter's settings in place. A filter that cannot take the change while running says so rather than being restarted behind your back."},
+    {"name": "fx.assign", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/fx/assign"), "summary": 'Choose the transition a take uses when it names none, for one scene or for every take.'},
     {"name": "fx.fire", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/fx/fire"), "summary": 'Play an effect over the programme once: drawn on top of whatever is on air until its clip ends.'},
     {"name": "fx.import", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/fx/import"), "summary": "Import a transition or effect from a file, a folder or a zip on the mixer's machine, measuring what it is and where it covers the picture."},
     {"name": "fx.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/fx/list"), "summary": 'The imported transitions and effects, with what each is and whether it runs on the GPU here.'},
@@ -4555,6 +4574,20 @@ class GeneratedMethods:
         if params is not None:
             params["params"] = params
         return await self._call("filter.set", params)
+
+    async def fx_assign(
+        self,
+        *,
+        scene: Optional[str] = None,
+        transition: Optional[str] = None,
+    ) -> FxAssignments:
+        """Choose the transition a take uses when it names none, for one scene or for every take."""
+        params: Dict[str, Any] = {}
+        if scene is not None:
+            params["scene"] = scene
+        if transition is not None:
+            params["transition"] = transition
+        return await self._call("fx.assign", params)
 
     async def fx_fire(
         self,

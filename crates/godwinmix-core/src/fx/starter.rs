@@ -1,7 +1,7 @@
-//! The starter set, compiled in from `fx/` at the root of the repository and
-//! written into the library the first time the library is read.
+//! The starter set, compiled in from `graphics/starters/` in the repository
+//! and written into the library the first time the library is read.
 //!
-//! About 130 KB in all: four clips at 640x360 in VP9 (a light leak, bokeh, a
+//! About 85 KB in all: four clips at 640x360 in VP9 (a light leak, bokeh, a
 //! glitch with alpha and a film burn), one PNG matte and two shaders, every
 //! one made for this project (`dev/make-starter-fx.py`). Written out rather
 //! than read from inside the binary because GStreamer opens a file, and only
@@ -16,13 +16,13 @@ macro_rules! item {
         (
             $name,
             $file,
-            include_bytes!(concat!("../../../../fx/", $name, "/fx.json")) as &[u8],
-            include_bytes!(concat!("../../../../fx/", $name, "/", $file)) as &[u8],
+            include_bytes!(concat!("../../../../graphics/starters/", $name, "/graphic.toml")) as &[u8],
+            include_bytes!(concat!("../../../../graphics/starters/", $name, "/", $file)) as &[u8],
         )
     };
 }
 
-/// Name, media file, `fx.json`, media.
+/// Name, media file, `graphic.toml`, media.
 pub const STARTER: &[(&str, &str, &[u8], &[u8])] = &[
     item!("light-leak", "light-leak.webm"),
     item!("bokeh", "bokeh.webm"),
@@ -38,16 +38,22 @@ pub fn is_starter(name: &str) -> bool {
     STARTER.iter().any(|(n, ..)| *n == name)
 }
 
-/// Write every starter item whose folder is not in `root` yet.
+/// Write every starter item whose folder is not in `root` yet, and the
+/// marker that tells the media library the folder is the gallery's.
 pub fn install(root: &Path) -> Result<()> {
+    std::fs::create_dir_all(root).with_context(|| format!("making {}", root.display()))?;
+    let marker = root.join(".gmx-gallery");
+    if !marker.exists() {
+        let _ = std::fs::write(&marker, "");
+    }
     for (name, file, manifest, media) in STARTER {
         let dir = root.join(name);
-        if dir.join("fx.json").is_file() {
+        if dir.join(super::library::MANIFEST).is_file() {
             continue;
         }
         std::fs::create_dir_all(&dir).with_context(|| format!("making {}", dir.display()))?;
         std::fs::write(dir.join(file), media).with_context(|| format!("writing {name}/{file}"))?;
-        std::fs::write(dir.join("fx.json"), manifest).with_context(|| format!("writing {name}/fx.json"))?;
+        std::fs::write(dir.join(super::library::MANIFEST), manifest).with_context(|| format!("writing {name}/graphic.toml"))?;
     }
     Ok(())
 }

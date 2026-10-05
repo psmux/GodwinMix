@@ -86,4 +86,18 @@ pub fn register(reg: &mut Registry<Call>) {
                  before using it on air.",
             ),
     );
+    reg.register(
+        MethodDef::new("fx.assign", Scope::Operate, "Choose the transition a take uses when it names none, for one scene or for every take.", handler(assign))
+            .params(schema_of::<FxAssignRequest>)
+            .result(schema_of::<FxAssignments>)
+            .tool(
+                "assign_transition",
+                Tier::Search,
+                "Choose the transition a take uses when it names none: for one scene, or for every take \
+                 when `scene` is left out. `transition` is any name list_transitions shows, built in \
+                 (fade, wipe) or imported (light-leak, glitch). Example: assign_transition {\"scene\": \
+                 \"Interview\", \"transition\": \"light-leak\"}. Leave out `transition` to clear it. A \
+                 take that names its own transition, or names cut, is not changed by this.",
+            ),
+    );
 }
