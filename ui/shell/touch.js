@@ -13,6 +13,11 @@
 // Text fields are left alone. A long press there is the system's, for
 // selecting and pasting. So is anything under `[data-drag-handle]`, where a
 // held finger is the start of a drag rather than a request for a menu.
+//
+// Fetched only where there is a touch screen, or on the first touch: a
+// desktop with a mouse never loads it. The shell decides; see installTouch.
+
+import { isTouch } from "./pointer.js";
 
 /** How long a finger rests before it counts as a long press. */
 export const LONG_PRESS_MS = 500;
@@ -27,14 +32,6 @@ const ECHO_MS = 800;
 // A fader is an input too, but a double tap on one resets it to unity the way
 // a double click does, so ranges and boxes are not counted as text.
 const EDITABLE = "input:not([type=range]):not([type=checkbox]):not([type=radio]), textarea, select, [contenteditable]:not([contenteditable=false])";
-
-/** True for a pointer that is a finger or a pen rather than a mouse. */
-export const isTouch = (e) => e.pointerType === "touch" || e.pointerType === "pen";
-
-/** Words for the hand in use: "Double click" to a mouse, "Double tap" to a finger. */
-export function byPointer(mouse, finger) {
-  return typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches ? finger : mouse;
-}
 
 /** Where a long press and a double tap mean nothing of ours. */
 export function ignored(target) {

@@ -15,7 +15,7 @@
 import { contextMenu } from "../../shell/menu.js";
 import { toast, errorToast } from "../../shell/toast.js";
 import { settings } from "../../shell/settings.js";
-import { byPointer } from "../../shell/touch.js";
+import { byPointer } from "../../shell/pointer.js";
 
 export function menu(panel, id, e) {
   const ids = panel.selected();

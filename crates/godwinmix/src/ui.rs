@@ -790,7 +790,7 @@ mod tests {
     }
 
     #[test]
-    fn the_page_a_volunteer_opens_stays_under_350_kb() {
+    fn the_page_a_volunteer_opens_stays_under_360_kb() {
         // The budget from 07 Phase 3, against the set it was written about:
         // what a browser fetches to put a usable mixer on screen.
         //
@@ -803,6 +803,10 @@ mod tests {
         // eager set is what is measured here, the whole directory is measured
         // below, and `the_designer_is_not_in_the_eager_set` keeps the line
         // between them where it is.
+        //
+        // Raised to 360 kB for touch.css, which is the phone's layout and so
+        // belongs on exactly this page: measured at 353 kB. touch.js, the long
+        // press and double tap, loads only where there is a touch screen.
         //
         // Raised again to 350 kB when the add source picker grew its device
         // rail and the outputs panel its platform flow: measured at 324 kB.
@@ -821,8 +825,8 @@ mod tests {
             bytes += source_of(extra).map(|b| b.len()).unwrap_or(0);
         }
         assert!(
-            bytes < 350 * 1024,
-            "the page loads {} files and {bytes} bytes, over the 350 kB budget",
+            bytes < 360 * 1024,
+            "the page loads {} files and {bytes} bytes, over the 360 kB budget",
             eager.len()
         );
     }
@@ -846,18 +850,19 @@ mod tests {
     }
 
     #[test]
-    fn the_page_with_the_composer_open_stays_under_450_kb() {
+    fn the_page_with_the_composer_open_stays_under_460_kb() {
         // The other half of the rule: the lazy set is not somewhere to hide
         // things. This is the heaviest thing a session can become, the page
         // plus the whole designer and the two kits only it uses, and it is the
-        // number a person who actually arranges a scene pays.
+        // number a person who actually arranges a scene pays. Raised from 450
+        // to 460 kB with the page's own budget, for touch.css.
         let mut everything = eager_set();
         everything.extend(closure_of("panels/composer/composer.js"));
         let mut bytes: usize = everything.iter().filter_map(|p| source_of(p)).map(|b| b.len()).sum();
         for extra in ["index.html", "themes/base.css", "themes/dock.css", "themes/touch.css", "themes/dark.css", "panels/composer/composer.css"] {
             bytes += source_of(extra).map(|b| b.len()).unwrap_or(0);
         }
-        assert!(bytes < 450 * 1024, "the page with the composer open is {bytes} bytes, over the 450 kB budget");
+        assert!(bytes < 460 * 1024, "the page with the composer open is {bytes} bytes, over the 460 kB budget");
     }
 
     #[test]
@@ -912,6 +917,8 @@ mod tests {
         reachable.extend(closure_of("shell/mixer-settings.js"));
         reachable.extend(closure_of("shell/folder-picker.js"));
         reachable.extend(closure_of("panels/multiview/studio.js"));
+        // Long press and double tap, where there is a touch screen.
+        reachable.extend(closure_of("shell/touch.js"));
         // The menu bar's menus, the first time one opens, and File's project
         // dialogs after that.
         reachable.extend(closure_of("shell/menus.js"));
