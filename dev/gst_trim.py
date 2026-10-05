@@ -579,6 +579,13 @@ CODE_EXTRA = [
     # code, so the scan cannot find them, and without pngdec a PNG fell to
     # the much slower libav decoder; a WebP or GIF did not open at all.
     "pngdec", "webpdec", "gdkpixbufdec",
+    # What webrtcbin builds inside itself for WHIP, by name, where the scan
+    # cannot see it. Without srtpenc the DTLS transport has no certificate,
+    # the answer says `a=fingerprint:sha-256 (NULL)`, and every browser
+    # refuses it: a phone's camera never connected to the installed app.
+    "rtpbin", "rtpfunnel", "rtpstorage", "rtprtxsend", "rtprtxreceive",
+    "rtpulpfecenc", "rtpulpfecdec", "rtpredenc", "rtpreddec",
+    "srtpenc", "srtpdec", "dtlssrtpenc", "dtlssrtpdec", "nicesrc", "nicesink",
 ]
 
 
