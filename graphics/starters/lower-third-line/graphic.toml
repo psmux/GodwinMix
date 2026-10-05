@@ -1,0 +1,9 @@
+name = "Line lower third"
+kind = "html"
+file = "lower-third-line.html"
+zone = "lower-third"
+moves = true
+transparent = true
+description = "Minimal: a thin accent line draws across, the name rises above it and the role drops below it. No panel, so it needs a picture that is not too busy."
+tags = ["name", "minimal", "animated"]
+origin = "shipped"

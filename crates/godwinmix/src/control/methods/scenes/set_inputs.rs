@@ -27,6 +27,8 @@ pub async fn source_for(
             text.strip_prefix(r"\\?\").map(str::to_string).unwrap_or(text)
         }
         Err(_) if named.contains("://") || std::path::Path::new(named).is_file() => named.to_string(),
+        // A designed backdrop or desk by its template address.
+        Err(_) if named.starts_with("html:") || named.starts_with("template:") => named.to_string(),
         Err(_) => {
             return Err(RpcError::not_found(field, named, known)
                 .with("field", field)

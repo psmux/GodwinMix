@@ -36,7 +36,9 @@ Keys accepted on every method, handled before a method runs.
 |---|---|---|---|---|---|
 | `adbreak.end` | `POST /api/v1/adbreak/end` | operate |  | 1 | Cut a running ad short, or disarm one that is scheduled. |
 | `adbreak.start` | `POST /api/v1/adbreak/start` | operate |  | 1 | Interrupt the programme with a clip, then rejoin live when it ends. |
+| `agent.setup` | `POST /api/v1/agent/setup` | admin | yes | 1 | Set an AI agent tool up to use this mixer: its MCP config gets one entry, godwinmix, that runs this mixer's own executable, and its skills folder gets the GodwinMix skills. Other entries are kept and a changed file is copied aside first. dry_run answers every file it would write. The answer says how to start the tool and a first thing to ask it. |
 | `agent.state` | `GET /api/v1/agent/state` | read |  | 1 | The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing. |
+| `agent.tools` | `POST /api/v1/agent/tools` | admin |  | 1 | The AI agent tools this mixer can set up, the ones installed on its machine first, each with what was found: a command on PATH or a config folder. |
 | `channel.add` | `POST /api/v1/channels` | admin |  | 1 | Make a channel and its first key, which is in this answer. channel.key.reveal reads it again later. |
 | `channel.certificate.generate` | `POST /api/v1/channels/certificate/generate` | admin |  | 1 | Make a self signed certificate for RTMPS, for this machine's addresses unless names are given. Encoders must be told to accept it; one from a certificate authority needs no such step. |
 | `channel.certificate.set` | `POST /api/v1/channels/certificate/set` | admin |  | 1 | Give RTMPS a certificate: the PEM of the certificate (and its chain) and of its private key, as a certificate authority issued them. Checked before it is kept; the key is sealed and never read back. |
@@ -80,6 +82,16 @@ Keys accepted on every method, handled before a method runs.
 | `filter.list` | `GET /api/v1/filters` | read |  | 1 | Every filter in place, with what it is and where it sits. |
 | `filter.remove` | `DELETE /api/v1/filters/{id}` | operate | yes | 1 | Take a filter out of the pipeline. |
 | `filter.set` | `POST /api/v1/filters/{id}/set` | operate |  | 1 | Change a filter's settings in place. A filter that cannot take the change while running says so rather than being restarted behind your back. |
+| `gallery.duplicate` | `POST /api/v1/gallery/duplicate` | operate |  | 1 | Copy an item, shipped ones included, under a new name. |
+| `gallery.edit` | `POST /api/v1/gallery/edit` | operate |  | 1 | Change an item's name, tags, description, zone or the values it fills its fields with. |
+| `gallery.export` | `POST /api/v1/gallery/export` | operate |  | 1 | Write gallery items to one zip on the mixer, to carry a look to another mixer. |
+| `gallery.import` | `POST /api/v1/gallery/import` | operate |  | 1 | Take files into the gallery: a gallery zip, an SVG, an HTML page or folder, an OGraf package, a picture or a clip. Each is checked; refused ones say why and how to fix them. |
+| `gallery.list` | `GET /api/v1/gallery/list` | read |  | 1 | The Graphics gallery: every lower third, background, ticker, bug, title card, page, clip and virtual set, made here or shipped, with what each is and where it goes. |
+| `gallery.place` | `POST /api/v1/gallery/place` | operate |  | 1 | Add a gallery item to a scene in its zone (a lower third low on the left, a background under everything, a bug in the corner), hidden until gallery.show. A set becomes a new scene. |
+| `gallery.preview` | `POST /api/v1/gallery/preview` | read |  | 1 | A picture of a gallery item as it would land on the canvas, transparent parts over a checkerboard, drawn on demand. |
+| `gallery.remove` | `POST /api/v1/gallery/remove` | operate | yes | 1 | Delete a saved item and its files. Refused while a source shows it. |
+| `gallery.save` | `POST /api/v1/gallery/save` | operate |  | 1 | Save a graphic of any kind into the gallery with a name, tags and a description: an SVG template, an HTML page, a picture or clip, a ticker or text, or a virtual set. |
+| `gallery.show` | `POST /api/v1/gallery/show` | operate |  | 1 | Show a placed gallery item on air, or hide it, taking its scene when that scene is not on air. For a set, take its scene. |
 | `governor.calibrate` | `POST /api/v1/governor/calibrate` | admin |  | 1 | Measure this machine's encoders again, in the background, a few seconds of every core. Refused while anything is on air unless `confirm` is true. |
 | `governor.status` | `GET /api/v1/governor/status` | read |  | 1 | The resource governor: when this machine was measured, what is in use and free on the CPU and each GPU encoder, and what was shed to keep the programme whole. |
 | `log.gst` | `POST /api/v1/log/gst` | admin |  | 1 | Raise GStreamer's own debug categories for a while, then let them fall back on their own. |
@@ -269,6 +281,21 @@ MCP tool `ad_break` in the `search` profile: readOnlyHint false, destructiveHint
 }
 ```
 
+#### `agent.setup`
+
+Set an AI agent tool up to use this mixer: its MCP config gets one entry, godwinmix, that runs this mixer's own executable, and its skills folder gets the GodwinMix skills. Other entries are kept and a changed file is copied aside first. dry_run answers every file it would write. The answer says how to start the tool and a first thing to ask it.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/SetupRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/Setup"
+  }
+}
+```
+
 #### `agent.state`
 
 The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing.
@@ -282,6 +309,26 @@ MCP tool `agent_state` in the `minimal` profile: readOnlyHint true, destructiveH
   },
   "result": {
     "type": "object"
+  }
+}
+```
+
+#### `agent.tools`
+
+The AI agent tools this mixer can set up, the ones installed on its machine first, each with what was found: a command on PATH or a config folder.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "items": {
+      "$ref": "#/$defs/Detected"
+    },
+    "type": "array"
   }
 }
 ```
@@ -1001,6 +1048,176 @@ Change a filter's settings in place. A filter that cannot take the change while 
   },
   "result": {
     "$ref": "#/$defs/FilterRecord"
+  }
+}
+```
+
+#### `gallery.duplicate`
+
+Copy an item, shipped ones included, under a new name.
+
+MCP tool `duplicate_graphic` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint false.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/GalleryDuplicateRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/GallerySaved"
+  }
+}
+```
+
+#### `gallery.edit`
+
+Change an item's name, tags, description, zone or the values it fills its fields with.
+
+MCP tool `edit_graphic` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/GalleryEditRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/GallerySaved"
+  }
+}
+```
+
+#### `gallery.export`
+
+Write gallery items to one zip on the mixer, to carry a look to another mixer.
+
+MCP tool `export_graphics` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint false.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/GalleryExportRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/GalleryExported"
+  }
+}
+```
+
+#### `gallery.import`
+
+Take files into the gallery: a gallery zip, an SVG, an HTML page or folder, an OGraf package, a picture or a clip. Each is checked; refused ones say why and how to fix them.
+
+MCP tool `import_graphics` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint false.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/GalleryImportRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/GalleryImported"
+  }
+}
+```
+
+#### `gallery.list`
+
+The Graphics gallery: every lower third, background, ticker, bug, title card, page, clip and virtual set, made here or shipped, with what each is and where it goes.
+
+MCP tool `list_graphics` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/GalleryListRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/GalleryList"
+  }
+}
+```
+
+#### `gallery.place`
+
+Add a gallery item to a scene in its zone (a lower third low on the left, a background under everything, a bug in the corner), hidden until gallery.show. A set becomes a new scene.
+
+MCP tool `place_graphic` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint false.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/GalleryPlaceRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/GalleryPlaced"
+  }
+}
+```
+
+#### `gallery.preview`
+
+A picture of a gallery item as it would land on the canvas, transparent parts over a checkerboard, drawn on demand.
+
+MCP tool `preview_graphic` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/GalleryPreviewRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/GalleryPreview"
+  }
+}
+```
+
+#### `gallery.remove`
+
+Delete a saved item and its files. Refused while a source shows it.
+
+MCP tool `remove_graphic` in the `search` profile: readOnlyHint false, destructiveHint true, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/GalleryIdRequest"
+  },
+  "result": {
+    "type": "object"
+  }
+}
+```
+
+#### `gallery.save`
+
+Save a graphic of any kind into the gallery with a name, tags and a description: an SVG template, an HTML page, a picture or clip, a ticker or text, or a virtual set.
+
+MCP tool `save_graphic` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint false.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/GallerySaveRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/GallerySaved"
+  }
+}
+```
+
+#### `gallery.show`
+
+Show a placed gallery item on air, or hide it, taking its scene when that scene is not on air. For a set, take its scene.
+
+MCP tool `show_graphic` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint false.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/GalleryShowRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/GalleryShown"
   }
 }
 ```
@@ -1777,7 +1994,7 @@ What is on air, the programme running time, and what revert would go back to.
 
 One call to put a web page on air: add the page, add the destination, and take the page as soon as it renders.
 
-MCP tool `go_live` in the `standard` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+MCP tool `go_live` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
 
 ```json
 {
@@ -2003,7 +2220,7 @@ MCP tool `apply_layout` in the `search` profile: readOnlyHint false, destructive
 
 A scene from a set of sources, laid out by the built in layout for that count (full, two-box, three-box, quad, then a grid) or by a named one. Pictures from the media library become sources, and a keyed layout such as virtual-set guesses its key colour from the camera.
 
-MCP tool `create_scene_from` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint false.
+MCP tool `create_scene_from` in the `standard` profile: readOnlyHint false, destructiveHint false, idempotentHint false.
 
 ```json
 {
@@ -2180,7 +2397,7 @@ Read an OBS Studio scene collection and add its scenes to this one. Send the fil
 
 Put something on a scene's canvas. With no transform it lands in the next free cell, so a drop never needs a dialog.
 
-MCP tool `add_scene_item` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+MCP tool `add_scene_item` in the `standard` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
 
 ```json
 {
@@ -2441,7 +2658,7 @@ MCP tool `scene_item_schema` in the `search` profile: readOnlyHint true, destruc
 
 Assign an item's properties. Only the keys named move; the rest are left alone, so calling it twice with the same body changes nothing the second time.
 
-MCP tool `set_scene_item` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+MCP tool `set_scene_item` in the `standard` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
 
 ```json
 {
@@ -2742,7 +2959,7 @@ Where one piece stands, without starting anything.
 ```json
 {
   "params": {
-    "$ref": "#/$defs/SetupRequest"
+    "$ref": "#/$defs/SetupRequest2"
   },
   "result": {
     "$ref": "#/$defs/SetupStatus"
@@ -2777,7 +2994,7 @@ Set a piece up now, or join the set up already running, and answer at once with 
 ```json
 {
   "params": {
-    "$ref": "#/$defs/SetupRequest"
+    "$ref": "#/$defs/SetupRequest2"
   },
   "result": {
     "$ref": "#/$defs/SetupStatus"
@@ -2806,7 +3023,7 @@ MCP tool `add_show` in the `search` profile: readOnlyHint false, destructiveHint
 
 Make many shows in one call, such as every channel of a headend. The whole batch is checked first. With dry_run (the default) nothing is made: the answer says what would be, what its renditions would cost and whether the governor would admit them. Without it, every show that fits is made and the rest are refused with why; a show is made whole or not at all.
 
-MCP tool `add_shows` in the `standard` profile: readOnlyHint false, destructiveHint false, idempotentHint false.
+MCP tool `add_shows` in the `headend` profile: readOnlyHint false, destructiveHint false, idempotentHint false.
 
 ```json
 {
@@ -2823,7 +3040,7 @@ MCP tool `add_shows` in the `standard` profile: readOnlyHint false, destructiveH
 
 Every show on this machine: its name, whether it is running, what is on air, what its outputs send and what its process costs. `current` is the show a client reaches when it names none.
 
-MCP tool `list_shows` in the `standard` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+MCP tool `list_shows` in the `headend` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
 
 ```json
 {
@@ -2876,7 +3093,7 @@ MCP tool `remove_show_output` in the `search` profile: readOnlyHint false, destr
 
 Change one output of a show without compositing, naming only what moves: another address, a new key, on or off, copy or a rendition.
 
-MCP tool `set_show_output` in the `standard` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+MCP tool `set_show_output` in the `headend` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
 
 ```json
 {
@@ -2944,7 +3161,7 @@ MCP tool `rename_show` in the `search` profile: readOnlyHint false, destructiveH
 
 Change a show's name, its input, or whether it composites. Turning compositing on starts a show process whose one source is the input and moves the outputs to it; turning it off hands them back to the direct host, when the show has one source and no scenes in use. A switch can take half a minute, so it answers at once with a task_id and the show as it is; task.get with that id carries this answer, with how long the outputs were off, once it is done.
 
-MCP tool `set_show` in the `standard` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+MCP tool `set_show` in the `headend` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
 
 ```json
 {
@@ -2978,7 +3195,7 @@ MCP tool `start_show` in the `search` profile: readOnlyHint false, destructiveHi
 
 Health, input numbers and each output's numbers for many shows in one read, from what the station already holds, so it is cheap to call every second for two hundred shows. `fields` narrows it to health, input or outputs.
 
-MCP tool `show_stats` in the `standard` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+MCP tool `show_stats` in the `headend` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
 
 ```json
 {
@@ -3012,7 +3229,7 @@ MCP tool `stop_show` in the `search` profile: readOnlyHint false, destructiveHin
 
 One JPEG: the whole contact sheet, the programme, or one source cut out of the mosaic.
 
-MCP tool `snapshot` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+MCP tool `snapshot` in the `standard` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
 
 ```json
 {
@@ -3229,7 +3446,7 @@ MCP tool `seek_source` in the `search` profile: readOnlyHint false, destructiveH
 
 Change a running source: its name and colour, its params, or where it runs. The name and colour live on the scene document. Moving a source between the core, a sidecar and a node is `place`; the programme keeps its frame rate across the move and the compositor covers the swap.
 
-MCP tool `set_source` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+MCP tool `set_source` in the `standard` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
 
 ```json
 {
@@ -3351,7 +3568,7 @@ MCP tool `get_template` in the `search` profile: readOnlyHint true, destructiveH
 
 The graphic templates: the built in packs and the SVG and HTML templates in the media library, each with its fields.
 
-MCP tool `list_templates` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+MCP tool `list_templates` in the `standard` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
 
 ```json
 {
@@ -3370,7 +3587,7 @@ MCP tool `list_templates` in the `search` profile: readOnlyHint true, destructiv
 
 Check an SVG or HTML template and write it into the media library.
 
-MCP tool `save_template` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint false.
+MCP tool `save_template` in the `standard` profile: readOnlyHint false, destructiveHint false, idempotentHint false.
 
 ```json
 {
@@ -3552,6 +3769,10 @@ The paths below still answer, for one release, with a `Deprecation: true` header
 | `GET /rpc` | the JSON-RPC WebSocket. Everything in `methods` is reachable here. |
 | `GET /api/v1/status` | an alias for GET /api/v1/core/status, because it is what people type |
 | `ANY /api/v1/{*rest}` | every method's REST route, generated by the transform rule |
+| `GET /api/v1/gallery/{id}/preview.jpg` | a gallery item's picture as a JPEG, for an <img>: ?width= (64 to 1920) and ?background= (checker, black, white, #rrggbb), as gallery.preview draws it |
+| `GET /api/v1/gallery/{id}/files/{*path}` | one of a gallery item's own files: an HTML graphic's page for the browser source, a clip for a moving preview. Open to a process on the mixer's machine; a token with read from anywhere else |
+| `GET /api/v1/gallery/exports/{file}` | a zip gallery.export wrote, to download |
+| `POST /api/v1/gallery/upload` | ?name=<file name>, the body a file: checked and taken into the gallery as gallery.import does, answered with what was added and what was refused and why |
 | `POST /whip/{channel}/{stream}` | WHIP ingest for a channel that has WHIP on. The body is the SDP offer, the channel's key is the bearer token, and the answer is 201 with the SDP answer and the session's Location. |
 | `DELETE /whip/{channel}/{stream}/{session}` | ends a WHIP session, as the WHIP client does when it stops publishing |
 | `PATCH /whip/{channel}/{stream}/{session}` | 405: every candidate is in the answer, and none are taken later |

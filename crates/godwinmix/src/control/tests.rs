@@ -244,6 +244,9 @@ fn the_table_matches_the_scopes_in_the_protocol_document() {
     assert_eq!(
         destructive,
         vec![
+            // It rewrites another program's configuration file, keeping a
+            // copy of the old one beside it.
+            "agent.setup",
             // It takes a live stream off a platform, and repeating the call
             // does not put it back.
             "channel.destination.remove",
@@ -257,6 +260,8 @@ fn the_table_matches_the_scopes_in_the_protocol_document() {
             "core.restart",
             "core.shutdown",
             "filter.remove",
+            // A graphic deleted takes its files with it, like a clip.
+            "gallery.remove",
             "media.remove",
             "node.remove",
             "output.remove",
@@ -329,10 +334,18 @@ fn the_mcp_profiles_stay_inside_their_budgets() {
     let size = wire_size(&minimal);
     assert!(size < MINIMAL_BYTES, "the minimal tool list is {size} bytes, budget {MINIMAL_BYTES}");
 
-    // Both profiles end with the way out to everything else.
-    for profile in [Profile::Standard, Profile::Minimal] {
+    let headend = tools(&reg, Profile::Headend);
+    assert!(headend.len() <= STANDARD_TOOLS, "the headend profile has {} tools", headend.len());
+    let size = wire_size(&headend);
+    assert!(size < STANDARD_BYTES, "the headend tool list is {size} bytes, budget {STANDARD_BYTES}");
+
+    // Every profile ends with the way out to everything else: a tool that runs
+    // any tool by name, then the search that finds it.
+    for profile in [Profile::Standard, Profile::Minimal, Profile::Headend] {
         let list = tools(&reg, profile);
-        assert_eq!(list.last().unwrap()["name"], SEARCH_TOOL);
+        let n = list.len();
+        assert_eq!(list[n - 2]["name"], CALL_TOOL);
+        assert_eq!(list[n - 1]["name"], SEARCH_TOOL);
     }
     // Minimal is a subset of standard, so moving a token between profiles
     // never takes a tool away that the agent was told about.

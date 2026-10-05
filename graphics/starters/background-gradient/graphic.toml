@@ -1,0 +1,9 @@
+name = "Gradient background loop"
+kind = "html"
+file = "background-gradient.html"
+zone = "full"
+moves = true
+transparent = false
+description = "A full screen background of slowly drifting colour, for behind a presenter cut out of a green screen or a camera with its background removed. Three colours. Drawn small and stretched, which a soft gradient does not show, so it is cheap."
+tags = ["background", "gradient", "loop"]
+origin = "shipped"

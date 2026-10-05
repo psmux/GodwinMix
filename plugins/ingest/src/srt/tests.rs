@@ -31,6 +31,12 @@ fn free_udp_port() -> u16 {
 }
 
 /// An SRT caller sending a small H.264 and AAC picture in MPEG-TS.
+///
+/// A second of SRT latency here and in the player below, not the default
+/// 120 ms: libsrt drops a packet that arrives later than the latency, and on
+/// a runner with every core busy that was most of them, so a player saw its
+/// first keyframe and nothing after it. The tests are about who is let in
+/// and what is sent, not about how little delay a busy machine manages.
 fn caller(port: u16, streamid: &str, passphrase: &str) -> Option<gst::Element> {
     gmx_netkit::init().ok()?;
     let pass = if passphrase.is_empty() { String::new() } else { format!("passphrase={passphrase}") };
@@ -38,7 +44,7 @@ fn caller(port: u16, streamid: &str, passphrase: &str) -> Option<gst::Element> {
         "videotestsrc is-live=true ! video/x-raw,width=320,height=240,framerate=30/1 ! \
          x264enc tune=zerolatency speed-preset=ultrafast key-int-max=15 ! h264parse ! mux. \
          audiotestsrc is-live=true ! audioconvert ! avenc_aac ! aacparse ! mux. \
-         mpegtsmux name=mux ! srtsink uri=srt://127.0.0.1:{port} mode=caller streamid={streamid} {pass}"
+         mpegtsmux name=mux ! srtsink uri=srt://127.0.0.1:{port} mode=caller latency=1000 streamid={streamid} {pass}"
     );
     let pipeline = gst::parse::launch(&line).ok()?;
     pipeline.set_state(gst::State::Playing).ok()?;
@@ -49,8 +55,12 @@ fn stop(pipeline: gst::Element) {
     let _ = pipeline.set_state(gst::State::Null);
 }
 
+/// Ten seconds, times `GODWINMIX_TIMING_SLACK` on a runner that declares
+/// itself slow: with every core busy, as the rest of the suite keeps them, a
+/// player decoded one frame in ten seconds and thirty alone in three.
 fn wait_for(what: impl Fn() -> bool) -> bool {
-    let until = Instant::now() + Duration::from_secs(10);
+    let slack = std::env::var("GODWINMIX_TIMING_SLACK").ok().and_then(|s| s.parse::<f64>().ok()).unwrap_or(1.0).max(1.0);
+    let until = Instant::now() + Duration::from_secs(10).mul_f64(slack);
     while Instant::now() < until {
         if what() {
             return true;
@@ -79,7 +89,9 @@ fn two_callers_on_one_port_are_two_streams_of_one_channel() {
     };
     let two = caller(server.port(), "#!::r=church/cam2,m=publish,u=phone", KEY_TWO).unwrap();
     let both = wait_for(|| gate.hub.is_live("church", "main") && gate.hub.is_live("church", "cam2"));
-    let coded = wait_for(|| gate.hub.stream("church", "cam2").is_some_and(|s| s["video"]["width"] == 320));
+    // Both kinds: on a busy runner the picture's size was read and the
+    // sound's codec had not been yet.
+    let coded = wait_for(|| gate.hub.stream("church", "cam2").is_some_and(|s| s["video"]["width"] == 320 && !s["audio"].is_null()));
     let described = gate.hub.stream("church", "cam2");
     stop(one);
     stop(two);
@@ -157,7 +169,7 @@ fn a_player_on_the_publishers_port_is_sent_the_stream() {
     };
     assert!(wait_for(|| gate.hub.is_live("church", "main")), "the encoder is on air");
     let line = format!(
-        "srtsrc uri=\"srt://127.0.0.1:{}?mode=caller\" streamid=\"#!::r=church/main,m=request\" passphrase={KEY_ONE} \
+        "srtsrc uri=\"srt://127.0.0.1:{}?mode=caller\" latency=1000 streamid=\"#!::r=church/main,m=request\" passphrase={KEY_ONE} \
          ! tsdemux ! h264parse ! avdec_h264 ! fakesink name=end",
         server.port()
     );

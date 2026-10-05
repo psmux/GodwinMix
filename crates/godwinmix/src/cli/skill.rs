@@ -62,6 +62,10 @@ pub enum Tool {
     Opencode,
     /// pi, and any tool that reads the shared `.agents/skills` folder.
     Pi,
+    /// Cursor: `~/.cursor/skills`.
+    Cursor,
+    /// VS Code's Copilot: `~/.copilot/skills`, `.github/skills` in a project.
+    Vscode,
 }
 
 impl Tool {
@@ -72,6 +76,8 @@ impl Tool {
             Self::Gemini => "gemini",
             Self::Opencode => "opencode",
             Self::Pi => "pi",
+            Self::Cursor => "cursor",
+            Self::Vscode => "vscode",
         }
     }
 
@@ -86,15 +92,18 @@ impl Tool {
             home()?
         };
         Some(match (self, project) {
-            (Self::Claude, true) => root.join(".claude/skills"),
-            (Self::Claude, false) => root.join(".claude/skills"),
-            (Self::Codex, true) => root.join(".codex/skills"),
-            (Self::Codex, false) => root.join(".codex/skills"),
-            (Self::Gemini, true) => root.join(".gemini/skills"),
-            (Self::Gemini, false) => root.join(".gemini/skills"),
-            (Self::Opencode, true) => root.join(".opencode/skills"),
-            (Self::Opencode, false) => root.join(".config/opencode/skills"),
-            (Self::Pi, _) => root.join(".agents/skills"),
+            (Self::Claude, true) => root.join(".claude").join("skills"),
+            (Self::Claude, false) => root.join(".claude").join("skills"),
+            (Self::Codex, true) => root.join(".codex").join("skills"),
+            (Self::Codex, false) => root.join(".codex").join("skills"),
+            (Self::Gemini, true) => root.join(".gemini").join("skills"),
+            (Self::Gemini, false) => root.join(".gemini").join("skills"),
+            (Self::Opencode, true) => root.join(".opencode").join("skills"),
+            (Self::Opencode, false) => root.join(".config").join("opencode").join("skills"),
+            (Self::Pi, _) => root.join(".agents").join("skills"),
+            (Self::Cursor, _) => root.join(".cursor").join("skills"),
+            (Self::Vscode, true) => root.join(".github").join("skills"),
+            (Self::Vscode, false) => root.join(".copilot").join("skills"),
         })
     }
 }
@@ -202,19 +211,30 @@ fn install(target: &Path, print: bool, tool: Tool) -> Result<()> {
         println!("\nRun again without --print to write them.");
         return Ok(());
     }
+    // An installed app is on nobody's PATH, and the skills say `godwinmix`.
+    let note = std::env::current_exe().ok().and_then(|exe| crate::agents::path_note(&exe));
+    // Every file first, then the report: a reader that closes the pipe early
+    // (`| head -1`) once stopped the install after the first skill.
+    let mut written = Vec::new();
     for (name, text) in &skills {
         let dir = target.join(name);
         std::fs::create_dir_all(&dir)
             .with_context(|| format!("creating {}", dir.display()))?;
         let path = dir.join("SKILL.md");
+        let text = crate::agents::with_note(text, note.as_deref());
         std::fs::write(&path, text).with_context(|| format!("writing {}", path.display()))?;
+        written.push(path);
+    }
+    for path in written {
         println!("wrote {}", path.display());
     }
     println!(
-        "\n{} now reads {}. Start a session in a directory with a mixer to hand, or \
-         point it at one with GODWINMIX_URL.",
+        "\n{} now reads {}. With the GodwinMix app open on this machine the agent finds the \
+         mixer by itself; for one elsewhere set GODWINMIX_URL and GODWINMIX_TOKEN. \
+         `gmx agent setup {}` also connects its MCP server.",
         tool.as_str(),
-        SKILLS.join(", ")
+        SKILLS.join(", "),
+        tool.as_str()
     );
     Ok(())
 }

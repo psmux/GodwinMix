@@ -25,7 +25,7 @@ pub fn register(reg: &mut Registry<Call>) {
             .result(schema_of::<TemplateList>)
             .tool(
                 "list_templates",
-                Tier::Search,
+                Tier::Standard,
                 "Every graphic template this mixer can draw, each with its `uri` for `add_source` and its \
                  fields (label, type, default). Two formats. `svg`: stills the mixer draws for almost \
                  nothing (news lower third, breaking news bar, headline strap, score bug, logo bug, title \
@@ -55,7 +55,7 @@ pub fn register(reg: &mut Registry<Call>) {
             .not_idempotent()
             .tool(
                 "save_template",
-                Tier::Search,
+                Tier::Standard,
                 "Write a graphic template into the mixer's media library after checking it: `svg` for a \
                  still (a viewBox, fields in {{double braces}}), or `html` for one that moves (a \
                  gmx-template block declaring its fields, a transparent background, nothing from the \

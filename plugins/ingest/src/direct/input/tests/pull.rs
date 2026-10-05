@@ -75,7 +75,11 @@ fn hls_and_dash_are_pulled_and_paced() {
         let dir = scratch().join(kind);
         std::fs::create_dir_all(&dir).unwrap();
         let out = path(&dir.join(file));
-        let mut args = vec!["-loglevel", "error", "-re", "-f", "lavfi", "-i", "testsrc2=size=320x240:rate=25", "-f", "lavfi", "-i", "sine",
+        // Paced by the `realtime` filters, not by `-re` alone: the ffmpeg
+        // Homebrew ships did not pace its lavfi inputs with `-re`, wrote the
+        // thirty seconds in about six, segment 24 five seconds in, and ended
+        // the playlist before a live player had joined.
+        let mut args = vec!["-loglevel", "error", "-re", "-f", "lavfi", "-i", "testsrc2=size=320x240:rate=25,realtime", "-f", "lavfi", "-i", "sine,arealtime",
             "-t", "30", "-c:v", "libx264", "-preset", "ultrafast", "-g", "25", "-c:a", "aac"];
         args.extend(if kind == "hls" { ["-f", "hls", "-hls_time", "1", "-hls_list_size", "6"] } else { ["-f", "dash", "-seg_duration", "1", "-window_size", "6"] });
         args.push(&out);

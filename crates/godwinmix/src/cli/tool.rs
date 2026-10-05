@@ -41,7 +41,7 @@ pub async fn run(url: &str, token: Option<String>, name: &str, args: Option<&str
     for part in result["content"].as_array().into_iter().flatten() {
         match part["type"].as_str() {
             Some("text") => println!("{}", part["text"].as_str().unwrap_or_default()),
-            Some("image") => println!("(a picture, {} bytes of {} as base64)", part["data"].as_str().map(str::len).unwrap_or(0), part["mimeType"].as_str().unwrap_or("image")),
+            Some("image") => println!("{}", picture(name, part)),
             _ => println!("{part}"),
         }
     }
@@ -49,6 +49,21 @@ pub async fn run(url: &str, token: Option<String>, name: &str, args: Option<&str
         std::process::exit(1);
     }
     Ok(())
+}
+
+/// A picture a tool answered with, written to a file an agent with a shell
+/// can open and look at, since a terminal cannot show it. Answers the line
+/// to print.
+fn picture(tool: &str, part: &Value) -> String {
+    use base64::Engine;
+    let ext = if part["mimeType"].as_str().unwrap_or_default().contains("png") { "png" } else { "jpg" };
+    let bytes = base64::engine::general_purpose::STANDARD.decode(part["data"].as_str().unwrap_or_default()).unwrap_or_default();
+    let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or(0);
+    let path = std::env::temp_dir().join(format!("gmx-{tool}-{stamp}.{ext}"));
+    match std::fs::write(&path, &bytes) {
+        Ok(()) => format!("picture: {} ({} bytes). Open that file to look at it.", path.display(), bytes.len()),
+        Err(e) => format!("(a picture of {} bytes, which could not be written to {}: {e})", bytes.len(), path.display()),
+    }
 }
 
 /// The tool's arguments: JSON on the command line, `@file`, or nothing.

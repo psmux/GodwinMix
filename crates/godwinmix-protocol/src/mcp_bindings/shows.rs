@@ -7,13 +7,13 @@
 //! what comes back and stop.
 
 use super::Binding;
-use crate::method::Tier::{Search, Standard};
+use crate::method::Tier::{Headend, Search};
 
 pub const BINDINGS: &[Binding] = &[
     Binding {
         method: "show.add_many",
         tool: "add_shows",
-        tier: Standard,
+        tier: Headend,
         description: "Add many shows in one call: a headend's channel list, one show per feed. \
             Each entry is what add_show takes: name, input {uri, program?, backup?}, outputs, and \
             compositing (false: the input straight to its outputs, light, no process per show). \
@@ -23,7 +23,7 @@ pub const BINDINGS: &[Binding] = &[
     Binding {
         method: "show.stats",
         tool: "show_stats",
-        tier: Standard,
+        tier: Headend,
         description: "Health and numbers for many shows in one read: health (ok, warning, \
             alarm, off, with alarms such as no-input, black, freeze, cc-errors), the input's \
             kbps, fps, size and codecs, and each output's state and kbps. Cheap enough to call \
@@ -32,7 +32,7 @@ pub const BINDINGS: &[Binding] = &[
     Binding {
         method: "show.set",
         tool: "set_show",
-        tier: Standard,
+        tier: Headend,
         description: "Change one show: name, input, or compositing. compositing true gives it \
             scenes, transitions and a programme encode; false sends one input straight to its \
             outputs, refused while it holds more than one source or a scene. Outputs keep \
@@ -41,7 +41,7 @@ pub const BINDINGS: &[Binding] = &[
     Binding {
         method: "show.output.set",
         tool: "set_show_output",
-        tier: Standard,
+        tier: Headend,
         description: "Change one output of a show without compositing: `id` is the show, \
             `output` the output. On or off, where it goes, or its format: rendition null copies \
             the input's own bytes (almost free); {preset: <id>} from rendition_presets \

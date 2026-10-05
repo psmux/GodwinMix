@@ -1,0 +1,11 @@
+# The two Apache 2.0 matting models for the person cutout are build input,
+# fetched rather than committed:
+#
+#   bash dev/fetch-models.sh --models tauri-app/models --runtime tauri-app/onnxruntime
+#
+# tauri.conf.json lists models/ under bundle.resources, and `cargo tauri build`
+# refuses a resource folder that is not there, so this file keeps the folder
+# in the tree. With nothing in it the app builds and has no cutout, which is
+# how a CI build and a developer build work.
+/*
+!.gitignore

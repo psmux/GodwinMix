@@ -1,0 +1,9 @@
+name = "Starting soon"
+kind = "html"
+file = "starting-soon.html"
+zone = "overlay"
+moves = true
+transparent = false
+description = "A full screen holding slate: the show's name, a line saying what is coming, a large countdown and drifting colour behind it. The countdown starts when it is taken, from duration."
+tags = ["slate", "starting soon", "countdown", "full screen"]
+origin = "shipped"

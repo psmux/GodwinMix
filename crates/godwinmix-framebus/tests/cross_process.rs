@@ -13,8 +13,11 @@ fn child_entry() {
     child_main();
 }
 
-/// Publish for `ms` at about `fps`, returning the slowest single write.
-fn pump(p: &mut godwinmix_framebus::Publisher, ms: u64, fps: u64) -> Duration {
+/// Publish for `ms` at about `fps`, returning the slowest single write and
+/// how many frames went out. The count is what the readers are judged
+/// against: a macOS runner's sleeps overran so far that 200 fps came out at
+/// about 30, and a reader that saw every one of them still "got" only 41.
+fn pump(p: &mut godwinmix_framebus::Publisher, ms: u64, fps: u64) -> (Duration, u64) {
     let (start, mut worst, mut seq) = (Instant::now(), Duration::ZERO, 0u64);
     while start.elapsed() < Duration::from_millis(ms) {
         seq += 1;
@@ -26,7 +29,7 @@ fn pump(p: &mut godwinmix_framebus::Publisher, ms: u64, fps: u64) -> Duration {
         worst = worst.max(t.elapsed());
         std::thread::sleep(Duration::from_micros(1_000_000 / fps).saturating_sub(t.elapsed()));
     }
-    worst
+    (worst, seq)
 }
 
 #[test]
@@ -49,17 +52,20 @@ fn every_frame_a_reader_gets_in_another_process_matches_its_checksum() {
         }
         (got, bad)
     });
-    pump(&mut p, 1800, 200);
+    // The readers listen for 1.5 s and the in process one for 1.2 s of the
+    // 1.8 s written, so each should see well over half of what went out.
+    let (_, sent) = pump(&mut p, 1800, 200);
+    assert!(sent > 20, "only {sent} frames went out");
     for k in &mut kids {
         let r = k.result();
-        assert!(num(&r, "got") > 100, "{r:?}");
+        assert!(num(&r, "got") * 2 > sent, "{r:?} of {sent} sent");
         assert_eq!(num(&r, "bad"), 0, "{r:?}");
         assert_eq!(num(&r, "out_of_order"), 0, "{r:?}");
     }
     let (got, bad) = inproc.join().unwrap();
     assert!(
-        got > 100 && bad == 0,
-        "in process reader got {got}, {bad} bad"
+        got * 2 > sent && bad == 0,
+        "in process reader got {got} of {sent} sent, {bad} bad"
     );
     assert_eq!(p.stats().dropped, 0);
 }
@@ -72,15 +78,16 @@ fn a_stalled_reader_skips_frames_and_never_slows_the_owner_or_the_others() {
     let mut fast = spawn("reader", &reg, "2000,0");
     num(&slow.result(), "ready");
     num(&fast.result(), "ready");
-    let worst = pump(&mut p, 2200, 100);
+    let (worst, sent) = pump(&mut p, 2200, 100);
     let (s, f) = (slow.result(), fast.result());
     // The slow one sleeps 400 ms a frame: about five frames in two seconds,
-    // and everything else skipped. The fast one sees nearly every frame.
+    // and everything else skipped, which is most of what was sent. The fast
+    // one sees nearly every frame.
     assert!(
-        num(&s, "got") <= 7 && num(&s, "skipped") > 20 * num(&s, "got"),
-        "slow reader: {s:?}"
+        num(&s, "got") <= 7 && num(&s, "skipped") > 3 * num(&s, "got"),
+        "slow reader: {s:?} of {sent} sent"
     );
-    assert!(num(&f, "got") > 100, "fast reader: {f:?}");
+    assert!(num(&f, "got") * 2 > sent, "fast reader: {f:?} of {sent} sent");
     assert!(
         num(&f, "skipped") * 10 < num(&f, "got"),
         "fast reader: {f:?}"

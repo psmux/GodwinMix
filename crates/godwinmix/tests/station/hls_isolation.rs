@@ -22,6 +22,9 @@ fn child_of(parent: u32, pattern: &str) -> Option<u32> {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn killing_the_hls_packager_costs_the_hls_output_a_moment_and_nothing_else() {
+    if !godwinmix_core::probe::have_or_skip("cmafmux") {
+        return;
+    }
     let (dir, port) = folder_with_relay("hls-isolation");
     let source = staged_ingest(&dir);
     let st = start(dir.clone(), port, &[]).await;

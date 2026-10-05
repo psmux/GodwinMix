@@ -162,8 +162,8 @@ logged and the three are ignored until it is fixed.
 | `template.fields {id}` | `template_fields` | read | a running graphic's fields, each with `value` (what is on screen) and `set` (whether the source set it), and `path`, `params.fields.<name>` |
 | `scene.preview.frame {width?}` | `preview_frame` | read | the armed preview scene as a JPEG, which over MCP is an image the model sees |
 
-All five template tools and `preview_frame` are behind `search_tools`, so the
-hot list is the size it was. Adding the graphic is `source.add`
+`list_templates` and `save_template` are in the standard MCP list;
+`get_template`, `check_template`, `template_fields` and `preview_frame` run through `call_tool`. Adding the graphic is `source.add`
 (`add_source`), placing it is `scene.item.add` (`add_scene_item`), which takes
 `visible`, `enter` and `exit`, and changing a field is `source.set`
 (`set_source`).
