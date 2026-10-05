@@ -2,10 +2,10 @@
 //! and written into the library the first time the library, or the gallery,
 //! is read.
 //!
-//! About 130 KB in all: four clips at 640x360 in VP9 (a light leak, bokeh, a
+//! About 280 KB in all, 86 KB of it media and the rest previews: four clips at 640x360 in VP9 (a light leak, bokeh, a
 //! glitch with alpha and a film burn), one PNG matte and two shaders, every
 //! one made for this project (`dev/make-starter-fx.py`), each with its
-//! preview still and strip. Written out rather than read from inside the
+//! preview still, strip and loop. Written out rather than read from inside the
 //! binary because GStreamer opens a file, and only when its folder is
 //! missing, so an operator who changes a starter item's cut point keeps it
 //! and one who deletes the folder gets it back.
@@ -38,6 +38,7 @@ macro_rules! item {
                 ($file, include_bytes!(concat!("../../../../graphics/starters/", $name, "/", $file))),
                 ("preview.jpg", include_bytes!(concat!("../../../../graphics/starters/", $name, "/preview.jpg"))),
                 ("preview-strip.jpg", include_bytes!(concat!("../../../../graphics/starters/", $name, "/preview-strip.jpg"))),
+                ("preview.webm", include_bytes!(concat!("../../../../graphics/starters/", $name, "/preview.webm"))),
                 ("graphic.toml", include_bytes!(concat!("../../../../graphics/starters/", $name, "/graphic.toml"))),
             ],
         }
