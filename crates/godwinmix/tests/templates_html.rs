@@ -53,6 +53,11 @@ async fn an_html_template_is_listed_checked_and_saved() {
     assert_eq!(saved["template"]["uri"], "html:ours.html", "{saved}");
     let listed = core.call(&token, "template.list", json!({})).await.unwrap();
     assert!(listed["templates"].as_array().unwrap().iter().any(|t| t["name"] == "ours.html" && t["origin"] == "library"));
+
+    // The same designs are gallery starters, placed as HTML templates.
+    let gallery = core.call(&token, "gallery.list", json!({"query": "glass lower third"})).await.unwrap();
+    let item = gallery["items"].as_array().unwrap().iter().find(|i| i["id"] == "lower-third-glass").expect("a gallery starter").clone();
+    assert!(item["uri"].as_str().is_some_and(|u| u.starts_with("html:")), "{item}");
     drop(core);
     let _ = std::fs::remove_dir_all(&dir);
 }

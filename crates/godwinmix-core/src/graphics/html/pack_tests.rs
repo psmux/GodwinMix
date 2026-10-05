@@ -49,3 +49,27 @@ fn a_saved_template_is_checked_first_and_listed_after() {
     assert_eq!((listed.len(), errors.len()), (1, 0));
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn every_design_is_a_gallery_starter_drawn_as_an_html_template() {
+    use godwinmix_protocol::gallery::{GalleryKind, Origin};
+    let g = std::env::temp_dir().join(format!("gmx-html-gallery-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&g);
+    let (all, errors) = crate::gallery::store::list(&g);
+    assert!(errors.is_empty(), "{errors:?}");
+    for (name, _) in PACK.iter().filter(|(n, _)| !n.starts_with("set-")) {
+        let e = all.iter().find(|e| e.item.id == *name).unwrap_or_else(|| panic!("{name} is in the gallery"));
+        assert_eq!((e.item.kind, e.item.origin), (GalleryKind::Html, Origin::Shipped), "{name}");
+        assert!(e.item.uri.as_deref().is_some_and(|u| u.starts_with("html:")), "{name} is drawn as a template: {:?}", e.item.uri);
+        assert!(e.item.fields.iter().any(|f| f.name == "accent"), "{name} lists its fields");
+        assert!(e.preview_file().is_some(), "{name} has a picture for its card");
+    }
+    for set in ["studio-newsroom", "studio-ring"] {
+        let e = all.iter().find(|e| e.item.id == set).unwrap_or_else(|| panic!("{set} is in the gallery"));
+        assert_eq!(e.item.kind, GalleryKind::Set);
+        let spec = e.manifest.set.as_ref().expect("a set says what it is made of");
+        let dir = e.dir().expect("written out");
+        assert!(dir.join(&spec.background).is_file() && dir.join(spec.foreground.as_ref().unwrap()).is_file());
+    }
+    let _ = std::fs::remove_dir_all(&g);
+}
