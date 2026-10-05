@@ -75,7 +75,7 @@ fn run<B: Blend>(dst: &mut Planes<'_>, src: &Source<'_>, d: &Draw) {
             *d = B::luma(*d as i32, p[1] as i32, a + (a >> 7)).clamp(16, 235) as u8;
         };
         if step > 0 {
-            let (from, n) = (srow + cols[0], line.len() / step);
+            let (from, n) = (srow + cols[0], line.len().checked_div(step).unwrap_or(0));
             let pixels = src.data[from..from + n * 4].chunks_exact(4);
             line.chunks_exact_mut(step).zip(pixels).for_each(|(ds, p)| ds.iter_mut().for_each(|d| one(d, p)));
         } else {

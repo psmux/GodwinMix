@@ -23,7 +23,8 @@ use std::sync::{Arc, LazyLock, OnceLock};
 type Plane = Arc<OnceLock<Vec<u8>>>;
 
 /// Mattes already read, by file and size.
-static READ: LazyLock<Mutex<HashMap<(PathBuf, i32, i32), Plane>>> = LazyLock::new(Mutex::default);
+type Read = Mutex<HashMap<(PathBuf, i32, i32), Plane>>;
+static READ: LazyLock<Read> = LazyLock::new(Mutex::default);
 
 pub struct Matte {
     plane: Plane,

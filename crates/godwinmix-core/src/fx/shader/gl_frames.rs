@@ -11,7 +11,7 @@ pub fn stack(stacked: &gst_video::VideoInfo, old: &Pic<'_>, f: &Planes<'_>) -> O
     let mut buffer = gst::Buffer::with_size(stacked.size()).ok()?;
     {
         let b = buffer.get_mut()?;
-        let mut frame = gst_video::VideoFrameRef::from_buffer_ref_writable(b, &stacked).ok()?;
+        let mut frame = gst_video::VideoFrameRef::from_buffer_ref_writable(b, stacked).ok()?;
         let (w, h) = (f.width as usize, f.height as usize);
         let s = stacked.stride();
         let planes = frame.planes_data_mut();
@@ -31,7 +31,7 @@ pub fn stack(stacked: &gst_video::VideoInfo, old: &Pic<'_>, f: &Planes<'_>) -> O
 
 /// The top half of an answer onto the frame.
 pub fn draw(stacked: &gst_video::VideoInfo, answer: &gst::Buffer, f: &mut Planes<'_>) {
-    let Ok(frame) = gst_video::VideoFrameRef::from_buffer_ref_readable(answer.as_ref(), &stacked) else { return };
+    let Ok(frame) = gst_video::VideoFrameRef::from_buffer_ref_readable(answer.as_ref(), stacked) else { return };
     let (w, h) = (f.width as usize, f.height as usize);
     let s = stacked.stride();
     let dst = [(&mut *f.y, f.strides[0], h, w), (&mut *f.u, f.strides[1], h / 2, w / 2), (&mut *f.v, f.strides[2], h / 2, w / 2)];
