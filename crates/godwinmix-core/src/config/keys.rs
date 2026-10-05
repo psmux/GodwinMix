@@ -147,6 +147,7 @@ pub const KEYS: &[Key] = &[
     Key::new("graphics.accent", "Brand accent colour", Restart),
     Key::new("graphics.text", "Brand text colour", Restart),
     Key::new("graphics.panel", "Brand panel colour", Restart),
+    Key::new("graphics.gallery", "Graphics gallery folder", Restart),
     Key::new("browser.sidecar", "Browser sidecar", NextSource),
     Key::new("browser.args", "Browser arguments", NextSource),
     Key::new("browser.env", "Browser environment", NextSource),
