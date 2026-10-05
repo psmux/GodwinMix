@@ -13,6 +13,26 @@ pub enum FieldType {
     Text,
     /// A colour: `#rgb`, `#rrggbb` or `#rrggbbaa`.
     Color,
+    /// A picture: the file name of an image in the media library, such as
+    /// `logo.png`. HTML templates only.
+    Image,
+}
+
+/// What a template is written in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum TemplateFormat {
+    /// An SVG drawn by the mixer once per change and held: a still, the
+    /// cheapest designed graphic there is.
+    #[default]
+    Svg,
+    /// An HTML page drawn by the browser renderer: CSS animation, canvas,
+    /// WebGL, with a way in and a way out. Added by `html:<name>`.
+    Html,
+}
+
+fn is_svg(f: &TemplateFormat) -> bool {
+    *f == TemplateFormat::Svg
 }
 
 /// One named field of a template.
@@ -60,6 +80,22 @@ pub struct TemplateInfo {
     pub width: u32,
     pub height: u32,
     pub fields: Vec<TemplateField>,
+    /// `svg` (absent) or `html`.
+    #[serde(default, skip_serializing_if = "is_svg")]
+    pub format: TemplateFormat,
+    /// What sort of graphic it is, for a picker: lower-third, ticker, bug,
+    /// score, title, background, foreground, countdown, slate. HTML only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub category: Option<String>,
+    /// How long its own way out takes, in milliseconds. Give the scene item
+    /// `"exit": {"type": "hold", "duration_ms": <this>}` so it stays drawn
+    /// while it plays. HTML only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub out_ms: Option<u32>,
+    /// True for a design that covers the whole picture on purpose: a
+    /// background, a title card, a slate. HTML only.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub opaque: bool,
 }
 
 /// The answer to `template.list`.
@@ -84,8 +120,12 @@ pub struct TemplateGetRequest {
 pub struct TemplateDoc {
     #[serde(flatten)]
     pub info: TemplateInfo,
-    /// The SVG as written, with its `{{field}}` markers in place.
+    /// The SVG as written, with its `{{field}}` markers in place. Empty for
+    /// an HTML template.
     pub svg: String,
+    /// The HTML as written, for an HTML template.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub html: Option<String>,
 }
 
 /// `template.save`: check an SVG template and write it into the media
@@ -96,8 +136,13 @@ pub struct TemplateSaveRequest {
     /// The file name, ending `.svg` or not (it is added). One segment, no
     /// slashes.
     pub name: String,
-    /// The whole SVG document.
+    /// The whole SVG document. Leave it empty and give `html` to save an
+    /// HTML template.
+    #[serde(default)]
     pub svg: String,
+    /// The whole HTML document of an HTML template, saved as `<name>.html`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub html: Option<String>,
     /// Write over a library file of the same name. Every source drawing it
     /// is drawn again with the new SVG, on air, with no rebuild.
     #[serde(default)]
@@ -143,4 +188,42 @@ pub struct TemplateFields {
     pub fields: Vec<FieldValue>,
     /// Where a client sets a field with `source.set`: `params.fields.<name>`.
     pub path: String,
+}
+
+/// `template.check`: read a template the way `template.save` and
+/// `source.add` would, without writing anything, and say what to fix.
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct TemplateCheckRequest {
+    /// An SVG template's whole document.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub svg: Option<String>,
+    /// An HTML template's whole document.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub html: Option<String>,
+    /// Or a template by name, as `template.list` gives it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+}
+
+/// One thing wrong with a template, and what to do about it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct TemplateProblem {
+    /// `error` stops it being saved or drawn; `warning` is drawn as it is.
+    pub level: String,
+    /// What is wrong, quoting the part of the file it is in.
+    pub problem: String,
+    /// What to change, in words a model can act on.
+    pub fix: String,
+}
+
+/// The answer to `template.check`.
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+pub struct TemplateChecked {
+    /// True when nothing at level `error` was found.
+    pub ok: bool,
+    pub problems: Vec<TemplateProblem>,
+    /// The template as it reads, when it reads at all.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub template: Option<TemplateInfo>,
 }

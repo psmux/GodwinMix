@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Countdown ring</title>
+<script type="application/json" id="gmx-template">
+{
+  "title": "Countdown ring",
+  "description": "A transparent countdown in the bottom right: minutes and seconds inside a ring that empties. It starts counting when it is taken, from duration, or counts to a time of day when until is set (such as 19:30).",
+  "category": "countdown",
+  "out_ms": 400,
+  "fields": {
+    "label":    {"label": "Label", "default": "STARTING IN"},
+    "duration": {"label": "Count down from, mm:ss", "default": "05:00"},
+    "until":    {"label": "Or count to a time of day, hh:mm (leave empty to use duration)", "default": ""},
+    "done":     {"label": "Words at zero", "default": "NOW"},
+    "accent":   {"label": "Ring colour", "type": "color", "default": "#f97316"},
+    "panel":    {"label": "Disc colour", "type": "color", "default": "#0f172a"},
+    "text":     {"label": "Text colour", "type": "color", "default": "#ffffff"}
+  }
+}
+</script>
+<style>
+  html, body { margin: 0; background: transparent; overflow: hidden; }
+  :root { --accent: #f97316; --panel: #0f172a; --text: #ffffff; }
+  body { font-family: Inter, "Segoe UI", "Helvetica Neue", Helvetica, Arial, "DejaVu Sans", sans-serif; }
+
+  .count { position: absolute; right: 120px; bottom: 100px; width: 260px; height: 260px; color: var(--text);
+           opacity: 0; transform: scale(.6) rotate(-20deg); }
+  svg { position: absolute; inset: 0; transform: rotate(-90deg); }
+  .disc { fill: color-mix(in srgb, var(--panel) 82%, transparent); }
+  .track { fill: none; stroke: rgba(255, 255, 255, .15); stroke-width: 12; }
+  .ring { fill: none; stroke: var(--accent); stroke-width: 12; stroke-linecap: round;
+          stroke-dasharray: 691; stroke-dashoffset: 0; transition: stroke-dashoffset .4s ease-out; }
+  .words { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .label { font-size: 17px; font-weight: 800; letter-spacing: 2.5px; opacity: .85; }
+  .time { font-size: 66px; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1.05; }
+
+  .count { transition: opacity .3s ease-in, transform .35s ease-in; }
+  .gmx-in .count { opacity: 1; transform: none; transition: opacity .4s ease-out, transform .6s cubic-bezier(.2, 1.3, .4, 1); }
+</style>
+</head>
+<body>
+  <div class="count">
+    <svg viewBox="0 0 260 260"><circle class="disc" cx="130" cy="130" r="122"/><circle class="track" cx="130" cy="130" r="110"/><circle class="ring" id="ring" cx="130" cy="130" r="110"/></svg>
+    <div class="words"><div class="label" data-field="label">STARTING IN</div><div class="time" id="time">05:00</div></div>
+  </div>
+<script>
+  // Repaints once a second, only while it is on air.
+  var f = {}, end = 0, total = 1, timer = null;
+  function secs(t) { var p = String(t).split(":"); return (Number(p[0]) || 0) * 60 + (Number(p[1]) || 0); }
+  function aim() {
+    var now = Date.now();
+    if (/^\d{1,2}:\d{2}$/.test(String(f.until || ""))) {
+      var p = f.until.split(":"), d = new Date(); d.setHours(+p[0], +p[1], 0, 0);
+      if (d.getTime() < now) d.setDate(d.getDate() + 1);
+      end = d.getTime(); total = Math.max(1, (end - now) / 1000);
+    } else {
+      total = Math.max(1, secs(f.duration || "05:00")); end = now + total * 1000;
+    }
+  }
+  function tick() {
+    var left = Math.max(0, Math.round((end - Date.now()) / 1000));
+    var m = Math.floor(left / 60), s = left % 60;
+    document.getElementById("time").textContent = left > 0 ? (m < 10 ? "0" : "") + m + ":" + (s < 10 ? "0" : "") + s : (f.done || "NOW");
+    document.getElementById("ring").style.strokeDashoffset = String(691 * (1 - left / total));
+    if (left === 0) clearInterval(timer);
+  }
+  window.addEventListener("gmx:update", function (e) {
+    // A new duration or time restarts the count; new words do not.
+    var again = timer && (e.detail.duration !== f.duration || e.detail.until !== f.until);
+    f = e.detail;
+    if (again) { aim(); clearInterval(timer); timer = setInterval(tick, 1000); }
+    if (timer) tick();
+  });
+  window.addEventListener("gmx:in", function () { aim(); tick(); clearInterval(timer); timer = setInterval(tick, 1000); });
+  window.addEventListener("gmx:out", function () { clearInterval(timer); timer = null; });
+</script>
+</body>
+</html>

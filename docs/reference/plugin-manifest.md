@@ -354,6 +354,7 @@ choice. A source must declare at least one.
 | `audio-layers` | `audio.set` accepts `layers`, page and media levels |
 | `alpha` | the source emits AYUV and is composited over the programme layer, not under it |
 | `programme-timeline` | raw timestamps already use the programme clock and base time adopted by the in-process source pipeline, so the mixer does not shift them again |
+| `cue` | call `cue` with `{"on_air": true}` when an item showing the source goes on the programme and `{"on_air": false}` when the last one comes off, so it can play its own way in and out. The built in HTML templates (`html/graphic`) declare it; the host does not forward `cue` to a tier 2 plugin yet |
 
 `seek` is only meaningful on a `source` and is refused anywhere else.
 

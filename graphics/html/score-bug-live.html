@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Live score bug</title>
+<script type="application/json" id="gmx-template">
+{
+  "title": "Live score bug",
+  "description": "Top left score bug: two teams with their colours, the score, and a match clock that runs by itself from the time you set while running is yes. A changed score flashes.",
+  "category": "score",
+  "out_ms": 400,
+  "fields": {
+    "home":        {"label": "Home team", "default": "ARS"},
+    "home_score":  {"label": "Home score", "default": "2"},
+    "home_colour": {"label": "Home colour", "type": "color", "default": "#ef0107"},
+    "away":        {"label": "Away team", "default": "CHE"},
+    "away_score":  {"label": "Away score", "default": "1"},
+    "away_colour": {"label": "Away colour", "type": "color", "default": "#034694"},
+    "clock":       {"label": "Clock, mm:ss", "default": "67:00"},
+    "running":     {"label": "Clock running, yes or no", "default": "yes"},
+    "period":      {"label": "Period", "default": "2ND HALF"},
+    "panel":       {"label": "Panel colour", "type": "color", "default": "#0b1020"},
+    "text":        {"label": "Text colour", "type": "color", "default": "#ffffff"},
+    "accent":      {"label": "Clock colour", "type": "color", "default": "#facc15"}
+  }
+}
+</script>
+<style>
+  html, body { margin: 0; background: transparent; overflow: hidden; }
+  :root { --panel: #0b1020; --text: #ffffff; --accent: #facc15; --home_colour: #ef0107; --away_colour: #034694; }
+  body { font-family: Inter, "Segoe UI", "Helvetica Neue", Helvetica, Arial, "DejaVu Sans", sans-serif; }
+
+  .bug { position: absolute; left: 96px; top: 60px; display: flex; height: 56px; color: var(--text);
+         border-radius: 8px; overflow: hidden; box-shadow: 0 8px 24px rgba(0, 0, 0, .35);
+         clip-path: inset(0 100% 0 0); }
+  .team { display: flex; align-items: center; background: var(--panel); font-size: 28px; font-weight: 800; letter-spacing: 1px; }
+  .team b { width: 8px; align-self: stretch; }
+  .team.home b { background: var(--home_colour); }
+  .team.away b { background: var(--away_colour); }
+  .team span { padding: 0 18px; }
+  .score { min-width: 104px; display: flex; align-items: center; justify-content: center; gap: 12px;
+           background: color-mix(in srgb, var(--panel) 80%, #fff); font-size: 32px; font-weight: 900; }
+  .score .n { display: inline-block; }
+  .score .n.flash { animation: flash .9s ease-out; }
+  @keyframes flash { 0% { transform: scale(1.6); color: var(--accent); } 100% { transform: scale(1); } }
+  .clock { display: flex; flex-direction: column; justify-content: center; padding: 0 18px; background: var(--panel); }
+  .clock .t { font-size: 26px; font-weight: 800; color: var(--accent); font-variant-numeric: tabular-nums; line-height: 1; }
+  .clock .p { font-size: 13px; font-weight: 700; letter-spacing: 1.5px; opacity: .8; margin-top: 4px; }
+
+  .bug { transition: clip-path .35s cubic-bezier(.6, 0, .8, .2); }
+  .gmx-in .bug { clip-path: inset(0 0 0 0); transition: clip-path .6s cubic-bezier(.2, .8, .2, 1); }
+</style>
+</head>
+<body>
+  <div class="bug">
+    <div class="team home"><b></b><span data-field="home">ARS</span></div>
+    <div class="score"><span class="n" id="hs">2</span><span>-</span><span class="n" id="as">1</span></div>
+    <div class="team away"><span data-field="away">CHE</span><b></b></div>
+    <div class="clock"><div class="t" id="clock">67:00</div><div class="p" data-field="period">2ND HALF</div></div>
+  </div>
+<script>
+  // The clock counts on by itself once a second while running is yes, from
+  // the time last set, so the mixer only sends a time when it is corrected.
+  var base = 0, since = 0, run = false, timer = null;
+  function secs(t) { var p = String(t).split(":"); return (Number(p[0]) || 0) * 60 + (Number(p[1]) || 0); }
+  function show() {
+    var s = base + (run ? Math.floor((Date.now() - since) / 1000) : 0);
+    var m = Math.floor(s / 60), r = s % 60;
+    document.getElementById("clock").textContent = m + ":" + (r < 10 ? "0" : "") + r;
+  }
+  function score(id, v) {
+    var el = document.getElementById(id);
+    if (el.textContent === String(v)) return;
+    el.textContent = v; el.classList.remove("flash"); void el.offsetWidth; el.classList.add("flash");
+  }
+  var last = "";
+  window.addEventListener("gmx:update", function (e) {
+    var f = e.detail;
+    score("hs", f.home_score); score("as", f.away_score);
+    // Only a new time or a start or stop moves the clock; a goal does not.
+    if (f.clock + "|" + f.running === last) return;
+    last = f.clock + "|" + f.running;
+    base = secs(f.clock); since = Date.now(); run = /^(yes|true|1|on)$/i.test(String(f.running));
+    clearInterval(timer); show();
+    if (run) timer = setInterval(show, 1000);
+  });
+</script>
+</body>
+</html>

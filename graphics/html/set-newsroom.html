@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Newsroom set</title>
+<script type="application/json" id="gmx-template">
+{
+  "title": "Newsroom set",
+  "description": "Virtual set background: a newsroom wall with three video panels, light moving slowly across them, the station's name behind the presenter, and a glossy floor. Pair it with the set-newsroom-desk SVG in front. Built for the virtual-set layout: the presenter stands in the middle, 90 percent of the height.",
+  "category": "set",
+  "opaque": true,
+  "fps": 20,
+  "fields": {
+    "station": {"label": "Name on the wall", "default": "GMX NEWS"},
+    "city":    {"label": "Small line under it", "default": "LONDON  ·  LIVE"},
+    "accent":  {"label": "Accent colour", "type": "color", "default": "#e11d48"},
+    "panel":   {"label": "Wall colour", "type": "color", "default": "#0b1530"},
+    "text":    {"label": "Text colour", "type": "color", "default": "#ffffff"}
+  }
+}
+</script>
+<style>
+  :root { --accent: #e11d48; --panel: #0b1530; --text: #ffffff; }
+  html, body { margin: 0; height: 100%; overflow: hidden; color: var(--text);
+               font-family: Inter, "Segoe UI", "Helvetica Neue", Helvetica, Arial, "DejaVu Sans", sans-serif;
+               background: linear-gradient(180deg, color-mix(in srgb, var(--panel) 70%, #000) 0%, var(--panel) 55%, #05070d 100%); }
+  /* The back wall: three screens. The middle one sits behind the presenter's head. */
+  .screen { position: absolute; top: 120px; height: 520px; border-radius: 10px; overflow: hidden;
+            background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 55%, var(--panel)), var(--panel) 70%);
+            box-shadow: 0 0 0 6px rgba(255, 255, 255, .06), 0 30px 80px rgba(0, 0, 0, .5); }
+  .left { left: 60px; width: 470px; } .right { right: 60px; width: 470px; }
+  .middle { left: 590px; width: 740px; background: linear-gradient(180deg, color-mix(in srgb, var(--panel) 85%, #fff) 0%, var(--panel) 100%); }
+  .sweep { position: absolute; top: -50%; left: -60%; width: 40%; height: 200%; transform: rotate(18deg);
+           background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .16), transparent);
+           animation: sweep 9s linear infinite paused; }
+  .right .sweep { animation-delay: -4.5s; }
+  @keyframes sweep { to { left: 140%; } }
+  .lines { position: absolute; inset: 0; background: repeating-linear-gradient(0deg, rgba(255, 255, 255, .05) 0 2px, transparent 2px 26px); }
+  .brand { position: absolute; left: 0; right: 0; top: 170px; text-align: center; }
+  .station { font-size: 96px; font-weight: 900; letter-spacing: 6px; opacity: .9; }
+  .city { font-size: 26px; font-weight: 700; letter-spacing: 8px; color: var(--accent); margin-top: 6px; }
+  .strip { position: absolute; left: 0; right: 0; top: 660px; height: 8px; background: var(--accent);
+           box-shadow: 0 0 30px var(--accent); opacity: .85; }
+  /* The floor: a soft reflection of the wall. */
+  .floor { position: absolute; left: 0; right: 0; top: 668px; bottom: 0;
+           background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 22%, #0a0d18) 0%, #05070d 60%); }
+  .floor::after { content: ""; position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 0%, rgba(255, 255, 255, .18), transparent 60%); }
+  .gmx-in .sweep { animation-play-state: running; }
+</style>
+</head>
+<body>
+  <div class="screen left"><div class="lines"></div><div class="sweep"></div></div>
+  <div class="screen middle"><div class="lines"></div></div>
+  <div class="screen right"><div class="lines"></div><div class="sweep"></div></div>
+  <div class="brand"><div class="station" data-field="station">GMX NEWS</div><div class="city" data-field="city">LONDON  ·  LIVE</div></div>
+  <div class="strip"></div>
+  <div class="floor"></div>
+</body>
+</html>

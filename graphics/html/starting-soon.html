@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Starting soon</title>
+<script type="application/json" id="gmx-template">
+{
+  "title": "Starting soon",
+  "description": "A full screen holding slate: the show's name, a line saying what is coming, a large countdown and drifting colour behind it. The countdown starts when it is taken, from duration.",
+  "category": "slate",
+  "opaque": true,
+  "fps": 20,
+  "out_ms": 500,
+  "fields": {
+    "headline": {"label": "Big words", "default": "Starting soon"},
+    "show":     {"label": "Show name", "default": "The Evening Programme"},
+    "detail":   {"label": "Line under it", "default": "Grab a drink, we are on in a few minutes"},
+    "duration": {"label": "Count down from, mm:ss (empty for no clock)", "default": "05:00"},
+    "accent":   {"label": "Accent colour", "type": "color", "default": "#f59e0b"},
+    "panel":    {"label": "Background colour", "type": "color", "default": "#111827"},
+    "text":     {"label": "Text colour", "type": "color", "default": "#ffffff"}
+  }
+}
+</script>
+<style>
+  :root { --accent: #f59e0b; --panel: #111827; --text: #ffffff; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--panel); color: var(--text);
+               font-family: Inter, "Segoe UI", "Helvetica Neue", Helvetica, Arial, "DejaVu Sans", sans-serif; }
+  .glow { position: absolute; width: 1300px; height: 1300px; border-radius: 50%; opacity: .5;
+          background: radial-gradient(circle, var(--accent) 0%, transparent 62%);
+          left: 900px; top: -300px; animation: drift 24s ease-in-out infinite alternate paused; }
+  .glow.two { left: -500px; top: 300px; opacity: .3; animation-duration: 33s; background: radial-gradient(circle, #6366f1 0%, transparent 62%); }
+  .gmx-in .glow { animation-play-state: running; }
+  @keyframes drift { to { transform: translate(-300px, 260px) scale(1.15); } }
+  .stack { position: absolute; left: 160px; top: 250px; }
+  .show { font-size: 34px; font-weight: 700; letter-spacing: 5px; text-transform: uppercase; color: var(--accent); }
+  .headline { font-size: 150px; font-weight: 900; letter-spacing: -4px; line-height: 1; margin: 20px 0 28px; }
+  .detail { font-size: 40px; opacity: .8; }
+  .clock { position: absolute; right: 160px; bottom: 150px; font-size: 130px; font-weight: 800;
+           font-variant-numeric: tabular-nums; letter-spacing: -2px; opacity: .95; }
+  .clock:empty { display: none; }
+  .stack > *, .clock { opacity: 0; transform: translateY(24px); transition: opacity .3s, transform .3s; }
+  .gmx-in .stack > *, .gmx-in .clock { opacity: 1; transform: none; transition: opacity .7s, transform .9s cubic-bezier(.2, .8, .2, 1); }
+  .gmx-in .headline { transition-delay: .15s; } .gmx-in .detail { transition-delay: .3s; } .gmx-in .clock { transition-delay: .45s; }
+</style>
+</head>
+<body>
+  <div class="glow"></div><div class="glow two"></div>
+  <div class="stack">
+    <div class="show" data-field="show">The Evening Programme</div>
+    <div class="headline" data-field="headline">Starting soon</div>
+    <div class="detail" data-field="detail">Grab a drink, we are on in a few minutes</div>
+  </div>
+  <div class="clock" id="clock"></div>
+<script>
+  var end = 0, timer = null, duration = "05:00";
+  function tick() {
+    var el = document.getElementById("clock");
+    if (!duration) { el.textContent = ""; return; }
+    var left = Math.max(0, Math.round((end - Date.now()) / 1000)), m = Math.floor(left / 60), s = left % 60;
+    el.textContent = (m < 10 ? "0" : "") + m + ":" + (s < 10 ? "0" : "") + s;
+  }
+  function start() {
+    var p = String(duration).split(":");
+    end = Date.now() + ((Number(p[0]) || 0) * 60 + (Number(p[1]) || 0)) * 1000;
+    clearInterval(timer); tick(); timer = setInterval(tick, 1000);
+  }
+  window.addEventListener("gmx:update", function (e) {
+    var again = e.detail.duration !== duration; duration = e.detail.duration;
+    if (timer && again) start(); else tick();
+  });
+  window.addEventListener("gmx:in", start);
+  window.addEventListener("gmx:out", function () { clearInterval(timer); timer = null; });
+</script>
+</body>
+</html>

@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>News crawl</title>
+<script type="application/json" id="gmx-template">
+{
+  "title": "News crawl",
+  "description": "A bar along the bottom with a label and headlines crawling right to left, looping. Put the headlines in items, separated by |. Rises in from the bottom edge.",
+  "category": "ticker",
+  "out_ms": 450,
+  "fields": {
+    "label":  {"label": "Label", "default": "LATEST"},
+    "items":  {"label": "Headlines, separated by |", "default": "Markets close higher after a quiet day | Rail strike called off for the weekend | Heavy rain expected in the north overnight | City council approves the new bridge"},
+    "speed":  {"label": "Speed, pixels a second", "default": "140"},
+    "accent": {"label": "Label colour", "type": "color", "default": "#d7263d"},
+    "panel":  {"label": "Bar colour", "type": "color", "default": "#0b1220"},
+    "text":   {"label": "Text colour", "type": "color", "default": "#ffffff"}
+  }
+}
+</script>
+<style>
+  html, body { margin: 0; background: transparent; overflow: hidden; }
+  :root { --accent: #d7263d; --panel: #0b1220; --text: #ffffff; }
+  body { font-family: Inter, "Segoe UI", "Helvetica Neue", Helvetica, Arial, "DejaVu Sans", sans-serif; }
+
+  .ticker { position: absolute; left: 0; right: 0; top: 990px; height: 66px; display: flex;
+            background: color-mix(in srgb, var(--panel) 90%, transparent); color: var(--text);
+            transform: translateY(110px); }
+  .label { flex: none; background: var(--accent); padding: 0 34px; font-size: 30px; font-weight: 800;
+           letter-spacing: 2px; line-height: 66px; position: relative; z-index: 1; }
+  .window { flex: 1; overflow: hidden; position: relative; }
+  .strip { position: absolute; left: 0; top: 0; white-space: nowrap; font-size: 32px; line-height: 66px;
+           will-change: transform; animation: crawl linear infinite; animation-play-state: paused; }
+  .strip span { padding: 0 28px; }
+  .strip i { color: var(--accent); font-style: normal; font-size: 22px; vertical-align: 3px; }
+  @keyframes crawl { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+
+  .ticker { transition: transform .4s cubic-bezier(.6, 0, .8, .2); }
+  .gmx-in .ticker { transform: none; transition: transform .5s cubic-bezier(.2, .8, .2, 1); }
+  /* Crawl only while it is on air: a held ticker costs nothing. */
+  .gmx-in .strip { animation-play-state: running; }
+</style>
+</head>
+<body>
+  <div class="ticker">
+    <div class="label" data-field="label">LATEST</div>
+    <div class="window"><div class="strip" id="strip"></div></div>
+  </div>
+<script>
+  // The defaults from the block above, until the mixer sends the fields.
+  function defaults() {
+    var d = {}, decl = JSON.parse(document.getElementById("gmx-template").textContent).fields;
+    for (var k in decl) d[k] = decl[k].default;
+    return d;
+  }
+  function build(f) {
+    var items = String(f.items || "").split("|").map(function (s) { return s.trim(); }).filter(Boolean);
+    var strip = document.getElementById("strip");
+    strip.textContent = "";
+    // Twice over, so the loop is seamless at half way.
+    for (var copy = 0; copy < 2; copy++) {
+      items.forEach(function (t) {
+        var s = document.createElement("span"); s.textContent = t; strip.appendChild(s);
+        var dot = document.createElement("i"); dot.textContent = "◆"; strip.appendChild(dot);
+      });
+    }
+    var speed = Math.max(20, Number(f.speed) || 140);
+    strip.style.animationDuration = (strip.scrollWidth / 2 / speed) + "s";
+  }
+  window.addEventListener("gmx:update", function (e) { build(e.detail); });
+  build(defaults());
+</script>
+</body>
+</html>

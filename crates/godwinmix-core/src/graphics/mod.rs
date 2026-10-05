@@ -19,6 +19,7 @@
 pub mod brand;
 pub mod fill;
 pub mod fit;
+pub mod html;
 pub mod images;
 pub mod measure;
 pub mod pack;

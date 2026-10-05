@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Line lower third</title>
+<script type="application/json" id="gmx-template">
+{
+  "title": "Line lower third",
+  "description": "Minimal: a thin accent line draws across, the name rises above it and the role drops below it. No panel, so it needs a picture that is not too busy.",
+  "category": "lower-third",
+  "out_ms": 500,
+  "fields": {
+    "name":   {"label": "Name", "default": "Katherine Johnson"},
+    "title":  {"label": "Role", "default": "Mathematician, NASA Langley"},
+    "accent": {"label": "Line colour", "type": "color", "default": "#38bdf8"},
+    "text":   {"label": "Text colour", "type": "color", "default": "#ffffff"}
+  }
+}
+</script>
+<style>
+  html, body { margin: 0; background: transparent; overflow: hidden; }
+  :root { --accent: #38bdf8; --text: #ffffff; }
+  body { font-family: Inter, "Segoe UI", "Helvetica Neue", Helvetica, Arial, "DejaVu Sans", sans-serif; }
+
+  .strap { position: absolute; left: 140px; top: 780px; width: 1000px; color: var(--text);
+           text-shadow: 0 2px 14px rgba(0, 0, 0, .55), 0 1px 2px rgba(0, 0, 0, .6); }
+  .clip  { overflow: hidden; height: 84px; }
+  .clip.low { height: 52px; }
+  .name  { font-size: 64px; font-weight: 700; line-height: 84px; white-space: nowrap; transform: translateY(100%); }
+  .title { font-size: 32px; font-weight: 400; line-height: 52px; white-space: nowrap; opacity: .9; transform: translateY(-100%); }
+  .line  { height: 4px; width: 620px; background: var(--accent); border-radius: 2px; margin: 6px 0;
+           box-shadow: 0 0 18px color-mix(in srgb, var(--accent) 60%, transparent);
+           transform: scaleX(0); transform-origin: 0 50%; }
+
+  /* Out, and before it is taken: the words go first, then the line. */
+  .name, .title { transition: transform .3s cubic-bezier(.6, 0, .8, .2); }
+  .line { transition: transform .3s cubic-bezier(.6, 0, .8, .2) .2s; transform-origin: 100% 50%; }
+
+  /* In: the line draws, then the words come out of it. */
+  .gmx-in .line  { transform: scaleX(1); transform-origin: 0 50%; transition: transform .45s cubic-bezier(.2, .8, .2, 1); }
+  .gmx-in .name  { transform: none; transition: transform .5s cubic-bezier(.2, .8, .2, 1) .3s; }
+  .gmx-in .title { transform: none; transition: transform .5s cubic-bezier(.2, .8, .2, 1) .4s; }
+</style>
+</head>
+<body>
+  <div class="strap">
+    <div class="clip"><div class="name" data-field="name">Katherine Johnson</div></div>
+    <div class="line"></div>
+    <div class="clip low"><div class="title" data-field="title">Mathematician, NASA Langley</div></div>
+  </div>
+<script>
+  function fit() {
+    document.querySelectorAll(".name, .title").forEach(function (el) {
+      el.style.fontSize = "";
+      var size = parseFloat(getComputedStyle(el).fontSize);
+      while (el.scrollWidth > 1000 && size > 14) { size -= 2; el.style.fontSize = size + "px"; }
+    });
+  }
+  window.addEventListener("gmx:update", fit);
+  fit();
+</script>
+</body>
+</html>
