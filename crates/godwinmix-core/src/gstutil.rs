@@ -1037,10 +1037,16 @@ mod tests {
             buffer.get_mut().unwrap().set_pts(gst::ClockTime::from_mseconds(n));
             source.push_buffer(buffer).unwrap();
         }
+        // Until the source is empty and the queue has settled. The source
+        // reads empty as soon as its thread takes the last buffer, a moment
+        // before that buffer reaches the queue, and a macOS runner measured
+        // the queue in that moment and found one.
         let until = std::time::Instant::now() + Duration::from_secs(2);
-        while source.current_level_bytes() != 0 && std::time::Instant::now() < until {
+        let settled = || source.current_level_bytes() == 0 && queue.property::<u32>("current-level-buffers") >= 2;
+        while !settled() && std::time::Instant::now() < until {
             std::thread::sleep(Duration::from_millis(5));
         }
+        std::thread::sleep(Duration::from_millis(50));
         let queued = queue.property::<u32>("current-level-buffers");
         release.send(()).unwrap();
         pipeline.set_state(gst::State::Null).unwrap();
