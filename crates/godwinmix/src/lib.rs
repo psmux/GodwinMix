@@ -17,6 +17,7 @@
 //! be a copy of the other. `run` below is what both call.
 
 pub mod address;
+pub mod agents;
 pub mod bundled;
 pub mod bench;
 pub mod channels;

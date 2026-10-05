@@ -36,7 +36,9 @@ Keys accepted on every method, handled before a method runs.
 |---|---|---|---|---|---|
 | `adbreak.end` | `POST /api/v1/adbreak/end` | operate |  | 1 | Cut a running ad short, or disarm one that is scheduled. |
 | `adbreak.start` | `POST /api/v1/adbreak/start` | operate |  | 1 | Interrupt the programme with a clip, then rejoin live when it ends. |
+| `agent.setup` | `POST /api/v1/agent/setup` | admin | yes | 1 | Set an AI agent tool up to use this mixer: its MCP config gets one entry, godwinmix, that runs this mixer's own executable, and its skills folder gets the GodwinMix skills. Other entries are kept and a changed file is copied aside first. dry_run answers every file it would write. The answer says how to start the tool and a first thing to ask it. |
 | `agent.state` | `GET /api/v1/agent/state` | read |  | 1 | The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing. |
+| `agent.tools` | `POST /api/v1/agent/tools` | admin |  | 1 | The AI agent tools this mixer can set up, the ones installed on its machine first, each with what was found: a command on PATH or a config folder. |
 | `channel.add` | `POST /api/v1/channels` | admin |  | 1 | Make a channel and its first key, which is in this answer. channel.key.reveal reads it again later. |
 | `channel.certificate.generate` | `POST /api/v1/channels/certificate/generate` | admin |  | 1 | Make a self signed certificate for RTMPS, for this machine's addresses unless names are given. Encoders must be told to accept it; one from a certificate authority needs no such step. |
 | `channel.certificate.set` | `POST /api/v1/channels/certificate/set` | admin |  | 1 | Give RTMPS a certificate: the PEM of the certificate (and its chain) and of its private key, as a certificate authority issued them. Checked before it is kept; the key is sealed and never read back. |
@@ -268,6 +270,21 @@ MCP tool `ad_break` in the `search` profile: readOnlyHint false, destructiveHint
 }
 ```
 
+#### `agent.setup`
+
+Set an AI agent tool up to use this mixer: its MCP config gets one entry, godwinmix, that runs this mixer's own executable, and its skills folder gets the GodwinMix skills. Other entries are kept and a changed file is copied aside first. dry_run answers every file it would write. The answer says how to start the tool and a first thing to ask it.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/SetupRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/Setup"
+  }
+}
+```
+
 #### `agent.state`
 
 The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing.
@@ -281,6 +298,26 @@ MCP tool `agent_state` in the `minimal` profile: readOnlyHint true, destructiveH
   },
   "result": {
     "type": "object"
+  }
+}
+```
+
+#### `agent.tools`
+
+The AI agent tools this mixer can set up, the ones installed on its machine first, each with what was found: a command on PATH or a config folder.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "items": {
+      "$ref": "#/$defs/Detected"
+    },
+    "type": "array"
   }
 }
 ```
@@ -2741,7 +2778,7 @@ Where one piece stands, without starting anything.
 ```json
 {
   "params": {
-    "$ref": "#/$defs/SetupRequest"
+    "$ref": "#/$defs/SetupRequest2"
   },
   "result": {
     "$ref": "#/$defs/SetupStatus"
@@ -2776,7 +2813,7 @@ Set a piece up now, or join the set up already running, and answer at once with 
 ```json
 {
   "params": {
-    "$ref": "#/$defs/SetupRequest"
+    "$ref": "#/$defs/SetupRequest2"
   },
   "result": {
     "$ref": "#/$defs/SetupStatus"
