@@ -96,13 +96,12 @@ impl Settings {
                 self.endpoint
             ));
         }
-        for (key, value) in [("stun_server", &self.stun_server)] {
-            if !value.is_empty() && !value.to_lowercase().starts_with("stun://") {
-                return Some(format!(
-                    "{key} is '{value}'. Write it as stun://host:port, or leave it empty \
-                     to use the element's default."
-                ));
-            }
+        let stun = &self.stun_server;
+        if !stun.is_empty() && !stun.to_lowercase().starts_with("stun://") {
+            return Some(format!(
+                "stun_server is '{stun}'. Write it as stun://host:port, or leave it empty \
+                 to use the element's default."
+            ));
         }
         if !self.turn_server.is_empty() {
             let lower = self.turn_server.to_lowercase();
