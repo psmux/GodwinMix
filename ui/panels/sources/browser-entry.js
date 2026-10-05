@@ -38,6 +38,24 @@ const add = (client, choice, onSource) =>
     .then((m) => m.addBrowserDevice(client, { ...choice, onSource }))
     .catch((e) => errorToast(e, choice.camera ? "This browser's camera" : "This browser's microphone"));
 
+/**
+ * A phone's camera: a code to scan rather than a device to open here. The
+ * source comes later, when the phone goes live, so the row only shows the
+ * code and the picker closes.
+ */
+function phoneRow(client) {
+  return {
+    icon: "camera",
+    name: "A phone's camera",
+    note: "Scan a code with the phone. Each phone becomes a source of its own",
+    label: "Show code",
+    added: () => false,
+    run: () => import("./phone-camera.js")
+      .then((m) => m.openPhoneCamera(client))
+      .catch((e) => errorToast(e, "A phone's camera")),
+  };
+}
+
 function note(kind) {
   if (sameMachine()) {
     return `Through this browser, on the mixer's own computer. If this ${kind} is listed above too, add only one of the two: they share the device.`;
@@ -58,8 +76,10 @@ export function browserEntries(client, category, opts = {}, devices = known) {
     run: () => add(client, choice, placed),
   });
   if (category === "cameras") {
-    if (!devices.cameras.length) return [row("This browser's camera", "camera", { camera: true }, "camera")];
-    return devices.cameras.map((d) => row(`${d.label} (this browser)`, "camera", { camera: true, cameraId: d.id }, "camera"));
+    const own = devices.cameras.length
+      ? devices.cameras.map((d) => row(`${d.label} (this browser)`, "camera", { camera: true, cameraId: d.id }, "camera"))
+      : [row("This browser's camera", "camera", { camera: true }, "camera")];
+    return [...own, phoneRow(client)];
   }
   if (category === "audio") {
     if (!devices.mics.length) return [row("This browser's microphone", "microphone", { camera: false }, "mic")];

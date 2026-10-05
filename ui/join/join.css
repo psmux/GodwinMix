@@ -6,6 +6,8 @@
 .pub-error { color: var(--bad); }
 .pub-picture { position: relative; aspect-ratio: 16 / 9; background: #000; border-radius: var(--radius-sm); overflow: hidden; }
 .pub-preview { width: 100%; height: 100%; object-fit: contain; display: block; transform: scaleX(-1); }
+.pub-preview.back { transform: none; }
+.pub-flip[hidden] { display: none; }
 .pub-nopicture { position: absolute; inset: 0; display: grid; place-items: center; }
 .pub-nopicture[hidden] { display: none; }
 .pub-meter { height: 6px; background: var(--panel2); border-radius: 3px; overflow: hidden; }
@@ -16,10 +18,27 @@
 .pub-buttons { flex-wrap: wrap; }
 .pub-stats { min-height: 1.4em; }
 
-/* /join/ on its own. */
+/* /join/ on its own, which is mostly a phone in somebody's hand: controls a
+   thumb can hit (48px, as the platform guides ask), text inputs at 16px so
+   Safari does not zoom into them, nothing that only shows on hover, and a
+   picture that never pushes the Go live button off a small screen. */
 body.join-page { overflow: auto; }
 .join-main { max-width: 560px; margin: 0 auto; }
 .join-title { font-size: var(--fs-lg); margin: 4px 0; }
+.join-page .pub .btn, .join-page .pub select, .join-page .pub-name { min-height: 48px; font-size: 16px; }
+.join-page .pub .btn { padding: 0 16px; }
+.join-page .pub-picture { max-height: 60vh; margin: 0 auto; width: 100%; }
+.join-page .pub-field input[type="checkbox"] { width: 24px; height: 24px; }
+.pub-namebox { gap: 4px; }
+.pub-name { flex: 1; min-width: 0; }
+@media (max-width: 480px) {
+  .join-page .pub-label { width: 64px; }
+  .join-page .pub-buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .join-page .pub-buttons .pub-gap { display: none; }
+  .join-page .pub-buttons .btn { width: 100%; }
+  /* Go live is the one that matters: the whole row, last. */
+  .join-page .pub-buttons .btn.primary, .join-page .pub-buttons .btn:last-child { grid-column: 1 / -1; }
+}
 
 /* The publisher inside the mixer's page: a card that floats over the
    workspace and stays while the operator works. */

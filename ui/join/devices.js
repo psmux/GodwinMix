@@ -64,7 +64,7 @@ export async function listDevices(md = navigator.mediaDevices) {
  * hop from a channel to the mixer does not carry. `loose` is the fallback for
  * a camera that cannot make that size at all.
  */
-export function videoConstraints(deviceId, exact, loose = false) {
+export function videoConstraints(deviceId, exact, loose = false, facing = "") {
   const size = (n) => (loose ? { ideal: n } : { exact: n });
   const c = {
     width: size(ENCODER.width),
@@ -72,7 +72,9 @@ export function videoConstraints(deviceId, exact, loose = false) {
     frameRate: { ideal: ENCODER.frameRate },
   };
   if (!loose) c.resizeMode = "crop-and-scale";
-  if (deviceId) c.deviceId = exact ? { exact: deviceId } : { ideal: deviceId };
+  // A phone's flip names a side rather than a device.
+  if (facing) c.facingMode = { exact: facing };
+  else if (deviceId) c.deviceId = exact ? { exact: deviceId } : { ideal: deviceId };
   return c;
 }
 
@@ -94,9 +96,9 @@ export function audioConstraints(deviceId, exact, processing) {
 export async function openTrack(kind, deviceId, opts = {}, md = navigator.mediaDevices) {
   if (deviceId === "off") return null;
   if (kind === "video") {
-    const stream = await md.getUserMedia({ video: videoConstraints(deviceId, opts.exact) }).catch((e) => {
+    const stream = await md.getUserMedia({ video: videoConstraints(deviceId, opts.exact, false, opts.facing) }).catch((e) => {
       if (e && e.name !== "OverconstrainedError") throw e;
-      return md.getUserMedia({ video: videoConstraints(deviceId, opts.exact, true) });
+      return md.getUserMedia({ video: videoConstraints(deviceId, opts.exact, true, opts.facing) });
     });
     return stream.getVideoTracks()[0] || null;
   }

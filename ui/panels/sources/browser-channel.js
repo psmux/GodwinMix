@@ -46,19 +46,9 @@ export async function ensureBrowserChannel(client) {
   return revealed ? { channel, key: revealed.secret } : fresh();
 }
 
-/**
- * The stream name for this browser: what it is and where it runs, as a
- * slug. "chrome-macos", "firefox-windows", "safari-ios".
- */
-export function streamNameFor(ua = navigator.userAgent, platform = navigator.userAgentData?.platform || navigator.platform || "") {
-  const u = String(ua);
-  const browser = /Edg\//.test(u) ? "edge" : /OPR\//.test(u) ? "opera" : /Firefox\//.test(u) ? "firefox"
-    : /Chrome\//.test(u) ? "chrome" : /Safari\//.test(u) ? "safari" : "browser";
-  const p = `${platform} ${u}`.toLowerCase();
-  const os = /iphone|ipad|ios/.test(p) ? "ios" : /android/.test(p) ? "android" : /mac/.test(p) ? "macos"
-    : /win/.test(p) ? "windows" : /cros/.test(p) ? "chromeos" : /linux/.test(p) ? "linux" : "";
-  return [browser, os].filter(Boolean).join("-");
-}
+// The stream name, one per device, lives with the publisher because /join/
+// on a phone needs it too, with no mixer page around it.
+export { streamNameFor, deviceName } from "../../join/name.js";
 
 /** The source a live stream becomes: `<app>-<stream>`, as the channel names it. */
 export function sourceIdFor(channel, stream) {
