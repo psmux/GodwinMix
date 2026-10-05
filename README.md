@@ -64,17 +64,16 @@ TLS, and the firewall, before that port is reachable from anywhere else.
 
 ### The desktop app
 
-Desktop installers are not published yet. Build from source using
-[CONTRIBUTING.md](CONTRIBUTING.md). The release workflow produces `.dmg` on
-macOS, `.msi` on Windows and `.deb` on Debian and Ubuntu when its checks pass.
-Published artifacts will appear on the
-[releases page](https://github.com/psmux/GodwinMix/releases).
+Download it from the [latest release](https://github.com/psmux/GodwinMix/releases/latest): the setup `.exe` or the
+`.msi` on Windows, the `.dmg` on Apple Silicon Macs, the `.deb` on Debian and
+Ubuntu, and the `.AppImage` on any other Linux. To build it yourself, see
+[CONTRIBUTING.md](CONTRIBUTING.md).
 
 GStreamer travels inside the Windows and macOS installers and inside the
 AppImage, trimmed to what the codec catalogue and the pipelines actually name,
 so there is nothing else to install. Measured on an Apple M4 Pro, the trimmed
 runtime is 84 MB and `GodwinMix.app` is 108 MB; the budget for the Windows
-installer is 150 MB and CI fails a build that goes over it. The stock
+installer is 300 MB and CI fails a build that goes over it. The stock
 GStreamer runtime installer alone is 527 MB and is never a user's problem.
 
 The Debian package is the exception, on purpose: it depends on the
