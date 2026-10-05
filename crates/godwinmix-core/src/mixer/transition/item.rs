@@ -19,6 +19,9 @@ pub enum ItemKind {
     Slide,
     Zoom,
     Wipe,
+    /// Drawn as it is until the end, then gone: the item stays while a
+    /// graphic plays its own way out.
+    Hold,
 }
 
 impl ItemKind {
@@ -28,6 +31,7 @@ impl ItemKind {
             "slide" => ItemKind::Slide,
             "zoom" => ItemKind::Zoom,
             "wipe" => ItemKind::Wipe,
+            "hold" => ItemKind::Hold,
             _ => ItemKind::Cut,
         }
     }
@@ -105,7 +109,7 @@ fn shot(s: &PadState, picture: Rect, m: &ItemMotion, canvas: (i32, i32), present
     let (w, h) = (canvas.0 as f64, canvas.1 as f64);
     let r = Rect::of(s);
     match m.kind {
-        ItemKind::Cut => Shot { alpha: if present > 0.0 { s.alpha } else { 0.0 }, ..here },
+        ItemKind::Cut | ItemKind::Hold => Shot { alpha: if present > 0.0 { s.alpha } else { 0.0 }, ..here },
         ItemKind::Fade => Shot { alpha: s.alpha * present, ..here },
         ItemKind::Slide => match m.edge {
             Edge::Left => here.moved(-(r.x + r.w) * away, 0.0),

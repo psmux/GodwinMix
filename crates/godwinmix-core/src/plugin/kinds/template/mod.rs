@@ -74,14 +74,14 @@ pub fn validate(params: &Params) -> Result<TemplateParams> {
         bail!("template/source has no param {key:?}. It takes fields, a table of the template's field values");
     }
     let template = graphics::pack::load(name)?;
-    let values = values(params.get("fields"))?;
+    let values = values_of(params.get("fields"))?;
     graphics::fill::check(&template, &values)?;
     Ok(TemplateParams { template: Arc::new(template), values })
 }
 
 /// `params.fields` as strings. A number or a true or false is taken as the
 /// words it would be written as, so a score can be sent as 2.
-fn values(fields: Option<&toml::Value>) -> Result<Values> {
+pub fn values_of(fields: Option<&toml::Value>) -> Result<Values> {
     let Some(fields) = fields else { return Ok(Values::new()) };
     let table = fields.as_table().context("params.fields is a table of field names and their values, such as { headline = \"Polls close\" }")?;
     table

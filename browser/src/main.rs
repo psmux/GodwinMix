@@ -17,6 +17,8 @@
 //! those, and they must return immediately without touching anything else.
 //! Everything written to stdout is stream data; all logging goes to stderr.
 
+mod control;
+mod graphic;
 mod mux;
 
 use cef::{args::Args, *};
@@ -45,6 +47,26 @@ struct Opts {
     /// also stops the page's own video being painted, which is the point: the
     /// mixer decodes that video on the GPU and draws the page over the top.
     transparent: bool,
+    /// Graphic mode: transparent, no sound, only painted frames and only the
+    /// part of the page with something in it, and the graphic's state read
+    /// from stdin. See `graphic.rs` and `control.rs`.
+    graphic: bool,
+    /// Let Chromium use the GPU. Off by default, which rasterises and runs
+    /// WebGL in software on every machine.
+    gpu: bool,
+    /// Device pixels to a CSS pixel. A graphic designed on a 1920 wide page
+    /// is drawn on a 1280 wide canvas at 0.6667, laid out exactly as it was
+    /// designed and painted at the canvas's own size.
+    scale: f64,
+}
+
+/// Graphic mode, for the handlers. Set once before CEF starts.
+static GRAPHIC: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+/// Whether Chromium may use the GPU. Set once before CEF starts.
+static GPU: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+fn graphic_mode() -> bool {
+    GRAPHIC.load(std::sync::atomic::Ordering::Relaxed)
 }
 
 fn opts() -> Opts {
@@ -63,6 +85,9 @@ fn opts() -> Opts {
         cache_dir: std::env::temp_dir().join(format!("gmx-browser-{}", std::process::id())),
         detect_media: false,
         transparent: false,
+        graphic: false,
+        gpu: false,
+        scale: 1.0,
     };
     let mut it = std::env::args().skip(1);
     while let Some(a) = it.next() {
@@ -79,6 +104,12 @@ fn opts() -> Opts {
             "--cache-dir" => o.cache_dir = PathBuf::from(val()),
             "--detect-media" => o.detect_media = true,
             "--transparent" => o.transparent = true,
+            "--graphic" => {
+                o.graphic = true;
+                o.transparent = true;
+            }
+            "--gpu" => o.gpu = true,
+            "--scale" => o.scale = val().parse::<f64>().ok().filter(|s| *s > 0.1 && *s <= 4.0).unwrap_or(1.0),
             _ => {} // Chromium's own switches pass through untouched.
         }
     }
@@ -89,7 +120,9 @@ fn opts() -> Opts {
 struct Shared {
     width: i32,
     height: i32,
+    scale: f64,
     mux: Option<Arc<Muxer>>,
+    graphic: Option<Arc<graphic::Out>>,
     frames: u64,
     audio_packets: u64,
     audio_frames: u64,
@@ -112,8 +145,8 @@ wrap_render_handler! {
             if let Some(r) = rect {
                 r.x = 0;
                 r.y = 0;
-                r.width = s.width;
-                r.height = s.height;
+                r.width = (s.width as f64 / s.scale).round() as i32;
+                r.height = (s.height as f64 / s.scale).round() as i32;
             }
         }
 
@@ -124,12 +157,13 @@ wrap_render_handler! {
         ) -> ::std::os::raw::c_int {
             let s = self.state.lock().unwrap();
             if let Some(i) = info {
-                i.device_scale_factor = 1.0;
+                let (w, h) = ((s.width as f64 / s.scale).round() as i32, (s.height as f64 / s.scale).round() as i32);
+                i.device_scale_factor = s.scale as f32;
                 i.depth = 32;
                 i.depth_per_component = 8;
                 i.is_monochrome = 0;
-                i.rect = Rect { x: 0, y: 0, width: s.width, height: s.height };
-                i.available_rect = Rect { x: 0, y: 0, width: s.width, height: s.height };
+                i.rect = Rect { x: 0, y: 0, width: w, height: h };
+                i.available_rect = Rect { x: 0, y: 0, width: w, height: h };
                 return 1;
             }
             0
@@ -139,7 +173,7 @@ wrap_render_handler! {
             &self,
             _browser: Option<&mut Browser>,
             type_: PaintElementType,
-            _dirty_rects: Option<&[Rect]>,
+            dirty_rects: Option<&[Rect]>,
             buffer: *const u8,
             width: ::std::os::raw::c_int,
             height: ::std::os::raw::c_int,
@@ -150,6 +184,16 @@ wrap_render_handler! {
             }
             let mut s = self.state.lock().unwrap();
             s.frames += 1;
+            if let Some(g) = &s.graphic {
+                let len = (width * height * 4) as usize;
+                let bgra = unsafe { std::slice::from_raw_parts(buffer, len) };
+                let dirty: Vec<graphic::Area> = dirty_rects
+                    .unwrap_or_default()
+                    .iter()
+                    .map(|r| graphic::Area { x: r.x, y: r.y, w: r.width, h: r.height })
+                    .collect();
+                g.paint(bgra, width, height, &dirty);
+            }
             if let Some(m) = &s.mux {
                 let len = (width * height * 4) as usize;
                 let bgra = unsafe { std::slice::from_raw_parts(buffer, len) };
@@ -239,8 +283,11 @@ wrap_life_span_handler! {
     }
 
     impl LifeSpanHandler {
-        fn on_after_created(&self, _browser: Option<&mut Browser>) {
+        fn on_after_created(&self, browser: Option<&mut Browser>) {
             eprintln!("[browser] browser created");
+            if let Some(b) = browser {
+                control::remember(b);
+            }
         }
 
         fn on_before_close(&self, _browser: Option<&mut Browser>) {
@@ -267,6 +314,17 @@ wrap_load_handler! {
     }
 
     impl LoadHandler {
+        fn on_load_start(
+            &self,
+            _browser: Option<&mut Browser>,
+            frame: Option<&mut Frame>,
+            _transition_type: TransitionType,
+        ) {
+            if graphic_mode() && frame.is_some_and(|f| f.is_main() == 1) {
+                control::on_load_start();
+            }
+        }
+
         fn on_load_end(
             &self,
             _browser: Option<&mut Browser>,
@@ -274,6 +332,11 @@ wrap_load_handler! {
             http_status_code: ::std::os::raw::c_int,
         ) {
             eprintln!("[browser] load finished, http {http_status_code}");
+            if graphic_mode() {
+                if let Some(f) = frame.as_deref().filter(|f| f.is_main() == 1) {
+                    control::on_load(f);
+                }
+            }
             // Re-injected per load because a navigation discards the last one.
             // The script itself is idempotent, which covers same-document
             // navigations that fire this more than once.
@@ -369,6 +432,10 @@ wrap_client! {
             Some(Renderer::new(self.state.clone()))
         }
         fn audio_handler(&self) -> Option<AudioHandler> {
+            // A graphic has no sound to carry.
+            if graphic_mode() {
+                return None;
+            }
             Some(Audio::new(self.state.clone()))
         }
         fn life_span_handler(&self) -> Option<LifeSpanHandler> {
@@ -457,8 +524,6 @@ wrap_app! {
                 "no-first-run",
                 "no-default-browser-check",
                 "no-sandbox",
-                "disable-gpu",
-                "disable-gpu-compositing",
                 "disable-dev-shm-usage",
                 // Render audio into a fake output device. The audio handler
                 // taps the stream before the device, so it still gets every
@@ -470,6 +535,16 @@ wrap_app! {
                 "disable-audio-output",
             ] {
                 cl.append_switch(Some(&CefString::from(sw)));
+            }
+            // Software unless asked. WebGL still works without a GPU: Chromium
+            // draws it with SwiftShader (or WARP on Windows), on the CPU.
+            if !GPU.load(std::sync::atomic::Ordering::Relaxed) {
+                for sw in ["disable-gpu", "disable-gpu-compositing", "enable-unsafe-swiftshader"] {
+                    cl.append_switch(Some(&CefString::from(sw)));
+                }
+            }
+            if graphic_mode() {
+                control::switches(cl);
             }
             // macOS: the cookie store is encrypted with a key Chromium keeps in
             // the login keychain, and reading it from an app that is not signed
@@ -619,10 +694,14 @@ fn main() {
     }
 
     let o = opts();
+    GRAPHIC.store(o.graphic, std::sync::atomic::Ordering::Relaxed);
+    GPU.store(o.gpu, std::sync::atomic::Ordering::Relaxed);
     let state: State = Arc::new(Mutex::new(Shared {
         width: o.width,
         height: o.height,
+        scale: o.scale,
         mux: None,
+        graphic: None,
         frames: 0,
         audio_packets: 0,
         audio_frames: 0,
@@ -652,25 +731,27 @@ fn main() {
         std::process::exit(2);
     }
 
-    // Stream goes to stdout (fd 1). Stereo 48 kHz is what audio_parameters
-    // asks the browser for, so the muxer's caps match what arrives.
-    let mux = match Muxer::new(
-        o.width,
-        o.height,
-        o.fps,
-        2,
-        48000,
-        1,
-        o.audio_offset_ms,
-        o.transparent,
-    ) {
-        Ok(m) => m,
-        Err(e) => {
-            eprintln!("[browser] output pipeline failed: {e}");
-            std::process::exit(3);
+    // Stream goes to stdout (fd 1): pictures in graphic mode, otherwise
+    // Matroska. Stereo 48 kHz is what audio_parameters asks the browser for,
+    // so the muxer's caps match what arrives.
+    let mux = if o.graphic {
+        let out = graphic::Out::start(o.width, o.height, || {
+            let mut task = Quit::new();
+            post_task(ThreadId::UI, Some(&mut task));
+        });
+        state.lock().unwrap().graphic = Some(out);
+        control::listen();
+        None
+    } else {
+        match Muxer::new(o.width, o.height, o.fps, 2, 48000, 1, o.audio_offset_ms, o.transparent) {
+            Ok(m) => Some(m),
+            Err(e) => {
+                eprintln!("[browser] output pipeline failed: {e}");
+                std::process::exit(3);
+            }
         }
     };
-    state.lock().unwrap().mux = Some(mux.clone());
+    state.lock().unwrap().mux = mux.clone();
     eprintln!("[browser] rendering {} at {}x{} @ {} fps", o.url, o.width, o.height, o.fps);
 
     // Stop cleanly on SIGTERM and SIGINT: the mixer signals the process group
@@ -698,8 +779,8 @@ fn main() {
         post_task(ThreadId::UI, Some(&mut task));
     });
     // The reader of stdout went away: stop rather than paint into a dead pipe.
-    {
-        let mux = mux.clone();
+    // Graphic mode's writer does this itself.
+    if let Some(mux) = mux.clone() {
         std::thread::spawn(move || {
             let why = mux.wait_for_failure();
             eprintln!("[browser] output stopped: {why}");
@@ -719,7 +800,12 @@ fn main() {
     }
 
     run_message_loop();
-    mux.finish();
+    if let Some(mux) = &mux {
+        mux.finish();
+    }
+    if let Some(g) = state.lock().unwrap().graphic.take() {
+        g.stop();
+    }
     shutdown();
     // The profile was private to this run; leave nothing behind.
     let _ = std::fs::remove_dir_all(&o.cache_dir);

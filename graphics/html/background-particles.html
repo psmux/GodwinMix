@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Particle background loop</title>
+<script type="application/json" id="gmx-template">
+{
+  "title": "Particle background loop",
+  "description": "A full screen background of soft points of light drifting upwards and joining with faint lines when they pass close, on a dark gradient. For behind a presenter or under a title. Drawn on a canvas at 20 frames a second.",
+  "category": "background",
+  "opaque": true,
+  "fps": 20,
+  "fields": {
+    "accent": {"label": "Particle colour", "type": "color", "default": "#38bdf8"},
+    "panel":  {"label": "Background colour", "type": "color", "default": "#020617"},
+    "count":  {"label": "How many particles, 10 to 200", "default": "90"}
+  }
+}
+</script>
+<style>
+  :root { --accent: #38bdf8; --panel: #020617; }
+  html, body { margin: 0; height: 100%; overflow: hidden;
+               background: radial-gradient(ellipse at 50% 30%, color-mix(in srgb, var(--accent) 14%, var(--panel)) 0%, var(--panel) 70%); }
+  canvas { position: absolute; inset: 0; }
+</style>
+</head>
+<body>
+  <canvas id="c" width="1920" height="1080"></canvas>
+<script>
+  var c = document.getElementById("c"), g = c.getContext("2d"), dots = [], running = false, last = 0, colour = "#38bdf8";
+  function seed(n) {
+    dots = [];
+    for (var i = 0; i < n; i++) dots.push({ x: Math.random() * 1920, y: Math.random() * 1080, r: 1 + Math.random() * 3, v: 10 + Math.random() * 30, w: Math.random() * 6.28 });
+  }
+  function frame(ms) {
+    if (!running) return;
+    requestAnimationFrame(frame);
+    if (ms - last < 50) return;          // 20 frames a second is plenty for a drift
+    var dt = Math.min(0.1, (ms - last) / 1000); last = ms;
+    g.clearRect(0, 0, 1920, 1080);
+    g.fillStyle = colour; g.strokeStyle = colour;
+    for (var i = 0; i < dots.length; i++) {
+      var d = dots[i];
+      d.y -= d.v * dt; d.x += Math.sin(ms / 1000 + d.w) * 8 * dt;
+      if (d.y < -10) { d.y = 1090; d.x = Math.random() * 1920; }
+      g.globalAlpha = 0.35 + d.r / 6; g.beginPath(); g.arc(d.x, d.y, d.r, 0, 6.283); g.fill();
+      for (var j = i + 1; j < dots.length; j++) {
+        var e = dots[j], dx = d.x - e.x, dy = d.y - e.y, q = dx * dx + dy * dy;
+        if (q < 16000) { g.globalAlpha = 0.18 * (1 - q / 16000); g.beginPath(); g.moveTo(d.x, d.y); g.lineTo(e.x, e.y); g.stroke(); }
+      }
+    }
+  }
+  function css(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+  window.addEventListener("gmx:update", function (e) {
+    colour = css("--accent") || colour;
+    var n = Math.max(10, Math.min(200, Number(e.detail.count) || 90));
+    if (n !== dots.length) seed(n);
+  });
+  // Drifts only while on air.
+  window.addEventListener("gmx:in", function () { if (!running) { running = true; requestAnimationFrame(frame); } });
+  window.addEventListener("gmx:out", function () { running = false; });
+  seed(90);
+</script>
+</body>
+</html>

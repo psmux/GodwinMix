@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Gradient background loop</title>
+<script type="application/json" id="gmx-template">
+{
+  "title": "Gradient background loop",
+  "description": "A full screen background of slowly drifting colour, for behind a presenter cut out of a green screen or a camera with its background removed. Three colours. Moves slowly enough to draw at 20 frames a second.",
+  "category": "background",
+  "opaque": true,
+  "fps": 20,
+  "fields": {
+    "accent": {"label": "First colour", "type": "color", "default": "#4f46e5"},
+    "second": {"label": "Second colour", "type": "color", "default": "#db2777"},
+    "panel":  {"label": "Base colour", "type": "color", "default": "#0b1026"},
+    "speed":  {"label": "Speed, 1 is slow", "default": "1"}
+  }
+}
+</script>
+<style>
+  :root { --accent: #4f46e5; --second: #db2777; --panel: #0b1026; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--panel); }
+  .glow { position: absolute; width: 1400px; height: 1400px; border-radius: 50%; opacity: .55; will-change: transform; }
+  .a { left: -300px; top: -500px; background: radial-gradient(circle, var(--accent) 0%, transparent 65%); animation: drift-a 26s ease-in-out infinite alternate; }
+  .b { left: 800px; top: 100px; background: radial-gradient(circle, var(--second) 0%, transparent 65%); animation: drift-b 31s ease-in-out infinite alternate; }
+  .c { left: 200px; top: 400px; width: 1000px; height: 1000px; opacity: .35;
+       background: radial-gradient(circle, color-mix(in srgb, var(--accent) 50%, #fff) 0%, transparent 60%); animation: drift-c 37s ease-in-out infinite alternate; }
+  /* Still until it is on air: a background nobody sees costs nothing. */
+  .glow { animation-play-state: paused; } .gmx-in .glow { animation-play-state: running; }
+  .shade { position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 40%, transparent 40%, rgba(0, 0, 0, .55) 100%); }
+  @keyframes drift-a { to { transform: translate(500px, 300px) scale(1.2); } }
+  @keyframes drift-b { to { transform: translate(-600px, -200px) scale(.85); } }
+  @keyframes drift-c { to { transform: translate(400px, -350px) scale(1.3); } }
+</style>
+</head>
+<body>
+  <div class="glow a"></div><div class="glow b"></div><div class="glow c"></div><div class="shade"></div>
+<script>
+  window.addEventListener("gmx:update", function (e) {
+    var k = 1 / Math.max(0.1, Number(e.detail.speed) || 1);
+    document.querySelectorAll(".glow").forEach(function (el) { el.style.animationDuration = ""; el.style.animationDuration = (parseFloat(getComputedStyle(el).animationDuration) * k) + "s"; });
+  });
+</script>
+</body>
+</html>

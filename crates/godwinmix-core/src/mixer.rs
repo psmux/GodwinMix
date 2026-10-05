@@ -410,6 +410,7 @@ use crate::plugin::branch::{BranchCtx, ProgrammeBranch, VideoPads};
 
 pub mod group;
 mod backoff;
+mod cue;
 mod exited;
 mod generation;
 mod keyed;
@@ -1157,6 +1158,9 @@ pub struct Mixer {
     /// nothing by every apply until their transition settles, so the apply
     /// that binds a slot never shows the item in its place first.
     entering: Vec<crate::scene::id::Id>,
+    /// What each source that plays its own way in and out was last told,
+    /// by the instance it was told to. See `cue`.
+    cued: HashMap<SourceId, cue::Told>,
     /// Where the compositor has got to, from a probe on its own src pad.
     ///
     /// Not the same as the clock's running time. A live aggregator composes
@@ -1872,6 +1876,7 @@ impl Mixer {
             controllers: transition::Controllers::default(),
             transitions: None,
             entering: Vec::new(),
+            cued: HashMap::new(),
             pgm_out,
             pending_take: None,
             pending_ad_end: None,
@@ -3648,6 +3653,7 @@ impl Mixer {
                 error!(?e, "could not apply the scene to the compositor");
             }
         }
+        self.cue_sources(&placements);
 
         // Audio follows video per item: a source is heard when any live item
         // of it says `follow` and is visible, or says `always`. This is OBS's

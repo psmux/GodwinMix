@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>3D spinning logo</title>
+<script type="application/json" id="gmx-template">
+{
+  "title": "3D spinning logo",
+  "description": "The station's mark on a thick metal coin that spins in, turns slowly in 3D with light moving across it, and spins away. Transparent around the coin. Drawn in WebGL; works with no GPU at a lower frame rate.",
+  "category": "logo",
+  "out_ms": 700,
+  "fields": {
+    "station": {"label": "Words on the coin (when there is no logo)", "default": "GMX"},
+    "logo":    {"label": "Logo picture from the media library", "type": "image", "default": ""},
+    "accent":  {"label": "Coin colour", "type": "color", "default": "#e11d48"},
+    "text":    {"label": "Words colour", "type": "color", "default": "#ffffff"},
+    "size":    {"label": "Size in pixels", "default": "420"}
+  }
+}
+</script>
+<style>
+  html, body { margin: 0; background: transparent; overflow: hidden; }
+  :root { --accent: #e11d48; --text: #ffffff; }
+  canvas { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); }
+</style>
+</head>
+<body>
+  <canvas id="gl"></canvas>
+  <img id="logo" data-field="logo" alt="" style="display:none">
+<script>
+  // ---- mini3d: a textured coin in plain WebGL. The face is drawn from the fields. ----
+  var canvas = document.getElementById("gl"), f = {}, size = 420;
+  var gl = canvas.getContext("webgl", { alpha: true, premultipliedAlpha: false, antialias: true });
+  var soft = false;
+  if (gl) {
+    var info = gl.getExtension("WEBGL_debug_renderer_info");
+    soft = /swiftshader|llvmpipe|basic render|software/i.test(info ? gl.getParameter(info.UNMASKED_RENDERER_WEBGL) : "");
+  }
+  function css(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || "#888"; }
+  // The coin: front and back faces with texture coordinates, and the rim (u below zero).
+  function coin(seg, depth) {
+    var pos = [], nrm = [], uv = [];
+    function add(p, n, t) { pos.push(p[0], p[1], p[2]); nrm.push(n[0], n[1], n[2]); uv.push(t[0], t[1]); }
+    for (var i = 0; i < seg; i++) {
+      var a = i / seg * Math.PI * 2, b = (i + 1) / seg * Math.PI * 2;
+      var ca = Math.cos(a), sa = Math.sin(a), cb = Math.cos(b), sb = Math.sin(b);
+      [1, -1].forEach(function (s) {
+        var z = s * depth, n = [0, 0, s], m = s > 0 ? -1 : 1;
+        add([0, 0, z], n, [0.5, 0.5]);
+        add([ca, sa, z], n, [0.5 + m * ca * 0.5, 0.5 - sa * 0.5]);
+        add([cb, sb, z], n, [0.5 + m * cb * 0.5, 0.5 - sb * 0.5]);
+      });
+      [[ca, sa, depth], [cb, sb, depth], [cb, sb, -depth], [ca, sa, depth], [cb, sb, -depth], [ca, sa, -depth]].forEach(function (p) {
+        add(p, [p[0], p[1], 0], [-1, 0]);
+      });
+    }
+    return { pos: new Float32Array(pos), nrm: new Float32Array(nrm), uv: new Float32Array(uv), count: pos.length / 3 };
+  }
+  function face() {
+    var c = document.createElement("canvas"); c.width = c.height = 512;
+    var g = c.getContext("2d"), img = document.getElementById("logo");
+    var grad = g.createRadialGradient(200, 160, 40, 256, 256, 300);
+    grad.addColorStop(0, "#ffffff"); grad.addColorStop(0.25, css("--accent")); grad.addColorStop(1, "#000000");
+    g.fillStyle = css("--accent"); g.fillRect(0, 0, 512, 512);
+    g.globalAlpha = 0.35; g.fillStyle = grad; g.fillRect(0, 0, 512, 512); g.globalAlpha = 1;
+    g.strokeStyle = "rgba(255,255,255,.6)"; g.lineWidth = 10; g.beginPath(); g.arc(256, 256, 226, 0, Math.PI * 2); g.stroke();
+    if (img.complete && img.naturalWidth > 0) {
+      var s = Math.min(300 / img.naturalWidth, 300 / img.naturalHeight);
+      g.drawImage(img, 256 - img.naturalWidth * s / 2, 256 - img.naturalHeight * s / 2, img.naturalWidth * s, img.naturalHeight * s);
+    } else {
+      var words = String(f.station || "GMX"), px = 200;
+      g.fillStyle = css("--text"); g.textAlign = "center"; g.textBaseline = "middle";
+      do { g.font = "900 " + px + "px Inter, Arial, sans-serif"; px -= 8; } while (g.measureText(words).width > 340 && px > 40);
+      g.fillText(words, 256, 266);
+    }
+    return c;
+  }
+  if (gl) {
+    var mesh = coin(64, 0.12);
+    function sh(type, src) { var s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); return s; }
+    var p = gl.createProgram();
+    gl.attachShader(p, sh(gl.VERTEX_SHADER,
+      "attribute vec3 pos; attribute vec3 nrm; attribute vec2 uv; uniform mat4 m; varying vec3 n; varying vec2 t;" +
+      "void main() { vec4 w = m * vec4(pos, 1.0); n = (m * vec4(nrm, 0.0)).xyz; t = uv; gl_Position = vec4(w.xy * 0.82, w.z * 0.3, 1.0); }"));
+    gl.attachShader(p, sh(gl.FRAGMENT_SHADER,
+      "precision mediump float; uniform sampler2D face; uniform vec3 rim; uniform vec3 light; varying vec3 n; varying vec2 t;" +
+      "void main() { vec3 N = normalize(n); float d = 0.35 + 0.65 * max(dot(N, normalize(light)), 0.0);" +
+      " float spec = pow(max(dot(reflect(-normalize(light), N), vec3(0.0, 0.0, -1.0)), 0.0), 24.0);" +
+      " vec3 c = t.x < 0.0 ? rim * 0.7 : texture2D(face, t).rgb; gl_FragColor = vec4(c * d + spec * 0.6, 1.0); }"));
+    gl.linkProgram(p); gl.useProgram(p);
+    [["pos", mesh.pos, 3], ["nrm", mesh.nrm, 3], ["uv", mesh.uv, 2]].forEach(function (a) {
+      gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer()); gl.bufferData(gl.ARRAY_BUFFER, a[1], gl.STATIC_DRAW);
+      var at = gl.getAttribLocation(p, a[0]); gl.enableVertexAttribArray(at); gl.vertexAttribPointer(at, a[2], gl.FLOAT, false, 0, 0);
+    });
+    var tex = gl.createTexture();
+    function texture() {
+      gl.bindTexture(gl.TEXTURE_2D, tex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, face());
+      gl.generateMipmap(gl.TEXTURE_2D); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+    }
+    gl.enable(gl.DEPTH_TEST);
+    var U = { m: gl.getUniformLocation(p, "m"), rim: gl.getUniformLocation(p, "rim"), light: gl.getUniformLocation(p, "light") };
+    var state = "out", since = 0, running = false, last = 0;
+    function ease(x) { x = Math.min(Math.max(x, 0), 1); return 1 - Math.pow(1 - x, 3); }
+    function frame(ms) {
+      if (!running) return;
+      requestAnimationFrame(frame);
+      if (soft && ms - last < 40) return;   // 25 frames a second on the CPU
+      last = ms;
+      var t = (ms - since) / 1000, k = state === "in" ? ease(t / 0.9) : 1 - ease(t / 0.6);
+      if (state === "out" && t > 0.7) { running = false; }
+      var spin = state === "in" ? (1 - k) * 6.5 + t * 0.9 : t * 9, s = 0.15 + 0.85 * k;
+      var c = Math.cos(spin), si = Math.sin(spin), tilt = 0.18 * Math.sin(ms / 2300);
+      var ct = Math.cos(tilt), st = Math.sin(tilt);
+      gl.viewport(0, 0, canvas.width, canvas.height);
+      gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+      gl.uniformMatrix4fv(U.m, false, [c * s, si * st * s, -si * ct * s, 0, 0, ct * s, st * s, 0, si * s, -c * st * s, c * ct * s, 0, 0, 0, 0, 1]);
+      var rgb = css("--accent").replace("#", ""); if (rgb.length === 3) rgb = rgb.replace(/./g, "$&$&");
+      gl.uniform3f(U.rim, parseInt(rgb.slice(0, 2), 16) / 255, parseInt(rgb.slice(2, 4), 16) / 255, parseInt(rgb.slice(4, 6), 16) / 255);
+      gl.uniform3f(U.light, Math.sin(ms / 1700) * 0.8, 0.6, -1.0);
+      gl.drawArrays(gl.TRIANGLES, 0, mesh.count);
+      if (!running) { gl.clear(gl.COLOR_BUFFER_BIT); }
+    }
+    function resize() {
+      size = Math.max(64, Math.min(1000, Number(f.size) || 420));
+      var px = soft ? Math.round(size * 0.75) : size;
+      canvas.width = canvas.height = px; canvas.style.width = canvas.style.height = size + "px";
+    }
+    var img = document.getElementById("logo");
+    img.addEventListener("load", texture);
+    window.addEventListener("gmx:update", function (e) { f = e.detail; resize(); texture(); });
+    window.addEventListener("gmx:in", function () { state = "in"; since = performance.now(); if (!running) { running = true; requestAnimationFrame(frame); } });
+    window.addEventListener("gmx:out", function () { state = "out"; since = performance.now(); });
+    resize(); texture();
+  }
+</script>
+</body>
+</html>

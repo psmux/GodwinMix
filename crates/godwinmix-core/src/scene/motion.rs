@@ -22,7 +22,9 @@ pub const ITEM_DEFAULT_MS: u32 = 300;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ItemTransition {
-    /// cut, fade, slide, zoom or wipe.
+    /// cut, fade, slide, zoom, wipe or hold. `hold` keeps the item as it is
+    /// for `duration_ms` and then takes it away, for a graphic whose own
+    /// animation is its way out.
     #[serde(rename = "type")]
     pub kind: ItemTransitionKind,
     /// How long it takes, in milliseconds. 300 by default, ten seconds at
@@ -50,6 +52,7 @@ pub enum ItemTransitionKind {
     Slide,
     Zoom,
     Wipe,
+    Hold,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -80,6 +83,7 @@ impl ItemTransition {
                 ItemTransitionKind::Slide => ItemKind::Slide,
                 ItemTransitionKind::Zoom => ItemKind::Zoom,
                 ItemTransitionKind::Wipe => ItemKind::Wipe,
+                ItemTransitionKind::Hold => ItemKind::Hold,
             },
             duration_ms: (self.duration_ms as u64).min(crate::mixer::transition::MAX_DURATION_MS),
             easing: Easing::parse(self.easing.as_deref()),
