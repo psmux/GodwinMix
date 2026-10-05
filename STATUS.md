@@ -14,14 +14,18 @@ browser sidecar with it.
 pushes it into an `appsrc`. The sidecar host built that `appsrc` with
 GStreamer's defaults, and a default `appsrc` never makes the pusher wait: past
 its `max-bytes` it says "enough data" and keeps everything it is given. With
-the machine loaded, the decode behind it fell short of the camera's frame
-rate, so every frame the camera wrote stayed queued in the mixer. The camera's
+the machine loaded, the demuxing and converting behind it fell short of the
+camera's frame rate, so every frame the camera wrote stayed queued in the mixer. The camera's
 pictures reached the programme later and later, 60 seconds behind at 08:38
 and 47 minutes behind at 09:44, which is a queue of frames growing without
 end. And 3,110,409 bytes is one Matroska block carrying one raw 1080p I420
 frame (3,110,400 bytes and a 9 byte header), so the allocation that failed was
-one more camera frame. The `exec:` source path already built this element to
-block at 16 MB; the sidecar host now uses the same one (`input::pipe_source`).
+one more camera frame. The mixer the app started again at 09:52 showed the same
+thing on a smaller scale an hour later: its screen 64 seconds behind and
+staying there, a backlog the load had built and nothing drained, and the
+process steady at about 1.5 GB with four sources. The `exec:` source path
+already built this element to block at 16 MB; the sidecar host now uses the
+same one (`input::pipe_source`).
 
 Reproduced with a debug build and the shipped screen plugin forced onto
 `videotestsrc`, a sidecar producing faster than the mixer consumes, which is
