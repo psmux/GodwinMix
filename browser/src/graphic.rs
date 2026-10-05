@@ -106,8 +106,18 @@ impl Out {
     /// The browser painted `dirty` of a `width` by `height` page.
     pub fn paint(&self, bgra: &[u8], width: i32, height: i32, dirty: &[Area]) {
         let mut p = self.pending.lock().unwrap();
-        if width != p.width || height != p.height || bgra.len() != p.mirror.len() {
+        if bgra.len() < (width * height * 4).max(0) as usize {
             return;
+        }
+        // Scaled, Chromium may paint a pixel more or less than was asked for:
+        // take the size it painted, and the whole of it.
+        if width != p.width || height != p.height {
+            (p.width, p.height) = (width, height);
+            p.mirror = vec![0u8; (width * height * 4).max(0) as usize];
+            p.dirty = Area { x: 0, y: 0, w: width, h: height };
+            let all = [p.dirty];
+            drop(p);
+            return self.paint(bgra, width, height, &all);
         }
         let stride = width as usize * 4;
         for d in dirty.iter().map(|d| d.clamp(width, height)).filter(|d| !d.is_empty()) {
@@ -235,7 +245,7 @@ pub fn ayuv(px: &[u8]) -> [u8; 4] {
     let (b, g, r) = (un(px[0]), un(px[1]), un(px[2]));
     // BT.709 in 8 bit fixed point, scaled by 256.
     let y = 16 + ((47 * r + 157 * g + 16 * b + 128) >> 8);
-    let u = 128 + ((-26 * r - 87 * g + 112 * b + 128) >> 8);
+    let u = 128 + ((-26 * r - 86 * g + 112 * b + 128) >> 8);
     let v = 128 + ((112 * r - 102 * g - 10 * b + 128) >> 8);
     [a as u8, y.clamp(16, 235) as u8, u.clamp(16, 240) as u8, v.clamp(16, 240) as u8]
 }

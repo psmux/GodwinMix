@@ -165,7 +165,10 @@ wrap_render_handler! {
             let s = self.state.lock().unwrap();
             if let Some(i) = info {
                 let (w, h) = ((s.width as f64 / s.scale).round() as i32, (s.height as f64 / s.scale).round() as i32);
-                i.device_scale_factor = s.scale as f32;
+                // The exact ratio of the canvas to the layout, a hair under,
+                // so Chromium's rounding up lands on the canvas and not a
+                // pixel past it.
+                i.device_scale_factor = if s.scale == 1.0 { 1.0 } else { (s.width as f64 / w.max(1) as f64 - 1e-6) as f32 };
                 i.depth = 32;
                 i.depth_per_component = 8;
                 i.is_monochrome = 0;
