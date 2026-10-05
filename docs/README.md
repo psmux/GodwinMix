@@ -98,6 +98,7 @@ Start here if you have never run it.
 * [Change a setting](how-to/change-a-setting.md)
 * [Debug a show](how-to/debug-a-show.md)
 * [The desktop app](how-to/desktop-app.md)
+* [Run a show from phones](how-to/run-a-show-from-phones.md): let the network in, scan a code, take shots from a phone
 * [Import your scenes from OBS](how-to/import-from-obs.md)
 * [Make a graphic](how-to/make-a-graphic.md)
 * [Write an SVG template](how-to/write-an-svg-template.md)
@@ -132,6 +133,7 @@ Start here if you have never run it.
 * [The keyboard](reference/keyboard.md)
 * [Configuration, every key](reference/configuration.md)
 * [The config methods: config.get, config.set, config.reset, config.schema](reference/config-methods.md)
+* [Device tokens: token.create, token.list, token.revoke](reference/device-tokens.md)
 * [Presets, every manifest key and the merge rules](reference/presets.md)
 * [Scene commands, every method with an example](reference/scene-commands.md)
 * [Transitions: the built in types, the plugin contract, the accuracy](reference/transitions.md)

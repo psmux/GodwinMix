@@ -81,6 +81,16 @@ fn a_bad_request_says_what_to_send_instead() {
     assert!(missing.message.contains("There are none"), "{missing}");
 }
 
+#[test]
+fn a_file_that_will_not_parse_is_never_written_over() {
+    let path = dir("broken").join("godwinmix.devices.toml");
+    std::fs::write(&path, "[[devices]\nid = ").unwrap();
+    let devices = Devices::open(Some(path.clone()));
+    let refused = devices.create(ask("Phone", Scope::Operate), &|_| false).unwrap_err();
+    assert!(refused.message.contains("move it aside"), "{refused}");
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), "[[devices]\nid = ", "the broken file is left for a person to fix");
+}
+
 #[tokio::test]
 async fn an_open_core_refuses_to_make_device_tokens() {
     let open = Tokens::default().with_devices(Arc::new(Devices::open(None)));

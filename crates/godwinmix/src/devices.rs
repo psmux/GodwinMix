@@ -48,6 +48,9 @@ pub(super) struct State {
     pub(super) records: Vec<Record>,
     seen: Option<store::Stamp>,
     checked: Option<Instant>,
+    /// Why the file as it is on disk would not parse. Nothing is written
+    /// over it until somebody fixes it, so no phone is lost by accident.
+    broken: Option<String>,
 }
 
 /// The registry for a core started with `config`: the station's file when
@@ -95,14 +98,18 @@ impl Devices {
         if now == state.seen {
             return;
         }
+        state.seen = now;
         match store::load(path) {
             Ok(records) => {
                 state.records = records;
-                state.seen = now;
+                state.broken = None;
             }
-            // The copy in memory stays: a half written or hand broken file
-            // must not lock every phone out, nor let a revoked one back in.
-            Err(e) => tracing::warn!("{e:#}. Device tokens stay as they were; fix or remove the file."),
+            // The copy in memory stays: a hand broken file must not lock
+            // every phone out, nor let a revoked one back in.
+            Err(e) => {
+                tracing::warn!("{e:#}. Device tokens stay as they were; fix or remove the file.");
+                state.broken = Some(format!("{e:#}"));
+            }
         }
     }
 
@@ -110,6 +117,13 @@ impl Devices {
     /// so it is not read straight back.
     pub(super) fn persist(&self, state: &mut State) -> Result<(), RpcError> {
         let Some(path) = &self.path else { return Ok(()) };
+        if let Some(why) = &state.broken {
+            return Err(RpcError::not_in_state(format!(
+                "{why}. Nothing changed, so the device tokens in it are not lost. Fix the file, \
+                 or move it aside to start an empty list, and try again."
+            ))
+            .with("path", path.display().to_string()));
+        }
         store::save(path, &state.records).map_err(|e| {
             RpcError::internal(format!("{e:#}. Nothing changed. Check that the folder holding {} can be written to.", path.display()))
         })?;

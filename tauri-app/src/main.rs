@@ -29,6 +29,7 @@
 mod commands;
 mod core_link;
 mod lan;
+mod lan_menu;
 mod page_menu;
 mod plugins;
 mod restart;
