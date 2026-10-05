@@ -42,19 +42,6 @@ async fn a_show_killed_is_started_again_the_other_runs_on_and_its_share_goes_bac
     let text = std::fs::read_to_string(&config).unwrap();
     std::fs::write(&config, format!("{text}\n[governor]\nreserve_cores = 0\n")).unwrap();
     let st = start_alone(dir.clone(), port, &[]).await;
-    // The station measures its encoders in a process of its own when it
-    // starts, at full speed, and the governor counts that process as another
-    // program on the machine. On a four core runner that left no room at the
-    // moment the killed show came back. Wait for the measurement first, for
-    // two minutes at most: a station whose measurement fails carries on.
-    let calibrating = Instant::now();
-    while calibrating.elapsed() < Duration::from_secs(120) {
-        let g = get(&st, "/api/v1/governor/status").await;
-        if !g["calibrated_at"].is_null() && g["calibrating"] == false {
-            break;
-        }
-        tokio::time::sleep(Duration::from_millis(250)).await;
-    }
     let mut ws = rpc(&st, "").await;
     call(&mut ws, 1, "core.subscribe", json!({"events": ["show.*"]})).await;
     let added = call(&mut ws, 2, "show.add", json!({"name": "Second"})).await;
