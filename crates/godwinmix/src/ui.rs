@@ -118,6 +118,16 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/composer/ops.js", include_str!("../../../ui/panels/composer/ops.js")),
     ("panels/composer/others.js", include_str!("../../../ui/panels/composer/others.js")),
     ("panels/composer/motion.js", include_str!("../../../ui/panels/composer/motion.js")),
+    // The Graphics gallery. Only entry.js loads with the page.
+    ("panels/graphics/actions.js", include_str!("../../../ui/panels/graphics/actions.js")),
+    ("panels/graphics/card.js", include_str!("../../../ui/panels/graphics/card.js")),
+    ("panels/graphics/edit.js", include_str!("../../../ui/panels/graphics/edit.js")),
+    ("panels/graphics/entry.js", include_str!("../../../ui/panels/graphics/entry.js")),
+    ("panels/graphics/graphics.css", include_str!("../../../ui/panels/graphics/graphics.css")),
+    ("panels/graphics/make.js", include_str!("../../../ui/panels/graphics/make.js")),
+    ("panels/graphics/model.js", include_str!("../../../ui/panels/graphics/model.js")),
+    ("panels/graphics/panel.js", include_str!("../../../ui/panels/graphics/panel.js")),
+    ("panels/graphics/prompts.js", include_str!("../../../ui/panels/graphics/prompts.js")),
     ("panels/header/panel.js", include_str!("../../../ui/panels/header/panel.js")),
     ("panels/media/entry.js", include_str!("../../../ui/panels/media/entry.js")),
     ("panels/media/panel.js", include_str!("../../../ui/panels/media/panel.js")),
@@ -310,6 +320,7 @@ const DEV_ASSETS: &[(&str, &str)] = &[
     ("test/live-data.js", include_str!("../../../ui/test/live-data.js")),
     ("test/live-data-feed.json", include_str!("../../../ui/test/live-data-feed.json")),
     ("test/graphics.js", include_str!("../../../ui/test/graphics.js")),
+    ("test/gallery.js", include_str!("../../../ui/test/gallery.js")),
     ("test/studio.js", include_str!("../../../ui/test/studio.js")),
     ("test/transitions.js", include_str!("../../../ui/test/transitions.js")),
     ("test/scene-fix.js", include_str!("../../../ui/test/scene-fix.js")),
@@ -981,6 +992,12 @@ mod tests {
         reachable.extend(closure_of("panels/sources/browser-device.js"));
         // A phone's camera: the code and the link, when that row is pressed.
         reachable.extend(closure_of("panels/sources/phone-camera.js"));
+        // The Graphics gallery: entry.js imports the panel when its tab is
+        // first shown, and the panel imports Edit and Make with an agent when
+        // their buttons are pressed.
+        for entry in ["panels/graphics/panel.js", "panels/graphics/edit.js", "panels/graphics/make.js"] {
+            reachable.extend(closure_of(entry));
+        }
         for (path, _) in ASSETS {
             if path.ends_with(".css") || path.ends_with(".html") || path.ends_with(".json") {
                 continue;
@@ -1004,6 +1021,7 @@ mod tests {
             ("panels/channels/panel.js", "the Channels tab or Add RTMP Channel"),
             ("panels/channels/qr.js", "a channel key being shown"),
             ("panels/channels/brands.js", "the Channels tab"),
+            ("panels/graphics/panel.js", "the Graphics tab, the first time it is shown"),
             ("panels/composer/canvas.js", "the composer"),
             ("panels/composer/inspector.js", "the composer"),
             ("kits/canvas/gizmos.js", "the composer's canvas"),

@@ -149,6 +149,11 @@ pub struct GalleryItem {
     /// When it was saved, as RFC 3339, when known.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub saved: String,
+    /// A file of the item a page plays as its moving preview, served at
+    /// `/api/v1/gallery/{id}/files/{moving}`: a clip itself, or the item's
+    /// own `preview.webm`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub moving: Option<String>,
     /// The sources on this mixer drawing it now.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub placed: Vec<String>,

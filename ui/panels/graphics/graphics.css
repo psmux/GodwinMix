@@ -1,0 +1,44 @@
+/* The Graphics gallery. Cards in a grid that is two across on a phone and
+   as many as fit on a desk; the picture keeps 16:9 and shows a checkerboard
+   where a graphic is transparent. */
+
+gmx-graphics-view { display: block; position: relative; }
+gmx-graphics-view.gx-drop { outline: 2px dashed var(--accent); outline-offset: -4px; }
+.gx-head, .gx-filters { flex-wrap: wrap; gap: 6px; }
+.gx-filters { padding: 0 var(--pad) var(--pad); }
+.gx-search { flex: 1 1 140px; max-width: 260px; }
+.gx-chip[aria-pressed="true"], .gx-kinds .btn[aria-pressed="true"] { background: var(--select-fill); border-color: var(--select); }
+
+.gx-grid {
+  display: grid; gap: 10px; padding: 0 var(--pad) var(--pad);
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+}
+@media (max-width: 520px) { .gx-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; } }
+
+.gx-card {
+  display: flex; flex-direction: column; min-width: 0;
+  background: var(--panel); border: var(--border) solid var(--line-soft); border-radius: var(--radius); overflow: hidden;
+}
+.gx-pic {
+  position: relative; aspect-ratio: 16 / 9; overflow: hidden;
+  background-color: #46464a;
+  background-image: linear-gradient(45deg, #5f5f64 25%, transparent 25%, transparent 75%, #5f5f64 75%),
+    linear-gradient(45deg, #5f5f64 25%, transparent 25%, transparent 75%, #5f5f64 75%);
+  background-size: 16px 16px; background-position: 0 0, 8px 8px;
+}
+.gx-pic img, .gx-pic video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+.gx-meta { padding: 6px 8px 2px; min-width: 0; }
+.gx-name { font-weight: 600; }
+.gx-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gx-actions { display: flex; gap: 6px; padding: 6px 8px 8px; align-items: center; }
+.gx-actions .gx-main { flex: 1; }
+
+.gx-refused { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 8px; }
+.gx-prompt { width: 100%; font-family: var(--num); font-size: var(--fs-sm); }
+.gx-kinds { flex-wrap: wrap; gap: 6px; }
+
+.gx-edit { display: grid; grid-template-columns: minmax(0, 2fr) minmax(220px, 1fr); gap: 12px; }
+.gx-edit-stage { background: #46464a; border-radius: var(--radius-sm); aspect-ratio: 16 / 9; }
+.gx-edit-pic { width: 100%; height: 100%; object-fit: contain; display: block; }
+.gx-edit-fields { gap: 8px; }
+@media (max-width: 720px) { .gx-edit { grid-template-columns: 1fr; } }

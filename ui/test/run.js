@@ -6,6 +6,7 @@ import { sourceChooserTests } from "./source-chooser.js";
 import { textSourceTests } from "./text-sources.js";
 import { liveDataTests } from "./live-data.js";
 import { graphicTests } from "./graphics.js";
+import { galleryTests } from "./gallery.js";
 import { studioTests } from "./studio.js";
 import { transitionTests } from "./transitions.js";
 import { sceneFixTests, sceneFixLoadTests } from "./scene-fix.js";
@@ -2770,6 +2771,7 @@ legacySuite()
   .then(() => textSourceTests(test, eq, ok))
   .then(() => liveDataTests(test, eq, ok))
   .then(() => graphicTests(test, eq, ok))
+  .then(() => galleryTests(test, eq, ok))
   .then(() => sourceFileTests(test, eq, ok))
   .then(() => errorActionTests(test, eq, ok))
   .catch((e) => {
