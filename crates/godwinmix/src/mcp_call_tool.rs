@@ -161,6 +161,16 @@ mod tests {
         assert_eq!(unstring(&obs, Some(&schema)), obs);
     }
 
+    /// `get_scene {"scene": "Live"}` reaches the scene: its schema says
+    /// `scene`, and the path used to be filled from `id` only.
+    #[test]
+    fn a_scene_tool_fills_its_path_from_scene() {
+        use godwinmix_protocol::scope::Profile;
+        let s = super::super::Server::new("http://127.0.0.1:1", None, Profile::Standard);
+        let p = s.plan("get_scene", &json!({"scene": "Live"})).unwrap();
+        assert_eq!(p.path, "/api/v1/scenes/Live");
+    }
+
     #[test]
     fn a_refusal_shows_the_shape_to_send() {
         for sent in [json!({}), json!("list_scenes"), json!({"name": "call_tool"}), json!({"name": "x", "arguments": [1]})] {

@@ -18,7 +18,7 @@ mod files;
 pub mod merge;
 pub mod targets;
 
-pub use files::apply;
+pub use files::{apply, path_note, with_note};
 use merge::Action;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
@@ -93,7 +93,11 @@ pub fn plan(req: &SetupRequest, exe: &Path, dirs: &Dirs) -> Result<Setup, String
     let entry = req.tool.entry(&exe_text, &req.env);
     let mut writes = Vec::new();
     if let Some((path, format)) = &target.mcp {
-        writes.push(files::mcp_write(path, *format, &entry, req.tool.seed())?);
+        let mut mcp = files::mcp_write(path, *format, &entry, req.tool.seed())?;
+        if let Some(rules) = rules_file(req.tool, req.scope, dirs, &project) {
+            writes.push(files::rules_write(&rules, &mut mcp)?);
+        }
+        writes.insert(0, mcp);
     }
     let note = files::path_note(exe);
     if let Some(dir) = &target.skills {
@@ -117,6 +121,17 @@ pub fn plan(req: &SetupRequest, exe: &Path, dirs: &Dirs) -> Result<Setup, String
         notes,
         applied: false,
     })
+}
+
+/// A few lines read into every opencode session, named in its config's
+/// `instructions`. A free model in opencode asked "what is on air right now?"
+/// checked the clock and asked which country; it never thought of the mixer.
+fn rules_file(tool: AgentTool, scope: SetupScope, dirs: &Dirs, project: &Path) -> Option<PathBuf> {
+    match (tool, scope) {
+        (AgentTool::Opencode, SetupScope::User) => Some(dirs.home.join(".config").join("opencode").join("godwinmix.md")),
+        (AgentTool::Opencode, SetupScope::Project) => Some(project.join(".opencode").join("godwinmix.md")),
+        _ => None,
+    }
 }
 
 fn project_dir(req: &SetupRequest) -> Result<PathBuf, String> {

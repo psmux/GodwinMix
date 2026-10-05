@@ -202,19 +202,30 @@ fn install(target: &Path, print: bool, tool: Tool) -> Result<()> {
         println!("\nRun again without --print to write them.");
         return Ok(());
     }
+    // An installed app is on nobody's PATH, and the skills say `godwinmix`.
+    let note = std::env::current_exe().ok().and_then(|exe| crate::agents::path_note(&exe));
+    // Every file first, then the report: a reader that closes the pipe early
+    // (`| head -1`) once stopped the install after the first skill.
+    let mut written = Vec::new();
     for (name, text) in &skills {
         let dir = target.join(name);
         std::fs::create_dir_all(&dir)
             .with_context(|| format!("creating {}", dir.display()))?;
         let path = dir.join("SKILL.md");
+        let text = crate::agents::with_note(text, note.as_deref());
         std::fs::write(&path, text).with_context(|| format!("writing {}", path.display()))?;
+        written.push(path);
+    }
+    for path in written {
         println!("wrote {}", path.display());
     }
     println!(
-        "\n{} now reads {}. Start a session in a directory with a mixer to hand, or \
-         point it at one with GODWINMIX_URL.",
+        "\n{} now reads {}. With the GodwinMix app open on this machine the agent finds the \
+         mixer by itself; for one elsewhere set GODWINMIX_URL and GODWINMIX_TOKEN. \
+         `gmx agent setup {}` also connects its MCP server.",
         tool.as_str(),
-        SKILLS.join(", ")
+        SKILLS.join(", "),
+        tool.as_str()
     );
     Ok(())
 }

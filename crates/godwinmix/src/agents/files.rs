@@ -19,6 +19,26 @@ pub fn mcp_write(path: &Path, format: Format, entry: &Value, seed: Value) -> Res
     Ok(FileWrite { path: path.display().to_string(), action, what: "the godwinmix MCP server".into(), backup: None, text, ours: false })
 }
 
+/// The rules file, and its path added to the config's `instructions`.
+pub fn rules_write(path: &Path, config: &mut FileWrite) -> Result<FileWrite, String> {
+    let item = path.display().to_string();
+    let (text, added) = merge::json_list_add(&config.text, "instructions", &item)
+        .map_err(|why| format!("{} cannot be changed safely: {why}", config.path))?;
+    if added {
+        config.text = text;
+        if config.action == Action::Unchanged {
+            config.action = Action::Merge;
+        }
+    }
+    let body = include_str!("rules.md");
+    let action = match std::fs::read_to_string(path) {
+        Err(_) => Action::Create,
+        Ok(old) if old == body => Action::Unchanged,
+        Ok(_) => Action::Update,
+    };
+    Ok(FileWrite { path: item, action, what: "what GodwinMix is, read every session".into(), backup: None, text: body.into(), ours: true })
+}
+
 /// One `SKILL.md` per skill, with the note about PATH when there is one.
 pub fn skill_writes(dir: &Path, note: Option<&str>) -> Vec<FileWrite> {
     crate::cli::skill::skills()

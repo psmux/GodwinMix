@@ -30,10 +30,9 @@ fn children(schema: &Map<String, Value>) -> Vec<(String, &Value)> {
 
 /// Every problem a validator would raise, as `path: what`.
 fn problems(path: &str, schema: &Value, found: &mut Vec<String>) {
-    // `true` is the schema that takes anything, which every validator knows.
-    if schema.is_boolean() {
-        return;
-    }
+    // `true` is valid JSON Schema, but the MCP TypeScript SDK (opencode, and
+    // most clients written in TypeScript) wants every property to be an
+    // object and drops the whole tool list otherwise.
     let Some(map) = schema.as_object() else {
         found.push(format!("{path}: a schema has to be an object, not {schema}"));
         return;

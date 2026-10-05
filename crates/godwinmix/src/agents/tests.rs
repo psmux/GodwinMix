@@ -46,7 +46,9 @@ fn every_tool_writes_where_it_reads() {
         let want = parts.iter().fold(root.clone(), |p, s| p.join(s));
         assert_eq!(setup.writes[0].path, want.display().to_string(), "{tool:?} {scope:?}");
         assert_eq!(setup.writes[0].action, merge::Action::Create);
-        assert_eq!(setup.writes.len(), 4, "the server and three skills for {tool:?}");
+        // opencode also gets the few lines it reads every session.
+        let files = if tool == AgentTool::Opencode { 5 } else { 4 };
+        assert_eq!(setup.writes.len(), files, "the server and three skills for {tool:?}");
     }
     // pi has no MCP: only its skills, where it reads them.
     let pi = plan(&request(AgentTool::Pi, SetupScope::User, None), &exe(), &dirs).unwrap();
@@ -117,6 +119,23 @@ fn the_path_note_follows_the_frontmatter() {
     assert!(out.starts_with("---\nname: x\ndescription: y\n---\n"), "{out}");
     assert!(out.contains("> run C:/g.exe\n\n# Body"), "{out}");
     assert_eq!(files::with_note(skill, None), skill);
+}
+
+/// opencode's config names the rules file in `instructions`, once.
+#[test]
+fn opencode_reads_what_godwinmix_is_every_session() {
+    let (dirs, root) = scratch("rules");
+    let req = request(AgentTool::Opencode, SetupScope::User, None);
+    let mut setup = plan(&req, &exe(), &dirs).unwrap();
+    apply(&mut setup).unwrap();
+    let config = dirs.home.join(".config").join("opencode").join("opencode.json");
+    let v: Value = serde_json::from_str(&std::fs::read_to_string(&config).unwrap()).unwrap();
+    let rules = dirs.home.join(".config").join("opencode").join("godwinmix.md");
+    assert_eq!(v["instructions"], json!([rules.display().to_string()]));
+    assert!(std::fs::read_to_string(&rules).unwrap().contains("agent_state"));
+    let again = plan(&req, &exe(), &dirs).unwrap();
+    assert!(again.writes.iter().all(|w| w.action == merge::Action::Unchanged), "{:?}", again.writes);
+    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// Any other client gets the entry to paste and no file.
