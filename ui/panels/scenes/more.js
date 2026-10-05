@@ -15,6 +15,7 @@
 import { contextMenu } from "../../shell/menu.js";
 import { toast, errorToast } from "../../shell/toast.js";
 import { settings } from "../../shell/settings.js";
+import { byPointer } from "../../shell/pointer.js";
 
 export function menu(panel, id, e) {
   const ids = panel.selected();
@@ -59,7 +60,7 @@ export async function copyLayout(panel, id) {
  */
 export async function pasteLayout(panel, ids) {
   if (!panel.layoutClip || !ids.length) {
-    toast({ text: "Copy a layout first: right click the scene it should come from." });
+    toast({ text: `Copy a layout first: ${byPointer("right click", "long press")} the scene it should come from.` });
     return;
   }
   for (const id of ids) {

@@ -566,8 +566,13 @@ iframe.panel { width: 100%; border: 0; background: var(--panel); display: block;
 .checklist li.done .step-tick { background: var(--ok); border-color: transparent; color: var(--on-accent); }
 .checklist li.done > .grow { color: var(--dim); }
 
+/* Under dialogs and the palette, which must not open with their title behind
+   it, and in its own room above the shell: the page does not scroll, so a bar
+   that pushed the shell down hid the bottom of it, a phone's take bar included. */
+body:has(> .restart-bar:not([hidden])) { display: flex; flex-direction: column; }
+body:has(> .restart-bar:not([hidden])) > gmx-shell { flex: 1 1 auto; min-height: 0; height: auto; }
 .restart-bar {
-  position: sticky; top: 0; z-index: 80;
+  position: sticky; top: 0; z-index: 35;
   display: flex; align-items: center; gap: var(--gap, 8px);
   padding: 6px var(--pad, 12px);
   background: var(--panel2); border-bottom: 1px solid var(--line);

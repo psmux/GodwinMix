@@ -114,6 +114,31 @@ the web UI has a pointer, a tray and a scene composer and this has a keyboard.
 That table is a summary. `ui/shell/keymap.js` is the map itself, and it wins
 where the two disagree.
 
+### Touch
+
+A phone or a tablet has no right button and no reliable double click, so the
+page makes them out of gestures. `ui/shell/touch.js` turns a long press into
+the `contextmenu` event and a double tap into the `dblclick` event, on the
+element under the finger, and every menu and every "open" in the page listens
+for those already. Whatever the mouse can reach, the finger reaches the same
+way.
+
+| Gesture | Stands for | Detail |
+|---|---|---|
+| long press | right click | 500 ms without moving more than 8 px. When it opens a menu, lifting the finger is not a tap; on a button with no menu, such as Take, the tap still happens |
+| double tap | double click | two taps within 320 ms and 24 px of each other |
+| drag by the ⠿ grip | drag the tile | the grip is `touch-action: none`; a swipe anywhere else on a tile scrolls |
+| tap on the grip | a click that only selects | the tile is selected and is not put on air |
+
+A long press in a text field, and anything under the grip, is left alone.
+The browser's own `contextmenu` and `dblclick` that follow a touch are
+dropped, so nothing opens twice on Android, which sometimes sends them.
+
+Every shortcut in the table above has a menu item, a button or a gesture; the
+list is in [run the mixer from a phone or a tablet](../how-to/use-a-phone-or-tablet.md).
+`?` on a keyboard, or Help, Keyboard shortcuts in the menu, shows the
+gestures above the keys.
+
 ### The menu bar
 
 File, Edit, View, Sources, Scenes, Outputs and Help sit in the top bar, and

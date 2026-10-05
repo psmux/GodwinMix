@@ -1,0 +1,114 @@
+/* touch.css: the same page under a finger. Nothing here changes how the page
+   looks with a mouse. Three media queries carry it:
+
+   (hover: none)       no pointer can hover, so nothing may wait for a hover.
+   (pointer: coarse)   the main pointer is a finger: 44px targets, 16px text
+                       in fields so iOS does not zoom when one is focused.
+   (any-pointer: coarse)  some pointer is a finger, which is enough to show
+                       the grip a tile is dragged by.
+
+   Long press and double tap are ui/shell/touch.js. The grip is in pointer.js. */
+
+/* ------------------------------------------------------------ the grip */
+
+.tile .drag-handle { display: none; }
+@media (any-pointer: coarse) {
+  .tile .drag-handle {
+    display: grid; place-items: center; flex: none; width: 34px; height: 34px; margin: -4px 0 -4px -4px;
+    color: var(--dim); font-size: 18px; line-height: 1; cursor: grab;
+    /* Only the grip keeps the page from scrolling, so a finger anywhere else
+       on a tile still scrolls the tray. */
+    touch-action: none; -webkit-touch-callout: none;
+  }
+  .dragging-tiles .drag-handle { cursor: grabbing; }
+}
+
+/* --------------------------------------------------- no hover to wait for */
+
+@media (hover: none) {
+  .tile .gear { opacity: 1; }
+  /* The level and mute sit under the picture rather than over it: always
+     there, and not covering what the camera sees. */
+  .tile .strip { position: static; opacity: 1; background: var(--panel); }
+  .rt-cell .rt-offer { opacity: 0.7; border-color: var(--line); }
+  .wl-bdel { opacity: 1; }
+  /* A long press is a menu here, not a word to select or a link to share. */
+  .tile, .scene-tabs, .showtabs, .dock-title, .menu, .menubar-wrap, .btn, .rt-route, .chn-tile {
+    -webkit-touch-callout: none; -webkit-user-select: none; user-select: none;
+  }
+}
+
+/* ------------------------------------------------------- finger targets */
+
+@media (pointer: coarse) {
+  /* iOS zooms the page into any field whose text is under 16px. */
+  input, select, textarea { font-size: 16px; }
+  input[type=text], input[type=search], input[type=password], input[type=number], input[type=url], select { min-height: 44px; }
+  input[type=checkbox], input[type=radio] { width: 22px; height: 22px; }
+
+  .btn, .btn.icon { min-height: 44px; min-width: 44px; padding: 8px 12px; }
+  .menu button { min-height: 44px; align-items: center; padding: 8px 12px; }
+  .menu .swatches { gap: 8px; flex-wrap: wrap; }
+  .menu .swatches button { width: 44px; height: 44px; min-height: 0; }
+  .menubar-all { min-width: 44px; min-height: 44px; font-size: 20px; }
+  .menubar-title { min-height: 44px; padding-inline: 10px; }
+  .tabs button, .out-tabs button, .picker-rail button { min-height: 44px; }
+  .scene-tabs button:not(.btn) { min-height: 44px; }
+  .scene-tabs button.scene-edit:not(.btn) { width: 44px; height: 44px; }
+  .showtab, .shows-add { min-height: 44px; }
+  .shows-add { min-width: 44px; justify-content: center; }
+  .palette li { min-height: 44px; align-items: center; padding: 10px 12px; }
+  summary { padding-block: 12px; }
+  .panel-section > summary { padding: 13px 12px; }
+  .dock-title { min-height: 44px; }
+  .dock-title button, .dock-tab { min-height: 44px; min-width: 44px; }
+  .tile .gear { width: 40px; height: 40px; font-size: 18px; margin: -6px -4px -6px 0; }
+  .tile .scene-edit { width: 44px; height: 44px; }
+  .tile .scene-warn { width: 36px; height: 36px; }
+  .rt-add, .rt-offer, .rt-fold, .rt-ladd { min-height: 44px; }
+  .welcome-tile { min-height: 44px; }
+
+  /* A splitter a finger can find: the bar stays thin, the target does not. */
+  .dock-splitter::before { content: ""; position: absolute; inset: -10px; }
+
+  /* Faders with a thumb the size of a fingertip. Styling the thumb means
+     styling the track as well, so both are drawn here. */
+  input[type=range] {
+    -webkit-appearance: none; appearance: none; height: 36px; min-height: 36px;
+    background: transparent; touch-action: pan-y;
+  }
+  input[type=range]::-webkit-slider-runnable-track { height: 6px; border-radius: 3px; background: var(--line); }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 28px; height: 28px; margin-top: -11px; border-radius: 50%;
+    background: var(--accent); border: 2px solid var(--panel); box-shadow: 0 0 0 1px var(--line);
+  }
+  input[type=range]::-moz-range-track { height: 6px; border-radius: 3px; background: var(--line); }
+  input[type=range]::-moz-range-thumb { width: 28px; height: 28px; border-radius: 50%; background: var(--accent); border: 2px solid var(--panel); }
+  input[type=range]:disabled::-webkit-slider-thumb { background: var(--faint); }
+  input[type=range]:disabled::-moz-range-thumb { background: var(--faint); }
+}
+
+/* ------------------------------------------------------- narrow screens */
+
+/* A header with more in it than the window is wide wraps onto a second line.
+   Unwrapped it widened the page, and a tablet zooms a wide page out to fit,
+   which shrinks every target on it. */
+@media (max-width: 1280px) {
+  .header { flex-wrap: wrap; height: auto; min-height: var(--header-h); row-gap: 4px; padding-block: 4px; }
+}
+
+@media (max-width: 760px) {
+  /* Dialogs use the whole width and scroll inside, never the page sideways. */
+  .scrim { padding: 8px; align-items: start; overflow: auto; }
+  .dialog { max-width: 100%; max-height: calc(100dvh - 16px); }
+  .dialog > footer, .dialog .row { flex-wrap: wrap; }
+  .palette { padding-top: 8px; }
+  .palette .box { width: calc(100vw - 16px); max-height: calc(100dvh - 16px); }
+  .menu { max-width: calc(100vw - 12px); }
+  .menubar-every { overflow: auto; }
+  /* The settings drawer is the whole screen on a phone, over the header, with
+     its own close button; its rows wrap rather than run off the side. */
+  .slot-sidebar { top: 0; width: 100%; max-width: none; z-index: 36; }
+  .slot-sidebar .row { flex-wrap: wrap; }
+  .toast { max-width: calc(100vw - 16px); }
+}

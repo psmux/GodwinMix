@@ -115,6 +115,8 @@ export async function mountShell(client, root) {
 
   shellCommands(client, node);
   shell.keymap.attach(window);
+  // A long press is the right click and a double tap the double click.
+  touchWhenNeeded();
   connectionBanner(client);
   // Settings written to the file that wait for a restart, and the restart.
   restartBar(client);
@@ -189,9 +191,10 @@ function shellCommands(client, node) {
 }
 
 function shortcutSheet() {
-  const rows = Object.entries(shell.keymap.map).map(([chord, id]) =>
-    el("div.row", {}, [el("span.num", { text: chord, style: { minWidth: "8em" } }), el("span.dim", { text: id })])
-  );
+  const row = ([chord, id]) => el("div.row", {}, [el("span.num", { text: chord, style: { minWidth: "8em" } }), el("span.dim", { text: id })]);
+  // What a finger has instead, for whoever opened this from the menu on a phone.
+  const touch = [["Long press", "the item menu, as a right click"], ["Double tap", "open, as a double click"], ["⠿", "drag a tile by its grip"]];
+  const rows = [el("strong", { text: "Touch" }), ...touch.map(row), el("strong", { text: "Keys" }), ...Object.entries(shell.keymap.map).map(row)];
   modal({ title: "Keyboard", body: el("div.col.sm", {}, rows) });
 }
 
@@ -262,4 +265,17 @@ function fileDrop(client) {
     const text = dt.getData("text/uri-list") || dt.getData("text/plain");
     if (text) pickFromDrop(client, text.split("\n")[0]);
   });
+}
+
+/** touch.js, fetched where a finger may use the page and nowhere else. */
+function touchWhenNeeded() {
+  const load = () => import("./touch.js").then((m) => m.installTouch());
+  if (matchMedia("(any-pointer: coarse)").matches) return load();
+  // A touch screen the browser did not report: from the first touch on.
+  const first = (e) => {
+    if (e.pointerType === "mouse") return;
+    window.removeEventListener("pointerdown", first, true);
+    load();
+  };
+  window.addEventListener("pointerdown", first, true);
 }
