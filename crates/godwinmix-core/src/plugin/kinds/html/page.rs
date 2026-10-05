@@ -56,7 +56,8 @@ impl TransparentPage {
         }
         self.renderer = None;
         let carrier = self.carrier.clone().context("the page's pipeline is not built yet")?;
-        let r = Renderer::start(&self.ctx.id, &self.page, &self.ctx.canvas, &self.ctx.browser, self.layer.clone(), carrier, "{}".into())?;
+        let to = super::frames::Target { layer: self.layer.clone(), carrier, opaque: None };
+        let r = Renderer::start(&self.ctx.id, &self.page, &self.ctx.canvas, &self.ctx.browser, to, "{}".into())?;
         self.renderer = Some(r);
         self.stopped = false;
         Ok(())

@@ -37,7 +37,10 @@ impl Mixer {
             if !input.capabilities().has(Capability::Cue) {
                 continue;
             }
-            let now = Told { instance: input.layer().map(|l| std::sync::Arc::as_ptr(&l) as usize).unwrap_or(0), on_air: shown.contains(&input.id) };
+            // A source rebuilt from nothing has a new pipeline, and has been
+            // told nothing yet.
+            let instance = gstreamer::glib::object::ObjectType::as_ptr(&input.pipeline) as usize;
+            let now = Told { instance, on_air: shown.contains(&input.id) };
             if self.cued.get(&input.id) == Some(&now) {
                 continue;
             }

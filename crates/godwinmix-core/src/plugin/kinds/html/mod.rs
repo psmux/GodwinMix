@@ -11,6 +11,7 @@
 //! that shows it plays the page's own way in (`Capability::Cue`).
 
 pub mod frames;
+pub mod opaque;
 pub mod page;
 pub mod params;
 pub mod renderer;
@@ -54,7 +55,7 @@ fn claims(uri: &str) -> Option<u16> {
 
 fn new(req: SourceRequest<'_>) -> Result<Box<dyn Source>> {
     let params = params::validate(&req.cfg.effective_params())?;
-    Ok(Box::new(HtmlSource { ctx: req.ctx(), params, layer: Layer::new(true), carrier: None, renderer: None, on_air: false, stopped: false }))
+    Ok(Box::new(HtmlSource { ctx: req.ctx(), params, layer: Layer::new(true), carrier: None, opaque: None, renderer: None, on_air: false, stopped: false }))
 }
 
 pub struct HtmlSource {
@@ -62,6 +63,9 @@ pub struct HtmlSource {
     params: HtmlParams,
     layer: Arc<Layer>,
     carrier: Option<Arc<Carrier>>,
+    /// Set for a design that covers the picture, which goes to the
+    /// compositor rather than the board. See `opaque`.
+    opaque: Option<Arc<opaque::Opaque>>,
     renderer: Option<Renderer>,
     /// Whether an item showing this is on the programme, as the mixer last
     /// said with `cue`.
@@ -82,11 +86,9 @@ impl HtmlSource {
         let page = self.params.template.file.clone().context("the template has no file to load")?;
         let state = self.params.state(self.on_air);
         let fps = if self.params.fps > 0 { self.params.fps } else { self.params.template.fps.unwrap_or(0) };
-        // A design that covers the picture goes to the compositor like a
-        // camera, and the board leaves it alone.
-        let opaque = self.params.template.info.opaque;
-        self.layer.activate(!opaque);
-        let r = Renderer::start(&self.ctx.id, &renderer::Page::template(&page, fps, opaque), &self.ctx.canvas, &self.ctx.browser, self.layer.clone(), carrier, state)?;
+        let to = frames::Target { layer: self.layer.clone(), carrier, opaque: self.opaque.clone() };
+        let page = renderer::Page::template(&page, fps, self.opaque.is_some());
+        let r = Renderer::start(&self.ctx.id, &page, &self.ctx.canvas, &self.ctx.browser, to, state)?;
         self.renderer = Some(r);
         self.stopped = false;
         Ok(())
@@ -113,8 +115,19 @@ impl Source for HtmlSource {
     fn start(&mut self, canvas: &CanvasCaps, thumb: bool) -> Result<MediaEnds> {
         self.ctx.canvas = canvas.clone();
         let carrier = Arc::new(Carrier::build(&self.ctx.id, canvas)?);
-        let ends = assemble_layer(&self.ctx, thumb, &carrier, &self.layer)?;
-        carrier.show(self.layer.picture().as_deref());
+        // A design that covers the picture goes to the compositor like a
+        // camera, in its place in the stack, and the board leaves it alone.
+        let ends = if self.params.template.info.opaque {
+            let o = opaque::Opaque::build(&self.ctx.id, canvas)?;
+            let ends = o.assemble(&self.ctx, thumb)?;
+            o.keep_alive(&self.ctx.id);
+            self.opaque = Some(o);
+            ends
+        } else {
+            let ends = assemble_layer(&self.ctx, thumb, &carrier, &self.layer)?;
+            carrier.show(self.layer.picture().as_deref());
+            ends
+        };
         self.carrier = Some(carrier);
         self.renderer = None;
         self.ensure_renderer()?;
@@ -124,12 +137,18 @@ impl Source for HtmlSource {
     fn stop(&mut self) -> Result<()> {
         self.stopped = true;
         self.renderer = None;
+        if let Some(o) = self.opaque.take() {
+            o.stop();
+        }
         Ok(())
     }
 
     /// New words in place, with no reload. A different page is loaded again.
     fn configure(&mut self, params: &Params) -> Result<Configure> {
         let p = params::validate(params)?;
+        if p.template.info.opaque != self.params.template.info.opaque {
+            return Ok(Configure::RestartRequired("a design that covers the picture is drawn by the compositor, one that does not by the overlay board".into()));
+        }
         let other_page = p.template != self.params.template || p.fps != self.params.fps;
         self.params = p;
         if other_page && self.carrier.is_some() {
