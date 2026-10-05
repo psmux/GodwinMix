@@ -1,8 +1,8 @@
 # Install on macOS
 
-No public installers are published yet. Use the source build instructions in
-[CONTRIBUTING.md](../../CONTRIBUTING.md) for now. The installer instructions
-below apply once a validated release is available.
+Download the `.dmg` from the [latest release](https://github.com/psmux/GodwinMix/releases/latest). It is built for Apple
+Silicon; on an Intel Mac, build from source with
+[CONTRIBUTING.md](../../CONTRIBUTING.md).
 
 From a source checkout, `cargo run --release -- --config
 godwinmix.example.toml` is complete. The web page renderer and the first party

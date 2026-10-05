@@ -1,8 +1,8 @@
 # Install on Linux
 
-No public installers are published yet. Use the source build instructions in
-[CONTRIBUTING.md](../../CONTRIBUTING.md) for now. The installer instructions
-below apply once a validated release is available.
+Download the `.deb` (Debian and Ubuntu) or the `.AppImage` (any other
+distribution) from the [latest release](https://github.com/psmux/GodwinMix/releases/latest). To build it yourself instead,
+see [CONTRIBUTING.md](../../CONTRIBUTING.md).
 
 From a source checkout, `cargo run --release -- --config
 godwinmix.example.toml` is complete. The web page renderer and the first party
@@ -47,11 +47,12 @@ has to be clicked past. That cuts both ways: check the hash.
 ## The .deb
 
 ```sh
-sudo apt install ./godwinmix_0.2.0_amd64.deb
+sudo apt install ./GodwinMix_0.2.0_amd64.deb
 ```
 
-Unlike the Windows and macOS builds, the `.deb` does **not** carry its own
-GStreamer. It depends on the distribution's packages, which `apt` pulls in
+The `.deb` carries the same trimmed GStreamer as the other installers, and the
+app uses that copy, so what you see matches the Windows and macOS builds. It
+also depends on the distribution's GStreamer packages, which `apt` pulls in
 with it:
 
 ```
@@ -59,11 +60,9 @@ libgstreamer1.0-0, libgstreamer-plugins-base1.0-0, gstreamer1.0-plugins-base,
 gstreamer1.0-plugins-good, gstreamer1.0-plugins-bad, gstreamer1.0-libav
 ```
 
-That is the right trade on a distribution that already has a packaged
-GStreamer: the security updates are the distribution's job, the download is 20
-MB rather than 110, and the plugins on the machine are the ones the machine's
-own applications use. It is also why the `.deb` needs no permission dialog and
-no unpacking step.
+Those serve `godwinmix` when you run it from a terminal rather than from the
+app, as `godwinmix doctor` or an AI agent does. The package is about 435 MB
+for that reason; dropping the bundled copy from the `.deb` is an open item.
 
 What the package does carry is the camera, the screen, the microphone and
 the ingest plugin, and the web page renderer under
@@ -85,7 +84,7 @@ sudo apt install gstreamer1.0-plugins-ugly
 Then check the machine before you point cameras at it:
 
 ```sh
-gmx doctor
+godwinmix doctor
 godwinmix --probe
 ```
 
@@ -95,8 +94,8 @@ prints which encoder it picked.
 ## The AppImage
 
 ```sh
-chmod +x godwinmix_0.2.0_amd64.AppImage
-./godwinmix_0.2.0_amd64.AppImage
+chmod +x GodwinMix_0.2.0_amd64.AppImage
+./GodwinMix_0.2.0_amd64.AppImage
 ```
 
 The AppImage does carry its own GStreamer, trimmed to what the codec catalogue
@@ -117,7 +116,7 @@ sudo dnf install fuse-libs
 Or extract it and run it from the directory, which needs no FUSE at all:
 
 ```sh
-./godwinmix_0.2.0_amd64.AppImage --appimage-extract
+./GodwinMix_0.2.0_amd64.AppImage --appimage-extract
 ./squashfs-root/AppRun
 ```
 
@@ -220,7 +219,7 @@ the mixer is right to use the software encoder.
 the screen capture path goes through PipeWire and the desktop portal, which
 asks you which window to share the first time.
 
-**Something else.** `gmx doctor`, or the log. Then
+**Something else.** `godwinmix doctor`, or the log. Then
 [Debug a show](debug-a-show.md).
 
 ## See also

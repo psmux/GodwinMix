@@ -1,8 +1,8 @@
 # Install on Windows
 
-No public installers are published yet. Use the source build instructions in
-[CONTRIBUTING.md](../../CONTRIBUTING.md) for now. The installer instructions
-below apply once a validated release is available.
+Download `GodwinMix_<version>_x64-setup.exe`, or the `.msi` if you deploy
+with Group Policy, from the [latest release](https://github.com/psmux/GodwinMix/releases/latest). To build it yourself
+instead, see [CONTRIBUTING.md](../../CONTRIBUTING.md).
 
 From a source checkout, `cargo run --release -- --config
 godwinmix.example.toml` is complete. The web page renderer and the first party
