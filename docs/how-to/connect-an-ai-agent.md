@@ -202,6 +202,9 @@ shell, which is how pi works. Calls are tool calls, errors are refused calls.
 | "Make an animated news ticker with these three headlines: ..." | on air, 45 s | on air, 13 calls, 55 s | on air, 32 calls, 122 s |
 | "Make me a modern news studio set and put me in it, no green screen" | on air: a designed set and desk, 55 turns, 5 min | on air: a designed set, 15 calls, 112 s | not run |
 
+A second free model, `opencode/nemotron-3-ultra-free`, put the same lower
+third on air in 7 calls with no error, choosing `#0066cc` for the blue.
+
 What they did for the set, both models, without being told how: designed a
 full screen SVG backdrop, saved it with `save_template`, added it as a
 source, and made the scene with `create_scene_from` and the `virtual-set`
