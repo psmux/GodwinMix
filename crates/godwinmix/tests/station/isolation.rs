@@ -33,7 +33,7 @@ fn pid_of(dir: &std::path::Path, show: &str) -> Option<i32> {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_show_killed_is_started_again_the_other_runs_on_and_its_share_goes_back() {
     let (dir, port) = folder("kill");
-    let st = start(dir.clone(), port, &[]).await;
+    let st = start_alone(dir.clone(), port, &[]).await;
     let mut ws = rpc(&st, "").await;
     call(&mut ws, 1, "core.subscribe", json!({"events": ["show.*"]})).await;
     let added = call(&mut ws, 2, "show.add", json!({"name": "Second"})).await;
