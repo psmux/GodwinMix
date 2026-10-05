@@ -2,13 +2,18 @@
 
 Ask an agent for "a red breaking news bar that says NEWS 24" and have it on
 air a minute later, designed, branded and checked. The agent writes or picks
-an [SVG template](write-an-svg-template.md), the mixer draws it with no
-browser, and the agent looks at the result before it tells you it is done.
+an [SVG template](write-an-svg-template.md) for a graphic that holds still,
+or an [HTML template](make-a-moving-graphic.md) for one that moves (an
+animated strap, a ticker, a countdown, a 3D logo, a looping background, a
+virtual set), and looks at the result before it tells you it is done.
 
 This works with Claude Code, opencode, pi, Codex, Gemini CLI, Cursor and
-any other agent that speaks MCP or runs commands. A small model does the pack
-and the field changes well; designing a new template from nothing wants a
-stronger one.
+any other agent that speaks MCP or runs commands. A small or free model does
+well when it starts from a starter design and changes its words, colours and
+layout; `check_template` tells it exactly what to fix when it gets one wrong.
+Designing a new template from nothing wants a stronger model. The rules a
+model follows, with one example of each kind, are in
+[graphics for agents](../reference/graphics-for-agents.md).
 
 ## 1. Connect the agent and give it the skill
 
@@ -105,5 +110,8 @@ third. 320 wide, about 84 tokens, is enough to see where things are.
   from `core_info`; the skill says so too.
 * The words are tiny. They were shrunk to fit a long headline. Ask for a
   shorter one, or for the two line strap.
-* The agent reaches for OGraf for a lower third. Point it at the skill: OGraf
-  is for graphics that move inside themselves, and runs a browser per graphic.
+* The agent reaches for HTML for a graphic that holds still. Point it at the
+  skill: an SVG template does that for almost nothing, and the scene item's
+  `enter` and `exit` move it in and out.
+* An HTML graphic it made shows nothing, or covers the picture. Ask it to run
+  `check_template` on it and fix what it says.

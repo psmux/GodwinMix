@@ -22,6 +22,25 @@ use std::sync::Arc;
 /// page scaled, laid out exactly as designed.
 pub const DESIGN_WIDTH: u32 = 1920;
 
+/// What the renderer is asked to draw.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Page {
+    pub url: String,
+    /// Frames a second at most; zero for the canvas rate.
+    pub fps: u32,
+    /// A template: a local file, drawn with no network at all.
+    pub offline: bool,
+    /// Laid out on a 1920 wide page and scaled to the canvas.
+    pub designed: bool,
+}
+
+impl Page {
+    /// An HTML template's file.
+    pub fn template(file: &Path, fps: u32) -> Page {
+        Page { url: crate::input::file_uri(file), fps, offline: true, designed: true }
+    }
+}
+
 pub struct Renderer {
     /// Dropping it kills the process.
     _child: ExecChild,
@@ -32,9 +51,8 @@ pub struct Renderer {
 impl Renderer {
     /// Start the renderer on `page` at the canvas size, its pictures going to
     /// `layer`, and tell it `state` straight away.
-    #[allow(clippy::too_many_arguments)]
-    pub fn start(id: &str, page: &Path, fps: u32, canvas: &CanvasCaps, browser: &BrowserConfig, layer: Arc<Layer>, carrier: Arc<Carrier>, state: String) -> Result<Renderer> {
-        let spec = spec(page, fps, canvas, browser)?;
+    pub fn start(id: &str, page: &Page, canvas: &CanvasCaps, browser: &BrowserConfig, layer: Arc<Layer>, carrier: Arc<Carrier>, state: String) -> Result<Renderer> {
+        let spec = spec(page, canvas, browser)?;
         let (stdout, mut child, stderr) = spawn_exec(id, &spec)?;
         let stdin = child.stdin.take().context("the renderer has no stdin to send the graphic's state on")?;
         let feed = Feed::new();
@@ -61,15 +79,16 @@ impl Drop for Renderer {
     }
 }
 
-/// The command line: the page, the canvas size, graphic mode, and the scale
-/// that lays a 1920 wide design out on this canvas.
-fn spec(page: &Path, fps: u32, canvas: &CanvasCaps, browser: &BrowserConfig) -> Result<ExecSpec> {
+/// The command line: the page, the canvas size, graphic mode, and for a
+/// template, no network and the scale that lays a 1920 wide design out on
+/// this canvas.
+fn spec(page: &Page, canvas: &CanvasCaps, browser: &BrowserConfig) -> Result<ExecSpec> {
     let program = crate::input::graphic_renderer(browser)?;
-    let fps = if fps == 0 { canvas.fps.numer().max(1) as u32 } else { fps };
+    let fps = if page.fps == 0 { canvas.fps.numer().max(1) as u32 } else { page.fps };
     let mut argv = vec![
         program.to_string_lossy().to_string(),
         "--url".into(),
-        crate::input::file_uri(page),
+        page.url.clone(),
         "--width".into(),
         canvas.width.to_string(),
         "--height".into(),
@@ -78,7 +97,10 @@ fn spec(page: &Path, fps: u32, canvas: &CanvasCaps, browser: &BrowserConfig) -> 
         fps.to_string(),
         "--graphic".into(),
     ];
-    if canvas.width as u32 != DESIGN_WIDTH {
+    if page.offline {
+        argv.push("--offline".into());
+    }
+    if page.designed && canvas.width as u32 != DESIGN_WIDTH {
         argv.extend(["--scale".into(), format!("{:.4}", canvas.width as f64 / DESIGN_WIDTH as f64)]);
     }
     argv.extend(browser.args.iter().cloned());

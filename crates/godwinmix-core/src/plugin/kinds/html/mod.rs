@@ -11,6 +11,7 @@
 //! that shows it plays the page's own way in (`Capability::Cue`).
 
 pub mod frames;
+pub mod page;
 pub mod params;
 pub mod renderer;
 
@@ -81,7 +82,7 @@ impl HtmlSource {
         let page = self.params.template.file.clone().context("the template has no file to load")?;
         let state = self.params.state(self.on_air);
         let fps = if self.params.fps > 0 { self.params.fps } else { self.params.template.fps.unwrap_or(0) };
-        let r = Renderer::start(&self.ctx.id, &page, fps, &self.ctx.canvas, &self.ctx.browser, self.layer.clone(), carrier, state)?;
+        let r = Renderer::start(&self.ctx.id, &renderer::Page::template(&page, fps), &self.ctx.canvas, &self.ctx.browser, self.layer.clone(), carrier, state)?;
         self.renderer = Some(r);
         self.stopped = false;
         Ok(())

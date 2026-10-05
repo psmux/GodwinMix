@@ -55,17 +55,20 @@ pub fn listen() {
         .expect("spawning the control reader");
 }
 
-/// Chromium switches for graphic mode. A graphic is a local file and runs
-/// offline: every host name fails to resolve, so a page cannot fetch a font
-/// or a script from the network at show time (and works the same in a
-/// building with no internet), and a page may read the files beside it,
-/// which is what lets it load its own scripts as modules and its pictures
-/// into WebGL. Nothing in the background reaches out either.
-pub fn switches(cl: &mut CommandLine) {
-    for sw in ["allow-file-access-from-files", "disable-background-networking", "disable-component-update", "disable-extensions", "disable-sync"] {
+/// Chromium switches for graphic mode: nothing in the background reaches
+/// out. With `offline`, for a template that is a local file, every host name
+/// fails to resolve, so a page cannot fetch a font or a script at show time
+/// (and works the same in a building with no internet), and a page may read
+/// the files beside it, which lets it load its own scripts as modules and its
+/// pictures into WebGL.
+pub fn switches(cl: &mut CommandLine, offline: bool) {
+    for sw in ["disable-background-networking", "disable-component-update", "disable-extensions", "disable-sync"] {
         cl.append_switch(Some(&CefString::from(sw)));
     }
-    cl.append_switch_with_value(Some(&CefString::from("host-resolver-rules")), Some(&CefString::from("MAP * ~NOTFOUND")));
+    if offline {
+        cl.append_switch(Some(&CefString::from("allow-file-access-from-files")));
+        cl.append_switch_with_value(Some(&CefString::from("host-resolver-rules")), Some(&CefString::from("MAP * ~NOTFOUND")));
+    }
 }
 
 /// The script that installs the runtime and applies the newest state.
