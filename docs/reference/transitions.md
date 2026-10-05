@@ -103,7 +103,15 @@ the scenes do not dissolve, because a stinger that dissolves underneath looks
 like two transitions at once.
 
 The canvas stays I420. Only the clip's own pad carries alpha, which is the
-cheap half of the AYUV price 11 section 3 puts at 3.5 times I420.
+cheap half of the AYUV price 11 section 3 puts at 3.5 times I420. A clip whose
+decoder gives alpha (WebM VP8 or VP9 alpha, ProRes 4444, QuickTime Animation)
+is drawn by the overlay board by that alpha.
+
+`luma` is read and, so far, does nothing: an opaque clip's black is not keyed,
+and the clip covers the picture wherever it is drawn. For a clip on black, a
+light leak or a burn, import it into the fx library instead, where it is drawn
+with Screen, Add or a luma key and its cut point is measured; see
+[transitions and effects from packs](fx.md).
 
 ### `wipe`
 
@@ -234,7 +242,8 @@ Read scope. Every name a take accepts here, in the order a take resolves them:
 {"transitions": [
    {"name": "fade", "origin": "built-in", "type": "fade", "params": ["easing"]},
    {"name": "wipe", "origin": "built-in", "type": "wipe", "params": ["direction", "easing"]},
-   {"name": "house", "origin": "collection", "type": "fade", "params": ["easing"], "duration_ms": 400}],
+   {"name": "house", "origin": "collection", "type": "fade", "params": ["easing"], "duration_ms": 400},
+   {"name": "light-leak", "origin": "fx", "type": "overlay", "params": ["cut_at_ms"], "duration_ms": 2000}],
  "easings": ["linear", "ease-in", "ease-out", "ease-in-out"],
  "directions": ["left", "right", "up", "down"],
  "item_transitions": ["cut", "fade", "slide", "zoom", "wipe"],
@@ -244,7 +253,9 @@ Read scope. Every name a take accepts here, in the order a take resolves them:
 ```
 
 A running plugin whose name is a built in one replaces it in the list, as it
-does in a take. Over MCP it is `list_transitions`, found through
+does in a take. An item in the fx library that takes may use is listed with
+origin `fx` and its `type` is its look (`stinger`, `overlay`, `matte`,
+`shader`); see [transitions and effects from packs](fx.md). Over MCP it is `list_transitions`, found through
 `search_tools` rather than in the hot list.
 
 ## `program.take`
@@ -262,7 +273,8 @@ does in a take. Over MCP it is `list_transitions`, found through
 | `"fade"` | `{"type": "fade", "duration_ms": 300}` |
 | `{"type": "fade"}` | the same |
 | `{"type": "fade", "duration_ms": 800}` | 800 milliseconds |
-| absent, `"cut"`, or any `duration_ms: 0` | a cut |
+| absent | the scene's transition, then the default, when `fx.assign` set one; otherwise a cut |
+| `"cut"`, or any `duration_ms: 0` | a cut, whatever is assigned |
 
 `params` is the transition's own: a stinger reads `clip`, `cut_at_ms` and
 `luma`, a wipe `direction`, a dip `colour`, every built in one `easing`; a
@@ -271,7 +283,8 @@ collection stores a named transition under, so a transition written into a
 scene collection and one typed into a call are the same thing.
 
 A name a collection knows is resolved first, then a transition plugin the
-supervisor has running, then the built in ones; a plugin named like a built in
+supervisor has running, then an item in the fx library, then the built in
+ones; a plugin named like a built in
 one (`plugins/wipe` is called `wipe`) is the one that runs. A name nobody knows
 is `-32602`, with `data.transitions` listing every name this core would have
 accepted. A built in transition's params are checked the same way: a

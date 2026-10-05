@@ -96,13 +96,15 @@ def iris():
     # corners, so the new scene shows from the centre out.
     out = ROOT / "iris" / "iris.png"
     out.parent.mkdir(parents=True, exist_ok=True)
-    expr = "lum='255*clip(hypot(X-W/2\\,(Y-H/2)*W/H)/(0.62*W)\\,0\\,1)':cb=128:cr=128"
+    expr = "lum='255*clip(hypot(X-W/2\\,Y-H/2)/hypot(W/2\\,H/2)\\,0\\,1)':cb=128:cr=128"
     run(["-f", "lavfi", "-i", f"color=c=black:s={W}x{H},format=yuv444p,geq={expr}",
          "-frames:v", "1", "-pix_fmt", "gray", str(out)])
 
 
 if __name__ == "__main__":
+    only = sys.argv[1:]
     for make in (light_leak, bokeh, glitch, film_burn, iris):
-        make()
+        if not only or make.__name__ in only:
+            make()
     for f in sorted(ROOT.rglob("*.*")):
         print(f"{f.stat().st_size:>8}  {f.relative_to(ROOT)}")

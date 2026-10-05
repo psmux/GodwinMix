@@ -38,6 +38,7 @@ Start here if you have never run it.
 * [Choose a hardware encoder](how-to/choose-a-hardware-encoder.md)
 * [Put more than one thing on screen](how-to/scenes.md)
 * [Change scene with a transition](how-to/transitions.md)
+* [Use transitions and effects from packs: light leaks, stingers, luma wipes, shaders](how-to/transitions-from-packs.md)
 * [Build a scene by dragging](how-to/compose-a-scene.md)
 * [Operate one mixer with several people](how-to/operate-with-several-people.md),
   from phones and desks at once, each with their own undo
@@ -141,6 +142,7 @@ Start here if you have never run it.
 * [Presets, every manifest key and the merge rules](reference/presets.md)
 * [Scene commands, every method with an example](reference/scene-commands.md)
 * [Transitions: the built in types, the plugin contract, the accuracy](reference/transitions.md)
+* [Transitions and effects from packs: the formats, the folder, the fx methods](reference/fx.md)
 * [The scene document](reference/scene-document.md)
 * [The designer kits](reference/designer-kits.md)
 * [Presence: client ids, presence.list and presence.changed](reference/presence.md)

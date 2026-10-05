@@ -90,12 +90,12 @@ impl Gl {
         if self.failed.load(Ordering::Acquire) || self.error().is_some() {
             return super::super::matte::dissolve(old, f, t);
         }
-        let stacked = self.stack(old, f);
+        let stacked = frames::stack(&self.stacked, old, f);
         while let Some(s) = self.sink.try_pull_sample(gst::ClockTime::ZERO) {
             *self.latest.lock() = s.buffer_owned();
         }
         if let Some(answer) = self.latest.lock().clone() {
-            self.draw(&answer, f);
+            frames::draw(&self.stacked, &answer, f);
         } else {
             let pic = Pic { y: old.y, u: old.u, v: old.v, strides: old.strides };
             super::super::matte::dissolve(&pic, f, 0.0);
@@ -128,43 +128,6 @@ impl Gl {
     pub fn has_failed(&self) -> bool {
         self.failed.load(Ordering::Acquire)
     }
-
-    /// One buffer twice the canvas height, old picture above new.
-    fn stack(&self, old: &Pic<'_>, f: &Planes<'_>) -> Option<gst::Buffer> {
-        let mut buffer = gst::Buffer::with_size(self.stacked.size()).ok()?;
-        {
-            let b = buffer.get_mut()?;
-            let mut frame = gst_video::VideoFrameRef::from_buffer_ref_writable(b, &self.stacked).ok()?;
-            let (w, h) = (f.width as usize, f.height as usize);
-            let s = self.stacked.stride();
-            let planes = frame.planes_data_mut();
-            let [y, u, v, _] = planes;
-            let new = [&*f.y, &*f.u, &*f.v];
-            for (i, (dst, rows, cols)) in [(y, h, w), (u, h / 2, w / 2), (v, h / 2, w / 2)].into_iter().enumerate() {
-                let ds = s[i] as usize;
-                let olds = [old.y, old.u, old.v][i];
-                for r in 0..rows {
-                    dst[r * ds..r * ds + cols].copy_from_slice(&olds[r * old.strides[i]..][..cols]);
-                    dst[(rows + r) * ds..(rows + r) * ds + cols].copy_from_slice(&new[i][r * f.strides[i]..][..cols]);
-                }
-            }
-        }
-        Some(buffer)
-    }
-
-    /// The top half of an answer onto the frame.
-    fn draw(&self, answer: &gst::Buffer, f: &mut Planes<'_>) {
-        let Ok(frame) = gst_video::VideoFrameRef::from_buffer_ref_readable(answer.as_ref(), &self.stacked) else { return };
-        let (w, h) = (f.width as usize, f.height as usize);
-        let s = self.stacked.stride();
-        let dst = [(&mut *f.y, f.strides[0], h, w), (&mut *f.u, f.strides[1], h / 2, w / 2), (&mut *f.v, f.strides[2], h / 2, w / 2)];
-        for (i, (d, ds, rows, cols)) in dst.into_iter().enumerate() {
-            let Ok(src) = frame.plane_data(i as u32) else { return };
-            for r in 0..rows {
-                d[r * ds..r * ds + cols].copy_from_slice(&src[r * s[i] as usize..][..cols]);
-            }
-        }
-    }
 }
 
 impl Gl {
@@ -189,3 +152,6 @@ impl Drop for Gl {
         });
     }
 }
+
+#[path = "gl_frames.rs"]
+mod frames;
