@@ -64,9 +64,11 @@ export function watchTouch(root, opts = {}) {
     const p = press;
     press = null;
     if (!p || !p.target.isConnected) return;
-    firedAt = now();
     lastTap = null;
-    p.target.dispatchEvent(mouse("contextmenu", p, 2));
+    // Only a press that opened a menu eats the click that follows. A Take
+    // button held down a moment too long must still take.
+    const opened = !p.target.dispatchEvent(mouse("contextmenu", p, 2));
+    if (opened) firedAt = now();
   };
 
   const down = (e) => {

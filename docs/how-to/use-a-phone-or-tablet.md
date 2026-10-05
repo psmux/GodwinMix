@@ -55,7 +55,8 @@ The grip is the six dots at the left of each tile's name bar. It is there so a
 swipe across the picture still scrolls the tray, which on a phone matters more
 than rearranging it. A tap on the grip that does not move selects the tile and
 does not put it on air. A long press that turns into a menu never puts the
-tile on air either, when the finger lifts.
+tile on air either, when the finger lifts. A button with no menu, Take for one,
+still does its job when it is held down a moment too long.
 
 A long press in a text box is left to the phone, for selecting and pasting.
 

@@ -125,7 +125,7 @@ way.
 
 | Gesture | Stands for | Detail |
 |---|---|---|
-| long press | right click | 500 ms without moving more than 8 px. Lifting the finger afterwards is not a tap |
+| long press | right click | 500 ms without moving more than 8 px. When it opens a menu, lifting the finger is not a tap; on a button with no menu, such as Take, the tap still happens |
 | double tap | double click | two taps within 320 ms and 24 px of each other |
 | drag by the ⠿ grip | drag the tile | the grip is `touch-action: none`; a swipe anywhere else on a tile scrolls |
 | tap on the grip | a click that only selects | the tile is selected and is not put on air |
