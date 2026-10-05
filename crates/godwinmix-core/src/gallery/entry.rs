@@ -40,7 +40,11 @@ impl Entry {
     pub fn folder(id: &str, dir: PathBuf, manifest: Manifest, starter: Option<&'static Starter>) -> Entry {
         let file = (!manifest.file.is_empty()).then(|| dir.join(&manifest.file));
         let item = item(id, &manifest, file.as_deref());
-        Entry { item, manifest, at: Where::Folder(dir), starter }
+        let mut e = Entry { item, manifest, at: Where::Folder(dir), starter };
+        let own_clip = matches!(e.item.kind, GalleryKind::Clip | GalleryKind::Transition | GalleryKind::Effect)
+            && [".webm", ".mp4", ".mov"].iter().any(|x| e.manifest.file.to_ascii_lowercase().ends_with(x));
+        e.item.moving = e.preview_loop().or_else(|| own_clip.then(|| e.manifest.file.clone()));
+        e
     }
 
     /// The main file on disk, when the item has one there.
@@ -125,6 +129,7 @@ pub fn item(id: &str, m: &Manifest, file: Option<&Path>) -> GalleryItem {
         uri,
         made_by: m.made_by.clone(),
         saved: m.saved.clone(),
+        moving: None,
         placed: Vec::new(),
     }
 }
