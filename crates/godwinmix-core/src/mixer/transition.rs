@@ -67,6 +67,7 @@ use std::time::Duration;
 use tracing::{debug, warn};
 
 mod dip;
+mod fx_cut;
 pub mod easing;
 pub mod item;
 pub mod params;
@@ -210,6 +211,9 @@ pub enum Kind {
     },
     /// A `transition` plugin over the sidecar host, by plugin name.
     Plugin(String),
+    /// An item from the fx library: a clip over both scenes, a luma matte or
+    /// a shader, drawn by the overlay board. See `crate::fx`.
+    Fx(Box<crate::fx::Plan>),
 }
 
 impl Kind {
@@ -228,6 +232,7 @@ impl Kind {
             Kind::Box { .. } => "box",
             Kind::Dip { .. } => "dip",
             Kind::Plugin(name) => name,
+            Kind::Fx(plan) => &plan.name,
         }
     }
 
@@ -410,6 +415,7 @@ pub fn built_in(kind: &Kind) -> Option<Box<dyn Transition>> {
         Kind::ZoomOut { point } => Some(Box::new(zoom::Zoom { point: *point, out: true })),
         Kind::Dip { .. } => Some(Box::new(dip::Dip)),
         Kind::Plugin(_) => None,
+        Kind::Fx(plan) => Some(Box::new(fx_cut::FxCut::of(plan))),
     }
 }
 

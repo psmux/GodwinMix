@@ -83,10 +83,15 @@ pub fn fire(plan: &Plan, board: &Arc<Board>, canvas: (i32, i32), opacity: f64) -
 }
 
 /// Put a transition's pass on the board for `window`, in running time.
-pub fn transition(plan: &Plan, board: &Arc<Board>, canvas: (i32, i32), window: (u64, u64), easing: crate::mixer::transition::Easing, outgoing: Outgoing) -> Result<Running> {
+/// A clip's player may be handed in already started, which is how the mixer
+/// waits for a clip's first frame before it binds the cut.
+pub fn transition(plan: &Plan, board: &Arc<Board>, canvas: (i32, i32), window: (u64, u64), easing: crate::mixer::transition::Easing, outgoing: Outgoing, started: Option<player::Player>) -> Result<Running> {
     let (pass, player): (Arc<dyn Pass>, _) = match &plan.look {
         Look::Clip { path, mode, .. } => {
-            let player = player::Player::start(path, canvas)?;
+            let player = match started {
+                Some(p) => p,
+                None => player::Player::start(path, canvas)?,
+            };
             let pass = clip::ClipPass::new(&plan.name, &player, *mode, 1.0, Some(window.0), plan.duration_ms);
             (Arc::new(pass), Some(player))
         }

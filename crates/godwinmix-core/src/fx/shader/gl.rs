@@ -40,9 +40,8 @@ pub struct Gl {
 }
 
 impl Gl {
-    /// Build the pipeline and start it. Blocks while GL makes a context,
-    /// which can take a tenth of a second, so it is called off every
-    /// streaming thread.
+    /// Build the pipeline and start it. Called off every streaming thread,
+    /// because building it loads the GL plugin.
     pub fn start(fragment: &str, size: (i32, i32)) -> Result<Gl> {
         let stacked = gst_video::VideoInfo::builder(gst_video::VideoFormat::I420, size.0 as u32, size.1 as u32 * 2)
             .fps(gst::Fraction::new(30, 1))
@@ -60,12 +59,13 @@ impl Gl {
         let ratio = size.0 as f32 / size.1.max(1) as f32;
         let gl = Gl { pipeline, src, sink, shader, stacked, latest: Mutex::new(None), failed: Arc::default(), ratio };
         gl.uniforms(0.0);
+        // Not waited for: the GL context is made when the first frame
+        // arrives, and a shader that will not compile says so on the bus,
+        // which `mix` reads every frame.
         gl.pipeline.set_state(gst::State::Playing).context("GStreamer GL would not start")?;
-        let (_, state, _) = gl.pipeline.state(gst::ClockTime::from_seconds(3));
         if let Some(e) = gl.error() {
             anyhow::bail!("GStreamer GL would not run the shader: {e}");
         }
-        anyhow::ensure!(state == gst::State::Playing, "GStreamer GL did not start in three seconds");
         Ok(gl)
     }
 
