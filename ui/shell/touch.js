@@ -41,6 +41,9 @@ export function ignored(target) {
   return !target || !target.closest || !!target.closest(`${EDITABLE}, [data-drag-handle]`);
 }
 
+/** Where the browser's own long press menu is wanted: text, to select and paste. */
+const editable = (target) => !target || !target.closest || !!target.closest(EDITABLE);
+
 /**
  * Watch one root for long presses and double taps. Returns the function that
  * stops watching. `now` is injectable for the tests; the page uses the clock.
@@ -96,9 +99,10 @@ export function watchTouch(root, opts = {}) {
     }
     lastTap = tap;
   };
-  // The browser's own, after a touch: ours already went, or is on its way.
+  // The browser's own, after a touch: ours already went, or is on its way. On
+  // the grip there is none of ours, and a menu there would interrupt a drag.
   const echo = (e) => {
-    if (!e.isTrusted || now() - lastTouch > ECHO_MS || ignored(e.target)) return;
+    if (!e.isTrusted || now() - lastTouch > ECHO_MS || editable(e.target)) return;
     e.preventDefault();
     e.stopImmediatePropagation();
   };
