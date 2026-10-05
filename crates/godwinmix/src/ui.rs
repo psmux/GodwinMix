@@ -70,6 +70,7 @@ const ASSETS: &[(&str, &str)] = &[
     ("kits/protocol/index.js", include_str!("../../../ui/kits/protocol/index.js")),
     ("kits/protocol/mirror.js", include_str!("../../../ui/kits/protocol/mirror.js")),
     ("kits/protocol/predict.js", include_str!("../../../ui/kits/protocol/predict.js")),
+    ("kits/protocol/presence.js", include_str!("../../../ui/kits/protocol/presence.js")),
     ("kits/protocol/timing.js", include_str!("../../../ui/kits/protocol/timing.js")),
     ("kits/protocol/undo.js", include_str!("../../../ui/kits/protocol/undo.js")),
     ("kits/schema/describe.js", include_str!("../../../ui/kits/schema/describe.js")),
@@ -110,6 +111,7 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/composer/cutout.js", include_str!("../../../ui/panels/composer/cutout.js")),
     ("panels/composer/key.js", include_str!("../../../ui/panels/composer/key.js")),
     ("panels/composer/ops.js", include_str!("../../../ui/panels/composer/ops.js")),
+    ("panels/composer/others.js", include_str!("../../../ui/panels/composer/others.js")),
     ("panels/composer/motion.js", include_str!("../../../ui/panels/composer/motion.js")),
     ("panels/header/panel.js", include_str!("../../../ui/panels/header/panel.js")),
     ("panels/media/entry.js", include_str!("../../../ui/panels/media/entry.js")),
@@ -254,6 +256,8 @@ const ASSETS: &[(&str, &str)] = &[
     ("shell/setup-note.js", include_str!("../../../ui/shell/setup-note.js")),
     ("shell/pointer.js", include_str!("../../../ui/shell/pointer.js")),
     ("shell/touch.js", include_str!("../../../ui/shell/touch.js")),
+    ("shell/conflicts.js", include_str!("../../../ui/shell/conflicts.js")),
+    ("shell/presence.js", include_str!("../../../ui/shell/presence.js")),
     ("shell/registry.js", include_str!("../../../ui/shell/registry.js")),
     ("shell/sandbox.js", include_str!("../../../ui/shell/sandbox.js")),
     ("shell/selection.js", include_str!("../../../ui/shell/selection.js")),
@@ -308,6 +312,7 @@ const DEV_ASSETS: &[(&str, &str)] = &[
     ("test/welcome.js", include_str!("../../../ui/test/welcome.js")),
     ("test/menubar.js", include_str!("../../../ui/test/menubar.js")),
     ("test/touch.js", include_str!("../../../ui/test/touch.js")),
+    ("test/presence.js", include_str!("../../../ui/test/presence.js")),
     ("test/touch-tray.js", include_str!("../../../ui/test/touch-tray.js")),
     // The Channels panel against a stub of the channel contract, as tests and
     // as a page to look at: /test/channels.html?scene=cards&theme=light.
@@ -850,19 +855,21 @@ mod tests {
     }
 
     #[test]
-    fn the_page_with_the_composer_open_stays_under_460_kb() {
+    fn the_page_with_the_composer_open_stays_under_480_kb() {
         // The other half of the rule: the lazy set is not somewhere to hide
         // things. This is the heaviest thing a session can become, the page
         // plus the whole designer and the two kits only it uses, and it is the
         // number a person who actually arranges a scene pays. Raised from 450
-        // to 460 kB with the page's own budget, for touch.css.
+        // to 460 kB with the page's own budget, for touch.css, and to 480 kB
+        // for working with other people: who else is editing this scene, a
+        // draft somebody changed underneath, and undo per person.
         let mut everything = eager_set();
         everything.extend(closure_of("panels/composer/composer.js"));
         let mut bytes: usize = everything.iter().filter_map(|p| source_of(p)).map(|b| b.len()).sum();
         for extra in ["index.html", "themes/base.css", "themes/dock.css", "themes/touch.css", "themes/dark.css", "panels/composer/composer.css"] {
             bytes += source_of(extra).map(|b| b.len()).unwrap_or(0);
         }
-        assert!(bytes < 460 * 1024, "the page with the composer open is {bytes} bytes, over the 460 kB budget");
+        assert!(bytes < 480 * 1024, "the page with the composer open is {bytes} bytes, over the 480 kB budget");
     }
 
     #[test]
@@ -919,6 +926,8 @@ mod tests {
         reachable.extend(closure_of("panels/multiview/studio.js"));
         // Long press and double tap, where there is a touch screen.
         reachable.extend(closure_of("shell/touch.js"));
+        // A refused undo, or a draft somebody else changed underneath.
+        reachable.extend(closure_of("shell/conflicts.js"));
         // The menu bar's menus, the first time one opens, and File's project
         // dialogs after that.
         reachable.extend(closure_of("shell/menus.js"));
