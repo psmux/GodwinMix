@@ -1,5 +1,6 @@
-//! The library: `fx/` in the media folder, one folder an item, each with
-//! an `fx.json` beside its file.
+//! The library: the gallery's folder, `graphics/` in the media folder, one
+//! folder an item, each with a `graphic.toml` beside its file. Only the
+//! items whose `kind` is `transition` or `effect` are ours; see `toml_form`.
 
 use super::starter;
 use anyhow::{bail, Context, Result};
@@ -7,11 +8,12 @@ use godwinmix_protocol::fx::{FxEntry, FxManifest};
 use std::path::{Path, PathBuf};
 
 /// The manifest's file name inside an item's folder.
-pub const MANIFEST: &str = "fx.json";
+pub const MANIFEST: &str = "graphic.toml";
 
-/// Where the library is for a media folder.
+/// Where the library is for a media folder: the gallery's folder, so the
+/// gallery lists every transition and effect with its other designs.
 pub fn root(media: &Path) -> PathBuf {
-    media.join("fx")
+    media.join("graphics")
 }
 
 /// Every item, sorted by name, and a sentence for each folder that would not
@@ -26,7 +28,8 @@ pub fn list(media: &Path) -> (Vec<(FxManifest, PathBuf)>, Vec<String>) {
     let Ok(entries) = std::fs::read_dir(&root) else { return (found, errors) };
     for dir in entries.flatten().map(|e| e.path()).filter(|p| p.is_dir()) {
         match read(&dir) {
-            Ok(m) => found.push((m, dir)),
+            Ok(Some(m)) => found.push((m, dir)),
+            Ok(None) => {}
             Err(e) if dir.join(MANIFEST).exists() => errors.push(format!("{}: {e:#}", dir.display())),
             Err(_) => {}
         }
@@ -35,14 +38,16 @@ pub fn list(media: &Path) -> (Vec<(FxManifest, PathBuf)>, Vec<String>) {
     (found, errors)
 }
 
-/// The manifest in one folder, checked against what is there.
-pub fn read(dir: &Path) -> Result<FxManifest> {
+/// The item in one folder, checked against what is there. `None` for a
+/// gallery item that is not a transition or an effect.
+pub fn read(dir: &Path) -> Result<Option<FxManifest>> {
     let text = std::fs::read_to_string(dir.join(MANIFEST)).with_context(|| format!("reading {}", dir.join(MANIFEST).display()))?;
-    let m: FxManifest = serde_json::from_str(&text).context("fx.json is not a transition or effect; see docs/reference/fx.md")?;
+    let id = dir.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+    let Some(m) = super::toml_form::parse(&id, &text)? else { return Ok(None) };
     if m.file.contains(['/', '\\']) || m.file.contains("..") || !dir.join(&m.file).is_file() {
-        bail!("fx.json names the file {:?}, which is not in its folder", m.file);
+        bail!("graphic.toml names the file {:?}, which is not in its folder", m.file);
     }
-    Ok(m)
+    Ok(Some(m))
 }
 
 /// The item called `name`, or an error that lists the names there are.
@@ -57,11 +62,14 @@ pub fn find(media: &Path, name: &str) -> Result<(FxManifest, PathBuf)> {
 }
 
 /// Write `m` into `dir`, through a temporary file so a reader never sees half.
+/// What it keeps of the folder's last `graphic.toml` is everything that is
+/// not an fx setting: the gallery's description, tags and the rest.
 pub fn save(dir: &Path, m: &FxManifest) -> Result<()> {
-    let text = serde_json::to_string_pretty(m)? + "\n";
-    let part = dir.join(".fx.json.part");
+    let old = std::fs::read_to_string(dir.join(MANIFEST)).ok();
+    let text = super::toml_form::render(m, old.as_deref(), "uploaded")?;
+    let part = dir.join(".graphic.toml.part");
     std::fs::write(&part, text).with_context(|| format!("writing {}", part.display()))?;
-    std::fs::rename(&part, dir.join(MANIFEST)).context("saving fx.json")?;
+    std::fs::rename(&part, dir.join(MANIFEST)).context("saving graphic.toml")?;
     Ok(())
 }
 

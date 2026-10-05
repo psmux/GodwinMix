@@ -257,6 +257,9 @@ fn the_table_matches_the_scopes_in_the_protocol_document() {
             "core.restart",
             "core.shutdown",
             "filter.remove",
+            // An imported transition's folder goes, its clip with it, like
+            // media.remove.
+            "fx.remove",
             "media.remove",
             "node.remove",
             "output.remove",

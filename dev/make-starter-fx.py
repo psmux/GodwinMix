@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""Make the starter transitions and effects in fx/ with ffmpeg alone.
+"""Make the starter transitions and effects in graphics/starters/ with ffmpeg alone.
 
 Every picture here is drawn by an ffmpeg expression, so the set is ours to
 ship under the repository's licence and anyone can make it again:
 
     python3 dev/make-starter-fx.py
 
-Writes the media file of each item. The fx.json beside each is written by
-hand and checked in; tests/fx.rs checks that what the importer measures on
+Writes the media file of each item. The graphic.toml beside each is written by
+hand and checked in; tests/fx_import.rs checks that what the importer measures on
 these files agrees with it. Needs an ffmpeg with libvpx-vp9.
 
 The clips are small on purpose (640x360, a second or two, a high CRF). A
@@ -19,12 +19,12 @@ import subprocess
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent / "fx"
+ROOT = Path(__file__).resolve().parent.parent / "graphics" / "starters"
 W, H, FPS = 640, 360, 30
 
 
 def run(args):
-    print(" ".join(str(a) for a in args[:12]), "...", file=sys.stderr)
+    print("ffmpeg", args[-1], file=sys.stderr)
     subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", *args], check=True)
 
 

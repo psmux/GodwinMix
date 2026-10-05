@@ -1,0 +1,16 @@
+name = "Iris"
+kind = "transition"
+file = "iris.png"
+description = "A circle opening from the middle: a black to white luma matte."
+tags = ["luma wipe", "iris", "circle"]
+origin = "shipped"
+
+[transition]
+look = "matte"
+blend = "normal"
+duration_ms = 1000
+softness = 0.1
+transition = true
+effect = false
+licence = "Apache-2.0"
+source = "made for GodwinMix by dev/make-starter-fx.py"

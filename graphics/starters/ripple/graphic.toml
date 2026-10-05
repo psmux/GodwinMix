@@ -1,0 +1,15 @@
+name = "Ripple"
+kind = "transition"
+file = "ripple.glsl"
+description = "Rings run out from the centre and the new scene comes up through them."
+tags = ["shader", "ripple", "water"]
+origin = "shipped"
+
+[transition]
+look = "shader"
+blend = "normal"
+duration_ms = 1200
+transition = true
+effect = false
+licence = "Apache-2.0"
+source = "written for GodwinMix in the gl-transitions form"

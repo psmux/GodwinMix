@@ -21,6 +21,9 @@ pub struct FxList {
     pub errors: Vec<String>,
     /// Whether GStreamer GL runs here, which decides `runs` for a shader.
     pub gpu: bool,
+    /// The transition a take uses when it names none, overall and by scene.
+    #[serde(default)]
+    pub assigned: FxAssignments,
 }
 
 /// `fx.import`: a file, a folder or a zip on the mixer's machine.
@@ -122,4 +125,28 @@ pub struct FxPreview {
     pub frame_height: u32,
     /// How long the strip takes to play once, in milliseconds.
     pub duration_ms: u64,
+}
+
+/// `fx.assign`: the transition a take uses when it names none.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+pub struct FxAssignRequest {
+    /// The scene this is for. Absent sets the default for every take.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scene: Option<String>,
+    /// Any name `program.transitions` lists: a built in one such as `fade`,
+    /// or an fx item such as `light-leak`. Absent or null clears it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transition: Option<String>,
+}
+
+/// What `fx.assign` keeps, in the library's `assign.json`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct FxAssignments {
+    /// Used by a take that names no transition, when its scene has none of
+    /// its own. `cut` is still a cut whatever this says.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default: Option<String>,
+    /// By scene name.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub scenes: std::collections::BTreeMap<String, String>,
 }

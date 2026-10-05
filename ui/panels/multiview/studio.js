@@ -23,6 +23,7 @@ import { register } from "../../shell/commands.js";
 import { releasePreview, retunePreview } from "./studio-picture.js";
 import { render } from "./studio-armed.js";
 import { picker } from "./transition-picker.js";
+import { gallery, effects } from "./fx-gallery.js";
 
 export { retunePreview, releasePreview, render };
 
@@ -50,8 +51,14 @@ export function build(panel) {
     title: "Send preview to programme at once, with no transition",
     onclick: () => take(panel, 0),
   });
+  // The fx library: a Looks panel to pick an imported transition, and a
+  // row of effect buttons that play over the programme.
+  panel.fx = panel.client ? gallery(panel.client, { pick: (name) => panel.picker.choose(name), armedScene: () => panel.armedScene || panel.client.state.preview || null }) : null;
+  panel.effects = panel.client ? effects(panel.client) : null;
   panel.takeBar = el("div.take-bar", { role: "group", "aria-label": "Take" }, [
     panel.takeBtn, panel.cutBtn, panel.picker.el,
+    ...(panel.fx ? [panel.fx.button, panel.fx.panel] : []),
+    ...(panel.effects ? [panel.effects.el] : []),
   ]);
   function describe() {
     panel.takeHow.textContent = panel.picker.describe();
@@ -63,6 +70,7 @@ export function build(panel) {
   const programme = panel.row.querySelector(".program");
   panel.row.insertBefore(panel.previewWrap, programme);
   panel.row.insertBefore(panel.takeBar, programme);
+  if (panel.effects) panel.offs.push(panel.effects.off);
   panel.offs.push(
     // A source tile armed in the Sources panel says so here at once, rather
     // than on the next state the core sends.
@@ -106,9 +114,9 @@ export async function take(panel, durationMs) {
   }
   const scene = panel.client.state.preview === target || panel.armedScene === target;
   const request = scene ? { scene: target } : { source: target };
-  if (durationMs) {
-    request.transition = panel.picker ? panel.picker.request(durationMs) : { type: "fade", duration_ms: durationMs };
-  }
+  // Cut says so, so a default transition set with fx.assign does not turn
+  // the Cut button into a Take.
+  request.transition = durationMs ? (panel.picker ? panel.picker.request(durationMs) : { type: "fade", duration_ms: durationMs }) : "cut";
   try {
     await panel.client.call("program.take", request);
   } catch (e) {

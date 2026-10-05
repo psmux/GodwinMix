@@ -3,7 +3,8 @@
 //!
 //! Made once, when an item is imported or first asked for, by the same
 //! blend, matte and shader code the programme uses, and kept beside the item
-//! as `.preview.jpg`. A picker animates it with a CSS step animation, so the
+//! as `preview-strip.jpg`, with its middle frame as `preview.jpg`, the
+//! still the gallery shows for a transition or an effect. A picker animates it with a CSS step animation, so the
 //! browser does the moving and only while the picker is open; the mixer
 //! never renders a preview on a clock.
 
@@ -23,7 +24,13 @@ const H: usize = SMALL.1 as usize;
 
 /// Where an item's strip is kept.
 pub fn path(dir: &Path) -> PathBuf {
-    dir.join(".preview.jpg")
+    dir.join("preview-strip.jpg")
+}
+
+/// Write the strip and the still beside the item.
+pub fn write(dir: &Path, (strip, still): (Vec<u8>, Vec<u8>)) -> Result<()> {
+    std::fs::write(path(dir), strip).with_context(|| format!("writing the preview in {}", dir.display()))?;
+    std::fs::write(dir.join("preview.jpg"), still).with_context(|| format!("writing the still in {}", dir.display()))
 }
 
 /// The strip for the item in `dir`, made now if it is missing or older than
@@ -34,8 +41,7 @@ pub fn ensure(m: &FxManifest, dir: &Path) -> Result<PathBuf> {
     if out.is_file() && modified(&out) >= modified(&dir.join(super::library::MANIFEST)) {
         return Ok(out);
     }
-    let jpeg = render(m, dir, None)?;
-    std::fs::write(&out, jpeg).with_context(|| format!("writing {}", out.display()))?;
+    write(dir, render(m, dir, None)?)?;
     Ok(out)
 }
 
@@ -45,8 +51,8 @@ fn scene(u: u8, v: u8, lo: u8) -> [Vec<u8>; 3] {
     [y, vec![u; W * H / 4], vec![v; W * H / 4]]
 }
 
-/// Render the strip as a JPEG.
-pub fn render(m: &FxManifest, dir: &Path, measured: Option<&Measured>) -> Result<Vec<u8>> {
+/// Render the strip and its middle frame, as two JPEGs.
+pub fn render(m: &FxManifest, dir: &Path, measured: Option<&Measured>) -> Result<(Vec<u8>, Vec<u8>)> {
     let plan = Plan::of(m, dir, None)?;
     let owned;
     let clip = match (&plan.look, measured) {
@@ -88,9 +94,16 @@ pub fn render(m: &FxManifest, dir: &Path, measured: Option<&Measured>) -> Result
         }
         rgb(&f, &mut strip, i);
     }
+    let mid = FRAMES as usize / 2;
+    let row = W * FRAMES as usize * 3;
+    let still: Vec<u8> = (0..H).flat_map(|y| strip[y * row + mid * W * 3..][..W * 3].to_vec()).collect();
+    Ok((jpeg(&strip, W as u32 * FRAMES)?, jpeg(&still, W as u32)?))
+}
+
+fn jpeg(rgb: &[u8], width: u32) -> Result<Vec<u8>> {
     let mut out = Vec::new();
     image::codecs::jpeg::JpegEncoder::new_with_quality(&mut out, 80)
-        .encode(&strip, W as u32 * FRAMES, H as u32, image::ExtendedColorType::Rgb8)
+        .encode(rgb, width, H as u32, image::ExtendedColorType::Rgb8)
         .context("encoding the preview")?;
     Ok(out)
 }

@@ -48,9 +48,9 @@ pub fn describe(path: &Path, slug: &str, file_name: &str, req: &FxImportRequest)
     Ok((m, Some(measured)))
 }
 
-/// A folder that already has an `fx.json`, copied in as it is.
+/// A folder that already has a `graphic.toml` of an fx item, copied in as it is.
 pub fn copy_item(dir: &Path, root: &Path, replace: bool) -> Result<FxEntry> {
-    let m = library::read(dir)?;
+    let Some(m) = library::read(dir)? else { bail!("this folder's graphic.toml is a gallery design, not a transition or an effect; import it with gallery.import") };
     let mut slug = library::slug(&m.name);
     if godwinmix_protocol::requests::TRANSITIONS.contains(&slug.as_str()) {
         slug.push_str("-fx");

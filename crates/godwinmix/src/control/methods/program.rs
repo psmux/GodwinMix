@@ -214,7 +214,14 @@ fn resolve_transition(
     call: &Call,
     req: &TakeRequest,
 ) -> Result<Option<TransitionSpec>, RpcError> {
-    let Some(asked) = &req.transition else { return Ok(None) };
+    let Some(asked) = &req.transition else {
+        // Nothing named: the scene's own transition, or the default, when
+        // `fx.assign` has set one. Otherwise the cut a take has always been.
+        return match super::fx::assigned(call, req) {
+            Some(named) => resolve_transition(call, &TakeRequest { transition: Some(named), ..req.clone() }),
+            None => Ok(None),
+        };
+    };
     let extra = call.app.transition_names();
     let named = call.app.scenes.transition(&asked.type_id());
     if let Some(stored) = named {

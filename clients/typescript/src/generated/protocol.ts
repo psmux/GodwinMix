@@ -1031,6 +1031,18 @@ export interface Frame {
   w: number;
 }
 
+/** `fx.assign`: the transition a take uses when it names none. */
+export interface FxAssignRequest {
+  scene?: string | null;
+  transition?: string | null;
+}
+
+/** What `fx.assign` keeps, in the library's `assign.json`. */
+export interface FxAssignments {
+  default?: string | null;
+  scenes?: Record<string, unknown>;
+}
+
 /** How a clip is put over the picture. */
 export type FxBlend = "normal" | "screen" | "add" | "luma";
 
@@ -1092,6 +1104,7 @@ export type FxKind = "stinger" | "overlay" | "matte" | "shader";
 
 /** What `fx.list` answers. */
 export interface FxList {
+  assigned?: FxAssignments;
   errors?: string[];
   fx: FxEntry[];
   gpu: boolean;
@@ -3209,6 +3222,7 @@ export interface MethodParams {
   "filter.list": Record<string, never>;
   "filter.remove": FilterIdRequest;
   "filter.set": SetFilterRequest;
+  "fx.assign": FxAssignRequest;
   "fx.fire": FxFireRequest;
   "fx.import": FxImportRequest;
   "fx.list": FxListRequest;
@@ -3414,6 +3428,7 @@ export interface MethodResults {
   "filter.list": FilterListing;
   "filter.remove": FilterRemoved;
   "filter.set": FilterRecord;
+  "fx.assign": FxAssignments;
   "fx.fire": FxFired;
   "fx.import": FxImported;
   "fx.list": FxList;
@@ -3670,6 +3685,7 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "filter.list", summary: "Every filter in place, with what it is and where it sits.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/filters" } },
   { name: "filter.remove", summary: "Take a filter out of the pipeline.", scope: "operate", mutating: true, destructive: true, rest: { method: "DELETE", path: "/api/v1/filters/{id}" } },
   { name: "filter.set", summary: "Change a filter's settings in place. A filter that cannot take the change while running says so rather than being restarted behind your back.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/filters/{id}/set" } },
+  { name: "fx.assign", summary: "Choose the transition a take uses when it names none, for one scene or for every take.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/fx/assign" } },
   { name: "fx.fire", summary: "Play an effect over the programme once: drawn on top of whatever is on air until its clip ends.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/fx/fire" } },
   { name: "fx.import", summary: "Import a transition or effect from a file, a folder or a zip on the mixer's machine, measuring what it is and where it covers the picture.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/fx/import" } },
   { name: "fx.list", summary: "The imported transitions and effects, with what each is and whether it runs on the GPU here.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/fx/list" } },
@@ -4117,6 +4133,11 @@ export class GeneratedMethods {
   /** Change a filter's settings in place. A filter that cannot take the change while running says so rather than being restarted behind your back. */
   filterSet(params: SetFilterRequest): Promise<FilterRecord> {
     return this._call("filter.set", params as unknown as Record<string, unknown>) as Promise<FilterRecord>;
+  }
+
+  /** Choose the transition a take uses when it names none, for one scene or for every take. */
+  fxAssign(params: FxAssignRequest = {}): Promise<FxAssignments> {
+    return this._call("fx.assign", params as unknown as Record<string, unknown>) as Promise<FxAssignments>;
   }
 
   /** Play an effect over the programme once: drawn on top of whatever is on air until its clip ends. */

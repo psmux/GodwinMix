@@ -26,8 +26,8 @@ fn the_starter_clips_measure_as_their_manifests_say() {
         if file.ends_with(".glsl") {
             continue;
         }
-        let m: godwinmix_protocol::fx::FxManifest = serde_json::from_slice(manifest).unwrap();
-        let measured = detect::measure(&repo().join("fx").join(name).join(file)).expect("the starter file decodes");
+        let m = godwinmix_core::fx::toml_form::parse(name, std::str::from_utf8(manifest).unwrap()).unwrap().expect("an fx item");
+        let measured = detect::measure(&repo().join("graphics/starters").join(name).join(file)).expect("the starter file decodes");
         let v = detect::classify(&measured);
         println!("{name:<12} {:?} {:?} cut {:?} coverage {:?} transition {} alpha {} {} ms", v.kind, v.blend, v.cut_at_ms, v.coverage, v.transition, measured.alpha, measured.duration_ms);
         assert_eq!(v.kind, m.kind, "{name} measured as the wrong kind");
@@ -46,7 +46,7 @@ fn the_starter_clips_measure_as_their_manifests_say() {
 fn a_clip_with_alpha_imports_as_a_stinger_with_a_preview() {
     gst::init().unwrap();
     let media = scratch("alpha");
-    let req = FxImportRequest { path: repo().join("fx/glitch/glitch.webm").display().to_string(), name: Some("My Glitch".into()), ..Default::default() };
+    let req = FxImportRequest { path: repo().join("graphics/starters/glitch/glitch.webm").display().to_string(), name: Some("My Glitch".into()), ..Default::default() };
     let done = import::import(&media, &req).expect("import");
     let item = &done.imported[0];
     assert_eq!(item.manifest.name, "my-glitch");
