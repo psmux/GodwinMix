@@ -13,8 +13,26 @@
 import { Selection, overlaps, rectFrom } from "./selection.js";
 import { el, on } from "./dom.js";
 
+/** True for a pointer that is a finger or a pen rather than a mouse. */
+export const isTouch = (e) => e.pointerType === "touch" || e.pointerType === "pen";
+
+/** Words for the hand in use: "Double click" to a mouse, "Double tap" to a finger. */
+export function byPointer(mouse, finger) {
+  return typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches ? finger : mouse;
+}
+
 /** Travel in CSS pixels before a press becomes a drag rather than a click. */
 export const DRAG_THRESHOLD = 5;
+
+/**
+ * The grip a finger drags a tile by. A finger anywhere else on a tile scrolls
+ * the page, because a tray that cannot be scrolled on a phone is worse than one
+ * that cannot be rearranged. The grip is `touch-action: none`, so the browser
+ * leaves its movement to us. Hidden where there is no touch screen.
+ */
+export function dragHandle() {
+  return el("span.drag-handle", { "data-drag-handle": "", "aria-hidden": "true", title: "Drag to move", text: "⠿" });
+}
 
 export class DragSelect {
   /**
@@ -69,6 +87,9 @@ export class DragSelect {
     if (e.button !== 0 || !e.isPrimary) return;
     if (this._inert(e.target)) return;
     const tile = this._tile(e.target);
+    const handle = !!e.target.closest("[data-drag-handle]");
+    // A finger on empty space is the start of a scroll, never a sweep.
+    if (isTouch(e) && !tile) return;
     const order = this.o.order();
     const mods = { toggle: e.ctrlKey || e.metaKey, extend: e.shiftKey };
 
@@ -94,6 +115,8 @@ export class DragSelect {
         before: [...this.sel.ids],
         beforeAnchor: this.sel.anchor,
         copy: false,
+        touch: isTouch(e),
+        handle,
       };
       this.o.onChange();
       return;
@@ -124,6 +147,11 @@ export class DragSelect {
     const dy = e.clientY - s.startY;
     const far = Math.abs(dx) >= DRAG_THRESHOLD || Math.abs(dy) >= DRAG_THRESHOLD;
 
+    if (s.mode === "press" && far && s.touch && !s.handle) {
+      // The browser is scrolling, and is about to say so with a pointercancel.
+      this._cancel();
+      return;
+    }
     if (s.mode === "press" && far) {
       s.mode = "drag";
       s.ghost = this._ghost();
@@ -169,15 +197,12 @@ export class DragSelect {
     const s = this.state;
     if (!s || e.pointerId !== s.pointerId) return;
     this.state = null;
-    try {
-      this.o.container.releasePointerCapture(e.pointerId);
-    } catch {
-      /* already released */
-    }
+    this._release(s);
 
     if (s.mode === "press") {
       if (this.sel.release(s.deferred)) this.o.onChange();
-      if (this.o.onActivate) this.o.onActivate(s.id, e);
+      // A touch on the grip that never moved selects. It does not take.
+      if (this.o.onActivate && !s.handle) this.o.onActivate(s.id, e);
       return;
     }
     if (s.mode === "maybe-marquee") {
@@ -208,11 +233,20 @@ export class DragSelect {
     const s = this.state;
     this.state = null;
     if (!s) return;
+    this._release(s);
     if (s.box) s.box.remove();
     if (s.mode === "drag") this._endDrag(s);
     // Escape restores the selection the gesture started from.
     this.sel.set(s.before, s.beforeAnchor);
     this.o.onChange();
+  }
+
+  _release(s) {
+    try {
+      this.o.container.releasePointerCapture(s.pointerId);
+    } catch {
+      /* already released */
+    }
   }
 
   _endDrag(s) {
@@ -257,6 +291,12 @@ export class DragSelect {
 
   _menu(e) {
     if (!this.o.onMenu) return;
+    // A long press arrives with the finger still down. Lifting it afterwards
+    // must not count as a tap, which would put the tile on air.
+    if (this.state && this.state.mode === "press") {
+      this._release(this.state);
+      this.state = null;
+    }
     const tile = this._tile(e.target);
     if (tile && !this.sel.has(tile.dataset.id)) {
       this.sel.click(tile.dataset.id, this.o.order(), {});

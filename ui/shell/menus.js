@@ -66,6 +66,8 @@ export async function openAll(bar, button) {
   const r = button.getBoundingClientRect();
   node.style.left = "8px";
   node.style.top = r.bottom + 2 + "px";
+  // A phone's header wraps, so the room under it is measured, not assumed.
+  node.style.maxHeight = `calc(100dvh - ${Math.round(r.bottom) + 10}px)`;
   opened = { id: "*", node, bar, title: button, since: performance.now(), offs: watch(node, bar) };
   first(node);
 }
