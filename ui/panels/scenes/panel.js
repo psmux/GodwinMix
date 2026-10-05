@@ -23,6 +23,7 @@
 
 import { el, clear, on } from "../../shell/dom.js";
 import { DragSelect, dragHandle } from "../../shell/pointer.js";
+import { byPointer } from "../../shell/touch.js";
 import { Selection } from "../../shell/selection.js";
 import { registerAll } from "../../shell/commands.js";
 import { focusedScene, setFocusedScene, onFocusChanged } from "../../shell/focus.js";
@@ -130,7 +131,7 @@ class ScenesPanel extends HTMLElement {
       style: { minHeight: "96px" },
     });
     this.hint = el("div.dim.sm.pad", {
-      text: "Choose a scene, then use + in Sources to add existing sources or create new ones. Double click a scene to edit its layout. Outputs send the programme and are shared by every scene.",
+      text: `Choose a scene, then use + in Sources to add existing sources or create new ones. ${byPointer("Double click", "Double tap")} a scene to edit its layout. Outputs send the programme and are shared by every scene.`,
       style: { maxWidth: "56ch" },
     });
     this.append(this.bar, this.strip, this.grid, this.hint);

@@ -31,6 +31,11 @@ const EDITABLE = "input:not([type=range]):not([type=checkbox]):not([type=radio])
 /** True for a pointer that is a finger or a pen rather than a mouse. */
 export const isTouch = (e) => e.pointerType === "touch" || e.pointerType === "pen";
 
+/** Words for the hand in use: "Double click" to a mouse, "Double tap" to a finger. */
+export function byPointer(mouse, finger) {
+  return typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches ? finger : mouse;
+}
+
 /** Where a long press and a double tap mean nothing of ours. */
 export function ignored(target) {
   return !target || !target.closest || !!target.closest(`${EDITABLE}, [data-drag-handle]`);

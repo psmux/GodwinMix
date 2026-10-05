@@ -192,9 +192,10 @@ function shellCommands(client, node) {
 }
 
 function shortcutSheet() {
-  const rows = Object.entries(shell.keymap.map).map(([chord, id]) =>
-    el("div.row", {}, [el("span.num", { text: chord, style: { minWidth: "8em" } }), el("span.dim", { text: id })])
-  );
+  const row = ([chord, id]) => el("div.row", {}, [el("span.num", { text: chord, style: { minWidth: "8em" } }), el("span.dim", { text: id })]);
+  // What a finger has instead, for whoever opened this from the menu on a phone.
+  const touch = [["Long press", "the item menu, as a right click"], ["Double tap", "open, as a double click"], ["⠿", "drag a tile by its grip"]];
+  const rows = [el("strong", { text: "Touch" }), ...touch.map(row), el("strong", { text: "Keys" }), ...Object.entries(shell.keymap.map).map(row)];
   modal({ title: "Keyboard", body: el("div.col.sm", {}, rows) });
 }
 

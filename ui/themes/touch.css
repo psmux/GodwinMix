@@ -49,21 +49,22 @@
   .btn, .btn.icon { min-height: 44px; min-width: 44px; padding: 8px 12px; }
   .menu button { min-height: 44px; align-items: center; padding: 8px 12px; }
   .menu .swatches { gap: 8px; flex-wrap: wrap; }
-  .menu .swatches button { width: 36px; height: 36px; min-height: 0; }
+  .menu .swatches button { width: 44px; height: 44px; min-height: 0; }
   .menubar-all { min-width: 44px; min-height: 44px; font-size: 20px; }
   .tabs button, .out-tabs button, .picker-rail button { min-height: 44px; }
   .scene-tabs button:not(.btn) { min-height: 44px; }
   .scene-tabs button.scene-edit:not(.btn) { width: 44px; height: 44px; }
   .showtab, .shows-add { min-height: 44px; }
+  .shows-add { min-width: 44px; justify-content: center; }
   .palette li { min-height: 44px; align-items: center; padding: 10px 12px; }
+  summary { padding-block: 12px; }
   .panel-section > summary { padding: 13px 12px; }
   .dock-title { min-height: 44px; }
   .dock-title button, .dock-tab { min-height: 44px; min-width: 44px; }
   .tile .gear { width: 40px; height: 40px; font-size: 18px; margin: -6px -4px -6px 0; }
   .tile .scene-edit { width: 44px; height: 44px; }
   .tile .scene-warn { width: 36px; height: 36px; }
-  .tile .strip .btn.icon { min-height: 36px; min-width: 36px; padding: 4px 8px; }
-  .rt-add, .rt-offer { min-height: 44px; }
+  .rt-add, .rt-offer, .rt-fold, .rt-ladd { min-height: 44px; }
   .welcome-tile { min-height: 44px; }
 
   /* A splitter a finger can find: the bar stays thin, the target does not. */
@@ -97,5 +98,9 @@
   .palette .box { width: calc(100vw - 16px); max-height: calc(100dvh - 16px); }
   .menu { max-width: calc(100vw - 12px); }
   .menubar-every { overflow: auto; }
+  /* The settings drawer is the whole screen on a phone, over the header, with
+     its own close button; its rows wrap rather than run off the side. */
+  .slot-sidebar { top: 0; width: 100%; max-width: none; z-index: 36; }
+  .slot-sidebar .row { flex-wrap: wrap; }
   .toast { max-width: calc(100vw - 16px); }
 }
