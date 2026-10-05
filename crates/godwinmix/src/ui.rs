@@ -64,6 +64,7 @@ const ASSETS: &[(&str, &str)] = &[
     ("join/name-field.js", include_str!("../../../ui/join/name-field.js")),
     ("join/wake.js", include_str!("../../../ui/join/wake.js")),
     ("join/flip.js", include_str!("../../../ui/join/flip.js")),
+    ("join/wiring.js", include_str!("../../../ui/join/wiring.js")),
     ("kits/canvas/draw.js", include_str!("../../../ui/kits/canvas/draw.js")),
     ("kits/canvas/geometry.js", include_str!("../../../ui/kits/canvas/geometry.js")),
     ("kits/canvas/gizmos.js", include_str!("../../../ui/kits/canvas/gizmos.js")),

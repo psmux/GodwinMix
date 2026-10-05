@@ -120,6 +120,7 @@ Start here if you have never run it.
 * [Receive and send MPEG-TS over UDP and multicast](how-to/udp-and-multicast.md)
 * [Upload a local media file](how-to/upload-local-media.md)
 * [Use this browser's camera and microphone](how-to/use-this-browsers-camera.md)
+* [Add a phone's camera with one scan](how-to/use-this-browsers-camera.md#add-a-phones-camera)
 
 
 ## Reference
@@ -175,7 +176,7 @@ Start here if you have never run it.
 * [Reference: the resource governor](reference/governor.md)
 * [Media upload](reference/media-upload.md)
 * [Project files and the project methods](reference/project.md)
-* [The publisher page](reference/publisher-page.md)
+* [The publisher page](reference/publisher-page.md): `/join/`, its links, the stream name, VP8 and what a phone gets
 * [Recording outputs](reference/recording.md)
 * [Setup on first use](reference/setup.md)
 * [Show health: alarms, thresholds and thumbnails](reference/show-health.md)

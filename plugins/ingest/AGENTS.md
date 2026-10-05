@@ -38,12 +38,15 @@ gmx plugin test plugins/ingest --offline     # replay tests/transcript.jsonl
    stays one all the way to `matroskamux`. `h264parse` and `aacparse` are there
    because a muxer needs framing, not because anything is being examined.
    Adding a decoder here would pay for the decode twice and is the one change
-   that would make this plugin expensive. The one exception is `src/transcode/`,
+   that would make this plugin expensive. One exception is `src/transcode/`,
    which decodes a channel stream only while a destination has asked for a
    rendition the stream is not, once per stream however many destinations
    convert it, and builds exactly the nodes the core's plan hands over in the
-   channel table. A destination with no rendition never goes near it. The
-   other is `src/direct/vitals/`, which decodes keyframes alone, at most one
+   channel table. A destination with no rendition never goes near it. Another
+   is `src/whip/session/vp8.rs`, which decodes VP8 from a WHIP publisher
+   that offers no H.264 and encodes it as H.264, for that publisher alone;
+   H.264 comes first in every answer, so a browser that can send it does.
+   The last is `src/direct/vitals/`, which decodes keyframes alone, at most one
    a second per show, and three sound frames a second, through two shared
    worker threads, and only while a show's alarms are on or somebody is
    looking at it (`docs/reference/show-health.md`).
