@@ -66,18 +66,20 @@ and it is cleared when the source is removed, because the ids are reused: a
 director alternating `event-a` and `event-b` one per match must not have one
 match's failures charged to the next.
 
-**A restart that does not hold makes the next one wait longer.** Every restart
-the supervisor arms (for a stall, a pipeline error, an end of stream or a
-failed restart) is a strike against the source, and each strike doubles how
-long it may stay stalled before the next one: `stall.restart_after_secs`, then
-twice that, four times, eight, and sixteen times at most, so 10, 20, 40, 80
-and 160 seconds with the defaults. The delay before an in place restart (half
-a second, growing to ten) is kept the same way. Both are forgiven only after
-the source has stayed live for 60 seconds. A source that is really dead is
-still restarted, a few times an hour rather than a few times a minute, and it
-reads `stalled` the whole time. The `restarting the source's pipeline` line in
-the log carries `strikes` and `next_stall_limit_secs`, and `the source has
-stayed live since its last restart` is written when a source is forgiven.
+**A stall restart that does not hold makes the next one wait longer.** Every
+restart for a stall is a strike against the source, and each strike doubles
+how long it may stay stalled before the next one: `stall.restart_after_secs`,
+then twice that, four times, eight, and sixteen times at most, so 10, 20, 40,
+80 and 160 seconds with the defaults. While a source has strikes, the delay
+before an in place restart (half a second, growing to ten) and the rebuild
+count above are kept too. All of it is forgiven once the source has stayed
+live for 60 seconds. A source that is really dead is still restarted, a few
+times an hour rather than a few times a minute, and it reads `stalled` the
+whole time. A restart for an end of stream or a pipeline error is not a
+strike: a clip that loops restarts at each end, and its next loop starts half
+a second later as it always did. Each strike is written to the log with
+`strikes` and `next_stall_limit_secs`, and `the source has stayed live since
+its last restart` when a source is forgiven.
 
 **A starved machine is not a dead source.** On a tick where the programme
 itself made fewer than half the frames the canvas rate asks for, a stalled
