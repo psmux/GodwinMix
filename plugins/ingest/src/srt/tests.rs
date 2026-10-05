@@ -49,8 +49,12 @@ fn stop(pipeline: gst::Element) {
     let _ = pipeline.set_state(gst::State::Null);
 }
 
+/// Ten seconds, times `GODWINMIX_TIMING_SLACK` on a runner that declares
+/// itself slow: with every core busy, as the rest of the suite keeps them, a
+/// player decoded one frame in ten seconds and thirty alone in three.
 fn wait_for(what: impl Fn() -> bool) -> bool {
-    let until = Instant::now() + Duration::from_secs(10);
+    let slack = std::env::var("GODWINMIX_TIMING_SLACK").ok().and_then(|s| s.parse::<f64>().ok()).unwrap_or(1.0).max(1.0);
+    let until = Instant::now() + Duration::from_secs(10).mul_f64(slack);
     while Instant::now() < until {
         if what() {
             return true;

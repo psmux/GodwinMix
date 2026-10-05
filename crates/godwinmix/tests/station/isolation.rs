@@ -92,7 +92,11 @@ async fn a_show_killed_is_started_again_the_other_runs_on_and_its_share_goes_bac
         tokio::time::sleep(Duration::from_millis(100)).await;
         now = governor_used(&st).await;
     }
-    assert_eq!(now.0, held.0, "the restarted show holds its rendition again, once: {now:?} against {held:?} before");
+    if now.0 != held.0 {
+        let shows = get(&st, "/api/v1/shows").await;
+        let governor = get(&st, "/api/v1/governor/status").await;
+        panic!("the restarted show holds its rendition again, once: {now:?} against {held:?} before\nshows: {shows}\ngovernor: {governor}");
+    }
 
     let main = list["shows"].as_array().unwrap().iter().find(|s| s["id"] == "main").cloned().unwrap();
     assert_eq!((main["state"].clone(), main["restarts"].clone()), (json!("running"), json!(0)), "{list}");
