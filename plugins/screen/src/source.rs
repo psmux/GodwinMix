@@ -2,9 +2,8 @@
 
 use std::time::Duration;
 
-use godwinmix_capture_common::{capture, Capture};
-
-use crate::opening::Opening;
+use godwinmix_capture_common::opening::Cancel;
+use godwinmix_capture_common::{capture, Capture, Opening};
 use godwinmix_sdk::prelude::*;
 use serde_json::Value;
 
@@ -56,21 +55,25 @@ impl ScreenSource {
         }
     }
 
-    /// Start opening the capture and return. See `opening` for why it does
-    /// not wait.
+    /// Start opening the capture and return. See capture-common's `opening`
+    /// for why it does not wait. Whatever was open before is let go of first.
     fn open(&mut self, params: &StartParams) -> Result<(), RpcError> {
         let settings = self.settings.clone();
         let params = params.clone();
         let reporter = self.reporter.clone();
         let what = self.what();
         let start = params.clone();
-        self.opening = Some(Opening::start(move || {
+        let before = self.opening.take();
+        self.opening = Some(Opening::after(before, move |cancel: &Cancel| {
             let capture = capture::open_with_retry(
                 OPEN_ATTEMPTS,
                 OPEN_GAP,
                 FIRST_FRAME_WITHIN,
                 reporter.as_ref(),
                 || {
+                    if cancel.is_set() {
+                        return Err("the source was stopped".into());
+                    }
                     let pipeline =
                         pipeline::build(&settings, start.canvas, start.transport, &start.media)?;
                     Capture::start(pipeline, Some("gmx-video-queue"), reporter.clone())
@@ -79,7 +82,8 @@ impl ScreenSource {
             if let Some(r) = &reporter {
                 if capture.buffers() == 0 {
                     r.warn(format!(
-                        "{what} has not sent a frame yet. On macOS the system is probably                          asking for screen recording permission; answer it and the picture appears."
+                        "{what} has not sent a frame yet. On macOS the system is probably \
+                         asking for screen recording permission; answer it and the picture appears."
                     ));
                 }
                 r.info(format!(
@@ -100,7 +104,6 @@ impl ScreenSource {
         let Some(params) = self.last_start.clone() else {
             return Ok(());
         };
-        self.close();
         self.open(&params)
     }
 

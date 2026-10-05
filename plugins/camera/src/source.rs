@@ -1,28 +1,22 @@
 //! The `camera/source` provide: one instance, one camera.
+//!
+//! `start` answers at once and the camera opens on a thread of its own; the
+//! picture follows when it is up. On the laptop this was written for, the
+//! open took about four seconds for the device monitor and three more for
+//! Media Foundation, and the core gives `start` five. See capture-common's
+//! `opening` for the thread, and `crate::opening` for the order the camera is
+//! asked for in.
 
 use std::time::Duration;
 
-use godwinmix_capture_common::{capture, Capture};
+use godwinmix_capture_common::opening::Cancel;
+use godwinmix_capture_common::Opening;
 use godwinmix_sdk::prelude::*;
 use serde_json::Value;
 
-use crate::pipeline;
+use crate::opening::CameraOpen;
 use crate::settings::Settings;
 use crate::tools;
-
-/// How long `start` waits for the camera's first frame before carrying on.
-///
-/// Capture already waits for the pipeline state. Leave room for the host to
-/// attach it within the command deadline; health reports pending frames.
-const FIRST_FRAME_WITHIN: Duration = Duration::from_millis(100);
-
-/// How many times to ask for the camera before giving up.
-///
-/// `restart-in-place` hands the device back and asks for it again within
-/// milliseconds, and on macOS it is not free yet. Three tries over half a
-/// second covers it and still leaves most of the core's five second budget.
-const OPEN_ATTEMPTS: u32 = 3;
-const OPEN_GAP: Duration = Duration::from_millis(250);
 
 pub struct CameraSource {
     canvas: Canvas,
@@ -31,7 +25,7 @@ pub struct CameraSource {
     /// What `start` was given, so `configure` can open the same transport
     /// again without waiting to be started a second time.
     last_start: Option<StartParams>,
-    capture: Option<Capture>,
+    opening: Option<Opening>,
 }
 
 impl CameraSource {
@@ -41,7 +35,7 @@ impl CameraSource {
             settings: Settings::default(),
             reporter: None,
             last_start: None,
-            capture: None,
+            opening: None,
         }
     }
 
@@ -62,45 +56,26 @@ impl CameraSource {
         }
     }
 
-    fn open(&mut self, params: &StartParams) -> Result<(), RpcError> {
-        let settings = self.settings.clone();
-        let params = params.clone();
-        let reporter = self.reporter.clone();
-        let capture = capture::open_with_retry(
-            OPEN_ATTEMPTS,
-            OPEN_GAP,
-            FIRST_FRAME_WITHIN,
-            reporter.as_ref(),
-            || {
-                let pipeline =
-                    pipeline::build(&settings, params.canvas, params.transport, &params.media)?;
-                Capture::start(pipeline, Some("gmx-video-queue"), reporter.clone())
-            },
-        )
-        .map_err(|why| internal(format!("{} would not start: {why}", describe(&settings))))?;
-        if let Some(r) = &self.reporter {
-            r.info(format!(
-                "{} is running at {}x{}@{} over {}",
-                self.what(),
-                params.canvas.width,
-                params.canvas.height,
-                params.canvas.fps,
-                params.transport.as_str()
-            ));
-        }
+    /// Start opening the camera and return. Whatever was open before is let
+    /// go of first, and the new open waits for it.
+    fn open(&mut self, params: &StartParams) {
+        let job = CameraOpen {
+            settings: self.settings.clone(),
+            start: params.clone(),
+            reporter: self.reporter.clone(),
+            what: self.what(),
+        };
+        let before = self.opening.take();
+        self.opening = Some(Opening::after(before, move |cancel: &Cancel| job.run(cancel)));
         self.canvas = params.canvas;
-        self.capture = Some(capture);
-        self.last_start = Some(params);
-        Ok(())
+        self.last_start = Some(params.clone());
     }
 
     /// Close the camera and open it again with the settings as they are now.
-    fn reopen(&mut self) -> Result<(), RpcError> {
-        let Some(params) = self.last_start.clone() else {
-            return Ok(());
-        };
-        self.capture = None;
-        self.open(&params)
+    fn reopen(&mut self) {
+        if let Some(params) = self.last_start.clone() {
+            self.open(&params);
+        }
     }
 }
 
@@ -126,17 +101,17 @@ impl Source for CameraSource {
     }
 
     fn start(&mut self, params: &StartParams) -> Result<StartResult, RpcError> {
-        self.open(params)?;
+        self.open(params);
         Ok(StartResult { latency_ms: None })
     }
 
     fn stop(&mut self) -> Result<(), RpcError> {
-        if let Some(capture) = self.capture.as_ref() {
+        if let Some(opening) = self.opening.take() {
             // A camera holds no buffered picture worth saving, but the device
-            // is handed back faster when the pipeline is drained first.
-            capture.drain(Duration::from_millis(100));
+            // is handed back faster when the pipeline is drained first. An
+            // open still running lets go of the camera when it finishes.
+            opening.stop(Duration::from_millis(100));
         }
-        self.capture = None;
         Ok(())
     }
 
@@ -144,18 +119,18 @@ impl Source for CameraSource {
         let next = Settings::from(&params);
         let restart = self.settings.needs_restart(&next);
         self.settings = next;
-        if restart && self.capture.is_some() {
+        if restart && self.opening.is_some() {
             // The core covers the gap with a freeze frame. Saying `applied` is
-            // honest: the process is the same one and the setting is live by
-            // the time this answer is read.
-            self.reopen()?;
+            // honest: the process is the same one, and the camera opens again
+            // with the new setting behind this answer.
+            self.reopen();
         }
         Ok(Configure::applied())
     }
 
     fn health(&mut self) -> Health {
-        match self.capture.as_ref() {
-            Some(capture) => capture.health(&self.what()),
+        match self.opening.as_ref() {
+            Some(opening) => opening.health(&self.what()),
             None => Health::ok(),
         }
     }
@@ -163,19 +138,6 @@ impl Source for CameraSource {
     fn call(&mut self, method: &str, params: Value) -> Result<Value, RpcError> {
         tools::dispatch(method, params)
     }
-}
-
-/// The camera as an error message would name it, without needing `self`.
-fn describe(settings: &Settings) -> String {
-    if settings.label.is_empty() {
-        "the camera".into()
-    } else {
-        format!("the camera '{}'", settings.label)
-    }
-}
-
-fn internal(message: String) -> RpcError {
-    RpcError::new(codes::INTERNAL_ERROR, message).with_data(serde_json::json!({"retryable": true}))
 }
 
 #[cfg(test)]
@@ -217,7 +179,7 @@ mod tests {
             .expect("configure never fails on a valid object");
         assert!(answer.applied);
         assert_eq!(source.settings.device, "/dev/video9");
-        assert!(source.capture.is_none());
+        assert!(source.opening.is_none());
     }
 
     #[test]
@@ -228,6 +190,36 @@ mod tests {
         assert_eq!(source.canvas.fps, 30);
         assert_eq!(source.settings.element, "videotestsrc");
         assert_eq!(source.settings.label, "Camera 1");
+    }
+
+    /// A camera that cannot be opened, so nothing is written to this test's
+    /// stdout, which is where the container transport would send a picture.
+    #[test]
+    fn start_answers_at_once_and_a_failed_open_is_reported_by_health() {
+        let mut source = CameraSource::new();
+        source.settings = Settings::from(&json!({"element": "gmx-no-such-camera"}));
+        let params: StartParams = serde_json::from_value(json!({
+            "canvas": {"width": 320, "height": 180, "fps": 30},
+            "transport": "container", "media": ""
+        }))
+        .expect("start params parse");
+        let asked = std::time::Instant::now();
+        source.start(&params).expect("start answers");
+        assert!(asked.elapsed() < Duration::from_millis(200), "start waited for the camera");
+        let failing = (0..500).any(|_| {
+            std::thread::sleep(Duration::from_millis(20));
+            source.health().state == HealthState::Failing
+        });
+        let health = source.health();
+        assert!(failing, "{health:?}");
+        let detail = health.detail.unwrap_or_default();
+        assert!(detail.contains("gmx-no-such-camera") && detail.contains("try"), "{detail}");
+        // A setting that reopens it answers at once too.
+        let asked = std::time::Instant::now();
+        source.configure(json!({"element": "gmx-no-such-camera", "framerate": 25})).unwrap();
+        assert!(asked.elapsed() < Duration::from_millis(200), "configure waited for the camera");
+        source.stop().unwrap();
+        assert!(source.opening.is_none());
     }
 
     #[test]

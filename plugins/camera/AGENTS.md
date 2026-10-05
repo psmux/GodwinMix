@@ -32,7 +32,9 @@ forces `element = "videotestsrc"`.
 |---|---|
 | `src/main.rs` | picks the handler from `GMX_PROVIDE` and runs the SDK loop |
 | `src/settings.rs` | `schemas/source.json` as a struct, and what a change costs |
-| `src/pipeline.rs` | the element chain, the platform candidates, opening the device |
+| `src/pipeline.rs` | the element chain from the camera to the canvas caps |
+| `src/device.rs` | which camera, through which element: the platform candidates, the Windows Kernel Streaming route |
+| `src/opening.rs` | one round of opening the camera, run off the protocol thread by capture-common's `Opening` |
 | `src/source.rs` | the `source` provide |
 | `src/discover.rs` | the `devices` provide |
 | `src/tools.rs` | `list_cameras` |
@@ -69,7 +71,7 @@ forces `element = "videotestsrc"`.
 * A new setting: add it to `schemas/source.json` with a `description`, a
   `default` and at least one `examples` entry, read it in `Settings::from`, and
   decide in `needs_restart` whether it can change while the camera runs.
-* A new platform element: add it to `pipeline::CANDIDATES` behind the right
+* A new platform element: add it to `device::CANDIDATES` behind the right
   `cfg!`, and say in the README why it is there and which it falls back from.
 * Audio: do not. A camera's microphone is an `audio-device/source`. Adding
   audio here would tie the two together for every operator who wants them

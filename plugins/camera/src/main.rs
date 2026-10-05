@@ -19,8 +19,10 @@
 //! `audio-device/source`. That is what lets an operator take the picture from
 //! a camera and the sound from a desk, which is what every church does.
 
+mod device;
 mod discover;
 mod guard;
+mod opening;
 mod pipeline;
 mod settings;
 mod source;
