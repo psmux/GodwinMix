@@ -137,8 +137,13 @@ fn landed_on_green(mix: &Mixer) {
     assert!(mix.pool.driven_by_a_transition("xpos").is_empty() && mix.pool.driven_by_a_transition("alpha").is_empty());
 }
 
+/// Three hundred milliseconds, longer by `GODWINMIX_TIMING_SLACK` on a runner
+/// that declares itself slow: the middle frame is read by its time, and on a
+/// Windows runner a 300 ms zoom still showed the old scene at its centre
+/// half way through.
 fn spec(kind: Kind) -> TransitionSpec {
-    TransitionSpec::new(kind, 300)
+    let ms = (300.0 * crate::plugin::harness::timing_slack()) as u64;
+    TransitionSpec::new(kind, ms)
 }
 
 /// Every new transition: the programme never misses a frame, the middle
