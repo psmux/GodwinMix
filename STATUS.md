@@ -71,8 +71,44 @@ without it and passed four in four with it.
 encoder stop and start again in the middle of the swap, and on Windows the
 new output was linked while the old encoder came down ("Pads do not have
 common format"); the swap now holds the encoder. The direct input tests'
-`eventually` and the RIST output test wait `GODWINMIX_TIMING_SLACK` times
-longer; something that never arrives still fails.
+`eventually`, the RIST output test, the programme thumbnail test, the remux
+size test, the Icecast wrong password test and the dead output test wait
+`GODWINMIX_TIMING_SLACK` times longer or accept a little less on a runner
+that says it is slow; something that never arrives still fails. The
+isolation test accepts the restarted show's rendition within a quarter of
+its first price (the encoder is priced again: 769 and 771 millicores against
+808), and the direct restart test accepts a governor refusal after the
+sender comes back as it already did before.
+
+**The smoke test, reached at last.** With the Linux tests passing, the
+platforms job got as far as `dev/smoke.sh` and three steps failed there, all
+in `gmx ctl`: a read is a GET and the core reads a GET's params from the
+query, but `gmx ctl` sent them as a body, so `scene export show.zip` got the
+plain document back and printed "wrote show.zip" for a file that was never
+written, and the import after it found nothing; and `scene get` asked for
+`/api/v1/scenes/{id}` with a literal `{id}` and the scene in the query, which
+the core refused as a duplicate field, so the undo step compared two copies
+of that refusal. Both fixed in `ctl.rs` and replayed against a local core.
+
+**Still open.**
+
+* `mixer::transition_tests::every_new_transition_keeps_the_frame_rate_and_lands_on_the_taken_scene`
+  under load. With the mixer suite beside it, three times in thirteen runs on
+  this laptop, the scene coming in was not drawn at all for the whole window
+  (3 s at a slack of 3) and appeared about 400 ms after the window, when the
+  transition settled, while the outgoing scene moved as its curve said. A
+  longer window does not help, so this looks like a fault in how the
+  incoming pad is driven during a crossing on a starved machine, not timing
+  in the test. It belongs with the transitions work; the test now prints the
+  window a tenth at a time and when the new scene first showed.
+* On the Windows runner, single runs of `a_lower_third_slides_out_and_back_in_to_where_it_was_placed`
+  ("part way out the third is off the left edge, at 0"),
+  `stall_storm::a_source_that_keeps_stalling_waits_longer_each_time`
+  ("round 2: never stalled") and `direct_live` failed once each and were not
+  looked into.
+* The SRT player test passed 25 runs in 25 here after the caps gate and
+  failed once on the Windows platforms runner; it now prints what the
+  player's pipeline said.
 
 ## Two phones that aborted the show, 2026-10-05
 
