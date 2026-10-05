@@ -91,8 +91,15 @@ fn seconds_of(bytes: &[u8], demux: &str) -> f64 {
 /// is set in code, since the launch parser reads a pipe name's backslashes as
 /// escapes. Unbuffered, as the core writes it, or the 4 s arrive at the end.
 fn programme_into(fifo: &std::path::Path) -> gst::Element {
-    let line = "audiotestsrc is-live=true num-buffers=172 ! audio/x-raw,rate=44100 ! avenc_aac ! aacparse ! queue ! matroskamux streamable=true ! filesink name=out buffer-mode=unbuffered";
-    let p = gst::parse::launch(line).unwrap();
+    // Four seconds, times GODWINMIX_TIMING_SLACK on a runner that declares
+    // itself slow: on a busy Linux or macOS runner the sender had not reached
+    // the mount by the time four seconds of programme had gone.
+    let slack = std::env::var("GODWINMIX_TIMING_SLACK").ok().and_then(|s| s.parse::<u32>().ok()).unwrap_or(1).max(1);
+    let line = format!(
+        "audiotestsrc is-live=true num-buffers={} ! audio/x-raw,rate=44100 ! avenc_aac ! aacparse ! queue ! matroskamux streamable=true ! filesink name=out buffer-mode=unbuffered",
+        172 * slack
+    );
+    let p = gst::parse::launch(&line).unwrap();
     p.downcast_ref::<gst::Bin>().unwrap().by_name("out").unwrap().set_property("location", fifo.to_string_lossy().to_string());
     p.set_state(gst::State::Playing).unwrap();
     p
@@ -122,7 +129,7 @@ fn the_programmes_sound_reaches_an_icecast_mount_as_mp3_behind_the_source_login(
     let fd = godwinmix_capture_common::fifo::open_read(&fifo).unwrap();
     let sender = Sender::start(&s, fd, None).expect("the sender starts");
     let core = programme_into(&fifo);
-    let _ = core.bus().unwrap().timed_pop_filtered(gst::ClockTime::from_seconds(15), &[gst::MessageType::Eos, gst::MessageType::Error]);
+    let _ = core.bus().unwrap().timed_pop_filtered(gst::ClockTime::from_seconds(45), &[gst::MessageType::Eos, gst::MessageType::Error]);
     let _ = core.set_state(gst::State::Null);
     std::thread::sleep(Duration::from_millis(800));
     drop(sender);

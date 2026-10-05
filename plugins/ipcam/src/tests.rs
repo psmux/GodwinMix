@@ -97,8 +97,13 @@ fn pictures_from(params: serde_json::Value, secs: u64) -> usize {
 #[test]
 fn an_mjpeg_camera_arrives_as_pictures_the_core_can_decode() {
     let base = camera();
-    let n = pictures_from(json!({"uri": format!("{base}/video.mjpg")}), 3);
-    assert!(n >= 40, "decoded {n} pictures from 3 s of a 25 fps MJPEG camera; wanted 40");
+    // Longer on a runner that declares itself slow with
+    // GODWINMIX_TIMING_SLACK: the fake camera's 40 ms sleeps overrun there,
+    // and a macOS runner sent 27 pictures in the three seconds.
+    let slack = std::env::var("GODWINMIX_TIMING_SLACK").ok().and_then(|s| s.parse::<u64>().ok()).unwrap_or(1).max(1);
+    let secs = 3 * slack;
+    let n = pictures_from(json!({"uri": format!("{base}/video.mjpg")}), secs);
+    assert!(n >= 40, "decoded {n} pictures from {secs} s of a 25 fps MJPEG camera; wanted 40");
 }
 
 #[test]

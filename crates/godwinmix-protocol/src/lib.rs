@@ -25,6 +25,7 @@
 //!   shows.rs        the station's show.* methods and events
 //!   graphics.rs     graphic templates and their fields
 //!   fx.rs           transitions and effects imported from packs
+//!   gallery.rs      the graphics gallery: every designed asset, in one list
 //!   health.rs       a show health and its alarms
 //!   idempotency.rs  the 24 hour replay cache
 //!   trace.rs        one trace id per call
@@ -47,10 +48,12 @@ pub mod channel_ingest;
 pub mod error;
 pub mod feeds;
 pub mod fx;
+pub mod gallery;
 pub mod graphics;
 pub mod health;
 pub mod idempotency;
 pub mod mcp_bindings;
+pub mod mcp_schema;
 pub mod mcp_tools;
 pub mod method;
 pub mod openapi;

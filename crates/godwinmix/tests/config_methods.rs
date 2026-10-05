@@ -32,7 +32,14 @@ enabled = false
 token = \"s3cret-hall\"
 ";
 
+/// One core at a time. `configure` keeps the running config in a process
+/// wide slot, as a real core has one, so two tests started together each
+/// read the other's: the second one's media folder, beside another file, read
+/// as a setting waiting for a restart.
+static ONE_AT_A_TIME: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 struct Core {
+    _turn: tokio::sync::MutexGuard<'static, ()>,
     app: AppState,
     snapshots: Arc<Tracker>,
     registry: Registry<call::Call>,
@@ -42,6 +49,7 @@ struct Core {
 
 impl Core {
     async fn start(tag: &str) -> Core {
+        let turn = ONE_AT_A_TIME.lock().await;
         let _ = gstreamer::init();
         let dir = std::env::temp_dir().join(format!("gmx-config-methods-{tag}-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
@@ -89,7 +97,7 @@ impl Core {
             false,
         );
         methods::config::configure(&cfg, &[]);
-        let core = Core { app, snapshots, registry: methods::registry(), thread: Some(thread), path };
+        let core = Core { _turn: turn, app, snapshots, registry: methods::registry(), thread: Some(thread), path };
         for id in ["cam1", "cam2"] {
             core.add_source(id).await;
         }

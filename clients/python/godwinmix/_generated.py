@@ -565,17 +565,17 @@ class ChannelSetRequest(TypedDict, total=False):
     # RTMPS on or off, and its port.
 
 ChannelStream = TypedDict("ChannelStream", {
-    "audio": Union[StreamAudio, None],
-    "dropped_gops": int,
-    "from": str,
-    "key": Optional[str],
-    "name": str,
-    "protocol": Optional[str],
-    "relay": Optional[str],
-    "since_ms": int,
-    "source": Optional[str],
-    "state": str,
-    "video": Union[StreamVideo, None],
+    "audio": "Union[StreamAudio, None]",
+    "dropped_gops": "int",
+    "from": "str",
+    "key": "Optional[str]",
+    "name": "str",
+    "protocol": "Optional[str]",
+    "relay": "Optional[str]",
+    "since_ms": "int",
+    "source": "Optional[str]",
+    "state": "str",
+    "video": "Union[StreamVideo, None]",
 }, total=False)
 
 class ConfigChanged(TypedDict, total=False):
@@ -803,6 +803,13 @@ class DestinationRefusal(TypedDict, total=False):
     have: Union[Cost, None]
     message: str
     need: Union[Cost, None]
+
+class Detected(TypedDict, total=False):
+    found: Optional[str]
+    # What was found: the command's path, or the config folder.
+    installed: bool
+    name: str
+    tool: AgentTool
 
 class DeviceToken(TypedDict, total=False):
     """One device token, without its secret."""
@@ -1078,6 +1085,16 @@ class FieldValue(TypedDict, total=False):
     value: str
     # What is on screen: the source's own value, the brand colour or the default, in that order.
 
+class FileWrite(TypedDict, total=False):
+    """One file a setup writes."""
+
+    action: Action
+    backup: Optional[str]
+    # Where the file was copied before it was changed.
+    path: str
+    what: str
+    # In words: "the godwinmix MCP server", "the godwinmix-design skill".
+
 class Filter(TypedDict, total=False):
     """One filter in an item's chain."""
 
@@ -1263,7 +1280,7 @@ class FxList(TypedDict, total=False):
     assigned: FxAssignments
     # The transition a take uses when it names none, overall and by scene.
     errors: List[str]
-    # Folders under `fx/` that would not read, each with the reason.
+    # Item folders that would not read, each with the reason.
     fx: List[FxEntry]
     gpu: bool
     # Whether GStreamer GL runs here, which decides `runs` for a shader.
@@ -1308,6 +1325,239 @@ class FxSetRequest(TypedDict, total=False):
 class FxSkipped(TypedDict, total=False):
     file: str
     reason: str
+
+class GalleryDuplicateRequest(TypedDict, total=False):
+    """`gallery.duplicate`."""
+
+    id: str
+    name: Optional[str]
+    # The copy's name. Default: the name with "copy" after it.
+
+class GalleryEditRequest(TypedDict, total=False):
+    """`gallery.edit`: change what is said about an item, or its field values."""
+
+    description: Optional[str]
+    id: str
+    name: Optional[str]
+    tags: Any
+    values: Optional[Dict[str, Any]]
+    # Field values to keep with the item; `null` drops one.
+    zone: Optional[str]
+
+class GalleryExportRequest(TypedDict, total=False):
+    """`gallery.export`: items as one zip to carry to another mixer."""
+
+    ids: Any
+    # The ids, as a list or one string with commas. Default: every item that was not shipped with the mixer.
+    path: Optional[str]
+    # Where to write the zip on the mixer. Default: the gallery's `exports` folder.
+
+class GalleryExported(TypedDict, total=False):
+    """The answer to `gallery.export`."""
+
+    ids: List[str]
+    path: str
+    size_bytes: int
+    url: str
+    # Where a browser downloads it from this mixer.
+
+class GalleryIdRequest(TypedDict, total=False):
+    """One item by id: `gallery.remove`."""
+
+    id: str
+    # The item's id from `gallery.list`.
+
+class GalleryImportRequest(TypedDict, total=False):
+    """`gallery.import`: files made elsewhere, checked one by one."""
+
+    data: Optional[str]
+    # The same as base64, with `filename`.
+    filename: Optional[str]
+    path: Optional[str]
+    # A file or a folder on the mixer: a gallery zip, an SVG, an HTML page or a folder or zip with one, an OGraf package, a PNG or WebP, a WebM or MOV. A folder of several of these imports each.
+    replace: bool
+    # Write over items with the same id.
+
+class GalleryImported(TypedDict, total=False):
+    """The answer to `gallery.import`."""
+
+    added: List[GalleryItem]
+    refused: List[Refused]
+
+class GalleryItem(TypedDict, total=False):
+    """One item, as `gallery.list` describes it."""
+
+    description: str
+    fields: List[TemplateField]
+    # The fields a template or OGraf graphic has, with their defaults.
+    id: str
+    # The slug every other gallery method takes: `storm-lower-third`.
+    kind: GalleryKind
+    made_by: str
+    # Who or what saved it, in its own words: `claude-code`, `opencode`.
+    moves: bool
+    # Whether it moves by itself: a clip, a page, a ticker.
+    moving: Optional[str]
+    # A file of the item a page plays as its moving preview, served at `/api/v1/gallery/{id}/files/{moving}`: a clip itself, or the item's own `preview.webm`.
+    name: str
+    origin: Origin
+    placed: List[str]
+    # The sources on this mixer drawing it now.
+    saved: str
+    # When it was saved, as RFC 3339, when known.
+    tags: List[str]
+    transparent: bool
+    # Whether the picture under it shows through anywhere.
+    uri: Optional[str]
+    # The address `source.add` takes for it, when it is one source.
+    values: Dict[str, Any]
+    # The values this item fills its fields with, over the defaults.
+    zone: Zone
+
+class GalleryList(TypedDict, total=False):
+    """The answer to `gallery.list`."""
+
+    dir: str
+    # The folder saved items live in, on the mixer.
+    errors: List[str]
+    # Folders that look like items and would not read, and why.
+    items: List[GalleryItem]
+    total: int
+    # How many items match before `limit` cut the list.
+
+class GalleryListRequest(TypedDict, total=False):
+    """`gallery.list`."""
+
+    kind: Optional[str]
+    # Only this kind: template, image, clip, html, ograf, ticker, text, set.
+    limit: Optional[int]
+    # At most this many. Default 50.
+    query: Optional[str]
+    # Words to look for in the name, tags, description and kind: `"lower third"`, `"red news"`, `"background"`.
+
+class GalleryPlaceRequest(TypedDict, total=False):
+    """`gallery.place`: add an item to a scene in its zone. Hidden unless `visible`; `gallery.show` takes it on air."""
+
+    camera: Optional[str]
+    # For a set: the camera source standing in it. Default: the source on air.
+    id: str
+    scene: Optional[str]
+    # The scene to add it to. Default: the scene on air.
+    values: Optional[Dict[str, Any]]
+    # Field values for this placement, over the item's own.
+    visible: Optional[bool]
+    # Show it at once. Default false: placed hidden, ready to take.
+    zone: Optional[str]
+    # Where on the canvas, over the item's own zone: full, lower-third, bug, top, bottom, center, overlay.
+
+class GalleryPlaced(TypedDict, total=False):
+    """The answer to `gallery.place`."""
+
+    id: str
+    item: Optional[str]
+    # The scene item's name, for `gallery.show` and `scene.item.set`.
+    new_scene: bool
+    # True for a set, which becomes a scene of its own.
+    next: str
+    scene: str
+    source: Optional[str]
+    # The source drawing it. For a set, the scene's sources are in `scene`.
+    updated: bool
+    # True when it was on the scene already, and only its values changed.
+    visible: bool
+
+GalleryPreview = TypedDict("GalleryPreview", {
+    "caption": "str",
+    "encoding": "str",
+    "format": "str",
+    "from": "str",
+    "height": "int",
+    "id": "str",
+    "image": "str",
+    "width": "int",
+}, total=False)
+
+class GalleryPreviewRequest(TypedDict, total=False):
+    """`gallery.preview`: a picture of an item, drawn on demand."""
+
+    background: Optional[str]
+    # What shows through the transparent parts: `checker` (the default), `black`, `white`, or a colour `#rrggbb`.
+    id: str
+    values: Optional[Dict[str, Any]]
+    # Field values to try, over the item's own, without saving them.
+    width: Optional[int]
+    # Pixels wide, 64 to 1920. Default 960, which is what reading a lower third needs.
+
+class GallerySaveRequest(TypedDict, total=False):
+    """`gallery.save`: one call for any kind. Give exactly one of `svg`, `html`, `data`, `file`, `source` or `set`; the kind is worked out from it."""
+
+    data: Optional[str]
+    # A picture or a clip as base64, or as a `data:` URI.
+    description: Optional[str]
+    file: Optional[str]
+    # A file or a folder on the mixer's machine: an SVG, a picture, a clip, an HTML page or a folder holding one, an OGraf package, a zip.
+    filename: Optional[str]
+    # The name `data` had, for its type: `logo.png`, `sting.webm`.
+    files: Optional[Dict[str, Any]]
+    # More files an HTML page loads, by name: text, or a `data:` URI.
+    html: Optional[str]
+    # A whole HTML page, with its CSS and script inline. Transparent where the page has no background.
+    kind: Optional[str]
+    # template, image, clip, html, ograf, ticker, text or set. Usually left out: it is worked out from what you give.
+    made_by: Optional[str]
+    # Who made it, in a word: `claude-code`, `opencode`, `pi`.
+    moves: Optional[bool]
+    # Say it moves, or does not, when the gallery would guess wrong.
+    name: str
+    # What people call it: `"Storm warning lower third"`. The id is made from it.
+    replace: bool
+    # Write over an item with the same id. Every source drawing it is drawn again.
+    set: Union[SetSpec, None]
+    # A virtual set: `{"background": ..., "foreground": ..., "settings": {...}}`. Each picture is a gallery id, a media file, a path or a `data:` URI.
+    source: Any
+    # A ticker or text source as `source.add` takes it: `{"uri": "ticker:", "params": {...}}`.
+    svg: Optional[str]
+    # A whole SVG document. With `{{fields}}` in it, it is a template; without, a picture.
+    tags: Any
+    # Words to find it by: `["news", "red"]`, or `"news, red"`.
+    transparent: Optional[bool]
+    # Say it has transparency, or not, when the gallery would guess wrong.
+    values: Optional[Dict[str, Any]]
+    # What to fill a template's fields with, by name.
+    zone: Optional[str]
+    # Where it goes when placed: full (a background), lower-third, bug, top, bottom, center, overlay. Worked out when left out.
+
+class GallerySaved(TypedDict, total=False):
+    """The answer to `gallery.save`, `gallery.edit` and `gallery.duplicate`."""
+
+    item: GalleryItem
+    next: str
+    # What to call next.
+    path: str
+    # The folder it was written to.
+    redrawn: List[str]
+    # Sources drawing it that were drawn again.
+    warnings: List[str]
+    # Things that did not stop the save and are worth fixing.
+
+class GalleryShowRequest(TypedDict, total=False):
+    """`gallery.show`: take a placed item on air, or off."""
+
+    id: str
+    # The gallery id, the source id or the scene item's name.
+    scene: Optional[str]
+    # Default: the scene on air.
+    visible: Optional[bool]
+    # True to show, false to hide. Default true.
+
+class GalleryShown(TypedDict, total=False):
+    """The answer to `gallery.show`."""
+
+    item: str
+    scene: str
+    took: bool
+    # For a set: the scene was taken to the programme rather than an item shown.
+    visible: bool
 
 class Geometry(TypedDict, total=False):
     """One item's derived box."""
@@ -2205,10 +2455,10 @@ class PluginSettings(TypedDict, total=False):
     settings: Dict[str, Any]
 
 PluginUpdated = TypedDict("PluginUpdated", {
-    "from": str,
-    "handshake_ms": int,
-    "plugin": PluginRecord,
-    "to": str,
+    "from": "str",
+    "handshake_ms": "int",
+    "plugin": "PluginRecord",
+    "to": "str",
 }, total=False)
 
 class PresenceClient(TypedDict, total=False):
@@ -2323,6 +2573,15 @@ class Record(TypedDict, total=False):
     # A fractional key. Siblings sort by it; see `order.rs`.
     parent: Union[Id, None]
     # The scene this item is in, or the group item it is a child of. Absent for a scene, which hangs off the document itself.
+
+class Refused(TypedDict, total=False):
+    """One file the import would not take."""
+
+    file: str
+    fix: str
+    # What to do about it.
+    reason: str
+    # What was wrong with it.
 
 class Relink(TypedDict, total=False):
     """One asset an import could not put back."""
@@ -2644,7 +2903,49 @@ class SetSourceRequest(TypedDict, total=False):
     transport: Union[BridgeTransport, None]
     # How a remote source's media travels: `rtp`, `srt` or `whip`.
 
+class SetSpec(TypedDict, total=False):
+    """The pictures and settings of a virtual set."""
+
+    background: str
+    # The plate behind the presenter.
+    foreground: Optional[str]
+    # A desk or a frame in front of the presenter, transparent elsewhere.
+    layout: Optional[str]
+    # The layout. Default `virtual-set`.
+    settings: Dict[str, Any]
+    # The layout's settings: `presenter_scale` (0.3 to 1), `presenter_x` (0 to 1), `screen` (green, blue, none).
+
+class Setup(TypedDict, total=False):
+    """What a setup did, or would do."""
+
+    applied: bool
+    entry: Any
+    # The MCP entry, for a client nothing is written for.
+    name: str
+    notes: List[str]
+    prompt: str
+    # A first thing to ask it.
+    scope: SetupScope
+    start: str
+    # How to start the tool afterwards.
+    tool: AgentTool
+    writes: List[FileWrite]
+
 class SetupRequest(TypedDict, total=False):
+    """`agent.setup`."""
+
+    dir: Optional[str]
+    # The project folder, for `scope: project`. An absolute path.
+    dry_run: bool
+    # Answer every file it would write, and write nothing. The dispatcher reads it too, as it does on every destructive method.
+    env: Dict[str, Any]
+    # Environment for `godwinmix mcp`, such as GODWINMIX_URL for a mixer that is not the desktop app's. Written into the tool's config as given.
+    scope: SetupScope
+    # `user` (the default) writes into the home folder, `project` into `dir`.
+    tool: AgentTool
+    # claude, opencode, pi, codex, gemini, cursor, vscode or other.
+
+class SetupRequest2(TypedDict, total=False):
     """`setup.start` and `setup.get`: one piece by name."""
 
     piece: str
@@ -2705,11 +3006,11 @@ class Show(TypedDict, total=False):
     state: ShowState
 
 ShowAdd = TypedDict("ShowAdd", {
-    "compositing": Optional[bool],
-    "from": Union[ShowFrom, None],
-    "input": Union[InputSpec, None],
-    "name": str,
-    "outputs": List[ShowOutputSpec],
+    "compositing": "Optional[bool]",
+    "from": "Union[ShowFrom, None]",
+    "input": "Union[InputSpec, None]",
+    "name": "str",
+    "outputs": "List[ShowOutputSpec]",
 }, total=False)
 
 class ShowAddManyRequest(TypedDict, total=False):
@@ -2729,11 +3030,11 @@ class ShowAddManyResult(TypedDict, total=False):
     refused: List[ShowRefused]
 
 ShowAddRequest = TypedDict("ShowAddRequest", {
-    "compositing": Optional[bool],
-    "from": Union[ShowFrom, None],
-    "input": Union[InputSpec, None],
-    "name": str,
-    "outputs": List[ShowOutputSpec],
+    "compositing": "Optional[bool]",
+    "from": "Union[ShowFrom, None]",
+    "input": "Union[InputSpec, None]",
+    "name": "str",
+    "outputs": "List[ShowOutputSpec]",
 }, total=False)
 
 class ShowChanged(TypedDict, total=False):
@@ -3241,7 +3542,7 @@ class TokenInfo(TypedDict, total=False):
     # "none" or "required": whether destructive calls need a confirm token.
     id: str
     profile: str
-    # MCP tool profile this token is meant for: "standard" or "minimal".
+    # MCP tool profile this token is meant for: "standard", "minimal" or "headend".
     rehearsal: bool
     scopes: List[str]
 
@@ -3491,10 +3792,10 @@ class ChannelRemovedEvent(TypedDict, total=False):
     id: str
 
 ChannelRefusedEvent = TypedDict("ChannelRefusedEvent", {
-    "from": str,
-    "id": str,
-    "stream": str,
-    "why": str,
+    "from": "str",
+    "id": "str",
+    "stream": "str",
+    "why": "str",
 }, total=False)
 
 class AlertEvent(TypedDict, total=False):
@@ -3536,11 +3837,17 @@ class FeedRecoveredEvent(TypedDict, total=False):
     id: str
     # The feed.
 
+# What a write does to a file.
+Action = Literal['create', 'merge', 'update', 'unchanged']
+
 # What pressing the button does.
 ActionKind = Literal['set-config', 'install-plugin', 'enable-plugin', 'open', 'retry', 'restart', 'setup', 'copy']
 
 # `ext.agent`. `true` takes the default thresholds; an object moves them.
 AgentExt = Union[bool, Dict[str, Any]]
+
+# The agent tools this mixer knows how to set up.
+AgentTool = Union[Literal['claude', 'opencode', 'pi', 'codex', 'gemini', 'cursor', 'vscode'], Literal['other']]
 
 # What an alarm is about.
 AlarmKind = Literal['no-input', 'stall', 'black', 'freeze', 'silence', 'cc-errors', 'loss', 'output-failed', 'governor-refused', 'shed']
@@ -3600,6 +3907,9 @@ FxBlend = Literal['normal', 'screen', 'add', 'luma']
 # What a file is, which decides how it is drawn.
 FxKind = Literal['stinger', 'overlay', 'matte', 'shader']
 
+# What an item is, which decides how it is drawn and how it is added.
+GalleryKind = Literal['template', 'image', 'clip', 'html', 'ograf', 'ticker', 'text', 'set', 'transition', 'effect']
+
 # The one word a monitoring wall colours a row by.
 HealthState = Literal['ok', 'warning', 'alarm', 'off']
 
@@ -3621,6 +3931,9 @@ Mode = Literal['replace', 'merge']
 # `ext.multiview`. Accepts `false` to mean off, or an object.
 MultiviewExt = Union[bool, Dict[str, Any]]
 
+# Where an item came from.
+Origin = Literal['shipped', 'agent', 'uploaded']
+
 OutputState = Literal['connecting', 'live', 'reconnecting', 'failed']
 
 # Where an instance runs: core, in-process, sidecar, or node:<name>.
@@ -3639,6 +3952,9 @@ RestartHow = Literal['supervised', 'none']
 
 # What a token may reach. Ordered: `admin` implies `operate` implies `read`. `Plugin` is the exception and sits below the ladder on purpose. It is what a plugin's own per instance token carries, and it grants exactly one thing: calling that plugin's own tools. It implies no reading and no operating, so a plugin that tries `program.take` is refused with -32002, which is what 04 section 8 asks for. Which plugin a token belongs to is `Token::plugin`, beside the scope rather than inside it, so `Scope` stays `Copy` and the method table stays a table of constants.
 Scope = Literal['plugin', 'read', 'operate', 'admin']
+
+# For the user, in their home folder, or for one project folder.
+SetupScope = Literal['user', 'project']
 
 # Where a piece stands.
 SetupState = Literal['ready', 'missing', 'running', 'failed', 'unavailable']
@@ -3672,10 +3988,15 @@ Transition = Union[str, TransitionRequest]
 
 VideoCodec = Union[Literal['h264', 'h265', 'av1', 'vp8', 'vp9', 'mpeg2', 'prores'], Literal['other']]
 
+# Where an item sits on the canvas when it is placed.
+Zone = Literal['full', 'lower-third', 'bug', 'top', 'bottom', 'center', 'overlay']
+
 METHODS = (
     {"name": "adbreak.end", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/adbreak/end"), "summary": 'Cut a running ad short, or disarm one that is scheduled.'},
     {"name": "adbreak.start", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/adbreak/start"), "summary": 'Interrupt the programme with a clip, then rejoin live when it ends.'},
+    {"name": "agent.setup", "scope": "admin", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/agent/setup"), "summary": "Set an AI agent tool up to use this mixer: its MCP config gets one entry, godwinmix, that runs this mixer's own executable, and its skills folder gets the GodwinMix skills. Other entries are kept and a changed file is copied aside first. dry_run answers every file it would write. The answer says how to start the tool and a first thing to ask it."},
     {"name": "agent.state", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/agent/state"), "summary": "The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing."},
+    {"name": "agent.tools", "scope": "admin", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/agent/tools"), "summary": 'The AI agent tools this mixer can set up, the ones installed on its machine first, each with what was found: a command on PATH or a config folder.'},
     {"name": "channel.add", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/channels"), "summary": 'Make a channel and its first key, which is in this answer. channel.key.reveal reads it again later.'},
     {"name": "channel.certificate.generate", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/channels/certificate/generate"), "summary": "Make a self signed certificate for RTMPS, for this machine's addresses unless names are given. Encoders must be told to accept it; one from a certificate authority needs no such step."},
     {"name": "channel.certificate.set", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/channels/certificate/set"), "summary": 'Give RTMPS a certificate: the PEM of the certificate (and its chain) and of its private key, as a certificate authority issued them. Checked before it is kept; the key is sealed and never read back.'},
@@ -3726,6 +4047,16 @@ METHODS = (
     {"name": "fx.preview", "scope": "read", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/fx/preview"), "summary": 'A moving preview of an item: twelve frames side by side in one JPEG, made once and kept.'},
     {"name": "fx.remove", "scope": "operate", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/fx/remove"), "summary": 'Delete an imported item from the library. The starter set cannot be deleted.'},
     {"name": "fx.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/fx/set"), "summary": 'Change an imported item: its blend, its cut point, its length, whether it is a transition or an effect.'},
+    {"name": "gallery.duplicate", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/gallery/duplicate"), "summary": 'Copy an item, shipped ones included, under a new name.'},
+    {"name": "gallery.edit", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/gallery/edit"), "summary": "Change an item's name, tags, description, zone or the values it fills its fields with."},
+    {"name": "gallery.export", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/gallery/export"), "summary": 'Write gallery items to one zip on the mixer, to carry a look to another mixer.'},
+    {"name": "gallery.import", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/gallery/import"), "summary": 'Take files into the gallery: a gallery zip, an SVG, an HTML page or folder, an OGraf package, a picture or a clip. Each is checked; refused ones say why and how to fix them.'},
+    {"name": "gallery.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/gallery/list"), "summary": 'The Graphics gallery: every lower third, background, ticker, bug, title card, page, clip and virtual set, made here or shipped, with what each is and where it goes.'},
+    {"name": "gallery.place", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/gallery/place"), "summary": 'Add a gallery item to a scene in its zone (a lower third low on the left, a background under everything, a bug in the corner), hidden until gallery.show. A set becomes a new scene.'},
+    {"name": "gallery.preview", "scope": "read", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/gallery/preview"), "summary": 'A picture of a gallery item as it would land on the canvas, transparent parts over a checkerboard, drawn on demand.'},
+    {"name": "gallery.remove", "scope": "operate", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/gallery/remove"), "summary": 'Delete a saved item and its files. Refused while a source shows it.'},
+    {"name": "gallery.save", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/gallery/save"), "summary": 'Save a graphic of any kind into the gallery with a name, tags and a description: an SVG template, an HTML page, a picture or clip, a ticker or text, or a virtual set.'},
+    {"name": "gallery.show", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/gallery/show"), "summary": 'Show a placed gallery item on air, or hide it, taking its scene when that scene is not on air. For a set, take its scene.'},
     {"name": "governor.calibrate", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/governor/calibrate"), "summary": "Measure this machine's encoders again, in the background, a few seconds of every core. Refused while anything is on air unless `confirm` is true."},
     {"name": "governor.status", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/governor/status"), "summary": 'The resource governor: when this machine was measured, what is in use and free on the CPU and each GPU encoder, and what was shed to keep the programme whole.'},
     {"name": "log.gst", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/log/gst"), "summary": "Raise GStreamer's own debug categories for a while, then let them fall back on their own."},
@@ -3961,6 +4292,28 @@ class GeneratedMethods:
             params["return_to"] = return_to
         return await self._call("adbreak.start", params)
 
+    async def agent_setup(
+        self,
+        tool: AgentTool,
+        *,
+        dir: Optional[str] = None,
+        dry_run: Optional[bool] = None,
+        env: Optional[Dict[str, Any]] = None,
+        scope: Optional[SetupScope] = None,
+    ) -> Setup:
+        """Set an AI agent tool up to use this mixer: its MCP config gets one entry, godwinmix, that runs this mixer's own executable, and its skills folder gets the GodwinMix skills. Other entries are kept and a changed file is copied aside first. dry_run answers every file it would write. The answer says how to start the tool and a first thing to ask it."""
+        params: Dict[str, Any] = {}
+        params["tool"] = tool
+        if dir is not None:
+            params["dir"] = dir
+        if dry_run is not None:
+            params["dry_run"] = dry_run
+        if env is not None:
+            params["env"] = env
+        if scope is not None:
+            params["scope"] = scope
+        return await self._call("agent.setup", params)
+
     async def agent_state(
         self,
         *,
@@ -3971,6 +4324,13 @@ class GeneratedMethods:
         if response_format is not None:
             params["response_format"] = response_format
         return await self._call("agent.state", params)
+
+    async def agent_tools(
+        self,
+    ) -> List[Detected]:
+        """The AI agent tools this mixer can set up, the ones installed on its machine first, each with what was found: a command on PATH or a config folder."""
+        params: Dict[str, Any] = {}
+        return await self._call("agent.tools", params)
 
     async def channel_add(
         self,
@@ -4692,6 +5052,233 @@ class GeneratedMethods:
         if transition is not None:
             params["transition"] = transition
         return await self._call("fx.set", params)
+
+    async def gallery_duplicate(
+        self,
+        *,
+        id: Optional[str] = None,
+        name: Optional[str] = None,
+    ) -> GallerySaved:
+        """Copy an item, shipped ones included, under a new name."""
+        params: Dict[str, Any] = {}
+        if id is not None:
+            params["id"] = id
+        if name is not None:
+            params["name"] = name
+        return await self._call("gallery.duplicate", params)
+
+    async def gallery_edit(
+        self,
+        *,
+        description: Optional[str] = None,
+        id: Optional[str] = None,
+        name: Optional[str] = None,
+        tags: Any = None,
+        values: Optional[Dict[str, Any]] = None,
+        zone: Optional[str] = None,
+    ) -> GallerySaved:
+        """Change an item's name, tags, description, zone or the values it fills its fields with."""
+        params: Dict[str, Any] = {}
+        if description is not None:
+            params["description"] = description
+        if id is not None:
+            params["id"] = id
+        if name is not None:
+            params["name"] = name
+        if tags is not None:
+            params["tags"] = tags
+        if values is not None:
+            params["values"] = values
+        if zone is not None:
+            params["zone"] = zone
+        return await self._call("gallery.edit", params)
+
+    async def gallery_export(
+        self,
+        *,
+        ids: Any = None,
+        path: Optional[str] = None,
+    ) -> GalleryExported:
+        """Write gallery items to one zip on the mixer, to carry a look to another mixer."""
+        params: Dict[str, Any] = {}
+        if ids is not None:
+            params["ids"] = ids
+        if path is not None:
+            params["path"] = path
+        return await self._call("gallery.export", params)
+
+    async def gallery_import(
+        self,
+        *,
+        data: Optional[str] = None,
+        filename: Optional[str] = None,
+        path: Optional[str] = None,
+        replace: Optional[bool] = None,
+    ) -> GalleryImported:
+        """Take files into the gallery: a gallery zip, an SVG, an HTML page or folder, an OGraf package, a picture or a clip. Each is checked; refused ones say why and how to fix them."""
+        params: Dict[str, Any] = {}
+        if data is not None:
+            params["data"] = data
+        if filename is not None:
+            params["filename"] = filename
+        if path is not None:
+            params["path"] = path
+        if replace is not None:
+            params["replace"] = replace
+        return await self._call("gallery.import", params)
+
+    async def gallery_list(
+        self,
+        *,
+        kind: Optional[str] = None,
+        limit: Optional[int] = None,
+        query: Optional[str] = None,
+    ) -> GalleryList:
+        """The Graphics gallery: every lower third, background, ticker, bug, title card, page, clip and virtual set, made here or shipped, with what each is and where it goes."""
+        params: Dict[str, Any] = {}
+        if kind is not None:
+            params["kind"] = kind
+        if limit is not None:
+            params["limit"] = limit
+        if query is not None:
+            params["query"] = query
+        return await self._call("gallery.list", params)
+
+    async def gallery_place(
+        self,
+        *,
+        camera: Optional[str] = None,
+        id: Optional[str] = None,
+        scene: Optional[str] = None,
+        values: Optional[Dict[str, Any]] = None,
+        visible: Optional[bool] = None,
+        zone: Optional[str] = None,
+    ) -> GalleryPlaced:
+        """Add a gallery item to a scene in its zone (a lower third low on the left, a background under everything, a bug in the corner), hidden until gallery.show. A set becomes a new scene."""
+        params: Dict[str, Any] = {}
+        if camera is not None:
+            params["camera"] = camera
+        if id is not None:
+            params["id"] = id
+        if scene is not None:
+            params["scene"] = scene
+        if values is not None:
+            params["values"] = values
+        if visible is not None:
+            params["visible"] = visible
+        if zone is not None:
+            params["zone"] = zone
+        return await self._call("gallery.place", params)
+
+    async def gallery_preview(
+        self,
+        *,
+        background: Optional[str] = None,
+        id: Optional[str] = None,
+        values: Optional[Dict[str, Any]] = None,
+        width: Optional[int] = None,
+    ) -> GalleryPreview:
+        """A picture of a gallery item as it would land on the canvas, transparent parts over a checkerboard, drawn on demand."""
+        params: Dict[str, Any] = {}
+        if background is not None:
+            params["background"] = background
+        if id is not None:
+            params["id"] = id
+        if values is not None:
+            params["values"] = values
+        if width is not None:
+            params["width"] = width
+        return await self._call("gallery.preview", params)
+
+    async def gallery_remove(
+        self,
+        *,
+        id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Delete a saved item and its files. Refused while a source shows it."""
+        params: Dict[str, Any] = {}
+        if id is not None:
+            params["id"] = id
+        return await self._call("gallery.remove", params)
+
+    async def gallery_save(
+        self,
+        *,
+        data: Optional[str] = None,
+        description: Optional[str] = None,
+        file: Optional[str] = None,
+        filename: Optional[str] = None,
+        files: Optional[Dict[str, Any]] = None,
+        html: Optional[str] = None,
+        kind: Optional[str] = None,
+        made_by: Optional[str] = None,
+        moves: Optional[bool] = None,
+        name: Optional[str] = None,
+        replace: Optional[bool] = None,
+        set: Optional[Union[SetSpec, None]] = None,
+        source: Any = None,
+        svg: Optional[str] = None,
+        tags: Any = None,
+        transparent: Optional[bool] = None,
+        values: Optional[Dict[str, Any]] = None,
+        zone: Optional[str] = None,
+    ) -> GallerySaved:
+        """Save a graphic of any kind into the gallery with a name, tags and a description: an SVG template, an HTML page, a picture or clip, a ticker or text, or a virtual set."""
+        params: Dict[str, Any] = {}
+        if data is not None:
+            params["data"] = data
+        if description is not None:
+            params["description"] = description
+        if file is not None:
+            params["file"] = file
+        if filename is not None:
+            params["filename"] = filename
+        if files is not None:
+            params["files"] = files
+        if html is not None:
+            params["html"] = html
+        if kind is not None:
+            params["kind"] = kind
+        if made_by is not None:
+            params["made_by"] = made_by
+        if moves is not None:
+            params["moves"] = moves
+        if name is not None:
+            params["name"] = name
+        if replace is not None:
+            params["replace"] = replace
+        if set is not None:
+            params["set"] = set
+        if source is not None:
+            params["source"] = source
+        if svg is not None:
+            params["svg"] = svg
+        if tags is not None:
+            params["tags"] = tags
+        if transparent is not None:
+            params["transparent"] = transparent
+        if values is not None:
+            params["values"] = values
+        if zone is not None:
+            params["zone"] = zone
+        return await self._call("gallery.save", params)
+
+    async def gallery_show(
+        self,
+        *,
+        id: Optional[str] = None,
+        scene: Optional[str] = None,
+        visible: Optional[bool] = None,
+    ) -> GalleryShown:
+        """Show a placed gallery item on air, or hide it, taking its scene when that scene is not on air. For a set, take its scene."""
+        params: Dict[str, Any] = {}
+        if id is not None:
+            params["id"] = id
+        if scene is not None:
+            params["scene"] = scene
+        if visible is not None:
+            params["visible"] = visible
+        return await self._call("gallery.show", params)
 
     async def governor_calibrate(
         self,

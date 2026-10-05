@@ -180,7 +180,7 @@ async fn import(call: Call, params: Value) -> Result<Value, RpcError> {
 ///
 /// The scope was checked once, on `project.import`, which is admin; the
 /// methods it runs are admin or less. Confirmation was asked once too.
-async fn invoke(call: &Call, method: &'static str, params: Value) -> Result<Value, RpcError> {
+pub(crate) async fn invoke(call: &Call, method: &'static str, params: Value) -> Result<Value, RpcError> {
     static TABLE: OnceLock<Registry<Call>> = OnceLock::new();
     let table = TABLE.get_or_init(super::registry);
     let def = table

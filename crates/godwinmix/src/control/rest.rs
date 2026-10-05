@@ -30,6 +30,15 @@ pub fn router(ctx: Ctx, max_upload: usize) -> Router<Ctx> {
         // An fx item's preview strip, and a pack dropped on the picker.
         .route("/api/v1/fx/{name}/preview.jpg", get(super::fx_rest::preview))
         .route("/api/v1/fx/upload", post(super::fx_rest::upload).layer(DefaultBodyLimit::max(max_upload)))
+        // The gallery's bytes: a card's picture, an item's own files, a
+        // file dropped on the gallery, and an export to download.
+        .route("/api/v1/gallery/{id}/preview.jpg", get(gallery_preview))
+        .route("/api/v1/gallery/{id}/files/{*path}", get(crate::control::methods::gallery::serve_file))
+        .route("/api/v1/gallery/exports/{file}", get(crate::control::methods::gallery::download_export))
+        .route(
+            "/api/v1/gallery/upload",
+            post(crate::control::methods::gallery::import_upload).layer(DefaultBodyLimit::max(max_upload)),
+        )
         // `/api/v1/status` because that is what everyone types. The method is
         // `core.status`, and `/api/v1/core/status` answers too.
         .route("/api/v1/status", get(generic))
@@ -228,7 +237,14 @@ async fn generic(State(ctx): State<Ctx>, request: Request) -> Response {
     };
     let (route, captures) = route;
 
-    let body = match read_json(body).await {
+    // A graphic saved or imported carries its picture or clip as base64 in
+    // the JSON, so those two take what an upload takes; everything else is
+    // a few hundred bytes and a megabyte is generous.
+    let limit = match route.method {
+        "gallery.save" | "gallery.import" => ctx.app.library.cfg().max_upload_bytes.saturating_mul(4) / 3 + 4096,
+        _ => 1 << 20,
+    };
+    let body = match read_json(body, limit).await {
         Ok(v) => v,
         Err(e) => return error_response(&e, &trace_id),
     };
@@ -267,8 +283,8 @@ async fn generic(State(ctx): State<Ctx>, request: Request) -> Response {
     }
 }
 
-async fn read_json(body: Body) -> Result<Value, RpcError> {
-    let bytes = axum::body::to_bytes(body, 1 << 20)
+async fn read_json(body: Body, limit: usize) -> Result<Value, RpcError> {
+    let bytes = axum::body::to_bytes(body, limit)
         .await
         .map_err(|e| RpcError::invalid_params(format!("could not read the body: {e}")))?;
     if bytes.is_empty() {
@@ -321,6 +337,31 @@ pub fn bearer(headers: &HeaderMap) -> Option<String> {
 pub fn query_token(uri: &Uri) -> Option<String> {
     let Query(pairs) = Query::<Vec<(String, String)>>::try_from_uri(uri).ok()?;
     pairs.into_iter().find(|(k, _)| k == "token").map(|(_, v)| v).filter(|v| !v.is_empty())
+}
+
+/// `GET /api/v1/gallery/{id}/preview.jpg`: a card's picture, drawn the first
+/// time a page shows the card and kept until the item changes.
+async fn gallery_preview(
+    State(ctx): State<Ctx>,
+    axum::extract::Path(id): axum::extract::Path<String>,
+    Query(q): Query<HashMap<String, String>>,
+    headers: HeaderMap,
+) -> Response {
+    let trace_id = trace_of(&headers, None);
+    let presented = bearer(&headers).or_else(|| q.get("token").cloned());
+    if let Err(f) = ctx.app.tokens.authenticate(presented.as_deref()) {
+        return unauthorised(f.message(), &trace_id);
+    }
+    let width = q.get("width").and_then(|w| w.parse::<u32>().ok());
+    match crate::control::methods::gallery::preview_jpeg(&id, width, q.get("background").map(String::as_str)).await {
+        Ok(jpeg) => (
+            StatusCode::OK,
+            [(header::CONTENT_TYPE, "image/jpeg".to_string()), (header::CACHE_CONTROL, "no-cache".to_string())],
+            jpeg,
+        )
+            .into_response(),
+        Err(e) => error_response(&e, &trace_id),
+    }
 }
 
 /// `GET /api/v1/snapshot/{name}`: the JPEG itself, because an `<img>` tag

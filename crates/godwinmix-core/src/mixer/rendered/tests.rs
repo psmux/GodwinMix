@@ -190,11 +190,15 @@ async fn two_rungs_started_apart_put_keyframes_on_the_same_frames() {
     println!("keyframes big {big:?} small {small:?}");
     // The small rung's first keyframe is its start; every one after it is
     // on an interval boundary the big rung also has.
-    let shared: Vec<&u64> = small.iter().skip(1).filter(|p| big.contains(p)).collect();
+    // Within a millisecond, since the truncation to milliseconds can land
+    // either side of one: macOS gave big 2021 and small 2020 for one frame,
+    // which is a thirtieth of the 33 ms between two frames.
+    let near = |a: u64, b: u64| a.abs_diff(b) <= 1;
+    let shared: Vec<&u64> = small.iter().skip(1).filter(|p| big.iter().any(|b| near(*b, **p))).collect();
     assert!(small.len() >= 3, "the small rung made keyframes: {small:?}");
     assert_ne!(small[0], big[0], "the rungs started on different frames");
     let gaps: Vec<u64> = big.windows(2).skip(1).map(|w| w[1] - w[0]).collect();
-    assert!(gaps.iter().all(|g| *g == 1000), "one keyframe a second, as asked: {big:?}");
+    assert!(gaps.iter().all(|g| near(*g, 1000)), "one keyframe a second, as asked: {big:?}");
     assert_eq!(shared.len(), small.len() - 1, "every keyframe after the first lines up: big {big:?} small {small:?}");
     mix.shutdown();
 }

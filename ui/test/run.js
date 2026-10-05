@@ -6,6 +6,7 @@ import { sourceChooserTests } from "./source-chooser.js";
 import { textSourceTests } from "./text-sources.js";
 import { liveDataTests } from "./live-data.js";
 import { graphicTests } from "./graphics.js";
+import { galleryTests } from "./gallery.js";
 import { studioTests } from "./studio.js";
 import { transitionTests } from "./transitions.js";
 import { sceneFixTests, sceneFixLoadTests } from "./scene-fix.js";
@@ -22,6 +23,7 @@ import { wallTests } from "./wall.js";
 import { browserDeviceTests } from "./browser-devices.js";
 import { presenceTests } from "./presence.js";
 import { lanDeviceTests } from "./lan-devices.js";
+import { agentsTests } from "./agents.js";
 // The test runner: forty lines, no dependencies, no toolchain. Open the page,
 // read the console, or read the list. Everything testable without a mixer is
 // here, including the legacy adapter against a stubbed server.
@@ -2747,6 +2749,12 @@ legacySuite()
     line("fail", "the other devices suite threw: " + e.message);
     console.error(e);
   })
+  .then(() => agentsTests(test, eq, ok))
+  .catch((e) => {
+    failed += 1;
+    line("fail", "the connect an AI agent suite threw: " + e.message);
+    console.error(e);
+  })
   .then(outputNumbersSuite)
   .catch((e) => {
     failed += 1;
@@ -2770,6 +2778,7 @@ legacySuite()
   .then(() => textSourceTests(test, eq, ok))
   .then(() => liveDataTests(test, eq, ok))
   .then(() => graphicTests(test, eq, ok))
+  .then(() => galleryTests(test, eq, ok))
   .then(() => sourceFileTests(test, eq, ok))
   .then(() => errorActionTests(test, eq, ok))
   .catch((e) => {

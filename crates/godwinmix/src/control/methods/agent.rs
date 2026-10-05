@@ -43,8 +43,13 @@ pub struct AgentStateRequest {
 /// The concise document.
 #[derive(Debug, Clone, Serialize, JsonSchema)]
 pub struct Concise {
-    /// What is on air. `null` is the slate.
+    /// What is on air. `null` with no `scene` is the slate.
     pub program: Option<String>,
+    /// The scene on air, when one was taken by name. Without it a scene on
+    /// air read as `program: null`, and an agent took that for the slate and
+    /// went looking for what had gone wrong.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scene: Option<String>,
     /// How much the programme picture is changing, 0 to 1, when a snapshot
     /// tracker is running.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -127,7 +132,8 @@ pub fn register(reg: &mut Registry<Call>) {
         .tool(
             "agent_state",
             Tier::Minimal,
-            "Compact state written for agents, a few hundred bytes: the programme source, \
+            "Compact state written for agents, a few hundred bytes: what is on air \
+             (`program`, the source, and `scene` when a scene is on air), \
              each source's id and state, and a motion score saying how much its picture is \
              changing, so you can tell a live camera from a frozen or black one without \
              looking at it. A working source says nothing about its video or sound; one \
@@ -163,6 +169,7 @@ pub fn document(
     };
     Concise {
         program: status.program.clone(),
+        scene: status.scene.clone(),
         program_motion: score(godwinmix_core::snapshot::Pick::Program),
         uptime_secs: status.uptime_secs,
         sources: status
@@ -236,6 +243,7 @@ mod tests {
     fn document_of(n: usize) -> Concise {
         Concise {
             program: Some("cam1".into()),
+            scene: None,
             program_motion: Some(0.12),
             uptime_secs: 942,
             sources: (1..=n)
@@ -307,4 +315,15 @@ mod tests {
         assert_eq!(req.response_format, ResponseFormat::Detailed);
     }
 
+    /// A scene on air is named, so `program: null` is never mistaken for the
+    /// slate while a scene is showing.
+    #[test]
+    fn a_scene_on_air_is_named() {
+        let mut doc = document_of(1);
+        assert!(!serde_json::to_string(&doc).unwrap().contains("\"scene\""));
+        doc.program = None;
+        doc.scene = Some("Live".into());
+        let text = serde_json::to_string(&doc).unwrap();
+        assert!(text.contains("\"program\":null") && text.contains("\"scene\":\"Live\""), "{text}");
+    }
 }

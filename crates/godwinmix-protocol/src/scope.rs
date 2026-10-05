@@ -59,11 +59,13 @@ pub enum ConfirmPolicy {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum Profile {
-    /// At most 12 hot tools.
+    /// The live mix, its graphics and its scenes: at most 14 hot tools.
     #[default]
     Standard,
-    /// Five tools, the rest behind `search_tools`, for a small context.
+    /// The fewest tools, the rest behind `call_tool`, for a small context.
     Minimal,
+    /// Many shows at once: a headend's channel list and its health.
+    Headend,
 }
 
 impl Profile {
@@ -71,6 +73,7 @@ impl Profile {
         match self {
             Self::Standard => "standard",
             Self::Minimal => "minimal",
+            Self::Headend => "headend",
         }
     }
 }

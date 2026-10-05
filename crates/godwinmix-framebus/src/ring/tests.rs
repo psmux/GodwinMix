@@ -95,9 +95,13 @@ fn one_reader_cannot_hold_more_than_its_share() {
 fn readers_on_other_threads_never_see_a_torn_frame() {
     let r = Arc::new(ring(4, 2));
     let stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    // How many readers have read at least one frame. On a two core runner the
+    // writer could finish all its frames before a reader thread had been
+    // scheduled, and that reader saw nothing through no fault of the ring.
+    let reading = Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let readers: Vec<_> = (0..4)
         .map(|_| {
-            let (r, stop) = (r.clone(), stop.clone());
+            let (r, stop, reading) = (r.clone(), stop.clone(), reading.clone());
             std::thread::spawn(move || {
                 let me = r.take_reader(1).unwrap();
                 let (mut last, mut seen) = (0, 0u64);
@@ -107,6 +111,9 @@ fn readers_on_other_threads_never_see_a_torn_frame() {
                         assert_eq!(checksum(r.frame(slot)), want, "frame {seq} torn");
                         assert!(r.frame(slot).iter().all(|&b| b == seq as u8));
                         r.release(me, slot);
+                        if seen == 0 {
+                            reading.fetch_add(1, Relaxed);
+                        }
                         (last, seen) = (seq, seen + 1);
                     }
                 }
@@ -114,7 +121,10 @@ fn readers_on_other_threads_never_see_a_torn_frame() {
             })
         })
         .collect();
-    for seq in 1..=20_000 {
+    let started = std::time::Instant::now();
+    let mut seq = 0;
+    while seq < 20_000 || (reading.load(Relaxed) < 4 && started.elapsed() < std::time::Duration::from_secs(10)) {
+        seq += 1;
         put(&r, seq);
     }
     stop.store(true, Relaxed);

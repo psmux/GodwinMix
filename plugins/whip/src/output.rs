@@ -465,7 +465,13 @@ mod tests {
         // A plain file stands in for the FIFO: `filesrc` does not care, and the
         // point of the check is that the elements assemble and the supervisor
         // answers rather than panicking with nowhere to send.
+        // On Windows the plugin makes a named pipe at the name it is given, as
+        // the core names one there, so the name has to be a pipe's.
+        #[cfg(windows)]
+        let path = std::path::PathBuf::from(format!(r"\\.\pipe\gmx-whip-test-{}", std::process::id()));
+        #[cfg(not(windows))]
         let path = std::env::temp_dir().join(format!("gmx-whip-test-{}.mkv", std::process::id()));
+        #[cfg(not(windows))]
         std::fs::write(&path, b"not really matroska").expect("a stand in for the FIFO");
         let settings = Settings::from_params(&json!({
             "endpoint": "http://127.0.0.1:1/whip", "reconnect_first_ms": 60_000

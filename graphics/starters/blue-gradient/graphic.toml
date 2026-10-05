@@ -1,0 +1,8 @@
+name = "Blue studio background"
+kind = "image"
+file = "background.svg"
+zone = "full"
+transparent = false
+description = "A deep blue gradient with a soft light from the upper left, for behind a presenter or under a title card"
+tags = ["background", "blue", "studio", "news"]
+origin = "shipped"

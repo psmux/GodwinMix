@@ -1,6 +1,6 @@
 ---
 name: godwinmix-design
-description: Design on screen graphics for a GodwinMix mixer and put them on air, drawn by the mixer itself with no browser. Use when asked to make, brand, restyle or reword a news lower third, a breaking news bar, a headline strap, a score bug, a logo bug, a title card, a quote card or a location tag, or to choose between a text source, an SVG template and an OGraf page. Covers the built in pack, writing an SVG template with {{fields}} and shrink to fit, safe areas, save_template, placing it on a scene with an enter and an exit, looking at the result with preview_frame, and changing its words on air with set_source.
+description: Design on screen graphics for a GodwinMix mixer, save them into its Graphics gallery and put them on air. Use when asked to make, brand, restyle or reword a lower third, a breaking news bar, a news ticker or crawl, a score bug, a logo bug, a title card, a background, a web (HTML) graphic, a clip with transparency, a virtual set or news studio set for a presenter (with or without a green screen), or to choose between a text source, an SVG template and an OGraf page. Covers the built in pack, writing an SVG template with {{fields}} and shrink to fit, safe areas, save_template, placing it on the scene that is on air with an enter and an exit, the virtual-set layout, looking at the result with snapshot and preview_frame, and changing its words on air with set_source.
 ---
 
 # Designing graphics for a GodwinMix mixer
@@ -11,15 +11,24 @@ on air is drawn again in a few milliseconds and swapped in on the next frame,
 with no rebuild and no gap. It costs a Raspberry Pi almost nothing while it
 holds still, so it is the default for anything designed.
 
-## No MCP? Run each tool as a command
+## Calling the tools
 
-Every tool this skill names is also a command, with its arguments as one JSON
-object, for an agent that has a shell and no MCP (pi, or any other):
+Over MCP, call the tools by name. A tool that is not in your list (`get_scene`,
+`list_layouts`, `template_fields`) runs through `call_tool`:
+`call_tool {"name": "get_scene", "arguments": {"scene": "Live"}}`.
+`search_tools {"query": "..."}` finds one by what it does.
+
+No MCP? Every tool is also a command, with its arguments as one JSON object
+(pi, or any agent with a shell):
 
 ```
 godwinmix tool agent_state
-godwinmix tool add_source '{"name": "lower", "uri": "template:news-lower-third"}'
+godwinmix tool add_source '{"id": "lower", "uri": "template:news-lower-third"}'
+godwinmix tool save_graphic '{"name": "Storm strap", "file": "storm.svg"}'
+godwinmix tool preview_graphic '{"id": "storm-strap"}'
 ```
+
+A tool's picture is written to a file and its path printed: open it to look.
 
 It finds the GodwinMix app's mixer on the same machine by itself. A file goes
 into the media library with `godwinmix ctl upload picture.png`.
@@ -36,6 +45,30 @@ Movement in and out is not a reason to reach for OGraf. Every scene item has
 an `enter` and an `exit` (fade, slide, wipe, zoom), and they move templates
 like anything else. Do not put `<animate>` or CSS animation in a template:
 it is drawn once, as a still.
+
+## The gallery: save, look, fix, place, show
+
+Whatever you make, save it into the Graphics gallery. The person sees it
+there as a card and puts it on air with two clicks, and you can do the same.
+
+1. `save_graphic` with a `name` and ONE of: `svg` (fields make it a
+   template), `html` (a whole page, background transparent), `data` (PNG,
+   WebP, WebM or MOV as base64), `file` (a path; yours is fine, the tool
+   carries it), `source` (`{"uri": "ticker:", "params": {"items": [...]}}`)
+   or `set` (`{"background": "plate.png", "foreground": "desk.png",
+   "settings": {"presenter_scale": 0.8, "presenter_x": 0.62}}`). Add `tags`,
+   a one line `description` and a `zone`: `lower-third`, `full` (a
+   background), `bug`, `bottom` (a ticker), `center`.
+2. `preview_graphic {"id": "<id from the answer>"}` and look. Fix and save
+   again with `"replace": true` until it is right.
+3. `place_graphic {"id": ..., "values": {"headline": "..."}}` puts it on the
+   scene on air, hidden, where its zone says. A set becomes a new scene.
+4. `show_graphic {"id": ...}` puts it on air; `"visible": false` takes it off.
+   `place_graphic` again with new `values` changes its words.
+
+`list_graphics {"query": "red lower third"}` finds what is there; ids that
+are shipped can be copied with `duplicate_graphic`. Every answer has a `next`
+saying what to call.
 
 ## The pack
 
@@ -64,7 +97,16 @@ to draw.
 
 ## Put one on air
 
-Five calls. Names in `code` are MCP tools; the CLI is at the end.
+Names in `code` are MCP tools; the CLI is at the end.
+
+0. `agent_state {}`. `program` is what is on air. If it names a scene, use
+   that scene below. If it names a source (`cam1`), make a scene of it once,
+   then take it; the picture does not change:
+
+   ```
+   create_scene_from {"sources": ["cam1"], "name": "Live"}
+   take {"scene": "Live"}
+   ```
 
 1. Add the graphic as a source, with its words:
 
@@ -76,18 +118,17 @@ Five calls. Names in `code` are MCP tools; the CLI is at the end.
 2. Put it on the scene that is on air, hidden, with its way in and out:
 
    ```
-   add_scene_item {"scene": "studio", "content": {"source": "breaking"}, "name": "breaking bar",
-     "transform": {"position": {"x": 0, "y": 0}, "frame": {"w": 1920, "h": 1080}},
+   add_scene_item {"scene": "Live", "content": {"source": "breaking"}, "name": "breaking bar",
      "visible": false,
      "enter": {"type": "slide", "edge": "left", "duration_ms": 400, "easing": "ease-out"},
      "exit": {"type": "fade", "duration_ms": 300}}
    ```
 
-   Use the canvas size `core_info` reports for `frame`. Leave `transform` out
-   and it lands in a grid cell instead, which is wrong for a lower third.
+   With no `transform` a template covers the whole canvas, which is where it
+   was designed to sit. Leave out `visible` and it is on air at once.
 
 3. Look before it airs (next section).
-4. Show it: `set_scene_item {"scene": "studio", "item": "breaking bar", "props": {"visible": true}}`.
+4. Show it: `set_scene_item {"scene": "Live", "item": "breaking bar", "props": {"visible": true}}`.
    It slides in. `false` takes it out the way `exit` says.
 5. Change the words on air:
 
@@ -101,9 +142,15 @@ Five calls. Names in `code` are MCP tools; the CLI is at the end.
    A field the template does not have is refused with the ones it does have in
    `data.fields`.
 
+A colour named but not given ("my brand blue") is not stored anywhere unless
+`[graphics] accent` is set. Pick a fitting one, put it on air as asked, and
+say which hex you used and how to change it, rather than stopping to ask.
+
 ## Look at your own work
 
-Always look once before you tell anyone it is done.
+Always look once before you tell anyone it is done. Just after a take, or
+while the pictures start ("no mosaic frame yet"), wait a second and look
+again before you call anything black.
 
 ```
 arm_preview {"scene": "studio"}
@@ -219,6 +266,43 @@ add_source {"id": "strap", "uri": "template:ours-lower-third.svg",
 Then place, look and show as above. To make green the whole station's colour,
 set `graphics.accent`, `graphics.text` and `graphics.panel` in Settings; every
 template uses them from the next start.
+
+**"An animated news ticker with these three headlines."**
+
+A ticker is a source the mixer draws and moves itself, not a template:
+
+```
+add_source {"id": "ticker", "uri": "ticker:", "params": {"items": ["First headline", "Second", "Third"], "speed": 120, "background": "#0b1f3a"}}
+add_scene_item {"scene": "Live", "content": {"source": "ticker"}, "name": "ticker",
+  "transform": {"position": {"x": 0, "y": 1000}, "frame": {"w": 1920, "h": 80}}}
+set_source {"id": "ticker", "params": {"items": ["New first headline", "Second", "Third"]}}
+```
+
+**"Design a background for my presenter."** A full screen template: an SVG
+with no transparent part (a gradient, panels, a skyline, the show's name),
+saved with `save_template` and added as a source like any other:
+
+```
+save_template {"name": "studio-bg", "svg": "<svg viewBox=\"0 0 1920 1080\" width=\"1920\" height=\"1080\" ...>...</svg>"}
+add_source {"id": "studio-bg", "uri": "template:studio-bg.svg"}
+```
+
+**"Make me a modern news studio set and put me in it, no green screen."**
+There is no separate virtual set feature: a set is a background, the camera
+cut out in front of it, and a scene made in one call with the `virtual-set`
+layout. Design the background as above, then:
+
+```
+create_scene_from {"sources": ["studio-bg", "cam1"], "layout": "virtual-set", "name": "Studio",
+  "settings": {"screen": "none", "presenter_scale": 0.8, "presenter_x": 0.35}}
+take {"scene": "Studio"}
+snapshot {"id": "program", "width": 640}
+```
+
+`screen: "none"` cuts the person out with a model, so no green screen is
+needed; leave it out for a green screen and say `"blue"` for a blue one. A
+desk in front of the presenter is a third source, a template with a
+transparent top half. A lower third goes on the `Studio` scene as above.
 
 ## From a terminal
 

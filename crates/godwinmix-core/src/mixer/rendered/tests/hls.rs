@@ -28,6 +28,9 @@ fn hls_output(id: &str) -> OutputConfig {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn an_hls_ladder_is_packaged_from_the_planners_encoders() {
+    if !crate::probe::have_or_skip("cmafmux") {
+        return;
+    }
     let mut mix = mixer(config()).await;
     mix.add_output(&output("steady", Some(want(144, 400)))).unwrap();
     mix.add_output(&hls_output("ladder-in-mixer")).expect("an hls output needs no uri");

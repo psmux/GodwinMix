@@ -111,6 +111,14 @@ impl Gl {
         self.latest.lock().is_some()
     }
 
+    /// Draw the newest answer onto `f` and send nothing, for a caller that
+    /// waited for the answer to the one frame it sent.
+    pub fn draw_latest(&self, f: &mut Planes<'_>) {
+        if let Some(answer) = self.latest.lock().clone() {
+            frames::draw(&self.stacked, &answer, f);
+        }
+    }
+
     /// Drop every answer so far, for a caller about to wait for a new one.
     pub fn forget(&self) {
         while self.sink.try_pull_sample(gst::ClockTime::ZERO).is_some() {}
