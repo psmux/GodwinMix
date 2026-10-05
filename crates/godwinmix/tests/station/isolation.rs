@@ -106,13 +106,17 @@ async fn a_show_killed_is_started_again_the_other_runs_on_and_its_share_goes_bac
     // The restarted show keeps the output it could not attach and asks again
     // on the tick (`mixer::unattached`), so this is a wait for room on a
     // shared runner, not for a retry that may never come.
+    // Once, not twice, and not to the millicore: the encoder is priced again
+    // when it is admitted again, and on a Linux runner the same rendition
+    // came back at 769 millicores where it had held 808.
+    let once = |n: (u64, u64)| n.0 * 4 >= held.0 * 3 && n.0 * 4 <= held.0 * 5;
     let start = Instant::now();
     let mut now = governor_used(&st).await;
-    while now.0 != held.0 && start.elapsed() < Duration::from_secs(30).mul_f64(slack) {
+    while !once(now) && start.elapsed() < Duration::from_secs(30).mul_f64(slack) {
         tokio::time::sleep(Duration::from_millis(100)).await;
         now = governor_used(&st).await;
     }
-    if now.0 != held.0 {
+    if !once(now) {
         let shows = get(&st, "/api/v1/shows").await;
         let governor = get(&st, "/api/v1/governor/status").await;
         // What else is taking the machine: the governor's room is what is
