@@ -20,51 +20,9 @@ use schemars::JsonSchema;
 use serde::Serialize;
 
 use super::patch::{Header, Patch};
+pub(super) use super::writers::Writers;
 use crate::scene::flat::{FlatDocument, Props, Record};
 use crate::scene::id::Id;
-
-/// How many recent writers are remembered per record, so a conflict can name
-/// the last person who is not the one asking.
-const WRITERS_KEPT: usize = 4;
-
-/// Who changed each record most recently, newest last.
-#[derive(Default)]
-pub(super) struct Writers {
-    by_record: HashMap<Id, Vec<String>>,
-    header: Vec<String>,
-}
-
-impl Writers {
-    /// Note that `client` made this change.
-    pub fn note(&mut self, p: &Patch, client: Option<&str>) {
-        let who = client.unwrap_or("").to_string();
-        let ids = p.added.iter().map(|r| r.id).chain(p.updated.iter().map(|u| u.after.id));
-        for id in ids.chain(p.removed.iter().copied()) {
-            push(self.by_record.entry(id).or_default(), &who);
-        }
-        if p.header.is_some() {
-            push(&mut self.header, &who);
-        }
-    }
-
-    /// The most recent writer of a record who is not `me`.
-    fn other(&self, record: Option<Id>, me: Option<&str>) -> Option<String> {
-        let list = match record {
-            Some(id) => self.by_record.get(&id)?,
-            None => &self.header,
-        };
-        let me = me.unwrap_or("");
-        list.iter().rev().find(|w| w.as_str() != me).filter(|w| !w.is_empty()).cloned()
-    }
-}
-
-fn push(list: &mut Vec<String>, who: &str) {
-    list.retain(|w| w != who);
-    list.push(who.to_string());
-    if list.len() > WRITERS_KEPT {
-        list.remove(0);
-    }
-}
 
 /// One record a step cannot put back without overwriting somebody else.
 #[derive(Debug, Clone, PartialEq, Serialize, JsonSchema)]
@@ -184,29 +142,3 @@ pub(super) fn without(step: &Patch, conflicts: &[Conflict]) -> Patch {
     }
     out
 }
-
-/// An undo or redo refused because it would overwrite somebody else's change.
-#[derive(Debug, Clone)]
-pub struct Refused {
-    /// `undo` or `redo`, the method's own word.
-    pub verb: &'static str,
-    pub conflicts: Vec<Conflict>,
-}
-
-impl std::fmt::Display for Refused {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let list: Vec<String> = self.conflicts.iter().map(Conflict::describe).collect();
-        write!(
-            f,
-            "your last change cannot be {}ne without overwriting somebody else's work on {}. \
-             Nothing was {}ne and the step stays on your stack. Send scene.{} with force: true \
-             to put your version back over theirs, or change it by hand.",
-            self.verb,
-            list.join(", "),
-            self.verb,
-            self.verb
-        )
-    }
-}
-
-impl std::error::Error for Refused {}

@@ -25,13 +25,17 @@ mod clients;
 pub mod compose;
 pub mod conflict;
 mod drafts;
+mod stale;
 pub mod find;
 pub mod graphics;
 pub mod ops;
 pub mod patch;
+mod refused;
 pub mod store;
+mod transaction;
 mod undo;
 pub mod view;
+mod writers;
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -47,8 +51,10 @@ use crate::scene::document::{Canvas, Collection};
 use crate::scene::id::Id;
 use crate::scene::validate::Finding;
 
-pub use conflict::{Conflict, Refused};
-pub use drafts::{Draft, Stale};
+pub use conflict::Conflict;
+pub use refused::Refused;
+pub use drafts::Draft;
+pub use stale::Stale;
 pub use patch::{Patch, Update};
 pub use view::{Geometry, SceneView};
 
@@ -529,6 +535,10 @@ fn sources_of(item: &crate::scene::document::Item) -> Vec<String> {
 }
 
 #[cfg(test)]
+mod clients_tests;
+#[cfg(test)]
 mod collab_tests;
+#[cfg(test)]
+mod draft_tests;
 #[cfg(test)]
 mod tests;
