@@ -68,3 +68,14 @@ fn a_name_that_is_a_path_is_never_looked_for() {
         assert_eq!(find(name), None, "{name:?}");
     }
 }
+
+#[test]
+fn every_desktop_app_has_its_plugins_looked_for_where_it_puts_them() {
+    let at = |exe: &str| places_from(Path::new(exe), "srt");
+    let mac = at("/Applications/GodwinMix.app/Contents/MacOS");
+    assert!(mac.contains(&PathBuf::from("/Applications/GodwinMix.app/Contents/Resources/plugins/srt")));
+    let deb = at("/usr/bin");
+    assert!(deb.contains(&PathBuf::from("/usr/lib/GodwinMix/plugins/srt")));
+    let win = at(r"C:\Program Files\GodwinMix");
+    assert!(win.contains(&Path::new(r"C:\Program Files\GodwinMix").join("plugins").join("srt")));
+}

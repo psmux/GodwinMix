@@ -67,7 +67,14 @@ fn places_from(exe_dir: &Path, name: &str) -> Vec<PathBuf> {
     let prefix = exe_dir.parent().unwrap_or(exe_dir);
     let mut out = vec![
         prefix.join("share").join("godwinmix").join("plugins").join(name),
+        // The Windows app: the plugins beside the mixer.
         exe_dir.join("plugins").join(name),
+        // The macOS app: Contents/MacOS/godwinmix, Contents/Resources/plugins.
+        prefix.join("Resources").join("plugins").join(name),
+        // The .deb and the AppImage: /usr/bin/godwinmix, /usr/lib/GodwinMix/plugins.
+        // Missing until 0.2.0, so every plugin installed on demand (SRT, WHIP,
+        // RTSP, NDI and the rest) shipped in those apps and was never found.
+        prefix.join("lib").join("GodwinMix").join("plugins").join(name),
     ];
     out.extend(checkout_of(exe_dir).map(|c| c.join("plugins").join(name)));
     out
