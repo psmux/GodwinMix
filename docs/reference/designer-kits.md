@@ -69,7 +69,7 @@ from godwinmix.kits import SceneMirror, Prediction, UndoProxy
 
 | JavaScript and TypeScript | Python | What it does |
 |---|---|---|
-| `new SceneMirror({clientId})` | `SceneMirror(client_id=...)` | `clientId` is your own `source_client`, from `core.info`'s `token.id` |
+| `new SceneMirror({clientId})` | `SceneMirror(client_id=...)` | `clientId` is your own `source_client`: `client_id` from `core.subscribe` or `core.info`, which is your connection and not only your token. A core older than client ids has only `token.id` |
 | `applyView(view)` | `apply_view(view)` | take the view a mutating command answered with. That scene's subtree is replaced and no other scene is touched |
 | `applyPatch(patch)` | `apply_patch(patch)` | one `event/scene.patch`. Answers `{applied, echo, gap, seq, added, updated, removed}` |
 | `reset(views)` | `reset(views)` | replace everything, after a resync |
@@ -107,7 +107,7 @@ prediction.settle(seq);                          // the core has caught up
 | `predict(item, props)` | record the local intent, return the number to send. A second prediction for the same item replaces the first |
 | `settle(seq)` | the core applied everything up to `seq`. Returns the items that are the core's again |
 | `resolve(item, serverProps)` | what to draw: your own move while it is in flight, the core's record once it has caught up |
-| `accepts(item, echoSeq)` | false while you hold a newer move for that item. This is what removes the rubber band |
+| `accepts(item, echoSeq, own?)` | false while you hold a newer move for that item. This is what removes the rubber band. Pass `own: false` for a patch somebody else made: its `client_seq` is their count, not yours, so it never settles your move (`own=False` in Python) |
 | `reset()` | throw it all away, for a cancelled drag or a resync |
 | `.busy`, `.seq`, `.acked`, `.pending` | state |
 
@@ -131,7 +131,11 @@ await undo.undo();                                  // scene.undo
 ```
 
 `mark(label)` is `scene.history.mark`, which is what folds forty moves of a drag
-into one Ctrl+Z. `record(label, {offer})` pushes a line into the surface's own
+into one Ctrl+Z. The stacks are your client's own, so `undo()` never takes back
+somebody else's change. When it would overwrite one they made later, the core
+refuses with `data.conflict: "undo"`; the JavaScript proxy asks its
+`onConflict(error)` hook, when you set one, and goes again with `force: true` on
+a yes. `record(label, {offer})` pushes a line into the surface's own
 undo menu, and `offer` asks for an Undo button in a toast, which the destructive
 ones want.
 

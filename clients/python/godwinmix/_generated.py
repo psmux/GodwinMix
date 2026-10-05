@@ -165,6 +165,13 @@ class AlarmSettings(TypedDict, total=False):
     # The peak level under which sound counts as quiet.
     silence_ms: Optional[int]
 
+class ApplyDraftRequest(TypedDict, total=False):
+    """`scene.edit.apply`."""
+
+    draft: str
+    force: bool
+    # Apply even though the scene changed after the draft was taken, which replaces those changes with the draft. Without it such an apply is refused with the changes listed in `data.conflicts`.
+
 class ApplyGraphicRequest(TypedDict, total=False):
     """`scene.apply_graphic`."""
 
@@ -655,6 +662,8 @@ class CoreInfo(TypedDict, total=False):
     api_compatible: int
     api_level: int
     canvas: CanvasInfo
+    client_id: Optional[str]
+    # Who the call came from: the `source_client` this caller's scene patches carry, which is what a mirror suppresses its own echo by. `<token id>.<name>` on /rpc or with `client_id` in the envelope, the token id alone otherwise.
     core: str
     # Always "godwinmix".
     executable: Optional[str]
@@ -827,10 +836,14 @@ class DiscoverRequest2(TypedDict, total=False):
 class DraftRecord(TypedDict, total=False):
     """`scene.edit.begin`."""
 
+    base_seq: int
+    # The document's revision when the draft was taken. An apply is refused when the scene has changed since.
     draft: str
     # Pass this as `draft` on any `scene.item.*` call to edit the copy.
     live: bool
     # True when the client asked to edit on air.
+    owner: Optional[str]
+    # The client that opened it.
     scene: str
     # The scene it was taken from.
     view: Union[SceneView, None]
@@ -1253,13 +1266,19 @@ class HistoryRequest(TypedDict, total=False):
     limit: Optional[int]
     # How many takes to return, newest first. At most 100.
 
+class HistoryRequest2(TypedDict, total=False):
+    """`scene.undo` and `scene.redo`."""
+
+    force: bool
+    # Go ahead even where somebody else changed the same item after you, putting your version back over theirs. Without it such a step is refused with who changed what in `data.conflicts`, and stays on your stack.
+
 class HistoryStep(TypedDict, total=False):
     """`scene.undo` and `scene.redo`."""
 
     patch: Patch
     redo: int
     undo: int
-    # How many steps are still on each stack, so a UI greys out a button.
+    # How many steps are still on each of your stacks, so a UI greys out a button.
 
 class HlsOutputParams(TypedDict, total=False):
     """An `hls://` output's params, as an `hls/output` takes them."""
@@ -2033,6 +2052,38 @@ PluginUpdated = TypedDict("PluginUpdated", {
     "plugin": PluginRecord,
     "to": str,
 }, total=False)
+
+class PresenceClient(TypedDict, total=False):
+    """One client connected to `/rpc`."""
+
+    client_id: str
+    # The client id, as scene patches carry it in `source_client`.
+    device: str
+    # A guess at the device from its User-Agent: "iPhone Safari", "Windows Chrome", "gmx CLI". Empty when it sent none.
+    label: Optional[str]
+    # What to call it: the name the client gave itself with presence.set, else the token's label when the token has one.
+    scene: Optional[str]
+    # The scene this client says it is editing, when it said.
+    since_ms: int
+    # When it connected, in milliseconds since the Unix epoch.
+    token: str
+    # The token it connected with.
+    you: bool
+    # True for the connection asking.
+
+class PresenceList(TypedDict, total=False):
+    """`presence.list`, and the payload of `event/presence.changed`."""
+
+    clients: List[PresenceClient]
+    # Every connected client, oldest connection first.
+
+class PresenceSetRequest(TypedDict, total=False):
+    """`presence.set`: what this connection tells everybody else about itself."""
+
+    label: Optional[str]
+    # A name for this device that a person chose ("Sam's phone"). Omitted keeps the one it has; an empty string clears it.
+    scene: Optional[str]
+    # The scene this client is editing, by id or name. Null or omitted says it is editing none.
 
 class PresetRef(TypedDict, total=False):
     """A preset named by id."""
@@ -2820,6 +2871,8 @@ class SubscribeRequest(TypedDict, total=False):
 class SubscribeResult(TypedDict, total=False):
     """What `core.subscribe` answers with, before the snapshot arrives."""
 
+    client_id: Optional[str]
+    # Who this connection is: the `source_client` its scene patches carry, and its id in presence.list. `<token id>.<name>`.
     events: List[str]
     # The event patterns now in force.
     ignored_ext: List[str]
@@ -3500,6 +3553,8 @@ METHODS = (
     {"name": "plugin.settings.set", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/plugins/{id}/settings"), "summary": "Change a plugin's settings. A plugin that cannot take a change while running says so rather than being restarted behind your back."},
     {"name": "plugin.stats", "scope": "read", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/plugins/{id}/stats"), "summary": 'Per instance cpu, memory, media latency, dropped buffers and restarts, refreshed once a second.'},
     {"name": "plugin.update", "scope": "admin", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/plugins/{id}/update"), "summary": 'Fetch a newer build of a plugin, install it beside the one that is running, and prove it starts. A build that does not answer `initialize` within ten seconds is rolled back and the plugin that was working stays working.'},
+    {"name": "presence.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/presence/list"), "summary": 'Every client connected to /rpc: its client id, token, label, device, the scene it says it is editing and when it connected. `you` marks the caller.'},
+    {"name": "presence.set", "scope": "read", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/presence/set"), "summary": 'Tell everybody else which scene this connection is editing, or none, and optionally a name for the device. Changes nothing on air.'},
     {"name": "preset.apply", "scope": "admin", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/preset/apply"), "summary": 'Put a preset on this core: its config, its scenes, its layout, its theme and its gallery mode. Pass dry_run to get the plan and write nothing.'},
     {"name": "preset.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/preset/list"), "summary": 'Every preset this core can apply: the six built in, plus anything installed beside the binary or under ~/.godwinmix/presets.'},
     {"name": "preset.save", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/preset/save"), "summary": "Turn this core's working setup into a preset directory somebody else can apply. Stream keys and the control token are replaced with placeholders."},
@@ -3521,7 +3576,7 @@ METHODS = (
     {"name": "scene.apply_layout", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/apply_layout"), "summary": 'Apply a layout, making a scene or reshaping one that exists. Applying onto an existing scene keeps the item ids, so the change is a ramp and not a cut.'},
     {"name": "scene.create_from", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/create_from"), "summary": 'A scene from a set of sources, laid out by the built in layout for that count (full, two-box, three-box, quad, then a grid) or by a named one. Pictures from the media library become sources, and a keyed layout such as virtual-set guesses its key colour from the camera.'},
     {"name": "scene.duplicate", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/{id}/duplicate"), "summary": 'A copy of a scene with new ids throughout, so editing the copy cannot touch the original.'},
-    {"name": "scene.edit.apply", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/edit/apply"), "summary": 'Write a draft back into the live document.'},
+    {"name": "scene.edit.apply", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/edit/apply"), "summary": 'Write a draft back into the live document. Refused, with what changed and who changed it, when somebody changed the scene after the draft was taken; force: true applies it anyway.'},
     {"name": "scene.edit.begin", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/edit/begin"), "summary": 'Take a working copy of a scene. Editing is off air by default: the draft is written back on the next take of that scene, or when you apply it.'},
     {"name": "scene.edit.discard", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/edit/discard"), "summary": 'Throw a draft away. The live document is untouched.'},
     {"name": "scene.export", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/scenes/export"), "summary": 'The whole collection: as JSON, or as a zip bundle carrying its assets with a hash each, which is what you send somebody.'},
@@ -3557,13 +3612,13 @@ METHODS = (
     {"name": "scene.params.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/params/set"), "summary": "Set the collection's parameter values, declaring any that are new. A `{{name}}` in any string property of any item follows them, so one call changes every lower third that uses it."},
     {"name": "scene.preview.frame", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/scenes/preview/frame"), "summary": 'A still of the armed scene as base64 JPEG, the floor every client has.'},
     {"name": "scene.preview.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/preview/set"), "summary": 'Arm a scene. The armed scene is the preview, and program.take with no argument takes it.'},
-    {"name": "scene.redo", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/redo"), "summary": 'Put back what undo took away.'},
+    {"name": "scene.redo", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/redo"), "summary": 'Put back what your undo took away.'},
     {"name": "scene.remove", "scope": "operate", "mutating": True, "destructive": True, "rest": ("DELETE", "/api/v1/scenes/{id}"), "summary": 'Delete a scene. What is on air is not touched.'},
     {"name": "scene.rename", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/{id}/rename"), "summary": "Change a scene's name, its colour, or both. Names and colours live on the document, so every client, the tally and an agent see the same ones."},
-    {"name": "scene.transaction.abort", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/transaction/abort"), "summary": 'Throw the batch away. The document goes back to where it was when the batch opened.'},
-    {"name": "scene.transaction.begin", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/transaction/begin"), "summary": 'Start a batch. Everything until the commit applies on one frame or not at all, and undoes in one step.'},
+    {"name": "scene.transaction.abort", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/transaction/abort"), "summary": 'Throw your batch away. What you changed in it goes back to where it was, except where somebody else has changed it since.'},
+    {"name": "scene.transaction.begin", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/transaction/begin"), "summary": "Start a batch. Everything you do until the commit applies on one frame or not at all, and undoes in one step. Other clients' edits go on meanwhile."},
     {"name": "scene.transaction.commit", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/transaction/commit"), "summary": 'Apply the batch.'},
-    {"name": "scene.undo", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/undo"), "summary": 'Undo the last change. A drag marked with scene.history.mark undoes as one step.'},
+    {"name": "scene.undo", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/scenes/undo"), "summary": "Undo your last change. Each client has its own stack, so this never takes back somebody else's. A drag marked with scene.history.mark undoes as one step."},
     {"name": "scene.validate", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/scenes/validate"), "summary": 'Overlaps, items off the canvas, safe area breaches and missing sources: what to fix before saying a scene is done.'},
     {"name": "setup.get", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/setup"), "summary": 'Where one piece stands, without starting anything.'},
     {"name": "setup.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/setup/list"), "summary": 'Where each piece the mixer sets up on first use stands: the browser renderer (`web`) and every first party plugin this copy carries.'},
@@ -3640,6 +3695,7 @@ EVENT_NAMES = (
     "show.health",
     "feed.failed",
     "feed.recovered",
+    "presence.changed",
     "health",
 )
 
@@ -4707,6 +4763,27 @@ class GeneratedMethods:
             params["source"] = source
         return await self._call("plugin.update", params)
 
+    async def presence_list(
+        self,
+    ) -> PresenceList:
+        """Every client connected to /rpc: its client id, token, label, device, the scene it says it is editing and when it connected. `you` marks the caller."""
+        params: Dict[str, Any] = {}
+        return await self._call("presence.list", params)
+
+    async def presence_set(
+        self,
+        *,
+        label: Optional[str] = None,
+        scene: Optional[str] = None,
+    ) -> PresenceList:
+        """Tell everybody else which scene this connection is editing, or none, and optionally a name for the device. Changes nothing on air."""
+        params: Dict[str, Any] = {}
+        if label is not None:
+            params["label"] = label
+        if scene is not None:
+            params["scene"] = scene
+        return await self._call("presence.set", params)
+
     async def preset_apply(
         self,
         name: str,
@@ -5001,10 +5078,14 @@ class GeneratedMethods:
     async def scene_edit_apply(
         self,
         draft: str,
+        *,
+        force: Optional[bool] = None,
     ) -> Dict[str, Any]:
-        """Write a draft back into the live document."""
+        """Write a draft back into the live document. Refused, with what changed and who changed it, when somebody changed the scene after the draft was taken; force: true applies it anyway."""
         params: Dict[str, Any] = {}
         params["draft"] = draft
+        if force is not None:
+            params["force"] = force
         return await self._call("scene.edit.apply", params)
 
     async def scene_edit_begin(
@@ -5692,9 +5773,13 @@ class GeneratedMethods:
 
     async def scene_redo(
         self,
+        *,
+        force: Optional[bool] = None,
     ) -> HistoryStep:
-        """Put back what undo took away."""
+        """Put back what your undo took away."""
         params: Dict[str, Any] = {}
+        if force is not None:
+            params["force"] = force
         return await self._call("scene.redo", params)
 
     async def scene_remove(
@@ -5725,14 +5810,14 @@ class GeneratedMethods:
     async def scene_transaction_abort(
         self,
     ) -> Dict[str, Any]:
-        """Throw the batch away. The document goes back to where it was when the batch opened."""
+        """Throw your batch away. What you changed in it goes back to where it was, except where somebody else has changed it since."""
         params: Dict[str, Any] = {}
         return await self._call("scene.transaction.abort", params)
 
     async def scene_transaction_begin(
         self,
     ) -> Dict[str, Any]:
-        """Start a batch. Everything until the commit applies on one frame or not at all, and undoes in one step."""
+        """Start a batch. Everything you do until the commit applies on one frame or not at all, and undoes in one step. Other clients' edits go on meanwhile."""
         params: Dict[str, Any] = {}
         return await self._call("scene.transaction.begin", params)
 
@@ -5745,9 +5830,13 @@ class GeneratedMethods:
 
     async def scene_undo(
         self,
+        *,
+        force: Optional[bool] = None,
     ) -> HistoryStep:
-        """Undo the last change. A drag marked with scene.history.mark undoes as one step."""
+        """Undo your last change. Each client has its own stack, so this never takes back somebody else's. A drag marked with scene.history.mark undoes as one step."""
         params: Dict[str, Any] = {}
+        if force is not None:
+            params["force"] = force
         return await self._call("scene.undo", params)
 
     async def scene_validate(

@@ -84,10 +84,16 @@ export class Prediction {
    * No while we are still holding a newer move for it: that is the echo of
    * something the operator has already dragged past, and drawing it is exactly
    * the rubber band this class exists to remove.
+   *
+   * `own` is false for a patch somebody else made (its `source_client` is not
+   * ours). Its `client_seq` is that client's own count and says nothing about
+   * our moves, so it never settles them: while we hold a move for the item the
+   * hand wins, and the core, which applies our move after theirs, agrees.
    */
-  accepts(item, echoSeq) {
+  accepts(item, echoSeq, own = true) {
     const held = this.pending.get(item);
     if (!held) return true;
+    if (!own) return false;
     return Number(echoSeq || 0) >= held.seq;
   }
 }

@@ -309,7 +309,7 @@ async fn take_scene(
     // A draft of this scene taken off air is written back now, which is what
     // "applied on the next take" means.
     if let Ok(view) = call.app.scenes.scene(which) {
-        call.app.scenes.apply_drafts_of(Some(&call.token.id), view.id);
+        call.app.scenes.apply_drafts_of(Some(&call.client), view.id);
     }
     let (name, placements) = call
         .app

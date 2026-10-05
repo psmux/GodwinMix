@@ -22,6 +22,7 @@ Keys accepted on every method, handled before a method runs.
 
 | Key | Type | What it does |
 |---|---|---|
+| `client_id` | string | A name for this device or connection. The core makes it <token id>.<client_id> and that is who the call is from: the source_client on its scene patches, the owner of its undo stack and drafts, its name in presence. A /rpc connection has one already; over HTTP without it the caller is the token id alone. |
 | `confirm` | string | The confirm_token from a -32020 refusal, valid 30 seconds. Only a token whose policy is confirm = required needs it. |
 | `dry_run` | boolean | On any destructive method. Answers the diff it would make and would_change, against the live state, and changes nothing. |
 | `idempotency_key` | string | On any mutating method. The answer is kept for 24 hours; a replay returns it with replayed: true. The same key with different params is -32602 with data.idempotency = mismatch. |
@@ -118,6 +119,8 @@ Keys accepted on every method, handled before a method runs.
 | `plugin.settings.set` | `POST /api/v1/plugins/{id}/settings` | admin |  | 1 | Change a plugin's settings. A plugin that cannot take a change while running says so rather than being restarted behind your back. |
 | `plugin.stats` | `POST /api/v1/plugins/{id}/stats` | read |  | 1 | Per instance cpu, memory, media latency, dropped buffers and restarts, refreshed once a second. |
 | `plugin.update` | `POST /api/v1/plugins/{id}/update` | admin | yes | 1 | Fetch a newer build of a plugin, install it beside the one that is running, and prove it starts. A build that does not answer `initialize` within ten seconds is rolled back and the plugin that was working stays working. |
+| `presence.list` | `GET /api/v1/presence/list` | read |  | 1 | Every client connected to /rpc: its client id, token, label, device, the scene it says it is editing and when it connected. `you` marks the caller. |
+| `presence.set` | `POST /api/v1/presence/set` | read |  | 1 | Tell everybody else which scene this connection is editing, or none, and optionally a name for the device. Changes nothing on air. |
 | `preset.apply` | `POST /api/v1/preset/apply` | admin | yes | 1 | Put a preset on this core: its config, its scenes, its layout, its theme and its gallery mode. Pass dry_run to get the plan and write nothing. |
 | `preset.list` | `GET /api/v1/preset/list` | read |  | 1 | Every preset this core can apply: the six built in, plus anything installed beside the binary or under ~/.godwinmix/presets. |
 | `preset.save` | `POST /api/v1/preset/save` | admin |  | 1 | Turn this core's working setup into a preset directory somebody else can apply. Stream keys and the control token are replaced with placeholders. |
@@ -139,7 +142,7 @@ Keys accepted on every method, handled before a method runs.
 | `scene.apply_layout` | `POST /api/v1/scenes/apply_layout` | operate |  | 1 | Apply a layout, making a scene or reshaping one that exists. Applying onto an existing scene keeps the item ids, so the change is a ramp and not a cut. |
 | `scene.create_from` | `POST /api/v1/scenes/create_from` | operate |  | 1 | A scene from a set of sources, laid out by the built in layout for that count (full, two-box, three-box, quad, then a grid) or by a named one. Pictures from the media library become sources, and a keyed layout such as virtual-set guesses its key colour from the camera. |
 | `scene.duplicate` | `POST /api/v1/scenes/{id}/duplicate` | operate |  | 1 | A copy of a scene with new ids throughout, so editing the copy cannot touch the original. |
-| `scene.edit.apply` | `POST /api/v1/scenes/edit/apply` | operate |  | 1 | Write a draft back into the live document. |
+| `scene.edit.apply` | `POST /api/v1/scenes/edit/apply` | operate |  | 1 | Write a draft back into the live document. Refused, with what changed and who changed it, when somebody changed the scene after the draft was taken; force: true applies it anyway. |
 | `scene.edit.begin` | `POST /api/v1/scenes/edit/begin` | operate |  | 1 | Take a working copy of a scene. Editing is off air by default: the draft is written back on the next take of that scene, or when you apply it. |
 | `scene.edit.discard` | `POST /api/v1/scenes/edit/discard` | operate |  | 1 | Throw a draft away. The live document is untouched. |
 | `scene.export` | `GET /api/v1/scenes/export` | read |  | 1 | The whole collection: as JSON, or as a zip bundle carrying its assets with a hash each, which is what you send somebody. |
@@ -175,13 +178,13 @@ Keys accepted on every method, handled before a method runs.
 | `scene.params.set` | `POST /api/v1/scenes/params/set` | operate |  | 1 | Set the collection's parameter values, declaring any that are new. A `{{name}}` in any string property of any item follows them, so one call changes every lower third that uses it. |
 | `scene.preview.frame` | `GET /api/v1/scenes/preview/frame` | read |  | 1 | A still of the armed scene as base64 JPEG, the floor every client has. |
 | `scene.preview.set` | `POST /api/v1/scenes/preview/set` | operate |  | 1 | Arm a scene. The armed scene is the preview, and program.take with no argument takes it. |
-| `scene.redo` | `POST /api/v1/scenes/redo` | operate |  | 1 | Put back what undo took away. |
+| `scene.redo` | `POST /api/v1/scenes/redo` | operate |  | 1 | Put back what your undo took away. |
 | `scene.remove` | `DELETE /api/v1/scenes/{id}` | operate | yes | 1 | Delete a scene. What is on air is not touched. |
 | `scene.rename` | `POST /api/v1/scenes/{id}/rename` | operate |  | 1 | Change a scene's name, its colour, or both. Names and colours live on the document, so every client, the tally and an agent see the same ones. |
-| `scene.transaction.abort` | `POST /api/v1/scenes/transaction/abort` | operate |  | 1 | Throw the batch away. The document goes back to where it was when the batch opened. |
-| `scene.transaction.begin` | `POST /api/v1/scenes/transaction/begin` | operate |  | 1 | Start a batch. Everything until the commit applies on one frame or not at all, and undoes in one step. |
+| `scene.transaction.abort` | `POST /api/v1/scenes/transaction/abort` | operate |  | 1 | Throw your batch away. What you changed in it goes back to where it was, except where somebody else has changed it since. |
+| `scene.transaction.begin` | `POST /api/v1/scenes/transaction/begin` | operate |  | 1 | Start a batch. Everything you do until the commit applies on one frame or not at all, and undoes in one step. Other clients' edits go on meanwhile. |
 | `scene.transaction.commit` | `POST /api/v1/scenes/transaction/commit` | operate |  | 1 | Apply the batch. |
-| `scene.undo` | `POST /api/v1/scenes/undo` | operate |  | 1 | Undo the last change. A drag marked with scene.history.mark undoes as one step. |
+| `scene.undo` | `POST /api/v1/scenes/undo` | operate |  | 1 | Undo your last change. Each client has its own stack, so this never takes back somebody else's. A drag marked with scene.history.mark undoes as one step. |
 | `scene.validate` | `GET /api/v1/scenes/validate` | read |  | 1 | Overlaps, items off the canvas, safe area breaches and missing sources: what to fix before saying a scene is done. |
 | `setup.get` | `GET /api/v1/setup` | read |  | 1 | Where one piece stands, without starting anything. |
 | `setup.list` | `GET /api/v1/setup/list` | read |  | 1 | Where each piece the mixer sets up on first use stands: the browser renderer (`web`) and every first party plugin this copy carries. |
@@ -1636,6 +1639,38 @@ Fetch a newer build of a plugin, install it beside the one that is running, and 
 }
 ```
 
+#### `presence.list`
+
+Every client connected to /rpc: its client id, token, label, device, the scene it says it is editing and when it connected. `you` marks the caller.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "$ref": "#/$defs/PresenceList"
+  }
+}
+```
+
+#### `presence.set`
+
+Tell everybody else which scene this connection is editing, or none, and optionally a name for the device. Changes nothing on air.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/PresenceSetRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/PresenceList"
+  }
+}
+```
+
 #### `preset.apply`
 
 Put a preset on this core: its config, its scenes, its layout, its theme and its gallery mode. Pass dry_run to get the plan and write nothing.
@@ -1994,12 +2029,12 @@ A copy of a scene with new ids throughout, so editing the copy cannot touch the 
 
 #### `scene.edit.apply`
 
-Write a draft back into the live document.
+Write a draft back into the live document. Refused, with what changed and who changed it, when somebody changed the scene after the draft was taken; force: true applies it anyway.
 
 ```json
 {
   "params": {
-    "$ref": "#/$defs/DraftRequest"
+    "$ref": "#/$defs/ApplyDraftRequest"
   },
   "result": {
     "type": "object"
@@ -2568,14 +2603,12 @@ MCP tool `arm_preview` in the `search` profile: readOnlyHint false, destructiveH
 
 #### `scene.redo`
 
-Put back what undo took away.
+Put back what your undo took away.
 
 ```json
 {
   "params": {
-    "additionalProperties": false,
-    "properties": {},
-    "type": "object"
+    "$ref": "#/$defs/HistoryRequest2"
   },
   "result": {
     "$ref": "#/$defs/HistoryStep"
@@ -2615,7 +2648,7 @@ Change a scene's name, its colour, or both. Names and colours live on the docume
 
 #### `scene.transaction.abort`
 
-Throw the batch away. The document goes back to where it was when the batch opened.
+Throw your batch away. What you changed in it goes back to where it was, except where somebody else has changed it since.
 
 ```json
 {
@@ -2632,7 +2665,7 @@ Throw the batch away. The document goes back to where it was when the batch open
 
 #### `scene.transaction.begin`
 
-Start a batch. Everything until the commit applies on one frame or not at all, and undoes in one step.
+Start a batch. Everything you do until the commit applies on one frame or not at all, and undoes in one step. Other clients' edits go on meanwhile.
 
 ```json
 {
@@ -2666,16 +2699,14 @@ Apply the batch.
 
 #### `scene.undo`
 
-Undo the last change. A drag marked with scene.history.mark undoes as one step.
+Undo your last change. Each client has its own stack, so this never takes back somebody else's. A drag marked with scene.history.mark undoes as one step.
 
 MCP tool `undo_scene_edit` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
 
 ```json
 {
   "params": {
-    "additionalProperties": false,
-    "properties": {},
-    "type": "object"
+    "$ref": "#/$defs/HistoryRequest2"
   },
   "result": {
     "$ref": "#/$defs/HistoryStep"
@@ -3416,6 +3447,7 @@ Subscribe with `core.subscribe`. Patterns match the part after `event/`, so `pro
 | `event/show.health` |  |  | A show's health changed state, or an alarm began or ended. Never sent for a number alone: read those with show.stats. |
 | `event/feed.failed` |  |  | A feed could not be read (a refused connection, a timeout, a body that would not parse, a response over 4 MB), or one of its bindings could not write what it read. `binding` names the binding when it was the write. Sent on the first failure in a row, not on every retry; what was last written stays on air. |
 | `event/feed.recovered` |  |  | A feed or a binding that was failing works again. `failures` is how many attempts in a row failed before this one. |
+| `event/presence.changed` |  |  | Somebody connected to /rpc, left, or said which scene they are editing. Carries the whole list, as presence.list answers it. Sent only to a client that subscribed to it, and nothing is worked out while nobody has. |
 | `event/health` |  |  | This show's health changed: its state (ok, warning, alarm, off) or the kinds of its alarms, never a number alone. From a show that composites; the station sends it on to every client as show.health with the show's id. docs/reference/show-health.md says what each alarm watches. |
 
 ## The routes this replaces

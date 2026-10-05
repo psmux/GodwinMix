@@ -71,9 +71,21 @@ export class UndoProxy {
   /**
    * The core answers with the patch it applied and how many steps are left, so
    * a menu can grey itself out without asking a second question.
+   *
+   * The stacks are this client's own, so an undo never takes back somebody
+   * else's change. When it would overwrite one they made later, the core
+   * refuses with `data.conflict: "undo"` and who it was; `onConflict`, when
+   * the page sets it, is asked whether to go ahead with `force: true`.
    */
-  async step(method) {
-    const answer = await this.client.call(method, {});
+  async step(method, params = {}) {
+    let answer;
+    try {
+      answer = await this.client.call(method, params);
+    } catch (e) {
+      const conflict = e && e.data && e.data.conflict === "undo" && !params.force;
+      if (!conflict || !this.onConflict || !(await this.onConflict(e))) throw e;
+      answer = await this.client.call(method, { force: true });
+    }
     if (this.onStep) this.onStep(answer);
     return answer;
   }

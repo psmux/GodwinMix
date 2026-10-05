@@ -5,7 +5,7 @@
 //! pipeline half is tested in `mixer.rs` against real sources.
 
 use super::*;
-use crate::scene::document::{Content, Fit, Frame, Item, Vec2};
+use crate::scene::document::{Content, Fit, Frame, Item, Scene, Vec2};
 
 fn caps() -> CanvasCaps {
     CanvasCaps::new(&crate::config::Canvas {
@@ -80,7 +80,7 @@ fn undo_after_a_drag_restores_the_exact_transform() {
     let before = s.scene("two").unwrap().geometry[0].clone();
 
     // A drag: one mark, then forty moves at input rate.
-    s.mark(Some("drag left".into()));
+    s.mark(Some("designer"), Some("drag left".into()));
     for step in 1..=40 {
         s.edit_scene(Some("designer"), "two", |doc, i| {
             let id = find::item_id_in(&doc.scenes[i], "left")?;
@@ -90,12 +90,12 @@ fn undo_after_a_drag_restores_the_exact_transform() {
         })
         .expect("a move");
     }
-    s.mark(None);
+    s.mark(Some("designer"), None);
     let dragged = s.scene("two").unwrap().geometry[0].clone();
     assert_eq!((dragged.x, dragged.y), (120.0, 40.0));
-    assert_eq!(s.history().0, 2, "the drag is one step, on top of the scene being added");
+    assert_eq!(s.history(Some("designer")).0, 1, "the drag is one step on the designer's own stack");
 
-    s.undo(None).expect("one Ctrl+Z");
+    s.undo(Some("designer"), false).expect("one Ctrl+Z");
     let after = s.scene("two").unwrap().geometry[0].clone();
     assert_eq!(
         (after.x, after.y),
@@ -103,7 +103,7 @@ fn undo_after_a_drag_restores_the_exact_transform() {
         "undo after a drag has to restore the exact transform, not an approximation"
     );
 
-    s.redo(None).expect("and forward again");
+    s.redo(Some("designer"), false).expect("and forward again");
     let again = s.scene("two").unwrap().geometry[0].clone();
     assert_eq!((again.x, again.y), (dragged.x, dragged.y));
 }
@@ -111,7 +111,7 @@ fn undo_after_a_drag_restores_the_exact_transform() {
 #[test]
 fn undo_with_nothing_on_the_stack_says_so() {
     let s = server();
-    let err = s.undo(None).expect_err("nothing has been done");
+    let err = s.undo(None, false).expect_err("nothing has been done");
     assert!(format!("{err}").contains("nothing to undo"), "{err}");
 }
 
@@ -121,8 +121,8 @@ fn a_transaction_applies_on_one_frame_or_not_at_all() {
     two_box(&s);
     let mut rx = s.subscribe();
 
-    s.begin().expect("opening one");
-    assert!(s.in_transaction());
+    s.begin(None).expect("opening one");
+    assert!(s.in_transaction(None));
     for name in ["left", "right"] {
         s.edit_scene(None, "two", |doc, i| {
             let id = find::item_id_in(&doc.scenes[i], name)?;
@@ -139,7 +139,7 @@ fn a_transaction_applies_on_one_frame_or_not_at_all() {
     assert!(rx.try_recv().is_err(), "the batch was published more than once");
 
     // And it is one step on the undo stack.
-    s.undo(None).expect("one Ctrl+Z for the batch");
+    s.undo(None, false).expect("one Ctrl+Z for the batch");
     let view = s.scene("two").unwrap();
     for g in &view.geometry {
         assert_eq!(g.opacity, 1.0, "undoing the batch left half of it behind");
@@ -150,7 +150,7 @@ fn a_transaction_applies_on_one_frame_or_not_at_all() {
 fn an_aborted_transaction_puts_everything_back() {
     let s = server();
     two_box(&s);
-    s.begin().unwrap();
+    s.begin(None).unwrap();
     s.edit_scene(None, "two", |doc, i| {
         doc.scenes[i].items.push(Item::new(Content::Source { source: "cam3".into() }));
         Ok(())
@@ -159,14 +159,14 @@ fn an_aborted_transaction_puts_everything_back() {
     assert_eq!(s.scene("two").unwrap().geometry.len(), 3);
     s.abort(None).expect("throwing it away");
     assert_eq!(s.scene("two").unwrap().geometry.len(), 2, "the abort left something behind");
-    assert!(!s.in_transaction());
+    assert!(!s.in_transaction(None));
 }
 
 #[test]
 fn two_transactions_at_once_are_refused_with_what_to_do() {
     let s = server();
-    s.begin().unwrap();
-    let err = s.begin().expect_err("only one at a time");
+    s.begin(None).unwrap();
+    let err = s.begin(None).expect_err("only one at a time");
     assert!(format!("{err}").contains("scene.transaction.commit"), "{err}");
     s.abort(None).unwrap();
 }
@@ -176,7 +176,7 @@ fn a_draft_is_edited_off_air_and_applied_when_it_is_asked_for() {
     let s = server();
     two_box(&s);
     let mut rx = s.subscribe();
-    let draft = s.edit_begin("two", false).expect("taking a working copy");
+    let draft = s.edit_begin(None, "two", false).expect("taking a working copy");
 
     let view = s
         .edit_draft(&draft.id.to_string(), |doc, i| {
@@ -189,7 +189,7 @@ fn a_draft_is_edited_off_air_and_applied_when_it_is_asked_for() {
     assert_eq!(s.scene("two").unwrap().geometry[0].x, 0.0, "the live scene moved");
     assert!(rx.try_recv().is_err(), "a draft edit was published");
 
-    s.edit_apply(None, &draft.id.to_string()).expect("applying it");
+    s.edit_apply(None, &draft.id.to_string(), false).expect("applying it");
     assert_eq!(s.scene("two").unwrap().geometry[0].x, 500.0);
     assert!(rx.try_recv().is_ok(), "applying a draft has to publish");
     assert!(s.drafts().is_empty(), "the draft outlived its apply");
@@ -199,7 +199,7 @@ fn a_draft_is_edited_off_air_and_applied_when_it_is_asked_for() {
 fn a_discarded_draft_changes_nothing() {
     let s = server();
     two_box(&s);
-    let draft = s.edit_begin("two", false).unwrap();
+    let draft = s.edit_begin(None, "two", false).unwrap();
     s.edit_draft(&draft.id.to_string(), |doc, i| {
         doc.scenes[i].items.clear();
         Ok(())
@@ -216,7 +216,7 @@ fn a_draft_of_the_scene_going_to_air_is_applied_by_the_take() {
     let s = server();
     two_box(&s);
     let scene_id = s.scene("two").unwrap().id;
-    let draft = s.edit_begin("two", false).unwrap();
+    let draft = s.edit_begin(None, "two", false).unwrap();
     s.edit_draft(&draft.id.to_string(), |doc, i| {
         let id = find::item_id_in(&doc.scenes[i], "right")?;
         ops::item_mut(&mut doc.scenes[i].items, id).unwrap().opacity = 0.25;
@@ -254,7 +254,7 @@ fn arming_a_scene_makes_it_the_preview_and_gives_a_layout_for_it() {
 fn the_preview_draws_a_draft_while_it_is_shown_and_what_is_armed_is_left_alone() {
     let s = server();
     two_box(&s);
-    let draft = s.edit_begin("two", false).unwrap();
+    let draft = s.edit_begin(None, "two", false).unwrap();
     let id = draft.id.to_string();
     assert!(s.preview_layout(320, 180).is_none(), "a draft nobody asked to see is not drawn");
 
@@ -771,10 +771,10 @@ fn a_source_label_is_kept_and_undone() {
         .expect("naming a source");
     assert_eq!(server.document().sources["cam1"].name.as_deref(), Some("Wide"));
 
-    server.undo(None).expect("undoing it");
+    server.undo(None, false).expect("undoing it");
     assert!(server.document().sources.is_empty(), "undo did not take the label off");
 
-    server.redo(None).expect("putting it back");
+    server.redo(None, false).expect("putting it back");
     assert_eq!(server.document().sources["cam1"].color.as_deref(), Some("#ff0000"));
 }
 
@@ -782,7 +782,7 @@ fn a_source_label_is_kept_and_undone() {
 fn a_header_change_and_an_item_change_in_one_transaction_are_one_step() {
     let server = server();
     let scene = two_box(&server).name;
-    server.begin().expect("a transaction");
+    server.begin(None).expect("a transaction");
     server
         .edit(None, |doc| {
             doc.params["properties"]["speaker"] =
@@ -800,7 +800,7 @@ fn a_header_change_and_an_item_change_in_one_transaction_are_one_step() {
     assert!(patch.header.is_some(), "the batch lost the parameter");
     assert_eq!(patch.added.len(), 1);
 
-    server.undo(None).expect("undoing the batch");
+    server.undo(None, false).expect("undoing the batch");
     let after = server.document();
     assert!(after.params["properties"].get("speaker").is_none(), "the parameter came back");
     assert_eq!(after.scenes[0].items.len(), 2, "the item came back with it");

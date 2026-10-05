@@ -105,6 +105,8 @@ pub struct CallEnvelope {
     pub idempotency_key: Option<String>,
     pub dry_run: bool,
     pub confirm: Option<String>,
+    /// The caller's name for its connection. See `crate::presence`.
+    pub client_id: Option<String>,
 }
 
 impl CallEnvelope {
@@ -120,6 +122,7 @@ impl CallEnvelope {
             idempotency_key: s("idempotency_key"),
             dry_run: params.get("dry_run").and_then(Value::as_bool).unwrap_or(false),
             confirm: s("confirm"),
+            client_id: s("client_id"),
         }
     }
 }
