@@ -1045,7 +1045,7 @@ mod tests {
         let (release, wait) = std::sync::mpsc::channel();
         let wait = std::sync::Mutex::new(wait);
         sink.static_pad("sink").unwrap().add_probe(gst::PadProbeType::BUFFER, move |_, _| {
-            let _ = wait.lock().unwrap().recv_timeout(Duration::from_secs(3));
+            let _ = wait.lock().unwrap().recv_timeout(Duration::from_secs(30));
             gst::PadProbeReturn::Remove
         });
         pipeline.add_many([source.upcast_ref(), &queue, &sink]).unwrap();
@@ -1056,14 +1056,24 @@ mod tests {
             buffer.get_mut().unwrap().set_pts(gst::ClockTime::from_mseconds(n));
             source.push_buffer(buffer).unwrap();
         }
-        let until = std::time::Instant::now() + Duration::from_secs(2);
-        while source.current_level_bytes() != 0 && std::time::Instant::now() < until {
+        // Until the source is empty and the queue has settled. The source
+        // reads empty as soon as its thread takes the last buffer, a moment
+        // before that buffer reaches the queue, and runners measured one
+        // there. The sink is held for thirty seconds, not three, so a slow
+        // runner cannot let it go before the queue is read.
+        let until = std::time::Instant::now() + Duration::from_secs(10);
+        let settled = || source.current_level_bytes() == 0 && queue.property::<u32>("current-level-buffers") >= 2;
+        while !settled() && std::time::Instant::now() < until {
             std::thread::sleep(Duration::from_millis(5));
         }
+        std::thread::sleep(Duration::from_millis(50));
         let queued = queue.property::<u32>("current-level-buffers");
         release.send(()).unwrap();
         pipeline.set_state(gst::State::Null).unwrap();
-        assert_eq!(queued, 2, "a slow preview retained a backlog of full canvas frames");
+        // At most two is the promise. It reads two alone; with the rest of
+        // the suite on the machine, Linux and macOS runners read one, fifty
+        // runs out of fifty alone did not, and one is no backlog either.
+        assert!((1..=2).contains(&queued), "a slow preview retained a backlog of full canvas frames: {queued}");
     }
 
     /// The flush a restarting source sends across its proxy has to flush the

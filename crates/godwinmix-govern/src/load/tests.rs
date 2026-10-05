@@ -79,5 +79,10 @@ fn a_sample_costs_well_under_a_thousandth_of_a_core_at_one_a_second() {
     // Wall time on one thread bounds its CPU time from above.
     let share = per.as_secs_f64();
     eprintln!("governor sample: {:?} each, {:.4}% of one core at 1 Hz", per, share * 100.0);
-    assert!(share < 0.001, "{per:?} a sample is {:.4}% of a core", share * 100.0);
+    // Wall time, so a shared runner that declares itself slow with
+    // GODWINMIX_TIMING_SLACK gets the same multiple the other timing tests
+    // do: a Windows runner measured 1.9 ms a sample where a desk takes well
+    // under one.
+    let slack = std::env::var("GODWINMIX_TIMING_SLACK").ok().and_then(|s| s.parse::<f64>().ok()).unwrap_or(1.0).max(1.0);
+    assert!(share < 0.001 * slack, "{per:?} a sample is {:.4}% of a core", share * 100.0);
 }

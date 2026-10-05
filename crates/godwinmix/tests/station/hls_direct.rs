@@ -96,6 +96,9 @@ pub async fn fetch_rung(st: &Running, master: &str, rung: &str, file: &Path) -> 
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_direct_show_serves_its_feed_as_hls_from_the_station_copied_not_decoded() {
+    if !godwinmix_core::probe::have_or_skip("cmafmux") {
+        return;
+    }
     let (dir, port) = folder_with_relay("hls-direct");
     let source = staged_ingest(&dir);
     let st = start(dir.clone(), port, &[]).await;
@@ -146,9 +149,19 @@ async fn a_direct_show_serves_its_feed_as_hls_from_the_station_copied_not_decode
 /// sound comes out as AAC.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn mp2_sound_is_refused_with_the_next_step_and_served_once_a_rendition_makes_aac() {
+    if !godwinmix_core::probe::have_or_skip("cmafmux") {
+        return;
+    }
     let (dir, port) = folder_with_relay("hls-direct-mp2");
+    // No reserve: the sound decode is a sliver of a core, and on a three or
+    // four core runner the reserve and its allowance for jumps in load left
+    // "0.0 cores free" for minutes. What is checked is the refusal and the
+    // rendition, not what the machine keeps back.
+    let config = dir.join("godwinmix.toml");
+    let written = std::fs::read_to_string(&config).unwrap();
+    std::fs::write(&config, format!("{written}\n[governor]\nreserve_cores = 0\n")).unwrap();
     let source = staged_ingest(&dir);
-    let st = start(dir.clone(), port, &[]).await;
+    let st = start_alone(dir.clone(), port, &[]).await;
     let mut ws = rpc(&st, "").await;
     let _ = call(&mut ws, 1, "channel.remove", json!({"id": "live"})).await;
     let input = free_udp();
