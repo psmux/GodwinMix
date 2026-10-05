@@ -387,6 +387,9 @@ impl Server {
             let id = args
                 .get("id")
                 .or_else(|| args.get("show").filter(|_| method.starts_with("show.")))
+                // A scene method's schema names it `scene`, which is what a
+                // model sends; `get_scene {"scene": "Live"}` was refused.
+                .or_else(|| args.get("scene").filter(|_| method.starts_with("scene.")))
                 .or_else(|| args.get("name"))
                 .or_else(|| args.get("task_id"))
                 .and_then(Value::as_str)

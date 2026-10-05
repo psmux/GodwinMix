@@ -67,7 +67,15 @@ const MANY: [&str; 4] = ["anyOf", "oneOf", "allOf", "prefixItems"];
 /// Cut every schema deeper than `MAX_SCHEMA_DEPTH` down to its type and
 /// description. `depth` is 0 for the arguments object itself.
 pub fn prune(schema: &Value, depth: usize) -> Value {
-    let Value::Object(map) = schema else { return schema.clone() };
+    // `true` and `false` are valid JSON Schema, but the MCP TypeScript SDK
+    // that opencode is built on wants every property to be an object, and
+    // refused the whole tool list over one `"exit": true`.
+    let map = match schema {
+        Value::Object(map) => map,
+        Value::Bool(true) => return json!({}),
+        Value::Bool(false) => return json!({ "not": {} }),
+        other => return other.clone(),
+    };
     if depth > MAX_SCHEMA_DEPTH {
         return summary(map);
     }
@@ -174,5 +182,14 @@ mod tests {
         // A property literally named `type` is a schema, not a type name.
         let named = prune(&json!({ "type": "object", "properties": { "type": { "type": "string" } } }), 0);
         assert_eq!(named["properties"]["type"]["type"], "string");
+    }
+
+    /// A boolean schema becomes the object that means the same, because
+    /// opencode's MCP client refused a tool list with `"exit": true` in it.
+    #[test]
+    fn a_boolean_schema_becomes_an_object() {
+        let out = prune(&json!({ "type": "object", "properties": { "exit": true, "never": false } }), 0);
+        assert_eq!(out["properties"]["exit"], json!({}));
+        assert_eq!(out["properties"]["never"], json!({ "not": {} }));
     }
 }

@@ -54,6 +54,24 @@ pub fn json(existing: Option<&str>, key: &str, entry: &Value, seed: Value) -> Re
     Ok((text, action))
 }
 
+/// `item` added to the list under `key`, once. For opencode's `instructions`.
+pub fn json_list_add(text: &str, key: &str, item: &str) -> Result<(String, bool), String> {
+    let mut doc: Value = serde_json::from_str(text).map_err(|e| e.to_string())?;
+    let list = doc
+        .as_object_mut()
+        .ok_or("its top level is not a JSON object")?
+        .entry(key.to_string())
+        .or_insert_with(|| Value::Array(Vec::new()));
+    let Some(list) = list.as_array_mut() else {
+        return Err(format!("its `{key}` is not a list. Add {item:?} to it by hand"));
+    };
+    if list.iter().any(|v| v.as_str() == Some(item)) {
+        return Ok((text.to_string(), false));
+    }
+    list.push(Value::String(item.to_string()));
+    Ok((serde_json::to_string_pretty(&doc).map_err(|e| e.to_string())? + "\n", true))
+}
+
 /// The new text of a Codex `config.toml` with `[mcp_servers.godwinmix]`.
 pub fn toml(existing: Option<&str>, entry: &Value) -> Result<(String, Action), String> {
     use toml_edit::{value, Array, DocumentMut, InlineTable, Item, Table};
