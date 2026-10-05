@@ -1,5 +1,62 @@
 # Where GodwinMix stands
 
+## The desktop mixer that grew to 12 GB, 2026-10-05
+
+The installed app's mixer ran for 16 and a half hours without a fault. At
+08:00 UTC the machine filled up with other work, and from then on its sources
+were judged stalled 290 times: the webcam 176, the YouTube page 76, the
+screen 31 and a still 7, 246 of them in the last hour. At 09:44 it died with
+`memory allocation of 3110409 bytes failed`, at about 12 GB, and took the
+browser sidecar with it.
+
+**Where the memory went.** The camera and the screen are sidecars on the
+`container` transport, and on Windows a thread of ours reads their stdout and
+pushes it into an `appsrc`. The sidecar host built that `appsrc` with
+GStreamer's defaults, and a default `appsrc` never makes the pusher wait: past
+its `max-bytes` it says "enough data" and keeps everything it is given. With
+the machine loaded, the decode behind it fell short of the camera's frame
+rate, so every frame the camera wrote stayed queued in the mixer. The camera's
+pictures reached the programme later and later, 60 seconds behind at 08:38
+and 47 minutes behind at 09:44, which is a queue of frames growing without
+end. And 3,110,409 bytes is one Matroska block carrying one raw 1080p I420
+frame (3,110,400 bytes and a 9 byte header), so the allocation that failed was
+one more camera frame. The `exec:` source path already built this element to
+block at 16 MB; the sidecar host now uses the same one (`input::pipe_source`).
+
+Reproduced with a debug build and the shipped screen plugin forced onto
+`videotestsrc`, a sidecar producing faster than the mixer consumes, which is
+the same mismatch from the other side: the mixer reached 7.8 GB in ten
+seconds and 11.5 GB in fifteen before the harness stopped it. With the fix the
+same run sat between 325 and 343 MB for a minute. A test pushes raw 1080p
+frames into the element with its downstream blocked: before, all 200 frames
+went in (622 MB queued); now the writer waits after a handful.
+
+**Why it kept restarting.** Two things in the restart policy let a loaded
+machine feed itself. The backoff was cleared by the first frame after a
+restart, so the page, which came back for a second or two after each rebuild,
+was always on the fast path: rebuilt 43 times, roughly every 70 seconds. And
+the stall limit was the same ten seconds on the fortieth restart as on the
+first. Now every restart the supervisor arms is a strike; each strike doubles
+how long the source may stay stalled before the next (10, 20, 40, 80, then 160
+seconds), and the strikes and the backoff are cleared only after a minute
+live. A tick on which the programme itself made under half its frames counts
+a quarter, since a starved machine is not a dead source. In a test that
+pauses a source three times, the restart came after 2.5, 2.4 and 2.5 seconds
+before and after 2.5, 3.8 and 6.8 seconds now. A source that is really dead is
+still restarted, a few times an hour, and reads `stalled` throughout.
+
+**So the next one is in the log.** Every five minutes the mixer writes
+`mixer memory` with its resident size and how many sources and outputs it
+has, and warns when the size has risen at every sample for half an hour by
+512 MB or more. It reads one number on the existing tick, on a blocking task,
+and costs nothing between.
+
+What was not found: no per restart leak. Sixty in place restarts, then sixty
+removes and adds, of a test pattern, a still and a clip each, and thirty
+restarts of a raw sidecar, ended within the noise of where they started (the
+numbers are in the commit that added this entry). The incident's growth was
+the queue, not the restarts.
+
 ## Backgrounds, agents and releases, 2026-10-04
 
 **A new background with or without a screen.** `matte/filter` cuts a person
