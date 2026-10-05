@@ -242,6 +242,17 @@ jobs:
           path: target/gst-dot/
           if-no-files-found: ignore
 
+      # The station tests run real stations in folders under /tmp, and what
+      # their shows logged is the only account of a governor's decisions.
+      - name: What the stations of a failed station test logged
+        if: failure()
+        run: |
+          for f in $(find /tmp -maxdepth 6 -path '/tmp/gmx-station-test-*' \( -name 'log.jsonl' -o -name 'godwinmix.log' \) 2>/dev/null); do
+            echo "::group::$f"
+            grep -iE 'governor|refus|admit|ticket|died|output|warn|error' "$f" | cut -c1-400 | tail -60
+            echo "::endgroup::"
+          done
+
       - name: What the probe picked
         run: |
           cargo build --locked
