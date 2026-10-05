@@ -96,6 +96,13 @@ losing data on one path and stalling the programme, the programme wins.
   thread and hands its result over.
 * **A crash must cost one source.** This is why plugins are separate processes.
   See [why plugins are processes](why-plugins-are-processes.md).
+* **A source's timing stops at its own edge.** The compositor and the audio
+  mixer place everything by running time, and a frame they cannot place is
+  an assertion that aborts the process. So the proxy sink at the end of every
+  source's pipeline holds back a segment that is not in time and any buffer
+  with no segment or no timestamp in front of it, posts an error from that
+  source's pipeline, and the mixer restarts that source alone
+  (`input::boundary`).
 * **Nothing runs unless asked.** The multiview, the snapshot tracker and the
   telemetry probes all cost CPU on a machine whose spare CPU is what keeps the
   encoder on time. They stop when no client wants them.
