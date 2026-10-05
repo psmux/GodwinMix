@@ -1,4 +1,5 @@
 import { SceneClient } from '../kits/protocol/index.js';
+import { nameScenesWith } from './presence.js';
 
 const sessions = new WeakMap();
 
@@ -25,6 +26,10 @@ export function acquireScenes(client, undo) {
   let session = sessions.get(client);
   if (!session) {
     const scenes = new SceneClient(client, { undo });
+    // An undo over somebody else's later change is refused by the core; the
+    // person is asked whether to put theirs back anyway.
+    scenes.undo.onConflict = (e) => import("./conflicts.js").then((m) => m.askToForceUndo(e));
+    nameScenesWith((id) => scenes.summary(id)?.name);
     session = { scenes, refs: 0 };
     session.offName = scenes.onChange(() => publishLiveName(client, scenes));
     const started = session;

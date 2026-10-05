@@ -36,12 +36,14 @@ fn drafts(reg: &mut Registry<Call>) {
             handler(|call: Call, params| async move {
                 let req: EditBeginRequest = call.params(&params)?;
                 let draft = server(&call)
-                    .edit_begin(&req.scene, req.live)
+                    .edit_begin(client(&call).as_deref(), &req.scene, req.live)
                     .map_err(|e| scene_error(&call, e))?;
                 body(DraftRecord {
                     draft: draft.id.to_string(),
                     scene: draft.name.clone(),
                     live: draft.live,
+                    owner: draft.owner.clone(),
+                    base_seq: draft.base_seq,
                     view: server(&call).scene(&req.scene).ok(),
                 })
             }),
@@ -54,11 +56,13 @@ fn drafts(reg: &mut Registry<Call>) {
         MethodDef::new(
             "scene.edit.apply",
             Scope::Operate,
-            "Write a draft back into the live document.",
+            "Write a draft back into the live document. Refused, with what changed and \
+             who changed it, when somebody changed the scene after the draft was taken; \
+             force: true applies it anyway.",
             handler(|call: Call, params| async move {
-                let req: DraftRequest = call.params(&params)?;
+                let req: ApplyDraftRequest = call.params(&params)?;
                 let outcome = server(&call)
-                    .edit_apply(client(&call).as_deref(), &req.draft)
+                    .edit_apply(client(&call).as_deref(), &req.draft, req.force)
                     .map_err(|e| scene_error(&call, e))?;
                 // Apply means now. A scene that is on air takes its new layout
                 // on the next frame, as it does for an edit made straight to
@@ -74,7 +78,7 @@ fn drafts(reg: &mut Registry<Call>) {
                 super::answered(outcome)
             }),
         )
-        .params(schema_of::<DraftRequest>)
+        .params(schema_of::<ApplyDraftRequest>)
         .result(any_object),
     );
 
@@ -102,10 +106,10 @@ fn transactions(reg: &mut Registry<Call>) {
         MethodDef::new(
             "scene.transaction.begin",
             Scope::Operate,
-            "Start a batch. Everything until the commit applies on one frame or not at all, \
-             and undoes in one step.",
+            "Start a batch. Everything you do until the commit applies on one frame or not \
+             at all, and undoes in one step. Other clients' edits go on meanwhile.",
             handler(|call: Call, _| async move {
-                server(&call).begin().map_err(|e| scene_error(&call, e))?;
+                server(&call).begin(client(&call).as_deref()).map_err(|e| scene_error(&call, e))?;
                 Ok(json!({ "open": true }))
             }),
         )
@@ -130,8 +134,8 @@ fn transactions(reg: &mut Registry<Call>) {
         MethodDef::new(
             "scene.transaction.abort",
             Scope::Operate,
-            "Throw the batch away. The document goes back to where it was when the batch \
-             opened.",
+            "Throw your batch away. What you changed in it goes back to where it was, except \
+             where somebody else has changed it since.",
             handler(|call: Call, _| async move {
                 let patch =
                     server(&call).abort(client(&call).as_deref()).map_err(|e| scene_error(&call, e))?;
@@ -145,20 +149,20 @@ fn transactions(reg: &mut Registry<Call>) {
         MethodDef::new(
             "scene.undo",
             Scope::Operate,
-            "Undo the last change. A drag marked with scene.history.mark undoes as one step.",
-            handler(|call: Call, _| async move {
-                let patch =
-                    server(&call).undo(client(&call).as_deref()).map_err(|e| scene_error(&call, e))?;
-                body(HistoryStep { patch, undo: server(&call).history().0, redo: server(&call).history().1 })
-            }),
+            "Undo your last change. Each client has its own stack, so this never takes back \
+             somebody else's. A drag marked with scene.history.mark undoes as one step.",
+            handler(|call: Call, params| async move { history_step(call, params, true).await }),
         )
+        .params(schema_of::<HistoryRequest>)
         .result(schema_of::<HistoryStep>)
         .tool(
             "undo_scene_edit",
             Tier::Search,
             "Undo the last change to a scene, exactly. Use it the moment an edit turns out \
-             wrong rather than working out by hand what to put back. Refused, with how \
-             many steps are on the stack, when there is nothing to undo.",
+             wrong rather than working out by hand what to put back. It undoes your own \
+             changes only. Refused when there is nothing to undo, and when somebody else \
+             changed the same item after you: the refusal names them, and force: true \
+             undoes anyway.",
         ),
     );
 
@@ -166,13 +170,10 @@ fn transactions(reg: &mut Registry<Call>) {
         MethodDef::new(
             "scene.redo",
             Scope::Operate,
-            "Put back what undo took away.",
-            handler(|call: Call, _| async move {
-                let patch =
-                    server(&call).redo(client(&call).as_deref()).map_err(|e| scene_error(&call, e))?;
-                body(HistoryStep { patch, undo: server(&call).history().0, redo: server(&call).history().1 })
-            }),
+            "Put back what your undo took away.",
+            handler(|call: Call, params| async move { history_step(call, params, false).await }),
         )
+        .params(schema_of::<HistoryRequest>)
         .result(schema_of::<HistoryStep>),
     );
 
@@ -184,14 +185,29 @@ fn transactions(reg: &mut Registry<Call>) {
              is what makes a drag of forty moves one Ctrl+Z.",
             handler(|call: Call, params| async move {
                 let req: MarkRequest = call.params(&params)?;
-                server(&call).mark(req.label.clone());
-                let (undo, redo) = server(&call).history();
+                let me = client(&call);
+                server(&call).mark(me.as_deref(), req.label.clone());
+                let (undo, redo) = server(&call).history(me.as_deref());
                 Ok(json!({ "label": req.label, "undo": undo, "redo": redo }))
             }),
         )
         .params(schema_of::<MarkRequest>)
         .result(any_object),
     );
+}
+
+/// `scene.undo` and `scene.redo`, on the caller's own stacks.
+async fn history_step(call: Call, params: Value, back: bool) -> Result<Value, RpcError> {
+    // Both used to take no params at all, so a bare call still means "no".
+    let req: HistoryRequest =
+        if params.is_object() { call.params(&params)? } else { HistoryRequest::default() };
+    let me = client(&call);
+    let s = server(&call);
+    let stepped =
+        if back { s.undo(me.as_deref(), req.force) } else { s.redo(me.as_deref(), req.force) };
+    let patch = stepped.map_err(|e| scene_error(&call, e))?;
+    let (undo, redo) = s.history(me.as_deref());
+    body(HistoryStep { patch, undo, redo })
 }
 
 fn preview(reg: &mut Registry<Call>) {
@@ -453,6 +469,12 @@ pub struct DraftRecord {
     pub scene: String,
     /// True when the client asked to edit on air.
     pub live: bool,
+    /// The client that opened it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub owner: Option<String>,
+    /// The document's revision when the draft was taken. An apply is refused
+    /// when the scene has changed since.
+    pub base_seq: u64,
     /// The scene as it stands, so the client has something to draw at once.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub view: Option<SceneView>,
@@ -462,7 +484,8 @@ pub struct DraftRecord {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct HistoryStep {
     pub patch: godwinmix_core::scene::server::Patch,
-    /// How many steps are still on each stack, so a UI greys out a button.
+    /// How many steps are still on each of your stacks, so a UI greys out a
+    /// button.
     pub undo: usize,
     pub redo: usize,
 }

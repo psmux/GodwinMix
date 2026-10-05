@@ -759,6 +759,10 @@ pub struct SubscribeResult {
     pub events: Vec<String>,
     /// `ext` keys this build ignored. Empty on a build that knows them all.
     pub ignored_ext: Vec<String>,
+    /// Who this connection is: the `source_client` its scene patches carry,
+    /// and its id in presence.list. `<token id>.<name>`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub client_id: Option<String>,
 }
 
 /// `event/multiview.layout`: how to read the binary frames that follow.

@@ -24,6 +24,9 @@ export class RpcTransport {
     const u = new URL("/rpc", this.base);
     u.protocol = u.protocol === "https:" ? "wss:" : "ws:";
     if (this.token) u.searchParams.set("token", this.token);
+    // Which tab this is. Two phones on one token are two people, and the core
+    // tells them apart by this: each its own undo stack, each its own echo.
+    u.searchParams.set("client_id", tabClientName());
     return withShow(u).toString();
   }
 
@@ -76,6 +79,30 @@ export class RpcTransport {
     if (this.token) u.searchParams.set("token", this.token);
     return withShow(u).toString();
   }
+}
+
+/**
+ * This tab's name for its connection, kept in sessionStorage so a reload or a
+ * reconnect is the same client and finds its own undo stack again. Lower case
+ * letters and digits, which is what the core accepts as a `client_id`.
+ */
+export function tabClientName() {
+  const KEY = "gmx.client";
+  let store = null;
+  try {
+    store = window.sessionStorage;
+    const kept = store.getItem(KEY);
+    if (kept && /^[a-z0-9-]{1,32}$/.test(kept)) return kept;
+  } catch {
+    /* no storage: a new name on every load, which costs only the undo stack */
+  }
+  const name = "t" + Math.random().toString(36).slice(2, 10);
+  try {
+    if (store) store.setItem(KEY, name);
+  } catch {
+    /* as above */
+  }
+  return name;
 }
 
 /** The show this page addresses, from its own `?show=`, on every URL it calls. */

@@ -569,6 +569,22 @@
         }
       ]
     },
+    "ApplyDraftRequest": {
+      "description": "`scene.edit.apply`.",
+      "properties": {
+        "draft": {
+          "type": "string"
+        },
+        "force": {
+          "description": "Apply even though the scene changed after the draft was taken, which\nreplaces those changes with the draft. Without it such an apply is\nrefused with the changes listed in `data.conflicts`.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "draft"
+      ],
+      "type": "object"
+    },
     "ApplyGraphicRequest": {
       "description": "`scene.apply_graphic`.",
       "properties": {
@@ -2331,6 +2347,13 @@
         "canvas": {
           "$ref": "#/$defs/CanvasInfo"
         },
+        "client_id": {
+          "description": "Who the call came from: the `source_client` this caller's scene\npatches carry, which is what a mirror suppresses its own echo by.\n`<token id>.<name>` on /rpc or with `client_id` in the envelope, the\ntoken id alone otherwise.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "core": {
           "description": "Always \"godwinmix\".",
           "type": "string"
@@ -3004,6 +3027,12 @@
     "DraftRecord": {
       "description": "`scene.edit.begin`.",
       "properties": {
+        "base_seq": {
+          "description": "The document's revision when the draft was taken. An apply is refused\nwhen the scene has changed since.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
         "draft": {
           "description": "Pass this as `draft` on any `scene.item.*` call to edit the copy.",
           "type": "string"
@@ -3011,6 +3040,13 @@
         "live": {
           "description": "True when the client asked to edit on air.",
           "type": "boolean"
+        },
+        "owner": {
+          "description": "The client that opened it.",
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "scene": {
           "description": "The scene it was taken from.",
@@ -3031,7 +3067,8 @@
       "required": [
         "draft",
         "scene",
-        "live"
+        "live",
+        "base_seq"
       ],
       "type": "object"
     },
@@ -4554,6 +4591,16 @@
       },
       "type": "object"
     },
+    "HistoryRequest2": {
+      "description": "`scene.undo` and `scene.redo`.",
+      "properties": {
+        "force": {
+          "description": "Go ahead even where somebody else changed the same item after you,\nputting your version back over theirs. Without it such a step is\nrefused with who changed what in `data.conflicts`, and stays on your\nstack.",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
     "HistoryStep": {
       "description": "`scene.undo` and `scene.redo`.",
       "properties": {
@@ -4566,7 +4613,7 @@
           "type": "integer"
         },
         "undo": {
-          "description": "How many steps are still on each stack, so a UI greys out a button.",
+          "description": "How many steps are still on each of your stacks, so a UI greys out a\nbutton.",
           "format": "uint",
           "minimum": 0,
           "type": "integer"
@@ -7329,6 +7376,91 @@
         "handshake_ms",
         "plugin"
       ],
+      "type": "object"
+    },
+    "PresenceClient": {
+      "description": "One client connected to `/rpc`.",
+      "properties": {
+        "client_id": {
+          "description": "The client id, as scene patches carry it in `source_client`.",
+          "type": "string"
+        },
+        "device": {
+          "description": "A guess at the device from its User-Agent: \"iPhone Safari\",\n\"Windows Chrome\", \"gmx CLI\". Empty when it sent none.",
+          "type": "string"
+        },
+        "label": {
+          "description": "What to call it: the name the client gave itself with presence.set,\nelse the token's label when the token has one.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "scene": {
+          "description": "The scene this client says it is editing, when it said.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "since_ms": {
+          "description": "When it connected, in milliseconds since the Unix epoch.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "token": {
+          "description": "The token it connected with.",
+          "type": "string"
+        },
+        "you": {
+          "description": "True for the connection asking.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "client_id",
+        "token",
+        "device",
+        "since_ms"
+      ],
+      "type": "object"
+    },
+    "PresenceList": {
+      "description": "`presence.list`, and the payload of `event/presence.changed`.",
+      "properties": {
+        "clients": {
+          "description": "Every connected client, oldest connection first.",
+          "items": {
+            "$ref": "#/$defs/PresenceClient"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "clients"
+      ],
+      "type": "object"
+    },
+    "PresenceSetRequest": {
+      "description": "`presence.set`: what this connection tells everybody else about itself.",
+      "properties": {
+        "label": {
+          "description": "A name for this device that a person chose (\"Sam's phone\"). Omitted\nkeeps the one it has; an empty string clears it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "scene": {
+          "default": null,
+          "description": "The scene this client is editing, by id or name. Null or omitted says it\nis editing none.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
       "type": "object"
     },
     "PresetRef": {
@@ -10181,6 +10313,13 @@
     "SubscribeResult": {
       "description": "What `core.subscribe` answers with, before the snapshot arrives.",
       "properties": {
+        "client_id": {
+          "description": "Who this connection is: the `source_client` its scene patches carry,\nand its id in presence.list. `<token id>.<name>`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "events": {
           "description": "The event patterns now in force.",
           "items": {
@@ -11416,6 +11555,12 @@
   "envelope": {
     "description": "Keys accepted on every method, handled before a method runs.",
     "properties": {
+      "client_id": {
+        "description": "A name for this device or connection. The core makes it <token id>.<client_id> and that is who the call is from: the source_client on its scene patches, the owner of its undo stack and drafts, its name in presence. A /rpc connection has one already; over HTTP without it the caller is the token id alone.",
+        "maxLength": 32,
+        "pattern": "^[a-z0-9-]+$",
+        "type": "string"
+      },
       "confirm": {
         "description": "The confirm_token from a -32020 refusal, valid 30 seconds. Only a token whose policy is confirm = required needs it.",
         "type": "string"
@@ -12195,6 +12340,17 @@
       },
       "since": "1",
       "summary": "A feed or a binding that was failing works again. `failures` is how many attempts in a row failed before this one."
+    },
+    {
+      "ext": null,
+      "legacy": null,
+      "name": "event/presence.changed",
+      "pattern": "presence.changed",
+      "payload": {
+        "$ref": "#/$defs/PresenceList"
+      },
+      "since": "1",
+      "summary": "Somebody connected to /rpc, left, or said which scene they are editing. Carries the whole list, as presence.list answers it. Sent only to a client that subscribed to it, and nothing is worked out while nobody has."
     },
     {
       "ext": null,
@@ -14794,6 +14950,46 @@
       "summary": "Fetch a newer build of a plugin, install it beside the one that is running, and prove it starts. A build that does not answer `initialize` within ten seconds is rolled back and the plugin that was working stays working."
     },
     {
+      "destructive": false,
+      "idempotent": true,
+      "mutating": false,
+      "name": "presence.list",
+      "params": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      },
+      "rest": {
+        "method": "GET",
+        "path": "/api/v1/presence/list"
+      },
+      "result": {
+        "$ref": "#/$defs/PresenceList"
+      },
+      "scope": "read",
+      "since": "1",
+      "summary": "Every client connected to /rpc: its client id, token, label, device, the scene it says it is editing and when it connected. `you` marks the caller."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mutating": false,
+      "name": "presence.set",
+      "params": {
+        "$ref": "#/$defs/PresenceSetRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/presence/set"
+      },
+      "result": {
+        "$ref": "#/$defs/PresenceList"
+      },
+      "scope": "read",
+      "since": "1",
+      "summary": "Tell everybody else which scene this connection is editing, or none, and optionally a name for the device. Changes nothing on air."
+    },
+    {
       "destructive": true,
       "idempotent": true,
       "mcp": {
@@ -15309,7 +15505,7 @@
       "mutating": true,
       "name": "scene.edit.apply",
       "params": {
-        "$ref": "#/$defs/DraftRequest"
+        "$ref": "#/$defs/ApplyDraftRequest"
       },
       "rest": {
         "method": "POST",
@@ -15320,7 +15516,7 @@
       },
       "scope": "operate",
       "since": "1",
-      "summary": "Write a draft back into the live document."
+      "summary": "Write a draft back into the live document. Refused, with what changed and who changed it, when somebody changed the scene after the draft was taken; force: true applies it anyway."
     },
     {
       "destructive": false,
@@ -16092,9 +16288,7 @@
       "mutating": true,
       "name": "scene.redo",
       "params": {
-        "additionalProperties": false,
-        "properties": {},
-        "type": "object"
+        "$ref": "#/$defs/HistoryRequest2"
       },
       "rest": {
         "method": "POST",
@@ -16105,7 +16299,7 @@
       },
       "scope": "operate",
       "since": "1",
-      "summary": "Put back what undo took away."
+      "summary": "Put back what your undo took away."
     },
     {
       "destructive": true,
@@ -16164,7 +16358,7 @@
       },
       "scope": "operate",
       "since": "1",
-      "summary": "Throw the batch away. The document goes back to where it was when the batch opened."
+      "summary": "Throw your batch away. What you changed in it goes back to where it was, except where somebody else has changed it since."
     },
     {
       "destructive": false,
@@ -16185,7 +16379,7 @@
       },
       "scope": "operate",
       "since": "1",
-      "summary": "Start a batch. Everything until the commit applies on one frame or not at all, and undoes in one step."
+      "summary": "Start a batch. Everything you do until the commit applies on one frame or not at all, and undoes in one step. Other clients' edits go on meanwhile."
     },
     {
       "destructive": false,
@@ -16221,9 +16415,7 @@
       "mutating": true,
       "name": "scene.undo",
       "params": {
-        "additionalProperties": false,
-        "properties": {},
-        "type": "object"
+        "$ref": "#/$defs/HistoryRequest2"
       },
       "rest": {
         "method": "POST",
@@ -16234,7 +16426,7 @@
       },
       "scope": "operate",
       "since": "1",
-      "summary": "Undo the last change. A drag marked with scene.history.mark undoes as one step."
+      "summary": "Undo your last change. Each client has its own stack, so this never takes back somebody else's. A drag marked with scene.history.mark undoes as one step."
     },
     {
       "destructive": false,

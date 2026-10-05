@@ -291,6 +291,18 @@ pub type Applies = String;
 /// The values api_level 1 knows for [`Applies`].
 pub const APPLIES_VALUES: &[&str] = &["live", "next_source", "restart"];
 
+/// `scene.edit.apply`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ApplyDraftRequest {
+    pub draft: String,
+    /// Apply even though the scene changed after the draft was taken, which
+    /// replaces those changes with the draft. Without it such an apply is
+    /// refused with the changes listed in `data.conflicts`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub force: Option<bool>,
+}
+
 /// `scene.apply_graphic`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -1037,6 +1049,12 @@ pub struct CoreInfo {
     pub api_compatible: u32,
     pub api_level: u32,
     pub canvas: CanvasInfo,
+    /// Who the call came from: the `source_client` this caller's scene
+    /// patches carry, which is what a mirror suppresses its own echo by.
+    /// `<token id>.<name>` on /rpc or with `client_id` in the envelope, the
+    /// token id alone otherwise.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub client_id: Option<String>,
     /// Always "godwinmix".
     pub core: String,
     /// The mixer's own executable on the machine it runs on. What a surface
@@ -1313,10 +1331,16 @@ pub struct DiscoverRequest2 {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct DraftRecord {
+    /// The document's revision when the draft was taken. An apply is refused
+    /// when the scene has changed since.
+    pub base_seq: u64,
     /// Pass this as `draft` on any `scene.item.*` call to edit the copy.
     pub draft: String,
     /// True when the client asked to edit on air.
     pub live: bool,
+    /// The client that opened it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub owner: Option<String>,
     /// The scene it was taken from.
     pub scene: String,
     /// The scene as it stands, so the client has something to draw at once.
@@ -1987,10 +2011,23 @@ pub struct HistoryRequest {
 /// `scene.undo` and `scene.redo`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
+pub struct HistoryRequest2 {
+    /// Go ahead even where somebody else changed the same item after you,
+    /// putting your version back over theirs. Without it such a step is
+    /// refused with who changed what in `data.conflicts`, and stays on your
+    /// stack.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub force: Option<bool>,
+}
+
+/// `scene.undo` and `scene.redo`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct HistoryStep {
     pub patch: Patch,
     pub redo: i64,
-    /// How many steps are still on each stack, so a UI greys out a button.
+    /// How many steps are still on each of your stacks, so a UI greys out a
+    /// button.
     pub undo: i64,
 }
 
@@ -3231,6 +3268,53 @@ pub struct PluginUpdated {
     pub handshake_ms: u64,
     pub plugin: PluginRecord,
     pub to: String,
+}
+
+/// One client connected to `/rpc`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PresenceClient {
+    /// The client id, as scene patches carry it in `source_client`.
+    pub client_id: String,
+    /// A guess at the device from its User-Agent: "iPhone Safari",
+    /// "Windows Chrome", "gmx CLI". Empty when it sent none.
+    pub device: String,
+    /// What to call it: the name the client gave itself with presence.set,
+    /// else the token's label when the token has one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+    /// The scene this client says it is editing, when it said.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scene: Option<String>,
+    /// When it connected, in milliseconds since the Unix epoch.
+    pub since_ms: u64,
+    /// The token it connected with.
+    pub token: String,
+    /// True for the connection asking.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub you: Option<bool>,
+}
+
+/// `presence.list`, and the payload of `event/presence.changed`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PresenceList {
+    /// Every connected client, oldest connection first.
+    pub clients: Vec<PresenceClient>,
+}
+
+/// `presence.set`: what this connection tells everybody else about itself.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PresenceSetRequest {
+    /// A name for this device that a person chose ("Sam's phone"). Omitted
+    /// keeps the one it has; an empty string clears it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
+    /// The scene this client is editing, by id or name. Null or omitted says it
+    /// is editing none.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scene: Option<String>,
 }
 
 /// A preset named by id.
@@ -4491,6 +4575,10 @@ pub struct SubscribeRequest {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct SubscribeResult {
+    /// Who this connection is: the `source_client` its scene patches carry,
+    /// and its id in presence.list. `<token id>.<name>`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub client_id: Option<String>,
     /// The event patterns now in force.
     pub events: Vec<String>,
     /// `ext` keys this build ignored. Empty on a build that knows them all.
@@ -5242,7 +5330,7 @@ pub struct MethodInfo {
     pub rest: Option<(&'static str, &'static str)>,
 }
 
-pub const METHODS: [MethodInfo; 190] = [
+pub const METHODS: [MethodInfo; 192] = [
     MethodInfo { name: "adbreak.end", summary: "Cut a running ad short, or disarm one that is scheduled.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/end")) },
     MethodInfo { name: "adbreak.start", summary: "Interrupt the programme with a clip, then rejoin live when it ends.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/start")) },
     MethodInfo { name: "agent.state", summary: "The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/agent/state")) },
@@ -5328,6 +5416,8 @@ pub const METHODS: [MethodInfo; 190] = [
     MethodInfo { name: "plugin.settings.set", summary: "Change a plugin's settings. A plugin that cannot take a change while running says so rather than being restarted behind your back.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/plugins/{id}/settings")) },
     MethodInfo { name: "plugin.stats", summary: "Per instance cpu, memory, media latency, dropped buffers and restarts, refreshed once a second.", scope: "read", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/plugins/{id}/stats")) },
     MethodInfo { name: "plugin.update", summary: "Fetch a newer build of a plugin, install it beside the one that is running, and prove it starts. A build that does not answer `initialize` within ten seconds is rolled back and the plugin that was working stays working.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/plugins/{id}/update")) },
+    MethodInfo { name: "presence.list", summary: "Every client connected to /rpc: its client id, token, label, device, the scene it says it is editing and when it connected. `you` marks the caller.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/presence/list")) },
+    MethodInfo { name: "presence.set", summary: "Tell everybody else which scene this connection is editing, or none, and optionally a name for the device. Changes nothing on air.", scope: "read", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/presence/set")) },
     MethodInfo { name: "preset.apply", summary: "Put a preset on this core: its config, its scenes, its layout, its theme and its gallery mode. Pass dry_run to get the plan and write nothing.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/preset/apply")) },
     MethodInfo { name: "preset.list", summary: "Every preset this core can apply: the six built in, plus anything installed beside the binary or under ~/.godwinmix/presets.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/preset/list")) },
     MethodInfo { name: "preset.save", summary: "Turn this core's working setup into a preset directory somebody else can apply. Stream keys and the control token are replaced with placeholders.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/preset/save")) },
@@ -5349,7 +5439,7 @@ pub const METHODS: [MethodInfo; 190] = [
     MethodInfo { name: "scene.apply_layout", summary: "Apply a layout, making a scene or reshaping one that exists. Applying onto an existing scene keeps the item ids, so the change is a ramp and not a cut.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/apply_layout")) },
     MethodInfo { name: "scene.create_from", summary: "A scene from a set of sources, laid out by the built in layout for that count (full, two-box, three-box, quad, then a grid) or by a named one. Pictures from the media library become sources, and a keyed layout such as virtual-set guesses its key colour from the camera.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/create_from")) },
     MethodInfo { name: "scene.duplicate", summary: "A copy of a scene with new ids throughout, so editing the copy cannot touch the original.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/{id}/duplicate")) },
-    MethodInfo { name: "scene.edit.apply", summary: "Write a draft back into the live document.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/edit/apply")) },
+    MethodInfo { name: "scene.edit.apply", summary: "Write a draft back into the live document. Refused, with what changed and who changed it, when somebody changed the scene after the draft was taken; force: true applies it anyway.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/edit/apply")) },
     MethodInfo { name: "scene.edit.begin", summary: "Take a working copy of a scene. Editing is off air by default: the draft is written back on the next take of that scene, or when you apply it.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/edit/begin")) },
     MethodInfo { name: "scene.edit.discard", summary: "Throw a draft away. The live document is untouched.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/edit/discard")) },
     MethodInfo { name: "scene.export", summary: "The whole collection: as JSON, or as a zip bundle carrying its assets with a hash each, which is what you send somebody.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/scenes/export")) },
@@ -5385,13 +5475,13 @@ pub const METHODS: [MethodInfo; 190] = [
     MethodInfo { name: "scene.params.set", summary: "Set the collection's parameter values, declaring any that are new. A `{{name}}` in any string property of any item follows them, so one call changes every lower third that uses it.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/params/set")) },
     MethodInfo { name: "scene.preview.frame", summary: "A still of the armed scene as base64 JPEG, the floor every client has.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/scenes/preview/frame")) },
     MethodInfo { name: "scene.preview.set", summary: "Arm a scene. The armed scene is the preview, and program.take with no argument takes it.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/preview/set")) },
-    MethodInfo { name: "scene.redo", summary: "Put back what undo took away.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/redo")) },
+    MethodInfo { name: "scene.redo", summary: "Put back what your undo took away.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/redo")) },
     MethodInfo { name: "scene.remove", summary: "Delete a scene. What is on air is not touched.", scope: "operate", mutating: true, destructive: true, rest: Some(("DELETE", "/api/v1/scenes/{id}")) },
     MethodInfo { name: "scene.rename", summary: "Change a scene's name, its colour, or both. Names and colours live on the document, so every client, the tally and an agent see the same ones.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/{id}/rename")) },
-    MethodInfo { name: "scene.transaction.abort", summary: "Throw the batch away. The document goes back to where it was when the batch opened.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/transaction/abort")) },
-    MethodInfo { name: "scene.transaction.begin", summary: "Start a batch. Everything until the commit applies on one frame or not at all, and undoes in one step.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/transaction/begin")) },
+    MethodInfo { name: "scene.transaction.abort", summary: "Throw your batch away. What you changed in it goes back to where it was, except where somebody else has changed it since.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/transaction/abort")) },
+    MethodInfo { name: "scene.transaction.begin", summary: "Start a batch. Everything you do until the commit applies on one frame or not at all, and undoes in one step. Other clients' edits go on meanwhile.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/transaction/begin")) },
     MethodInfo { name: "scene.transaction.commit", summary: "Apply the batch.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/transaction/commit")) },
-    MethodInfo { name: "scene.undo", summary: "Undo the last change. A drag marked with scene.history.mark undoes as one step.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/undo")) },
+    MethodInfo { name: "scene.undo", summary: "Undo your last change. Each client has its own stack, so this never takes back somebody else's. A drag marked with scene.history.mark undoes as one step.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/scenes/undo")) },
     MethodInfo { name: "scene.validate", summary: "Overlaps, items off the canvas, safe area breaches and missing sources: what to fix before saying a scene is done.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/scenes/validate")) },
     MethodInfo { name: "setup.get", summary: "Where one piece stands, without starting anything.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/setup")) },
     MethodInfo { name: "setup.list", summary: "Where each piece the mixer sets up on first use stands: the browser renderer (`web`) and every first party plugin this copy carries.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/setup/list")) },
@@ -5435,7 +5525,7 @@ pub const METHODS: [MethodInfo; 190] = [
     MethodInfo { name: "vitals.set", summary: "Change the alarm thresholds, or whether a mosaic is kept up for the black and freeze checks while nobody is looking. Fields left out keep their defaults; a duration of 0 switches that check off. Applies within a second.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/vitals/set")) },
 ];
 
-pub const EVENT_NAMES: [&str; 33] = [
+pub const EVENT_NAMES: [&str; 34] = [
     "snapshot",
     "program.took",
     "scene.patch",
@@ -5468,6 +5558,7 @@ pub const EVENT_NAMES: [&str; 33] = [
     "show.health",
     "feed.failed",
     "feed.recovered",
+    "presence.changed",
     "health",
 ];
 
@@ -5552,6 +5643,8 @@ pub enum Event {
     FeedFailed(FeedFailedEvent),
     /// A feed or a binding that was failing works again. `failures` is how many attempts in a row failed before this one.
     FeedRecovered(FeedRecoveredEvent),
+    /// Somebody connected to /rpc, left, or said which scene they are editing. Carries the whole list, as presence.list answers it. Sent only to a client that subscribed to it, and nothing is worked out while nobody has.
+    PresenceChanged(PresenceList),
     /// This show's health changed: its state (ok, warning, alarm, off) or the kinds of its alarms, never a number alone. From a show that composites; the station sends it on to every client as show.health with the show's id. docs/reference/show-health.md says what each alarm watches.
     Health(HealthEvent),
     /// An event name this api_level does not know, with its params as they came.
@@ -5684,6 +5777,10 @@ impl Event {
                 Ok(payload) => Event::FeedRecovered(payload),
                 Err(_) => Event::Other { name: pattern.to_string(), params },
             },
+            "presence.changed" => match serde_json::from_value(params.clone()) {
+                Ok(payload) => Event::PresenceChanged(payload),
+                Err(_) => Event::Other { name: pattern.to_string(), params },
+            },
             "health" => match serde_json::from_value(params.clone()) {
                 Ok(payload) => Event::Health(payload),
                 Err(_) => Event::Other { name: pattern.to_string(), params },
@@ -5727,6 +5824,7 @@ impl Event {
             Event::ShowHealth(_) => "show.health",
             Event::FeedFailed(_) => "feed.failed",
             Event::FeedRecovered(_) => "feed.recovered",
+            Event::PresenceChanged(_) => "presence.changed",
             Event::Health(_) => "health",
             Event::Other { name, .. } => name,
         }
@@ -6161,6 +6259,16 @@ impl Client {
         self.call("plugin.update", params).await
     }
 
+    /// Every client connected to /rpc: its client id, token, label, device, the scene it says it is editing and when it connected. `you` marks the caller.
+    pub async fn presence_list(&self) -> Result<PresenceList> {
+        self.call("presence.list", &serde_json::json!({})).await
+    }
+
+    /// Tell everybody else which scene this connection is editing, or none, and optionally a name for the device. Changes nothing on air.
+    pub async fn presence_set(&self, params: &PresenceSetRequest) -> Result<PresenceList> {
+        self.call("presence.set", params).await
+    }
+
     /// Put a preset on this core: its config, its scenes, its layout, its theme and its gallery mode. Pass dry_run to get the plan and write nothing.
     pub async fn preset_apply(&self, params: &ApplyRequest) -> Result<ApplyResult> {
         self.call("preset.apply", params).await
@@ -6266,8 +6374,8 @@ impl Client {
         self.call("scene.duplicate", params).await
     }
 
-    /// Write a draft back into the live document.
-    pub async fn scene_edit_apply(&self, params: &DraftRequest) -> Result<BTreeMap<String, Value>> {
+    /// Write a draft back into the live document. Refused, with what changed and who changed it, when somebody changed the scene after the draft was taken; force: true applies it anyway.
+    pub async fn scene_edit_apply(&self, params: &ApplyDraftRequest) -> Result<BTreeMap<String, Value>> {
         self.call("scene.edit.apply", params).await
     }
 
@@ -6446,9 +6554,9 @@ impl Client {
         self.call("scene.preview.set", params).await
     }
 
-    /// Put back what undo took away.
-    pub async fn scene_redo(&self) -> Result<HistoryStep> {
-        self.call("scene.redo", &serde_json::json!({})).await
+    /// Put back what your undo took away.
+    pub async fn scene_redo(&self, params: &HistoryRequest2) -> Result<HistoryStep> {
+        self.call("scene.redo", params).await
     }
 
     /// Delete a scene. What is on air is not touched.
@@ -6461,12 +6569,12 @@ impl Client {
         self.call("scene.rename", params).await
     }
 
-    /// Throw the batch away. The document goes back to where it was when the batch opened.
+    /// Throw your batch away. What you changed in it goes back to where it was, except where somebody else has changed it since.
     pub async fn scene_transaction_abort(&self) -> Result<BTreeMap<String, Value>> {
         self.call("scene.transaction.abort", &serde_json::json!({})).await
     }
 
-    /// Start a batch. Everything until the commit applies on one frame or not at all, and undoes in one step.
+    /// Start a batch. Everything you do until the commit applies on one frame or not at all, and undoes in one step. Other clients' edits go on meanwhile.
     pub async fn scene_transaction_begin(&self) -> Result<BTreeMap<String, Value>> {
         self.call("scene.transaction.begin", &serde_json::json!({})).await
     }
@@ -6476,9 +6584,9 @@ impl Client {
         self.call("scene.transaction.commit", &serde_json::json!({})).await
     }
 
-    /// Undo the last change. A drag marked with scene.history.mark undoes as one step.
-    pub async fn scene_undo(&self) -> Result<HistoryStep> {
-        self.call("scene.undo", &serde_json::json!({})).await
+    /// Undo your last change. Each client has its own stack, so this never takes back somebody else's. A drag marked with scene.history.mark undoes as one step.
+    pub async fn scene_undo(&self, params: &HistoryRequest2) -> Result<HistoryStep> {
+        self.call("scene.undo", params).await
     }
 
     /// Overlaps, items off the canvas, safe area breaches and missing sources: what to fix before saying a scene is done.

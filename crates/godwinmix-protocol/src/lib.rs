@@ -52,6 +52,7 @@ pub mod mcp_tools;
 pub mod method;
 pub mod openapi;
 pub mod plugin;
+pub mod presence;
 pub mod protocol;
 pub mod requests;
 pub mod rpc;
