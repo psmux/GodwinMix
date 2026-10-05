@@ -1,5 +1,79 @@
 # Where GodwinMix stands
 
+## What CI still failed after fix/ci-green, 2026-10-06
+
+Branch `fix/ci-remaining`, draft pull request #1. Five things were red on
+GitHub Actions after the last round; each is below with what it was, what
+changed and how it was checked.
+
+**A show started again lost its outputs for good.** When a station starts a
+show again, the show attaches the outputs it kept, and on a busy runner the
+governor refused the rendition ("0.0 cores is free"). `Mixer::start` logged
+"failed to attach output" and nothing else: the output was gone from the
+status, was never asked for again, and the next write of the runtime store
+dropped it from the file. macOS later had 1.4 cores free and the output still
+did not return. Now `mixer::unattached` keeps it, `output.list` shows it as
+`failed` with the reason in `shed`, it stays in the saved list, and the tick
+asks again after a backoff: half a second rising to ten for a governor
+refusal, the source curve for anything else. `output.remove` and
+`output.set` work on it. Tested by
+`mixer::rendered::tests::unattached`, which starts a mixer with every core
+"taken", sees the output listed and saved, frees the room and sees it attach
+with nobody asking.
+
+The 0 to 9 millicores free on a four core runner was mostly the runner: the
+other station tests run beside this one and the governor rightly counts their
+encoders as other programs. The isolation test now asks again on a
+`retryable` refusal, as a client should, and waits up to 30 s times
+`GODWINMIX_TIMING_SLACK` for the restarted show to hold its rendition. One
+real fault was in the governor too. The station subtracted what its shows
+measure *now* from the peak of the last ten readings, so a show killed a
+second ago left its whole load in the window as another program's for ten
+seconds, and the same show started again was refused for exactly that. The
+sampler now adds the shows' load to each reading as it is taken
+(`Reading::with_elsewhere`); `load::window` has the test.
+
+**An SRT listener input could not take a second caller on Windows.**
+`srtsrc` in listener mode posts "Socket is broken or closed" and then end of
+stream when its caller goes (seen here on 1.28.6), so the input built a new
+`srtsrc` on the same port, and on the Windows runner that one could not bind
+it for about 45 seconds. `keep-listening` rebinds inside the element instead,
+and on this machine that accepted a caller and dropped it over and over. The
+listener is now libsrt's own socket, the one the channel port already uses
+(`direct/input/srt_listen.rs`), opened once and held for the input's life;
+callers come and go underneath it and the newest one is read. A caller mode
+input still uses `srtsrc`. Checked here against the LAN address, since the
+VPN on this machine breaks loopback UDP: the restart test passed, where on
+the runner it had seen five frames and "Could not open resource for reading".
+
+**The SRT player test decoded nothing in the full suite.** Reproduced here by
+running the five SRT channel tests together (one run in four to one in twenty
+failed; with a debug log on, every run). The log showed the player's
+`mpegtsmux` write "PMT for program 1 has 1 streams" with the picture's pad
+"caps were not set yet": `aacparse` hands its first frame on at once,
+`h264parse` only once it has read a picture, and the two run on their own
+queues' threads, so ordering the tags going in did not help. The player's
+`tsdemux` then offered no picture at all. Each muxer sink pad now holds its
+buffers until every expected stream has caps (`srt/play/gate.rs`), with a
+three second way out. Twenty five runs together passed, and fifteen with the
+debug log.
+
+**HEVC to RTMP kept 1 to 18 of 90 frames on macOS.** Not x265's DTS: the
+test's encoder runs `tune=zerolatency` and makes no B frames. The FLV muxer
+could not learn its upstream latency, so it wrote whichever stream had a
+buffer at its deadline; a slow x265 then delivered pictures older than sound
+already written and `skip-backwards-streams` dropped them ("Got backwards
+dts!" in its log). The RTMP muxer now has a second of latency. With twelve
+x264 encodes taking this laptop's cores the test failed four runs in four
+without it and passed four in four with it.
+
+**Timing under load.** `output.set` on the only output let the programme
+encoder stop and start again in the middle of the swap, and on Windows the
+new output was linked while the old encoder came down ("Pads do not have
+common format"); the swap now holds the encoder. The direct input tests'
+`eventually` and the RIST output test wait `GODWINMIX_TIMING_SLACK` times
+longer; something that never arrives still fails.
+
 ## Two phones that aborted the show, 2026-10-05
 
 In an end to end test of the installed 0.2.1 app, two headless Chrome phones
