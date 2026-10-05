@@ -104,6 +104,26 @@ impl Patience {
 }
 
 impl super::Mixer {
+    /// Restart a source the stall sweep has given up on, and count it as a
+    /// strike if a restart was armed. Only a stall is a strike. A clip that
+    /// loops restarts at every end of stream and a server that refuses us
+    /// errors; both keep the backoff they always had, cleared by the next
+    /// frame, so a ten second clip does not wait ten seconds between loops.
+    pub(super) fn arm_stall_restart(&mut self, id: crate::state::SourceId) {
+        if !self.arm_source_restart(id.clone(), "it has delivered nothing for too long") {
+            return;
+        }
+        let patience = self.patience.entry(id.clone()).or_default();
+        patience.struck();
+        let base = Duration::from_secs(self.cfg.stall.restart_after_secs);
+        tracing::info!(
+            source = %id,
+            strikes = patience.strikes(),
+            next_stall_limit_secs = patience.stall_limit(base).as_secs(),
+            "a stall restart is a strike until the source stays live for a minute"
+        );
+    }
+
     /// Whether the programme made under half its frames since the last tick.
     /// One read of the frame counter the programme probe keeps anyway.
     pub(super) fn programme_starved(&mut self) -> bool {

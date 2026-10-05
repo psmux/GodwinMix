@@ -4302,7 +4302,7 @@ impl Mixer {
             self.log_timeline(&id, "judged stalled", true);
         }
         for id in restart {
-            self.arm_source_restart(id, "it has delivered nothing for too long");
+            self.arm_stall_restart(id);
         }
         for id in forgiven {
             info!(source = %id, "the source has stayed live since its last restart; its backoff starts again from nothing");
@@ -4389,12 +4389,12 @@ impl Mixer {
     ///
     /// A server that has gone away will keep refusing us, so retrying every two
     /// seconds forever is just noise. The delay grows to ten seconds and stays
-    /// there until the source has come back and stayed back for
-    /// `patience::HEALTHY_FOR`. Each restart armed here is also a strike in
-    /// `mixer::patience`, which widens how long the next stall may last.
-    fn arm_source_restart(&mut self, id: SourceId, why: &'static str) {
+    /// there until the source has come back, and after a stall restart until
+    /// it has stayed back for `patience::HEALTHY_FOR`. True when a restart or
+    /// a retry was scheduled, false when this one was refused.
+    fn arm_source_restart(&mut self, id: SourceId, why: &'static str) -> bool {
         let Some(slot) = self.sources.iter().find(|s| s.input.id == id) else {
-            return;
+            return false;
         };
         // The retry goes to this instance and no other: a source removed and
         // added again under the same id before the delay runs out is a
@@ -4403,7 +4403,7 @@ impl Mixer {
         // The restart already running is the answer to this stall; a second
         // one queued behind it would only take the pipeline down again.
         if slot.input.restarting() {
-            return;
+            return false;
         }
         // A source that does not declare `restart-in-place` is built again from
         // nothing (see `rebuild_source`), which for a page costs a browser
@@ -4416,7 +4416,7 @@ impl Mixer {
         if !slot.input.restarts_in_place() {
             let now = Instant::now();
             if self.rebuild_not_before.get(&id).is_some_and(|t| *t > now) {
-                return;
+                return false;
             }
             let failures = *self.rebuild_failures.get(&id).unwrap_or(&0);
             if let Some(wait) = self.cfg.stall.rebuild_delay(failures) {
@@ -4432,36 +4432,24 @@ impl Mixer {
                 });
                 // Scheduled rather than dropped, so the retry happens even
                 // once the source stops being reported as stalled.
-                self.patience.entry(id.clone()).or_default().struck();
                 let handle = self.handle.clone();
                 let again = id.clone();
                 self.rt.spawn(async move {
                     tokio::time::sleep(wait).await;
                     let _ = handle.send(Command::RetrySource(again, generation));
                 });
-                return;
+                return true;
             }
         }
         if !slot.input.try_arm_restart() {
-            return;
+            return false;
         }
         // `why` rather than a fixed message: this is reached from the stall
         // sweep, from a pipeline error and from an end of stream, and a line
         // that said "stalled" for all three sent the reader looking at the
         // wrong thing on 2026-09-12, when a killed browser arrived here as an
         // end of stream.
-        let patience = self.patience.entry(id.clone()).or_default();
-        patience.struck();
-        let next_stall_limit_secs = patience
-            .stall_limit(Duration::from_secs(self.cfg.stall.restart_after_secs))
-            .as_secs();
-        warn!(
-            source = %id,
-            why,
-            strikes = patience.strikes(),
-            next_stall_limit_secs,
-            "restarting the source's pipeline"
-        );
+        warn!(source = %id, why, "restarting the source's pipeline");
         let attempt = self.source_attempts.entry(id.clone()).or_insert(0);
         let delay = Duration::from_millis(
             (500.0 * 1.8f64.powi((*attempt).min(8) as i32)).min(10_000.0) as u64,
@@ -4473,6 +4461,7 @@ impl Mixer {
             tokio::time::sleep(delay).await;
             let _ = handle.send(Command::RetrySource(id, generation));
         });
+        true
     }
 
     fn emit_output_state(&self, out: &OutputSlot) {

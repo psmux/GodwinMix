@@ -36,11 +36,13 @@ machine feed itself. The backoff was cleared by the first frame after a
 restart, so the page, which came back for a second or two after each rebuild,
 was always on the fast path: rebuilt 43 times, roughly every 70 seconds. And
 the stall limit was the same ten seconds on the fortieth restart as on the
-first. Now every restart the supervisor arms is a strike; each strike doubles
+first. Now every stall restart is a strike; each strike doubles
 how long the source may stay stalled before the next (10, 20, 40, 80, then 160
 seconds), and the strikes and the backoff are cleared only after a minute
-live. A tick on which the programme itself made under half its frames counts
-a quarter, since a starved machine is not a dead source. In a test that
+live. An end of stream or a pipeline error is not a strike, so a clip that
+loops still starts again half a second after it ends. A tick on which the
+programme itself made under half its frames counts a quarter, since a starved
+machine is not a dead source. In a test that
 pauses a source three times, the restart came after 2.5, 2.4 and 2.5 seconds
 before and after 2.5, 3.8 and 6.8 seconds now. A source that is really dead is
 still restarted, a few times an hour, and reads `stalled` throughout.
@@ -51,11 +53,21 @@ has, and warns when the size has risen at every sample for half an hour by
 512 MB or more. It reads one number on the existing tick, on a blocking task,
 and costs nothing between.
 
-What was not found: no per restart leak. Sixty in place restarts, then sixty
-removes and adds, of a test pattern, a still and a clip each, and thirty
-restarts of a raw sidecar, ended within the noise of where they started (the
-numbers are in the commit that added this entry). The incident's growth was
-the queue, not the restarts.
+No per restart leak was found in the mixer's own code. Private bytes of a
+1080p debug core, before and after: fifty in place restarts of a test pattern,
+175.9 to 178.5 MB; of a still, 176.1 to 171.6 MB; of a clip decoded in
+software, 814 to 818 MB; thirty restarts of a raw sidecar on the `container`
+transport, 208.4 to 207.6 MB. Two tests now count the elements and pads in the
+programme and in the source's pipeline, and what holds the source, across
+twenty restarts in place and ten rebuilds, and assert they do not move.
+
+One thing grows that is not ours: a clip decoded by Quick Sync
+(`qsvh264dec`) adds about 4.4 MB a restart while it is being restarted, 815 to
+1037 MB over fifty, and gave most of it back five seconds after the restarts
+stopped (753 MB). The same clip in software is flat. A clip restarts at every
+end of stream, so a short one looping on this hardware is worth watching with
+the new memory line; none of the incident's sources decoded anything. The
+incident's growth was the queue, not the restarts.
 
 ## Backgrounds, agents and releases, 2026-10-04
 
