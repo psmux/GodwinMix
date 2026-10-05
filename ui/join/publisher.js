@@ -11,16 +11,23 @@ import { openKind, refreshDevices } from "./tracks.js";
 import { Session } from "./session.js";
 import { LevelMeter } from "./meter.js";
 import { StatsLine } from "./stats.js";
+import { ScreenAwake } from "./wake.js";
+import { facingOf } from "./flip.js";
+import { wire } from "./wiring.js";
 
 /**
  * @param {HTMLElement} host
- * @param {{url: string, key: string, labels?: object, camera?: boolean,
- *          autostart?: boolean, cameraId?: string, micId?: string,
+ * @param {{url: string | (() => string), key: string, labels?: object,
+ *          camera?: boolean, autostart?: boolean, keepAwake?: boolean,
+ *          cameraId?: string, micId?: string,
  *          onState?: (s: object) => void}} opts
+ * `url` may be a function, read each time publishing starts: /join/ on a
+ * phone lets the person rename the device until then.
  * `camera: false` opens with the camera set to none, for a microphone alone.
  * `autostart` publishes as soon as the devices are open, with no button to
  * press: the mixer's own page uses it, because there the browser is a device
  * like any other and picking it is the whole of adding it.
+ * `keepAwake` holds a screen wake lock while publishing, for a phone.
  */
 export function mountPublisher(host, opts) {
   const r = buildForm(opts.labels);
@@ -43,7 +50,8 @@ class Publisher {
     this.meter = new LevelMeter(r.level);
     this.stats = new StatsLine(r.stats, () => this.session && this.session.pc);
     this.session = null;
-    this.wire();
+    this.awake = opts.keepAwake ? new ScreenAwake() : null;
+    this.unwire = wire(this);
     this.open().then(() => {
       refreshDevices(this);
       if (opts.autostart && (this.tracks.video || this.tracks.audio)) this.startPublishing();
@@ -59,20 +67,6 @@ class Publisher {
       use: (kind, deviceId) => this.switchTo(kind, deviceId),
       destroy: () => this.destroy(),
     };
-  }
-
-  wire() {
-    const r = this.r;
-    r.go.onclick = () => (this.session && this.session.active ? this.stopPublishing() : this.startPublishing());
-    r.camera.onchange = () => this.switchTo("video", r.camera.value);
-    r.mic.onchange = () => this.switchTo("audio", r.mic.value);
-    r.processing.onchange = () => this.switchTo("audio", r.mic.value);
-    r.cameraMute.onclick = () => this.toggle("video");
-    r.micMute.onclick = () => this.toggle("audio");
-    this.onDevices = () => refreshDevices(this);
-    this.onHidden = () => this.applyVisibility();
-    navigator.mediaDevices.addEventListener("devicechange", this.onDevices);
-    document.addEventListener("visibilitychange", this.onHidden);
   }
 
   async open() {
@@ -96,13 +90,16 @@ class Publisher {
     const v = this.tracks.video;
     paintMutes(this.r, this.tracks);
     this.r.noPicture.hidden = !!v && v.enabled;
+    // A mirror for the camera facing the person, as every phone shows it.
+    this.r.preview.classList.toggle("back", facingOf(v) === "environment");
     this.meter.setTrack(this.tracks.audio);
     this.applyVisibility();
   }
 
   startPublishing() {
+    const url = this.opts.url;
     this.session = new Session({
-      url: this.opts.url,
+      url: typeof url === "function" ? url() : url,
       key: this.opts.key,
       tracks: { ...this.tracks },
       onChange: (s) => this.changed(s),
@@ -116,6 +113,7 @@ class Publisher {
 
   changed(s) {
     paintState(this.r, s, this.opts.labels);
+    if (this.awake) this.awake.want(this.session && this.session.active);
     this.applyVisibility();
     if (this.opts.onState) this.opts.onState(s);
   }
@@ -142,9 +140,9 @@ class Publisher {
     this.stopPublishing();
     this.stats.stop();
     this.meter.destroy();
+    if (this.awake) this.awake.destroy();
     for (const t of Object.values(this.tracks)) if (t) t.stop();
-    navigator.mediaDevices.removeEventListener("devicechange", this.onDevices);
-    document.removeEventListener("visibilitychange", this.onHidden);
+    this.unwire();
     this.r.root.remove();
   }
 }

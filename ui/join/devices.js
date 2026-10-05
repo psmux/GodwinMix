@@ -56,23 +56,36 @@ export async function listDevices(md = navigator.mediaDevices) {
 }
 
 /**
+ * Is this a phone or a tablet held upright? A touch screen taller than it is
+ * wide. A narrow window on a laptop is not: its webcam still sends a wide picture.
+ */
+export function upright(win = typeof window !== "undefined" ? window : null) {
+  return !!(win && win.matchMedia && win.matchMedia("(pointer: coarse) and (orientation: portrait)").matches);
+}
+
+/**
  * What getUserMedia is asked for the picture. `exact` when a person chose it.
  *
  * The size is exact, and the browser crops and scales to it, so every camera
  * sends the same size and switching cameras on the air changes nothing the
- * mixer has to be told: a new size is a new H.264 configuration, which the
- * hop from a channel to the mixer does not carry. `loose` is the fallback for
- * a camera that cannot make that size at all.
+ * mixer has to be told: a new size is a new H.264 configuration, which costs
+ * the source a second or so on its last picture while the mixer's decoder
+ * starts over. A phone held upright is asked for the same size on its side,
+ * 720x1280, so it sends what the person is looking at. `loose` is the
+ * fallback for a camera that cannot make that size at all.
  */
-export function videoConstraints(deviceId, exact, loose = false) {
+export function videoConstraints(deviceId, exact, loose = false, facing = "", tall = upright()) {
   const size = (n) => (loose ? { ideal: n } : { exact: n });
+  const [w, h] = tall ? [ENCODER.height, ENCODER.width] : [ENCODER.width, ENCODER.height];
   const c = {
-    width: size(ENCODER.width),
-    height: size(ENCODER.height),
+    width: size(w),
+    height: size(h),
     frameRate: { ideal: ENCODER.frameRate },
   };
   if (!loose) c.resizeMode = "crop-and-scale";
-  if (deviceId) c.deviceId = exact ? { exact: deviceId } : { ideal: deviceId };
+  // A phone's flip names a side rather than a device.
+  if (facing) c.facingMode = { exact: facing };
+  else if (deviceId) c.deviceId = exact ? { exact: deviceId } : { ideal: deviceId };
   return c;
 }
 
@@ -94,9 +107,9 @@ export function audioConstraints(deviceId, exact, processing) {
 export async function openTrack(kind, deviceId, opts = {}, md = navigator.mediaDevices) {
   if (deviceId === "off") return null;
   if (kind === "video") {
-    const stream = await md.getUserMedia({ video: videoConstraints(deviceId, opts.exact) }).catch((e) => {
+    const stream = await md.getUserMedia({ video: videoConstraints(deviceId, opts.exact, false, opts.facing) }).catch((e) => {
       if (e && e.name !== "OverconstrainedError") throw e;
-      return md.getUserMedia({ video: videoConstraints(deviceId, opts.exact, true) });
+      return md.getUserMedia({ video: videoConstraints(deviceId, opts.exact, true, opts.facing) });
     });
     return stream.getVideoTracks()[0] || null;
   }

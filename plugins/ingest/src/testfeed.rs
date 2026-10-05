@@ -43,8 +43,13 @@ impl Inlet for Keep {
 /// `frames` frames of 320x240 at 30 fps and the sound beside them, as tags
 /// in the order the two sinks made them.
 pub fn tags(frames: u32) -> Vec<MediaTag> {
+    sized(frames, 320, 240)
+}
+
+/// The same at another picture size.
+pub fn sized(frames: u32, width: u32, height: u32) -> Vec<MediaTag> {
     let got = Arc::new(Mutex::new(Vec::new()));
-    let p = launch(false, Some(frames), 320, 240);
+    let p = launch(false, Some(frames), width, height);
     attach(&p, Box::new(Keep(got.clone())));
     p.set_state(gst::State::Playing).unwrap();
     let _ = p.bus().unwrap().timed_pop_filtered(gst::ClockTime::from_seconds(30), &[gst::MessageType::Eos, gst::MessageType::Error]);

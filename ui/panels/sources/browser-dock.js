@@ -6,14 +6,14 @@ import { el } from "../../shell/dom.js";
 import { confirmModal } from "../../shell/modal.js";
 import { errorToast } from "../../shell/toast.js";
 import { mountPublisher } from "../../join/publisher.js";
-import { streamNameFor, sourceIdFor, streamOf } from "./browser-channel.js";
+import { deviceName, sourceIdFor, streamOf } from "./browser-channel.js";
 
 export class BrowserDock {
   constructor(client, { channel, key }, camera, devices, onGone) {
     this.onGone = onGone;
     this.client = client;
     this.channel = channel;
-    this.stream = streamNameFor();
+    this.stream = deviceName().stream;
     this.source = sourceIdFor(channel, this.stream);
     this.label = camera ? "This browser's camera" : "This browser's microphone";
     this.waiting = [];

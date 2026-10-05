@@ -2,8 +2,9 @@
 // DELETE on the session's Location when it is over.
 //
 // The mixer takes no trickle ICE, so the offer goes once gathering is done
-// with every candidate in it. A channel takes H.264 only (the picture is
-// never decoded there), so H.264 goes first in the codec list.
+// with every candidate in it. A channel carries H.264 as it comes, with
+// nothing decoded, so H.264 goes first in the codec list. VP8 comes next: a
+// mixer that can turn it into H.264 takes it from a browser with no H.264.
 
 /** What the encoder is asked for: a person talking, at 720p. */
 export const ENCODER = { width: 1280, height: 720, frameRate: 30, maxBitrate: 2_500_000 };
@@ -52,7 +53,7 @@ export function unpublish(location, fetcher = fetch) {
 
 function addTransceivers(pc, media) {
   // The video section is there even with no camera, because a channel
-  // refuses an offer with no H.264 in it.
+  // refuses an offer with no video codec it takes.
   const video = pc.addTransceiver(media.video || "video", {
     direction: "sendonly",
     sendEncodings: [{ maxBitrate: ENCODER.maxBitrate, maxFramerate: ENCODER.frameRate, scaleResolutionDownBy: 1 }],
@@ -66,18 +67,20 @@ function preferH264(transceiver) {
   const caps = window.RTCRtpSender?.getCapabilities?.("video");
   if (!caps || !transceiver.setCodecPreferences) return;
   const ordered = orderCodecs(caps.codecs);
-  if (!ordered.some((c) => /h264/i.test(c.mimeType))) {
-    throw new WhipError(0, "This browser cannot send H.264, which the mixer's channels need. Chrome, Edge, Safari and Firefox all can.");
+  if (!ordered.some((c) => /h264|vp8/i.test(c.mimeType))) {
+    throw new WhipError(0, "This browser can send neither H.264 nor VP8, and the mixer's channels need one of them. Chrome, Edge, Safari and Firefox all can.");
   }
   transceiver.setCodecPreferences(ordered);
 }
 
 /**
  * Codecs with H.264 first: packetization mode 1 and constrained baseline
- * ahead of the other H.264 profiles, then the rest in the browser's order.
+ * ahead of the other H.264 profiles, then VP8, then the rest in the
+ * browser's order.
  */
 export function orderCodecs(codecs) {
   const score = (c) => {
+    if (/vp8/i.test(c.mimeType)) return 5;
     if (!/h264/i.test(c.mimeType)) return 0;
     const fmtp = c.sdpFmtpLine || "";
     return 10 + (fmtp.includes("packetization-mode=1") ? 2 : 0) + (fmtp.includes("42e01f") ? 1 : 0);
@@ -91,11 +94,11 @@ export function orderCodecs(codecs) {
 /**
  * Keep the picture size steady and give up frame rate instead when the link
  * or the computer cannot keep up. A browser left to itself starts small and
- * raises the size as it finds bandwidth, and every change of size is a new
- * H.264 configuration, which the hop from a channel to the mixer carries only
- * once: the mixer's decoder then refuses every frame after the first change,
- * and the source freezes a few seconds in. A camera feeding a mixer wants one
- * size anyway.
+ * raises the size as it finds bandwidth. Every change of size is a new H.264
+ * configuration: the channel carries it to the mixer, whose decoder starts
+ * again at the new size, but the source holds its last picture for a second
+ * or so while that happens. A phone turned on its side costs the same pause
+ * once; a browser hunting for bandwidth would cost it over and over.
  */
 async function preferSteadySize(sender) {
   try {
