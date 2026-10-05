@@ -21,6 +21,7 @@ pub type ListenHook = unsafe extern "C" fn(*mut c_void, Socket, c_int, *const c_
 
 /// Socket options used here, from `srt.h`.
 pub const RCVTIMEO: c_int = 14;
+pub const LATENCY: c_int = 23;
 pub const PASSPHRASE: c_int = 26;
 
 /// "No data yet" on a blocking socket with a timeout, from `srt.h`.
@@ -153,10 +154,26 @@ impl Lib {
 
     /// A listening socket on `addr`, with `hook` asked about every caller.
     pub fn listener(&self, addr: std::net::SocketAddr, hook: ListenHook, opaque: *mut c_void) -> Result<Socket, String> {
+        self.listener_with(addr, hook, opaque, |_| Ok(()))
+    }
+
+    /// The same, with `prepare` setting options on the socket before it is
+    /// bound. A caller accepted on it inherits them.
+    pub fn listener_with(
+        &self,
+        addr: std::net::SocketAddr,
+        hook: ListenHook,
+        opaque: *mut c_void,
+        prepare: impl FnOnce(Socket) -> Result<(), String>,
+    ) -> Result<Socket, String> {
         // SAFETY: no arguments.
         let sock = unsafe { (self.create_socket)() };
         if sock == INVALID {
             return Err(format!("could not make an SRT socket: {}", self.last_error()));
+        }
+        if let Err(e) = prepare(sock) {
+            self.close(sock);
+            return Err(e);
         }
         let raw = super::addr::encode(addr);
         // SAFETY: `raw` is a sockaddr of the length given, alive for the call.

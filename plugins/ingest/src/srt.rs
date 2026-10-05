@@ -31,7 +31,7 @@
 mod addr;
 mod conn;
 mod decide;
-mod ffi;
+pub(crate) mod ffi;
 mod play;
 mod streamid;
 mod ts;

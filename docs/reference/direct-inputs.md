@@ -35,7 +35,7 @@ the three names `params.transport` with `data.allowed`.
 | `udp://@239.1.1.1:5000`, `udp://0.0.0.0:5000` | MPEG-TS on a multicast group or a unicast port | `interface` (a name such as `en0`, or its address) to join on; `source_address` for source specific multicast, or write `udp://10.0.0.9@232.1.1.1:5000`; `receive_buffer_kb` (64 to 262144, default 4096) |
 | `rtp://@239.1.1.1:5000` | the same, in RTP (RFC 2250, SMPTE 2022-2). A `udp://` address takes RTP too: each datagram says which it is | as `udp://` |
 | `srt://10.0.0.9:9000` | SRT caller, dialling a sender that listens | `latency_ms`, `passphrase`, `streamid` |
-| `srt://@:9000`, `srt://0.0.0.0:9000`, or `params.mode` `listener` | SRT listener on that port, waiting for a sender to call | as the caller |
+| `srt://@:9000`, `srt://0.0.0.0:9000`, or `params.mode` `listener` | SRT listener on that port, waiting for a sender to call. The port stays open for as long as the input exists: a sender that hangs up leaves the input quiet, the next one to call is read in its place, and one that calls while another is sending takes over from it | `latency_ms`, `passphrase`. Any stream id is taken |
 | `rist://@0.0.0.0:5004` | RIST Simple Profile, listening. The port must be even: RTCP is on the next one up | none |
 | `rtsp://user:pass@camera/stream1` | RTSP pull from a camera or an encoder | `transport`: `tcp`, `udp` or `auto` (UDP first, the default); `latency_ms` (default 200) |
 | `https://host/live.m3u8`, `https://host/live.mpd` | HLS or DASH pull, handed on at the clock's pace | none |
