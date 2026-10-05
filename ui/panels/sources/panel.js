@@ -558,6 +558,9 @@ class SourcesPanel extends HTMLElement {
       id && { kind: "colours", onColour: (colour) => this.setColour(ids, colour) },
       id && { label: "Settings", run: () => this.openDrawer(id) },
       id && { kind: "separator" },
+      // Here as well as on Ctrl+C and Ctrl+V, for a phone that has neither.
+      id && { label: "Copy", key: key("tray.copy") || "Ctrl+C", run: () => this.copy(ids) },
+      this.clipboard && { label: "Paste", key: key("tray.paste") || "Ctrl+V", run: () => this.paste() },
       id && { label: this.scopedTo() ? "Remove from scene" : many ? `Remove ${ids.length}` : "Remove", key: key("tray.delete") || "Delete", run: () => this.remove(ids) },
       { kind: "separator" },
       { label: "Add a source", key: key("tray.add") || "Ctrl+N", run: () => this.addSource() },
