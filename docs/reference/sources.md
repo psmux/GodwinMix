@@ -61,10 +61,40 @@ after which the programme does go to the slate and an alert says so.
 consecutive failures (3) and then waits `stall.rebuild_backoff_secs` (30),
 doubling to `stall.rebuild_backoff_max_secs` (300), with an alert on the UI for
 each wait. Two hours of that is under 40 attempts rather than 600. The count is
-cleared the moment the source delivers a frame, so a source that recovers is
-back on the fast path at once, and it is cleared when the source is removed,
-because the ids are reused: a director alternating `event-a` and `event-b` one
-per match must not have one match's failures charged to the next.
+cleared once the source has stayed live for a minute after its last restart,
+and it is cleared when the source is removed, because the ids are reused: a
+director alternating `event-a` and `event-b` one per match must not have one
+match's failures charged to the next.
+
+**A restart that does not hold makes the next one wait longer.** Every restart
+the supervisor arms (for a stall, a pipeline error, an end of stream or a
+failed restart) is a strike against the source, and each strike doubles how
+long it may stay stalled before the next one: `stall.restart_after_secs`, then
+twice that, four times, eight, and sixteen times at most, so 10, 20, 40, 80
+and 160 seconds with the defaults. The delay before an in place restart (half
+a second, growing to ten) is kept the same way. Both are forgiven only after
+the source has stayed live for 60 seconds. A source that is really dead is
+still restarted, a few times an hour rather than a few times a minute, and it
+reads `stalled` the whole time. The `restarting the source's pipeline` line in
+the log carries `strikes` and `next_stall_limit_secs`, and `the source has
+stayed live since its last restart` is written when a source is forgiven.
+
+**A starved machine is not a dead source.** On a tick where the programme
+itself made fewer than half the frames the canvas rate asks for, a stalled
+source's time counts a quarter towards that limit. The machine is short of
+CPU, and restarting sources then adds work rather than removing it.
+
+Both rules come from 2026-10-05, when the desktop app ran 16 hours without a
+fault and then, with the machine loaded by other work, judged its sources
+stalled 290 times in under two hours. The page in it came back for a second
+or two after each rebuild, which cleared its backoff every time, and it was
+rebuilt 43 times. Its camera and screen, sidecars on the `container`
+transport, were read into an `appsrc` that never made the reader wait: with
+the decode behind it short of the camera's frame rate, every frame the camera
+wrote was queued in the mixer, its pictures reached the programme 47 minutes
+late, and the mixer grew to about 12 GB and died on an allocation of one raw
+1080p frame. That element now blocks at 16 MB, so the pipe fills and the
+sidecar's own leaky queue drops what it cannot send.
 
 Every rebuild used to leak. The browser sidecar names its private profile
 directory after its own pid and removes it when its message loop ends, which a
