@@ -2,7 +2,7 @@
 name = "camera"
 version = "0.1.0"
 api = 1
-description = "A USB or built in camera as a source: v4l2 on Linux, AVFoundation on macOS, Media Foundation on Windows, with device discovery and a resolution and frame rate you can set."
+description = "A USB or built in camera as a source: v4l2 on Linux, AVFoundation on macOS, Kernel Streaming then Media Foundation on Windows, with device discovery and a resolution and frame rate you can set."
 license = "Apache-2.0"
 authors = ["GodwinMix"]
 repository = "https://github.com/psmux/godwinmix"

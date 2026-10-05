@@ -35,9 +35,17 @@ each check measures.
 ### camera
 
 A USB camera, a built in laptop camera or a capture card. `v4l2src` on Linux,
-`avfvideosrc` on macOS, `mfvideosrc` on Windows with `ksvideosrc` behind it
-because `mfvideosrc` has an open startup bug where some cameras never produce a
-first frame.
+`avfvideosrc` on macOS. On Windows `ksvideosrc` first, which gave a USB
+webcam's first ten frames in 1.1 to 1.3 s where `mfvideosrc` took 3.5, and
+`mfvideosrc` behind it for a camera Kernel Streaming cannot see. `mfvideosrc`
+also has an open startup bug where some cameras never produce a first frame.
+
+`start` returns at once and the camera opens on a thread of its own; the
+picture follows when it is up. Until then `health` is `degraded` with `the
+camera is opening`. An open that fails is tried again by the plugin, after one
+second and then twice as long each time up to thirty, and `health` is
+`failing` with the reason and the wait meanwhile; a camera another app holds
+reads `another app is using it`, and comes up by itself once that app lets go.
 
 Devices are opened through GStreamer's own device provider, so the plugin never
 has to know whether this platform's element wants `device`, `device-index` or

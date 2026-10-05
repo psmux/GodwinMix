@@ -69,6 +69,13 @@ gmx ctl source add cam1 --type camera/source
 That is the whole command. With no settings it takes the first camera on the
 machine and scales it to the canvas.
 
+The add answers straight away and the camera opens behind it, so the source
+reads `connecting` for a moment and then `live` when the first frame arrives.
+On a Windows laptop with a USB webcam the first frame came about a second
+after the add was answered. A camera that was busy or
+slow when the mixer started is tried again by itself; you do not have to add
+it again.
+
 ```sh
 gmx ctl status
 ```
@@ -154,6 +161,8 @@ gmx plugin stats
 | What it says | What it means |
 |---|---|
 | `no data from the camera after 5 s` | something else has the camera, or a permission prompt was never answered |
+| `the camera is opening` | the source was started and the camera is still being opened. Wait: the picture follows, on Windows usually within two seconds |
+| `would not start: another app is using it` | close the app holding the camera. The source tries again by itself, after 1 second and then up to every 30, so you do not need to remove and add it |
 | `no device matches '...'` | the message lists every camera the machine has. Copy one of those ids |
 | `would not agree on a format` | the camera will not do the `resolution` or `framerate` you asked for. Clear both |
 

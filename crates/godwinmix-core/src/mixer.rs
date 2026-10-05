@@ -409,6 +409,7 @@ fn needs_superimposed(page: Option<f64>, media: &[Option<f64>]) -> bool {
 use crate::plugin::branch::{BranchCtx, ProgrammeBranch, VideoPads};
 
 pub mod group;
+mod backoff;
 mod exited;
 mod generation;
 mod keyed;
@@ -501,6 +502,10 @@ pub enum Command {
     /// arrives, so a retry armed for a removed source cannot land on a new
     /// one under the same id. Never sent by the API. See `mixer::generation`.
     RetrySource(SourceId, u64),
+    /// Try again a source that could not be started and is kept as
+    /// unstarted. Dropped if it has started, been removed or been asked for
+    /// again meanwhile. Never sent by the API. See `mixer::unstarted`.
+    RetryUnstarted(SourceId),
     /// A restart in place has finished on its own thread, with the generation
     /// it was started for and why it failed if it did. Sent by the worker
     /// `RestartSource` starts; never by the API.
@@ -3037,6 +3042,12 @@ impl Mixer {
                 // Written now, or a restart before the next add or remove
                 // would read a list without it and forget it for good.
                 self.persist_runtime();
+                // One waiting on a piece being set up starts when the piece
+                // is ready, and a rebuild has its own retry. Anything else is
+                // tried again: a camera that was slow or busy at boot.
+                if !waits && !self.rebuilding.contains_key(&cfg.id) {
+                    self.retry_unstarted_later(&cfg.id);
+                }
             }
         }
     }
@@ -3891,6 +3902,7 @@ impl Mixer {
             Command::RetryOutput(_) => "output.retry",
             Command::RestartSource(_) => "source.restart",
             Command::RetrySource(..) => "source.retry",
+            Command::RetryUnstarted(_) => "source.retry",
             Command::SourceRestarted(..) => "source.restarted",
             Command::SourceStopped(_) => "source.stopped",
             Command::SetAudio { .. } => "source.audio.set",
@@ -4008,6 +4020,7 @@ impl Mixer {
             }
             Command::RestartSource(id) => self.restart_source(&id),
             Command::RetrySource(id, generation) => self.retry_source(&id, generation),
+            Command::RetryUnstarted(id) => self.retry_unstarted(&id),
             Command::SourceRestarted(id, generation, failed) => {
                 self.restarted(&id, generation, failed)
             }
@@ -4451,9 +4464,7 @@ impl Mixer {
         // end of stream.
         warn!(source = %id, why, "restarting the source's pipeline");
         let attempt = self.source_attempts.entry(id.clone()).or_insert(0);
-        let delay = Duration::from_millis(
-            (500.0 * 1.8f64.powi((*attempt).min(8) as i32)).min(10_000.0) as u64,
-        );
+        let delay = backoff::restart_delay(*attempt);
         *attempt += 1;
         let handle = self.handle.clone();
         debug!(source = %id, ?delay, "scheduling source restart");

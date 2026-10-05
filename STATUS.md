@@ -73,6 +73,57 @@ end of stream, so a short one looping on this hardware is worth watching with
 the new memory line; none of the incident's sources decoded anything. The
 incident's growth was the queue, not the restarts.
 
+**The webcam that never came up.** After the restart the installed app's USB
+webcam was missing from every show. Each boot logged `failed to add source`
+with `the plugin did not answer start within 5 s`, then stopped the plugin
+with `the source was removed`, and nothing asked again: the camera sat in the
+saved config and in `source.missing` for good. Two things were wrong. The
+camera plugin opened the device inside `start`, and on this laptop that is
+slow: the device monitor's first look took about 4 s in a fresh process
+(2.4 s of it Media Foundation's first probe), and a `gst-launch-1.0` run of
+`mfvideosrc` to ten frames took 3.5 s, and 7.5 s once. And the core
+kept a source that failed at boot as unstarted without ever trying it again.
+
+The open now runs on a thread of its own, written once in capture-common and
+used by the camera and the screen, so `start` answers at once and the picture
+follows. `health` says the camera is opening, then counts frames. A failed
+open is tried again by the plugin after 1 s, then 2, 4, up to 30, with the
+reason in `health`. A second open waits for the first to let go of the
+device, and a stop during an open hands the device back when the open
+finishes. On Windows the camera is now asked for through Kernel Streaming
+first. Measured on this webcam, a whole `gst-launch-1.0` run each time: to ten
+frames, 1.1 to 1.3 s with `ksvideosrc` against 3.5 s with `mfvideosrc`; to 30
+frames of 1080p, 1.8 to 2.1 s against 4.6 s. Listing the cameras through
+Kernel Streaming alone took 40 ms. With another app holding the camera it
+said `device already in use` after 0.4 s, where `mfvideosrc` took 6.9 s to say
+`Internal data stream error`. A time limit on `mfvideosrc` would still have
+spent the 2.4 s probe and the 3 s open on every good start, so the order was
+changed instead. Media Foundation stays behind it, for a camera Kernel
+Streaming cannot see and for a first frame that has not come within 3 s. A
+saved `device` id is a Media Foundation path; it is matched to the Kernel
+Streaming device by the instance path both share. Kernel Streaming lists this
+camera's 1080p raw mode at 5 frames a second ahead of its Motion JPEG at 30,
+so the caps now ask for at least the canvas rate when the device can do it.
+
+In the core, a source that could not be started when the show was built is
+tried again, half a second, then 0.9, 1.6, and after three failures the
+rebuild backoff, 30 seconds doubling to 300. It reads `failed` between tries
+and leaves the unstarted list when it starts. `crates/godwinmix-core/tests/late_start.rs`
+starts a mixer with a Python plugin whose first `start` sleeps seven seconds:
+the source fails at boot and is live 6.1 s after the mixer started, with
+nobody asking.
+
+Run on this laptop with a debug core from the branch and the camera plugin
+staged beside it, with the webcam's saved Media Foundation id: the core
+answered the camera's `start` 2.2 s after it began adding the source (process
+start and handshake included) and the first picture was linked 1.1 s later,
+through `ksvideosrc`. With a `gst-launch-1.0 ksvideosrc` holding the camera,
+the source read `connecting` while it was held and went live 3.1 s after the
+holder let go, with nobody touching it. One thing seen on the way: the log
+lines a mixer-held plugin sends as `log` notifications do not reach the
+core's log, so the camera's `would not start: another app is using it` is
+read through `health` and not in `mixer.log`.
+
 ## Backgrounds, agents and releases, 2026-10-04
 
 **A new background with or without a screen.** `matte/filter` cuts a person
