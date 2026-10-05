@@ -399,13 +399,21 @@ wrap_display_handler! {
         fn on_console_message(
             &self,
             _browser: Option<&mut Browser>,
-            _level: LogSeverity,
+            level: LogSeverity,
             message: Option<&CefString>,
-            _source: Option<&CefString>,
-            _line: ::std::os::raw::c_int,
+            source: Option<&CefString>,
+            line: ::std::os::raw::c_int,
         ) -> ::std::os::raw::c_int {
             if let Some(m) = message {
                 let m = m.to_string();
+                // A graphic is a page somebody wrote for the mixer: its errors
+                // are worth reading, and go to the log of the source.
+                let severe = sys::cef_log_severity_t::from(level) as i32 >= sys::cef_log_severity_t::LOGSEVERITY_WARNING as i32;
+                if graphic_mode() && severe {
+                    let at = source.map(|s| s.to_string()).unwrap_or_default();
+                    eprintln!("[browser] page: {m} ({}:{line})", at.rsplit('/').next().unwrap_or_default());
+                    return 1;
+                }
                 if let Some(report) = m.strip_prefix(MEDIA_TAG) {
                     eprintln!("[browser] media {report}");
                     return 1; // Handled: keep it out of Chromium's own log.

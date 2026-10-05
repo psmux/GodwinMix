@@ -219,10 +219,11 @@ Keys accepted on every method, handled before a method runs.
 | `task.cancel` | `POST /api/v1/tasks/{id}/cancel` | operate |  | 1 | Ask a piece of long running work to stop. Cooperative: the answer says the request landed, not that the work has stopped yet. |
 | `task.get` | `GET /api/v1/tasks/{id}` | read |  | 1 | How a piece of long running work is getting on, and its answer once it has one. |
 | `task.list` | `GET /api/v1/tasks` | read |  | 1 | Every background job this core knows about, newest first. |
+| `template.check` | `POST /api/v1/template/check` | read |  | 1 | Read an SVG or HTML template the way saving or drawing it would, and say what to fix. Writes nothing. |
 | `template.fields` | `POST /api/v1/template/fields` | read |  | 1 | A running graphic's fields: each one's label, type, default and what it shows now. |
-| `template.get` | `GET /api/v1/template` | read |  | 1 | One template, with its SVG as written. |
-| `template.list` | `GET /api/v1/template/list` | read |  | 1 | The graphic templates: the built in pack and the SVG templates in the media library, each with its fields. |
-| `template.save` | `POST /api/v1/template/save` | operate |  | 1 | Check an SVG template and write it into the media library. |
+| `template.get` | `GET /api/v1/template` | read |  | 1 | One template, with its SVG or HTML as written. |
+| `template.list` | `GET /api/v1/template/list` | read |  | 1 | The graphic templates: the built in packs and the SVG and HTML templates in the media library, each with its fields. |
+| `template.save` | `POST /api/v1/template/save` | operate |  | 1 | Check an SVG or HTML template and write it into the media library. |
 | `token.create` | `POST /api/v1/token/create` | admin |  | 1 | Make a token for one phone or tablet, with the read, operate (the default) or admin scope. The secret is in this answer and nowhere else: the mixer keeps only a digest of it. Open the page at https://<host>:<port>/#token=<token> to sign the device in. |
 | `token.list` | `GET /api/v1/token/list` | admin |  | 1 | Every device token: its id, label, scope and when it was made. Never a secret. |
 | `token.revoke` | `POST /api/v1/token/revoke` | admin | yes | 1 | Take a device token back. The device's next call is refused, including on a connection it already has open. |
@@ -3295,6 +3296,23 @@ Every background job this core knows about, newest first.
 }
 ```
 
+#### `template.check`
+
+Read an SVG or HTML template the way saving or drawing it would, and say what to fix. Writes nothing.
+
+MCP tool `check_template` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/TemplateCheckRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/TemplateChecked"
+  }
+}
+```
+
 #### `template.fields`
 
 A running graphic's fields: each one's label, type, default and what it shows now.
@@ -3314,7 +3332,7 @@ MCP tool `template_fields` in the `search` profile: readOnlyHint true, destructi
 
 #### `template.get`
 
-One template, with its SVG as written.
+One template, with its SVG or HTML as written.
 
 MCP tool `get_template` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
 
@@ -3331,7 +3349,7 @@ MCP tool `get_template` in the `search` profile: readOnlyHint true, destructiveH
 
 #### `template.list`
 
-The graphic templates: the built in pack and the SVG templates in the media library, each with its fields.
+The graphic templates: the built in packs and the SVG and HTML templates in the media library, each with its fields.
 
 MCP tool `list_templates` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
 
@@ -3350,7 +3368,7 @@ MCP tool `list_templates` in the `search` profile: readOnlyHint true, destructiv
 
 #### `template.save`
 
-Check an SVG template and write it into the media library.
+Check an SVG or HTML template and write it into the media library.
 
 MCP tool `save_template` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint false.
 
