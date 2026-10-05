@@ -170,6 +170,11 @@ mod tests {
         let p = s.plan("get_scene", &json!({"scene": "Live"})).unwrap();
         assert_eq!(p.path, "/api/v1/scenes/Live");
         assert!(p.args.get("scene").is_none(), "the scene is in the path, and twice is a duplicate field");
+        // The same for a name in the path: `remove_media` was refused with a
+        // duplicate `name` when Opus cleaned up after itself.
+        let p = s.plan("remove_media", &json!({"name": "bgtest-a.svg"})).unwrap();
+        assert!(p.path.contains("bgtest-a.svg"), "{}", p.path);
+        assert!(p.args.get("name").is_none(), "{:?}", p.args);
     }
 
     #[test]
