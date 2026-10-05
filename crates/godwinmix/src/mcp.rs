@@ -383,15 +383,24 @@ impl Server {
         // `{id}` in the path is filled from the argument of that name, or from
         // `name` where the method calls it that. A show's own methods also
         // take `show` for it, as the contract says.
+        // The argument the path's `{id}` was filled from, which then leaves
+        // the body: the route reads it from the path, and the same name in
+        // both is a duplicate field (`remove_media {"name": ...}` was refused).
+        let mut from_path: Option<&str> = None;
         let path = if rest.path.contains("{id}") {
-            let id = args
-                .get("id")
-                .or_else(|| args.get("show").filter(|_| method.starts_with("show.")))
-                // A scene method's schema names it `scene`, which is what a
-                // model sends; `get_scene {"scene": "Live"}` was refused.
-                .or_else(|| args.get("scene").filter(|_| method.starts_with("scene.")))
-                .or_else(|| args.get("name"))
-                .or_else(|| args.get("task_id"))
+            let key = ["id", "show", "scene", "name", "task_id"].into_iter().find(|k| {
+                let fits = match *k {
+                    "show" => method.starts_with("show."),
+                    // A scene method's schema names it `scene`, which is what
+                    // a model sends; `get_scene {"scene": "Live"}` was refused.
+                    "scene" => method.starts_with("scene."),
+                    _ => true,
+                };
+                fits && args.get(*k).and_then(Value::as_str).is_some_and(|v| !v.trim().is_empty())
+            });
+            from_path = key.filter(|k| matches!(*k, "scene" | "name"));
+            let id = key
+                .and_then(|k| args.get(k))
                 .and_then(Value::as_str)
                 .map(str::trim)
                 .filter(|s| !s.is_empty())
@@ -416,13 +425,9 @@ impl Server {
         // when the mixer happens to be down too.
         self.check_required(tool, method, &args, &path)?;
         let mut args = args;
-        if method.starts_with("scene.") && rest.path.contains("{id}") {
-            // The route reads the scene from the path; the same name in the
-            // body too is a duplicate field. Taken out after the check, which
-            // wants to see it.
-            if let Some(map) = args.as_object_mut() {
-                map.remove("scene");
-            }
+        // Taken out after the check, which wants to see it.
+        if let (Some(key), Some(map)) = (from_path, args.as_object_mut()) {
+            map.remove(key);
         }
         let image = tool == "snapshot";
         let preview = tool == "preview_frame";
