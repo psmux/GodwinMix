@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Logo bug with a shine</title>
+<script type="application/json" id="gmx-template">
+{
+  "title": "Logo bug with a shine",
+  "description": "A station mark in the top right corner, a logo picture or the station's name, with a light that sweeps across it every few seconds. Fades in and out. Still between sweeps, so it costs almost nothing.",
+  "category": "bug",
+  "out_ms": 400,
+  "fields": {
+    "station": {"label": "Station name (shown when there is no logo)", "default": "GMX 24"},
+    "tag":     {"label": "Small line under it", "default": "LIVE"},
+    "logo":    {"label": "Logo picture from the media library", "type": "image", "default": ""},
+    "every":   {"label": "Seconds between shines", "default": "8"},
+    "accent":  {"label": "Accent colour", "type": "color", "default": "#22c55e"},
+    "text":    {"label": "Text colour", "type": "color", "default": "#ffffff"}
+  }
+}
+</script>
+<style>
+  html, body { margin: 0; background: transparent; overflow: hidden; }
+  :root { --accent: #22c55e; --text: #ffffff; }
+  body { font-family: Inter, "Segoe UI", "Helvetica Neue", Helvetica, Arial, "DejaVu Sans", sans-serif; }
+
+  .bug { position: absolute; right: 96px; top: 56px; display: flex; flex-direction: column; align-items: flex-end;
+         color: var(--text); opacity: 0; transform: scale(.92); transform-origin: 100% 0;
+         filter: drop-shadow(0 3px 10px rgba(0, 0, 0, .5)); }
+  .mark { position: relative; overflow: hidden; border-radius: 6px; }
+  .mark img { display: block; max-height: 90px; max-width: 260px; }
+  .mark img:not([src]), .mark img[src=""] { display: none; }
+  .mark img:not([src]) + .name, .mark img[src=""] + .name { display: block; }
+  .name { display: none; font-size: 44px; font-weight: 900; letter-spacing: -1px; padding: 2px 10px; }
+  .tag { margin-top: 6px; font-size: 16px; font-weight: 800; letter-spacing: 3px; color: var(--accent); }
+  .shine { position: absolute; top: 0; bottom: 0; left: -60%; width: 40%;
+           background: linear-gradient(100deg, transparent, rgba(255, 255, 255, .55), transparent);
+           transform: skewX(-20deg); opacity: 0; }
+  .sweep .shine { animation: sweep 1.1s ease-in-out; }
+  @keyframes sweep { 0% { left: -60%; opacity: 1; } 100% { left: 130%; opacity: 1; } }
+
+  .bug { transition: opacity .35s ease-in, transform .35s ease-in; }
+  .gmx-in .bug { opacity: .92; transform: none; transition: opacity .5s ease-out, transform .5s cubic-bezier(.2, .8, .2, 1); }
+</style>
+</head>
+<body>
+  <div class="bug">
+    <div class="mark" id="mark"><img data-field="logo" alt=""><div class="name" data-field="station">GMX 24</div><div class="shine"></div></div>
+    <div class="tag" data-field="tag">LIVE</div>
+  </div>
+<script>
+  // One sweep every few seconds, and nothing at all in between.
+  var every = 8, timer = null, mark = document.getElementById("mark");
+  function sweep() { mark.classList.remove("sweep"); void mark.offsetWidth; mark.classList.add("sweep"); }
+  function start() { clearInterval(timer); timer = setInterval(sweep, Math.max(2, every) * 1000); }
+  window.addEventListener("gmx:update", function (e) { every = Number(e.detail.every) || 8; if (timer) start(); });
+  window.addEventListener("gmx:in", function () { setTimeout(sweep, 700); start(); });
+  window.addEventListener("gmx:out", function () { clearInterval(timer); timer = null; });
+</script>
+</body>
+</html>

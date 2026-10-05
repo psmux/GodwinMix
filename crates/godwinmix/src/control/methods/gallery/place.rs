@@ -10,6 +10,8 @@
 pub(super) mod scene_of;
 #[path = "place_set.rs"]
 mod set;
+#[path = "place_html.rs"]
+mod motion;
 
 use super::entry;
 use crate::control::call::Call;
@@ -72,7 +74,7 @@ async fn place_call(call: Call, params: Value) -> Result<Value, RpcError> {
     let added = invoke(&call, "scene.item.add", json!({
         "scene": target.id, "content": {"source": source}, "name": name,
         "transform": place::transform(zone, canvas, natural), "visible": visible,
-        "enter": place::enter(zone), "exit": place::exit(zone),
+        "enter": motion::enter_of(&e, zone), "exit": motion::exit_of(&e, zone),
     }))
     .await?;
     if place::underneath(zone) {
@@ -106,8 +108,9 @@ fn natural_of(e: &Entry) -> Option<(u32, u32)> {
 async fn source_for(call: &Call, e: &Entry, values: Option<&Map<String, Value>>) -> Result<String, RpcError> {
     let uri = uri_of(e)?;
     let mut params = Map::new();
+    let html_template = uri.starts_with("html:");
     match e.item.kind {
-        GalleryKind::Template => {
+        _ if html_template || e.item.kind == GalleryKind::Template => {
             let mut fields = e.item.values.clone();
             fields.extend(values.cloned().unwrap_or_default());
             params.insert("fields".into(), Value::Object(fields));

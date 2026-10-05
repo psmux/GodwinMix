@@ -83,7 +83,7 @@ older one.
 | `template` | an SVG with `{{fields}}` | the mixer, `template:` | a source over the canvas, with the item's values as `params.fields` |
 | `image` | PNG, WebP, JPEG, or an SVG with no fields | the mixer, `image/source` | a source in the zone |
 | `clip` | WebM (VP8 or VP9, alpha or not), MOV (ProRes 4444, QuickTime Animation, PNG), MP4 | the mixer's clip source, looped | a source in the zone |
-| `html` | `index.html`, with anything it loads beside it | the browser source | a web source loading the item's folder from the mixer |
+| `html` | `index.html`, with anything it loads beside it | the browser source; a page with a `gmx-template` block is an HTML template, `html/graphic` | a web source loading the item's folder from the mixer, or for an HTML template `html:<file>` with the item's values as `params.fields` and a `hold` exit for its own way out |
 | `ograf` | `graphic.ograf.json` beside its web component | the OGraf plugin | a web source, as the OGraf plugin serves it |
 | `ticker` | none: `[source]` with a `ticker:` uri | the mixer, `ticker/source` | a source in the bottom strip |
 | `text` | none: `[source]` with a `text:` uri | the mixer, `text/source` | a source in the zone |
@@ -119,7 +119,9 @@ presenter_x = 0.62             # 0 left to 1 right
 screen = "green"               # green, blue, or none for a cut out with no screen
 ```
 
-`background` and `foreground` are files in the folder. A set's lower third
+`background` and `foreground` are files in the folder. A page with a
+`gmx-template` block is drawn as an HTML template (a moving backdrop) and an
+SVG with fields as an SVG template; anything else by its path. A set's lower third
 area is the layout's own; place a `lower-third` item on the new scene for the
 words.
 

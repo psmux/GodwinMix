@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>3D title card</title>
+<script type="application/json" id="gmx-template">
+{
+  "title": "3D title card",
+  "description": "A full screen title card: a kicker, a big title and a subtitle beside a slowly turning faceted crystal drawn in WebGL, on a deep gradient. Covers the picture on purpose. Works with no GPU, at a lower resolution.",
+  "category": "title",
+  "opaque": true,
+  "out_ms": 600,
+  "fields": {
+    "kicker":   {"label": "Kicker", "default": "SPECIAL REPORT"},
+    "title":    {"label": "Title", "default": "The Engine Age"},
+    "subtitle": {"label": "Subtitle", "default": "How a machine of brass and cards changed everything"},
+    "accent":   {"label": "Accent colour", "type": "color", "default": "#22d3ee"},
+    "panel":    {"label": "Background colour", "type": "color", "default": "#0b1026"},
+    "text":     {"label": "Text colour", "type": "color", "default": "#ffffff"}
+  }
+}
+</script>
+<style>
+  :root { --accent: #22d3ee; --panel: #0b1026; --text: #ffffff; }
+  html, body { margin: 0; overflow: hidden; height: 100%; }
+  body { font-family: Inter, "Segoe UI", "Helvetica Neue", Helvetica, Arial, "DejaVu Sans", sans-serif; color: var(--text);
+         background: radial-gradient(circle at 72% 45%, color-mix(in srgb, var(--accent) 22%, var(--panel)) 0%, var(--panel) 55%, #000 100%); }
+  canvas { position: absolute; left: 1000px; top: 140px; width: 800px; height: 800px; }
+  .words { position: absolute; left: 140px; top: 330px; width: 900px; }
+  .kicker { font-size: 30px; font-weight: 800; letter-spacing: 6px; color: var(--accent); }
+  .title { font-size: 120px; font-weight: 900; line-height: 1.02; letter-spacing: -3px; margin: 18px 0 26px; }
+  .subtitle { font-size: 38px; font-weight: 400; opacity: .85; line-height: 1.3; }
+  .rule { width: 180px; height: 6px; background: var(--accent); margin-top: 40px; }
+  .words > * { opacity: 0; transform: translateY(30px); transition: opacity .3s ease-in, transform .3s ease-in; }
+  .rule { transform: scaleX(0); transform-origin: 0 50%; }
+  .gmx-in .words > * { opacity: 1; transform: none; transition: opacity .6s ease-out, transform .8s cubic-bezier(.2, .8, .2, 1); }
+  .gmx-in .kicker { transition-delay: .1s; } .gmx-in .title { transition-delay: .25s; }
+  .gmx-in .subtitle { transition-delay: .4s; } .gmx-in .rule { transition-delay: .55s; }
+  canvas { opacity: 0; transition: opacity .5s; } .gmx-in canvas { opacity: 1; transition: opacity 1s .2s; }
+</style>
+</head>
+<body>
+  <canvas id="gl" width="800" height="800"></canvas>
+  <div class="words">
+    <div class="kicker" data-field="kicker">SPECIAL REPORT</div>
+    <div class="title" data-field="title">The Engine Age</div>
+    <div class="subtitle" data-field="subtitle">How a machine of brass and cards changed everything</div>
+    <div class="rule"></div>
+  </div>
+<script>
+  // ---- mini3d: one lit mesh in plain WebGL. Change SHAPE, SPEED and the colour below. ----
+  var SPEED = 0.25;              // turns a second, roughly
+  var canvas = document.getElementById("gl");
+  var gl = canvas.getContext("webgl", { alpha: true, premultipliedAlpha: true, antialias: true });
+  // With no GPU the browser draws WebGL on the CPU: draw at half size and 20 frames a second.
+  var soft = false;
+  if (gl) {
+    var info = gl.getExtension("WEBGL_debug_renderer_info");
+    var who = info ? gl.getParameter(info.UNMASKED_RENDERER_WEBGL) : "";
+    soft = /swiftshader|llvmpipe|basic render|software/i.test(who);
+    if (soft) { canvas.width = 400; canvas.height = 400; }
+  }
+  function icosahedron() {
+    var t = (1 + Math.sqrt(5)) / 2, v = [[-1,t,0],[1,t,0],[-1,-t,0],[1,-t,0],[0,-1,t],[0,1,t],[0,-1,-t],[0,1,-t],[t,0,-1],[t,0,1],[-t,0,-1],[-t,0,1]];
+    var f = [[0,11,5],[0,5,1],[0,1,7],[0,7,10],[0,10,11],[1,5,9],[5,11,4],[11,10,2],[10,7,6],[7,1,8],[3,9,4],[3,4,2],[3,2,6],[3,6,8],[3,8,9],[4,9,5],[2,4,11],[6,2,10],[8,6,7],[9,8,1]];
+    var pos = [], nrm = [];
+    f.forEach(function (tri) {
+      var a = v[tri[0]], b = v[tri[1]], c = v[tri[2]];
+      var n = [(a[0]+b[0]+c[0]), (a[1]+b[1]+c[1]), (a[2]+b[2]+c[2])], l = Math.hypot(n[0], n[1], n[2]);
+      [a, b, c].forEach(function (p) { pos.push(p[0] / 1.9, p[1] / 1.9, p[2] / 1.9); nrm.push(n[0] / l, n[1] / l, n[2] / l); });
+    });
+    return { pos: new Float32Array(pos), nrm: new Float32Array(nrm) };
+  }
+  function program(vs, fs) {
+    function sh(type, src) { var s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); return s; }
+    var p = gl.createProgram(); gl.attachShader(p, sh(gl.VERTEX_SHADER, vs)); gl.attachShader(p, sh(gl.FRAGMENT_SHADER, fs));
+    gl.linkProgram(p); gl.useProgram(p); return p;
+  }
+  function attribute(p, name, data) {
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer()); gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+    var at = gl.getAttribLocation(p, name); gl.enableVertexAttribArray(at); gl.vertexAttribPointer(at, 3, gl.FLOAT, false, 0, 0);
+  }
+  function turn(ax, ay) {   // rotation about x then y, as a column major 4x4
+    var cx = Math.cos(ax), sx = Math.sin(ax), cy = Math.cos(ay), sy = Math.sin(ay);
+    return [cy, sx * sy, -cx * sy, 0, 0, cx, sx, 0, sy, -sx * cy, cx * cy, 0, 0, 0, 0, 1];
+  }
+  function colour() {
+    var c = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim().replace("#", "");
+    if (c.length === 3) c = c.replace(/./g, "$&$&");
+    return [parseInt(c.slice(0, 2), 16) / 255, parseInt(c.slice(2, 4), 16) / 255, parseInt(c.slice(4, 6), 16) / 255];
+  }
+  if (gl) {
+    var mesh = icosahedron();
+    var p = program(
+      "attribute vec3 pos; attribute vec3 nrm; uniform mat4 turn; varying vec3 n; varying vec3 v;" +
+      "void main() { vec4 w = turn * vec4(pos, 1.0); n = (turn * vec4(nrm, 0.0)).xyz; v = w.xyz; gl_Position = vec4(w.xy, w.z * 0.3, 1.0); }",
+      "precision mediump float; uniform vec3 tint; varying vec3 n; varying vec3 v;" +
+      "void main() { vec3 l = normalize(vec3(-0.4, 0.7, -1.0)); float d = max(dot(normalize(n), l), 0.0);" +
+      " float rim = pow(1.0 - abs(normalize(n).z), 2.0); vec3 c = tint * (0.25 + 0.75 * d) + rim * 0.35;" +
+      " gl_FragColor = vec4(c, 1.0); }");
+    attribute(p, "pos", mesh.pos); attribute(p, "nrm", mesh.nrm);
+    gl.enable(gl.DEPTH_TEST);
+    var uTurn = gl.getUniformLocation(p, "turn"), uTint = gl.getUniformLocation(p, "tint");
+    var running = false, last = 0;
+    function frame(ms) {
+      if (!running) return;
+      requestAnimationFrame(frame);
+      if (soft && ms - last < 50) return;   // 20 frames a second on the CPU
+      last = ms;
+      var t = ms / 1000 * SPEED * Math.PI * 2;
+      gl.viewport(0, 0, canvas.width, canvas.height);
+      gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+      gl.uniformMatrix4fv(uTurn, false, turn(0.4 + 0.15 * Math.sin(t * 0.3), t * 0.5));
+      gl.uniform3fv(uTint, colour());
+      gl.drawArrays(gl.TRIANGLES, 0, mesh.pos.length / 3);
+    }
+    // Turn only while on air; held, it paints nothing.
+    window.addEventListener("gmx:in", function () { if (!running) { running = true; requestAnimationFrame(frame); } });
+    window.addEventListener("gmx:out", function () { setTimeout(function () { running = false; }, 600); });
+  }
+</script>
+</body>
+</html>

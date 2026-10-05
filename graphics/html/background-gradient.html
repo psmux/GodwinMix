@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Gradient background loop</title>
+<script type="application/json" id="gmx-template">
+{
+  "title": "Gradient background loop",
+  "description": "A full screen background of slowly drifting colour, for behind a presenter cut out of a green screen or a camera with its background removed. Three colours. Drawn small and stretched, which a soft gradient does not show, so it is cheap.",
+  "category": "background",
+  "opaque": true,
+  "fps": 20,
+  "resolution": 0.5,
+  "fields": {
+    "accent": {"label": "First colour", "type": "color", "default": "#4f46e5"},
+    "second": {"label": "Second colour", "type": "color", "default": "#db2777"},
+    "panel":  {"label": "Base colour", "type": "color", "default": "#0b1026"},
+    "speed":  {"label": "Speed, 1 is slow", "default": "1"}
+  }
+}
+</script>
+<style>
+  :root { --accent: #4f46e5; --second: #db2777; --panel: #0b1026; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--panel); }
+  /* A quarter size canvas stretched to the page: soft colour loses nothing. */
+  canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+</style>
+</head>
+<body>
+  <canvas id="c" width="480" height="270"></canvas>
+<script>
+  var c = document.getElementById("c"), g = c.getContext("2d"), speed = 1, running = false, last = 0;
+  function css(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+  function glow(x, y, r, colour, alpha) {
+    var grad = g.createRadialGradient(x, y, 0, x, y, r);
+    grad.addColorStop(0, colour); grad.addColorStop(1, "transparent");
+    g.globalAlpha = alpha; g.fillStyle = grad; g.fillRect(0, 0, 480, 270);
+  }
+  function draw(t) {
+    g.globalAlpha = 1; g.fillStyle = css("--panel"); g.fillRect(0, 0, 480, 270);
+    // Three glows on slow loops of different lengths, so it never repeats exactly.
+    glow(140 + 90 * Math.sin(t / 13), 60 + 50 * Math.cos(t / 11), 260, css("--accent"), 0.6);
+    glow(360 + 80 * Math.cos(t / 17), 190 + 40 * Math.sin(t / 15), 240, css("--second"), 0.55);
+    glow(240 + 120 * Math.sin(t / 23), 150 + 60 * Math.sin(t / 19), 200, css("--accent"), 0.3);
+    var shade = g.createRadialGradient(240, 110, 120, 240, 135, 300);
+    shade.addColorStop(0, "rgba(0,0,0,0)"); shade.addColorStop(1, "rgba(0,0,0,0.55)");
+    g.globalAlpha = 1; g.fillStyle = shade; g.fillRect(0, 0, 480, 270);
+  }
+  function frame(ms) {
+    if (!running) return;
+    requestAnimationFrame(frame);
+    if (ms - last < 50) return;   // 20 frames a second
+    last = ms; draw(ms / 1000 * speed);
+  }
+  window.addEventListener("gmx:update", function (e) { speed = Math.max(0.1, Number(e.detail.speed) || 1); draw(last / 1000 * speed); });
+  // Still until it is on air: a background nobody sees costs nothing.
+  window.addEventListener("gmx:in", function () { if (!running) { running = true; requestAnimationFrame(frame); } });
+  window.addEventListener("gmx:out", function () { running = false; });
+  draw(0);
+</script>
+</body>
+</html>

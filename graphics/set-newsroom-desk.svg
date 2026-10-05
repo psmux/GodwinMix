@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:gmx="https://godwinmix.dev/ns/template" viewBox="0 0 1920 1080" width="1920" height="1080">
+  <metadata>
+    <gmx:template title="Newsroom desk" description="Virtual set foreground: an anchor desk across the bottom middle, in front of the presenter, with the station's name on its front. Transparent everywhere else. Pairs with the set-newsroom HTML background in the virtual-set layout."/>
+    <gmx:field name="station" label="Name on the desk" default="GMX NEWS"/>
+    <gmx:field name="accent" label="Accent colour" type="color" default="#e11d48"/>
+    <gmx:field name="panel" label="Desk colour" type="color" default="#0f1b3d"/>
+    <gmx:field name="text" label="Text colour" type="color" default="#ffffff"/>
+  </metadata>
+  <defs>
+    <linearGradient id="top" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0.12"/>
+    </linearGradient>
+    <linearGradient id="front" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#000000" stop-opacity="0"/>
+      <stop offset="1" stop-color="#000000" stop-opacity="0.55"/>
+    </linearGradient>
+  </defs>
+  <style>
+    .type { font-family: Inter, 'Helvetica Neue', Helvetica, Arial, 'DejaVu Sans', 'Liberation Sans', sans-serif; }
+  </style>
+  <!-- The desk top: a shallow curve the presenter stands behind. -->
+  <path d="M 330 842 Q 960 790 1590 842 L 1620 872 Q 960 822 300 872 Z" fill="{{panel}}"/>
+  <path d="M 330 842 Q 960 790 1590 842 L 1620 872 Q 960 822 300 872 Z" fill="url(#top)"/>
+  <!-- The front, down to the bottom of the picture. -->
+  <path d="M 300 872 Q 960 822 1620 872 L 1560 1080 L 360 1080 Z" fill="{{panel}}"/>
+  <path d="M 300 872 Q 960 822 1620 872 L 1560 1080 L 360 1080 Z" fill="url(#front)"/>
+  <!-- The accent band and the name on it. -->
+  <path d="M 318 905 Q 960 857 1602 905 L 1596 925 Q 960 877 324 925 Z" fill="{{accent}}"/>
+  <text class="type" x="960" y="1010" font-size="64" font-weight="900" letter-spacing="10" text-anchor="middle" fill="{{text}}" fill-opacity="0.92" data-fit-width="1000">{{station}}</text>
+</svg>

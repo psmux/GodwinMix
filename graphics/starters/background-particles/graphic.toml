@@ -1,0 +1,9 @@
+name = "Particle background loop"
+kind = "html"
+file = "background-particles.html"
+zone = "full"
+moves = true
+transparent = false
+description = "A full screen background of soft points of light drifting upwards and joining with faint lines when they pass close, on a dark gradient. For behind a presenter or under a title. Drawn on a canvas at 20 frames a second."
+tags = ["background", "particles", "loop"]
+origin = "shipped"

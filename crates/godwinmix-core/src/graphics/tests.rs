@@ -50,7 +50,8 @@ fn every_template_in_the_pack_loads_and_renders_with_its_defaults() {
         assert_eq!((pic.width, pic.height, pic.natural), (960, 540, (1920, 1080)));
         let c = pic.content.expect("the content is measured");
         assert!(c.w > 20 && c.h > 10, "{} draws something: {c:?}", t.info.name);
-        if t.info.name != "title-card" {
+        // A full screen card and a set's foreground run to the edges.
+        if t.info.name != "title-card" && !t.info.name.starts_with("set-") {
             // Inside title safe, the inner 90 percent, at half size.
             let safe = Rect::new(48, 27, 864, 486);
             assert_eq!(c.within(&safe), Some(c), "{} stays inside title safe: {c:?}", t.info.name);

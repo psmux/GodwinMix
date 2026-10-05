@@ -71,8 +71,10 @@ is a way to put words on somebody else's programme.
 |---|---|---|
 | `port` | 7841 | The port on the loopback. 0 takes any free one, which is what to use when two mixers share a machine. A port already taken falls back to a free one and the log says which. |
 
-## What transparency costs
+## Transparency
 
-The mixer graph is I420, which carries no alpha. A graphic that is an opaque
-shape is right on air today; one with a soft edge or a gap you should see the
-camera through is not. `docs/reference/graphics.md` says what the change is.
+A graphic is drawn with its transparency kept: its placement's source is a
+transparent page (`browser/source` with `transparent: true`), drawn by the
+browser renderer in graphic mode and blended over the programme by the
+overlay board. Only the painted part of the page crosses to the mixer, and
+only when it changed. `docs/reference/graphics.md` has the detail.

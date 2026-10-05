@@ -1,0 +1,15 @@
+name = "Newsroom set"
+kind = "set"
+moves = true
+transparent = false
+description = "A newsroom: three screens with light moving across them, the station's name on the wall, a glossy floor, and an anchor desk in front of the presenter."
+tags = ["set", "news", "studio", "desk"]
+origin = "shipped"
+
+[set]
+background = "set-newsroom.html"
+foreground = "set-newsroom-desk.svg"
+layout = "virtual-set"
+
+[set.settings]
+screen = "green"

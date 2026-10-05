@@ -1,5 +1,45 @@
 # Where GodwinMix stands
 
+## Graphics that move, 2026-10-06
+
+An audit of what could carry motion and transparency, then the fixes.
+
+**What there was.** Text, tickers, SVG templates, PNG, WebP and SVG stills
+with alpha and clips with alpha (WebM VP8 or VP9 alpha, ProRes 4444) were
+already drawn over the programme by the overlay board. A numbered picture
+sequence plays but flat. Web pages and OGraf graphics were not transparent at
+all: the sidecar could render a page with alpha, but only `layered/source`
+used it, and every `browser/source` went through the compositor opaque.
+`docs/reference/graphics.md` said so. And a page as a stream cost a camera
+whatever it showed: on this laptop (Core Ultra 9 285H, 1080p30) a blank
+transparent page took 125 percent of a core, an animated lower third 180,
+a WebGL cube 213. WebGL itself works with no GPU: Chromium draws it with WARP
+(the Microsoft Basic Render Driver) under `--disable-gpu`.
+
+**What changed.** The renderer has a graphic mode: a frame leaves only when
+Chromium painted, only the box around what is not transparent, in AYUV, with
+patches for changes inside that box; a design that covers the picture is
+sent whole as I420 and goes to the compositor like a camera. `html/graphic`
+draws HTML templates (`html:<name>`) that way, with their fields and their
+way in and out sent on stdin, `Capability::Cue` tells them when the programme
+takes them, and the new `hold` exit keeps the item drawn while the page plays
+its way out. `browser/source` takes `transparent: true`, and OGraf placements
+use it. `template.check` reads a template and says what to fix. Fifteen HTML
+starter designs and two SVG set foregrounds ship in the binary.
+`docs/reference/graphics-for-agents.md` has the rules, the pack and the costs.
+
+**What it costs now.** A held lower third: about 5 percent of a core in the
+renderer. A crawl, a clock or a countdown: 10 to 30. The WebGL logo: about 50.
+Full screen moving designs: 33 to 87 (the backgrounds at half size 33 to 52).
+The mixer adds a few points for each. Allowing the GPU did not help on the
+Intel Arc here (readback cost more than it saved).
+
+**Not done.** Run on Windows only; macOS and Linux have the same code and
+have not run it. A source's renderer runs while the source exists, on air or
+not. `cue` follows the programme only, not the preview. There is no three.js
+offline; the 3D designs are plain WebGL. Each renderer is a Chromium of its
+own (about 6 processes), so many HTML graphics at once cost memory.
+
 ## Two phones that aborted the show, 2026-10-05
 
 In an end to end test of the installed 0.2.1 app, two headless Chrome phones

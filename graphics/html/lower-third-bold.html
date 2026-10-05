@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Bold lower third</title>
+<script type="application/json" id="gmx-template">
+{
+  "title": "Bold lower third",
+  "description": "A big name on a solid block with a slanted accent tab for the role. Pushes in from the left with a slight skew, drops out downwards.",
+  "category": "lower-third",
+  "out_ms": 500,
+  "fields": {
+    "name":   {"label": "Name", "default": "Grace Hopper"},
+    "title":  {"label": "Role", "default": "Rear Admiral, US Navy"},
+    "accent": {"label": "Accent colour", "type": "color", "default": "#ffcc00"},
+    "panel":  {"label": "Block colour", "type": "color", "default": "#111111"},
+    "text":   {"label": "Text colour", "type": "color", "default": "#ffffff"}
+  }
+}
+</script>
+<style>
+  html, body { margin: 0; background: transparent; overflow: hidden; }
+  :root { --accent: #ffcc00; --panel: #111111; --text: #ffffff; }
+  body { font-family: Inter, "Segoe UI", "Helvetica Neue", Helvetica, Arial, "DejaVu Sans", sans-serif; }
+
+  .strap { position: absolute; left: 110px; top: 790px; }
+  .block { display: inline-block; background: var(--panel); color: var(--text); padding: 18px 44px 20px 40px;
+           font-size: 68px; font-weight: 900; text-transform: uppercase; letter-spacing: 1px; white-space: nowrap;
+           transform: translateX(-120%) skewX(-12deg); }
+  .block span { display: inline-block; transform: skewX(12deg); }
+  .tab { display: block; width: max-content; margin: -4px 0 0 34px; background: var(--accent); color: var(--panel);
+         padding: 8px 26px; font-size: 30px; font-weight: 700; white-space: nowrap;
+         transform: skewX(-12deg) scaleX(0); transform-origin: 0 50%; }
+  .tab span { display: inline-block; transform: skewX(12deg); }
+  .strap { transform: translateY(0); opacity: 1; }
+
+  /* Out, and before it is taken. */
+  .block { transition: transform .35s cubic-bezier(.6, 0, .8, .2) .1s; }
+  .tab   { transition: transform .25s ease-in; }
+  .gmx-out .strap { transform: translateY(40px); opacity: 0; transition: transform .45s ease-in, opacity .4s ease-in .05s; }
+
+  /* In. */
+  .gmx-in .block { transform: translateX(0) skewX(-12deg); transition: transform .55s cubic-bezier(.16, 1, .3, 1); }
+  .gmx-in .tab   { transform: skewX(-12deg) scaleX(1); transition: transform .4s cubic-bezier(.16, 1, .3, 1) .35s; }
+</style>
+</head>
+<body>
+  <div class="strap">
+    <div class="block"><span data-field="name">Grace Hopper</span></div>
+    <div class="tab"><span data-field="title">Rear Admiral, US Navy</span></div>
+  </div>
+<script>
+  // Keep a long name inside 1300 pixels.
+  function fit() {
+    var el = document.querySelector(".block"); el.style.fontSize = "";
+    var size = 68; while (el.scrollWidth > 1300 && size > 24) { size -= 2; el.style.fontSize = size + "px"; }
+  }
+  window.addEventListener("gmx:update", fit);
+  fit();
+</script>
+</body>
+</html>
