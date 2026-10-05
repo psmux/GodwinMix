@@ -128,8 +128,8 @@ fn flatten(layers: Vec<Layer>, at: (i32, i32), size: Size) -> Result<Layer> {
                 let src = &l.rgba[i..i + 4];
                 let px = img.get_pixel_mut(x, y);
                 let a = src[3] as u32;
-                for c in 0..3 {
-                    px.0[c] = ((src[c] as u32 * a + px.0[c] as u32 * (255 - a)) / 255) as u8;
+                for (dst, s) in px.0.iter_mut().zip(src).take(3) {
+                    *dst = ((*s as u32 * a + *dst as u32 * (255 - a)) / 255) as u8;
                 }
                 px.0[3] = px.0[3].max(src[3]);
             }
