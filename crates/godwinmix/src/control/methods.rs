@@ -26,6 +26,7 @@ mod feeds;
 mod shows;
 pub mod config;
 mod filters;
+pub(crate) mod gallery;
 pub mod lifecycle;
 mod media;
 mod paths;
@@ -77,6 +78,7 @@ pub fn registry() -> Registry<Call> {
     channel_destinations::register(&mut reg);
     media::register(&mut reg);
     templates::register(&mut reg);
+    gallery::register(&mut reg);
     tasks::register(&mut reg);
     agent::register(&mut reg);
     filters::register(&mut reg);

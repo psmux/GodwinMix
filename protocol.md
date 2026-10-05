@@ -80,6 +80,16 @@ Keys accepted on every method, handled before a method runs.
 | `filter.list` | `GET /api/v1/filters` | read |  | 1 | Every filter in place, with what it is and where it sits. |
 | `filter.remove` | `DELETE /api/v1/filters/{id}` | operate | yes | 1 | Take a filter out of the pipeline. |
 | `filter.set` | `POST /api/v1/filters/{id}/set` | operate |  | 1 | Change a filter's settings in place. A filter that cannot take the change while running says so rather than being restarted behind your back. |
+| `gallery.duplicate` | `POST /api/v1/gallery/duplicate` | operate |  | 1 | Copy an item, shipped ones included, under a new name. |
+| `gallery.edit` | `POST /api/v1/gallery/edit` | operate |  | 1 | Change an item's name, tags, description, zone or the values it fills its fields with. |
+| `gallery.export` | `POST /api/v1/gallery/export` | operate |  | 1 | Write gallery items to one zip on the mixer, to carry a look to another mixer. |
+| `gallery.import` | `POST /api/v1/gallery/import` | operate |  | 1 | Take files into the gallery: a gallery zip, an SVG, an HTML page or folder, an OGraf package, a picture or a clip. Each is checked; refused ones say why and how to fix them. |
+| `gallery.list` | `GET /api/v1/gallery/list` | read |  | 1 | The Graphics gallery: every lower third, background, ticker, bug, title card, page, clip and virtual set, made here or shipped, with what each is and where it goes. |
+| `gallery.place` | `POST /api/v1/gallery/place` | operate |  | 1 | Add a gallery item to a scene in its zone (a lower third low on the left, a background under everything, a bug in the corner), hidden until gallery.show. A set becomes a new scene. |
+| `gallery.preview` | `POST /api/v1/gallery/preview` | read |  | 1 | A picture of a gallery item as it would land on the canvas, transparent parts over a checkerboard, drawn on demand. |
+| `gallery.remove` | `POST /api/v1/gallery/remove` | operate | yes | 1 | Delete a saved item and its files. Refused while a source shows it. |
+| `gallery.save` | `POST /api/v1/gallery/save` | operate |  | 1 | Save a graphic of any kind into the gallery with a name, tags and a description: an SVG template, an HTML page, a picture or clip, a ticker or text, or a virtual set. |
+| `gallery.show` | `POST /api/v1/gallery/show` | operate |  | 1 | Show a placed gallery item on air, or hide it, taking its scene when that scene is not on air. For a set, take its scene. |
 | `governor.calibrate` | `POST /api/v1/governor/calibrate` | admin |  | 1 | Measure this machine's encoders again, in the background, a few seconds of every core. Refused while anything is on air unless `confirm` is true. |
 | `governor.status` | `GET /api/v1/governor/status` | read |  | 1 | The resource governor: when this machine was measured, what is in use and free on the CPU and each GPU encoder, and what was shed to keep the programme whole. |
 | `log.gst` | `POST /api/v1/log/gst` | admin |  | 1 | Raise GStreamer's own debug categories for a while, then let them fall back on their own. |
@@ -1000,6 +1010,176 @@ Change a filter's settings in place. A filter that cannot take the change while 
   },
   "result": {
     "$ref": "#/$defs/FilterRecord"
+  }
+}
+```
+
+#### `gallery.duplicate`
+
+Copy an item, shipped ones included, under a new name.
+
+MCP tool `duplicate_graphic` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint false.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/GalleryDuplicateRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/GallerySaved"
+  }
+}
+```
+
+#### `gallery.edit`
+
+Change an item's name, tags, description, zone or the values it fills its fields with.
+
+MCP tool `edit_graphic` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/GalleryEditRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/GallerySaved"
+  }
+}
+```
+
+#### `gallery.export`
+
+Write gallery items to one zip on the mixer, to carry a look to another mixer.
+
+MCP tool `export_graphics` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint false.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/GalleryExportRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/GalleryExported"
+  }
+}
+```
+
+#### `gallery.import`
+
+Take files into the gallery: a gallery zip, an SVG, an HTML page or folder, an OGraf package, a picture or a clip. Each is checked; refused ones say why and how to fix them.
+
+MCP tool `import_graphics` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint false.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/GalleryImportRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/GalleryImported"
+  }
+}
+```
+
+#### `gallery.list`
+
+The Graphics gallery: every lower third, background, ticker, bug, title card, page, clip and virtual set, made here or shipped, with what each is and where it goes.
+
+MCP tool `list_graphics` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/GalleryListRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/GalleryList"
+  }
+}
+```
+
+#### `gallery.place`
+
+Add a gallery item to a scene in its zone (a lower third low on the left, a background under everything, a bug in the corner), hidden until gallery.show. A set becomes a new scene.
+
+MCP tool `place_graphic` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint false.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/GalleryPlaceRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/GalleryPlaced"
+  }
+}
+```
+
+#### `gallery.preview`
+
+A picture of a gallery item as it would land on the canvas, transparent parts over a checkerboard, drawn on demand.
+
+MCP tool `preview_graphic` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/GalleryPreviewRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/GalleryPreview"
+  }
+}
+```
+
+#### `gallery.remove`
+
+Delete a saved item and its files. Refused while a source shows it.
+
+MCP tool `remove_graphic` in the `search` profile: readOnlyHint false, destructiveHint true, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/GalleryIdRequest"
+  },
+  "result": {
+    "type": "object"
+  }
+}
+```
+
+#### `gallery.save`
+
+Save a graphic of any kind into the gallery with a name, tags and a description: an SVG template, an HTML page, a picture or clip, a ticker or text, or a virtual set.
+
+MCP tool `save_graphic` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint false.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/GallerySaveRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/GallerySaved"
+  }
+}
+```
+
+#### `gallery.show`
+
+Show a placed gallery item on air, or hide it, taking its scene when that scene is not on air. For a set, take its scene.
+
+MCP tool `show_graphic` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint false.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/GalleryShowRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/GalleryShown"
   }
 }
 ```
@@ -3534,6 +3714,10 @@ The paths below still answer, for one release, with a `Deprecation: true` header
 | `GET /rpc` | the JSON-RPC WebSocket. Everything in `methods` is reachable here. |
 | `GET /api/v1/status` | an alias for GET /api/v1/core/status, because it is what people type |
 | `ANY /api/v1/{*rest}` | every method's REST route, generated by the transform rule |
+| `GET /api/v1/gallery/{id}/preview.jpg` | a gallery item's picture as a JPEG, for an <img>: ?width= (64 to 1920) and ?background= (checker, black, white, #rrggbb), as gallery.preview draws it |
+| `GET /api/v1/gallery/{id}/files/{*path}` | one of a gallery item's own files: an HTML graphic's page for the browser source, a clip for a moving preview. Open to a process on the mixer's machine; a token with read from anywhere else |
+| `GET /api/v1/gallery/exports/{file}` | a zip gallery.export wrote, to download |
+| `POST /api/v1/gallery/upload` | ?name=<file name>, the body a file: checked and taken into the gallery as gallery.import does, answered with what was added and what was refused and why |
 | `POST /whip/{channel}/{stream}` | WHIP ingest for a channel that has WHIP on. The body is the SDP offer, the channel's key is the bearer token, and the answer is 201 with the SDP answer and the session's Location. |
 | `DELETE /whip/{channel}/{stream}/{session}` | ends a WHIP session, as the WHIP client does when it stops publishing |
 | `PATCH /whip/{channel}/{stream}/{session}` | 405: every candidate is in the answer, and none are taken later |

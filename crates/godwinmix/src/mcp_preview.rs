@@ -13,12 +13,15 @@ use serde_json::{json, Value};
 pub fn content(text: &str) -> Option<Value> {
     let body: Value = serde_json::from_str(text.trim()).ok()?;
     let data = body.get("image")?.as_str()?;
-    let caption = format!(
-        "the armed scene {} at {}x{}",
-        body.get("scene").and_then(Value::as_str).unwrap_or("?"),
-        body.get("width").and_then(Value::as_u64).unwrap_or(0),
-        body.get("height").and_then(Value::as_u64).unwrap_or(0)
-    );
+    // A gallery preview says what it is in its own caption.
+    let caption = body.get("caption").and_then(Value::as_str).map(str::to_string).unwrap_or_else(|| {
+        format!(
+            "the armed scene {} at {}x{}",
+            body.get("scene").and_then(Value::as_str).unwrap_or("?"),
+            body.get("width").and_then(Value::as_u64).unwrap_or(0),
+            body.get("height").and_then(Value::as_u64).unwrap_or(0)
+        )
+    });
     Some(json!({ "content": [
         { "type": "image", "data": data, "mimeType": "image/jpeg" },
         { "type": "text", "text": caption }

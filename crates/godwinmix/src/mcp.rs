@@ -390,7 +390,7 @@ impl Server {
         // when the mixer happens to be down too.
         self.check_required(tool, method, &args, &path)?;
         let image = tool == "snapshot";
-        let preview = tool == "preview_frame";
+        let preview = tool == "preview_frame" || tool == "preview_graphic";
         Ok(Plan { verb, path, args, image, preview })
     }
 
@@ -586,7 +586,9 @@ fn initialize_result(params: &Value, profile: Profile) -> Value {
              `show_stats` watches them all in one read. In a mix, start with `agent_state` to \
              learn the source ids and how much each picture is moving, then `take` to switch \
              what is on air; tools that work inside one show take `show: <id>` and default to \
-             the first. `snapshot` shows you a picture when a number is not enough. You are on the {} tool profile; anything not in \
+             the first. `snapshot` shows you a picture when a number is not enough. To make graphics (a lower third, \
+             a background, a ticker, a bug, a title card, a virtual set), call save_graphic, preview_graphic, \
+             place_graphic and show_graphic by name; list_graphics searches what is saved. You are on the {} tool profile; anything not in \
              your list is reachable through `search_tools` and can be called by name. Every \
              tool talks to the running mixer over its HTTP API, so refusals come back \
              verbatim with the mixer's own reason and the next step to take. Mutating tools \

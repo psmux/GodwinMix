@@ -58,9 +58,22 @@ fn templated(id: &str, at: Where, t: &crate::graphics::Template, origin: Origin)
     let mut item = super::entry::item(id, &manifest, None);
     item.fields = t.info.fields.clone();
     item.uri = Some(t.info.uri.clone());
-    item.zone = if t.info.name == "title-card" { godwinmix_protocol::gallery::Zone::Full } else { item.zone };
+    item.zone = pack_zone(&t.info.name).unwrap_or(item.zone);
     item.transparent = t.info.name != "title-card";
     Entry { item, manifest, at, starter: None }
+}
+
+/// What each pack template is for. Each is laid out on a whole frame, so
+/// it is still placed over the whole canvas; the zone says what it is.
+fn pack_zone(name: &str) -> Option<godwinmix_protocol::gallery::Zone> {
+    use godwinmix_protocol::gallery::Zone;
+    Some(match name {
+        "news-lower-third" | "breaking-news" | "headline-strap" | "location-tag" => Zone::LowerThird,
+        "score-bug" | "logo-bug" => Zone::Bug,
+        "title-card" => Zone::Full,
+        "quote-card" => Zone::Center,
+        _ => return None,
+    })
 }
 
 /// The folders in the gallery, newest first.
