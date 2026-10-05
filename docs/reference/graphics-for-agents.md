@@ -170,7 +170,13 @@ library. There is no three.js built in, and a page cannot fetch one.
 
 `list_templates` lists them with every field. HTML designs are added as
 `html:<name>`, SVG ones as `template:<name>`. The files are in the repository
-under `graphics/html/` and `graphics/`.
+under `graphics/html/` and `graphics/`. Every HTML design is also a starter in
+the Graphics gallery under the same id (`list_graphics`, then `place_graphic`
+and `show_graphic`), placed with its fields and a `hold` exit, and the two
+sets are gallery starters `studio-newsroom` and `studio-ring`, which
+`place_graphic {"id": "studio-newsroom", "camera": "cam1"}` makes into a
+scene. Their gallery folders are under `graphics/starters/`; see
+[the gallery's item format](gallery-format.md).
 
 | Name | Format | What it is |
 |---|---|---|
