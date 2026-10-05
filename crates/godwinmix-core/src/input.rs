@@ -30,6 +30,8 @@ use std::time::{Duration, Instant};
 use tracing::{debug, info, warn};
 
 pub mod lifecycle;
+#[cfg(all(test, not(unix)))]
+mod pipe_tests;
 
 /// Thumbnails are produced at a fixed size in the input pipeline. The
 /// multiview compositor scales each one to whatever its cell happens to be, so
@@ -2349,24 +2351,46 @@ const EXEC_READ_BYTES: u32 = 4 * 1024 * 1024;
 /// buffers with their arrival time before the demuxer sees them destroys the
 /// timing the container carries. The demuxer's own timestamps are the correct
 /// ones, and the mixer pad offset aligns them afterwards.
-#[cfg(unix)]
 fn new_exec_source(id: &str) -> Result<gst::Element> {
-    let src = make("fdsrc", &format!("{id}-src-exec"))?;
+    pipe_source(&format!("{id}-src-exec"))
+}
+
+/// The element a child's stdout is read into, for an `exec:` source and for a
+/// sidecar on the `container` transport alike.
+///
+/// On Windows it is an `appsrc` that blocks when it holds `PIPE_QUEUE_BYTES`.
+/// A plain `appsrc` does not: past its `max-bytes` it says "enough data" and
+/// keeps every buffer it is given. The sidecar host built one of those for
+/// the camera and the screen, and on 2026-10-05, with the machine loaded and
+/// the decode behind it falling short of the camera's frame rate, every raw
+/// 1080p frame the camera wrote was queued in this process. The camera's
+/// pictures reached the programme 47 minutes late and the mixer grew to about
+/// 12 GB before an allocation of one frame failed and took it down. Blocking
+/// here fills the pipe instead, and the sidecar's own leaky queue drops what
+/// it cannot send, which is the right place for a live source to lose frames.
+#[cfg(unix)]
+pub(crate) fn pipe_source(name: &str) -> Result<gst::Element> {
+    let src = make("fdsrc", name)?;
     src.set_property("blocksize", EXEC_READ_BYTES);
     Ok(src)
 }
 
 #[cfg(not(unix))]
-fn new_exec_source(id: &str) -> Result<gst::Element> {
+pub(crate) fn pipe_source(name: &str) -> Result<gst::Element> {
     let src = gstreamer_app::AppSrc::builder()
-        .name(format!("{id}-src-exec"))
+        .name(name)
         .format(gst::Format::Bytes)
         .stream_type(gstreamer_app::AppStreamType::Stream)
         .block(true)
-        .max_bytes(4 * EXEC_READ_BYTES as u64)
+        .max_bytes(PIPE_QUEUE_BYTES)
         .build();
     Ok(src.upcast())
 }
+
+/// What a Windows pipe source holds before the reader thread waits: four
+/// reads, which is five raw 1080p frames.
+#[cfg(not(unix))]
+pub(crate) const PIPE_QUEUE_BYTES: u64 = 4 * EXEC_READ_BYTES as u64;
 
 /// Connect a freshly started child's stdout to the source element.
 ///

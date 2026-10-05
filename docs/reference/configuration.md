@@ -225,7 +225,7 @@ What the supervisor does with a source that has stopped delivering.
 
 | Key | Default | Meaning |
 |---|---|---|
-| `restart_after_secs` | 10 | seconds a source may deliver nothing before its pipeline is rebuilt |
+| `restart_after_secs` | 10 | seconds a source may deliver nothing before its pipeline is rebuilt. Doubles with each restart that does not hold, to 16 times this at most, and counts a quarter while the programme itself is short of frames; see [sources](sources.md#when-a-source-stops-delivering) |
 | `rebuild_attempts` | 3 | attempts at full speed before the backoff starts |
 | `rebuild_backoff_secs` | 30 | first delay after those attempts |
 | `rebuild_backoff_max_secs` | 300 | ceiling the delay doubles up to |
@@ -233,7 +233,10 @@ What the supervisor does with a source that has stopped delivering.
 
 The backoff exists because of two specific nights: 485 rebuilds one night and
 1,174 the next, on a superimposed source that could not recover. The counter is
-cleared the moment the source delivers a frame.
+cleared once the source has stayed live for a minute after its last restart,
+not at its first frame: on 2026-10-05 a page that came back for two seconds
+between stalls was rebuilt 43 times in an hour because its first frame cleared
+it every time.
 
 ## `[vitals]`
 

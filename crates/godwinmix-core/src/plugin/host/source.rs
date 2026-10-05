@@ -233,16 +233,12 @@ impl SidecarSource {
             .context("nothing has been negotiated; the handshake has not run")?;
         match transport {
             Transport::Container => {
-                let src = crate::gstutil::make(
-                    if cfg!(unix) { "fdsrc" } else { "appsrc" },
-                    &format!("{id}-src-container"),
-                )?;
-                if cfg!(unix) {
-                    // Frame sized reads rather than the 4 KB default. A source
-                    // writing raw video moves a lot through that pipe, and the
-                    // difference is whether it keeps up.
-                    crate::probe::set_int(&src, "blocksize", 4 * 1024 * 1024);
-                }
+                // The same element an `exec:` source reads its child through:
+                // frame sized reads on unix, and on Windows an `appsrc` that
+                // blocks when it is full rather than queueing without end,
+                // which is what took the mixer to 12 GB on 2026-10-05. See
+                // `input::pipe_source`.
+                let src = crate::input::pipe_source(&format!("{id}-src-container"))?;
                 let decode = transport::decoder(&id)?;
                 // A hardware decoder may hand out frames in device memory, and
                 // the normaliser wants them in system memory. `decodebin`
