@@ -150,8 +150,10 @@
 /* A narrow window puts the inspector under the picture rather than beside it,
  * because a 300 px column on a phone leaves no picture at all. */
 @media (max-width: 720px) {
+  /* minmax(0, 1fr) and not 1fr, or the widest toolbar row sets the width of
+   * the canvas under it and both run off a phone's screen. */
   .composer-body {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     grid-template-areas:
       "bar"
       "health"
@@ -162,6 +164,13 @@
   .composer-side {
     border-left: 0;
     border-top: var(--border) solid var(--line);
+  }
+
+  .composer-group {
+    flex-wrap: wrap;
+    min-width: 0;
+    padding-right: 0;
+    border-right: 0;
   }
 }
 

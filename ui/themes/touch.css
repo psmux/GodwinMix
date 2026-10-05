@@ -93,7 +93,7 @@
   /* Dialogs use the whole width and scroll inside, never the page sideways. */
   .scrim { padding: 8px; align-items: start; overflow: auto; }
   .dialog { max-width: 100%; max-height: calc(100dvh - 16px); }
-  .dialog > footer { flex-wrap: wrap; }
+  .dialog > footer, .dialog .row { flex-wrap: wrap; }
   .palette { padding-top: 8px; }
   .palette .box { width: calc(100vw - 16px); max-height: calc(100dvh - 16px); }
   .menu { max-width: calc(100vw - 12px); }
