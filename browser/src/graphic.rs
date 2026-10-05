@@ -1,79 +1,27 @@
 //! Graphic mode (`--graphic`): a transparent page as pictures, not a stream.
 //!
 //! A lower third, a bug or a ticker drawn by a web page is mostly nothing.
-//! Sent as a stream it costs what a camera costs: every frame at the canvas
-//! rate, the whole canvas, converted and muxed whether or not a pixel moved.
-//! Measured on a 2024 laptop at 1080p30, a blank transparent page sent that
-//! way took 125 percent of a core.
-//!
-//! So in graphic mode nothing is paced and nothing is muxed. A frame leaves
-//! only when Chromium painted one, and only the part of the page that has
-//! anything in it leaves: the box around every pixel that is not fully
-//! transparent, already in the AYUV the mixer's overlay board draws. A held
-//! graphic sends nothing at all. On stdout, per frame:
+//! Sent as a stream it costs a camera: every frame, the whole canvas,
+//! converted and muxed whether or not a pixel moved (a blank transparent
+//! page took 125 percent of a core at 1080p30 on the development laptop).
+//! Here a frame leaves only when Chromium painted one, and only the box
+//! around what is not fully transparent, in the AYUV the overlay board
+//! draws (A, Y, U, V, straight alpha, BT.709 limited range):
 //!
 //! ```text
-//!   "GMXF"  u32 LE: page width, page height, x, y, w, h   then w*h*4 bytes AYUV
+//!   "GMXF"  u32 LE: page width, page height, x, y, w, h   then w*h*4 bytes
+//!   "GMXP"  the same, a patch: a change inside the last box, away from its edges
+//!   "GMXI"  u32 LE: width, height, 0, 0, width, height   then w*h*3/2 bytes of I420
 //! ```
 //!
-//! `w` and `h` are zero when the page is empty. AYUV is A, Y, U, V per pixel,
-//! straight alpha, BT.709 limited range, which is the canvas's colorimetry.
-//!
-//! When what changed lies inside the box already sent, away from its edges,
-//! the box cannot have changed, and only the changed part is sent, as a
-//! patch the mixer copies into the picture it holds:
-//!
-//! ```text
-//!   "GMXP"  u32 LE: page width, page height, x, y, w, h   then w*h*4 bytes
-//! ```
-//!
-//! That is what keeps a full screen design with one moving corner (a title
-//! card with a spinning logo) costing the corner and not the screen.
-//!
-//! A design that covers the whole picture (`--opaque`: a background, a
-//! title card) has no alpha to keep and goes to the compositor like a
-//! camera, so it is sent whole, as I420, a third of the bytes of AYUV:
-//!
-//! ```text
-//!   "GMXI"  u32 LE: page width, page height, 0, 0, width, height   then w*h*3/2 bytes
-//! ```
+//! `w` and `h` are zero when the page is empty. `GMXI` is the whole page,
+//! for a design that covers the picture (`--opaque`), which needs no alpha
+//! and goes to the compositor like a camera.
 
+pub use crate::area::Area;
 use crate::pixels::{content, copy_area, encode, encode_as, inside};
 use std::io::Write;
 use std::sync::{Arc, Condvar, Mutex};
-
-/// A rectangle of the page, in pixels.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct Area {
-    pub x: i32,
-    pub y: i32,
-    pub w: i32,
-    pub h: i32,
-}
-
-impl Area {
-    pub fn is_empty(&self) -> bool {
-        self.w <= 0 || self.h <= 0
-    }
-
-    pub fn union(self, o: Area) -> Area {
-        if self.is_empty() {
-            return o;
-        }
-        if o.is_empty() {
-            return self;
-        }
-        let (x0, y0) = (self.x.min(o.x), self.y.min(o.y));
-        let (x1, y1) = ((self.x + self.w).max(o.x + o.w), (self.y + self.h).max(o.y + o.h));
-        Area { x: x0, y: y0, w: x1 - x0, h: y1 - y0 }
-    }
-
-    fn clamp(self, w: i32, h: i32) -> Area {
-        let (x0, y0) = (self.x.clamp(0, w), self.y.clamp(0, h));
-        let (x1, y1) = ((self.x + self.w).clamp(0, w), (self.y + self.h).clamp(0, h));
-        Area { x: x0, y: y0, w: x1 - x0, h: y1 - y0 }
-    }
-}
 
 /// What the browser painted and the writer has not sent yet.
 struct Pending {

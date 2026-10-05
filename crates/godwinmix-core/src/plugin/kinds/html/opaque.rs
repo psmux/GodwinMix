@@ -49,6 +49,14 @@ impl Opaque {
         Ok(Arc::new(Opaque { src, info, last: Mutex::new((None, Instant::now())), stopped: AtomicBool::new(false) }))
     }
 
+    /// Build it, its pipeline and its keep alive.
+    pub fn start(ctx: &BuildCtx, canvas: &CanvasCaps, thumb: bool) -> Result<(Arc<Opaque>, MediaEnds)> {
+        let o = Opaque::build(&ctx.id, canvas)?;
+        let ends = o.assemble(ctx, thumb)?;
+        o.keep_alive(&ctx.id);
+        Ok((o, ends))
+    }
+
     /// The source pipeline: these pictures and silence, no layer.
     pub fn assemble(self: &Arc<Self>, ctx: &BuildCtx, thumb: bool) -> Result<MediaEnds> {
         let silence = crate::plugin::kinds::layer::silence(&ctx.id, &ctx.canvas)?;
