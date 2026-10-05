@@ -26,14 +26,11 @@ pub fn register(reg: &mut Registry<Call>) {
             .tool(
                 "list_templates",
                 Tier::Standard,
-                "Every graphic template this mixer can draw, each with its `uri` for `add_source` and its \
-                 fields (label, type, default). Two formats. `svg`: stills the mixer draws for almost \
-                 nothing (news lower third, breaking news bar, headline strap, score bug, logo bug, title \
-                 card, quote card, location tag, virtual set desks). `html`: designs that move, drawn by the \
-                 browser renderer (animated lower thirds, tickers, a live score bug, a countdown, 3D title \
-                 card and logo, looping backgrounds, starting soon, virtual set backgrounds). Plus any \
-                 template in the media library. Start here when asked for a lower third, a strap, a bug, a \
-                 ticker, a card, a background or a set.",
+                "Every graphic template, each with its `uri` for `add_source` and its fields. `svg`: stills \
+                 drawn for almost nothing (news lower third, breaking bar, strap, score bug, logo bug, title \
+                 card, quote card, location tag, set desks). `html`: designs that move (animated straps, \
+                 tickers, live score bug, countdown, 3D title and logo, looping backgrounds, set backdrops). \
+                 Start here for a lower third, strap, bug, ticker, card, background or set.",
             ),
     );
     reg.register(
@@ -56,12 +53,10 @@ pub fn register(reg: &mut Registry<Call>) {
             .tool(
                 "save_template",
                 Tier::Standard,
-                "Write a graphic template into the mixer's media library after checking it: `svg` for a \
-                 still (a viewBox, fields in {{double braces}}), or `html` for one that moves (a \
-                 gmx-template block declaring its fields, a transparent background, nothing from the \
-                 network). A template with a mistake is refused with what to fix; `check_template` says \
-                 the same without writing. With `replace` true it writes over a file of the same name, \
-                 and every source drawing it is drawn again on air.",
+                "Check a graphic template and write it into the media library: `svg` for a still (a viewBox, \
+                 {{fields}}), or `html` for one that moves (a gmx-template block, a transparent background, \
+                 nothing from the network). A mistake is refused with what to fix. `replace` true writes over \
+                 a file of the same name and redraws every source showing it.",
             ),
     );
     html::register(reg);
