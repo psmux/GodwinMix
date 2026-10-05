@@ -95,6 +95,9 @@ fn hint(text: &str) -> (u64, u32) {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_viewer_key_plays_ll_hls_and_nothing_else_gets_in() {
+    if !godwinmix_core::probe::have_or_skip("cmafmux") {
+        return;
+    }
     let base = serve().await;
     let status = output(&base).await;
     let path = status["playback"]["master_url_path"].as_str().expect("playback.master_url_path").to_string();

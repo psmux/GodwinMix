@@ -65,6 +65,9 @@ fn stop(pipeline: gst::Pipeline) {
 
 #[test]
 fn a_four_rung_ladder_is_packaged_with_aligned_segments_and_parts() {
+    if !crate::probe::have_or_skip("cmafmux") {
+        return;
+    }
     // A third of a second at 30 fps is the part that does not divide into
     // nanoseconds, which is what once made two second segments 2.67 s long.
     let params = HlsParams { segment_ms: 1000, part_ms: 333, window_s: 6 };
@@ -109,6 +112,9 @@ fn a_four_rung_ladder_is_packaged_with_aligned_segments_and_parts() {
 
 #[test]
 fn a_part_is_served_within_a_part_of_its_keyframe() {
+    if !crate::probe::have_or_skip("cmafmux") {
+        return;
+    }
     let params = HlsParams { segment_ms: 1000, part_ms: 250, window_s: 6 };
     let stream = Arc::new(Stream::new("edge", params, "k".repeat(24).as_str()));
     let pipeline = running(&stream, &small_ladder()[..1]);
@@ -141,6 +147,9 @@ fn a_part_is_served_within_a_part_of_its_keyframe() {
 
 #[test]
 fn a_plain_segment_is_served_as_soon_as_it_is_whole() {
+    if !crate::probe::have_or_skip("cmafmux") {
+        return;
+    }
     let params = HlsParams { segment_ms: 1000, part_ms: 0, window_s: 6 };
     let stream = Arc::new(Stream::new("plain", params, "k".repeat(24).as_str()));
     let pipeline = running(&stream, &small_ladder()[..1]);
@@ -171,6 +180,9 @@ fn a_plain_segment_is_served_as_soon_as_it_is_whole() {
 
 #[test]
 fn a_rung_leaves_and_the_others_carry_on() {
+    if !crate::probe::have_or_skip("cmafmux") {
+        return;
+    }
     let params = HlsParams { segment_ms: 1000, part_ms: 0, window_s: 6 };
     let stream = Arc::new(Stream::new("leave", params, "k".repeat(24).as_str()));
     gst::init().unwrap();
