@@ -24,6 +24,7 @@ pub mod history;
 pub mod hls;
 pub mod hooks;
 pub mod methods;
+pub mod presence;
 pub mod push;
 pub mod rest;
 pub mod streams;
@@ -142,6 +143,9 @@ pub struct AppState {
     /// Live data feeds and what they are bound to. Empty, with no task and
     /// no client, until somebody adds a feed. See `crate::feeds`.
     pub feeds: Arc<crate::feeds::Feeds>,
+    /// Who is connected to `/rpc` and what each says it is editing. See
+    /// `control/presence.rs`.
+    pub presence: Arc<presence::Presence>,
 }
 
 /// The handles onto one running engine, gathered so `AppState::new` takes a
@@ -238,6 +242,7 @@ impl AppState {
             channels,
             plugins,
             feeds: crate::feeds::Feeds::open(&cfg.source_path),
+            presence: presence::Presence::new(),
         }
     }
 
@@ -572,7 +577,11 @@ async fn rpc_upgrade(
             return (StatusCode::UNAUTHORIZED, Json(e.body(&trace))).into_response();
         }
     };
-    ws.on_upgrade(move |socket| ws::serve_rpc(socket, ctx, token))
+    let who = match ws::Who::of(&ctx.app, &headers, &uri) {
+        Ok(who) => who,
+        Err(e) => return (StatusCode::BAD_REQUEST, Json(e.body(&trace_of(&headers, None)))).into_response(),
+    };
+    ws.on_upgrade(move |socket| ws::serve_rpc(socket, ctx, token, who))
 }
 
 async fn ws_upgrade(ws: WebSocketUpgrade, State(ctx): State<Ctx>) -> Response {

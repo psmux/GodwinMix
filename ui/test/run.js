@@ -20,6 +20,7 @@ import { touchTests } from "./touch.js";
 import { showTests } from "./shows.js";
 import { wallTests } from "./wall.js";
 import { browserDeviceTests } from "./browser-devices.js";
+import { presenceTests } from "./presence.js";
 // The test runner: forty lines, no dependencies, no toolchain. Open the page,
 // read the console, or read the list. Everything testable without a mixer is
 // here, including the legacy adapter against a stubbed server.
@@ -103,6 +104,7 @@ function near(a, b, tol, what) {
 }
 
 dockTests(test, eq, ok);
+presenceTests(test, eq, ok);
 
 // ---------------------------------------------------------------- selection
 

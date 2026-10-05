@@ -39,6 +39,8 @@ Start here if you have never run it.
 * [Put more than one thing on screen](how-to/scenes.md)
 * [Change scene with a transition](how-to/transitions.md)
 * [Build a scene by dragging](how-to/compose-a-scene.md)
+* [Operate one mixer with several people](how-to/operate-with-several-people.md),
+  from phones and desks at once, each with their own undo
 * [Make your plugin editable in every designer](how-to/extend-the-designer.md)
 * [Roll an ad break](how-to/ad-breaks.md)
 * [See and hear the mixer from anywhere](how-to/preview-and-audio.md)
@@ -138,6 +140,7 @@ Start here if you have never run it.
 * [Transitions: the built in types, the plugin contract, the accuracy](reference/transitions.md)
 * [The scene document](reference/scene-document.md)
 * [The designer kits](reference/designer-kits.md)
+* [Presence: client ids, presence.list and presence.changed](reference/presence.md)
 * [Sources](reference/sources.md)
 * [Web page sources](reference/web-page-sources.md)
 * [Text, ticker and transparent sources](reference/text-sources.md)
@@ -198,6 +201,7 @@ Start here if you have never run it.
 * [One plugin, three placements](explanation/one-plugin-three-placements.md)
 * [Why the UI is a client](explanation/why-the-ui-is-a-client.md)
 * [How a scene reaches the compositor](explanation/how-a-scene-reaches-the-compositor.md)
+* [Undo when several people edit one show](explanation/undo-with-several-people.md)
 * [Footprint budgets and the reference machines](explanation/footprint-budgets.md)
 * [The crate map](explanation/architecture.md)
 * [Cross platform: what is gated where, and why](explanation/cross-platform.md)

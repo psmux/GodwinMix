@@ -111,6 +111,7 @@ async fn call(ctx: &Ctx, method: &'static str, params: Value) -> Result<Value, S
         app: ctx.app.clone(),
         snapshots: ctx.snapshots.clone(),
         token: token(),
+        client: "feed".into(),
         trace_id: format!("feed-{method}"),
         dry_run: false,
         method: def.name,

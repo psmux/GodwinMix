@@ -78,7 +78,11 @@ export class SceneClient {
   async read() {
     try {
       const info = await this.client.call("core.info", {});
-      if (info && info.token && info.token.id) this.mirror.setClientId(info.token.id);
+      // This connection, not its token: two phones on one token are two
+      // clients, and one's edits are not the other's echo. A core older than
+      // client ids names the token, which is the best it can do.
+      const id = info && (info.client_id || (info.token && info.token.id));
+      if (id) this.mirror.setClientId(id);
     } catch {
       // A core that will not say who we are costs us echo suppression and
       // nothing else: the mirror still converges on what the core sends.
@@ -346,8 +350,12 @@ export class SceneClient {
     return this.client.call("scene.edit.begin", live ? { scene, live: true } : { scene });
   }
 
-  async editApply(draft) {
-    const answer = await this.client.call("scene.edit.apply", { draft });
+  /**
+   * Write a draft back. Refused with `data.conflict: "draft"` when somebody
+   * changed the scene after it was taken; `force` applies it over them.
+   */
+  async editApply(draft, force) {
+    const answer = await this.client.call("scene.edit.apply", force ? { draft, force: true } : { draft });
     this.absorb(answer);
     return answer;
   }

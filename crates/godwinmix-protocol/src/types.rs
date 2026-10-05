@@ -494,6 +494,12 @@ pub struct CoreInfo {
     /// Present when the request carried a token the core recognises.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub token: Option<TokenInfo>,
+    /// Who the call came from: the `source_client` this caller's scene
+    /// patches carry, which is what a mirror suppresses its own echo by.
+    /// `<token id>.<name>` on /rpc or with `client_id` in the envelope, the
+    /// token id alone otherwise.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub client_id: Option<String>,
     /// True when the core was started with `--rehearsal`, which refuses
     /// `output.add` and accepts rehearsal tokens.
     pub rehearsal: bool,

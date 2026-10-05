@@ -312,16 +312,21 @@ class Prediction:
             return server_props
         return merge_props(server_props or {}, held["props"])
 
-    def accepts(self, item: str, echo_seq: Any) -> bool:
+    def accepts(self, item: str, echo_seq: Any, own: bool = True) -> bool:
         """Should an incoming change be drawn over this item?
 
         No while a newer move is still held for it: that is the echo of
         something the operator has already dragged past, and drawing it is the
         rubber band this class exists to remove.
+
+        `own` is False for a patch somebody else made. Its `client_seq` is
+        their count, not ours, so it never settles our move.
         """
         held = self.pending.get(item)
         if held is None:
             return True
+        if not own:
+            return False
         return int(_num(echo_seq)) >= held["seq"]
 
 

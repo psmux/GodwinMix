@@ -337,7 +337,7 @@ for a preview until a client asks for one with `ext.preview`, opens
 | Method | What it does |
 |---|---|
 | `scene.edit.begin {scene, live?}` | a working copy, and its draft id |
-| `scene.edit.apply {draft}` | write it back |
+| `scene.edit.apply {draft, force?}` | write it back, refused if the scene changed since |
 | `scene.edit.discard {draft}` | throw it away |
 
 ```json
@@ -345,13 +345,33 @@ for a preview until a client asks for one with `ext.preview`, opens
 ```
 
 ```json
-{"draft": "0192f3c1-…", "scene": "three up", "live": false, "view": {…}}
+{"draft": "0192f3c1-…", "scene": "three up", "live": false,
+ "owner": "default.phone", "base_seq": 41, "view": {…}}
 ```
 
 Pass that id as `draft` on any `scene.item.*` call and the change goes to the
 working copy. Nothing is published while a draft is being edited: a draft is
 nobody else's business until it is applied. A draft of the scene that is on air
 is applied on the next take of that scene, which is what `live: false` means.
+
+`owner` is the client that opened it and `base_seq` is the document's revision
+at that moment. If anybody changes the scene after that, `scene.edit.apply` is
+refused rather than writing over them:
+
+```json
+{"code": -32001,
+ "message": "the scene \"three up\" changed after this draft was taken at revision 41 (it is at 44 now): item \"corner\" (changed by default.laptop). Applying would overwrite that, so nothing was applied. Throw the draft away with scene.edit.discard and open a fresh one with scene.edit.begin to start from what is there now, or apply with force: true to replace the scene with your draft.",
+ "data": {"conflict": "draft", "draft": "0192f3c1-…", "scene": "three up",
+          "base_seq": 41, "seq": 44, "removed": false,
+          "conflicts": [{"record": "0192…", "kind": "item", "name": "corner",
+                         "changed_by": "default.laptop", "who": "Windows Edge", "gone": false}],
+          "retry": {"method": "scene.edit.apply", "force": true},
+          "next": ["…", "…"], "retryable": false}}
+```
+
+`force: true` applies it anyway and replaces the scene with the draft. A take
+that would apply a waiting draft leaves a stale one open instead, and goes to
+air with the scene as it is.
 
 ## Batches and undo
 
@@ -360,12 +380,38 @@ is applied on the next take of that scene, which is what `live: false` means.
 | `scene.transaction.begin` | start a batch |
 | `scene.transaction.commit` | apply it: one patch, one undo step |
 | `scene.transaction.abort` | throw it away |
-| `scene.undo` | undo the last change |
-| `scene.redo` | put it back |
-| `scene.history.mark {label?}` | group what follows into one undo step |
+| `scene.undo {force?}` | undo your last change |
+| `scene.redo {force?}` | put it back |
+| `scene.history.mark {label?}` | group what you do next into one undo step |
+
+All six belong to the client that calls them. Every connection has its own
+undo and redo stacks, its own mark and its own transaction, keyed by its client
+id (see [Client ids](#client-ids) below), so Ctrl+Z on a phone never takes back
+what the laptop beside it did.
 
 Everything between `begin` and `commit` applies on one frame or not at all.
-Nothing is published until the commit, so a client never draws half a batch.
+Nothing of the batch is published until the commit, so a client never draws
+half of it. Another client's edits go through meanwhile and are published at
+once: an open transaction holds nobody else up. `abort` takes back what you did
+in the batch and leaves alone any record somebody else changed since.
+
+An undo or redo that would overwrite somebody else's later change to the same
+item is refused, and the step stays on your stack:
+
+```json
+{"code": -32001,
+ "message": "your last change cannot be undone without overwriting somebody else's work on item \"corner\" (changed by default.laptop). Nothing was undone and the step stays on your stack. Send scene.undo with force: true to put your version back over theirs, or change it by hand.",
+ "data": {"conflict": "undo", "verb": "undo",
+          "conflicts": [{"record": "0192…", "kind": "item", "name": "corner",
+                         "changed_by": "default.laptop", "who": "Windows Edge", "gone": false}],
+          "retry": {"method": "scene.undo", "force": true}, "next": ["…", "…"]}}
+```
+
+`changed_by` is a client id, and `who` is how a person would know it (its label,
+else its device) while that client is still connected. `gone: true` means the
+item, or the scene it sat in, has been removed; a forced undo leaves such an
+item out, since it has nowhere to go back to. Why a step is refused whole rather
+than merged is in [the undo model](../explanation/undo-with-several-people.md).
 
 `scene.history.mark` is what makes a drag one Ctrl+Z: a designer marks before
 the first move and again with no label at the end, and the moves between fold
@@ -375,7 +421,8 @@ into one step.
 {"method": "scene.history.mark", "params": {"label": "drag lower third"}}
 ```
 
-`scene.undo` answers with the patch it applied and how many steps are left:
+`scene.undo` answers with the patch it applied and how many steps are left on
+your own stacks:
 
 ```json
 {"patch": {"seq": 91, "scope": "document", "updated": [{"before": {…}, "after": {…}}]},
@@ -388,13 +435,30 @@ Clients mirror the document off `event/scene.patch` rather than refetching it.
 Subscribe to `scene.*` and they arrive on `/rpc`:
 
 ```json
-{"seq": 91, "source_client": "designer-1", "client_seq": 77, "scope": "document",
+{"seq": 91, "source_client": "default.t4k2x9q", "client_seq": 77, "scope": "document",
  "added": [], "updated": [{"before": {…}, "after": {…}}], "removed": []}
 ```
 
 One per transaction, ended by `event/flush`. Suppress the echo of your own edits
 by `source_client`, ignore record kinds and trailing fields you do not know, and
 you can be several versions behind without breaking.
+
+### Client ids
+
+`source_client` is the client id of whoever made the change: the token id, a
+dot, and a name for the connection. Two phones on one token are two clients.
+
+| Caller | Client id |
+|---|---|
+| a `/rpc` connection | `<token>.<name>`, where the name is `?client_id=` on the URL, or one the core makes up (`s7`) |
+| any call with `client_id` in the envelope | `<token>.<client_id>`, over `/rpc` or HTTP |
+| an HTTP call without it | the token id alone, shared by every such caller on that token |
+
+A name is up to 32 lower case letters, digits and dashes; anything else is
+refused with `-32602` and the pattern in `data`. `core.subscribe` and
+`core.info` both answer with `client_id`, which is what to give a mirror as its
+own id. The reference UI keeps one name per browser tab, so a reload or a
+reconnect is the same client and still has its undo stack.
 
 `client_seq` is the `seq` you put on the command coming back. A drag cannot
 wait for a round trip, so the kit draws the move itself and reconciles when the
@@ -417,7 +481,7 @@ Every refusal names the state and the next step (03 section 6).
 |---|---|
 | -32004 | no scene, item, source or draft by that name; the message lists the ones that exist |
 | -32602 | the params were wrong for the method, or a transition this core does not have (`data.transitions` lists the ones it does) |
-| -32001 | not in a state that allows it: no transaction open, nothing to undo, no scene armed |
+| -32001 | not in a state that allows it: no transaction open, nothing to undo, no scene armed, or somebody else's change in the way (`data.conflict` is `undo` or `draft`) |
 | -32003 | a safety rule refused the take; `data.retry_after_ms` says how long |
 
 ```json

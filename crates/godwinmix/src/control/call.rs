@@ -31,6 +31,11 @@ pub struct Call {
     pub snapshots: Arc<Tracker>,
     /// Who is calling. `open` when no token is configured.
     pub token: Token,
+    /// Which device or connection is calling: `<token id>.<name>`, or the
+    /// token id alone for an HTTP caller that named none. What scene patches
+    /// carry as `source_client`, and what owns an undo stack. See
+    /// `godwinmix_protocol::presence`.
+    pub client: String,
     /// Carried into the answer, the `X-Trace-Id` header and the log line.
     pub trace_id: String,
     /// True when the caller asked what would happen instead of asking for it
@@ -46,7 +51,14 @@ impl Call {
     /// A failure names the field and the method rather than quoting serde, so
     /// that "missing field `uri`" becomes something a caller can act on.
     pub fn params<T: DeserializeOwned>(&self, params: &Value) -> Result<T, RpcError> {
-        serde_json::from_value(params.clone()).map_err(|e| {
+        // `client_id` belongs to the envelope and is read before the handler
+        // runs. Taken off here, so a request type that refuses unknown fields
+        // does not refuse a caller for saying who it is.
+        let mut params = params.clone();
+        if let Some(map) = params.as_object_mut() {
+            map.remove("client_id");
+        }
+        serde_json::from_value(params).map_err(|e| {
             RpcError::invalid_params(format!(
                 "{} could not read its params: {e}. Call core.api for the schema.",
                 self.method
@@ -180,14 +192,46 @@ pub fn safety_error(method: &str, refusal: godwinmix_core::safety::Refusal) -> R
 }
 
 /// Run one method, with everything that has to happen around it.
-///
-/// Long because the sequence is the contract and splitting it into six
-/// functions that each do one check would hide the order that matters.
 pub async fn dispatch(
     registry: &Registry<Call>,
     app: &AppState,
     snapshots: &Arc<Tracker>,
     token: &Token,
+    trace_id: &str,
+    method: &str,
+    params: Value,
+) -> Result<Value, RpcError> {
+    dispatch_as(registry, app, snapshots, token, None, trace_id, method, params).await
+}
+
+/// The client id a call is from: the envelope's `client_id` when it names
+/// one, else the connection's own name, else the token id alone.
+fn client_of(token: &Token, connection: Option<&str>, named: Option<&str>) -> Result<String, RpcError> {
+    use godwinmix_protocol::presence::{client_id, valid_client_name, MAX_CLIENT_NAME};
+    match named.or(connection) {
+        None => Ok(token.id.clone()),
+        Some(name) if valid_client_name(name) => Ok(client_id(&token.id, name)),
+        Some(name) => Err(RpcError::invalid_params(format!(
+            "client_id {name:?} is not a name this core accepts. Use up to {MAX_CLIENT_NAME} \
+             lower case letters, digits and dashes, such as \"phone-cam\", or leave it out."
+        ))
+        .with("client_id", name)
+        .with("pattern", "^[a-z0-9-]+$")),
+    }
+}
+
+/// The same, for a connection that has a name of its own (every `/rpc`
+/// socket has one), which a call without `client_id` is then from.
+///
+/// Long because the sequence is the contract and splitting it into six
+/// functions that each do one check would hide the order that matters.
+#[allow(clippy::too_many_arguments)]
+pub async fn dispatch_as(
+    registry: &Registry<Call>,
+    app: &AppState,
+    snapshots: &Arc<Tracker>,
+    token: &Token,
+    connection: Option<&str>,
     trace_id: &str,
     method: &str,
     params: Value,
@@ -217,6 +261,7 @@ pub async fn dispatch(
     }
 
     let envelope = CallEnvelope::read(&params);
+    let client = client_of(token, connection, envelope.client_id.as_deref())?;
     if envelope.dry_run && !def.destructive {
         return Err(RpcError::invalid_params(format!(
             "{method} is not destructive, so dry_run has nothing to describe. \
@@ -257,6 +302,7 @@ pub async fn dispatch(
         app: app.clone(),
         snapshots: snapshots.clone(),
         token: token.clone(),
+        client,
         trace_id: trace_id.to_string(),
         dry_run,
         method: def.name,
