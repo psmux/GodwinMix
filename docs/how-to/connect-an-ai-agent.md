@@ -188,7 +188,30 @@ GodwinMix first, or set `GODWINMIX_URL`.
 
 ## Prompts that work
 
-PROMPTS_TABLE
+Each of these was run against a mixer with two test cameras, after the fixes
+in this release, with nothing said beforehand. "Free" is opencode with
+`opencode/muse-spark-1.3-contributor-free` over MCP; "pi's way" is the same
+free model with no MCP at all, only the skills and `godwinmix tool` in a
+shell, which is how pi works. Calls are tool calls, errors are refused calls.
+
+| Ask | Claude Code, Opus | opencode, free | pi's way, free |
+|---|---|---|---|
+| "What is on air right now?" | 3 calls, 11 s | 6 calls, 20 s | 4 calls, 27 s |
+| "Switch to the camera and cut to the wide shot" | 6 calls, 19 s | 7 calls, 30 s | 7 calls, 38 s |
+| "Add a lower third that says Ana Silva, Producer, in my brand blue, and put it on air" | placed it, then asked for the hex before showing it, 60 s | on air, 12 calls, 54 s | on air, 21 calls, 74 s |
+| "Make an animated news ticker with these three headlines: ..." | on air, 45 s | on air, 13 calls, 55 s | on air, 32 calls, 122 s |
+| "Make me a modern news studio set and put me in it, no green screen" | on air: a designed set and desk, 55 turns, 5 min | on air: a designed set, 15 calls, 112 s | not run |
+
+What they did for the set, both models, without being told how: designed a
+full screen SVG backdrop, saved it with `save_template`, added it as a
+source, and made the scene with `create_scene_from` and the `virtual-set`
+layout with `settings.screen: "none"`. With a test pattern for a camera there
+is nobody to cut out, so the set shows empty; with a real camera the person
+stands in it.
+
+Words that help a small model: name the thing ("a lower third", "a ticker",
+"the wide shot"), say what goes in it, and say "put it on air" if you want it
+shown. For a brand colour, give the hex.
 
 ## When it goes wrong
 
