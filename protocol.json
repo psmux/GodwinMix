@@ -4239,6 +4239,491 @@
       ],
       "type": "object"
     },
+    "FxBlend": {
+      "description": "How a clip is put over the picture.",
+      "oneOf": [
+        {
+          "const": "normal",
+          "description": "Over, by the clip's own alpha. What a stinger with alpha wants.",
+          "type": "string"
+        },
+        {
+          "const": "screen",
+          "description": "Lightens only: black leaves the picture as it was. Light leaks, bokeh.",
+          "type": "string"
+        },
+        {
+          "const": "add",
+          "description": "Adds the clip's light to the picture. Flames, sparks, film burn.",
+          "type": "string"
+        },
+        {
+          "const": "luma",
+          "description": "The clip's brightness is its alpha: black is clear, white is solid.",
+          "type": "string"
+        }
+      ]
+    },
+    "FxEntry": {
+      "description": "One item in `fx.list`: the manifest, and what this machine makes of it.",
+      "properties": {
+        "blend": {
+          "$ref": "#/$defs/FxBlend",
+          "default": "normal"
+        },
+        "coverage": {
+          "description": "How much of the picture the clip covers at that frame, 0 to 1. Under\nabout 0.9 the cut may show; the import says so.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "cut_at_measured_ms": {
+          "description": "The frame the import found most covered, which is where the cut goes\nunless `cut_at_ms` says otherwise.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "cut_at_ms": {
+          "description": "When the scenes swap under a clip, in milliseconds from its start.\nAbsent is `cut_at_measured_ms`, then half way.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "dir": {
+          "description": "The folder on the mixer's machine.",
+          "type": "string"
+        },
+        "duration_ms": {
+          "description": "How long it runs. A clip's own length; a matte or a shader's default,\nwhich a take may override with `duration_ms`.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "effect": {
+          "default": false,
+          "description": "Whether `fx.fire` may play it over the programme on its own.",
+          "type": "boolean"
+        },
+        "file": {
+          "description": "The media file, inside the folder: a clip, a picture or a `.glsl`.",
+          "type": "string"
+        },
+        "invert": {
+          "description": "A matte read white first instead of black first.",
+          "type": "boolean"
+        },
+        "kind": {
+          "$ref": "#/$defs/FxKind"
+        },
+        "licence": {
+          "description": "Where it came from and on what terms, as the pack said.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "description": "The slug every method and a take names it by, such as `light-leak`.",
+          "type": "string"
+        },
+        "note": {
+          "description": "Anything an operator should know, in a sentence.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "origin": {
+          "description": "`starter` (shipped with the mixer, read only) or `library`.",
+          "type": "string"
+        },
+        "preview": {
+          "description": "A moving preview: a strip of frames in one JPEG, see `fx.preview`.",
+          "type": "string"
+        },
+        "runs": {
+          "description": "`cpu`, `gpu`, or `fade` for a shader this machine can only run as a\ndissolve. Absent for a clip or a matte, which always run on the CPU.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "softness": {
+          "description": "A matte's soft edge, 0 (hard) to 1. 0.1 when absent.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "source": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "title": {
+          "default": "",
+          "description": "What a picker shows.",
+          "type": "string"
+        },
+        "transition": {
+          "default": true,
+          "description": "Whether a take may use it.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "kind",
+        "file",
+        "duration_ms",
+        "origin",
+        "dir",
+        "preview"
+      ],
+      "type": "object"
+    },
+    "FxFireRequest": {
+      "description": "`fx.fire`: play an effect over the programme once.",
+      "properties": {
+        "blend": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FxBlend"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "A blend for this firing only."
+        },
+        "name": {
+          "type": "string"
+        },
+        "opacity": {
+          "description": "How strong, 0 to 1. 1 when absent.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "FxFired": {
+      "description": "What `fx.fire` answers.",
+      "properties": {
+        "duration_ms": {
+          "description": "How long it will be on the programme.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "duration_ms"
+      ],
+      "type": "object"
+    },
+    "FxImportRequest": {
+      "description": "`fx.import`: a file, a folder or a zip on the mixer's machine.",
+      "properties": {
+        "blend": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FxBlend"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "How a clip is put over the picture, when the import should not decide."
+        },
+        "cut_at_ms": {
+          "description": "Where the scenes swap, when the measured frame is not the one.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "kind": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FxKind"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "What it is, when the import should not decide by looking."
+        },
+        "name": {
+          "description": "The slug to give it. Taken from the file name when absent. Ignored for\na folder or a zip, whose items are named after their files.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "path": {
+          "description": "An absolute path, or a name in the media library (where `media.upload`\nputs a file). A folder or a zip imports everything in it it can read.",
+          "type": "string"
+        },
+        "replace": {
+          "default": false,
+          "description": "Write over an item of the same name.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "type": "object"
+    },
+    "FxImported": {
+      "description": "What `fx.import` answers.",
+      "properties": {
+        "imported": {
+          "items": {
+            "$ref": "#/$defs/FxEntry"
+          },
+          "type": "array"
+        },
+        "skipped": {
+          "description": "Files that were not imported, each with why.",
+          "items": {
+            "$ref": "#/$defs/FxSkipped"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "imported"
+      ],
+      "type": "object"
+    },
+    "FxKind": {
+      "description": "What a file is, which decides how it is drawn.",
+      "oneOf": [
+        {
+          "const": "stinger",
+          "description": "A clip with an alpha channel (WebM VP8 or VP9 alpha, ProRes 4444,\nQuickTime Animation, PNG in a MOV) drawn over both scenes, with the\ncut underneath where it covers the picture.",
+          "type": "string"
+        },
+        {
+          "const": "overlay",
+          "description": "A clip on black meant for Screen or Add: a light leak, bokeh, a film\nburn, flames, dust. A transition when it whites the picture out, an\neffect over the programme either way.",
+          "type": "string"
+        },
+        {
+          "const": "matte",
+          "description": "A black to white picture or clip: the new scene shows through where\nthe matte is darker than the progress.",
+          "type": "string"
+        },
+        {
+          "const": "shader",
+          "description": "A GLSL transition in the gl-transitions form: `vec4 transition(vec2\nuv)` with `getFromColor`, `getToColor`, `progress` and `ratio`.",
+          "type": "string"
+        }
+      ]
+    },
+    "FxList": {
+      "description": "What `fx.list` answers.",
+      "properties": {
+        "errors": {
+          "description": "Folders under `fx/` that would not read, each with the reason.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "fx": {
+          "items": {
+            "$ref": "#/$defs/FxEntry"
+          },
+          "type": "array"
+        },
+        "gpu": {
+          "description": "Whether GStreamer GL runs here, which decides `runs` for a shader.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "fx",
+        "gpu"
+      ],
+      "type": "object"
+    },
+    "FxListRequest": {
+      "description": "`fx.list`.",
+      "properties": {
+        "role": {
+          "description": "`transition` or `effect` to see only those. Absent lists all.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "FxNameRequest": {
+      "description": "`fx.get`, `fx.remove` and `fx.preview`: one item by name.",
+      "properties": {
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "FxPreview": {
+      "description": "What `fx.preview` answers: a strip of frames side by side in one JPEG.",
+      "properties": {
+        "duration_ms": {
+          "description": "How long the strip takes to play once, in milliseconds.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "frame_height": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "frame_width": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "frames": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "name": {
+          "type": "string"
+        },
+        "url": {
+          "description": "`GET` this for the JPEG.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "url",
+        "frames",
+        "frame_width",
+        "frame_height",
+        "duration_ms"
+      ],
+      "type": "object"
+    },
+    "FxSetRequest": {
+      "description": "`fx.set`: change what an item does. Only what is named moves.",
+      "properties": {
+        "blend": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FxBlend"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "cut_at_ms": {
+          "description": "Where the scenes swap. 0 puts it back to the measured frame.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "duration_ms": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "effect": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "invert": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "softness": {
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "transition": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "FxSkipped": {
+      "properties": {
+        "file": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "file",
+        "reason"
+      ],
+      "type": "object"
+    },
     "Geometry": {
       "description": "One item's derived box.",
       "properties": {
@@ -14211,6 +14696,162 @@
       "scope": "operate",
       "since": "1",
       "summary": "Change a filter's settings in place. A filter that cannot take the change while running says so rather than being restarted behind your back."
+    },
+    {
+      "destructive": false,
+      "idempotent": false,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "fire_fx"
+      },
+      "mutating": true,
+      "name": "fx.fire",
+      "params": {
+        "$ref": "#/$defs/FxFireRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/fx/fire"
+      },
+      "result": {
+        "$ref": "#/$defs/FxFired"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "Play an effect over the programme once: drawn on top of whatever is on air until its clip ends."
+    },
+    {
+      "destructive": false,
+      "idempotent": false,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "import_fx"
+      },
+      "mutating": true,
+      "name": "fx.import",
+      "params": {
+        "$ref": "#/$defs/FxImportRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/fx/import"
+      },
+      "result": {
+        "$ref": "#/$defs/FxImported"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "Import a transition or effect from a file, a folder or a zip on the mixer's machine, measuring what it is and where it covers the picture."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": true,
+        "tool": "list_fx"
+      },
+      "mutating": false,
+      "name": "fx.list",
+      "params": {
+        "$ref": "#/$defs/FxListRequest"
+      },
+      "rest": {
+        "method": "GET",
+        "path": "/api/v1/fx/list"
+      },
+      "result": {
+        "$ref": "#/$defs/FxList"
+      },
+      "scope": "read",
+      "since": "1",
+      "summary": "The imported transitions and effects, with what each is and whether it runs on the GPU here."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": true,
+        "tool": "preview_fx"
+      },
+      "mutating": false,
+      "name": "fx.preview",
+      "params": {
+        "$ref": "#/$defs/FxNameRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/fx/preview"
+      },
+      "result": {
+        "$ref": "#/$defs/FxPreview"
+      },
+      "scope": "read",
+      "since": "1",
+      "summary": "A moving preview of an item: twelve frames side by side in one JPEG, made once and kept."
+    },
+    {
+      "destructive": true,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": true,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "remove_fx"
+      },
+      "mutating": true,
+      "name": "fx.remove",
+      "params": {
+        "$ref": "#/$defs/FxNameRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/fx/remove"
+      },
+      "result": {
+        "type": "object"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "Delete an imported item from the library. The starter set cannot be deleted."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "set_fx"
+      },
+      "mutating": true,
+      "name": "fx.set",
+      "params": {
+        "$ref": "#/$defs/FxSetRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/fx/set"
+      },
+      "result": {
+        "$ref": "#/$defs/FxEntry"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "Change an imported item: its blend, its cut point, its length, whether it is a transition or an effect."
     },
     {
       "destructive": false,

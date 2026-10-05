@@ -4,7 +4,7 @@
 
 use crate::overlay::modes::Mode;
 use anyhow::{Context, Result};
-use godwinmix_protocol::fx::{Blend, FxKind, FxManifest};
+use godwinmix_protocol::fx::{FxBlend, FxKind, FxManifest};
 use std::path::{Path, PathBuf};
 
 /// One item, ready to run.
@@ -38,12 +38,12 @@ impl Look {
     }
 }
 
-pub fn mode_of(blend: Blend) -> Mode {
+pub fn mode_of(blend: FxBlend) -> Mode {
     match blend {
-        Blend::Normal => Mode::Normal,
-        Blend::Screen => Mode::Screen,
-        Blend::Add => Mode::Add,
-        Blend::Luma => Mode::Luma,
+        FxBlend::Normal => Mode::Normal,
+        FxBlend::Screen => Mode::Screen,
+        FxBlend::Add => Mode::Add,
+        FxBlend::Luma => Mode::Luma,
     }
 }
 
