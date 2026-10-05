@@ -156,7 +156,7 @@ fn start(tool: AgentTool, scope: SetupScope, project: &Path) -> String {
         AgentTool::Cursor => "Restart Cursor and check godwinmix is switched on under Settings > MCP.".into(),
         AgentTool::Vscode => "Reload VS Code and open Copilot Chat in Agent mode; godwinmix is in its tools.".into(),
         AgentTool::Other => "Paste the entry into your client's MCP settings and restart it.".into(),
-        t => format!("{there} `{}`, then ask it something.", t.command().unwrap_or_default()),
+        t => format!("{there} `{}`.", t.command().unwrap_or_default()),
     }
 }
 

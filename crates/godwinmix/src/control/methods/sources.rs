@@ -70,7 +70,7 @@ pub fn register(reg: &mut Registry<Call>) {
              kind \"web\"), or something the mixer draws itself. A designed graphic is \
              {\"id\": \"lower\", \"uri\": \"template:news-lower-third\", \"params\": \
              {\"fields\": {\"name\": \"Ana Silva\", \"title\": \"Producer\", \"accent\": \
-             \"#1f6fd1\"}}} (list_templates names them and their fields). Words in a box are \
+             \"#0b6e3d\"}}} (list_templates names them and their fields). Words in a box are \
              uri \"text:\" with params.text; a crawling ticker is uri \"ticker:\" with \
              params.items, a list of headlines. Nothing is on air until it is on a scene \
              that is on air (add_scene_item) or taken with `take`.",

@@ -45,7 +45,7 @@ The answer:
     {"path": "/home/ana/.config/opencode/godwinmix.md", "action": "create", "what": "what GodwinMix is, read every session"},
     {"path": "/home/ana/.config/opencode/skills/godwinmix-operate/SKILL.md", "action": "create", "what": "the godwinmix-operate skill"}
   ],
-  "start": "In a terminal, run `opencode`, then ask it something.",
+  "start": "In a terminal, run `opencode`.",
   "prompt": "Make a lower third for Ana Silva, Producer, in blue, and put it on air."
 }
 ```
