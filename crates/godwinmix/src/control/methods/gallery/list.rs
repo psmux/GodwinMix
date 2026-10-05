@@ -54,7 +54,7 @@ async fn list(call: Call, params: Value) -> Result<Value, RpcError> {
 fn rank(entries: &mut Vec<Entry>, query: &str) {
     let words: Vec<String> = query.to_lowercase().split(|c: char| !c.is_alphanumeric()).filter(|w| w.len() > 1).map(synonym).collect();
     let mut scored: Vec<(usize, Entry)> = entries.drain(..).map(|e| (score(&e, &words), e)).filter(|(s, _)| *s > 0).collect();
-    scored.sort_by(|a, b| b.0.cmp(&a.0));
+    scored.sort_by_key(|s| std::cmp::Reverse(s.0));
     entries.extend(scored.into_iter().map(|(_, e)| e));
 }
 
