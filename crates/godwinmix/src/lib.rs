@@ -622,10 +622,14 @@ pub async fn run() -> Result<()> {
     // that are meant to be piped: MCP's protocol, and `gmx dot | dot -Tsvg`.
     // Levels start from `RUST_LOG` and move at runtime from there: see
     // `godwinmix_core::observe::logs`.
+    // `gmx tool` prints the tool's own answer, refusals included, and an agent
+    // reads both streams of a shell command: a JSON log line repeating the
+    // refusal on stderr is one more thing for a small model to misread.
+    let quiet = matches!(args.command, Some(Command::Tool { .. })).then(|| "error".to_string());
     logs::init(logs::Options {
         format: args.log_format.into(),
         node: config::env_var("NODE"),
-        env_filter: std::env::var("RUST_LOG").ok(),
+        env_filter: std::env::var("RUST_LOG").ok().or(quiet),
     });
 
     // The client subcommands talk to an already-running mixer and need none
