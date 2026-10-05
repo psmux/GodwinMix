@@ -75,7 +75,10 @@ fn hls_and_dash_are_pulled_and_paced() {
         let dir = scratch().join(kind);
         std::fs::create_dir_all(&dir).unwrap();
         let out = path(&dir.join(file));
-        let mut args = vec!["-loglevel", "error", "-re", "-f", "lavfi", "-i", "testsrc2=size=320x240:rate=25", "-f", "lavfi", "-i", "sine",
+        // `-re` before each input: it paces only the input it precedes, and
+        // the ffmpeg Homebrew ships ran ahead on the unpaced sound, writing
+        // segment 24 five seconds in, faster than a live player follows.
+        let mut args = vec!["-loglevel", "error", "-re", "-f", "lavfi", "-i", "testsrc2=size=320x240:rate=25", "-re", "-f", "lavfi", "-i", "sine",
             "-t", "30", "-c:v", "libx264", "-preset", "ultrafast", "-g", "25", "-c:a", "aac"];
         args.extend(if kind == "hls" { ["-f", "hls", "-hls_time", "1", "-hls_list_size", "6"] } else { ["-f", "dash", "-seg_duration", "1", "-window_size", "6"] });
         args.push(&out);
