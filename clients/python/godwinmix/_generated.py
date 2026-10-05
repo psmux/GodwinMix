@@ -1302,14 +1302,14 @@ class GalleryPlaced(TypedDict, total=False):
     visible: bool
 
 GalleryPreview = TypedDict("GalleryPreview", {
-    "caption": str,
-    "encoding": str,
-    "format": str,
-    "from": str,
-    "height": int,
-    "id": str,
-    "image": str,
-    "width": int,
+    "caption": "str",
+    "encoding": "str",
+    "format": "str",
+    "from": "str",
+    "height": "int",
+    "id": "str",
+    "image": "str",
+    "width": "int",
 }, total=False)
 
 class GalleryPreviewRequest(TypedDict, total=False):
