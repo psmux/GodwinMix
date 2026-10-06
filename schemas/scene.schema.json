@@ -453,7 +453,7 @@
         },
         "type": {
           "$ref": "#/$defs/ItemTransitionKind",
-          "description": "cut, fade, slide, zoom or wipe."
+          "description": "cut, fade, slide, zoom, wipe or hold. `hold` keeps the item as it is\nfor `duration_ms` and then takes it away, for a graphic whose own\nanimation is its way out."
         }
       },
       "required": [
@@ -467,7 +467,8 @@
         "fade",
         "slide",
         "zoom",
-        "wipe"
+        "wipe",
+        "hold"
       ],
       "type": "string"
     },
