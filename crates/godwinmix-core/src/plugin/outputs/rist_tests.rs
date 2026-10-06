@@ -43,6 +43,21 @@ fn receiver(port: u16) -> (gst::Pipeline, Arc<AtomicU64>) {
     (p, frames)
 }
 
+/// The errors and warnings a pipeline posted, for a failure message.
+fn said(p: &gst::Pipeline) -> Vec<String> {
+    let Some(bus) = p.bus() else { return Vec::new() };
+    let mut out = Vec::new();
+    while let Some(m) = bus.pop_filtered(&[gst::MessageType::Error, gst::MessageType::Warning]) {
+        let from = m.src().map(|s| s.name().to_string()).unwrap_or_default();
+        match m.view() {
+            gst::MessageView::Error(e) => out.push(format!("error from {from}: {} ({:?})", e.error(), e.debug())),
+            gst::MessageView::Warning(w) => out.push(format!("warning from {from}: {} ({:?})", w.error(), w.debug())),
+            _ => {}
+        }
+    }
+    out
+}
+
 #[test]
 fn a_rist_receiver_decodes_the_programme_and_the_output_says_it_is_connected() {
     let _ = gst::init();
@@ -83,8 +98,9 @@ fn a_rist_receiver_decodes_the_programme_and_the_output_says_it_is_connected() {
     }
     let got = frames.load(Ordering::Relaxed);
     let connected = out.connected();
+    let (rx_said, tx_said) = (said(&rx), said(&tx));
     let _ = tx.set_state(gst::State::Null);
     let _ = rx.set_state(gst::State::Null);
-    assert!(got >= 60, "the RIST receiver decoded {got} frames in {wait:?}; wanted 60");
+    assert!(got >= 60, "the RIST receiver decoded {got} frames in {wait:?}; wanted 60. Port {port}; the receiver said {rx_said:?}, the sender {tx_said:?}");
     assert!(connected, "the receiver answered, so the output should say it is connected");
 }
