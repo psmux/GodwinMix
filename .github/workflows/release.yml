@@ -183,6 +183,9 @@ jobs:
       WINDOWS_INSTALLER_BUDGET_MB: 300
       # 133.5 MB on Windows on 2026-10-03 once every first party plugin's
       # elements were kept (WHIP, NDI and DeckLink had been trimmed away).
+      # 154.6 MB on Windows and 146.4 MB on Linux on 2026-10-06, with the
+      # WebRTC, VP8/VP9, picture and GL plugins all loading. platforms.yml
+      # and runtime.yml use the same number.
       RUNTIME_BUDGET_MB: 160
       # The three device plugins together, measured at 4 MB on macOS. A
       # tripwire rather than a tight budget: what fills the installer is

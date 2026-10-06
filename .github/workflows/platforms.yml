@@ -37,9 +37,15 @@ env:
   # The Windows desktop installer, in megabytes, from the budget table in
   # 09-builders. A job that produces a bigger one fails.
   WINDOWS_INSTALLER_BUDGET_MB: 150
-  # What the GStreamer tree itself may take, once the shell and the mixer have
-  # had the 17 MB they measured at.
-  RUNTIME_BUDGET_MB: 130
+  # What the trimmed GStreamer tree may take. The same number as
+  # RUNTIME_BUDGET_MB in release.yml and the budget in runtime.yml, and one
+  # number for all three platforms, because a tree that fits on Windows fits
+  # anywhere. 130 was set before the official full 1.28 runtimes and before
+  # WebRTC, the VP8/VP9 and picture decoders and the GL elements were kept.
+  # Measured on 2026-10-06 with all of them: Windows 154.6 MB, Linux
+  # 146.4 MB, macOS about 110 MB. 160 leaves Windows 5 MB of room, so a
+  # plugin that grows by more than that is seen.
+  RUNTIME_BUDGET_MB: 160
   # The three device plugins together, measured at 4 MB on macOS. A tripwire,
   # not a tight budget: GStreamer is what fills the installer.
   PLUGINS_BUDGET_MB: 20

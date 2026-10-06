@@ -31,9 +31,9 @@
     Where to write the trimmed tree.
 
 .PARAMETER BudgetMb
-    Refuse to finish if the tree is bigger than this. The default is 130,
-    which is what the 150 MB installer budget leaves once the shell and the
-    mixer have had their 17 MB.
+    Refuse to finish if the tree is bigger than this. The default is 160,
+    the number the workflows use: the tree measured 154.6 MB on 2026-10-06
+    with the WebRTC, VP8/VP9, picture and GL plugins kept.
 
 .PARAMETER ExcludeGpl
     Leave out plugins whose licence is GPL (x264, x265). The catalogue falls
@@ -49,7 +49,7 @@ param(
     [string]$From = "",
     [string]$Version = "1.28.7",
     [string]$Out = "",
-    [double]$BudgetMb = 130,
+    [double]$BudgetMb = 160,
     [switch]$ExcludeGpl
 )
 

@@ -322,7 +322,7 @@ Options worth knowing:
 |---|---|
 | `--from <prefix>` / `-From` | trim a GStreamer already on the machine instead of downloading one |
 | `--version 1.28.7` / `-Version` | download that release |
-| `--budget-mb 130` / `-BudgetMb` | what the tree may weigh; the default is 130 |
+| `--budget-mb 160` / `-BudgetMb` | what the tree may weigh; the default is 160 |
 | `--exclude-gpl` / `-ExcludeGpl` | leave out x264 and x265, so the build can go out under Apache 2.0 |
 | `--extra-plugins <dir>` (`gst_trim.py`) | another plugin directory to choose from after the prefix's own; `bundle-gstreamer.sh` passes Homebrew's shared one |
 
@@ -373,7 +373,7 @@ built DLLs. The MSVC DLLs keep their debug information in `.pdb` files and are
 copied untouched: GNU strip, which a GitHub Windows runner has in
 `C:\mingw64`, rewrote them even with nothing to remove and broke OpenSSL and
 fourteen plugins with it.
-The 130 MB runtime budget has not changed. Linux release jobs run
+The runtime budget is 160 MB on every platform. Linux release jobs run
 `dev/build-linux-libav.sh <prefix>` first, then pass that prefix to the trimmer.
 The builder uses distribution source packages authenticated by apt, compiles
 FFmpeg without optional external libraries, and statically links it into a
