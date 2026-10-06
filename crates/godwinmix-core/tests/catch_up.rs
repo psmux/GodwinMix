@@ -95,7 +95,7 @@ impl std::io::Write for Log {
 /// The number after `key` on the first, or the last, line holding `marker`.
 fn number(text: &str, marker: &str, key: &str, last: bool) -> Option<i64> {
     let mut lines = text.lines().filter(|l| l.contains(marker));
-    let line = if last { lines.last()? } else { lines.next()? };
+    let line = if last { lines.next_back()? } else { lines.next()? };
     let at = line.find(key)? + key.len();
     line[at..].split(|c: char| !c.is_ascii_digit() && c != '-').next()?.parse().ok()
 }
