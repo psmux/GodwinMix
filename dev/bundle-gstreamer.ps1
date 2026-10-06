@@ -31,9 +31,9 @@
     Where to write the trimmed tree.
 
 .PARAMETER BudgetMb
-    Refuse to finish if the tree is bigger than this. The default is 130,
-    which is what the 150 MB installer budget leaves once the shell and the
-    mixer have had their 17 MB.
+    Refuse to finish if the tree is bigger than this. The default is 160,
+    the number the workflows use: the tree measured 154.6 MB on 2026-10-06
+    with the WebRTC, VP8/VP9, picture and GL plugins kept.
 
 .PARAMETER ExcludeGpl
     Leave out plugins whose licence is GPL (x264, x265). The catalogue falls
@@ -49,7 +49,7 @@ param(
     [string]$From = "",
     [string]$Version = "1.28.7",
     [string]$Out = "",
-    [double]$BudgetMb = 130,
+    [double]$BudgetMb = 160,
     [switch]$ExcludeGpl
 )
 
@@ -184,9 +184,22 @@ $env:GST_REGISTRY = $registry
 $env:PATH = (Join-Path $Out "bin") + ";" + $env:PATH
 Remove-Item $registry -ErrorAction SilentlyContinue
 
+# The same list as dev/bundle-gstreamer.sh, which says what each group is
+# for, less webpdec: the official Windows runtime has no WebP decoder at all,
+# neither webpdec nor avdec_webp, so a WebP picture does not open on Windows.
+$required = @(
+    "compositor", "videoflip", "videocrop", "videoscale", "audiomixer", "proxysink",
+    "rtmp2sink", "srtsink",
+    "webrtcbin", "srtpenc", "dtlssrtpenc", "nicesrc",
+    "matroskademux", "flvdemux", "qtdemux", "h264parse", "avdec_h264", "aacparse", "avdec_aac",
+    "opusdec", "vp8dec", "vp9dec",
+    "pngdec", "jpegdec", "rsvgdec", "gdkpixbufdec", "imagefreeze",
+    "glupload", "glcolorconvert", "glshader", "gldownload"
+)
+
 Write-Host ""
 $failed = 0
-foreach ($element in @("compositor", "videoflip", "videocrop", "videoscale", "audiomixer", "proxysink", "rtmp2sink", "srtsink", "webrtcbin", "srtpenc", "dtlssrtpenc", "nicesrc")) {
+foreach ($element in $required) {
     Write-Host -NoNewline ("{0,-26}" -f $element)
     & $inspect $element > $null 2>&1
     if ($LASTEXITCODE -eq 0) { Write-Host "ok" }
@@ -209,6 +222,26 @@ else { Write-Host "FAIL (neither openh264enc nor x264enc is loadable)"; $failed+
 & $inspect "mfh264enc" > $null 2>&1
 if ($LASTEXITCODE -ne 0) {
     Write-Host "note: mfh264enc is not in this tree, so Windows hardware encode is not available"
+}
+# The HLS ladder and file conversion make x264enc by name. -ExcludeGpl
+# leaves it out, which is allowed, and said here.
+& $inspect "x264enc" > $null 2>&1
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "note: x264enc is not in this tree, so HLS output and file conversion are not available"
+}
+
+if ($failed -ne 0) {
+    # Which plugin files GStreamer could not load, from a fresh scan, so the
+    # log says where to look rather than only that something is wrong.
+    Write-Host ""
+    Remove-Item $registry -ErrorAction SilentlyContinue
+    $env:GST_DEBUG = "GST_PLUGIN_LOADING:2"
+    $ErrorActionPreference = "Continue"
+    & $inspect -b 2>&1 | ForEach-Object { "$_" } |
+        Where-Object { $_ -match "fail|error|blacklist|\.dll" } | Select-Object -First 40 |
+        ForEach-Object { Write-Host $_ }
+    $ErrorActionPreference = "Stop"
+    $env:GST_DEBUG = ""
 }
 
 Remove-Item $registry -ErrorAction SilentlyContinue

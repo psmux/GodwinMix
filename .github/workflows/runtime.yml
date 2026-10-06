@@ -1,4 +1,8 @@
 name: runtime
+# The trimmed GStreamer the desktop installers carry, built and checked on
+# all three platforms in a quarter of the time the release takes. Each job
+# installs what the release's desktop job installs, so a gap shows up here
+# first. The budget is the release's RUNTIME_BUDGET_MB.
 on:
   workflow_dispatch:
   push:
@@ -6,6 +10,7 @@ on:
       - 'dev/build-linux-libav.sh'
       - 'dev/gst_*.py'
       - 'dev/bundle-gstreamer.sh'
+      - 'dev/bundle-gstreamer.ps1'
       - '.github/workflows/runtime.yml'
 concurrency:
   group: runtime-${{ github.ref }}
@@ -18,20 +23,23 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+      # gstreamer1.0-nice, -alsa and -pipewire are packages of their own on
+      # Ubuntu, outside the four plugin sets. See release.yml.
       - name: Build tools and GStreamer
         run: |
           sudo sed -i 's/^Types: deb$/Types: deb deb-src/' /etc/apt/sources.list.d/ubuntu.sources
           sudo apt-get update
           sudo apt-get install -y build-essential dpkg-dev meson ninja-build nasm zlib1g-dev libbz2-dev liblzma-dev \
-            libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+            libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libgstrtspserver-1.0-dev \
             gstreamer1.0-tools gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
-            gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav
+            gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav \
+            gstreamer1.0-nice gstreamer1.0-alsa gstreamer1.0-pipewire
       - name: Build private FFmpeg and plugin
         run: ./dev/build-linux-libav.sh "$RUNNER_TEMP/gst-prefix"
       - name: Test packaging and validate the runtime budget
         run: |
           python3 -m unittest discover -s dev -p test_gst_trim.py
-          ./dev/bundle-gstreamer.sh --from "$RUNNER_TEMP/gst-prefix" --budget-mb 130
+          ./dev/bundle-gstreamer.sh --from "$RUNNER_TEMP/gst-prefix" --budget-mb 160
       - name: Prove catalogue libav codecs are present
         env:
           GST_PLUGIN_PATH: ${{ github.workspace }}/tauri-app/gstreamer/linux/lib/gstreamer-1.0
@@ -47,6 +55,18 @@ jobs:
           tauri-app/gstreamer/linux/bin/gst-launch-1.0 -q \
             videotestsrc num-buffers=8 ! video/x-raw,format=I420,interlace-mode=interleaved \
             ! avdeinterlace ! fakesink
+  macos:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      # libnice-gstreamer is libnice's plugin, a formula of its own.
+      - name: GStreamer
+        run: brew install gstreamer libnice-gstreamer
+      - name: Validate the runtime budget and elements
+        run: |
+          python3 -m unittest discover -s dev -p test_gst_trim.py
+          ./dev/bundle-gstreamer.sh --budget-mb 160
   windows:
     runs-on: windows-latest
     timeout-minutes: 20

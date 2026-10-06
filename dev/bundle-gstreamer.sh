@@ -30,12 +30,13 @@ esac
 
 FROM=""
 VERSION=""
+EXTRA_PLUGINS=""
 OUT="$REPO/tauri-app/gstreamer/$PLATFORM"
-# What the runtime may take of the 150 MB installer budget in 09-builders,
-# once the shell and the mixer have had their 17 MB and the installer's own
-# compression has been left out of the arithmetic. Deliberately the same
-# number on every platform: a tree that fits on Windows fits anywhere.
-BUDGET=130
+# What the trimmed tree may weigh. Deliberately the same number on every
+# platform: a tree that fits on Windows fits anywhere. 130 until 2026-10-06;
+# with the WebRTC, VP8/VP9, picture and GL plugins kept and loading, Windows
+# measures 154.6 MB and Linux 146.4. The workflows pass the same 160.
+BUDGET=160
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -84,6 +85,11 @@ if [[ -z "$FROM" ]]; then
         # Homebrew's GStreamer scatters its dependencies across cellars, which
         # the trimmer follows. The result is the same tree.
         FROM="$(brew --prefix gstreamer)"
+        # libnice's plugin (nicesrc and nicesink, which a phone camera and
+        # the WHEP preview need) is a formula of its own, libnice-gstreamer,
+        # and lands only in the shared plugin directory. Without this the
+        # trimmer never saw it and the macOS app went out without it.
+        EXTRA_PLUGINS="$(brew --prefix)/lib/gstreamer-1.0"
     elif [[ "$PLATFORM" == "linux" ]]; then
         # The .deb depends on the distribution's packages and bundles nothing.
         # The AppImage is the one that has to carry a runtime, and on Linux
@@ -104,7 +110,8 @@ echo
 
 python3 "$REPO/dev/gst_trim.py" \
     --from "$FROM" --out "$OUT" --platform "$PLATFORM" \
-    --codecs "$REPO/codecs.toml" --budget-mb "$BUDGET"
+    --codecs "$REPO/codecs.toml" --budget-mb "$BUDGET" \
+    ${EXTRA_PLUGINS:+--extra-plugins "$EXTRA_PLUGINS"}
 
 # --- prove it loads ---------------------------------------------------------
 #
@@ -126,9 +133,24 @@ if [[ "$PLATFORM" == linux ]]; then
 fi
 rm -f "$GST_REGISTRY"
 
+# The mix and the two ways out. Then WebRTC, which is how a phone camera
+# and the browser preview connect: webrtcbin builds the srtp, dtls and nice
+# elements inside itself by name, so each is asked for. Then what a source
+# file or stream is opened with (decodebin picks these by type, so nothing in
+# the code names them), the picture decoders the media library uses, and the
+# four GL elements a shader transition runs on. The same list is in
+# dev/bundle-gstreamer.ps1, and the first part in --headless-check.
+REQUIRED="compositor videoflip videocrop videoscale audiomixer proxysink
+    rtmp2sink srtsink
+    webrtcbin srtpenc dtlssrtpenc nicesrc
+    matroskademux flvdemux qtdemux h264parse avdec_h264 aacparse avdec_aac
+    opusdec vp8dec vp9dec
+    pngdec jpegdec webpdec rsvgdec gdkpixbufdec imagefreeze
+    glupload glcolorconvert glshader gldownload"
+
 echo
 FAILED=0
-for element in compositor videoflip videocrop videoscale audiomixer proxysink rtmp2sink srtsink webrtcbin srtpenc dtlssrtpenc nicesrc; do
+for element in $REQUIRED; do
     printf '%-24s' "$element"
     if "$OUT/bin/gst-inspect-1.0" "$element" >/dev/null 2>&1; then
         echo ok
@@ -149,6 +171,19 @@ if [[ -n "$SOFTWARE" ]]; then
 else
     echo "FAIL (neither openh264enc nor x264enc is loadable)"
     FAILED=1
+fi
+# The HLS ladder and file conversion make x264enc by name. A tree trimmed
+# with --exclude-gpl has none, which is allowed, and said here.
+if ! "$OUT/bin/gst-inspect-1.0" x264enc >/dev/null 2>&1; then
+    echo "note: x264enc is not in this tree, so HLS output and file conversion are not available"
+fi
+
+if [[ $FAILED -ne 0 ]]; then
+    # Which plugin files GStreamer could not load, so the log says where to
+    # look. On a missing library the loader names it here too.
+    echo
+    rm -f "$GST_REGISTRY"
+    GST_DEBUG=GST_PLUGIN_LOADING:2 "$OUT/bin/gst-inspect-1.0" -b 2>&1 | grep -iE 'fail|error|blacklist|cannot|not found' | head -40 || true
 fi
 rm -f "$GST_REGISTRY"
 

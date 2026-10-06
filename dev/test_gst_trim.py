@@ -1,10 +1,12 @@
 """Packaging regressions which do not require an installed GStreamer."""
 
 from pathlib import Path
+import struct
 import tempfile
 import unittest
 from unittest.mock import patch
 
+import gst_symbols
 import gst_trim
 
 
@@ -42,6 +44,31 @@ class LibraryNames(unittest.TestCase):
                 found = gst_trim.closure([seed], [root], "linux")
             self.assertIn(alias, found)
             self.assertEqual(len(calls), 2)
+
+
+def pe(symbols: int, section: bytes) -> bytes:
+    """The headers of a PE file with one section, which is all the debug
+    test reads."""
+    data = bytearray(0x200)
+    data[:2] = b"MZ"
+    struct.pack_into("<I", data, 0x3C, 0x80)
+    data[0x80:0x84] = b"PE\0\0"
+    struct.pack_into("<H", data, 0x80 + 6, 1)
+    struct.pack_into("<II", data, 0x80 + 12, 0x180 if symbols else 0, symbols)
+    struct.pack_into("<H", data, 0x80 + 20, 0xF0)
+    head = 0x80 + 24 + 0xF0
+    data[head:head + len(section)] = section
+    return bytes(data)
+
+
+class Stripping(unittest.TestCase):
+    def test_an_msvc_dll_is_left_alone(self):
+        self.assertFalse(gst_symbols.pe_has_debug(pe(0, b".text")))
+
+    def test_a_mingw_dll_with_symbols_or_dwarf_is_stripped(self):
+        self.assertTrue(gst_symbols.pe_has_debug(pe(12, b".text")))
+        self.assertTrue(gst_symbols.pe_has_debug(pe(0, b".debug_i")))
+        self.assertTrue(gst_symbols.pe_has_debug(pe(0, b"/4")))
 
 
 if __name__ == "__main__":

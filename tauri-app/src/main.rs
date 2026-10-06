@@ -198,10 +198,11 @@ async fn wind_down(app: &AppHandle, stop_core: bool) -> i32 {
 /// runtime answered for every element the mixer cannot run without, out of
 /// files inside the bundle. `Some(1)` when it did not.
 ///
-/// The four elements are the ones a mix and a stream cannot be built without:
+/// The elements are the ones a mix and a stream cannot be built without:
 /// the compositor is the canvas, a software H.264 encoder is what a machine
-/// with no GPU uses, and `rtmp2sink` and `srtsink` are the two ways the
-/// programme leaves the building.
+/// with no GPU uses, `rtmp2sink` and `srtsink` are the two ways the
+/// programme leaves the building, and the WebRTC elements are how a phone
+/// camera comes in.
 fn bundled_runtime_check(app: &AppHandle) -> Option<i32> {
     let root = sidecar::bundled_gstreamer(app)?;
     println!("bundled GStreamer in {}", root.display());
@@ -210,8 +211,13 @@ fn bundled_runtime_check(app: &AppHandle) -> Option<i32> {
     // The same list the trim script checks: the slots' flip and crop and
     // the mix beside the two outputs, because a runtime that has the
     // encoder and not `videoflip` builds no programme at all, which is what
-    // the first bundled app on a macOS runner found.
-    for element in ["compositor", "videoflip", "videocrop", "videoscale", "audiomixer", "proxysink", "rtmp2sink", "srtsink"] {
+    // the first bundled app on a macOS runner found. The WebRTC four are how
+    // a phone camera connects; the v0.2.0 apps for macOS and Linux had no
+    // nicesrc, and this check did not ask.
+    for element in [
+        "compositor", "videoflip", "videocrop", "videoscale", "audiomixer", "proxysink", "rtmp2sink", "srtsink",
+        "webrtcbin", "srtpenc", "dtlssrtpenc", "nicesrc",
+    ] {
         match sidecar::inspect_element(app, element) {
             Ok(file) => println!("  {element} from {}", file.display()),
             Err(why) => {
