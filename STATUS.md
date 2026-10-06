@@ -74,6 +74,90 @@ installer budget: the NSIS installer is 195 MB and the `.msi` 271 MB against
 Still not in the Linux installer: `cmafmux`, `livesync`, the WHIP and WHEP
 plugin elements and `dav1ddec`, which need gst-plugins-rs and dav1d built for
 it. On Windows, WebP needs a WebP plugin the official runtime does not ship.
+## Transitions under load, 2026-10-06
+
+Branch `fix/transition-under-load`. The frame rate test for the new
+transitions failed under load (3 runs in 13 here, and on the macOS runner):
+the old scene stood still for the whole window and the new one appeared only
+when the transition settled, so a viewer saw a freeze and then a cut. It was
+three faults, not one, and none of them was the test's timing.
+
+**A reused binding that never wrote.** A `GstDirectControlBinding` writes a
+property only when the curve's value differs from the last one it wrote, and
+each pad property keeps one binding for good. The incoming pad of a slide or
+a wipe sits at alpha 1 for the whole window; the same pad came in at alpha 1
+the time before, and an apply has hidden it by hand since. The binding still
+remembered 1, so it never wrote 1 again, and the pad stayed at 0 until the
+settle wrote it directly. The old guard moved each curve's first point by a
+millionth, which only works if the compositor's first sync lands before the
+curve's second point, 17 ms in; a compositor behind the clock is a frame or
+two past that. Seen here before the change: the case that failed was the
+second wipe, whose pad the first had already driven, and the last tenth of
+its window was black (old scene gone, new one not drawn).
+Now every bind resets the binding's remembered value to the `G_MAXDOUBLE` a
+new one starts with, while it is disabled (`transition::forget`). The three
+tests in `mixer/transition/tests_binding.rs` sync a reused binding late, past
+the window and before it, by hand, with no pipeline; the first two failed
+before the change.
+
+**The compositor stopped every frame of a wipe to ask the encoder.** A wipe
+or a box trims the incoming picture with the slot's crop, so that slot's caps
+change every frame and `videoaggregator` renegotiates its output every frame.
+Each renegotiation sends an ALLOCATION query downstream, which waits at every
+`queue` until it has drained: here, the encoder's queue. Measured on a
+320x180 debug core, a one second wipe sent 30 of them, the longest 67 ms on a
+quiet machine and 113 ms with fourteen x264 encodes running beside it, and
+the compositor took no buffer from any slot while each one waited (one run
+counted 0 frames through the incoming crop in half a second). The output caps
+never change, so neither does the answer: `mixer::allocation` keeps the first
+answer for a set of caps on the compositor's src pad and gives it again, and
+forgets it on a RECONFIGURE from downstream (an output attached or taken
+away). An answer that offers a pool object is never kept, so a GPU path asks
+every time as it did. `a_wipe_does_not_send_the_encoder_an_allocation_query_every_frame`
+counts what reaches the encoder: 30 before, 1 now.
+
+**The window could start before the curves were on.** The window starts on
+the frame after the last one the compositor pushed, read before the curves
+are built. Under load the mixer thread was held off long enough that the
+compositor made the whole window with nothing bound: red at every tenth of a
+300 ms wipe, the new scene first drawn 1166 ms in, which is the macOS
+symptom. `Mixer::bind_in_time` checks once the curves are bound, and if the
+compositor got there first it moves every curve on by the frames it missed
+and binds them again; a curve is a function of the window's start, so the
+move is exact. A transition on a starved machine now starts a little late and
+plays whole. The layout glide uses the same call.
+
+**The tests.** Each transition test now reads the programme on the
+compositor's own timeline: it settles once the compositor has made a frame
+past the window, reads the lower third's position on the frame composed half
+way through its motion, checks the wipe's crop on the crop's own frame at the
+middle, and counts the slot's frames against what reached the slot rather
+than against the wall clock. They also wait for the sources to be live and
+for their slots to have passed a frame before taking: a slot with no frame
+has no picture to crop, so a wipe onto it falls back to a fade and the
+picture arrives part way through, which is right for the programme and not
+what the test is about.
+
+**Measured.** With fourteen 1080p `x264enc speed-preset=slow` encodes on this
+laptop's 16 threads, `mixer::transition` before the change: of the 6 runs
+that finished, the frame rate test failed 1 exactly as reported and the wipe
+crop test failed 1. After all of it: 19 runs of 19 passed (27 tests each); 5
+more runs died on the Quick Sync heap fault (0xc0000374) and are not counted.
+The whole `mixer::` suite with no outside load, four test threads: before,
+the frame rate test failed with a slide red at every tenth, the macOS
+symptom; after, 108 passed of 108 in both runs. The whole suite with eight
+encodes beside it fails the same handful of other tests before and after
+(`flush_window`, `full_pool_draw`, `stall_storm`, `restart`, `stale_work`,
+the rendered keyframe test) and usually dies on the heap fault before the
+end; every transition test that ran in those runs passed. Those are not
+looked into here.
+
+**Not done.** `fx` transitions (`Kind::Fx`) time their overlay pass from the
+crossing's own start, which `bind_in_time` does not move, so on a starved
+machine a stinger's clip can lead its cut by the frames the start moved. The
+allocation answer is kept for the software and GPU compositors alike, but
+only Windows ran it. A wipe still renegotiates the compositor's output every
+frame; that costs a caps query and a pool, now without waiting on anything.
 
 ## Transitions and effects from packs, 2026-10-06
 
@@ -264,22 +348,9 @@ test.
 **Still open.**
 
 * `mixer::transition_tests::every_new_transition_keeps_the_frame_rate_and_lands_on_the_taken_scene`
-  under load. With the mixer suite beside it, three times in thirteen runs on
-  this laptop, the scene coming in was not drawn at all for the whole window
-  (3 s at a slack of 3) and appeared about 400 ms after the window, when the
-  transition settled, while the outgoing scene moved as its curve said. A
-  longer window does not help, so this looks like a fault in how the
-  incoming pad is driven during a crossing on a starved machine, not timing
-  in the test. On the macOS runner (build run 37385300527) the outgoing
-  scene did not move either: red at every tenth of a 900 ms slide, the new
-  scene first drawn 1266 ms in. That reads as a compositor behind the clock
-  making the frames it owes back to back before the curves were bound, since
-  `compositor_now` starts the window from the last frame it made. Starting
-  it from the clock less the compositor's reported latency instead was
-  tried here and made `a_wipe_is_a_crop_on_the_slot_and_not_a_squash` fail
-  every run, so it was taken out again. It belongs with the transitions
-  work; the test now prints the window a tenth at a time and when the new
-  scene first showed.
+  under load: the scene coming in was not drawn for the whole window. Found
+  and fixed on `fix/transition-under-load`; see "Transitions under load"
+  above.
 * On the Windows runner, single runs of `a_lower_third_slides_out_and_back_in_to_where_it_was_placed`
   ("part way out the third is off the left edge, at 0"),
   `stall_storm::a_source_that_keeps_stalling_waits_longer_each_time`
