@@ -643,6 +643,16 @@ impl Drop for MultiviewSubscription {
     }
 }
 
+/// What a tile is scaled to before the mosaic places it: thumbnail sized raw
+/// video at whatever rate it comes. See `Multiview::add_tile_with`.
+fn tile_caps() -> gst::Caps {
+    let mut caps = CanvasCaps::video_at(THUMB_WIDTH, THUMB_HEIGHT, gst::Fraction::new(1, 1));
+    if let Some(s) = caps.make_mut().structure_mut(0) {
+        s.remove_field("framerate");
+    }
+    caps
+}
+
 struct Tile {
     /// None for the program return cell.
     source: Option<SourceId>,
@@ -843,33 +853,24 @@ impl Multiview {
         let queue = gstutil::queue_preview(&format!("mv-q-{tag}"))?;
         // The mosaic is a compositor too, and its tiles are scaled on its pads.
         gstutil::stop_flushes_here(&queue)?;
-        let rate = make("videorate", &format!("mv-rate-{tag}"))?;
-        // Start at the first buffer that arrives, not at the start of the
-        // segment. The mosaic is built when a client asks for it, which may be
-        // an hour into the broadcast, and the tiles then arrive carrying the
-        // programme's running time. Without this, videorate fills the gap
-        // between the segment start and that first buffer with duplicates: an
-        // 8 fps mosaic on a mixer that had been up ten minutes opened with
-        // nearly five thousand identical frames, encoded and pushed at the
-        // speed of the machine, before it settled to the rate it was asked
-        // for.
-        crate::probe::set_bool(&rate, "skip-to-first", true);
+        // No `videorate` here. Every tile arrives at the mosaic's rate
+        // already: a source's thumbnail end has its own, and so has the
+        // programme's return branch. A second one at the same rate decides
+        // each output frame only when the input after it has arrived, which
+        // held every tile a frame (125 ms at 8 fps) for nothing, and the
+        // preview drawn off the same tee with it. Measured on 2026-10-06: the
+        // programme tile 191 ms behind the wall clock with it, 128 ms without.
+        // The caps carry no rate for the same reason; the compositor takes
+        // the newest frame each time it draws, whatever rate it came at.
         let scale = make("videoscale", &format!("mv-scale-{tag}"))?;
-        let caps = gstutil::capsfilter(
-            &format!("mv-caps-{tag}"),
-            &CanvasCaps::video_at(
-                THUMB_WIDTH,
-                THUMB_HEIGHT,
-                gst::Fraction::new(self.cfg.fps.max(1), 1),
-            ),
-        )?;
+        let caps = gstutil::capsfilter(&format!("mv-caps-{tag}"), &tile_caps())?;
 
         // `allow-not-linked` so the preview taking a branch, or giving one
         // back, is nothing to the tile: the mosaic keeps drawing whatever
         // happens on the other side.
         let tee = make("tee", &format!("mv-tee-{tag}"))?;
         tee.set_property("allow-not-linked", true);
-        let branch = vec![src, queue, rate, scale, caps, tee.clone()];
+        let branch = vec![src, queue, scale, caps, tee.clone()];
         self.pipeline.add_many(&branch).context("adding tile branch")?;
         gst::Element::link_many(&branch).context("linking tile branch")?;
 
