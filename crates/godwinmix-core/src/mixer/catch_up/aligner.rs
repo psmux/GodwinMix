@@ -7,7 +7,7 @@ use gstreamer as gst;
 use gstreamer::prelude::*;
 use std::sync::{Arc, Weak};
 use std::time::Instant;
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
 impl TimelineAligner {
     /// Measure every buffer entering `queue`, the source's programme queue,
@@ -46,6 +46,7 @@ impl TimelineAligner {
             return;
         }
         let (verdict, least) = self.catch.review(now);
+        debug!(source = %self.id, lead_ms = ?least.map(|l| l / 1_000_000), "least lead this tick");
         match verdict {
             Verdict::Hold => {}
             Verdict::CatchUp(by) => {
