@@ -235,6 +235,39 @@ async fn every_new_transition_keeps_the_frame_rate_and_lands_on_the_taken_scene(
     mix.shutdown();
 }
 
+/// How many buffers pass this pad from now on.
+fn count_buffers(element: &gst::Element, pad: &str) -> Arc<std::sync::atomic::AtomicU64> {
+    let seen = Arc::new(std::sync::atomic::AtomicU64::new(0));
+    let counter = seen.clone();
+    element.static_pad(pad).expect("the pad").add_probe(gst::PadProbeType::BUFFER, move |_, _| {
+        counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        gst::PadProbeReturn::Ok
+    });
+    seen
+}
+
+/// Every frame a slot's crop lets through from now on: its running time and
+/// the width it left the picture at.
+fn crop_widths(crop: &gst::Element) -> Arc<Mutex<Vec<(u64, i32)>>> {
+    let out: Arc<Mutex<Vec<(u64, i32)>>> = Arc::default();
+    let src = crop.static_pad("src").expect("a src pad");
+    let sticky = src.sticky_event::<gst::event::Segment>(0).and_then(|e| e.segment().downcast_ref::<gst::ClockTime>().cloned());
+    let segment = Mutex::new(sticky);
+    let record = out.clone();
+    src.add_probe(gst::PadProbeType::BUFFER | gst::PadProbeType::EVENT_DOWNSTREAM, move |pad, info| {
+        if let Some(gst::EventView::Segment(sg)) = info.event().map(|e| e.view()) {
+            *segment.lock() = sg.segment().downcast_ref::<gst::ClockTime>().cloned();
+        }
+        let rt = info.buffer().and_then(|b| b.pts()).and_then(|pts| segment.lock().as_ref().and_then(|s| s.to_running_time(pts)));
+        let width = pad.current_caps().and_then(|c| c.structure(0).and_then(|s| s.get::<i32>("width").ok()));
+        if let (Some(rt), Some(width)) = (rt, width) {
+            record.lock().push((rt.nseconds(), width));
+        }
+        gst::PadProbeReturn::Ok
+    });
+    out
+}
+
 /// A wipe trims the picture rather than squashing it: the incoming pad's
 /// own caps narrow as the edge crosses, which only a crop does.
 #[tokio::test(flavor = "multi_thread")]
@@ -262,29 +295,26 @@ async fn a_wipe_is_a_crop_on_the_slot_and_not_a_squash() {
         .find(|s| s.source().map(String::as_str) == Some("green") && s.pad().control_binding("width").is_some())
         .map(|s| s.pad().clone())
         .expect("the incoming pad is driven");
-    // The slot keeps up while its crop changes size every frame: a
-    // renegotiation that waited on the compositor let through five buffers
-    // in half a second.
     let index = mix.pool.slots().iter().find(|s| s.pad() == &pad).map(|s| s.index).expect("its slot");
-    let crop = mix.program.by_name(&format!("slot-crop-{index}")).expect("the slot's crop");
-    let seen = Arc::new(std::sync::atomic::AtomicU64::new(0));
-    let counter = seen.clone();
-    crop.static_pad("src").expect("a src pad").add_probe(gst::PadProbeType::BUFFER, move |_p, _i| {
-        counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        gst::PadProbeReturn::Ok
-    });
-    // Counted against the frames the compositor made over the same half
-    // second of its own timeline rather than against the wall clock, which on
-    // a loaded machine starves both alike.
+    let element = |name: &str| mix.program.by_name(&format!("{name}-{index}")).expect("the slot's chain");
+    let (arrived, cropped) = (count_buffers(&element("slot-gate"), "sink"), crop_widths(&element("slot-crop")));
     let window = mix.transition_window().expect("a transition is on the canvas");
     let half = window.0 + 500_000_000;
-    assert!(tap.wait_past(half, limit).await, "the compositor made no frame half way through in 30 s");
-    let through = seen.load(std::sync::atomic::Ordering::Relaxed);
-    let composed = tap.frames.lock().iter().filter(|(t, _)| *t >= window.0 && *t < half).count();
-    assert!(composed >= 10, "the compositor made {composed} frames in half a second at 30 fps");
-    assert!(through * 3 >= composed as u64 * 2, "the slot let {through} frames through while the compositor made {composed}");
-    let caps = pad.current_caps().expect("the pad has caps");
-    let width: i32 = caps.structure(0).and_then(|s| s.get("width").ok()).expect("a width");
+    let until = std::time::Instant::now() + limit;
+    while !cropped.lock().iter().any(|(t, _)| *t >= half) {
+        assert!(std::time::Instant::now() < until, "the slot's crop let no frame past half way through in 30 s");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    // The slot keeps up with its own source while its crop changes size every
+    // frame: a renegotiation that waited on the compositor let five buffers
+    // through in half a second. Counted against what reached the slot over
+    // the same span rather than against the wall clock, which on a loaded
+    // machine starves both alike.
+    let came = arrived.load(std::sync::atomic::Ordering::Relaxed);
+    let through = cropped.lock().len() as u64;
+    assert!(through + 2 >= came * 2 / 3, "the slot let {through} frames through while {came} reached it");
+    // Half way through by the crop's own frames, not by the clock.
+    let width = cropped.lock().iter().min_by_key(|(t, _)| t.abs_diff(half)).map(|(_, w)| *w).expect("a cropped frame");
     assert!(width > 8 && width < canvas.width - 8, "half way through the picture is {width} wide of {}", canvas.width);
     assert!(tap.wait_past(window.1, limit).await, "the compositor made no frame past the window in 30 s");
     mix.handle(Command::TransitionEnd { transition: mix.transition_id() }).expect("the end");

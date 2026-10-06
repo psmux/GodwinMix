@@ -390,9 +390,16 @@ sync is never the wrong picture, and the curves take it from there.
 
 The curves are read by the compositor at the running time of each frame it
 makes, so a compositor that is behind the clock still plays the whole
-crossing, frame by frame, as it catches up. What it cannot do is go back:
-frames it had already made when the curves were bound show the old scene, so
-on a loaded machine a transition loses its first frame or two and no more.
+crossing, frame by frame, as it catches up. What it cannot do is go back: a
+frame it made before the curves were bound shows the old scene whatever the
+curves say. The window starts on the frame after the last one the compositor
+pushed, and on a loaded machine the mixer thread can be held off long enough
+that the compositor is already past that frame, or past the whole window,
+when the curves go on; measured once, a 300 ms wipe drew nothing and the new
+scene appeared 1166 ms in. So once the curves are bound the start is checked
+again, and if the compositor got there first every curve moves on by the
+frames it missed and is bound again (`Mixer::bind_in_time`). A transition on a
+starved machine starts a little late and then plays whole.
 Each pad property keeps one control binding for good, and a binding writes
 only when its value changes, so every new crossing makes the binding forget
 what it last wrote. Without that, an incoming pad whose alpha was 1 at the end
