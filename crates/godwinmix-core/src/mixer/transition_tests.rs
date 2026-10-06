@@ -270,6 +270,41 @@ async fn a_wipe_is_a_crop_on_the_slot_and_not_a_squash() {
     mix.shutdown();
 }
 
+/// A wipe changes the incoming slot's caps on every frame, and the compositor
+/// renegotiates its output each time. Its allocation query used to go down to
+/// the encoder on every one of those frames and wait there for the encoder's
+/// queue to drain: 30 in a one second wipe, up to 113 ms each under load,
+/// with the programme stopped for each. Now a repeat is answered at the
+/// compositor (`mixer::allocation`) and at most one goes down.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_wipe_does_not_send_the_encoder_an_allocation_query_every_frame() {
+    let mut mix = coloured(&["red", "green"]).await;
+    let canvas = mix.canvas.clone();
+    mix.take_scene(scene("a", vec![full(&canvas, "red")]), None).expect("the first scene");
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    let below = mix.program.by_name("vmix-caps").and_then(|c| c.static_pad("sink")).expect("the compositor's caps filter");
+    let sent = Arc::new(std::sync::atomic::AtomicU64::new(0));
+    let count = sent.clone();
+    // On the way down only: a query probe with no direction is called again
+    // with the answer.
+    below.add_probe(gst::PadProbeType::QUERY_DOWNSTREAM | gst::PadProbeType::PUSH, move |_, info| {
+        if info.query().is_some_and(|q| matches!(q.view(), gst::QueryView::Allocation(_))) {
+            count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        }
+        gst::PadProbeReturn::Ok
+    });
+    let spec = TransitionSpec::new(Kind::Wipe { direction: Default::default() }, 1000);
+    mix.take_scene_over(scene("b", vec![full(&canvas, "green")]), None, None, Some(spec)).expect("a wipe");
+    let window = mix.transition_window().expect("a transition is on the canvas");
+    let tap = Arc::new(Tap::default());
+    tap.watch(mix.pool.compositor(), Vec::new());
+    assert!(tap.wait_past(window.1, Duration::from_secs(30)).await, "the compositor made no frame past the window in 30 s");
+    let sent = sent.load(std::sync::atomic::Ordering::Relaxed);
+    assert!(sent <= 1, "{sent} allocation queries went down to the encoder during a one second wipe");
+    mix.handle(Command::TransitionEnd { transition: mix.transition_id() }).expect("the end");
+    mix.shutdown();
+}
+
 /// The easing changes the frames between and nothing else.
 #[test]
 fn an_eased_fade_is_behind_a_linear_one_half_way_and_level_at_the_ends() {
