@@ -144,6 +144,27 @@ why="about to rebuild" video_behind_ms=-2427  vq_buffers=30  vq_time_ms=1000  aq
 A source that has merely stopped producing looks different again: behind by
 seconds and with nothing queued at all, which is what a suspended browser gives.
 
+These running times are the source's own, before the aligner's shift, so for
+a source the aligner places (an `exec:` source, a container sidecar, a web
+page) they say where the source's clock had got to and not how long its frames
+wait. That second number is the lead, measured on every frame entering
+`pgm-vq-<id>` and `pgm-aq-<id>`. When every frame of a live source has waited
+more than 200 ms for two seconds, the mixer moves the source earlier by the
+least lead it saw, less 40 ms, and logs it at info:
+
+```
+a live source was running behind its own frames; dropped to the newest
+    source=cam behind_ms=1476 caught_up_ms=1436 total_ms=1436
+```
+
+`total_ms` is how far the source has been moved since its offset was decided;
+a restart or a seek sets it back to zero. A source that fills its queues again
+straight after a catch up is not live, and is left alone with a warning, `this
+source filled its queues again straight after a catch up, so it is not live`.
+A source that can be scrubbed is never moved. At debug level
+(`godwinmix_core::mixer::catch_up`) each source's least lead is printed every
+half second. See [How late the picture is](../explanation/how-late-the-picture-is.md).
+
 Measured on a Mac over 30 add and remove cycles of a superimposed web page:
 open descriptors, pipes, regular files, cached clips and profile directories
 all flat, with memory steady. Two caveats found while measuring, both macOS
