@@ -1,5 +1,73 @@
 # Where GodwinMix stands
 
+## The camera that showed up late, 2026-10-06
+
+Branch `fix/preview-latency`. "The preview video appears so delayed. Everything
+from my cam is appearing so delayed." It was, by more than half a second for
+good, and the page added more on top.
+
+**Measured.** A debug core on this laptop, a source writing the wall clock into
+every frame as a barcode, read back out of what the page is sent (stamped on
+arrival, decoded afterwards), out of the programme over SRT, and out of the
+page itself in headless Chrome. Medians in milliseconds, two rounds each.
+With the source's first 1.5 s of frames arriving at once, as the camera's do:
+the source tile 1649 to 1708 before and 201 to 202 after, the programme tile
+1676 and 235, Studio preview 1515 to 1570 and 212, the programme output 1648
+and 257. With the source on time: the tile 102 to 111 and 68, the programme
+tile 188 and 187, the preview 96 to 98 and 82. The installed app's own log
+put its webcam 582, 606 and 932 ms ahead of when its frames arrived, on three
+starts; its mosaic held the webcam's tile queue full while it ran.
+
+**What it was.**
+
+* *Placement.* A container source (the camera and the screen on Windows, a web
+  page, an `exec:` source) is put on the programme's timeline when its first
+  segment arrives, and stays there. The camera's first frames wait in the pipe
+  while the core links the decoder and arrive in a burst, so every later frame
+  was due as long after it arrived as that first one had waited, and the
+  compositors held it that long. Now each frame entering the programme pipeline
+  is measured, and a live source whose every frame waited more than 200 ms for
+  two seconds is moved back by the least wait less 40 ms, with a log line;
+  queued frames are then late and dropped. Picture and sound move together. A
+  source that fills up again straight after is not live and is left alone with
+  a warning; a seekable one is never moved (`mixer::catch_up`).
+* *The mosaic.* Every tile had a second `videorate` at the rate it already came
+  at, holding each tile a frame, and the programme tile was stamped 100 ms
+  before it arrived, so the mosaic waited for its next frame before drawing.
+  Both are gone. In the core's own test (640x360) the source tile went from
+  113 to 144 ms to 34 to 35, the preview from 34 to 49 to 35 to 48; the
+  programme tile went from 34 to 36 to 65, because it no longer holds the whole
+  mosaic back.
+* *The page.* The Sources panel attaches every tile on each render, and each
+  attach repainted every canvas, the programme monitor included: 1018 monitor
+  paints in 15 s for 120 frames. Now an attach paints its own canvas. The
+  monitor went from 200 to 140 ms median, 491 to 181 worst.
+
+Not a cause: the preview path has no video encoder (JPEG over `/rpc`, two
+frames deep, newest kept), so there was no GOP, B frame or HLS segment to cut;
+the programme encoders already run without B frames.
+
+**Tests.** `mixer::catch_up` (the decision on numbers, and the offset reaching
+the pad below with the next buffer), `tests/catch_up.rs` (the zero-dep Python
+plugin with its first 1.5 s sent at once: caught up by 1531 to 1542 ms, 40 ms
+of lead after, still live), `multiview::latency_tests` (the running time read
+back out of the tile, the programme tile and the preview, against budgets of
+90, 120 and 90 ms; the old mosaic failed the tile's), and a UI test that
+attaching a tile leaves the monitor's canvas alone.
+
+**Not done.** The real camera was in use by the installed app and was not
+opened; its sidecar ran with `videotestsrc`, which came up 10 to 300 ms ahead
+here, once caught up by 243 ms. The fix has not run in the installed app. The
+programme tile moves between about 70 and 190 ms from run to run with nothing
+changed, by where the programme's and the mosaic's eight frames a second fall
+against each other. The programme compositor still waits for its latest input
+up to its one second budget. In the browser a frame's message is read about
+60 ms after a plain socket reads it. `mixer::tests::full_pool` failed once in
+a loaded run of the whole `mixer::` suite and passed three times alone; the UI
+suite's `Make the scene`, `scrolling down` and echo timing tests fail the same
+with and without this branch. [How late the picture
+is](docs/explanation/how-late-the-picture-is.md) has every stage.
+
 ## What the v0.2.0 installers left out, 2026-10-06
 
 The desktop installers carry a trimmed GStreamer. Its self check asked for
