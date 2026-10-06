@@ -9,9 +9,18 @@ use std::time::{Duration, Instant};
 /// Whether GStreamer GL runs a shader on this machine: one frame through a
 /// trivial transition. Asked once and remembered, and only when something
 /// wants to know (`fx.list`, or the first shader take).
+///
+/// A GPU that is there but never answers (a runner with no GL context, where
+/// `glupload` builds and then waits for good) counts as none: the answer
+/// must come back inside three seconds.
 pub fn available() -> bool {
     static ANSWER: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     *ANSWER.get_or_init(|| {
+        // Asked from an import as well as from a running core, so it may be
+        // the first thing in the process to touch GStreamer.
+        if gstreamer::init().is_err() {
+            return false;
+        }
         let Ok(fragment) = super::fragment("vec4 transition(vec2 uv) { return mix(getFromColor(uv), getToColor(uv), progress); }") else { return false };
         let Ok(gl) = Gl::start(&fragment, (64, 36)) else { return false };
         let pic = vec![128u8; 64 * 36];
@@ -29,7 +38,7 @@ pub fn available() -> bool {
 pub fn settle(gl: &Gl, old: &Pic<'_>, planes: &mut Planes<'_>, t: f64, wait: Duration) -> bool {
     let deadline = Instant::now() + wait;
     gl.forget();
-    gl.mix(old, planes, t);
+    gl.mix(old, planes, t, None);
     while Instant::now() < deadline && !gl.has_failed() {
         std::thread::sleep(Duration::from_millis(15));
         if gl.answered_now() {
