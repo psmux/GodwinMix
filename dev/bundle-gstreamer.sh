@@ -32,11 +32,11 @@ FROM=""
 VERSION=""
 EXTRA_PLUGINS=""
 OUT="$REPO/tauri-app/gstreamer/$PLATFORM"
-# What the runtime may take of the 150 MB installer budget in 09-builders,
-# once the shell and the mixer have had their 17 MB and the installer's own
-# compression has been left out of the arithmetic. Deliberately the same
-# number on every platform: a tree that fits on Windows fits anywhere.
-BUDGET=130
+# What the trimmed tree may weigh. Deliberately the same number on every
+# platform: a tree that fits on Windows fits anywhere. 130 until 2026-10-06;
+# with the WebRTC, VP8/VP9, picture and GL plugins kept and loading, Windows
+# measures 154.6 MB and Linux 146.4. The workflows pass the same 160.
+BUDGET=160
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
