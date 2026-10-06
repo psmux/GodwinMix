@@ -288,7 +288,9 @@ jobs:
             throw "the bundler did not place the runtime next to the executable"
           }
           & .\tauri-app\target\release\godwinmix-desktop.exe --headless-check
-          if ($LASTEXITCODE -ne 0) { throw "--headless-check failed" }
+          # The exit code in hex: a crash reads as 0xC0000374 or 0xC0000005,
+          # where a check that failed on its own terms exits 1.
+          if ($LASTEXITCODE -ne 0) { throw ("--headless-check failed with exit code 0x{0:X8}" -f $LASTEXITCODE) }
 
       # What the mixer said when the headless check found it stopped. The
       # desktop app writes its logs under the platform's log directory, and a

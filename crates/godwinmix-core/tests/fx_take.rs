@@ -59,9 +59,7 @@ async fn blue_then_red() -> (MixerHandle, Frames, std::thread::JoinHandle<()>) {
     (handle, frames, thread)
 }
 
-/// `GODWINMIX_TIMING_SLACK`: a macOS runner busy with other jobs held the
-/// programme's frames 167 ms apart once, through a stinger that costs this
-/// laptop nothing.
+/// `GODWINMIX_TIMING_SLACK`: a busy macOS runner once held frames 167 ms apart.
 fn slack() -> f64 {
     godwinmix_core::plugin::harness::timing_slack()
 }
@@ -73,16 +71,17 @@ fn neither(p: (u8, u8, u8)) -> bool {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn an_alpha_stinger_covers_the_cut_and_leaves_the_new_scene() {
     let (handle, frames, thread) = blue_then_red().await;
+    let from = frames.mark();
     take_with(&handle, "b", Some(plan("glitch"))).await;
     let seen = watch(&frames, &[(160, 90), (20, 20), (300, 160)], 1_400).await;
     settle(300).await;
     let end = frames.latest().unwrap().yuv(160, 90);
-    let worst = frames.worst_interval();
+    let (worst, before) = frames.worst_since(from);
     stop(handle, thread);
     let covered = seen.iter().filter(|s| s.iter().all(|p| neither(*p))).count();
     assert!(covered > 0, "the glitch never covered the picture: {seen:?}");
     assert!(near(end, RED), "the new scene is on after the stinger: {end:?}");
-    assert!(worst < 34.0 * 3.0 * slack(), "the programme kept its frames: worst interval {worst:.1} ms");
+    assert!(worst < 34.0 * 3.0 * slack(), "the programme kept its frames: worst interval {worst:.1} ms ({before:.1} ms before)");
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -135,15 +134,16 @@ async fn an_effect_fired_over_a_moving_source_plays_and_goes() {
     add(&handle, SourceConfig::bare("ball", "test://ball")).await;
     take_with(&handle, "ball", None).await;
     settle(1_000).await;
+    let from = frames.mark();
     let p = plan("film-burn");
     handle.request(|ack| Command::FireFx { plan: Box::new(p), opacity: 1.0, ack: Some(ack) }).await.expect("fire");
     let seen = watch(&frames, &[(20, 90)], 1_600).await;
     settle(2_500).await;
     let after = frames.latest().unwrap().yuv(20, 90);
-    let worst = frames.worst_interval();
+    let (worst, before) = frames.worst_since(from);
     stop(handle, thread);
     let burnt = seen.iter().any(|s| s[0].0 > 200);
     assert!(burnt, "the burn should white out the left edge: {seen:?}");
     assert!(after.0 < 60, "and be gone once its clip ends: {after:?}");
-    assert!(worst < 34.0 * 3.0 * slack(), "the programme kept its frames: worst interval {worst:.1} ms");
+    assert!(worst < 34.0 * 3.0 * slack(), "the programme kept its frames: worst interval {worst:.1} ms ({before:.1} ms before)");
 }
