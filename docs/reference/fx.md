@@ -133,7 +133,7 @@ takes the same way a `.glsl`, `.frag` or `.fs`, as a shader transition, and a
 clip of light on black with no alpha, as an effect and a transition when it
 covers enough. A clip with alpha stays a gallery clip there, because it is as
 likely to be a moving lower third as a stinger; import it with `fx.import` or
-the Looks panel to make it a stinger. On the
+the transition picker beside Take to make it a stinger. On the
 starter set the measurement agrees with the shipped files to within 34 ms
 (`crates/godwinmix-core/tests/fx_import.rs`).
 

@@ -9,6 +9,7 @@ import { graphicTests } from "./graphics.js";
 import { galleryTests } from "./gallery.js";
 import { studioTests } from "./studio.js";
 import { transitionTests } from "./transitions.js";
+import { studioNextTests } from "./studio-next.js";
 import { sceneFixTests, sceneFixLoadTests } from "./scene-fix.js";
 import { scenePictureTests } from "./scene-pictures.js";
 import { greenScreenTests } from "./green-screen.js";
@@ -1660,10 +1661,15 @@ async function sceneTabsSuite() {
     ok(made.face.querySelector("button.scene-add-source"), "the tile lost its add button");
   });
 
+  // Outside Studio mode, which is now where a new browser starts.
+  const { settings: tabSettings, setSetting: setTabSetting } = await import("../shell/settings.js");
   test("the Take button puts the focused scene on air", () => {
+    const studioWas = tabSettings().producer;
+    setTabSetting("producer", false);
     calls.length = 0;
     setFocusedScene("two-box");
     panel.take.click();
+    setTabSetting("producer", studioWas);
     eq(calls.filter((c) => c.method === "program.take").map((c) => c.params.scene), ["two-box"]);
   });
 
@@ -2685,6 +2691,7 @@ legacySuite()
   })
   .then(() => studioTests(test, eq, ok))
   .then(() => transitionTests(test, eq, ok))
+  .then(() => studioNextTests(test, eq, ok))
   .then(() => sceneFixTests(test, eq, ok))
   .then(() => sceneFixLoadTests(test, eq, ok))
   .then(() => scenePictureTests(test, eq, ok))

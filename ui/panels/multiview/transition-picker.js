@@ -1,143 +1,80 @@
-// The transition beside Take: which one, which way or which colour, how it
-// eases and how long it runs.
+// The transition beside Take, the way a vision mixer's panel has it: one
+// control that says what the next Take does ("Wipe left 0.5 s") and opens the
+// picker, and at most three quick picks, the ones this desk takes with most.
+// Everything else is in the picker (transition-sheet.js), which is only built
+// while it is open.
 //
-// Remembered in this browser, so the desk's choice is there the next time the
-// page opens. The list starts with the built in transitions and grows with
-// whatever `program.transitions` adds (a collection's own names, a plugin's,
-// the fx library's imported transitions),
-// asked once. A small drawing beside the list shows the chosen one; it is a
-// fixed SVG, not a picture of any video.
+// The list starts with the built in transitions and grows with whatever
+// `program.transitions` adds (a collection's own names, a plugin's, the fx
+// library's imported transitions), asked once.
 
-import { el, on } from "../../shell/dom.js";
+import { el } from "../../shell/dom.js";
+import { TransitionState, TYPES } from "./transition-state.js";
+import { iconSvg } from "./transition-icons.js";
+import { transitionSheet } from "./transition-sheet.js";
+import { popover } from "./studio-popover.js";
 
-const KEY = "gmx.studio.take";
+export { TYPES };
 
-export const TYPES = [
-  { type: "fade", label: "Fade" },
-  { type: "move", label: "Move" },
-  { type: "wipe", label: "Wipe", option: "direction" },
-  { type: "slide", label: "Slide", option: "direction" },
-  { type: "push", label: "Push", option: "direction" },
-  { type: "zoom", label: "Zoom" },
-  { type: "zoom-out", label: "Zoom out" },
-  { type: "box", label: "Box" },
-  { type: "dip", label: "Dip", option: "colour" },
-];
-const OPTIONS = {
-  direction: [["left", "Left"], ["right", "Right"], ["up", "Up"], ["down", "Down"]],
-  colour: [["black", "To black"], ["white", "To white"]],
-};
-const EASINGS = [["ease-in-out", "Smooth"], ["linear", "Linear"], ["ease-in", "Ease in"], ["ease-out", "Ease out"]];
-const DURATIONS = [[250, "0.25 s"], [500, "0.5 s"], [1000, "1 s"], [2000, "2 s"]];
+/** The control and its picker. `armedScene()` names the scene For assigns to. */
+export function picker({ client = null, armedScene = () => null } = {}) {
+  const state = new TransitionState();
+  const icon = el("span.transition-icon");
+  const name = el("span.tp-name.ellipsis");
+  const length = el("span.tp-length");
+  const current = el("button.btn.tp-current", {
+    type: "button", "aria-haspopup": "dialog",
+    title: "The transition Take uses. Opens the list of every transition.",
+  }, [icon, el("span.tp-text", {}, [name, length]), el("span.tp-caret", { text: "▾", "aria-hidden": "true" })]);
+  const picks = el("div.tp-picks", { role: "group", "aria-label": "Quick transitions" });
+  const sheet = transitionSheet(state, { client, armedScene, done: () => pop.close() });
+  const pop = popover(sheet.el, current, { onOpen: () => sheet.fill(), onClose: () => sheet.empty() });
 
-// Two boxes, old and new, in the shape each transition leaves them half way.
-const OLD = 'fill="currentColor" opacity="0.35"';
-const NEW = 'fill="currentColor"';
-const ICONS = {
-  fade: `<rect x="1" y="1" width="26" height="14" ${OLD}/><rect x="1" y="1" width="26" height="14" fill="currentColor" opacity="0.5"/>`,
-  move: `<rect x="1" y="1" width="26" height="14" ${OLD}/><rect x="9" y="4" width="14" height="9" ${NEW}/>`,
-  wipe: `<rect x="1" y="1" width="13" height="14" ${OLD}/><rect x="14" y="1" width="13" height="14" ${NEW}/>`,
-  slide: `<rect x="1" y="1" width="26" height="14" ${OLD}/><rect x="14" y="1" width="20" height="14" ${NEW}/>`,
-  push: `<rect x="-6" y="1" width="20" height="14" ${OLD}/><rect x="14" y="1" width="20" height="14" ${NEW}/>`,
-  zoom: `<rect x="1" y="1" width="26" height="14" ${OLD}/><rect x="8" y="4" width="12" height="8" ${NEW}/>`,
-  "zoom-out": `<rect x="1" y="1" width="26" height="14" ${NEW}/><rect x="8" y="4" width="12" height="8" ${OLD}/>`,
-  box: `<rect x="1" y="1" width="26" height="14" ${OLD}/><rect x="7" y="4" width="14" height="8" ${NEW}/>`,
-  dip: `<rect x="1" y="1" width="26" height="14" fill="currentColor" opacity="0.1"/>`,
-};
-
-function remembered() {
-  try {
-    return JSON.parse(localStorage.getItem(KEY)) || {};
-  } catch {
-    return {};
+  function paint() {
+    const k = state.kind();
+    icon.innerHTML = iconSvg(state.type);
+    name.textContent = state.describe().replace(` ${state.lengthText()}`, "");
+    length.textContent = state.lengthText();
+    current.setAttribute("aria-label", `Transition: ${state.describe()}. Choose another`);
+    picks.replaceChildren(...state.picks().map((type) => {
+      const label = state.kind(type).label || type;
+      return el("button.btn.tp-pick", {
+        type: "button", title: `Take with ${label}`, "aria-label": label,
+        "aria-pressed": String(type === state.type),
+        onclick: () => state.set({ type }),
+      }, [el("span.tp-art", { html: iconSvg(type) }), el("small.ellipsis", { text: label })]);
+    }));
+    current.dataset.origin = k.origin || "built-in";
+    pop.place();
   }
-}
-
-function remember(value) {
-  try {
-    localStorage.setItem(KEY, JSON.stringify(value));
-  } catch {
-    /* the choice lasts the session */
-  }
-}
-
-function select(label, pairs, chosen) {
-  return el("select", { "aria-label": label, title: label },
-    pairs.map(([value, text]) => el("option", { value: String(value), text, selected: String(chosen) === String(value) })));
-}
-
-/** The picker: its element, and the request a take sends. */
-export function picker(onChange) {
-  const saved = remembered();
-  const type = select("Transition", TYPES.map((t) => [t.type, t.label]), saved.type || "fade");
-  const option = el("select");
-  const easing = select("Easing", EASINGS, saved.easing || "ease-in-out");
-  const length = select("Transition length", DURATIONS, saved.ms || 500);
-  const icon = el("span.transition-icon", { "aria-hidden": "true" });
-  const extra = new Map();
-
-  const kind = () => TYPES.find((t) => t.type === type.value) || extra.get(type.value) || { type: type.value };
-  const ms = () => Number(length.value) || 500;
-  // The second list is the directions or the colours, whichever the chosen
-  // transition reads, and is hidden for one that reads neither.
-  const fill = (want) => {
-    const k = kind();
-    const pairs = OPTIONS[k.option] || [];
-    option.replaceChildren(...pairs.map(([v, t]) => el("option", { value: v, text: t, selected: v === want })));
-    option.hidden = !pairs.length;
-    option.setAttribute("aria-label", k.option === "colour" ? "Colour" : "Direction");
-    icon.innerHTML = `<svg viewBox="0 0 28 16" width="28" height="16">${ICONS[k.type] || ICONS.fade}</svg>`;
-  };
-  const changed = () => {
-    remember({ type: type.value, option: option.value, easing: easing.value, ms: ms() });
-    if (onChange) onChange();
-  };
-  fill(saved.option);
-  on(type, "change", () => {
-    fill();
-    changed();
-  });
-  for (const s of [option, easing, length]) on(s, "change", changed);
+  state.onChange(paint);
+  paint();
 
   return {
-    el: el("div.transition-picker", {}, [el("div.row", {}, [icon, type]), option, easing, length]),
-    ms,
-    /** A short line for the Take button: "Wipe left 0.5 s". */
-    describe() {
-      const k = kind();
-      const how = k.option ? ` ${option.selectedOptions[0]?.text.toLowerCase() || ""}` : "";
-      // A clip from the fx library runs for its own length, whatever is chosen.
-      const long = k.ownMs ? `${k.ownMs / 1000} s` : length.selectedOptions[0]?.text || "";
-      return `${k.label || type.value}${how} ${long}`.trim();
+    el: current,
+    picks,
+    sheet: sheet.el,
+    state,
+    ms: () => state.ms(),
+    describe: () => state.describe(),
+    request: (durationMs) => state.request(durationMs),
+    /** Count a take, so the quick picks follow what this desk uses. */
+    used: () => {
+      state.used();
+      paint();
     },
-    /** `{type, duration_ms}`, with `params` only when there is something in it. */
-    request(durationMs) {
-      const k = kind();
-      const out = { type: type.value, duration_ms: durationMs };
-      const params = {};
-      if (k.option && option.value) params[k.option] = option.value;
-      if (easing.value !== "ease-in-out" && k.origin !== "plugin") params.easing = easing.value;
-      if (Object.keys(params).length) out.params = params;
-      return out;
+    /** Choose a transition by name. */
+    choose(type) {
+      if (!TYPES.some((t) => t.type === type) && !state.extra.has(type)) state.learn([{ name: type, origin: "collection" }]);
+      state.set({ type });
     },
-    /** Choose a transition by name, as the fx panel's Use does. */
-    choose(name) {
-      if (![...type.options].some((o) => o.value === name)) type.appendChild(el("option", { value: name, text: name }));
-      type.value = name;
-      fill();
-      changed();
-    },
-    /** Add the collection's, the plugins' and the fx library's names, once, from the core. */
-    async load(client) {
+    close: () => pop.close(),
+    /** Add the collection's, the plugins' and the fx library's names, once. */
+    async load(from = client) {
       try {
-        const answer = await client.call("program.transitions", {});
-        for (const t of (answer && answer.transitions) || []) {
-          if (t.origin === "built-in" || TYPES.some((b) => b.type === t.name)) continue;
-          const clip = t.origin === "fx" && (t.type === "stinger" || t.type === "overlay");
-          extra.set(t.name, { type: t.name, label: t.name, origin: t.origin, ownMs: clip ? t.duration_ms : 0 });
-          type.appendChild(el("option", { value: t.name, text: `${t.name} (${t.origin})`, selected: saved.type === t.name }));
-        }
-        fill(option.value);
+        const answer = await from.call("program.transitions", {});
+        state.learn((answer && answer.transitions) || []);
+        paint();
       } catch {
         /* an older core: the built in list is what it has */
       }

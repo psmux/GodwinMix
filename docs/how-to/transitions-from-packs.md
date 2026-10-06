@@ -22,24 +22,26 @@ Resolve `.drfx`), render the transition out of that editor first, as ProRes
 
 ## From the page
 
-Studio mode puts the take bar between preview and programme.
+Studio mode puts the take bar between preview and programme. Under Take and
+Cut is the transition the next take uses.
 
-1. Press **Looks** under the transition list. A panel opens with every
-   imported transition, each moving in a small preview over a blue scene that
-   becomes an orange one.
-2. Press **Import**, or drop the files or the zip onto the panel. The mixer
+1. Press it. A list opens with every transition, the built in ones and then,
+   under **From packs**, every imported one, each moving in a small preview
+   over a blue scene that becomes an orange one.
+2. Press **Import**, or drop the files or the zip onto the list. The mixer
    looks at each file, decides what it is and where it covers the picture,
    and adds it. A file it cannot use is listed with the reason.
-3. Press **Use** on one. The transition list now shows it, and Take uses it.
+3. Press **Use** on one. The control under Take now names it, and Take uses
+   it. Once it has been taken with a few times it joins the three quick picks.
 4. Press **Default** to use it whenever a take names no transition, or
    **For** a scene to use it whenever that scene is taken. Cut is still a cut.
 
-Effects get a row of buttons under the take bar. Each plays over whatever is
-on air and goes when its clip ends; Alt+1 to Alt+9 press them from the
-keyboard. On a Mac whose Option key types a symbol, give them other keys in
-the shortcuts list.
+Effects are behind one **Effects** button on the take bar, with how many there
+are. It opens the list; each plays over whatever is on air and goes when its
+clip ends. Alt+1 to Alt+9 play the first nine without opening it. On a Mac
+whose Option key types a symbol, give them other keys in the shortcuts list.
 
-On a phone the panel fills the bottom of the screen, two previews to a row,
+On a phone both lists fill the bottom of the screen, two previews to a row,
 and every button is big enough for a thumb.
 
 The Graphics gallery lists every transition and effect too, as those kinds,
