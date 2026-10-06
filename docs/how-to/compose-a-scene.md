@@ -165,8 +165,9 @@ Left. See [change scene with a transition](transitions.md#show-and-hide-an-item-
 
 ## Studio mode
 
-**Studio mode**, under the Programme monitor (or the producer switch in
-Settings), changes a click from "put it on air" to "put it in Preview". A
+Studio mode, which the page opens in, changes a click from "put it on air" to
+"put it in Preview". **Studio mode** under the Programme monitor (or the
+switch in Settings) turns it off and on. A
 click on a scene tab does it too. Take, Cut and the transition sit between
 Preview and Programme. See
 [Use the mixer controls](preview-monitor.md#studio-mode).

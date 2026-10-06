@@ -6,56 +6,102 @@ gmx-program.studio .monitor-pane { border-width: 2px; }
 gmx-program.studio .preview-pane { border-color: var(--ok); cursor: pointer; }
 gmx-program.studio .program { border-color: var(--live); }
 gmx-program.studio .program.on { box-shadow: none; }
-.preview-pane.unarmed .monitor-label span { color: var(--dim); }
+.preview-pane.unarmed { border-style: dashed; }
+.preview-why { color: var(--dim); font-size: var(--fs-sm); white-space: nowrap; }
+.preview-why[hidden] { display: none; }
 .preview-note[hidden] { display: none; }
 .preview-note { display: flex; align-items: center; gap: 8px; padding: 6px 10px; font-size: var(--fs-sm); color: var(--warn); background: var(--panel2); border-top: 1px solid var(--line); }
 
-.take-bar {
-  display: flex; flex-direction: column; justify-content: center; gap: 8px;
-  flex: 0 0 112px; min-width: 0;
+/* The picture, and words over it where a source has no picture yet. */
+.preview-frame { position: relative; display: flex; flex: 1 1 auto; min-height: 0; }
+.preview-frame canvas { width: 100%; }
+.preview-slots { position: absolute; inset: 0; pointer-events: none; }
+.preview-slot {
+  position: absolute; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  padding: 6px; overflow: hidden; text-align: center; color: var(--text); font-size: var(--fs-sm);
+  background: rgba(20, 20, 20, 0.72); outline: 1px dashed var(--line); outline-offset: -1px;
 }
-.take-bar .take-button {
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
-  min-height: 84px; font-size: 20px; font-weight: 700; letter-spacing: 0.04em;
-}
-.take-bar .take-how { font-size: var(--fs-sm); font-weight: 400; letter-spacing: 0; opacity: 0.85; }
-.take-bar .cut-button { min-height: 44px; font-size: 15px; font-weight: 600; }
-.take-bar select { width: 100%; max-width: none; }
+.preview-slot strong { max-width: 100%; }
+.preview-slot span { color: var(--dim); }
 
+/* The take bar. Take and Cut come first, large, and are never pushed away:
+   the bar starts at its top and anything below them scrolls inside it. */
+.take-bar {
+  display: flex; flex-direction: column; justify-content: flex-start; gap: 8px;
+  flex: 0 0 140px; min-width: 0; min-height: 0; overflow-y: auto;
+}
+.take-main, .take-more { display: flex; flex-direction: column; gap: 8px; }
+.take-bar .take-button {
+  min-height: 84px; font-size: 22px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+}
+.take-bar .cut-button { min-height: 48px; font-size: 16px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+.take-bar .btn { min-width: 0; }
+
+/* The one transition control: its drawing, what it is, how long, a caret. */
+.tp-current { display: flex; align-items: center; gap: 6px; min-height: 44px; padding: 4px 8px; text-align: left; }
+.tp-text { display: flex; flex-direction: column; min-width: 0; flex: 1 1 auto; line-height: 1.15; }
+.tp-name { font-weight: 600; }
+.tp-length { color: var(--dim); font-size: var(--fs-sm); }
+.tp-caret { color: var(--dim); }
+.transition-icon { flex: 0 0 auto; color: var(--text); line-height: 0; }
+.tp-picks { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+.tp-pick { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: 44px; padding: 2px; line-height: 1; }
+.tp-pick small { font-size: 10px; max-width: 100%; }
+.tp-pick[aria-pressed="true"], .tp-tile[aria-pressed="true"], .tp-lengths [aria-pressed="true"] { color: var(--accent); background: var(--select-fill); border-color: var(--accent); }
+.tp-art { line-height: 0; color: var(--text); }
+.fx-open { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; }
+.fx-open[hidden] { display: none; }
+.fx-count { color: var(--dim); font-size: var(--fs-sm); }
+
+/* Narrow: preview above programme, and the bar a band between them. Take
+   and Cut on the first row, in the same order, the rest on the second. */
 @container (max-width: 500px) {
-  .take-bar { flex-direction: row; flex-wrap: wrap; flex-basis: auto; }
-  .take-bar .take-button { flex: 1 1 100%; min-height: 56px; }
-  .take-bar .cut-button, .take-bar select { flex: 1 1 0; }
+  .take-bar { flex-basis: auto; overflow: visible; }
+  .take-main { flex-direction: row; }
+  .take-main .take-button { flex: 2 1 0; min-height: 56px; }
+  .take-main .cut-button { flex: 1 1 0; min-height: 56px; }
+  .take-more { flex-direction: row; flex-wrap: wrap; align-items: stretch; }
+  .take-more .tp-current { flex: 1 1 100px; }
+  .take-more .tp-picks { flex: 0 0 140px; }
+  .take-more .fx-open { flex: 0 0 auto; padding: 0 12px; }
+}
+/* A short window with a mouse: Take keeps its place and everything shrinks
+   a little, so the bar fits a 720 line screen without a scroll bar. */
+@media (max-height: 760px) and (min-width: 601px) and (pointer: fine) {
+  .take-bar .take-button { min-height: 56px; font-size: 20px; }
+  .take-bar .cut-button, .tp-current, .tp-pick, .fx-open { min-height: 38px; }
+  .tp-text { flex-direction: row; align-items: baseline; gap: 6px; }
+  .take-bar, .take-main, .take-more { gap: 6px; }
 }
 
 body.producer .tile.armed { border-color: var(--ok); }
 body.producer .scene-tabs button.armed { border-bottom-color: var(--ok); }
 
-/* The transition picker under Take: the kind with its drawing, then the
-   direction or colour, the easing and the length. */
-.transition-picker { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-.transition-picker .row { display: flex; align-items: center; gap: 6px; min-width: 0; }
-.transition-picker .row select { flex: 1 1 auto; min-width: 0; }
-.transition-picker select { width: 100%; max-width: none; }
-.transition-picker select[hidden] { display: none; }
-.transition-icon { flex: 0 0 auto; color: var(--text); line-height: 0; }
-@container (max-width: 500px) {
-  .transition-picker { flex-direction: row; flex-wrap: wrap; flex: 1 1 100%; }
-  .transition-picker > * { flex: 1 1 0; }
+/* The sheets that open from the bar: fixed to the window, beside their
+   button, or along the bottom of a phone. */
+.studio-sheet[hidden] { display: none; }
+.studio-sheet {
+  position: fixed; z-index: 40; max-height: calc(100vh - 16px); overflow: auto; padding: 10px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
 }
+.studio-sheet.bottom { left: 8px; right: 8px; bottom: 8px; top: auto; width: auto; max-height: 80vh; }
+.fx-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.fx-head .btn { min-height: 36px; }
+.fx-status { font-size: var(--fs-sm); color: var(--dim); margin: 0 0 8px; }
+.fx-status:empty { display: none; }
 
-/* The fx library beside Take: Looks opens a grid of moving previews, and the
-   effect buttons sit under it. A strip is twelve frames side by side; the
-   step animation walks it, and only while the panel is shown. */
-.take-bar .fx-open { min-height: 36px; }
-.fx-panel[hidden] { display: none; }
-.fx-panel {
-  position: absolute; z-index: 30; right: 8px; bottom: 8px; width: min(560px, calc(100% - 16px));
-  max-height: 70%; overflow: auto; padding: 10px; background: var(--panel); border: 1px solid var(--line);
-  border-radius: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+/* The picker: options for the chosen one, then every transition, moving. */
+.tp-options { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 10px; }
+.tp-options select { min-height: 36px; }
+.tp-lengths { display: inline-flex; gap: 4px; }
+.tp-lengths .btn { min-height: 36px; padding: 0 10px; }
+.tp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; margin-bottom: 10px; }
+.tp-tile {
+  display: flex; flex-direction: column; align-items: center; gap: 6px; min-height: 44px; padding: 8px 6px;
+  color: var(--text); background: var(--panel2); border: 1px solid var(--line); border-radius: 6px; cursor: pointer; font: inherit;
 }
-.fx-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
-.fx-status { font-size: var(--fs-sm); color: var(--dim); margin-bottom: 8px; }
+.tp-tile .tp-art svg { width: 72px; height: 41px; }
+.tp-section { display: block; margin: 4px 0 6px; font-size: var(--fs-sm); }
 .fx-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
 .fx-tile { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .fx-tile small { color: var(--dim); font-size: var(--fs-sm); }
@@ -65,15 +111,32 @@ body.producer .scene-tabs button.armed { border-bottom-color: var(--ok); }
   animation: fx-walk var(--ms) steps(11, jump-none) infinite;
 }
 @keyframes fx-walk { from { background-position: 0% 0; } to { background-position: 100% 0; } }
-@media (prefers-reduced-motion: reduce) { .fx-strip { animation: none; background-position: 50% 0; } }
 .fx-actions { display: flex; flex-wrap: wrap; gap: 4px; }
 .fx-actions .btn { min-height: 32px; padding: 2px 8px; font-size: var(--fs-sm); }
-.fx-effects { display: flex; flex-wrap: wrap; gap: 6px; }
-.fx-effects[hidden], .fx-effects:empty { display: none; }
-.fx-effects .fx-fire { flex: 1 1 auto; min-height: 36px; }
-@container (max-width: 500px) {
-  .fx-panel { position: fixed; left: 8px; right: 8px; bottom: 8px; width: auto; max-height: 80vh; }
-  .fx-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .take-bar .fx-open, .fx-effects { flex: 1 1 100%; }
-  .fx-effects .fx-fire, .fx-actions .btn { min-height: 44px; }
+.fx-effect-list { display: flex; flex-direction: column; gap: 6px; }
+.fx-fire { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 44px; }
+.fx-fire kbd { color: var(--dim); font-size: var(--fs-sm); }
+@media (pointer: coarse) {
+  .fx-head .btn, .tp-options select, .tp-lengths .btn, .fx-actions .btn { min-height: 44px; }
+}
+
+/* The built in drawings, walked through their transition while the picker
+   is open. The new box (.n) does the moving; the old one stays put. */
+.tp-moving .n { transform-box: fill-box; animation: 1.6s ease-in-out infinite both; }
+.tp-moving[data-type="fade"] .n, .tp-moving[data-type="move"] .n { animation-name: tp-fade; }
+.tp-moving[data-type="wipe"] .n { transform-origin: right; animation-name: tp-grow-x; }
+.tp-moving[data-type="slide"] .n, .tp-moving[data-type="push"] .n { animation-name: tp-slide; }
+.tp-moving[data-type="push"] .o { animation: tp-slide 1.6s ease-in-out infinite both; }
+.tp-moving[data-type="zoom"] .n, .tp-moving[data-type="box"] .n { transform-origin: center; animation-name: tp-grow; }
+.tp-moving[data-type="zoom-out"] .o { transform-box: fill-box; transform-origin: center; animation: tp-shrink 1.6s ease-in-out infinite both; }
+.tp-moving[data-type="dip"] .n { animation-name: tp-dip; }
+@keyframes tp-fade { 0%, 15% { opacity: 0; } 85%, 100% { opacity: 1; } }
+@keyframes tp-grow-x { 0%, 15% { transform: scaleX(0); } 85%, 100% { transform: scaleX(2); } }
+@keyframes tp-slide { 0%, 15% { transform: translateX(13px); } 85%, 100% { transform: translateX(-13px); } }
+@keyframes tp-grow { 0%, 15% { transform: scale(0); } 85%, 100% { transform: scale(2.1); } }
+@keyframes tp-shrink { 0%, 15% { transform: scale(2.1); } 85%, 100% { transform: scale(0); } }
+@keyframes tp-dip { 0%, 10% { opacity: 0; } 50% { opacity: 1; } 90%, 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .fx-strip { animation: none; background-position: 50% 0; }
+  .tp-moving .n, .tp-moving .o { animation: none; }
 }

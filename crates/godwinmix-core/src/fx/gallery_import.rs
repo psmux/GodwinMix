@@ -6,7 +6,7 @@
 //! * A clip is measured, as `fx.import` measures it. One that is light on
 //!   black with no alpha (a leak, a burn, bokeh) becomes an fx item. A clip
 //!   with alpha stays the gallery's: it is as likely to be a moving lower
-//!   third as a stinger, and the Looks panel's Import takes it as a stinger.
+//!   third as a stinger, and the transition picker's Import takes it as a stinger.
 //!
 //! Anything else is not ours and the gallery decides.
 

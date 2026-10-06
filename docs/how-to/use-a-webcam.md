@@ -191,6 +191,29 @@ check replaces the process under a running pipeline and the picture comes
 back; the gap it reports is at the camera's own end, and the compositor's
 freeze frame is what keeps the programme steady while it happens.
 
+## When the picture looks late
+
+On Windows the camera's first frames wait in the pipe while the mixer links
+its decoder, and a camera that came up that way used to stay that late. The
+mixer now notices within about two seconds and drops to the newest frame. The
+log says so once:
+
+```
+a live source was running behind its own frames; dropped to the newest
+    source=cam behind_ms=1476 caught_up_ms=1436 total_ms=1436
+```
+
+To watch it work, start the mixer with
+`RUST_LOG=info,godwinmix_core::mixer::catch_up=debug`: every half second it
+prints `least lead this tick` with how long that source's frames waited before
+they were due. A healthy camera reads a few tens of milliseconds.
+
+A camera still late after that is late before the mixer gets it: the device,
+the USB link or a machine too busy to decode it. Lower the `resolution`, or
+check the camera in its own app. [How late the picture
+is](../explanation/how-late-the-picture-is.md) has every stage and what each
+one was measured at.
+
 ## Taking it off again
 
 ```sh

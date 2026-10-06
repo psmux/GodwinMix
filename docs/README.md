@@ -212,6 +212,7 @@ Start here if you have never run it.
 * [One plugin, three placements](explanation/one-plugin-three-placements.md)
 * [Why the UI is a client](explanation/why-the-ui-is-a-client.md)
 * [How a scene reaches the compositor](explanation/how-a-scene-reaches-the-compositor.md)
+* [How late the picture is: every stage from camera to page](explanation/how-late-the-picture-is.md)
 * [Undo when several people edit one show](explanation/undo-with-several-people.md)
 * [Footprint budgets and the reference machines](explanation/footprint-budgets.md)
 * [The crate map](explanation/architecture.md)

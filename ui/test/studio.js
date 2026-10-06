@@ -22,7 +22,7 @@ export async function studioTests(test, eq, ok) {
   panel.studio = studio;
   const calls = [];
   panel.setClient({ state: { preview: 'wide-scene' }, call: async (method, params) => calls.push({ method, params }) });
-  panel.armed = 'wide-scene';
+  panel.next = { kind: 'scene', id: 'wide-scene', name: 'wide-scene', why: 'armed' };
   await panel.take(500);
   // The take bar also asks for the fx library's effects; only the takes count here.
   const takes = () => calls.filter(c => c.method === 'program.take');
@@ -30,7 +30,7 @@ export async function studioTests(test, eq, ok) {
     eq(takes()[0], { method: 'program.take', params: { scene: 'wide-scene', transition: { type: 'fade', duration_ms: 500 } } });
   });
   panel.client.state.preview = null;
-  panel.armed = 'camera';
+  panel.next = { kind: 'source', id: 'camera', name: 'Camera', why: 'armed' };
   await panel.take(0);
   test('studio Cut takes an armed source as a cut, whatever the default transition is', () => {
     eq(takes()[1], { method: 'program.take', params: { source: 'camera', transition: 'cut' } });
@@ -63,6 +63,9 @@ export async function studioTests(test, eq, ok) {
     want: kind => { wanted.push(kind); return { update() {}, release() {} }; },
   });
   setSetting('producer', true);
+  // Its own empty scene list, so a Scenes panel another test left on the
+  // page is not read instead.
+  pane.sceneSession = { scenes: { supported: true, scenes: () => [], summary: () => null, live: () => null, armed: () => null } };
   document.body.dataset.armed = 'cam-wide';
   studio.retunePreview(pane, { preview: null, multiview: { cells: [{ source: null, index: 0 }, { source: 'cam-wide', index: 2 }] } });
   test('a source in preview is its own tile out of the mosaic', () => {
@@ -72,6 +75,19 @@ export async function studioTests(test, eq, ok) {
   studio.retunePreview(pane, { preview: 'Two shot', multiview: { cells: [] } });
   test('a scene armed after it lets go of the tile and asks for the preview stream', () => {
     eq(attached, [2, 'off']);
+    eq(wanted, ['preview']);
+  });
+  let observing = 0;
+  pane.client.sheet.observe = () => { observing++; return () => observing--; };
+  let streamReleased = false;
+  pane.previewWant = { release() { streamReleased = true; } };
+  delete document.body.dataset.armed;
+  const wide = { id: 'wide', name: 'Wide' };
+  pane.sceneSession = { scenes: { supported: true, scenes: () => [wide], summary: (x) => (x === 'wide' || x === 'Wide' ? wide : null), live: () => null, armed: () => null } };
+  studio.retunePreview(pane, { preview: null, multiview: { cells: [] } });
+  test('a suggested scene is drawn from the mosaic and asks the core for nothing more', () => {
+    ok(streamReleased, 'the preview stream was kept for a scene nobody armed');
+    eq(observing, 1);
     eq(wanted, ['preview']);
   });
   studio.releasePreview(pane);
