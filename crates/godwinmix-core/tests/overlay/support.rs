@@ -35,6 +35,21 @@ impl Frames {
     pub fn worst_interval(&self) -> f64 {
         self.intervals.lock().unwrap().iter().cloned().fold(0.0, f64::max)
     }
+
+    /// How many intervals there have been so far, to measure from.
+    pub fn mark(&self) -> usize {
+        self.intervals.lock().unwrap().len()
+    }
+
+    /// The worst interval since `from`, and the worst before it, so a test
+    /// about a take answers for the take and still prints what came before
+    /// (the mixer starting and its sources being added).
+    pub fn worst_since(&self, from: usize) -> (f64, f64) {
+        let all = self.intervals.lock().unwrap();
+        let at = from.min(all.len());
+        let worst = |v: &[f64]| v.iter().cloned().fold(0.0, f64::max);
+        (worst(&all[at..]), worst(&all[..at]))
+    }
 }
 
 /// A mixer on a 320x180 canvas at 30 fps, with every programme frame seen.

@@ -38,7 +38,12 @@ fn an_address_is_host_and_an_even_port() {
 /// the specific address is the one Windows delivers to, which is why the
 /// direct carriage test, bound to 127.0.0.1, never failed this way.
 fn receiver(port: u16) -> (gst::Pipeline, Arc<AtomicU64>) {
-    let line = format!("uridecodebin uri=rist://127.0.0.1:{port} caps=video/x-raw(ANY) ! fakesink name=end sync=false");
+    // Both streams decoded and each to a sink of its own. With only the
+    // picture asked for, the sound came out as raw audio nothing would take,
+    // and its unlinked pad stopped the whole receiver after one frame.
+    let line = format!(
+        "uridecodebin name=d uri=rist://127.0.0.1:{port} d. ! video/x-raw(ANY) ! fakesink name=end sync=false d. ! audio/x-raw(ANY) ! fakesink sync=false"
+    );
     let p = gst::parse::launch(&line).unwrap().downcast::<gst::Pipeline>().unwrap();
     let frames = Arc::new(AtomicU64::new(0));
     let f = frames.clone();
