@@ -85,8 +85,14 @@ impl Drop for Running {
 }
 
 /// Wait up to `secs` for `done`, polling.
+///
+/// The wait is `secs` times `GODWINMIX_TIMING_SLACK` on a runner that says
+/// it is slow: on a three core macOS runner a RIST feed and an HLS pull that
+/// arrive in seconds alone were still connecting at fifteen with the rest of
+/// the suite running. Something that never arrives still fails, later.
 pub fn eventually(secs: u64, mut done: impl FnMut() -> bool) -> bool {
-    let until = Instant::now() + Duration::from_secs(secs);
+    let slack = std::env::var("GODWINMIX_TIMING_SLACK").ok().and_then(|s| s.trim().parse::<f64>().ok()).filter(|s| s.is_finite() && *s >= 1.0).unwrap_or(1.0);
+    let until = Instant::now() + Duration::from_secs(secs).mul_f64(slack);
     while Instant::now() < until {
         if done() {
             return true;

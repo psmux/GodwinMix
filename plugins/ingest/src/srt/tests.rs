@@ -182,6 +182,17 @@ fn a_player_on_the_publishers_port_is_sent_the_stream() {
     });
     player.set_state(gst::State::Playing).unwrap();
     let played = wait_for(|| frames.load(Ordering::Relaxed) >= 30);
+    // What the player's own pipeline said, for the message: a tsdemux that
+    // found no picture and an srtsrc cut off read differently.
+    let mut said = Vec::new();
+    while let Some(m) = player.bus().and_then(|b| b.pop_filtered(&[gst::MessageType::Error, gst::MessageType::Warning])) {
+        let src = m.src().map(|s| s.name().to_string()).unwrap_or_default();
+        match m.view() {
+            gst::MessageView::Error(e) => said.push(format!("{src}: {}", e.error())),
+            gst::MessageView::Warning(w) => said.push(format!("{src}: {}", w.error())),
+            _ => {}
+        }
+    }
     let _ = player.set_state(gst::State::Null);
     let refused = decide::decide(
         &gate.table.read().unwrap(),
@@ -189,6 +200,6 @@ fn a_player_on_the_publishers_port_is_sent_the_stream() {
         &streamid::parse("#!::r=church/nothere,m=request").unwrap(),
     );
     stop(encoder);
-    assert!(played, "the player decoded {} frames", frames.load(Ordering::Relaxed));
+    assert!(played, "the player decoded {} frames; its pipeline said {said:?}", frames.load(Ordering::Relaxed));
     assert!(matches!(refused, decide::Decision::Refuse { code: decide::NOT_FOUND, .. }), "{refused:?}");
 }

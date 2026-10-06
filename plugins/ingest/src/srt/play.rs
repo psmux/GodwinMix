@@ -16,10 +16,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
-use gmx_netkit::pipe::Pipe;
 use gstreamer as gst;
-use gstreamer::prelude::*;
-use gstreamer_app::{AppSink, AppSinkCallbacks, AppSrc};
 
 use super::decide::{by_passphrase, Decision, NOT_FOUND, UNAUTHORIZED};
 use super::ffi::{Lib, Socket};
@@ -27,8 +24,14 @@ use super::streamid::Route;
 use crate::channels::{Admit, Protocol, Table};
 use crate::gate::ChannelGate;
 use crate::hub::{Hub, Recv};
-use crate::media_tag::TagKind;
+use crate::media_tag::{MediaTag, TagKind};
 use crate::rtmp::Gate;
+use first::VideoFirst;
+use pipeline::launch;
+
+mod first;
+mod gate;
+mod pipeline;
 
 /// Let a player in when its key is good and the stream is on air.
 pub fn decide(table: &Table, hub: &Hub, route: &Route) -> Decision {
@@ -63,49 +66,40 @@ pub fn serve(lib: &'static Lib, sock: Socket, peer: String, admit: Admit, gate: 
     gate.note(format!("the SRT player {peer} of {name} left: {why}"));
 }
 
+/// How long the muxer waits for every stream's caps before it takes what it
+/// has. A parser that has not spoken by then is not going to.
+const CAPS_WAIT: Duration = Duration::from_secs(3);
+
 fn run(lib: &'static Lib, sock: Socket, admit: &Admit, hub: &Hub, gone: Arc<AtomicBool>) -> Result<(), String> {
     gmx_netkit::init()?;
-    let description = "appsrc name=in is-live=true format=bytes caps=video/x-flv ! flvdemux name=d \
-         d.audio ! queue ! aacparse ! mux. mpegtsmux name=mux alignment=7 ! appsink name=out sync=false";
-    let mut pipe = Pipe::launch(description)?;
-    crate::restream::ts_video::video_by_codec(pipe.pipeline());
-    let src: AppSrc = pipe.by_name("in").and_then(|e| e.downcast().ok()).ok_or("no appsrc")?;
-    let out: AppSink = pipe.by_name("out").and_then(|e| e.downcast().ok()).ok_or("no appsink")?;
-    let failed = gone.clone();
-    out.set_callbacks(
-        AppSinkCallbacks::builder()
-            .new_sample(move |s| {
-                let sample = s.pull_sample().map_err(|_| gst::FlowError::Eos)?;
-                let map = sample.buffer().and_then(|b| b.map_readable().ok()).ok_or(gst::FlowError::Error)?;
-                for chunk in map.chunks(1316) {
-                    if lib.send(sock, chunk).is_err() {
-                        failed.store(true, Ordering::Relaxed);
-                        return Err(gst::FlowError::Eos);
-                    }
-                }
-                Ok(gst::FlowSuccess::Ok)
-            })
-            .build(),
-    );
-    pipe.play(None)?;
-    let _ = src.push_buffer(gst::Buffer::from_mut_slice(crate::flv::header()));
     let reader = hub.subscribe(&admit.app, &admit.stream);
-    let mut zero: Option<u32> = None;
     let mut order = VideoFirst::default();
-    let outcome = loop {
+    let mut next = || -> Result<Option<Vec<MediaTag>>, String> {
         if gone.load(Ordering::Relaxed) {
-            break Err("the player stopped taking the stream".to_string());
+            return Err("the player stopped taking the stream".to_string());
         }
-        if let Some(f) = pipe.failure() {
-            break Err(f);
+        match reader.recv_timeout(Duration::from_millis(500)) {
+            Recv::Tag(t) => Ok(Some(order.take(t))),
+            Recv::Timeout => Ok(Some(Vec::new())),
+            Recv::Ended => Ok(None),
         }
-        let tag = match reader.recv_timeout(Duration::from_millis(500)) {
-            Recv::Tag(t) => t,
-            Recv::Timeout => continue,
-            Recv::Ended => break Ok(()),
-        };
-        let base = *zero.get_or_insert(tag.timestamp_ms);
-        for tag in order.take(tag) {
+    };
+    // Built once the first tags say which kinds the stream has.
+    let first = loop {
+        match next()? {
+            Some(tags) if tags.is_empty() => continue,
+            Some(tags) => break tags,
+            None => return Ok(()),
+        }
+    };
+    let has = |kind: TagKind| first.iter().any(|t| t.kind == kind);
+    let kinds = usize::from(has(TagKind::Video)) + usize::from(has(TagKind::Audio));
+    let (mut pipe, src, caps) = launch(lib, sock, has(TagKind::Audio), kinds, gone.clone())?;
+    // From the earliest, so a sound frame held behind the pictures keeps its
+    // place rather than all of them landing on zero.
+    let base = first.iter().map(|t| t.timestamp_ms).min().unwrap_or(0);
+    let push = |tags: Vec<MediaTag>| {
+        for tag in tags {
             let ts = tag.timestamp_ms.saturating_sub(base);
             let bytes = match tag.kind {
                 TagKind::Video => crate::flv::video(ts, &tag.payload),
@@ -115,43 +109,23 @@ fn run(lib: &'static Lib, sock: Socket, admit: &Admit, hub: &Hub, gone: Arc<Atom
             let _ = src.push_buffer(gst::Buffer::from_mut_slice(bytes));
         }
     };
+    push(first);
+    let started = std::time::Instant::now();
+    let outcome = loop {
+        if let Some(f) = pipe.failure() {
+            break Err(f);
+        }
+        if started.elapsed() > CAPS_WAIT && !caps.is_open() {
+            caps.open();
+        }
+        match next() {
+            Ok(Some(tags)) => push(tags),
+            Ok(None) => break Ok(()),
+            Err(e) => break Err(e),
+        }
+    };
+    caps.open();
     pipe.stop();
     outcome
 }
 
-/// Nothing goes in until both the picture and the sound have arrived, and
-/// then the picture goes first.
-///
-/// `flvdemux` makes a pad for each kind the first time it sees one, and the
-/// muxer writes its first PMT with the pads it has. With one kind in alone,
-/// the first PMT named only that one and the next named both, and a
-/// player's `tsdemux` takes a changed PMT as a new program: on a Windows
-/// runner it offered no picture at all, and elsewhere it dropped the picture
-/// it had after one frame. With both in before the muxer starts, the first
-/// table is the only one. A stream that has only one kind is let through
-/// after `HOLD_AT_MOST` tags.
-#[derive(Default)]
-struct VideoFirst {
-    open: bool,
-    held: Vec<crate::media_tag::MediaTag>,
-}
-
-const HOLD_AT_MOST: usize = 100;
-
-impl VideoFirst {
-    fn take(&mut self, tag: crate::media_tag::MediaTag) -> Vec<crate::media_tag::MediaTag> {
-        if self.open {
-            return vec![tag];
-        }
-        self.held.push(tag);
-        let has = |kind: TagKind| self.held.iter().any(|t| t.kind == kind);
-        if !(has(TagKind::Video) && has(TagKind::Audio)) && self.held.len() < HOLD_AT_MOST {
-            return Vec::new();
-        }
-        self.open = true;
-        // Stable, so each kind keeps its own order: the pictures, then the sound.
-        let mut out = std::mem::take(&mut self.held);
-        out.sort_by_key(|t| t.kind != TagKind::Video);
-        out
-    }
-}

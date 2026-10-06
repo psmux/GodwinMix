@@ -4,8 +4,12 @@
 //!
 //! ```text
 //!   udpsrc                       ──(probe)──► parsebin ──► tags
-//!   srtsrc                       ──(probe)──► parsebin ──► tags
+//!   srtsrc (a caller)            ──(probe)──► parsebin ──► tags
+//!   libsrt listener ──► appsrc   ──(probe)──► parsebin ──► tags
 //! ```
+//!
+//! A listener is libsrt's own socket, kept open between callers; see
+//! `srt_listen.rs` for why not `srtsrc`.
 //!
 //! The probe is the udp plugin's: it reads the PAT, PMT and SDT, keeps the
 //! chosen program, drops stuffing, and counts continuity errors and RTP gaps.
@@ -67,6 +71,8 @@ pub struct Srt {
     uri: String,
     params: Value,
     program: Option<u16>,
+    /// A listener's socket, opened at the first connection and kept.
+    listener: Option<super::srt_listen::Listener>,
 }
 
 impl Srt {
@@ -78,12 +84,20 @@ impl Srt {
         if listening && !uri.contains("mode=") {
             uri.push_str(if uri.contains('?') { "&mode=listener" } else { "?mode=listener" });
         }
-        Srt { uri, params: spec.params.clone(), program: spec.program }
+        Srt { uri, params: spec.params.clone(), program: spec.program, listener: None }
     }
 }
 
 impl Plan for Srt {
     fn build(&mut self, pipeline: &gst::Pipeline, pads: &Arc<Pads>) -> Result<Loss, String> {
+        if self.uri.contains("mode=listener") {
+            if let Some(src) = super::srt_listen::source_for(&mut self.listener, &self.uri, &self.params, pipeline) {
+                let src = src?;
+                let loss = Loss::probe(&src, self.program)?;
+                parse_into(pipeline, &src.static_pad("src").ok_or("appsrc has no src pad")?, pads)?;
+                return Ok(loss);
+            }
+        }
         let src = make("srtsrc")?;
         src.set_property("uri", &self.uri);
         let text = |k: &str| self.params.get(k).and_then(Value::as_str).filter(|s| !s.is_empty());

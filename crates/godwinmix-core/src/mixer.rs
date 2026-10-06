@@ -424,6 +424,7 @@ mod rendered;
 pub mod slots;
 mod slot_guard;
 pub mod transition;
+pub mod unattached;
 pub mod unstarted;
 #[cfg(test)]
 mod transition_tests;
@@ -1193,6 +1194,8 @@ pub struct Mixer {
     removed: Vec<SourceConfig>,
     /// See `unstarted.rs`.
     unstarted: unstarted::UnstartedList,
+    /// Outputs that would not attach at start. See `unattached.rs`.
+    unattached: unattached::UnattachedList,
 
     handle: MixerHandle,
     events: EventBus,
@@ -1900,6 +1903,7 @@ impl Mixer {
             next_generation: 1,
             removed: Vec::new(),
             unstarted: Default::default(),
+            unattached: Default::default(),
             handle: handle.clone(),
             events,
             rt,
@@ -1949,7 +1953,14 @@ impl Mixer {
         for out in self.cfg.outputs.clone() {
             match self.attach_output(&out) {
                 Ok(slot) => self.outputs.push(slot),
-                Err(e) => error!(output = %out.id, ?e, "failed to attach output"),
+                // Kept and tried again from the tick: a show started again
+                // on a busy machine can be refused a rendition for a few
+                // seconds, and the output must come back once there is room.
+                // See `mixer::unattached`.
+                Err(e) => {
+                    error!(output = %out.id, ?e, "failed to attach output; it is kept and tried again");
+                    self.keep_unattached(&out, &e);
+                }
             }
         }
         self.note_on_air();
@@ -2938,6 +2949,9 @@ impl Mixer {
     pub fn add_output(&mut self, cfg: &OutputConfig) -> Result<()> {
         anyhow::ensure!(!cfg.id.trim().is_empty(), "an output needs an id");
         crate::plugin::output::check_uri(cfg)?;
+        // Asked for by name while it waits to be attached: the caller's
+        // config wins, and the caller hears how this attempt went.
+        self.unattached.forget(&cfg.id);
         anyhow::ensure!(
             !self.outputs.iter().any(|o| o.id() == &cfg.id),
             "output {} already exists",
@@ -2968,10 +2982,35 @@ impl Mixer {
     /// air with nothing.
     pub fn set_output(&mut self, cfg: &OutputConfig) -> Result<()> {
         crate::plugin::output::check_uri(cfg)?;
+        if self.unattached.has(&cfg.id) {
+            // Nothing attached to take down: try the new config now, and
+            // keep it waiting if it will not attach either.
+            let r = self.add_output(cfg);
+            if let Err(e) = &r {
+                self.keep_unattached(cfg, e);
+                self.persist_runtime();
+            }
+            return r;
+        }
         let Some(pos) = self.outputs.iter().position(|o| o.id() == &cfg.id) else {
             anyhow::bail!("no such output {}", cfg.id);
         };
         let previous = self.outputs[pos].cfg.clone();
+        // The programme encoder is held through the swap. With this the only
+        // output, the remove let it stop and the add started it again, and
+        // on a loaded Windows runner the new output was linked while the old
+        // encoder was still coming down: "Pads do not have common format",
+        // and the change was refused.
+        let held = self.enc.lease("output.set");
+        let swapped = self.swap_output(cfg, previous);
+        drop(held);
+        self.sync_encoder();
+        swapped
+    }
+
+    /// The remove and the add of `set_output`, putting `previous` back when
+    /// the new config will not attach.
+    fn swap_output(&mut self, cfg: &OutputConfig, previous: OutputConfig) -> Result<()> {
         self.remove_output(&cfg.id)?;
         match self.add_output(cfg) {
             Ok(()) => Ok(()),
@@ -2998,6 +3037,12 @@ impl Mixer {
 
     /// Detach a destination. The programme and every other output carry on.
     pub fn remove_output(&mut self, id: &OutputId) -> Result<()> {
+        if self.unattached.forget(id) {
+            info!(output = %id, "output removed before it was attached");
+            self.persist_runtime();
+            self.broadcast_status();
+            return Ok(());
+        }
         let Some(pos) = self.outputs.iter().position(|o| o.id() == id) else {
             anyhow::bail!("no such output {id}");
         };
@@ -3038,7 +3083,9 @@ impl Mixer {
                 sources.push(p.clone());
             }
         }
-        let outputs: Vec<OutputConfig> = self.outputs.iter().map(|o| o.cfg.clone()).collect();
+        // One that would not attach this time is still wanted next time.
+        let outputs: Vec<OutputConfig> =
+            self.outputs.iter().map(|o| o.cfg.clone()).chain(self.unattached.configs().cloned()).collect();
         RuntimeConfigs {
             sources,
             outputs,
@@ -4256,6 +4303,8 @@ impl Mixer {
         self.release_stopped();
         // What the governor says to give up, or that there is room again.
         self.rendition_tick();
+        // Outputs refused at start, asked for again once their wait is up.
+        self.retry_unattached();
 
 
         // A plugin process that died by itself is restarted now rather than
@@ -4776,6 +4825,7 @@ impl Mixer {
                 .outputs
                 .iter()
                 .map(|o| OutputStatus { shed: self.shed_reason(o.id()), ..o.status() })
+                .chain(self.unattached.statuses())
                 .collect(),
             // With no mosaic running the configured shape is still what a
             // client would get if it asked, so `enabled` answers "may I have

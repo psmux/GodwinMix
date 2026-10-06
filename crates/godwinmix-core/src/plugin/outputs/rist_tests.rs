@@ -74,7 +74,10 @@ fn a_rist_receiver_decodes_the_programme_and_the_output_says_it_is_connected() {
     let ctx = OutputCtx { id: "contribution", generation: 1, pipeline: &tx, params: &params, cfg: &cfg, taps: &[] };
     out.build(&ctx, &tx.by_name("v").unwrap(), &tx.by_name("a").unwrap()).unwrap();
     tx.set_state(gst::State::Playing).unwrap();
-    let until = Instant::now() + Duration::from_secs(15);
+    // Longer by GODWINMIX_TIMING_SLACK: on a three core macOS runner with
+    // the suite beside it the receiver decoded 3 frames in fifteen seconds.
+    let wait = Duration::from_secs(15).mul_f64(crate::plugin::harness::timing_slack());
+    let until = Instant::now() + wait;
     while (frames.load(Ordering::Relaxed) < 60 || !out.connected()) && Instant::now() < until {
         std::thread::sleep(Duration::from_millis(100));
     }
@@ -82,6 +85,6 @@ fn a_rist_receiver_decodes_the_programme_and_the_output_says_it_is_connected() {
     let connected = out.connected();
     let _ = tx.set_state(gst::State::Null);
     let _ = rx.set_state(gst::State::Null);
-    assert!(got >= 60, "the RIST receiver decoded {got} frames in 15 s; wanted 60");
+    assert!(got >= 60, "the RIST receiver decoded {got} frames in {wait:?}; wanted 60");
     assert!(connected, "the receiver answered, so the output should say it is connected");
 }
