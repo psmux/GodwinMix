@@ -1,5 +1,67 @@
 # Where GodwinMix stands
 
+## What the v0.2.0 installers left out, 2026-10-06
+
+The desktop installers carry a trimmed GStreamer. Its self check asked for
+eight elements, so a plugin that was never copied, or was copied and could not
+load, went out unnoticed. Read out of the published v0.2.0 files (the Windows
+`.msi` unpacked and its runtime asked with nothing else on the path, and the
+plugin files listed in the macOS app and the `.deb`):
+
+* **A phone camera could not connect on any of the three.** WebRTC needs the
+  SRTP and DTLS plugins and libnice. The SRTP plugin was in none of the
+  installers. On macOS and Linux libnice's plugin was missing as well (it is
+  a package of its own, `libnice-gstreamer` on Homebrew and
+  `gstreamer1.0-nice` on Ubuntu, and the build machines did not have it), so
+  the WHEP browser preview did not work there either. On Windows the DTLS
+  plugin was in the installer and failed to load.
+* **No VP8 or VP9 decoding on any of the three.** A WebM file did not open, and
+  neither did a WebM stinger with alpha.
+* **Windows:** besides the above, the old RTMP plugin failed to load and
+  `curlhttpsrc` was missing. WebP pictures do not open on Windows at all,
+  because the official Windows GStreamer has no WebP decoder.
+* **Linux:** no `x264enc`, so HLS output and file conversion failed; no
+  `cmafmux` and no `livesync` (they come from gst-plugins-rs, which Ubuntu
+  does not package); no WHIP or WHEP plugin elements for the same reason; no
+  ALSA. The plugins for SRT and RTMP output, cameras, pictures and text were
+  there, and the SRT and RTMP ones passed that release's check.
+* **macOS:** besides WebRTC and VP8/VP9, the plugin files the mixer uses were
+  there. Only the old eight element check was run on them.
+
+What was fixed on branch `fix/release-bundles`:
+
+* The Windows runner has GNU strip in `C:\mingw64`, and `dev/gst_symbols.py`
+  handed it every DLL. On the official 1.28.6 MSVC runtime that rewrite broke
+  OpenSSL: loading `gstsrt.dll` or `gstdtls.dll` on the runner failed with
+  `WinError 998, invalid access to memory location`, and fourteen plugins
+  were blacklisted (srt, dtls, webrtc, nice, soup, curl, rtmp, png,
+  gdkpixbuf, rsvg, pango, opengl, svtav1, x265). This laptop has no GNU strip
+  and used `llvm-objcopy`, which is why the same script passed here. Now a
+  Windows file is stripped only if it carries a COFF symbol table or DWARF
+  sections, which in that runtime is four MinGW DLLs; the MSVC ones are
+  copied untouched.
+* The release, platforms and runtime workflows install `gstreamer1.0-nice`,
+  `gstreamer1.0-plugins-ugly`, `gstreamer1.0-alsa` and
+  `gstreamer1.0-pipewire` on Linux and `libnice-gstreamer` on macOS, and the
+  trimmer reads Homebrew's shared plugin directory (`--extra-plugins`), where
+  that formula puts its plugin.
+* The self check in both bundle scripts now asks for 31 elements: the mix and
+  outputs, the four WebRTC ones, the demuxers, parsers and decoders a file or
+  stream opens with, the picture decoders and the four GL elements the shader
+  transitions use (`webpdec` on macOS and Linux only). On a failure it prints
+  the plugin files GStreamer could not load. `--headless-check` asks for the
+  WebRTC four too.
+* `runtime.yml` builds and checks the trimmed tree on all three platforms with
+  the release's 160 MB budget, in about fifteen minutes rather than the
+  release's hour.
+
+Trimmed sizes on the runners: Windows 154.6 MB, Linux 146.4 MB, macOS
+RELEASE_MACOS_MB. Release rehearsal RELEASE_RUN_ID passed every job.
+
+Still not in the Linux installer: `cmafmux`, `livesync`, the WHIP and WHEP
+plugin elements and `dav1ddec`, which need gst-plugins-rs and dav1d built for
+it. On Windows, WebP needs a WebP plugin the official runtime does not ship.
+
 ## Transitions and effects from packs, 2026-10-06
 
 **What there was.** Eleven built in transitions and a `stinger` that added a
