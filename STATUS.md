@@ -31,6 +31,13 @@ version (or a dissolve), and that draws whenever the newest answer is more
 than three frames old. The GL appsrc keeps one frame and drops the older
 (`leaky-type=downstream`), where before a GPU slower than the programme let
 frames pile up in it. `Gl`'s answer handling moved to `gl_answers.rs`.
+That was still not it: the next macOS run looked the same, so the answers
+were coming, fresh, and were the old picture. GL on that runner runs the
+pipeline and not the shader. The probe only asked for an answer; it now
+checks it too (half way from grey 128 to black 16 must read 50 to 100) and
+logs a warning when it is wrong, so such a machine draws shaders the
+software way. This laptop's Intel GPU still passes it (ripple at 1 reads
+200, as sent).
 
 **The Icecast sender could die before its first sample.** The diagnostics
 added on this branch showed it on a macOS runner: 108,552 bytes of programme
@@ -58,8 +65,10 @@ unlinked pad stopped the receiver after one to three frames ("streaming
 stopped, reason not-linked" from `rist_rtp_udpsrc0`, on Windows and macOS).
 Before the receiver listened on 127.0.0.1 it showed nothing at all on
 Windows, so it listens there now, as the carriage test that never failed
-does. The receiver now sends each stream to a sink of its own; the same
-pipeline over this machine's LAN address decoded 235 frames in 8 seconds.
+does. The receiver now sends each stream to a sink of its own, linked in a
+`pad-added` handler (the launch parser's delayed linking left one pad
+unlinked on macOS); a launch line doing the same over this machine's LAN
+address decoded 235 frames in 8 seconds.
 
 **Not fixed: an RTMP output on Windows that will not take the programme.** On
 the Windows runner `slow_output` failed to attach its RTMP output once

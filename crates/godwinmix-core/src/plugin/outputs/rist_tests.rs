@@ -38,19 +38,29 @@ fn an_address_is_host_and_an_even_port() {
 /// the specific address is the one Windows delivers to, which is why the
 /// direct carriage test, bound to 127.0.0.1, never failed this way.
 fn receiver(port: u16) -> (gst::Pipeline, Arc<AtomicU64>) {
-    // Both streams decoded and each to a sink of its own. With only the
-    // picture asked for, the sound came out as raw audio nothing would take,
-    // and its unlinked pad stopped the whole receiver after one frame.
-    let line = format!(
-        "uridecodebin name=d uri=rist://127.0.0.1:{port} d. ! video/x-raw(ANY) ! fakesink name=end sync=false d. ! audio/x-raw(ANY) ! fakesink sync=false"
-    );
-    let p = gst::parse::launch(&line).unwrap().downcast::<gst::Pipeline>().unwrap();
+    // Every decoded stream to a sink of its own, the picture's counted. With
+    // only the picture asked for, the sound had nowhere to go and its
+    // unlinked pad stopped the receiver after one frame; with the launch
+    // parser's delayed linking, one of the two pads was not linked at all.
+    let p = gst::Pipeline::new();
+    let d = gst::ElementFactory::make("uridecodebin").property("uri", format!("rist://127.0.0.1:{port}")).build().unwrap();
+    p.add(&d).unwrap();
     let frames = Arc::new(AtomicU64::new(0));
-    let f = frames.clone();
-    let pad = p.by_name("end").unwrap().static_pad("sink").unwrap();
-    pad.add_probe(gst::PadProbeType::BUFFER, move |_, _| {
-        f.fetch_add(1, Ordering::Relaxed);
-        gst::PadProbeReturn::Ok
+    let (f, weak) = (frames.clone(), p.downgrade());
+    d.connect_pad_added(move |_, pad| {
+        let Some(p) = weak.upgrade() else { return };
+        let sink = gst::ElementFactory::make("fakesink").property("sync", false).build().unwrap();
+        p.add(&sink).unwrap();
+        sink.sync_state_with_parent().unwrap();
+        let video = pad.current_caps().and_then(|c| c.structure(0).map(|s| s.name().starts_with("video/"))).unwrap_or(false);
+        if video {
+            let f = f.clone();
+            sink.static_pad("sink").unwrap().add_probe(gst::PadProbeType::BUFFER, move |_, _| {
+                f.fetch_add(1, Ordering::Relaxed);
+                gst::PadProbeReturn::Ok
+            });
+        }
+        let _ = pad.link(&sink.static_pad("sink").unwrap());
     });
     p.set_state(gst::State::Playing).unwrap();
     (p, frames)
