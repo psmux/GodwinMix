@@ -169,7 +169,7 @@ fn a_player_on_the_publishers_port_is_sent_the_stream() {
     };
     assert!(wait_for(|| gate.hub.is_live("church", "main")), "the encoder is on air");
     let line = format!(
-        "srtsrc uri=\"srt://127.0.0.1:{}?mode=caller\" latency=1000 streamid=\"#!::r=church/main,m=request\" passphrase={KEY_ONE} \
+        "srtsrc name=src uri=\"srt://127.0.0.1:{}?mode=caller\" latency=1000 streamid=\"#!::r=church/main,m=request\" passphrase={KEY_ONE} \
          ! tsdemux ! h264parse ! avdec_h264 ! fakesink name=end",
         server.port()
     );
@@ -193,6 +193,9 @@ fn a_player_on_the_publishers_port_is_sent_the_stream() {
             _ => {}
         }
     }
+    // And what libsrt counted on the player's socket: nothing received reads
+    // differently from packets that came and were dropped as late.
+    let counted = player.by_name("src").map(|s| s.property::<gst::Structure>("stats").to_string());
     let _ = player.set_state(gst::State::Null);
     let refused = decide::decide(
         &gate.table.read().unwrap(),
@@ -200,6 +203,6 @@ fn a_player_on_the_publishers_port_is_sent_the_stream() {
         &streamid::parse("#!::r=church/nothere,m=request").unwrap(),
     );
     stop(encoder);
-    assert!(played, "the player decoded {} frames; its pipeline said {said:?}", frames.load(Ordering::Relaxed));
+    assert!(played, "the player decoded {} frames; its pipeline said {said:?}; srtsrc counted {counted:?}", frames.load(Ordering::Relaxed));
     assert!(matches!(refused, decide::Decision::Refuse { code: decide::NOT_FOUND, .. }), "{refused:?}");
 }
