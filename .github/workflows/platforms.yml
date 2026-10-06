@@ -89,13 +89,15 @@ jobs:
             libgstreamer-plugins-bad1.0-dev libgstrtspserver-1.0-dev gstreamer1.0-plugins-base \
             gstreamer1.0-plugins-good gstreamer1.0-plugins-bad \
             gstreamer1.0-plugins-ugly gstreamer1.0-libav gstreamer1.0-tools \
+            gstreamer1.0-nice gstreamer1.0-alsa gstreamer1.0-pipewire \
             libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev \
             patchelf libssl-dev libfuse2 xvfb
 
+      # libnice's plugin is a formula of its own; the trimmed tree needs it.
       - name: GStreamer (macOS)
         if: runner.os == 'macOS'
         run: |
-          brew install gstreamer
+          brew install gstreamer libnice-gstreamer
           echo "PKG_CONFIG_PATH=$(brew --prefix gstreamer)/lib/pkgconfig:$(brew --prefix)/lib/pkgconfig" >> "$GITHUB_ENV"
 
       # The MSVC runtime, which is what the mixer links against and what the

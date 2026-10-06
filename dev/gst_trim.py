@@ -157,6 +157,15 @@ def catalogue_elements(codecs: Path) -> set[str]:
     return wanted
 
 
+# Plugin directories outside the prefix that still belong to it. Homebrew
+# ships some plugins as formulae of their own: libnice's `nicesrc` and
+# `nicesink` are `libnice-gstreamer`, which installs into its own cellar and
+# links into `$(brew --prefix)/lib/gstreamer-1.0`, never into the gstreamer
+# formula's directory. Searched after the prefix's own, so a plugin found in
+# both comes from the prefix. Set from `--extra-plugins`.
+EXTRA_PLUGIN_DIRS: list[Path] = []
+
+
 def inspect(prefix: Path, plugins: Path, registry: Path, args: list[str]) -> str:
     """Run the source tree's own `gst-inspect-1.0` against the source tree.
 
@@ -169,8 +178,9 @@ def inspect(prefix: Path, plugins: Path, registry: Path, args: list[str]) -> str
     if exe is None:
         die(f"no gst-inspect-1.0 under {prefix}; is that a GStreamer prefix?")
     env = dict(os.environ)
-    env["GST_PLUGIN_PATH"] = str(plugins)
-    env["GST_PLUGIN_SYSTEM_PATH"] = str(plugins)
+    search = os.pathsep.join([str(plugins), *map(str, EXTRA_PLUGIN_DIRS)])
+    env["GST_PLUGIN_PATH"] = search
+    env["GST_PLUGIN_SYSTEM_PATH"] = search
     env["GST_REGISTRY"] = str(registry)
     scanner = which_in(prefix, "gst-plugin-scanner", SCANNER_DIRS)
     if scanner:
@@ -647,6 +657,7 @@ def build(args: argparse.Namespace) -> int:
     if not prefix.is_dir():
         die(f"{prefix} is not a directory")
     plugins = plugin_dir(prefix)
+    EXTRA_PLUGIN_DIRS[:] = [Path(d) for d in args.extra_plugins if Path(d).is_dir()]
 
     with tempfile.TemporaryDirectory() as scratch:
         registry = Path(scratch) / "registry.bin"
@@ -781,6 +792,10 @@ def main() -> int:
                    choices=["windows", "macos", "linux"])
     p.add_argument("--codecs", default="codecs.toml",
                    help="the codec catalogue the keep list follows from")
+    p.add_argument("--extra-plugins", action="append", default=[],
+                   metavar="DIR",
+                   help="another plugin directory to choose from, after the "
+                        "prefix's own; may be given more than once")
     p.add_argument("--budget-mb", type=float, default=0,
                    help="fail if the tree is bigger than this")
     p.add_argument("--exclude-gpl", action="store_true",
