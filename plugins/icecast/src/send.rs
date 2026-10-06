@@ -107,6 +107,11 @@ impl Sender {
     pub fn sent(&self) -> u64 {
         self.state.sent.load(Ordering::Relaxed)
     }
+
+    /// How much programme has come in from the core so far.
+    pub fn received(&self) -> u64 {
+        self.pump.as_ref().map_or(0, Pump::bytes)
+    }
 }
 
 impl Drop for Sender {
