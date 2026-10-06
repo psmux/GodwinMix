@@ -75,11 +75,9 @@ fn a_picture_that_changes_size_mid_stream_keeps_decoding_at_the_new_size() {
     // Dropping the remuxer sends end of stream and stops it at once, so the
     // file holds what it got through by then. Half a second was enough here
     // and on Linux; a loaded Windows runner wrote 11 of the 45 upright
-    // pictures, so the wait is longer by GODWINMIX_TIMING_SLACK, and two
-    // seconds rather than half of one: one and a half (half times the slack) did
-    // not do either.
+    // pictures, so the wait is longer by GODWINMIX_TIMING_SLACK.
     let slack = std::env::var("GODWINMIX_TIMING_SLACK").ok().and_then(|s| s.parse::<f64>().ok()).unwrap_or(1.0).max(1.0);
-    std::thread::sleep(std::time::Duration::from_secs(2).mul_f64(slack));
+    std::thread::sleep(std::time::Duration::from_millis(500).mul_f64(slack));
     drop(remux);
     let seen = widths(&path);
     let _ = std::fs::remove_file(&path);
