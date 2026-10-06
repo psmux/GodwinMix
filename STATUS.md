@@ -65,11 +65,18 @@ picture arrives part way through, which is right for the programme and not
 what the test is about.
 
 **Measured.** With fourteen 1080p `x264enc speed-preset=slow` encodes on this
-laptop's 16 threads, `mixer::transition` (27 tests) before the change: 1 run
-in 6 of the frame rate test failed exactly as reported, and the wipe crop
-test failed 1 in 6. After all of it: 19 runs of 19 passed; 5 more runs died
-on the Quick Sync heap fault (0xc0000374) before finishing and are not
-counted. The whole `mixer::` suite under load: see below.
+laptop's 16 threads, `mixer::transition` before the change: of the 6 runs
+that finished, the frame rate test failed 1 exactly as reported and the wipe
+crop test failed 1. After all of it: 19 runs of 19 passed (27 tests each); 5
+more runs died on the Quick Sync heap fault (0xc0000374) and are not counted.
+The whole `mixer::` suite with no outside load, four test threads: before,
+the frame rate test failed with a slide red at every tenth, the macOS
+symptom; after, 108 passed of 108 in both runs. The whole suite with eight
+encodes beside it fails the same handful of other tests before and after
+(`flush_window`, `full_pool_draw`, `stall_storm`, `restart`, `stale_work`,
+the rendered keyframe test) and usually dies on the heap fault before the
+end; every transition test that ran in those runs passed. Those are not
+looked into here.
 
 **Not done.** `fx` transitions (`Kind::Fx`) time their overlay pass from the
 crossing's own start, which `bind_in_time` does not move, so on a starved
