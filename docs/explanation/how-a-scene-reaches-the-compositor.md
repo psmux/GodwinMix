@@ -388,6 +388,20 @@ different ones, so slot pressure doubles and the pool grows if it has to. Every
 incoming pad arrives at alpha 0, so the frame between binding and the first
 sync is never the wrong picture, and the curves take it from there.
 
+The curves are read by the compositor at the running time of each frame it
+makes, so a compositor that is behind the clock still plays the whole
+crossing, frame by frame, as it catches up. What it cannot do is go back:
+frames it had already made when the curves were bound show the old scene, so
+on a loaded machine a transition loses its first frame or two and no more.
+Each pad property keeps one control binding for good, and a binding writes
+only when its value changes, so every new crossing makes the binding forget
+what it last wrote. Without that, an incoming pad whose alpha was 1 at the end
+of the last crossing, hidden by hand since, was never written on a late
+compositor and the new scene appeared only when the transition settled. A pad
+that has no frame yet is not drawn at all: the outgoing scene plays its half
+of the crossing over whatever is behind it, and the new scene appears on its
+first frame, which is a cut.
+
 Measured: six 300 ms crossfades between two eight item scenes left the
 programme's largest inter frame interval at 33.3 ms, one frame, with the pool
 grown to sixteen.

@@ -27,13 +27,17 @@ async fn coloured(names: &[&str]) -> Mixer {
             toml::from_str(&format!("id = \"{name}\"\nuri = \"test://{name}\"\n")).expect("a source");
         mix.add_source(&cfg, None).expect("adding a coloured source");
     }
-    for _ in 0..100 {
-        let live = names.iter().all(|n| {
+    // A source that is not live is left out of every scene, and a test that
+    // went on after five seconds without asking took a wipe with no scene
+    // coming in. On a loaded machine a test pattern can take longer than that.
+    let until = std::time::Instant::now() + Duration::from_secs(30);
+    let live = |mix: &Mixer| {
+        names.iter().all(|n| {
             mix.sources.iter().any(|s| s.input.id == *n && matches!(s.input.observed_state(), crate::state::SourceState::Live))
-        });
-        if live {
-            break;
-        }
+        })
+    };
+    while !live(&mix) {
+        assert!(std::time::Instant::now() < until, "the coloured sources {names:?} were not all live in 30 s");
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
     mix
