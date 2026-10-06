@@ -85,9 +85,16 @@ async fn a_source_that_keeps_stalling_waits_longer_each_time() {
         let input = rig.mix.sources.iter().find(|s| s.input.id == "flaky").unwrap().input.clone();
         // A live pipeline in PAUSED delivers nothing, which is a stall the
         // restart in place cures by taking it through NULL to PLAYING.
-        let _ = input.pipeline.set_state(gst::State::Paused);
+        let paused = input.pipeline.set_state(gst::State::Paused);
         let stopped = Instant::now();
-        assert!(rig.until(SourceState::Stalled).await, "round {round}: never stalled");
+        let stalled = rig.until(SourceState::Stalled).await;
+        let now = input.pipeline.state(gst::ClockTime::ZERO);
+        assert!(
+            stalled,
+            "round {round}: never stalled. The pause answered {paused:?}, the pipeline is {now:?},              the last picture was {:?} ms ago and the source reads {:?}",
+            input.health.video_idle_ms(),
+            rig.state()
+        );
         assert!(rig.until(SourceState::Live).await, "round {round}: never came back");
         waits.push(stopped.elapsed());
         // Back for a second and a half: far short of earning its backoff back.

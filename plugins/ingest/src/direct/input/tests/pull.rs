@@ -88,7 +88,15 @@ fn hls_and_dash_are_pulled_and_paced() {
         assert!(eventually(10, || dir.join(file).is_file()), "{kind}: ffmpeg wrote no {file}");
         std::thread::sleep(Duration::from_secs(3));
         let rx = start(json!(format!("http://127.0.0.1:{port}/{file}")), &Context::default());
-        assert!(eventually(20, || rx.got.keyframes() >= 4), "{kind}: {:?}", rx.got.last());
+        let arrived = eventually(20, || rx.got.keyframes() >= 4);
+        // Which adaptive demuxers this GStreamer has: on the macOS runner DASH
+        // stayed connecting with no error, and the log should say what it ran.
+        let have: Vec<&str> = ["dashdemux2", "dashdemux", "hlsdemux2", "hlsdemux", "souphttpsrc", "curlhttpsrc"]
+            .into_iter()
+            .filter(|e| gstreamer::ElementFactory::find(e).is_some())
+            .collect();
+        let manifest = std::fs::read_to_string(dir.join(file)).unwrap_or_default();
+        assert!(arrived, "{kind}: {:?}; elements here {have:?}; the manifest now: {manifest}", rx.got.last());
         let s = rx.got.last();
         assert_eq!((s.video_codec.as_str(), s.width, s.audio_codec.as_str()), ("h264", 320, "aac"), "{kind}: {s:?}");
     }

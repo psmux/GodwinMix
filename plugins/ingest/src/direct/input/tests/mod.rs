@@ -143,6 +143,23 @@ pub fn live_ts(sink: &str) -> String {
     )
 }
 
+/// The errors and warnings a pipeline in this process posted, for a failure
+/// message.
+pub fn said(p: &gstreamer::Pipeline) -> Vec<String> {
+    use gstreamer::prelude::*;
+    let Some(bus) = p.bus() else { return Vec::new() };
+    let mut out = Vec::new();
+    while let Some(m) = bus.pop_filtered(&[gstreamer::MessageType::Error, gstreamer::MessageType::Warning]) {
+        let from = m.src().map(|s| s.name().to_string()).unwrap_or_default();
+        match m.view() {
+            gstreamer::MessageView::Error(e) => out.push(format!("error from {from}: {} ({:?})", e.error(), e.debug())),
+            gstreamer::MessageView::Warning(w) => out.push(format!("warning from {from}: {} ({:?})", w.error(), w.debug())),
+            _ => {}
+        }
+    }
+    out
+}
+
 /// A pipeline run in this process, stopped when dropped.
 pub struct Local(pub gstreamer::Pipeline);
 

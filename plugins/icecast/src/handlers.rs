@@ -89,7 +89,12 @@ impl Output for IcecastOutput {
             return Health::degraded(format!("{why} Trying again."));
         }
         if sent == 0 {
-            return Health::degraded(format!("connected to {}, waiting for the programme's sound", self.settings.describe()));
+            // The mount is dialled with the first encoded sound, so before
+            // that nothing is connected yet; say which side is waiting.
+            return Health::degraded(match s.received() {
+                0 => format!("waiting for the programme from the core before dialling {}", self.settings.describe()),
+                n => format!("{} kB of programme read, waiting for the encoder's first sound for {}", n / 1000, self.settings.describe()),
+            });
         }
         let mut h = Health::ok();
         h.detail = Some(format!("{} kB sent to {}", sent / 1000, self.settings.describe()));
@@ -98,7 +103,7 @@ impl Output for IcecastOutput {
 
     fn call(&mut self, method: &str, _params: Value) -> Result<Value, RpcError> {
         match method {
-            "stats" => Ok(json!({"address": self.settings.describe(), "bytes_sent": self.sender.as_ref().map(Sender::sent)})),
+            "stats" => Ok(json!({"address": self.settings.describe(), "bytes_sent": self.sender.as_ref().map(Sender::sent), "bytes_received": self.sender.as_ref().map(Sender::received)})),
             other => Err(no_method("icecast/output", other)),
         }
     }
