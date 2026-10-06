@@ -350,6 +350,30 @@ test("reattaching a visible canvas restores the latest picture immediately", () 
   detach(); painter.destroy();
 });
 
+test("attaching one canvas leaves the others as they are", () => {
+  // The Sources panel attaches every tile again on each render. Each attach
+  // used to repaint every canvas, the programme monitor included, dozens of
+  // times a second, and the page read its frames late for it.
+  const painter = new SheetPainter();
+  const bitmap = document.createElement("canvas");
+  bitmap.width = 2; bitmap.height = 2;
+  const brush = bitmap.getContext("2d");
+  brush.fillStyle = "#ff0000"; brush.fillRect(0, 0, 2, 2);
+  painter.bitmap = bitmap;
+  painter.setLayout({ cells: [{ index: 0, x: 0, y: 0, w: 2, h: 2 }] });
+  const monitor = document.createElement("canvas");
+  monitor.width = 2; monitor.height = 2;
+  painter.attach(monitor, 0);
+  const mark = monitor.getContext("2d");
+  mark.fillStyle = "#0000ff"; mark.fillRect(0, 0, 2, 2);
+  const tile = document.createElement("canvas");
+  tile.width = 2; tile.height = 2;
+  painter.attach(tile, 0);
+  eq([...tile.getContext("2d").getImageData(0, 0, 1, 1).data], [255, 0, 0, 255]);
+  eq([...mark.getImageData(0, 0, 1, 1).data], [0, 0, 255, 255], "the monitor was painted again");
+  painter.destroy();
+});
+
 test("a snapshot restores the frame layout without a separate layout event", () => {
   const client = new Client({ name: "test" }, new Store());
   const multiview = { width: 640, height: 360, cells: [{ index: 0, x: 0, y: 0, w: 640, h: 360 }] };

@@ -66,10 +66,18 @@ export class SheetPainter {
     this.layout = layout;
   }
 
-  /** Register a canvas to be painted with one cell. Returns a release function. */
+  /**
+   * Register a canvas to be painted with one cell. Returns a release function.
+   *
+   * Paints that canvas alone. The Sources panel attaches every tile again each
+   * time it renders, several times a frame, and repainting every canvas on
+   * each attach drew the whole programme monitor dozens of times a second: on
+   * 2026-10-06 that held the page's main thread long enough that a frame
+   * waited about 170 ms before its message was even read.
+   */
   attach(canvas, cellIndex) {
     this.targets.set(canvas, cellIndex);
-    this._paint();
+    if (this.bitmap && this.layout) this._paintOne(canvas, cellIndex, this.layout.cells || []);
     return () => this.targets.delete(canvas);
   }
 
@@ -106,17 +114,17 @@ export class SheetPainter {
   _paint() {
     if (!this.bitmap || !this.layout) return;
     const cells = this.layout.cells || [];
-    for (const [canvas, index] of this.targets) {
-      const cell = cells.find((c) => c.index === index);
-      if (!cell) continue;
-      const w = canvas.width;
-      const h = canvas.height;
-      if (!w || !h) continue;
-      const ctx = canvas.getContext("2d", { alpha: false });
-      if (!ctx) continue;
-      ctx.drawImage(this.bitmap, cell.x, cell.y, cell.w, cell.h, 0, 0, w, h);
-    }
+    for (const [canvas, index] of this.targets) this._paintOne(canvas, index, cells);
     for (const fn of this.watchers) fn(this.bitmap, this.layout);
+  }
+
+  _paintOne(canvas, index, cells) {
+    const cell = cells.find((c) => c.index === index);
+    const w = canvas.width;
+    const h = canvas.height;
+    if (!cell || !w || !h) return;
+    const ctx = canvas.getContext("2d", { alpha: false });
+    if (ctx) ctx.drawImage(this.bitmap, cell.x, cell.y, cell.w, cell.h, 0, 0, w, h);
   }
 
   destroy() {
@@ -140,10 +148,10 @@ export class PicturePainter {
     this.targets = new Set();
   }
 
-  /** Register a canvas to be painted with the whole picture. */
+  /** Register a canvas to be painted with the whole picture. Paints that one alone. */
   attach(canvas) {
     this.targets.add(canvas);
-    this._paint();
+    this._paintOne(canvas);
     return () => this.targets.delete(canvas);
   }
 
@@ -168,12 +176,13 @@ export class PicturePainter {
   }
 
   _paint() {
-    if (!this.bitmap) return;
-    for (const canvas of this.targets) {
-      if (!canvas.width || !canvas.height) continue;
-      const ctx = canvas.getContext("2d", { alpha: false });
-      if (ctx) ctx.drawImage(this.bitmap, 0, 0, canvas.width, canvas.height);
-    }
+    for (const canvas of this.targets) this._paintOne(canvas);
+  }
+
+  _paintOne(canvas) {
+    if (!this.bitmap || !canvas.width || !canvas.height) return;
+    const ctx = canvas.getContext("2d", { alpha: false });
+    if (ctx) ctx.drawImage(this.bitmap, 0, 0, canvas.width, canvas.height);
   }
 
   destroy() {
