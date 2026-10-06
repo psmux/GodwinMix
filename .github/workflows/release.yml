@@ -439,7 +439,11 @@ jobs:
             -exec cp {} bundles/ \;
           # The .app is a directory, so it travels as an archive.
           if [ -d tauri-app/target/release/bundle/macos ]; then
+            # The commit on a rehearsal, as the core archives do: a branch
+            # name such as fix/release-bundles has a slash in it, and tar
+            # could not create a file in a directory that does not exist.
             version="${GITHUB_REF_NAME#v}"
+            [ "$version" = "$GITHUB_REF_NAME" ] && version="$(git rev-parse --short HEAD)"
             (cd tauri-app/target/release/bundle/macos && tar czf "$GITHUB_WORKSPACE/bundles/GodwinMix-${version}-macos.app.tar.gz" GodwinMix.app)
           fi
           ls -la bundles

@@ -25,8 +25,10 @@ plugin files listed in the macOS app and the `.deb`):
   does not package); no WHIP or WHEP plugin elements for the same reason; no
   ALSA. The plugins for SRT and RTMP output, cameras, pictures and text were
   there, and the SRT and RTMP ones passed that release's check.
-* **macOS:** besides WebRTC and VP8/VP9, the plugin files the mixer uses were
-  there. Only the old eight element check was run on them.
+* **macOS:** WebP pictures did not open. The WebP plugin was copied without
+  `libsharpyuv` and `libwebp` (the v0.2.0 build log warns about both), so it
+  could not load. Besides that, WebRTC and VP8/VP9, the plugin files the mixer
+  uses were there. Only the old eight element check was run on them.
 
 What was fixed on branch `fix/release-bundles`:
 
@@ -51,12 +53,20 @@ What was fixed on branch `fix/release-bundles`:
   transitions use (`webpdec` on macOS and Linux only). On a failure it prints
   the plugin files GStreamer could not load. `--headless-check` asks for the
   WebRTC four too.
-* `runtime.yml` builds and checks the trimmed tree on all three platforms with
-  the release's 160 MB budget, in about fifteen minutes rather than the
-  release's hour.
+* On macOS the trimmer resolved the Homebrew prefix to its Cellar path and
+  then never searched Homebrew's other libraries, so an `@rpath` import such
+  as `libsharpyuv` was skipped with a warning. It now finds the Homebrew root
+  from the Cellar, and a macOS tree that still imports anything from outside
+  itself after relocation fails the build by name instead of passing on a
+  machine that happens to have Homebrew.
+* `runtime.yml` builds and checks the trimmed tree on all three platforms, in
+  about fifteen minutes rather than the release's hour.
+* One runtime budget, 160 MB, in release.yml, platforms.yml, runtime.yml and
+  the two bundle scripts. platforms.yml still said 130, which the full 1.28
+  runtimes no longer fit.
 
 Trimmed sizes on the runners: Windows 154.6 MB, Linux 146.4 MB, macOS
-RELEASE_MACOS_MB. Release rehearsal RELEASE_RUN_ID passed every job.
+109.3 MB. Release rehearsal RELEASE_RUN_ID passed every job.
 
 Still not in the Linux installer: `cmafmux`, `livesync`, the WHIP and WHEP
 plugin elements and `dav1ddec`, which need gst-plugins-rs and dav1d built for
