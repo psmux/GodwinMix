@@ -18,11 +18,14 @@ pub(super) async fn place(call: &Call, e: &Entry, req: &GalleryPlaceRequest) -> 
     if let Some(front) = spec.foreground.as_ref().filter(|f| dir.join(f).is_file()) {
         sources.push(drawn(&dir.join(front)));
     }
+    let mut settings = to_json_map(&spec.settings);
+    let screen = screen_for(call, &camera, req.screen.as_deref(), settings.get("screen")).await;
+    settings.insert("screen".into(), Value::String(screen));
     let made = invoke(call, "scene.create_from", json!({
         "sources": sources,
         "layout": spec.layout.clone().unwrap_or_else(|| "virtual-set".into()),
         "name": e.item.name,
-        "settings": to_json_map(&spec.settings),
+        "settings": settings,
     }))
     .await?;
     // The answer is the scene itself, flattened, with what was added beside it.
@@ -50,6 +53,23 @@ fn drawn(file: &std::path::Path) -> String {
         format!("template:{}", plain(file))
     } else {
         plain(file)
+    }
+}
+
+/// What the camera stands in front of: as asked, else as the set says, else
+/// read off its picture. A set placed over a room with no green screen was
+/// keyed green by default and showed the whole room behind the presenter;
+/// with no screen to be found, the person is cut out instead.
+async fn screen_for(call: &Call, camera: &str, asked: Option<&str>, set: Option<&Value>) -> String {
+    if let Some(s) = asked.map(str::trim).filter(|s| !s.is_empty() && !s.eq_ignore_ascii_case("auto")) {
+        return s.to_ascii_lowercase();
+    }
+    if let Some(s) = set.and_then(Value::as_str).filter(|s| !s.eq_ignore_ascii_case("auto")) {
+        return s.to_string();
+    }
+    match crate::control::methods::scenes::key_color::guess(call, camera).await {
+        Some(found) => found.found,
+        None => "none".into(),
     }
 }
 

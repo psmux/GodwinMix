@@ -116,7 +116,7 @@ layout = "virtual-set"         # the default
 [set.settings]
 presenter_scale = 0.8          # 0.3 to 1
 presenter_x = 0.62             # 0 left to 1 right
-screen = "green"               # green, blue, or none for a cut out with no screen
+screen = "auto"                # auto reads the camera: green or blue when it finds that screen, none (cut out) when it finds none
 ```
 
 `background` and `foreground` are files in the folder. A page with a

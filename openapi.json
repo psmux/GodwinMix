@@ -5214,6 +5214,14 @@
               "null"
             ]
           },
+          "screen": {
+            "default": null,
+            "description": "For a set: what the camera stands in front of, \"green\", \"blue\" or\n\"none\" (the person cut out with no screen). Default: what the set\nsays, else read off the camera's picture.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "values": {
             "additionalProperties": true,
             "default": null,

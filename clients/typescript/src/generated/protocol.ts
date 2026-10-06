@@ -1264,6 +1264,7 @@ export interface GalleryPlaceRequest {
   camera?: string | null;
   id?: string;
   scene?: string | null;
+  screen?: string | null;
   values?: Record<string, unknown> | null;
   visible?: boolean | null;
   zone?: string | null;

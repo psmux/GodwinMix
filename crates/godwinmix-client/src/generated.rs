@@ -2284,6 +2284,11 @@ pub struct GalleryPlaceRequest {
     /// The scene to add it to. Default: the scene on air.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub scene: Option<String>,
+    /// For a set: what the camera stands in front of, "green", "blue" or
+    /// "none" (the person cut out with no screen). Default: what the set
+    /// says, else read off the camera's picture.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub screen: Option<String>,
     /// Field values for this placement, over the item's own.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub values: Option<BTreeMap<String, Value>>,

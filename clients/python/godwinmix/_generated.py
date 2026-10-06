@@ -1443,6 +1443,8 @@ class GalleryPlaceRequest(TypedDict, total=False):
     id: str
     scene: Optional[str]
     # The scene to add it to. Default: the scene on air.
+    screen: Optional[str]
+    # For a set: what the camera stands in front of, "green", "blue" or "none" (the person cut out with no screen). Default: what the set says, else read off the camera's picture.
     values: Optional[Dict[str, Any]]
     # Field values for this placement, over the item's own.
     visible: Optional[bool]
@@ -5203,6 +5205,7 @@ class GeneratedMethods:
         camera: Optional[str] = None,
         id: Optional[str] = None,
         scene: Optional[str] = None,
+        screen: Optional[str] = None,
         values: Optional[Dict[str, Any]] = None,
         visible: Optional[bool] = None,
         zone: Optional[str] = None,
@@ -5215,6 +5218,8 @@ class GeneratedMethods:
             params["id"] = id
         if scene is not None:
             params["scene"] = scene
+        if screen is not None:
+            params["screen"] = screen
         if values is not None:
             params["values"] = values
         if visible is not None:

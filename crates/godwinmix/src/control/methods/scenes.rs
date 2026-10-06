@@ -26,7 +26,7 @@ mod conflicts;
 pub(crate) mod edit;
 mod graphics;
 mod items;
-mod key_color;
+pub(crate) mod key_color;
 mod obs;
 pub(crate) mod layout;
 mod requests;
