@@ -9,7 +9,7 @@ const NEW = 'class="n" fill="currentColor"';
 const FULL = 'x="1" y="1" width="26" height="14"';
 
 const SHAPES = {
-  fade: `<rect ${FULL} ${OLD}/><rect ${FULL} ${NEW} opacity="0.6"/>`,
+  fade: `<rect x="1" y="1" width="18" height="14" ${OLD}/><rect x="9" y="1" width="18" height="14" ${NEW} opacity="0.6"/>`,
   move: `<rect ${FULL} ${OLD}/><rect x="9" y="4" width="14" height="9" ${NEW}/>`,
   wipe: `<rect ${FULL} ${OLD}/><rect x="14" y="1" width="13" height="14" ${NEW}/>`,
   slide: `<rect ${FULL} ${OLD}/><rect x="14" y="1" width="26" height="14" ${NEW}/>`,

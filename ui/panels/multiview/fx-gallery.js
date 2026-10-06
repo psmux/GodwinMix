@@ -57,7 +57,7 @@ export function tile(client, item, actions) {
 export function effects(client) {
   const list = el("div.fx-effect-list", { role: "group", "aria-label": "Effects" });
   const sheet = el("div.fx-effects-sheet", { "data-width": "320", role: "dialog", "aria-label": "Effects" }, [
-    el("div.fx-head", {}, [el("strong", { text: "Effects over the programme" }), el("button.btn", { type: "button", text: "Done", onclick: () => pop.close() })]),
+    el("div.fx-head", {}, [el("strong", { text: "Effects over the programme" }), el("span.grow"), el("button.btn", { type: "button", text: "Done", onclick: () => pop.close() })]),
     el("p.fx-status", { text: "Each plays over whatever is on air and goes when it ends." }),
     list,
   ]);
