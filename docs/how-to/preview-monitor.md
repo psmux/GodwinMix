@@ -25,32 +25,63 @@ The audio slider changes volume. Mute is independent of volume, and unmuting res
 
 ## Studio mode
 
-Press **Studio mode** under the Programme monitor to get a Preview beside it.
-You set up the next shot in Preview, then send it to Programme when you are
-ready. Nothing reaches the audience until you do.
+The page opens in Studio mode: a Preview beside the Programme monitor, and Take
+between them. You set up the next shot in Preview, then send it to Programme
+when you are ready. Nothing reaches the audience until you do. Press **Studio
+mode** under the monitors to turn it off; the page remembers that in this
+browser and opens the same way next time.
 
 * Preview is on the left with a green frame, Programme on the right with a red
-  one. On a narrow panel Preview sits above Programme.
+  one. On a narrow panel Preview sits above Programme, with Take and Cut in a
+  band between them.
 * Click a scene tab, a scene tile or a source tile and it goes into Preview.
   The number keys do the same for scenes 1 to 9. Nothing goes on air.
-* **Take**, the big button between the monitors, sends Preview to Programme
-  with the transition chosen under it: any of the built in ones, with its
-  direction (Wipe, Slide, Push) or colour (Dip), an easing and a length from
-  0.25 s to 2 s, plus whatever the scene collection or a plugin adds. A small
-  drawing beside the list shows the one chosen, and the choice is remembered in
-  this browser.
-  Space does the same, and so does a double click on the Preview picture.
-* **Cut** sends it at once, with no transition.
+* **Take**, the big button at the top of the bar, sends Preview to Programme
+  with the transition shown under it. Space does the same, and so does a
+  double click on the Preview picture.
+* **Cut**, under Take, sends it at once with no transition.
+* Under them is the transition Take uses, as a drawing, a name and a length
+  ("Wipe left, 0.5 s"). Press it to open the list of every transition, each one
+  moving: the built in ones, whatever the scene collection or a plugin adds,
+  and the ones imported from packs. The direction (Wipe, Slide, Push) or
+  colour (Dip), the easing and the length from 0.25 s to 2 s are at the top of
+  that list. Escape, Done or a press outside it closes it, and nothing in it
+  moves while it is closed.
+* The three small buttons under that are quick picks: the three transitions
+  this browser has taken with most, Fade, Wipe and Dip until it has taken
+  with any. One press makes it the next take's.
+* **Effects** opens the effects from packs, each with its key. They play over
+  whatever is on air; Alt+1 to Alt+9 play the first nine without opening it.
+  A mixer with no effects has no Effects button.
 * **Take the preview to programme** and **Cut the preview to programme** are in
   the palette (Ctrl+K) as well.
 
-After a take, Preview keeps what you just sent, so both monitors show the same
-shot until you pick the next one. That is what the mixer does with an armed
-scene, and a source behaves the same way.
+Take and Cut stay where they are at every width. The bar never grows with the
+fx library: a hundred imported transitions are a hundred tiles in the list,
+not a hundred buttons beside Take.
 
-A scene whose sources are not all running cannot be taken. The Preview says
-which ones are missing, and the picture shows the scene without them. Get them
-running, or open the scene with the pencil beside its tab and delete them.
+### What Preview shows when nothing is armed
+
+Preview is never just black. With nothing armed, or with the armed scene
+already on air, it shows the scene most likely to be taken next, and says so
+beside its name:
+
+* **Suggested: on air before this** is the scene that was on air before the
+  one on air now. After a take, from this page or from anyone else (another
+  operator, an AI agent, `gmx ctl take`), Preview swaps to where the show came
+  from, the way a vision mixer swaps its buses.
+* **Suggested: next scene** is the first scene that is not on air, when this
+  page has not seen anything else on air yet.
+
+Take and Space take the suggestion. It is this page's own guess: it is not
+armed on the mixer, other pages do not see it, and the frame round Preview is
+dashed while it shows one. Click a scene and that is what Preview holds.
+
+A source in the previewed scene that has no picture yet shows its name and its
+state on its own box ("Late camera, connecting, no picture yet") rather than a
+black hole. The take still goes ahead without it, and the note above the
+picture names it so it can be fixed first. With no scenes and nothing armed,
+Preview says what to do instead.
 
 **Cut to black** at the top of the page, and `0`, go to black even while
 something is in Preview.
