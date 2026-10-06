@@ -29,8 +29,16 @@ fn an_address_is_host_and_an_even_port() {
 }
 
 /// Frames a `uridecodebin` on `rist://` decodes, counted as they come.
+///
+/// On the loopback address, not 0.0.0.0. The port is one the system handed
+/// out a moment ago, and the sender binds its own sockets to ports the
+/// system hands out, with `SO_REUSEADDR` as `udpsink` sets it. On Windows a
+/// later socket on the same wildcard port takes the datagrams, and the
+/// receiver decoded nothing in 45 s with no error on either bus; a socket on
+/// the specific address is the one Windows delivers to, which is why the
+/// direct carriage test, bound to 127.0.0.1, never failed this way.
 fn receiver(port: u16) -> (gst::Pipeline, Arc<AtomicU64>) {
-    let line = format!("uridecodebin uri=rist://0.0.0.0:{port} caps=video/x-raw(ANY) ! fakesink name=end sync=false");
+    let line = format!("uridecodebin uri=rist://127.0.0.1:{port} caps=video/x-raw(ANY) ! fakesink name=end sync=false");
     let p = gst::parse::launch(&line).unwrap().downcast::<gst::Pipeline>().unwrap();
     let frames = Arc::new(AtomicU64::new(0));
     let f = frames.clone();

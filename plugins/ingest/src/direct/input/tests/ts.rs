@@ -132,8 +132,11 @@ fn rist_carries_the_feed() {
     let rx = start(json!("rist://@0.0.0.0:19928"), &Context::default());
     // In this process, so what the sender's bus said is in the message.
     let tx = Local::launch(&live_ts("rtpmp2tpay ! ristsink address=127.0.0.1 port=19928"));
-    let arrived = eventually(15, || rx.got.keyframes() >= 3);
-    assert!(arrived, "{:?}; the sender said {:?}", rx.got.last(), said(&tx.0));
+    // Until the stats say what came, not only until the pictures have: the
+    // stats are published once a second, and on a macOS runner three
+    // keyframes were in while the last stats still read connecting.
+    let arrived = eventually(15, || rx.got.keyframes() >= 3 && !rx.got.last().audio_codec.is_empty());
+    assert!(arrived, "{} keyframes, {:?}; the sender said {:?}", rx.got.keyframes(), rx.got.last(), said(&tx.0));
     let s = rx.got.last();
     assert_eq!((s.video_codec.as_str(), s.audio_codec.as_str()), ("h264", "aac"), "{s:?}");
 }
