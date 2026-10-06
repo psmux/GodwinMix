@@ -1,5 +1,108 @@
 # Where GodwinMix stands
 
+## What CI failed on main after the transitions merge, 2026-10-06
+
+Branch `fix/ci-main`, draft pull request #2, from main at `d5bcb319`. The
+build and platforms runs for `2b869013` were red on every platform. Each
+failure below says what it was, what changed, and how it was checked.
+
+**An import with nothing else running panicked.** `fx.import` of a shader
+draws its preview strip, the strip asks whether GL runs, and the GL probe
+built a `VideoInfo` before anything had started GStreamer. The probe and
+`Gl::start` now start GStreamer themselves. The test that found it
+(`a_shader_with_a_uniform_and_no_default_is_refused_by_name`) is the only
+one in the file that never called `gst::init`, which is how the import path
+got exercised cold.
+
+**The GPU shader test failed where there is no GPU.** On the no GPU Linux job
+and the Windows runner `glupload` builds and then never answers. The probe
+already treated that as no GL (three seconds without an answer), but the
+test started GL directly and asserted on it. It now asks the probe first; where
+the probe says no, it prints why it skipped the GPU half and checks what a
+take really runs there, the software version through `ShaderMix`.
+
+**A shader take on a slow GPU showed only the old scene.** On the macOS
+runner the probe said GL runs, and `glitch-slice` drew 69 frames of the old
+scene and then the new one. Drawing the software version until the GPU's
+first answer was not enough (the next run looked the same): the GPU answered
+once, near progress 0, and not again inside the 1.3 second window, and that
+stale answer was drawn to the end. `ShaderMix` now hands the GPU its software
+version (or a dissolve), and that draws whenever the newest answer is more
+than three frames old. The GL appsrc keeps one frame and drops the older
+(`leaky-type=downstream`), where before a GPU slower than the programme let
+frames pile up in it. `Gl`'s answer handling moved to `gl_answers.rs`.
+
+**The Icecast sender could die before its first sample.** The diagnostics
+added on this branch showed it on a macOS runner: 108,552 bytes of programme
+read, every pad linked and with caps, nothing sent, no error. The sender
+thread was started before the pipeline, and an appsink that has not started
+answers `is_eos` with true, so a thread that asked first took that for the
+end and left. It now starts after the pipeline plays, and believes `is_eos`
+only while the sink is playing. A race of that kind fits what the runs
+showed: one of the two sender tests in a run, never the same one, and only
+on Unix runners. Icecast health now says which side it waits for before the mount is
+dialled, and `stats` carries `bytes_received`. `mount.rs` was split
+(`mount_http.rs`) to stay under 150 lines.
+
+**A source live on sound alone was never judged stalled.** The stall storm
+test's diagnostics read "the last picture was None ms ago and the source
+reads Live": on a loaded runner the test source went live on its first sound,
+the test paused it before its first picture, and `is_stalled` only ever
+looked at the picture. A source that sends only sound and then stops was
+never restarted either. `SourceHealth::is_stalled` now uses the sound for a
+source that has sent no picture yet; `state::tests` has the case.
+
+**The RIST output test's receiver was the fault.** It decoded with
+`caps=video/x-raw(ANY)`, so the decoded sound had nowhere to go and its
+unlinked pad stopped the receiver after one to three frames ("streaming
+stopped, reason not-linked" from `rist_rtp_udpsrc0`, on Windows and macOS).
+Before the receiver listened on 127.0.0.1 it showed nothing at all on
+Windows, so it listens there now, as the carriage test that never failed
+does. The receiver now sends each stream to a sink of its own; the same
+pipeline over this machine's LAN address decoded 235 frames in 8 seconds.
+
+**An output could be refused while the programme encoder started.** On the
+Windows runner `slow_output` failed to attach its RTMP output: "linking
+out-stuck-reconnect-mux-vq-0 into out-stuck-reconnect-mux-0: Pads do not
+have common format". The link asked for caps, the query crossed the proxy
+into the programme pipeline, and the encoder starting for its first consumer
+answered nothing. `link_to_mux` now links against the pad templates; the
+caps still have to suit the muxer when they arrive. The message is the one
+the `output.set` swap gave in the last round, so this looks like the same
+race reached by `output.add`.
+
+**The RIST input test read the stats too early.** Its keyframes had
+arrived; the stats, published once a second, still said connecting. It now
+waits for both.
+
+**DASH pull on macOS is left out, with the reason printed.** On every macOS
+run the DASH half stayed connecting with no error. Here, with ffmpeg 9.0.2
+writing the same live DASH, a trace showed `dashdemux2` fetch four segments,
+then fetch the manifest every second and never ask for a segment again,
+while `dashdemux` on the same server took 680 buffers in 15 seconds. The
+macOS runner has Homebrew's ffmpeg 9.0.1. That is the demuxer and this
+encoder, so the test skips DASH on macOS and says so; HLS is still checked.
+Whether the ingest should prefer `dashdemux` for live DASH is open. The
+test also gives ffmpeg a forward slash path, since on Windows its DASH muxer
+wrote the segments into the working directory.
+
+**Tests that asked too much of a shared runner.** The fx take tests use
+`34 ms × 3 × GODWINMIX_TIMING_SLACK`, as the overlay clip test does, and
+measure from the take on, printing the worst interval before it. The HEVC
+transcode test and the direct plan test read for their window times the
+slack. The frame bus sound test uses 100 ms chunks: a reader more than eight
+chunks behind skips ahead by design, and with 10 ms chunks a reader held up
+80 ms on macOS did. The isolation test accepts the restarted show's
+rendition at half to one and a half times its first price (528 against 808
+millicores on a Linux runner), which still tells one share from none and from
+two. The smoke test expects the 14 standard and 6 minimal MCP tools the
+server has had since `call_tool` joined the hot lists.
+
+**Diagnostics left in.** The SRT player test prints what libsrt counted on
+the player's socket and the hub's side of the stream; the one failure since
+showed the player connected (31 µs round trip) and not one packet received.
+The Windows headless check prints its exit code in hex.
+
 ## What the v0.2.0 installers left out, 2026-10-06
 
 The desktop installers carry a trimmed GStreamer. Its self check asked for
