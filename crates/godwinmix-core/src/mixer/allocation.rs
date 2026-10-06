@@ -75,7 +75,7 @@ pub fn remember_answers(vmix: &gst::Element) {
 fn kept(a: &gst::query::Allocation) -> Option<Answer> {
     let (caps, need_pool) = a.get();
     let caps = caps?.to_owned();
-    let allocators = a.allocation_params().map(|(allocator, params)| (allocator, params)).collect();
+    let allocators = a.allocation_params().collect();
     let mut sizes = Vec::new();
     for (pool, size, min, max) in a.allocation_pools() {
         if pool.is_some() {
@@ -92,7 +92,7 @@ fn replay(memory: &Option<Answer>, query: &mut gst::QueryRef) -> bool {
     let Some(answer) = memory else { return false };
     let gst::QueryViewMut::Allocation(a) = query.view_mut() else { return false };
     let (caps, need_pool) = a.get();
-    if need_pool != answer.need_pool || caps.map_or(true, |c| c != answer.caps.as_ref()) {
+    if need_pool != answer.need_pool || caps.is_none_or(|c| c != answer.caps.as_ref()) {
         return false;
     }
     for (size, min, max) in &answer.sizes {
