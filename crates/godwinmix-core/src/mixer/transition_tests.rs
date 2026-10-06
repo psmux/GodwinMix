@@ -331,6 +331,40 @@ fn with(background: &Placement, third: Option<&Placement>) -> ProgramScene {
     scene("show", placements)
 }
 
+/// Where a pad was on the frame composed half way through a window, read on
+/// the compositor's own thread as each frame leaves it, and only once the
+/// compositor has made a frame past the window.
+///
+/// Read once by the wall clock instead, a compositor behind the clock had not
+/// reached the window yet and the third was still where it started: "part way
+/// out the third is off the left edge, at 0", once on a Windows runner and
+/// once here under load.
+async fn xpos_half_way(mix: &Mixer, pad: &gst::Pad, window: (u64, u64)) -> i32 {
+    let seen: Arc<Mutex<Vec<(u64, i32)>>> = Arc::default();
+    let src = mix.pool.compositor().static_pad("src").expect("the compositor has a src pad");
+    let segment = src.sticky_event::<gst::event::Segment>(0).and_then(|e| e.segment().downcast_ref::<gst::ClockTime>().cloned());
+    let (record, pad) = (seen.clone(), pad.clone());
+    let probe = src.add_probe(gst::PadProbeType::BUFFER, move |_, info| {
+        let rt = info.buffer().and_then(|b| b.pts()).and_then(|pts| segment.as_ref().and_then(|s| s.to_running_time(pts)));
+        if let Some(rt) = rt {
+            record.lock().push((rt.nseconds(), pad.property::<i32>("xpos")));
+        }
+        gst::PadProbeReturn::Ok
+    });
+    let past = window.1 + 2 * mix.canvas.frame_duration().nseconds();
+    let until = std::time::Instant::now() + Duration::from_secs(30);
+    while !seen.lock().iter().any(|(t, _)| *t >= past) {
+        assert!(std::time::Instant::now() < until, "the compositor made no frame past the window in 30 s");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    if let Some(probe) = probe {
+        src.remove_probe(probe);
+    }
+    let mid = window.0 + (window.1 - window.0) / 2;
+    let frames = seen.lock();
+    frames.iter().min_by_key(|(t, _)| t.abs_diff(mid)).map(|(_, x)| *x).expect("a frame was seen")
+}
+
 /// A lower third hidden on air slides out to the left and is gone; shown
 /// again, it slides in and ends exactly where it was placed. The programme
 /// never misses a frame on the way.
@@ -353,11 +387,9 @@ async fn a_lower_third_slides_out_and_back_in_to_where_it_was_placed() {
     // Hidden: the same scene applied again without it.
     mix.take_scene_over(with(&background, None), None, None, None).expect("hide");
     let pad = pad_of(&mix);
-    assert!(mix.transition_window().is_some(), "hiding an item with an exit plays it");
-    tokio::time::sleep(Duration::from_millis(200)).await;
-    let x: i32 = pad.property("xpos");
+    let window = mix.transition_window().expect("hiding an item with an exit plays it");
+    let x = xpos_half_way(&mix, &pad, window).await;
     assert!(x < 0, "part way out the third is off the left edge, at {x}");
-    tokio::time::sleep(Duration::from_millis(400)).await;
     mix.handle(Command::TransitionEnd { transition: mix.transition_id() }).expect("the end");
     mix.apply_visibility(false);
     assert_eq!(pad.property::<f64>("alpha"), 0.0, "a hidden item is gone once it has left");
@@ -365,12 +397,10 @@ async fn a_lower_third_slides_out_and_back_in_to_where_it_was_placed() {
 
     // Shown: back in, landing on its own placement.
     mix.take_scene_over(with(&background, Some(&third)), None, None, None).expect("show");
-    assert!(mix.transition_window().is_some(), "showing an item with an enter plays it");
+    let window = mix.transition_window().expect("showing an item with an enter plays it");
     let pad = pad_of(&mix);
-    tokio::time::sleep(Duration::from_millis(150)).await;
-    let x: i32 = pad.property("xpos");
+    let x = xpos_half_way(&mix, &pad, window).await;
     assert!(x < 0, "part way in it is still coming from the left, at {x}");
-    tokio::time::sleep(Duration::from_millis(500)).await;
     mix.handle(Command::TransitionEnd { transition: mix.transition_id() }).expect("the end");
     mix.apply_visibility(false);
     let placed = PadState { xpos: third.xpos, ypos: third.ypos, width: third.width, height: third.height, alpha: 1.0 };
