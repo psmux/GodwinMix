@@ -12,7 +12,10 @@ use std::time::{Duration, Instant};
 ///
 /// A GPU that is there but never answers (a runner with no GL context, where
 /// `glupload` builds and then waits for good) counts as none: the answer
-/// must come back inside three seconds.
+/// must come back inside three seconds. So does one that answers with the
+/// wrong picture: half way from grey 128 to black 16 must read about 72. On
+/// a macOS runner GL answered every frame with the old picture alone, so a
+/// shader take showed no transition at all while the probe said yes.
 pub fn available() -> bool {
     static ANSWER: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     *ANSWER.get_or_init(|| {
@@ -29,7 +32,12 @@ pub fn available() -> bool {
         let mut planes = Planes { y: &mut y, u: &mut u, v: &mut v, strides: [64, 32, 32], width: 64, height: 36 };
         let answered = settle(&gl, &old, &mut planes, 0.5, Duration::from_secs(3));
         gl.close();
-        answered
+        let mean = planes.y.iter().map(|&p| u32::from(p)).sum::<u32>() / planes.y.len() as u32;
+        let mixed = (50..=100).contains(&mean);
+        if answered && !mixed {
+            tracing::warn!(mean, "GStreamer GL answered with the wrong picture (half way should read about 72); shaders run the software way");
+        }
+        answered && mixed
     })
 }
 
