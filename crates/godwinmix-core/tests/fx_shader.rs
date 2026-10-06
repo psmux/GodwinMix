@@ -3,7 +3,8 @@
 //! (all old at 0, all new at 1) on real frames.
 
 use godwinmix_core::fx::frame::Pic;
-use godwinmix_core::fx::shader::{cpu, fragment, gl::Gl, probe};
+use godwinmix_core::fx::shader::{cpu, fragment, gl::Gl, probe, runs, ShaderMix};
+use godwinmix_core::fx::Mix;
 use godwinmix_core::overlay::blend::Planes;
 use gstreamer as gst;
 use std::time::{Duration, Instant};
@@ -41,18 +42,23 @@ fn the_shipped_shaders_have_software_versions_that_start_old_and_end_new() {
     }
 }
 
+/// Where GStreamer GL builds but no GL context answers (a hosted Linux runner
+/// with no GPU, the Windows runner), the probe says so and a shader take
+/// runs the software version: that is what is checked there, and the GPU half
+/// is skipped with the reason printed.
 #[test]
 fn a_shader_runs_on_the_gpu_where_gstreamer_gl_does() {
     gst::init().unwrap();
+    if !probe::available() {
+        println!("skipped the GPU half: GStreamer GL gave no answer here in three seconds, so takes run the software version");
+        assert_eq!(runs("ripple"), "cpu", "with no GPU a shader that has a software version runs it");
+        let mix = ShaderMix::start("ripple", &shader("ripple"), (W as i32, H as i32));
+        let at1 = step(&|o, f| mix.mix(o, f, 1.0), frame(200, 128, 128));
+        assert!(at1.iter().all(|&y| y == 200), "the software ripple at 1 is the new picture");
+        return;
+    }
     let source = fragment(&shader("ripple")).expect("ripple is a gl-transitions shader");
-    let gl = match Gl::start(&source, (W as i32, H as i32)) {
-        Ok(gl) => gl,
-        Err(e) => {
-            println!("skipped: no GStreamer GL here: {e:#}");
-            assert!(!probe::available(), "the probe must agree that there is no GL");
-            return;
-        }
-    };
+    let gl = Gl::start(&source, (W as i32, H as i32)).expect("the probe ran GL, so the shader starts");
     // The answer comes back a frame later; send until one has.
     let deadline = Instant::now() + Duration::from_secs(5);
     let mut last = Vec::new();
@@ -60,7 +66,7 @@ fn a_shader_runs_on_the_gpu_where_gstreamer_gl_does() {
         while Instant::now() < deadline {
             // Grey, so the trip through RGB on the GPU loses nothing to
             // clipping and the number read back is the number sent.
-            last = step(&|o, f| gl.mix(o, f, t), frame(200, 128, 128));
+            last = step(&|o, f| gl.mix(o, f, t, None), frame(200, 128, 128));
             if gl.answered() {
                 break;
             }
@@ -68,9 +74,8 @@ fn a_shader_runs_on_the_gpu_where_gstreamer_gl_does() {
         }
         std::thread::sleep(Duration::from_millis(60));
     }
-    assert!(gl.answered(), "GStreamer GL started but gave no answer in five seconds");
+    assert!(gl.answered(), "the probe had an answer from GStreamer GL but this shader gave none in five seconds");
     let mean = last.iter().map(|&y| y as u32).sum::<u32>() / last.len() as u32;
-    println!("GPU ripple at 1: mean luma {mean} (new is 200, old 40); probe says {}", probe::available());
+    println!("GPU ripple at 1: mean luma {mean} (new is 200, old 40)");
     assert!(mean > 190, "at progress 1 the GPU draws the new scene, mean luma was {mean}");
-    assert!(probe::available(), "the probe must agree that GL runs");
 }

@@ -59,6 +59,13 @@ async fn blue_then_red() -> (MixerHandle, Frames, std::thread::JoinHandle<()>) {
     (handle, frames, thread)
 }
 
+/// `GODWINMIX_TIMING_SLACK`: a macOS runner busy with other jobs held the
+/// programme's frames 167 ms apart once, through a stinger that costs this
+/// laptop nothing.
+fn slack() -> f64 {
+    godwinmix_core::plugin::harness::timing_slack()
+}
+
 fn neither(p: (u8, u8, u8)) -> bool {
     !near(p, BLUE) && !near(p, RED)
 }
@@ -75,7 +82,7 @@ async fn an_alpha_stinger_covers_the_cut_and_leaves_the_new_scene() {
     let covered = seen.iter().filter(|s| s.iter().all(|p| neither(*p))).count();
     assert!(covered > 0, "the glitch never covered the picture: {seen:?}");
     assert!(near(end, RED), "the new scene is on after the stinger: {end:?}");
-    assert!(worst < 100.0, "the programme kept its frames: worst interval {worst} ms");
+    assert!(worst < 34.0 * 3.0 * slack(), "the programme kept its frames: worst interval {worst:.1} ms");
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -138,5 +145,5 @@ async fn an_effect_fired_over_a_moving_source_plays_and_goes() {
     let burnt = seen.iter().any(|s| s[0].0 > 200);
     assert!(burnt, "the burn should white out the left edge: {seen:?}");
     assert!(after.0 < 60, "and be gone once its clip ends: {after:?}");
-    assert!(worst < 100.0, "the programme kept its frames: worst interval {worst} ms");
+    assert!(worst < 34.0 * 3.0 * slack(), "the programme kept its frames: worst interval {worst:.1} ms");
 }

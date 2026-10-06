@@ -76,15 +76,17 @@ pub enum Runner {
     Dissolve,
 }
 
-impl Runner {
+impl Mix for Runner {
     fn mix(&self, old: &Pic<'_>, f: &mut Planes<'_>, t: f64) {
         match self {
-            Runner::Gpu(g) => g.mix(old, f, t),
+            Runner::Gpu(g) => g.mix(old, f, t, None),
             Runner::Cpu(s) => s(old, f, t),
             Runner::Dissolve => dissolve(old, f, t),
         }
     }
+}
 
+impl Runner {
     /// `gpu`, `cpu` or `fade`, as `fx.list` reports it.
     pub fn word(&self) -> &'static str {
         match self {
@@ -133,7 +135,10 @@ impl ShaderMix {
 
 impl Mix for ShaderMix {
     fn mix(&self, old: &Pic<'_>, f: &mut Planes<'_>, t: f64) {
+        // The GPU is fed from its first frame, but until it has answered
+        // the software way draws, so a slow GPU still shows a transition.
         match self.ready.get() {
+            Some(Runner::Gpu(g)) => g.mix(old, f, t, Some(&self.interim)),
             Some(r) => r.mix(old, f, t),
             None => self.interim.mix(old, f, t),
         }

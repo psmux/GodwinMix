@@ -14,8 +14,10 @@
 //! two pictures over and draws the newest answer that has come back, which
 //! is the previous frame's: during a shader transition the new scene is one
 //! frame behind, and nobody watching a ripple can tell. Before the first
-//! answer it draws the old picture, which is what progress near 0 shows
-//! anyway.
+//! answer it draws the shader's software version where there is one (a
+//! slow GPU took longer than a whole transition to answer on a macOS
+//! runner, and the window showed only the old scene), or else the old
+//! picture.
 
 use super::super::frame::Pic;
 use crate::overlay::blend::Planes;
@@ -45,6 +47,7 @@ impl Gl {
     /// Build the pipeline and start it. Called off every streaming thread,
     /// because building it loads the GL plugin.
     pub fn start(fragment: &str, size: (i32, i32)) -> Result<Gl> {
+        gst::init().context("GStreamer would not start")?;
         let stacked = gst_video::VideoInfo::builder(gst_video::VideoFormat::I420, size.0 as u32, size.1 as u32 * 2)
             .fps(gst::Fraction::new(30, 1))
             .build()
@@ -86,19 +89,21 @@ impl Gl {
     }
 
     /// Draw the newest answer onto `f`, then send this frame's pictures.
-    pub fn mix(&self, old: &Pic<'_>, f: &mut Planes<'_>, t: f64) {
+    /// Before the first answer, and after the GPU has failed, `fallback`
+    /// draws the frame; with none it is the old picture, then a dissolve.
+    pub fn mix(&self, old: &Pic<'_>, f: &mut Planes<'_>, t: f64, fallback: Option<&dyn super::super::Mix>) {
         if self.failed.load(Ordering::Acquire) || self.error().is_some() {
-            return super::super::matte::dissolve(old, f, t);
+            return match fallback {
+                Some(m) => m.mix(old, f, t),
+                None => super::super::matte::dissolve(old, f, t),
+            };
         }
         let stacked = frames::stack(&self.stacked, old, f);
-        while let Some(s) = self.sink.try_pull_sample(gst::ClockTime::ZERO) {
-            *self.latest.lock() = s.buffer_owned();
-        }
-        if let Some(answer) = self.latest.lock().clone() {
-            frames::draw(&self.stacked, &answer, f);
-        } else {
-            let pic = Pic { y: old.y, u: old.u, v: old.v, strides: old.strides };
-            super::super::matte::dissolve(&pic, f, 0.0);
+        self.answered_now();
+        match (self.latest.lock().clone(), fallback) {
+            (Some(answer), _) => frames::draw(&self.stacked, &answer, f),
+            (None, Some(m)) => m.mix(old, f, t),
+            (None, None) => super::super::matte::dissolve(old, f, 0.0),
         }
         if let Some(buffer) = stacked {
             self.uniforms(t);
