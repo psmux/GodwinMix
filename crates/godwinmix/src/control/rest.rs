@@ -27,6 +27,9 @@ pub fn router(ctx: Ctx, max_upload: usize) -> Router<Ctx> {
             post(upload).layer(DefaultBodyLimit::max(max_upload)),
         )
         .route("/api/v1/snapshot/{id}", get(snapshot))
+        // An fx item's preview strip, and a pack dropped on the picker.
+        .route("/api/v1/fx/{name}/preview.jpg", get(super::fx_rest::preview))
+        .route("/api/v1/fx/upload", post(super::fx_rest::upload).layer(DefaultBodyLimit::max(max_upload)))
         // The gallery's bytes: a card's picture, an item's own files, a
         // file dropped on the gallery, and an export to download.
         .route("/api/v1/gallery/{id}/preview.jpg", get(gallery_preview))
@@ -302,7 +305,7 @@ pub fn error_response(e: &RpcError, trace_id: &str) -> Response {
         .into_response()
 }
 
-fn unauthorised(reason: &str, trace_id: &str) -> Response {
+pub(crate) fn unauthorised(reason: &str, trace_id: &str) -> Response {
     let e = RpcError::new(
         ErrorCode::Scope,
         format!("{reason}. Send it as `Authorization: Bearer <token>`."),

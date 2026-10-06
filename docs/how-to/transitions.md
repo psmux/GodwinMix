@@ -11,6 +11,11 @@ gmx ctl take --scene "wide" --transition fade
 That is a 300 millisecond crossfade. Everything else on this page is a
 variation on it.
 
+Light leaks, glitches, film burns, stingers with alpha, luma wipes and shader
+transitions from a pack are on their own page:
+[use transitions and effects from packs](transitions-from-packs.md). A take
+names one the same way, `--transition light-leak`.
+
 ## What ships
 
 | Name | What it looks like | Params |

@@ -412,6 +412,7 @@ pub mod group;
 mod backoff;
 mod cue;
 mod exited;
+mod fx_take;
 mod generation;
 mod keyed;
 mod lifecycle;
@@ -460,6 +461,13 @@ pub enum Command {
     /// that take's transition id, so one that has been overtaken does nothing
     /// rather than undoing the newer one. Never sent by the API.
     TransitionEnd { transition: u64 },
+    /// Play an effect from the fx library over the programme once. See
+    /// `crate::fx`: it is drawn by the overlay board and decoded on a
+    /// pipeline of its own, and goes when its clip ends.
+    FireFx { plan: Box<crate::fx::Plan>, opacity: f64, ack: Option<Ack> },
+    /// An fx clip transition's clip has its first frame, or has had long
+    /// enough: bind the cut and start the window now. Never sent by the API.
+    FxReady { transition: u64 },
     /// Interrupt the programme with an ad, then return to live.
     ///
     /// `return_to` defaults to whatever is on program when the break starts.
@@ -1143,6 +1151,9 @@ pub struct Mixer {
     /// The transition on the canvas right now, with the properties to hand
     /// back when its window passes.
     running_transition: Option<RunningTransition>,
+    /// An fx clip transition waiting for its clip's first frame. See
+    /// `fx_take`.
+    pending_fx: Option<fx_take::PendingFx>,
     /// The control bindings this mixer has put on compositor pads, one per pad
     /// and property, kept for the life of the pad. A transition turns them on
     /// and off; nothing takes one off a pad while the pipeline runs, because
@@ -1300,6 +1311,8 @@ struct RunningTransition {
     clip: Option<SourceId>,
     /// The slate was given a dip's colour and goes back to black after.
     slate: bool,
+    /// The board's pass for an fx transition, taken off when it settles.
+    fx: Option<crate::fx::Running>,
 }
 
 /// The numbers `Mixer::timeline_of` gathers. Plain data so that gathering them
@@ -1873,6 +1886,7 @@ impl Mixer {
             ad_cue_ms: None,
             take_generation: Arc::new(AtomicU64::new(0)),
             running_transition: None,
+            pending_fx: None,
             controllers: transition::Controllers::default(),
             transitions: None,
             entering: Vec::new(),
@@ -3340,7 +3354,7 @@ impl Mixer {
         let crossed = self.pool.begin_transition(&arriving, &branches)?;
         let cover = clip.as_ref().and_then(|id| self.cover_leg(id));
         let duration = gst::ClockTime::from_mseconds(spec.duration().as_millis() as u64);
-        let x = transition::Crossing {
+        let mut x = transition::Crossing {
             out: crossed.out,
             incoming: crossed.incoming,
             audio: self.audio_crossing(leaving, &arriving),
@@ -3353,11 +3367,17 @@ impl Mixer {
         // A pad that would not take a binding is driven the old way, by one
         // thread for the whole transition, abandoned the moment a newer take
         // bumps the id; `bind_window` sees to that and arms the end.
+        if self.defer_fx(id, spec, &x) {
+            return Ok(());
+        }
+        let lead = self.fx_lead(spec, &mut x);
         let (curves, longest) = self.crossing_curves(spec, &x)?;
         let slate = self.tint_slate(&spec.kind);
-        self.bind_window(id, spec.kind.name(), curves, x.start, longest, slate);
+        self.bind_window(id, spec.kind.name(), curves, x.start, longest + lead, slate);
+        let fx = self.start_fx(spec, &x);
         if let Some(running) = self.running_transition.as_mut() {
             running.clip = clip;
+            running.fx = fx;
         }
         Ok(())
     }
@@ -3369,6 +3389,7 @@ impl Mixer {
     /// the value its curve finished on, so a transition cut short lands on its
     /// destination rather than halfway.
     fn settle_transition(&mut self) {
+        self.pending_fx = None;
         let Some(running) = self.running_transition.take() else { return };
         if let Some(end) = running.end {
             end.unschedule();
@@ -3378,6 +3399,9 @@ impl Mixer {
         self.entering.clear();
         if running.slate {
             self.untint_slate();
+        }
+        if let Some(fx) = running.fx {
+            fx.stop();
         }
         if let Some(clip) = running.clip {
             if let Err(e) = self.remove_source(&clip) {
@@ -3719,6 +3743,7 @@ impl Mixer {
             end,
             clip: None,
             slate: false,
+            fx: None,
         });
     }
 
@@ -3896,6 +3921,8 @@ impl Mixer {
         match cmd {
             Command::Take { .. } | Command::TakeScene { .. } => "program.take",
             Command::TransitionEnd { .. } => "transition.end",
+            Command::FireFx { .. } => "fx.fire",
+            Command::FxReady { .. } => "fx.ready",
             Command::AdBreak { .. } => "adbreak.start",
             Command::EndAdBreak(_) => "adbreak.end",
             Command::AddSource(..) | Command::AddSourceProbed(..) => "source.add",
@@ -3973,6 +4000,12 @@ impl Mixer {
                     self.apply_visibility(false);
                     self.broadcast_status();
                 }
+            }
+            Command::FxReady { transition } => self.fx_ready(transition),
+            Command::FireFx { plan, opacity, ack } => {
+                let r = self.fire_fx(&plan, opacity);
+                reply(ack, &r);
+                r?;
             }
             Command::TakeScene { scene, at_running_time_ms, duration_ms, transition, ack } => {
                 let r = self.take_scene_over(*scene, at_running_time_ms, duration_ms, transition);

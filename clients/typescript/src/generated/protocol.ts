@@ -1052,6 +1052,123 @@ export interface Frame {
   w: number;
 }
 
+/** `fx.assign`: the transition a take uses when it names none. */
+export interface FxAssignRequest {
+  scene?: string | null;
+  transition?: string | null;
+}
+
+/** What `fx.assign` keeps, in the library's `assign.json`. */
+export interface FxAssignments {
+  default?: string | null;
+  scenes?: Record<string, unknown>;
+}
+
+/** How a clip is put over the picture. */
+export type FxBlend = "normal" | "screen" | "add" | "luma";
+
+/** One item in `fx.list`: the manifest, and what this machine makes of it. */
+export interface FxEntry {
+  blend?: FxBlend;
+  coverage?: number | null;
+  cut_at_measured_ms?: number | null;
+  cut_at_ms?: number | null;
+  dir: string;
+  duration_ms: number;
+  effect?: boolean;
+  file: string;
+  invert?: boolean;
+  kind: FxKind;
+  licence?: string | null;
+  name: string;
+  note?: string | null;
+  origin: string;
+  preview: string;
+  runs?: string | null;
+  softness?: number | null;
+  source?: string | null;
+  title?: string;
+  transition?: boolean;
+}
+
+/** `fx.fire`: play an effect over the programme once. */
+export interface FxFireRequest {
+  blend?: FxBlend | null;
+  name: string;
+  opacity?: number | null;
+}
+
+/** What `fx.fire` answers. */
+export interface FxFired {
+  duration_ms: number;
+  name: string;
+}
+
+/** `fx.import`: a file, a folder or a zip on the mixer's machine. */
+export interface FxImportRequest {
+  blend?: FxBlend | null;
+  cut_at_ms?: number | null;
+  kind?: FxKind | null;
+  name?: string | null;
+  path: string;
+  replace?: boolean;
+}
+
+/** What `fx.import` answers. */
+export interface FxImported {
+  imported: FxEntry[];
+  skipped?: FxSkipped[];
+}
+
+/** What a file is, which decides how it is drawn. */
+export type FxKind = "stinger" | "overlay" | "matte" | "shader";
+
+/** What `fx.list` answers. */
+export interface FxList {
+  assigned?: FxAssignments;
+  errors?: string[];
+  fx: FxEntry[];
+  gpu: boolean;
+}
+
+/** `fx.list`. */
+export interface FxListRequest {
+  role?: string | null;
+}
+
+/** `fx.get`, `fx.remove` and `fx.preview`: one item by name. */
+export interface FxNameRequest {
+  name: string;
+}
+
+/** What `fx.preview` answers: a strip of frames side by side in one JPEG. */
+export interface FxPreview {
+  duration_ms: number;
+  frame_height: number;
+  frame_width: number;
+  frames: number;
+  name: string;
+  url: string;
+}
+
+/** `fx.set`: change what an item does. Only what is named moves. */
+export interface FxSetRequest {
+  blend?: FxBlend | null;
+  cut_at_ms?: number | null;
+  duration_ms?: number | null;
+  effect?: boolean | null;
+  invert?: boolean | null;
+  name: string;
+  softness?: number | null;
+  title?: string | null;
+  transition?: boolean | null;
+}
+
+export interface FxSkipped {
+  file: string;
+  reason: string;
+}
+
 /** `gallery.duplicate`. */
 export interface GalleryDuplicateRequest {
   id?: string;
@@ -3392,6 +3509,13 @@ export interface MethodParams {
   "filter.list": Record<string, never>;
   "filter.remove": FilterIdRequest;
   "filter.set": SetFilterRequest;
+  "fx.assign": FxAssignRequest;
+  "fx.fire": FxFireRequest;
+  "fx.import": FxImportRequest;
+  "fx.list": FxListRequest;
+  "fx.preview": FxNameRequest;
+  "fx.remove": FxNameRequest;
+  "fx.set": FxSetRequest;
   "gallery.duplicate": GalleryDuplicateRequest;
   "gallery.edit": GalleryEditRequest;
   "gallery.export": GalleryExportRequest;
@@ -3604,6 +3728,13 @@ export interface MethodResults {
   "filter.list": FilterListing;
   "filter.remove": FilterRemoved;
   "filter.set": FilterRecord;
+  "fx.assign": FxAssignments;
+  "fx.fire": FxFired;
+  "fx.import": FxImported;
+  "fx.list": FxList;
+  "fx.preview": FxPreview;
+  "fx.remove": Record<string, unknown>;
+  "fx.set": FxEntry;
   "gallery.duplicate": GallerySaved;
   "gallery.edit": GallerySaved;
   "gallery.export": GalleryExported;
@@ -3867,6 +3998,13 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "filter.list", summary: "Every filter in place, with what it is and where it sits.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/filters" } },
   { name: "filter.remove", summary: "Take a filter out of the pipeline.", scope: "operate", mutating: true, destructive: true, rest: { method: "DELETE", path: "/api/v1/filters/{id}" } },
   { name: "filter.set", summary: "Change a filter's settings in place. A filter that cannot take the change while running says so rather than being restarted behind your back.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/filters/{id}/set" } },
+  { name: "fx.assign", summary: "Choose the transition a take uses when it names none, for one scene or for every take.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/fx/assign" } },
+  { name: "fx.fire", summary: "Play an effect over the programme once: drawn on top of whatever is on air until its clip ends.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/fx/fire" } },
+  { name: "fx.import", summary: "Import a transition or effect from a file, a folder or a zip on the mixer's machine, measuring what it is and where it covers the picture.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/fx/import" } },
+  { name: "fx.list", summary: "The imported transitions and effects, with what each is and whether it runs on the GPU here.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/fx/list" } },
+  { name: "fx.preview", summary: "A moving preview of an item: twelve frames side by side in one JPEG, made once and kept.", scope: "read", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/fx/preview" } },
+  { name: "fx.remove", summary: "Delete an imported item from the library. The starter set cannot be deleted.", scope: "operate", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/fx/remove" } },
+  { name: "fx.set", summary: "Change an imported item: its blend, its cut point, its length, whether it is a transition or an effect.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/fx/set" } },
   { name: "gallery.duplicate", summary: "Copy an item, shipped ones included, under a new name.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/gallery/duplicate" } },
   { name: "gallery.edit", summary: "Change an item's name, tags, description, zone or the values it fills its fields with.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/gallery/edit" } },
   { name: "gallery.export", summary: "Write gallery items to one zip on the mixer, to carry a look to another mixer.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/gallery/export" } },
@@ -4329,6 +4467,41 @@ export class GeneratedMethods {
   /** Change a filter's settings in place. A filter that cannot take the change while running says so rather than being restarted behind your back. */
   filterSet(params: SetFilterRequest): Promise<FilterRecord> {
     return this._call("filter.set", params as unknown as Record<string, unknown>) as Promise<FilterRecord>;
+  }
+
+  /** Choose the transition a take uses when it names none, for one scene or for every take. */
+  fxAssign(params: FxAssignRequest = {}): Promise<FxAssignments> {
+    return this._call("fx.assign", params as unknown as Record<string, unknown>) as Promise<FxAssignments>;
+  }
+
+  /** Play an effect over the programme once: drawn on top of whatever is on air until its clip ends. */
+  fxFire(params: FxFireRequest): Promise<FxFired> {
+    return this._call("fx.fire", params as unknown as Record<string, unknown>) as Promise<FxFired>;
+  }
+
+  /** Import a transition or effect from a file, a folder or a zip on the mixer's machine, measuring what it is and where it covers the picture. */
+  fxImport(params: FxImportRequest): Promise<FxImported> {
+    return this._call("fx.import", params as unknown as Record<string, unknown>) as Promise<FxImported>;
+  }
+
+  /** The imported transitions and effects, with what each is and whether it runs on the GPU here. */
+  fxList(params: FxListRequest = {}): Promise<FxList> {
+    return this._call("fx.list", params as unknown as Record<string, unknown>) as Promise<FxList>;
+  }
+
+  /** A moving preview of an item: twelve frames side by side in one JPEG, made once and kept. */
+  fxPreview(params: FxNameRequest): Promise<FxPreview> {
+    return this._call("fx.preview", params as unknown as Record<string, unknown>) as Promise<FxPreview>;
+  }
+
+  /** Delete an imported item from the library. The starter set cannot be deleted. */
+  fxRemove(params: FxNameRequest): Promise<Record<string, unknown>> {
+    return this._call("fx.remove", params as unknown as Record<string, unknown>) as Promise<Record<string, unknown>>;
+  }
+
+  /** Change an imported item: its blend, its cut point, its length, whether it is a transition or an effect. */
+  fxSet(params: FxSetRequest): Promise<FxEntry> {
+    return this._call("fx.set", params as unknown as Record<string, unknown>) as Promise<FxEntry>;
   }
 
   /** Copy an item, shipped ones included, under a new name. */

@@ -10,6 +10,7 @@
 
 use super::blend::{self, Draw, Planes, Source};
 use super::board::Board;
+use super::pass::Pass;
 use super::picture::Picture;
 use gstreamer as gst;
 use gstreamer::prelude::*;
@@ -38,12 +39,17 @@ pub(super) fn install(board: &Arc<Board>) -> Option<gst::PadProbeId> {
         let Some(gst::PadProbeData::Buffer(buffer)) = info.data.as_mut() else { return gst::PadProbeReturn::Ok };
         let now = buffer.pts().map(|t| t.nseconds()).unwrap_or(0);
         let jobs = board.jobs(now);
-        if jobs.0.is_empty() {
+        let passes = board.live_passes();
+        if jobs.0.is_empty() && passes.is_empty() {
             return gst::PadProbeReturn::Ok;
         }
-        if let Err(why) = paint(pad, buffer.make_mut(), &jobs) {
-            if !warned.swap(true, std::sync::atomic::Ordering::Relaxed) {
-                warn!(%why, "transparent sources cannot be drawn on this programme");
+        match paint_all(pad, buffer.make_mut(), &jobs, &passes, now) {
+            Ok((costs, budget)) if !costs.is_empty() => board.passes_spent(&costs, budget),
+            Ok(_) => {}
+            Err(why) => {
+                if !warned.swap(true, std::sync::atomic::Ordering::Relaxed) {
+                    warn!(%why, "transparent sources cannot be drawn on this programme");
+                }
             }
         }
         gst::PadProbeReturn::Ok
@@ -52,13 +58,28 @@ pub(super) fn install(board: &Arc<Board>) -> Option<gst::PadProbeId> {
 
 /// Draw every job onto one frame, in place.
 pub fn paint(pad: &gst::Pad, buffer: &mut gst::BufferRef, jobs: &Jobs) -> Result<(), String> {
+    paint_all(pad, buffer, jobs, &[], 0).map(|_| ())
+}
+
+/// Every job, then every pass, onto one frame.
+fn paint_all(pad: &gst::Pad, buffer: &mut gst::BufferRef, jobs: &Jobs, passes: &[(u64, Arc<dyn Pass>)], now: u64) -> Result<(Costs, std::time::Duration), String> {
     let caps = pad.current_caps().ok_or("the compositor has no caps yet")?;
     let info = gst_video::VideoInfo::from_caps(&caps).map_err(|e| e.to_string())?;
-    paint_with(&info, buffer, jobs)
+    let fps = info.fps();
+    let frame = std::time::Duration::from_nanos(1_000_000_000 * fps.denom().max(1) as u64 / fps.numer().max(1) as u64);
+    paint_passes(&info, buffer, jobs, passes, now).map(|costs| (costs, frame))
 }
+
+/// What each pass cost this frame, by its number.
+type Costs = Vec<(u64, std::time::Duration)>;
 
 /// The same, for a caller that already knows the frame's layout.
 pub fn paint_with(info: &gst_video::VideoInfo, buffer: &mut gst::BufferRef, jobs: &Jobs) -> Result<(), String> {
+    paint_passes(info, buffer, jobs, &[], 0).map(|_| ())
+}
+
+/// Jobs and passes onto a frame whose layout is known.
+pub fn paint_passes(info: &gst_video::VideoInfo, buffer: &mut gst::BufferRef, jobs: &Jobs, passes: &[(u64, Arc<dyn Pass>)], now: u64) -> Result<Costs, String> {
     if info.format() != gst_video::VideoFormat::I420 {
         return Err(format!(
             "the programme is composited in {:?}, and only the software compositor's I420 is drawn on",
@@ -84,7 +105,13 @@ pub fn paint_with(info: &gst_video::VideoInfo, buffer: &mut gst::BufferRef, jobs
         }
         blend::draw(&mut planes, &Source { data: &map, stride: pic.stride }, &clamped(&job.draw, pic));
     }
-    Ok(())
+    let mut costs = Vec::with_capacity(passes.len());
+    for (id, pass) in passes {
+        let started = std::time::Instant::now();
+        pass.paint(&mut planes, now);
+        costs.push((*id, started.elapsed()));
+    }
+    Ok(costs)
 }
 
 /// A draw whose window cannot read past the picture it names.

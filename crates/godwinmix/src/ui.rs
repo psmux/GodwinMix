@@ -135,6 +135,7 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/multiview/wanted.js", include_str!("../../../ui/panels/multiview/wanted.js")),
     ("panels/multiview/studio.js", include_str!("../../../ui/panels/multiview/studio.js")),
     ("panels/multiview/transition-picker.js", include_str!("../../../ui/panels/multiview/transition-picker.js")),
+    ("panels/multiview/fx-gallery.js", include_str!("../../../ui/panels/multiview/fx-gallery.js")),
     ("panels/multiview/studio.css", include_str!("../../../ui/panels/multiview/studio.css")),
     ("panels/multiview/studio-armed.js", include_str!("../../../ui/panels/multiview/studio-armed.js")),
     ("panels/multiview/studio-picture.js", include_str!("../../../ui/panels/multiview/studio-picture.js")),

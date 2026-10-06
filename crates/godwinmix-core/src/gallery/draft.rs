@@ -113,6 +113,10 @@ pub fn source(uri: &str, params: toml::Table) -> Result<Draft, Refusal> {
 
 /// The bytes of one file, whatever it is.
 pub fn bytes(name: &str, bytes: Vec<u8>) -> Result<Draft, Refusal> {
+    // A shader, or a light leak on black, is a transition or an effect.
+    if let Some(fx) = crate::fx::gallery_import::draft(name, &bytes) {
+        return fx;
+    }
     match sniff(&bytes, name) {
         Some(Sniffed::Svg) => svg(&String::from_utf8_lossy(&bytes)),
         Some(Sniffed::Html) => html(&String::from_utf8_lossy(&bytes), Vec::new()),

@@ -24,14 +24,16 @@ export async function studioTests(test, eq, ok) {
   panel.setClient({ state: { preview: 'wide-scene' }, call: async (method, params) => calls.push({ method, params }) });
   panel.armed = 'wide-scene';
   await panel.take(500);
+  // The take bar also asks for the fx library's effects; only the takes count here.
+  const takes = () => calls.filter(c => c.method === 'program.take');
   test('studio Take sends a scene with the chosen transition and length', () => {
-    eq(calls[0], { method: 'program.take', params: { scene: 'wide-scene', transition: { type: 'fade', duration_ms: 500 } } });
+    eq(takes()[0], { method: 'program.take', params: { scene: 'wide-scene', transition: { type: 'fade', duration_ms: 500 } } });
   });
   panel.client.state.preview = null;
   panel.armed = 'camera';
   await panel.take(0);
-  test('studio Cut takes an armed source without a transition', () => {
-    eq(calls[1], { method: 'program.take', params: { source: 'camera' } });
+  test('studio Cut takes an armed source as a cut, whatever the default transition is', () => {
+    eq(takes()[1], { method: 'program.take', params: { source: 'camera', transition: 'cut' } });
   });
 
   // The preview holds one thing: the armed scene, or a source armed here.

@@ -1,0 +1,15 @@
+name = "Bokeh sweep"
+kind = "effect"
+file = "bokeh.webm"
+description = "Soft discs of out of focus light drifting up and across, played over the shot."
+tags = ["bokeh", "lights", "overlay"]
+origin = "shipped"
+
+[effect]
+look = "overlay"
+blend = "screen"
+duration_ms = 3000
+transition = false
+effect = true
+licence = "Apache-2.0"
+source = "made for GodwinMix by dev/make-starter-fx.py"

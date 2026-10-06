@@ -29,6 +29,13 @@
 //! order holds. Crop and rotation on the item are not applied to it. On a GPU
 //! graphics entry the board does not draw at all, and the carrier, the
 //! picture flattened on grey, goes through the compositor instead.
+//!
+//! The board also paints passes (`pass`): something over the whole frame for
+//! a while, by a blend mode (`modes`), with no slot and no scene item. The fx
+//! library's effects, stinger clips, luma mattes and shader transitions are
+//! passes; see `crate::fx`. A pass slower than a frame for ten frames running
+//! is taken off, so the programme keeps its time on a machine that cannot
+//! afford it.
 
 pub mod blend;
 pub mod board;
@@ -38,6 +45,8 @@ pub mod draw;
 mod hold;
 pub mod keyed;
 pub mod layer;
+pub mod modes;
+pub mod pass;
 pub mod picture;
 pub mod place;
 pub mod worker;

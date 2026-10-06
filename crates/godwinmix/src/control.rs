@@ -20,6 +20,7 @@
 //! background tasks that feed the event stream are started.
 
 pub mod call;
+mod fx_rest;
 pub mod history;
 pub mod hls;
 pub mod hooks;

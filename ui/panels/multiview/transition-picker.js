@@ -3,7 +3,8 @@
 //
 // Remembered in this browser, so the desk's choice is there the next time the
 // page opens. The list starts with the built in transitions and grows with
-// whatever `program.transitions` adds (a collection's own names, a plugin's),
+// whatever `program.transitions` adds (a collection's own names, a plugin's,
+// the fx library's imported transitions),
 // asked once. A small drawing beside the list shows the chosen one; it is a
 // fixed SVG, not a picture of any video.
 
@@ -105,7 +106,9 @@ export function picker(onChange) {
     describe() {
       const k = kind();
       const how = k.option ? ` ${option.selectedOptions[0]?.text.toLowerCase() || ""}` : "";
-      return `${k.label || type.value}${how} ${length.selectedOptions[0]?.text || ""}`.trim();
+      // A clip from the fx library runs for its own length, whatever is chosen.
+      const long = k.ownMs ? `${k.ownMs / 1000} s` : length.selectedOptions[0]?.text || "";
+      return `${k.label || type.value}${how} ${long}`.trim();
     },
     /** `{type, duration_ms}`, with `params` only when there is something in it. */
     request(durationMs) {
@@ -117,13 +120,21 @@ export function picker(onChange) {
       if (Object.keys(params).length) out.params = params;
       return out;
     },
-    /** Add the collection's and the plugins' names, once, from the core. */
+    /** Choose a transition by name, as the fx panel's Use does. */
+    choose(name) {
+      if (![...type.options].some((o) => o.value === name)) type.appendChild(el("option", { value: name, text: name }));
+      type.value = name;
+      fill();
+      changed();
+    },
+    /** Add the collection's, the plugins' and the fx library's names, once, from the core. */
     async load(client) {
       try {
         const answer = await client.call("program.transitions", {});
         for (const t of (answer && answer.transitions) || []) {
           if (t.origin === "built-in" || TYPES.some((b) => b.type === t.name)) continue;
-          extra.set(t.name, { type: t.name, label: t.name, origin: t.origin });
+          const clip = t.origin === "fx" && (t.type === "stinger" || t.type === "overlay");
+          extra.set(t.name, { type: t.name, label: t.name, origin: t.origin, ownMs: clip ? t.duration_ms : 0 });
           type.appendChild(el("option", { value: t.name, text: `${t.name} (${t.origin})`, selected: saved.type === t.name }));
         }
         fill(option.value);
