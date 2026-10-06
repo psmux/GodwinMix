@@ -143,6 +143,13 @@ restart test was heard from for 34 s and then not at all, twice.
   The rest of the suite had the four cores. That is the governor doing what
   it says on a full machine; the test would need its own machine or a
   governor told it is a test.
+* `remux::size_tests::a_picture_that_changes_size_mid_stream_keeps_decoding_at_the_new_size`
+  is not a timing problem, though the last round treated it as one. With
+  the wait raised to six seconds a Linux runner decoded 45 pictures at the
+  first size and none at the second; on Windows 11 of 45. So the second
+  sequence header sometimes does not get through the remuxer to the file at
+  all. The wait is back where it was; the remuxer's handling of a size
+  change (the caps change into `matroskamux`) is the next place to look.
 * The `node` test binary on the Windows runner crashed once with
   0xC0000005 (access violation) after four of its seven tests passed. No
   test printed anything first; it was not seen in any other run.
