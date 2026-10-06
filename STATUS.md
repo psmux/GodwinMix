@@ -130,7 +130,14 @@ restart test was heard from for 34 s and then not at all, twice.
   one reader and 0 bytes, no video and no audio. The SRT connection from the
   test's encoder is accepted and its media never arrives. Other SRT publisher
   tests pass on the same runner, so this is the listener or that caller on
-  Windows, not the player path.
+  Windows, not the player path. It failed in every Windows mixer job of the
+  last four rounds and passes here three runs in three with the five SRT
+  tests moved to the LAN address (loopback UDP is broken on this machine).
+  The test now waits for the encoder's pictures before the player starts and
+  says so when they never come, so the next failure names the right side.
+  One guess to check: the listener's port is picked by binding and dropping
+  a socket, and on Windows a later socket bound to the same port with
+  `SO_REUSEADDR` (as `udpsrc` sets it) takes its datagrams.
 * `hls_direct` on the Windows runner: the governor refused an 8 millicore
   AAC encode for four minutes with 7 millicores free and "not measured yet".
   The rest of the suite had the four cores. That is the governor doing what
