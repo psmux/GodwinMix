@@ -32,14 +32,20 @@ You can also drag a file or paste a URL onto the window, which skips the picker.
 
 ## 3. Put it on air
 
-Click the tile.
+The page opens in Studio mode: Preview on the left with a green frame,
+Programme on the right with a red one, and **Take** between them. Preview
+already shows a scene, the one it expects you to take next.
 
-The frame goes red, the bar at the top turns red and names it, and that source
-is now the programme. Click another tile to cut to it. Press `0` to cut to
-black. Number keys `1` to `9` take the first nine tiles.
+Click the tile. It goes into Preview. Nothing has gone out yet.
 
-That is the whole idea: one picture is always on, and tapping a tile changes
-which one.
+Press **Take**, or Space. Preview goes to Programme with the transition named
+under Take, the bar at the top turns red and names it, and that is now the
+programme. **Cut** does the same at once, with no transition. Press `0` to cut
+to black. Number keys `1` to `9` put the first nine scenes in Preview.
+
+That is the whole idea: one picture is always on, you line up the next one in
+Preview, and Take changes which one is on. If you would rather a click went
+straight on air, press **Studio mode** under the monitors to turn it off.
 
 ## 4. Add an output
 
@@ -74,9 +80,11 @@ You are on air.
   tile between live, snapshot, icon and label. On a Raspberry Pi choose icon:
   the sources keep running and stay takeable, only the tiles stop showing
   moving pictures, and the mixer stops encoding them.
-* **Studio mode**: the button under the programme monitor. Clicking a scene or
-  a source then puts it in Preview, and the big Take button between the two
-  monitors (or Space) sends it live.
+* **Studio mode**, which the page opens in: clicking a scene or a source puts
+  it in Preview, and the big Take button between the two monitors (or Space)
+  sends it live. With nothing clicked, Preview shows the scene it expects you
+  to take next. The Studio mode button under the monitors turns it off, and
+  then a click puts a scene straight on air.
 
 ## If something is wrong
 
