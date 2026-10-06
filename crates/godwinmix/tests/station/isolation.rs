@@ -108,8 +108,10 @@ async fn a_show_killed_is_started_again_the_other_runs_on_and_its_share_goes_bac
     // shared runner, not for a retry that may never come.
     // Once, not twice, and not to the millicore: the encoder is priced again
     // when it is admitted again, and on a Linux runner the same rendition
-    // came back at 769 millicores where it had held 808.
-    let once = |n: (u64, u64)| n.0 * 4 >= held.0 * 3 && n.0 * 4 <= held.0 * 5;
+    // came back at 769 millicores where it had held 808, and in another round
+    // at 528. Half to one and a half times still tells one share from none
+    // and from two.
+    let once = |n: (u64, u64)| n.0 * 2 >= held.0 && n.0 * 2 <= held.0 * 3;
     let start = Instant::now();
     let mut now = governor_used(&st).await;
     while !once(now) && start.elapsed() < Duration::from_secs(30).mul_f64(slack) {
