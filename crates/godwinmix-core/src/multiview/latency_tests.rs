@@ -9,7 +9,16 @@
 //! as they arrive and decoded afterwards, so a slow decode in a debug build is
 //! never counted as the mixer's.
 //!
-//! Measured on 2026-10-06 on a debug build (Windows, 16 threads): MEASURED.
+//! Medians on 2026-10-06, a debug build on Windows with 16 threads, three runs
+//! each. Before that day's changes: the source tile 113 to 144 ms, the
+//! programme tile 34 to 36, the Studio preview 34 to 49. The mosaic waited on
+//! each tile's second `videorate` and on the programme tile's stamp a tenth of
+//! a second in the past, so its frames came out late and every source tile on
+//! it was old. After: the source tile 34 to 35 ms, the programme tile 65 to 66
+//! (it no longer holds the whole mosaic back, so it shows the programme frame
+//! that had arrived rather than one waited for), the preview 35 to 48. The
+//! budgets are a little under twice the after figures, below the tile's before
+//! figure, and widened by `GODWINMIX_TIMING_SLACK` on a runner that sets it.
 
 use super::*;
 use crate::mixer::Command;
@@ -19,9 +28,9 @@ mod barcode;
 
 const ID: &str = "lat-cam";
 /// What each picture may add, median over two seconds of frames.
-const TILE_BUDGET_MS: i64 = 150;
-const PROGRAMME_BUDGET_MS: i64 = 200;
-const PREVIEW_BUDGET_MS: i64 = 150;
+const TILE_BUDGET_MS: i64 = 90;
+const PROGRAMME_BUDGET_MS: i64 = 120;
+const PREVIEW_BUDGET_MS: i64 = 90;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn the_preview_path_adds_no_more_than_its_budget() {
