@@ -77,9 +77,9 @@ where GitHub records them and they are not argued about here.
 | Items opened in the window | 1 | |
 | Of those, still with no reply | 1 | 0 |
 | Open items waiting longer than 48 h | 0 | 0 |
-| New contributors (first merged PR, 30 days) | 0 | |
+| New contributors (first merged PR, 30 days) | 1 | |
 
-_Last updated 2026-10-05 by `.github/workflows/first-response.yml`._
+_Last updated 2026-10-06 by `.github/workflows/first-response.yml`._
 
 <!-- metrics:end -->
 
