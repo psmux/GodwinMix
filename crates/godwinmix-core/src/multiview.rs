@@ -1145,6 +1145,9 @@ impl Drop for Multiview {
 }
 
 #[cfg(test)]
+mod latency_tests;
+
+#[cfg(test)]
 mod tests {
     /// The next frame a subscription delivers, inside `within`.
     ///
