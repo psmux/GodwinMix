@@ -1034,13 +1034,13 @@ if [[ -n "$NODE_TOKEN" ]]; then
     fi
 fi
 
-step "gmx mcp lists 12 tools on standard"
+step "gmx mcp lists 14 tools on standard"
 COUNT="$(python3 "$REPO/dev/smoke_mcp.py" "$GMX" "$BASE" "$TOKEN" standard 2>>"$WORK/mcp.log")"
-if [[ "$COUNT" == "12" ]]; then ok; else bad "standard listed ${COUNT:-nothing}, wanted 12"; fi
+if [[ "$COUNT" == "14" ]]; then ok; else bad "standard listed ${COUNT:-nothing}, wanted 14"; fi
 
-step "gmx mcp lists 5 tools on minimal"
+step "gmx mcp lists 6 tools on minimal"
 COUNT="$(python3 "$REPO/dev/smoke_mcp.py" "$GMX" "$BASE" "$TOKEN" minimal 2>>"$WORK/mcp.log")"
-if [[ "$COUNT" == "5" ]]; then ok; else bad "minimal listed ${COUNT:-nothing}, wanted 5"; fi
+if [[ "$COUNT" == "6" ]]; then ok; else bad "minimal listed ${COUNT:-nothing}, wanted 6"; fi
 
 # --- shutdown ---------------------------------------------------------------
 
