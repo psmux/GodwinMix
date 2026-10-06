@@ -86,13 +86,17 @@ async fn the_wall_counts_what_a_show_that_mixes_costs_in_its_load_and_header() {
 
     // A first start calibrates, which is the station's own work and swamps
     // everything else; its share then decays over a few seconds.
+    // Two minutes, times GODWINMIX_TIMING_SLACK: calibration encodes with
+    // every encoder this machine has, and a three core macOS runner busy
+    // with the rest of the suite was still at it after two.
     let started = Instant::now();
+    let limit = Duration::from_secs(120).mul_f64(godwinmix_core::plugin::harness::timing_slack());
     loop {
         let g = call(&mut ws, 5, "governor.status", json!({})).await;
         if g["result"]["calibrating"] == false && started.elapsed() > Duration::from_secs(25) {
             break;
         }
-        assert!(started.elapsed() < Duration::from_secs(120), "still calibrating: {g}");
+        assert!(started.elapsed() < limit, "still calibrating after {limit:?}: {g}");
         tokio::time::sleep(Duration::from_secs(1)).await;
     }
     let s = call(&mut ws, 6, "show.stats", json!({"ids": ["main"]})).await;

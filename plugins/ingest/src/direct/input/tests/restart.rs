@@ -41,10 +41,20 @@ fn ffmpeg_sender(port: u16, start_pid: u16, program: u16, extra_audio: bool) -> 
 /// Frames keep arriving after a restart: fifty more video frames within
 /// `secs`, the input reads live again, and its time neither runs back nor
 /// leaves a hole.
-fn follows(rx: &Running, what: &str, secs: u64) {
+///
+/// The message says whether the sender is still running: on a macOS runner
+/// the input heard nothing for 34 s after the third sender started, and
+/// whether that sender had died was not in the message.
+fn follows(rx: &Running, tx: &mut Sender, what: &str, secs: u64) {
     let before = rx.got.frames(TagKind::Video);
     let more = || rx.got.frames(TagKind::Video) - before;
-    assert!(eventually(secs, || more() >= 50), "{what}: {} frames after the restart, {:?}", more(), rx.got.last());
+    let arrived = eventually(secs, || more() >= 50);
+    let sender = match tx.0.try_wait() {
+        Ok(None) => "still running".to_string(),
+        Ok(Some(status)) => format!("ended with {status}"),
+        Err(e) => format!("could not be asked: {e}"),
+    };
+    assert!(arrived, "{what}: {} frames after the restart, the sender {sender}, {:?}", more(), rx.got.last());
     assert!(eventually(3, || rx.got.last().state == crate::direct::input::stats::State::Live), "{what}: {:?}", rx.got.last());
     let times = rx.got.times();
     let back = times.windows(2).map(|w| w[0].saturating_sub(w[1])).max().unwrap_or(0);
@@ -64,11 +74,11 @@ fn a_restarted_gst_sender_is_followed_with_new_pids_or_the_same_ones() {
     let tx = sender(port, 65, 66, 1);
     assert!(eventually(15, || rx.got.keyframes() >= 3), "the first sender: {:?}", rx.got.last());
     drop(tx);
-    let tx = sender(port, 65, 66, 1);
-    follows(&rx, "the same layout again", 12);
+    let mut tx = sender(port, 65, 66, 1);
+    follows(&rx, &mut tx, "the same layout again", 12);
     drop(tx);
-    let _tx = sender(port, 300, 301, 7);
-    follows(&rx, "new PIDs and a new program", 12);
+    let mut tx = sender(port, 300, 301, 7);
+    follows(&rx, &mut tx, "new PIDs and a new program", 12);
     assert!(eventually(3, || rx.got.last().programs.iter().map(|p| p.number).eq([7])), "the programs read again: {:?}", rx.got.last());
 }
 
@@ -84,8 +94,8 @@ fn an_srt_caller_that_calls_again_with_new_pids_is_followed() {
     let tx = sender_to(to, 65, 66, 1);
     assert!(eventually(15, || rx.got.keyframes() >= 3), "the first caller: {:?}", rx.got.last());
     drop(tx);
-    let _tx = sender_to(to, 300, 301, 7);
-    follows(&rx, "a new caller with new PIDs", 15);
+    let mut tx = sender_to(to, 300, 301, 7);
+    follows(&rx, &mut tx, "a new caller with new PIDs", 15);
 }
 
 #[test]
@@ -99,11 +109,11 @@ fn a_restarted_ffmpeg_sender_is_followed_with_new_pids_and_a_new_stream() {
     let tx = ffmpeg_sender(port, 0x100, 1, false);
     assert!(eventually(15, || rx.got.keyframes() >= 3), "the first sender: {:?}", rx.got.last());
     drop(tx);
-    let tx = ffmpeg_sender(port, 0x200, 1, true);
-    follows(&rx, "new PIDs and a second audio stream", 12);
+    let mut tx = ffmpeg_sender(port, 0x200, 1, true);
+    follows(&rx, &mut tx, "new PIDs and a second audio stream", 12);
     let left_out = rx.got.last().error.unwrap_or_default();
     assert!(left_out.contains("a second audio stream"), "the second audio is named: {left_out}");
     drop(tx);
-    let _tx = ffmpeg_sender(port, 0x200, 1, true);
-    follows(&rx, "the same layout again", 12);
+    let mut tx = ffmpeg_sender(port, 0x200, 1, true);
+    follows(&rx, &mut tx, "the same layout again", 12);
 }
