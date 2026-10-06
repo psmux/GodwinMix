@@ -295,10 +295,26 @@ dev\bundle-gstreamer.ps1                   # Windows
 
 Each finds the runtime for the platform, trims it, writes
 the result to `tauri-app/gstreamer/<platform>/`, prints the size, and refuses
-to finish if the tree is over budget. Then it asks the trimmed tree for
-`compositor`, `rtmp2sink`, `srtsink` and a software H.264 encoder, out of its
-own registry with the system GStreamer shut out, because a tree of the right
-size that does not load is worse than no tree at all.
+to finish if the tree is over budget. Then it asks the trimmed tree for every
+element the product cannot do without, out of its own registry with the
+system GStreamer shut out, because a tree of the right size that does not load
+is worse than no tree at all. The list is the mix and its two outputs
+(`compositor`, `rtmp2sink`, `srtsink` and the rest), the WebRTC elements a
+phone camera connects through (`webrtcbin`, `srtpenc`, `dtlssrtpenc`,
+`nicesrc`), the demuxers, parsers and decoders a file or stream is opened with,
+the picture decoders, the four GL elements a shader transition uses, and a
+software H.264 encoder. `webpdec` is asked for on macOS and Linux only: the
+official Windows runtime has no WebP decoder. When an element fails, the
+script prints the plugin files GStreamer could not load.
+
+Some plugins are packaged apart from GStreamer and have to be installed
+before bundling, or the tree goes out without them:
+
+| Platform | Install as well |
+|---|---|
+| Debian, Ubuntu | `gstreamer1.0-nice` (WebRTC), `gstreamer1.0-plugins-ugly` (`x264enc`, for HLS and file conversion), `gstreamer1.0-alsa`, `gstreamer1.0-pipewire` |
+| macOS, Homebrew | `libnice-gstreamer` (WebRTC). The script looks in `$(brew --prefix)/lib/gstreamer-1.0` for it |
+| Windows | nothing: the official full installer has them all |
 
 Options worth knowing:
 
@@ -306,8 +322,9 @@ Options worth knowing:
 |---|---|
 | `--from <prefix>` / `-From` | trim a GStreamer already on the machine instead of downloading one |
 | `--version 1.28.7` / `-Version` | download that release |
-| `--budget-mb 130` / `-BudgetMb` | what the tree may weigh; the default is 130 |
+| `--budget-mb 160` / `-BudgetMb` | what the tree may weigh; the default is 160 |
 | `--exclude-gpl` / `-ExcludeGpl` | leave out x264 and x265, so the build can go out under Apache 2.0 |
+| `--extra-plugins <dir>` (`gst_trim.py`) | another plugin directory to choose from after the prefix's own; `bundle-gstreamer.sh` passes Homebrew's shared one |
 
 Where the runtime comes from, per platform: the official `.pkg` on macOS
 (`pkgutil --expand-full`, nothing installed), the MSVC runtime MSI on Windows
@@ -350,7 +367,13 @@ Windows and Linux bundles remove debug sections before measuring the budget.
 Windows needs `rustup component add llvm-tools`; Linux needs binutils. Set
 `GST_STRIP` to an explicit compatible stripping tool if necessary. Exported
 symbols and code remain in the runtime, and the element checks still run.
-The 130 MB runtime budget has not changed. Linux release jobs run
+On Windows only a file that carries a COFF symbol table or DWARF sections is
+handed to the tool, which in the official MSVC runtime is the handful of MinGW
+built DLLs. The MSVC DLLs keep their debug information in `.pdb` files and are
+copied untouched: GNU strip, which a GitHub Windows runner has in
+`C:\mingw64`, rewrote them even with nothing to remove and broke OpenSSL and
+fourteen plugins with it.
+The runtime budget is 160 MB on every platform. Linux release jobs run
 `dev/build-linux-libav.sh <prefix>` first, then pass that prefix to the trimmer.
 The builder uses distribution source packages authenticated by apt, compiles
 FFmpeg without optional external libraries, and statically links it into a

@@ -183,6 +183,9 @@ jobs:
       WINDOWS_INSTALLER_BUDGET_MB: 300
       # 133.5 MB on Windows on 2026-10-03 once every first party plugin's
       # elements were kept (WHIP, NDI and DeckLink had been trimmed away).
+      # 154.6 MB on Windows and 146.4 MB on Linux on 2026-10-06, with the
+      # WebRTC, VP8/VP9, picture and GL plugins all loading. platforms.yml
+      # and runtime.yml use the same number.
       RUNTIME_BUDGET_MB: 160
       # The three device plugins together, measured at 4 MB on macOS. A
       # tripwire rather than a tight budget: what fills the installer is
@@ -211,13 +214,21 @@ jobs:
             librsvg2-dev patchelf libssl-dev libfuse2 \
             libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
             libgstreamer-plugins-bad1.0-dev libgstrtspserver-1.0-dev gstreamer1.0-plugins-base \
-            gstreamer1.0-plugins-good gstreamer1.0-plugins-bad \
-            gstreamer1.0-libav gstreamer1.0-tools
+            gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly \
+            gstreamer1.0-libav gstreamer1.0-tools \
+            gstreamer1.0-nice gstreamer1.0-alsa gstreamer1.0-pipewire
+      # The last three are packages of their own on Debian and Ubuntu, outside
+      # the four plugin sets. gstreamer1.0-nice is libnice's plugin: without
+      # it the trimmed tree had no nicesrc, and the v0.2.0 AppImage and .deb
+      # could take no phone camera. -pipewire is screen capture on Wayland,
+      # -alsa the audio fallback with no PulseAudio. plugins-ugly is x264enc,
+      # which the HLS ladder and file conversion make by name.
 
+      # libnice-gstreamer is the same plugin as a Homebrew formula of its own.
       - name: GStreamer (macOS)
         if: runner.os == 'macOS'
         run: |
-          brew install gstreamer
+          brew install gstreamer libnice-gstreamer
           echo "PKG_CONFIG_PATH=$(brew --prefix gstreamer)/lib/pkgconfig:$(brew --prefix)/lib/pkgconfig" >> "$GITHUB_ENV"
 
       # The official full installer, not chocolatey's package: that one is
@@ -428,7 +439,11 @@ jobs:
             -exec cp {} bundles/ \;
           # The .app is a directory, so it travels as an archive.
           if [ -d tauri-app/target/release/bundle/macos ]; then
+            # The commit on a rehearsal, as the core archives do: a branch
+            # name such as fix/release-bundles has a slash in it, and tar
+            # could not create a file in a directory that does not exist.
             version="${GITHUB_REF_NAME#v}"
+            [ "$version" = "$GITHUB_REF_NAME" ] && version="$(git rev-parse --short HEAD)"
             (cd tauri-app/target/release/bundle/macos && tar czf "$GITHUB_WORKSPACE/bundles/GodwinMix-${version}-macos.app.tar.gz" GodwinMix.app)
           fi
           ls -la bundles

@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 import shutil
+import struct
 import subprocess
 
 
@@ -32,6 +33,39 @@ def strip_tool(platform: str) -> str | None:
     return shutil.which("strip") if platform == "linux" else None
 
 
+def pe_has_debug(data: bytes) -> bool:
+    """Whether a PE file carries anything --strip-debug would remove.
+
+    An MSVC build keeps its debug information in a .pdb beside it, so its DLLs
+    have no COFF symbol table and no .debug sections, and there is nothing to
+    strip. Only a MinGW build carries them. GNU strip rewrites every file it is
+    given even when it removes nothing, and on the official 1.28.6 MSVC
+    runtime that rewrite broke OpenSSL (`LoadLibrary` failed with error 998,
+    invalid access to memory location) and with it fourteen plugins: srt,
+    dtls, webrtc, nice, soup, curl, rtmp, png, gdkpixbuf, rsvg, pango, opengl,
+    svtav1 and x265. GitHub's Windows image has GNU strip in C:\\mingw64 and a
+    developer's machine usually does not, which is why only the runner broke.
+    """
+    if data[:2] != b"MZ" or len(data) < 0x40:
+        return False
+    pe = struct.unpack_from("<I", data, 0x3C)[0]
+    if data[pe:pe + 4] != b"PE\0\0":
+        return False
+    sections, = struct.unpack_from("<H", data, pe + 6)
+    symbols_at, symbols = struct.unpack_from("<II", data, pe + 12)
+    if symbols_at or symbols:
+        return True
+    optional, = struct.unpack_from("<H", data, pe + 20)
+    base = pe + 24 + optional
+    for i in range(sections):
+        name = data[base + i * 40:base + i * 40 + 8]
+        # A long section name such as .debug_info is written as "/4", an
+        # offset into the symbol table, which this file has none of anyway.
+        if name.startswith((b".debug", b"/")):
+            return True
+    return False
+
+
 def strip_debug(root: Path, platform: str) -> None:
     tool = strip_tool(platform)
     if tool is None:
@@ -44,6 +78,8 @@ def strip_debug(root: Path, platform: str) -> None:
         with path.open("rb") as stream:
             magic = stream.read(4)
         if not (magic.startswith(b"MZ") or magic == b"\x7fELF"):
+            continue
+        if magic.startswith(b"MZ") and not pe_has_debug(path.read_bytes()):
             continue
         before = path.stat().st_size
         result = subprocess.run([tool, "--strip-debug", str(path)],
