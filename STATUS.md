@@ -61,15 +61,16 @@ Windows, so it listens there now, as the carriage test that never failed
 does. The receiver now sends each stream to a sink of its own; the same
 pipeline over this machine's LAN address decoded 235 frames in 8 seconds.
 
-**An output could be refused while the programme encoder started.** On the
-Windows runner `slow_output` failed to attach its RTMP output: "linking
-out-stuck-reconnect-mux-vq-0 into out-stuck-reconnect-mux-0: Pads do not
-have common format". The link asked for caps, the query crossed the proxy
-into the programme pipeline, and the encoder starting for its first consumer
-answered nothing. `link_to_mux` now links against the pad templates; the
-caps still have to suit the muxer when they arrive. The message is the one
-the `output.set` swap gave in the last round, so this looks like the same
-race reached by `output.add`.
+**Not fixed: an RTMP output on Windows that will not take the programme.** On
+the Windows runner `slow_output` failed to attach its RTMP output once
+("linking out-stuck-reconnect-mux-vq-0 into out-stuck-reconnect-mux-0: Pads
+do not have common format"). Linking against the pad templates alone made
+the attach succeed and then no buffer reached the output in 10 s, or in 30 s
+with the slack, in two runs in a row, so that change was reverted: a refusal
+that names the link is better than a silent stall. The caps the programme
+encoder offers on that runner sometimes do not suit `flvmux`, and which caps
+they are is the next thing to print. The test now waits for the first buffer
+`GODWINMIX_TIMING_SLACK` times longer, which is fair but does not cure it.
 
 **The RIST input test read the stats too early.** Its keyframes had
 arrived; the stats, published once a second, still said connecting. It now
@@ -98,10 +99,41 @@ millicores on a Linux runner), which still tells one share from none and from
 two. The smoke test expects the 14 standard and 6 minimal MCP tools the
 server has had since `call_tool` joined the hot lists.
 
+**More of the same, found on the way.** The wall test waits for calibration
+two minutes times the slack (a three core macOS runner was still calibrating
+at two). The mosaic latency test asks `mv-comp` again for two seconds before
+it calls a failed latency query a failure, since on Windows a tile was still
+attaching when it first asked. The restart tests say whether the sender was
+still running when nothing arrived: on macOS the third sender of the gst
+restart test was heard from for 34 s and then not at all, twice.
+
+**Still open, with what is known.**
+
+* The SRT player test on Windows: the player connects (41 µs round trip)
+  and receives nothing, and the hub shows why: the publisher is "live" with
+  one reader and 0 bytes, no video and no audio. The SRT connection from the
+  test's encoder is accepted and its media never arrives. Other SRT publisher
+  tests pass on the same runner, so this is the listener or that caller on
+  Windows, not the player path.
+* `hls_direct` on the Windows runner: the governor refused an 8 millicore
+  AAC encode for four minutes with 7 millicores free and "not measured yet".
+  The rest of the suite had the four cores. That is the governor doing what
+  it says on a full machine; the test would need its own machine or a
+  governor told it is a test.
+* `switch::a_slow_switch_answers_at_once_and_finishes_as_a_task` on the
+  Windows runner, once: the switch task failed with "show quiet is still
+  starting after 15 seconds" (`station::relay::START_WAIT`). The error says
+  to try again; the task does not, and the test does not either.
+* macOS jobs ran into the 90 minute limit or lost the runner ("The hosted
+  runner lost communication with the server") in three of the last four
+  rounds, which is a runner problem.
+* The Windows headless check of the desktop app failed once after "every
+  device plugin the app carries is loaded" with no FAIL line; it now prints
+  its exit code in hex, so the next failure says whether it crashed.
+
 **Diagnostics left in.** The SRT player test prints what libsrt counted on
-the player's socket and the hub's side of the stream; the one failure since
-showed the player connected (31 µs round trip) and not one packet received.
-The Windows headless check prints its exit code in hex.
+the player's socket and the hub's side of the stream. The Windows headless
+check prints its exit code in hex.
 
 ## The camera that showed up late, 2026-10-06
 

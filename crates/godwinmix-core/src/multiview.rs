@@ -2353,8 +2353,16 @@ mod tests {
                 .by_name(name)
                 .unwrap_or_else(|| panic!("no {name}{}", preview_forensics(mv.pipeline())));
             let pad = comp.static_pad("src").unwrap();
+            // Asked again for up to two seconds (times the slack): the query
+            // goes up every tile, and on a Windows runner one of them was
+            // still being attached the first time it was asked.
             let mut query = gst::query::Latency::new();
-            assert!(pad.query(&mut query), "{name} would not answer a latency query");
+            let until = std::time::Instant::now() + Duration::from_secs(2).mul_f64(crate::plugin::harness::timing_slack());
+            while !pad.query(&mut query) && std::time::Instant::now() < until {
+                std::thread::sleep(Duration::from_millis(50));
+                query = gst::query::Latency::new();
+            }
+            assert!(pad.query(&mut query), "{name} would not answer a latency query{}", preview_forensics(mv.pipeline()));
             let (_, min, _) = query.result();
             // Four frames of the mosaic's own rate. Measured before the fix:
             // 1.258 s on the mosaic and 0.45 s on the preview, against 8 fps.
