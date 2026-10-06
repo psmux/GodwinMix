@@ -424,9 +424,19 @@ def library_dirs(prefix: Path, platform: str) -> list[Path]:
     # A Homebrew prefix keeps every dependency in its own cellar, so the
     # sibling opt directories are part of the search. An official framework or
     # an MSVC runtime is self contained and this finds nothing extra.
-    cellar = prefix.parent
-    if cellar.name == "opt" and cellar.is_dir():
-        dirs.extend(p / "lib" for p in cellar.iterdir() if (p / "lib").is_dir())
+    # `build` resolves the prefix, so /opt/homebrew/opt/gstreamer arrives as
+    # /opt/homebrew/Cellar/gstreamer/<version> and its parent is never `opt`:
+    # the Homebrew root is found from the Cellar instead. Without it an
+    # `@rpath/libsharpyuv.0.dylib` import was never found, libgstwebp was
+    # copied without it, and no macOS app since v0.2.0 could open a WebP.
+    roots = [prefix.parent.parent] if prefix.parent.name == "opt" else []
+    roots += [p.parent for p in prefix.parents if p.name == "Cellar"]
+    for root in roots:
+        if (root / "lib").is_dir():
+            dirs.append(root / "lib")
+        if (root / "opt").is_dir():
+            dirs.extend(p / "lib" for p in sorted((root / "opt").iterdir())
+                        if (p / "lib").is_dir())
     return dirs
 
 
@@ -496,7 +506,7 @@ def copy(src: Path, dst: Path) -> None:
     dst.chmod(dst.stat().st_mode | 0o644)
 
 
-def relocate_macos(out: Path) -> None:
+def relocate_macos(out: Path) -> list[str]:
     """Make the tree work wherever it is put.
 
     A Homebrew or framework library records where it was built, and a copy of
@@ -530,9 +540,30 @@ def relocate_macos(out: Path) -> None:
             rel = os.path.relpath(target, path.parent)
             args += ["-change", dep, f"@loader_path/{rel}"]
         if len(args) > 1:
-            subprocess.run(args + [str(path)], capture_output=True)
+            done = subprocess.run(args + [str(path)], capture_output=True,
+                                  text=True, encoding="utf-8", errors="replace")
+            if done.returncode:
+                warn(f"install_name_tool on {path.name}: {done.stderr.strip()}")
         subprocess.run(["codesign", "--force", "--sign", "-", str(path)],
                        capture_output=True)
+    return outside_the_tree(files)
+
+
+def outside_the_tree(files: list[Path]) -> list[str]:
+    """Every import still pointing outside the tree once it is relocated.
+
+    On the build machine such a path resolves, to Homebrew, so the self check
+    passes and the app fails on a Mac without Homebrew. Said by name so the
+    build can refuse.
+    """
+    left = []
+    for path in files:
+        for dep in imports(path, "macos"):
+            if dep.startswith(("@loader_path/", "@executable_path/")) \
+                    or is_system(dep, "macos"):
+                continue
+            left.append(f"{path.name} -> {dep}")
+    return left
 
 
 def largest(path: Path, count: int) -> list[Path]:
@@ -750,7 +781,13 @@ def build(args: argparse.Namespace) -> int:
             path.rmdir()
 
     if platform == "macos":
-        relocate_macos(out)
+        left = relocate_macos(out)
+        for line in left:
+            print(f"still outside the tree: {line}", file=sys.stderr)
+        if left:
+            print("FAIL the tree would load these from Homebrew, and a Mac "
+                  "without Homebrew could not", file=sys.stderr)
+            return 1
     else:
         from gst_symbols import strip_debug
         strip_debug(out, platform)
