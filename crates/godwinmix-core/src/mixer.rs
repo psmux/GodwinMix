@@ -3777,7 +3777,7 @@ impl Mixer {
         if curves.is_empty() {
             return;
         }
-        let bound = self.controllers.bind(curves);
+        let (bound, start) = self.bind_in_time(curves, start);
         if !bound.unbound.is_empty() {
             ramp_curves(bound.unbound.clone(), over, self.take_generation.clone());
         }

@@ -137,7 +137,7 @@ impl Mixer {
         slate: bool,
     ) {
         fill_trimmed_pads(&curves, self.pool.compositor());
-        let bound = self.controllers.bind(curves);
+        let (bound, start) = self.bind_in_time(curves, start);
         if !bound.unbound.is_empty() {
             let over = std::time::Duration::from_nanos(duration.nseconds());
             super::ramp_curves(bound.unbound.clone(), over, self.take_generation.clone());
@@ -161,6 +161,43 @@ impl Mixer {
             slate,
             fx: None,
         });
+    }
+
+    /// Bind curves so their window starts on a frame the compositor has not
+    /// made yet. Answers what was bound and where the window starts.
+    ///
+    /// `start` is the frame after the last one the compositor pushed, read
+    /// before the curves were built. On a loaded machine this thread can be
+    /// held off the processor between that read and the bind for longer than
+    /// the whole window, and the compositor makes the window's frames with no
+    /// curve bound: measured, the old scene stood still for all of a 300 ms
+    /// wipe and the new one appeared 1166 ms in. So the start is checked
+    /// once the curves are on: if the compositor has got there already, every
+    /// curve moves on by the frames it missed and is bound again. Moving
+    /// them is exact, since every curve is a function of the window's start.
+    pub(super) fn bind_in_time(
+        &mut self,
+        mut curves: Vec<Curve>,
+        mut start: gst::ClockTime,
+    ) -> (transition::Bound, gst::ClockTime) {
+        let mut bound = self.controllers.bind(curves.clone());
+        for _ in 0..4 {
+            let made = self.pgm_out.running();
+            if made.is_none_or(|made| made < start) {
+                break;
+            }
+            let later = self.compositor_now();
+            let by = later.saturating_sub(start);
+            debug!(late_ms = by.mseconds(), "the compositor passed the transition's start while it was bound; starting it later");
+            for curve in &mut curves {
+                for point in &mut curve.points {
+                    point.0 += by;
+                }
+            }
+            start = later;
+            bound = self.controllers.bind(curves.clone());
+        }
+        (bound, start)
     }
 }
 

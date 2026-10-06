@@ -116,6 +116,11 @@ impl Tap {
         false
     }
 
+    /// How many frames the compositor has made since the tap went on.
+    pub(super) fn count(&self) -> usize {
+        self.frames.lock().len()
+    }
+
     /// What the frame nearest to `at` showed.
     pub(super) fn at(&self, at: u64) -> Vec<(u8, u8)> {
         let frames = self.frames.lock();
@@ -237,6 +242,16 @@ async fn a_wipe_is_a_crop_on_the_slot_and_not_a_squash() {
     let mut mix = coloured(&["red", "green"]).await;
     let canvas = mix.canvas.clone();
     mix.take_scene(scene("a", vec![full(&canvas, "red")]), None).expect("the first scene");
+    // The compositor's first frames come a while after the pipeline starts,
+    // and then as fast as it can make them until it has caught up: counting
+    // frames across that would count the catching up.
+    let tap = Arc::new(Tap::default());
+    tap.watch(mix.pool.compositor(), Vec::new());
+    let limit = Duration::from_secs(30);
+    while tap.count() < 10 {
+        assert!(tap.wait_past(0, limit).await, "the compositor made no frame in 30 s");
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
     tokio::time::sleep(Duration::from_millis(300)).await;
     let spec = TransitionSpec::new(Kind::Wipe { direction: Default::default() }, 1000);
     mix.take_scene_over(scene("b", vec![full(&canvas, "green")]), None, None, Some(spec)).expect("a wipe");
@@ -258,13 +273,20 @@ async fn a_wipe_is_a_crop_on_the_slot_and_not_a_squash() {
         counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         gst::PadProbeReturn::Ok
     });
-    tokio::time::sleep(Duration::from_millis(500)).await;
+    // Counted against the frames the compositor made over the same half
+    // second of its own timeline rather than against the wall clock, which on
+    // a loaded machine starves both alike.
+    let window = mix.transition_window().expect("a transition is on the canvas");
+    let half = window.0 + 500_000_000;
+    assert!(tap.wait_past(half, limit).await, "the compositor made no frame half way through in 30 s");
     let through = seen.load(std::sync::atomic::Ordering::Relaxed);
-    assert!(through >= 10, "the slot let {through} frames through in half a second at 30 fps");
+    let composed = tap.frames.lock().iter().filter(|(t, _)| *t >= window.0 && *t < half).count();
+    assert!(composed >= 10, "the compositor made {composed} frames in half a second at 30 fps");
+    assert!(through * 3 >= composed as u64 * 2, "the slot let {through} frames through while the compositor made {composed}");
     let caps = pad.current_caps().expect("the pad has caps");
     let width: i32 = caps.structure(0).and_then(|s| s.get("width").ok()).expect("a width");
     assert!(width > 8 && width < canvas.width - 8, "half way through the picture is {width} wide of {}", canvas.width);
-    tokio::time::sleep(Duration::from_millis(800)).await;
+    assert!(tap.wait_past(window.1, limit).await, "the compositor made no frame past the window in 30 s");
     mix.handle(Command::TransitionEnd { transition: mix.transition_id() }).expect("the end");
     landed_on_green(&mix);
     mix.shutdown();
