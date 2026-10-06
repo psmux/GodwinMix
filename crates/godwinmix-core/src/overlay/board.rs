@@ -29,6 +29,8 @@ pub struct Board {
     compositor: gst::Element,
     canvas: (i32, i32),
     probe: Mutex<Option<gst::PadProbeId>>,
+    /// Effects, stinger clips and frame transitions over the whole frame.
+    pub(super) passes: Mutex<super::pass::Passes>,
     /// Whether the size drawn at goes back to the kind, which renders at it.
     /// The programme's board does; the preview's does not, or the two would
     /// ask for different sizes in turn and the text would never stop being
@@ -38,13 +40,13 @@ pub struct Board {
 
 impl Board {
     pub fn new(compositor: &gst::Element, canvas: (i32, i32)) -> Arc<Board> {
-        Arc::new(Board { entries: Mutex::new(Vec::new()), compositor: compositor.clone(), canvas, probe: Mutex::new(None), measures: true })
+        Arc::new(Board { entries: Mutex::new(Vec::new()), compositor: compositor.clone(), canvas, probe: Mutex::new(None), passes: Mutex::default(), measures: true })
     }
 
     /// A board that draws what another one's layers hold without asking them
     /// to render at its size: the scene preview's, at thumbnail size.
     pub fn watching(compositor: &gst::Element, canvas: (i32, i32)) -> Arc<Board> {
-        Arc::new(Board { entries: Mutex::new(Vec::new()), compositor: compositor.clone(), canvas, probe: Mutex::new(None), measures: false })
+        Arc::new(Board { entries: Mutex::new(Vec::new()), compositor: compositor.clone(), canvas, probe: Mutex::new(None), passes: Mutex::default(), measures: false })
     }
 
     /// The layer `source` draws from on this board, if it is a transparent one.
@@ -59,23 +61,15 @@ impl Board {
         entries.retain(|e| e.source != source);
         entries.push(Entry { source: source.to_string(), layer, pads, clock: Clock::default() });
         drop(entries);
-        let mut probe = self.probe.lock();
-        if probe.is_none() {
-            *probe = super::draw::install(self);
-        }
+        self.ensure_probe();
     }
 
     /// Stop drawing `source`. Takes the probe off with the last one.
     pub fn detach(&self, source: &str) {
         let mut entries = self.entries.lock();
         entries.retain(|e| e.source != source);
-        let empty = entries.is_empty();
         drop(entries);
-        if empty {
-            if let (Some(id), Some(pad)) = (self.probe.lock().take(), self.compositor.static_pad("src")) {
-                pad.remove_probe(id);
-            }
-        }
+        self.drop_probe_if_idle();
     }
 
     /// How many sources are on the board.
@@ -141,3 +135,6 @@ impl Board {
 }
 
 pub use super::hold::{hold_back, hold_back_at};
+
+#[path = "board_passes.rs"]
+mod passes;

@@ -43,3 +43,37 @@ body.producer .scene-tabs button.armed { border-bottom-color: var(--ok); }
   .transition-picker { flex-direction: row; flex-wrap: wrap; flex: 1 1 100%; }
   .transition-picker > * { flex: 1 1 0; }
 }
+
+/* The fx library beside Take: Looks opens a grid of moving previews, and the
+   effect buttons sit under it. A strip is twelve frames side by side; the
+   step animation walks it, and only while the panel is shown. */
+.take-bar .fx-open { min-height: 36px; }
+.fx-panel[hidden] { display: none; }
+.fx-panel {
+  position: absolute; z-index: 30; right: 8px; bottom: 8px; width: min(560px, calc(100% - 16px));
+  max-height: 70%; overflow: auto; padding: 10px; background: var(--panel); border: 1px solid var(--line);
+  border-radius: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+.fx-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.fx-status { font-size: var(--fs-sm); color: var(--dim); margin-bottom: 8px; }
+.fx-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.fx-tile { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.fx-tile small { color: var(--dim); font-size: var(--fs-sm); }
+.fx-strip {
+  aspect-ratio: 16 / 9; width: 100%; border-radius: 4px; background-color: #111;
+  background-repeat: no-repeat; background-size: calc(var(--frames) * 100%) 100%;
+  animation: fx-walk var(--ms) steps(11, jump-none) infinite;
+}
+@keyframes fx-walk { from { background-position: 0% 0; } to { background-position: 100% 0; } }
+@media (prefers-reduced-motion: reduce) { .fx-strip { animation: none; background-position: 50% 0; } }
+.fx-actions { display: flex; flex-wrap: wrap; gap: 4px; }
+.fx-actions .btn { min-height: 32px; padding: 2px 8px; font-size: var(--fs-sm); }
+.fx-effects { display: flex; flex-wrap: wrap; gap: 6px; }
+.fx-effects[hidden], .fx-effects:empty { display: none; }
+.fx-effects .fx-fire { flex: 1 1 auto; min-height: 36px; }
+@container (max-width: 500px) {
+  .fx-panel { position: fixed; left: 8px; right: 8px; bottom: 8px; width: auto; max-height: 80vh; }
+  .fx-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .take-bar .fx-open, .fx-effects { flex: 1 1 100%; }
+  .fx-effects .fx-fire, .fx-actions .btn { min-height: 44px; }
+}

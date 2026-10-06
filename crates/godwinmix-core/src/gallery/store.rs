@@ -18,7 +18,12 @@ use std::path::{Path, PathBuf};
 /// SVG templates, each id once. The reasons any folder would not read come
 /// back beside the list.
 pub fn list(gallery: &Path) -> (Vec<Entry>, Vec<String>) {
+    // The starter transitions and effects are folders like any saved item.
+    let starters_fx = crate::fx::starter::install(gallery);
     let (mut out, mut errors) = saved(gallery);
+    if let Err(e) = starters_fx {
+        errors.push(format!("the starter transitions could not be written: {e:#}"));
+    }
     let mut seen: HashSet<String> = out.iter().map(|e| e.item.id.clone()).collect();
     for s in starters::STARTERS {
         match s.manifest().and_then(|m| Ok((s.materialise(gallery)?, m))) {

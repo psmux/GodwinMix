@@ -1,0 +1,16 @@
+name = "Film burn"
+kind = "transition"
+file = "film-burn.webm"
+description = "A burn eating in from the left to white and back, drawn with Add."
+tags = ["film burn", "flame", "overlay"]
+origin = "shipped"
+
+[transition]
+look = "overlay"
+blend = "add"
+duration_ms = 1500
+cut_at_measured_ms = 750
+transition = true
+effect = true
+licence = "Apache-2.0"
+source = "made for GodwinMix by dev/make-starter-fx.py"

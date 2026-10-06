@@ -1,0 +1,16 @@
+name = "Light leak"
+kind = "transition"
+file = "light-leak.webm"
+description = "Warm light washing across the picture to near white, for a soft cut or a sweep over the shot."
+tags = ["light leak", "warm", "overlay"]
+origin = "shipped"
+
+[transition]
+look = "overlay"
+blend = "screen"
+duration_ms = 2000
+cut_at_measured_ms = 1000
+transition = true
+effect = true
+licence = "Apache-2.0"
+source = "made for GodwinMix by dev/make-starter-fx.py"

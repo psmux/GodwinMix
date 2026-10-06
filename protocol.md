@@ -82,6 +82,13 @@ Keys accepted on every method, handled before a method runs.
 | `filter.list` | `GET /api/v1/filters` | read |  | 1 | Every filter in place, with what it is and where it sits. |
 | `filter.remove` | `DELETE /api/v1/filters/{id}` | operate | yes | 1 | Take a filter out of the pipeline. |
 | `filter.set` | `POST /api/v1/filters/{id}/set` | operate |  | 1 | Change a filter's settings in place. A filter that cannot take the change while running says so rather than being restarted behind your back. |
+| `fx.assign` | `POST /api/v1/fx/assign` | operate |  | 1 | Choose the transition a take uses when it names none, for one scene or for every take. |
+| `fx.fire` | `POST /api/v1/fx/fire` | operate |  | 1 | Play an effect over the programme once: drawn on top of whatever is on air until its clip ends. |
+| `fx.import` | `POST /api/v1/fx/import` | operate |  | 1 | Import a transition or effect from a file, a folder or a zip on the mixer's machine, measuring what it is and where it covers the picture. |
+| `fx.list` | `GET /api/v1/fx/list` | read |  | 1 | The imported transitions and effects, with what each is and whether it runs on the GPU here. |
+| `fx.preview` | `POST /api/v1/fx/preview` | read |  | 1 | A moving preview of an item: twelve frames side by side in one JPEG, made once and kept. |
+| `fx.remove` | `POST /api/v1/fx/remove` | operate | yes | 1 | Delete an imported item from the library. The starter set cannot be deleted. |
+| `fx.set` | `POST /api/v1/fx/set` | operate |  | 1 | Change an imported item: its blend, its cut point, its length, whether it is a transition or an effect. |
 | `gallery.duplicate` | `POST /api/v1/gallery/duplicate` | operate |  | 1 | Copy an item, shipped ones included, under a new name. |
 | `gallery.edit` | `POST /api/v1/gallery/edit` | operate |  | 1 | Change an item's name, tags, description, zone or the values it fills its fields with. |
 | `gallery.export` | `POST /api/v1/gallery/export` | operate |  | 1 | Write gallery items to one zip on the mixer, to carry a look to another mixer. |
@@ -1048,6 +1055,125 @@ Change a filter's settings in place. A filter that cannot take the change while 
   },
   "result": {
     "$ref": "#/$defs/FilterRecord"
+  }
+}
+```
+
+#### `fx.assign`
+
+Choose the transition a take uses when it names none, for one scene or for every take.
+
+MCP tool `assign_transition` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/FxAssignRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/FxAssignments"
+  }
+}
+```
+
+#### `fx.fire`
+
+Play an effect over the programme once: drawn on top of whatever is on air until its clip ends.
+
+MCP tool `fire_fx` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint false.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/FxFireRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/FxFired"
+  }
+}
+```
+
+#### `fx.import`
+
+Import a transition or effect from a file, a folder or a zip on the mixer's machine, measuring what it is and where it covers the picture.
+
+MCP tool `import_fx` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint false.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/FxImportRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/FxImported"
+  }
+}
+```
+
+#### `fx.list`
+
+The imported transitions and effects, with what each is and whether it runs on the GPU here.
+
+MCP tool `list_fx` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/FxListRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/FxList"
+  }
+}
+```
+
+#### `fx.preview`
+
+A moving preview of an item: twelve frames side by side in one JPEG, made once and kept.
+
+MCP tool `preview_fx` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/FxNameRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/FxPreview"
+  }
+}
+```
+
+#### `fx.remove`
+
+Delete an imported item from the library. The starter set cannot be deleted.
+
+MCP tool `remove_fx` in the `search` profile: readOnlyHint false, destructiveHint true, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/FxNameRequest"
+  },
+  "result": {
+    "type": "object"
+  }
+}
+```
+
+#### `fx.set`
+
+Change an imported item: its blend, its cut point, its length, whether it is a transition or an effect.
+
+MCP tool `set_fx` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/FxSetRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/FxEntry"
   }
 }
 ```
@@ -3769,6 +3895,8 @@ The paths below still answer, for one release, with a `Deprecation: true` header
 | `GET /rpc` | the JSON-RPC WebSocket. Everything in `methods` is reachable here. |
 | `GET /api/v1/status` | an alias for GET /api/v1/core/status, because it is what people type |
 | `ANY /api/v1/{*rest}` | every method's REST route, generated by the transform rule |
+| `GET /api/v1/fx/{name}/preview.jpg` | an fx item's preview strip: twelve frames side by side in one JPEG, as fx.preview describes; the token may be ?token= |
+| `POST /api/v1/fx/upload` | ?name=pack.zip with the file as the body: kept under the fx library and imported, answering what fx.import answers |
 | `GET /api/v1/gallery/{id}/preview.jpg` | a gallery item's picture as a JPEG, for an <img>: ?width= (64 to 1920) and ?background= (checker, black, white, #rrggbb), as gallery.preview draws it |
 | `GET /api/v1/gallery/{id}/files/{*path}` | one of a gallery item's own files: an HTML graphic's page for the browser source, a clip for a moving preview. Open to a process on the mixer's machine; a token with read from anywhere else |
 | `GET /api/v1/gallery/exports/{file}` | a zip gallery.export wrote, to download |

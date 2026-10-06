@@ -1,0 +1,15 @@
+name = "Glitch slice"
+kind = "transition"
+file = "glitch-slice.glsl"
+description = "Bands of the picture jump sideways and change to the new scene one by one."
+tags = ["shader", "glitch"]
+origin = "shipped"
+
+[transition]
+look = "shader"
+blend = "normal"
+duration_ms = 800
+transition = true
+effect = false
+licence = "Apache-2.0"
+source = "written for GodwinMix in the gl-transitions form"

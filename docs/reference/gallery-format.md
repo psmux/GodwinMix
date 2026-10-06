@@ -95,7 +95,9 @@ older one.
 deleted like every other kind. Placing one is refused with the name of the
 method that plays it. The `[transition]` and `[effect]` tables in their
 `graphic.toml` belong to those methods and the gallery passes them through
-untouched.
+untouched; [transitions and effects from packs](fx.md) has the tables, the
+`fx.*` methods and what the gallery's import does with a shader or a light
+leak.
 
 ### A set
 

@@ -129,6 +129,23 @@ means sending the same call again would be safe, not that it failed.
 `revert` undoes the last take and puts the shot before back. Use it the moment
 a take turns out wrong rather than working out by hand what was on.
 
+## Transitions and effects from packs
+
+Light leaks, bokeh, glitches, film burns, stingers, luma wipes and shaders.
+Find the tools with `search_tools {"query": "transition effect"}`.
+
+```
+list_fx {"role": "transition"}
+take {"scene": "wide", "transition": "light-leak"}
+fire_fx {"name": "bokeh"}
+import_fx {"path": "/home/me/Downloads/pack.zip"}
+```
+
+Only an item with `transition` true goes in a take, and only one with
+`effect` true can be fired; the refusal says which to use. `fire_fx` plays
+over whatever is on air and goes by itself, so it is not a take and the hold
+does not apply. `assign_transition` sets what a take with no transition uses.
+
 ## Live data: a feed on screen
 
 Headlines in a ticker, a score in a score bug, a sheet's rows in a strap.
