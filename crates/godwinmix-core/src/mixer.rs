@@ -419,6 +419,7 @@ mod keyed;
 mod lifecycle;
 mod memwatch;
 mod motion;
+mod on_time;
 mod offload;
 mod patience;
 mod rendered;
