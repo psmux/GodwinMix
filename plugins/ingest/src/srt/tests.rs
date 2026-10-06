@@ -196,6 +196,9 @@ fn a_player_on_the_publishers_port_is_sent_the_stream() {
     // And what libsrt counted on the player's socket: nothing received reads
     // differently from packets that came and were dropped as late.
     let counted = player.by_name("src").map(|s| s.property::<gst::Structure>("stats").to_string());
+    // And the hub's side: whether the player's sender subscribed (`readers`)
+    // and whether the encoder's tags kept arriving (`bytes`).
+    let on_hub = gate.hub.stream("church", "main");
     let _ = player.set_state(gst::State::Null);
     let refused = decide::decide(
         &gate.table.read().unwrap(),
@@ -203,6 +206,6 @@ fn a_player_on_the_publishers_port_is_sent_the_stream() {
         &streamid::parse("#!::r=church/nothere,m=request").unwrap(),
     );
     stop(encoder);
-    assert!(played, "the player decoded {} frames; its pipeline said {said:?}; srtsrc counted {counted:?}", frames.load(Ordering::Relaxed));
+    assert!(played, "the player decoded {} frames; its pipeline said {said:?}; srtsrc counted {counted:?}; the hub had {on_hub:?}", frames.load(Ordering::Relaxed));
     assert!(matches!(refused, decide::Decision::Refuse { code: decide::NOT_FOUND, .. }), "{refused:?}");
 }
