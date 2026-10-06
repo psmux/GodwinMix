@@ -90,6 +90,18 @@ written, and the import after it found nothing; and `scene get` asked for
 the core refused as a duplicate field, so the undo step compared two copies
 of that refusal. Both fixed in `ctl.rs` and replayed against a local core.
 
+**Where CI stands.** Last full round on `8e52a58c`: build run 37385300527
+and platforms runs 37385294532 (push) and 37385300410 (pull request). Build:
+clippy and clients pass; the three mixer jobs and the software only job fail
+only on the `agent_headend` test from main (below), plus on macOS the tests
+named below. Platforms: Linux and Windows pass their tests and the smoke test
+and stop at the GStreamer runtime budget; macOS hit the job's 90 minute limit
+inside the test step, with the Icecast, RTSP, SRT carriage and direct plan
+tests failing before it did. None of those failed on Linux or Windows in the
+same round, so this reads as an overloaded macOS runner (two macOS jobs of
+this branch ran at once, beside the other branches') rather than any one
+test.
+
 **Still open.**
 
 * `mixer::transition_tests::every_new_transition_keeps_the_frame_rate_and_lands_on_the_taken_scene`
@@ -99,8 +111,16 @@ of that refusal. Both fixed in `ctl.rs` and replayed against a local core.
   transition settled, while the outgoing scene moved as its curve said. A
   longer window does not help, so this looks like a fault in how the
   incoming pad is driven during a crossing on a starved machine, not timing
-  in the test. It belongs with the transitions work; the test now prints the
-  window a tenth at a time and when the new scene first showed.
+  in the test. On the macOS runner (build run 37385300527) the outgoing
+  scene did not move either: red at every tenth of a 900 ms slide, the new
+  scene first drawn 1266 ms in. That reads as a compositor behind the clock
+  making the frames it owes back to back before the curves were bound, since
+  `compositor_now` starts the window from the last frame it made. Starting
+  it from the clock less the compositor's reported latency instead was
+  tried here and made `a_wipe_is_a_crop_on_the_slot_and_not_a_squash` fail
+  every run, so it was taken out again. It belongs with the transitions
+  work; the test now prints the window a tenth at a time and when the new
+  scene first showed.
 * On the Windows runner, single runs of `a_lower_third_slides_out_and_back_in_to_where_it_was_placed`
   ("part way out the third is off the left edge, at 0"),
   `stall_storm::a_source_that_keeps_stalling_waits_longer_each_time`
@@ -108,7 +128,20 @@ of that refusal. Both fixed in `ctl.rs` and replayed against a local core.
   looked into.
 * The SRT player test passed 25 runs in 25 here after the caps gate and
   failed once on the Windows platforms runner; it now prints what the
-  player's pipeline said.
+  player's pipeline said. It passed in every job of the last round.
+* macOS, build run 37385300527: the RIST output test decoded 0 frames in 45
+  s (with the slack, so not slowness alone), the DASH half of the HLS and
+  DASH pull test stayed connecting, and the dead output test measured a
+  70 ms push into the hub against its 20 ms line.
+* Not from this branch: `agent_headend::an_agent_adds_twenty_feeds_in_two_calls_and_reads_them_in_one`
+  fails on main itself (the MCP server's instructions no longer name
+  `add_shows` since the agents merge) and so in this pull request's merged
+  build on every platform.
+* The trimmed GStreamer runtime is over its 130 MB budget: 133.0 MB on
+  Linux and 154.6 MB on Windows in platforms run 37385294532. The tests and
+  the smoke test passed on both before the trim step stopped the job. Not
+  touched here; it needs either a smaller tree or a new budget in
+  09-builders.
 
 ## Two phones that aborted the show, 2026-10-05
 
