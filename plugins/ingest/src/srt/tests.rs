@@ -168,6 +168,12 @@ fn a_player_on_the_publishers_port_is_sent_the_stream() {
         return;
     };
     assert!(wait_for(|| gate.hub.is_live("church", "main")), "the encoder is on air");
+    // And its pictures arriving, before the player asks: on the Windows
+    // runner the encoder was on air with 0 bytes for the whole test, and the
+    // failure read as the player's. Over this laptop's LAN address all five
+    // SRT tests pass three runs in three.
+    let sending = wait_for(|| gate.hub.stream("church", "main").is_some_and(|s| s["video"]["width"] == 320));
+    assert!(sending, "the encoder connected and sent no pictures: {:?}", gate.hub.stream("church", "main"));
     let line = format!(
         "srtsrc name=src uri=\"srt://127.0.0.1:{}?mode=caller\" latency=1000 streamid=\"#!::r=church/main,m=request\" passphrase={KEY_ONE} \
          ! tsdemux ! h264parse ! avdec_h264 ! fakesink name=end",
