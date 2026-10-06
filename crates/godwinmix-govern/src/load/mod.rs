@@ -28,6 +28,20 @@ pub struct Reading {
     pub devices: Vec<(String, u32)>,
 }
 
+impl Reading {
+    /// Count `millicores` that other processes did for this one as this
+    /// process's own, at the moment of the reading. Taken per reading
+    /// rather than when the window is read: a show killed a second ago was
+    /// in the last ten readings, and subtracting what the shows measure now
+    /// left its whole load in the window as another program's peak, so the
+    /// same show started again was refused its rendition for ten seconds.
+    pub fn with_elsewhere(mut self, millicores: u32) -> Reading {
+        self.own_millicores = self.own_millicores.saturating_add(millicores);
+        self.system_millicores = self.system_millicores.max(self.own_millicores);
+        self
+    }
+}
+
 /// The counters as last read, so the next read is a difference.
 pub struct Probe {
     cores: u32,
@@ -103,7 +117,8 @@ impl Sampler {
                 if flag.load(Ordering::Relaxed) {
                     break;
                 }
-                cell.store(&window.push(probe.read()));
+                let reading = probe.read().with_elsewhere(cell.elsewhere());
+                cell.store(&window.push(reading));
             }
         })?;
         Ok(Sampler { stop, thread: Some(thread) })

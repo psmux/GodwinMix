@@ -638,7 +638,9 @@ fn initialize_result(params: &Value, profile: Profile) -> Value {
              `place_graphic`, then `show_graphic`. Look with `snapshot {{\"id\": \
              \"program\"}}` before saying it is done. You are on the {} tool profile; any other tool is found with \
              `search_tools` and run with `call_tool`. Tools that work inside one show take \
-             `show: <id>` and default to the first; `list_shows` lists them. Every \
+             `show: <id>` and default to the first; `list_shows` lists them, `add_shows` \
+             makes many in one call (dry_run first) and `show_stats` watches them all, \
+             which the headend profile keeps in its list. Every \
              tool talks to the running mixer over its HTTP API, so refusals come back \
              verbatim with the mixer's own reason and the next step to take. Mutating tools \
              accept an `idempotency_key`, so a retry after a timeout is free; destructive \

@@ -776,15 +776,32 @@ impl Api {
                 map.insert("dry_run".into(), Value::Bool(true));
             }
         }
-        let r = self
-            .client
-            .request(verb, &url)
-            .json(&body)
-            .send()
-            .await
-            .with_context(|| format!("calling {method} at {url}"))?;
+        // A read goes as a GET, and the core reads a GET's params from its
+        // query, not from a body. `gmx ctl scene export show.zip` sent the
+        // format and the path as a body, the core answered with the plain
+        // document, and the command said "wrote show.zip" for a file that
+        // was never written. A read of one member names it in the path, which
+        // is all it takes; its body repeats the name under another key and the
+        // core refuses the two as a duplicate, so that body is not sent.
+        let request = if verb == reqwest::Method::GET {
+            let query = if id.is_none() { query_of(&body) } else { Vec::new() };
+            self.client.request(verb, &url).query(&query)
+        } else {
+            self.client.request(verb, &url).json(&body)
+        };
+        let r = request.send().await.with_context(|| format!("calling {method} at {url}"))?;
         read(method, r).await
     }
+}
+
+/// An object's fields as query pairs: a string as itself, anything else as
+/// its JSON, which is how the core reads a number or a bool back.
+fn query_of(body: &Value) -> Vec<(String, String)> {
+    let Some(map) = body.as_object() else { return Vec::new() };
+    map.iter()
+        .filter(|(_, v)| !v.is_null())
+        .map(|(k, v)| (k.clone(), v.as_str().map(str::to_string).unwrap_or_else(|| v.to_string())))
+        .collect()
 }
 
 /// Percent encode an id for a path segment. Ids are slugs, so this is a guard
@@ -937,7 +954,10 @@ async fn scene(api: &Api, cmd: SceneCmd) -> Result<()> {
             }
         }
         SceneCmd::Get { scene, json } => {
-            let view: Value = api.get("scene.get", None, &[("scene", scene)]).await?;
+            // In the path, where the route names it. With no id the path kept
+            // a literal `{id}`, which the core reads as the scene's id beside
+            // the `scene` in the query, and it refused the two as duplicates.
+            let view: Value = api.get("scene.get", Some(&scene), &[]).await?;
             if json {
                 println!("{}", serde_json::to_string_pretty(&view)?);
                 return Ok(());

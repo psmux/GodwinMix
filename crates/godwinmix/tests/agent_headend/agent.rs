@@ -24,10 +24,11 @@ pub struct Agent {
 }
 
 impl Agent {
-    /// `gmx mcp --url <station>` on the standard profile.
+    /// `gmx mcp --url <station>` on the headend profile, the one a headend's
+    /// agent is set up with, which keeps the show tools in its list.
     pub fn connect(url: &str) -> Agent {
         let mut child = Command::new(GMX)
-            .args(["mcp", "--url", &format!("http://{url}")])
+            .args(["mcp", "--profile", "headend", "--url", &format!("http://{url}")])
             .env_remove("GODWINMIX_TOKEN")
             .env_remove("GODWINMIX_MCP_PROFILE")
             .stdin(std::process::Stdio::piped())

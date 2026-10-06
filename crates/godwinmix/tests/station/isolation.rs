@@ -62,7 +62,16 @@ async fn a_show_killed_is_started_again_the_other_runs_on_and_its_share_goes_bac
     let output = json!({"id": "archive", "uri": "record://programme", "type": "record/output",
         "params": {"format": "mkv", "directory": recordings}, "rendition": {"preset": "youtube-720p30"}});
     let mut second = rpc(&st, "?show=second").await;
-    let made = call(&mut second, 1, "output.add", output).await;
+    // A shared runner is running the other station tests beside this one,
+    // and the governor sees their encoders as other programs: it can say no
+    // with `retryable`, which a client answers by asking again.
+    let slack = godwinmix_core::plugin::harness::timing_slack();
+    let start = Instant::now();
+    let mut made = call(&mut second, 1, "output.add", output.clone()).await;
+    while made["error"]["data"]["retryable"] == true && start.elapsed() < Duration::from_secs(30).mul_f64(slack) {
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        made = call(&mut second, 1, "output.add", output.clone()).await;
+    }
     assert!(made.get("result").is_some(), "{made}");
     until("the station's governor to hold the second show's rendition", Duration::from_secs(20), || async {
         governor_used(&st).await != (0, 0)
@@ -94,13 +103,20 @@ async fn a_show_killed_is_started_again_the_other_runs_on_and_its_share_goes_bac
     assert_eq!(second["restarts"], 1, "{list}");
     assert_ne!(pid_of(&dir, "second"), Some(pid), "a new process");
 
+    // The restarted show keeps the output it could not attach and asks again
+    // on the tick (`mixer::unattached`), so this is a wait for room on a
+    // shared runner, not for a retry that may never come.
+    // Once, not twice, and not to the millicore: the encoder is priced again
+    // when it is admitted again, and on a Linux runner the same rendition
+    // came back at 769 millicores where it had held 808.
+    let once = |n: (u64, u64)| n.0 * 4 >= held.0 * 3 && n.0 * 4 <= held.0 * 5;
     let start = Instant::now();
     let mut now = governor_used(&st).await;
-    while now.0 != held.0 && start.elapsed() < Duration::from_secs(20) {
+    while !once(now) && start.elapsed() < Duration::from_secs(30).mul_f64(slack) {
         tokio::time::sleep(Duration::from_millis(100)).await;
         now = governor_used(&st).await;
     }
-    if now.0 != held.0 {
+    if !once(now) {
         let shows = get(&st, "/api/v1/shows").await;
         let governor = get(&st, "/api/v1/governor/status").await;
         // What else is taking the machine: the governor's room is what is
