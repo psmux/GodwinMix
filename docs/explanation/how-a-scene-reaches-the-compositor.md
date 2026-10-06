@@ -402,6 +402,17 @@ that has no frame yet is not drawn at all: the outgoing scene plays its half
 of the crossing over whatever is behind it, and the new scene appears on its
 first frame, which is a cut.
 
+A wipe and a box trim the incoming picture with the slot's own crop, so that
+slot's caps change on every frame of the crossing, and the compositor
+renegotiates its output each time. Renegotiating asks downstream how to
+allocate, and that question waits behind the encoder's queue. It used to be
+asked on every frame of a wipe, with the compositor stopped while it waited;
+on a loaded machine that was the incoming slot passing nothing for half a
+second. The answer cannot change while the output caps do not, so the
+compositor's src pad keeps it and answers the repeats itself
+(`mixer::allocation`). A wipe now costs one such question, or none, rather
+than one per frame.
+
 Measured: six 300 ms crossfades between two eight item scenes left the
 programme's largest inter frame interval at 33.3 ms, one frame, with the pool
 grown to sixteen.
