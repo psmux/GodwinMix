@@ -214,13 +214,7 @@ pub fn link_to_mux(
             format!("{} refused a pad; tried {}", mux.name(), templates.join(", "))
         })?;
     let src = queue.static_pad("src").context("queue has no src pad")?;
-    // Against the templates, not a caps query. The query crosses the proxy
-    // into the programme pipeline, and while the programme's encoder was
-    // starting for its first consumer it answered nothing on the Windows
-    // runner: "Pads do not have common format", and the output was refused.
-    // The caps the encoder sends still have to suit the muxer when they come.
-    src.link_full(&pad, gst::PadLinkCheck::HIERARCHY | gst::PadLinkCheck::TEMPLATE_CAPS)
-        .with_context(|| format!("linking {} into {}", queue.name(), mux.name()))?;
+    src.link(&pad).with_context(|| format!("linking {} into {}", queue.name(), mux.name()))?;
     Ok(pad)
 }
 
