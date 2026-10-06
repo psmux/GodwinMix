@@ -26,6 +26,7 @@ mod pull;
 mod rist;
 mod rtsp;
 mod runner;
+mod srt_listen;
 pub mod spec;
 pub mod stats;
 mod streams;

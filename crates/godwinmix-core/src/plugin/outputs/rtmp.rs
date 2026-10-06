@@ -19,6 +19,10 @@ use gstreamer::prelude::*;
 use parking_lot::Mutex;
 use serde_json::{json, Value};
 
+/// How far one stream may fall behind the other before the muxer writes on
+/// without it. See `build`.
+const MUX_LATENCY: gst::ClockTime = gst::ClockTime::from_seconds(1);
+
 pub const MANIFEST: Manifest = Manifest {
     plugin: "rtmp",
     id: "output",
@@ -87,6 +91,15 @@ impl Output for RtmpOutput {
         crate::probe::set_enum(&mux, "start-time-selection", "first");
         crate::probe::set_bool(&mux, "enforce-increasing-timestamps", true);
         crate::probe::set_bool(&mux, "skip-backwards-streams", true);
+        // Room for the encoder in front to fall behind the sound. Without it
+        // the muxer, which could not learn its upstream latency, muxed
+        // whichever stream had a buffer when its deadline passed; a loaded
+        // x265 then delivered pictures older than sound already written,
+        // and `skip-backwards-streams` dropped them ("Got backwards dts!" in
+        // its log): an HEVC rendition kept 1 to 18 of 90 frames on a busy
+        // macOS runner and 38 to 40 on a laptop with every core taken. A
+        // second of room costs nothing an RTMP viewer would notice.
+        crate::probe::set_int(&mux, "latency", MUX_LATENCY.nseconds() as i64);
 
         let sink = make("rtmp2sink", &format!("out-{id}-rtmp-{gen}"))?;
         sink.set_property("location", &self.uri);

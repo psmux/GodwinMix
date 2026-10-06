@@ -153,8 +153,16 @@ fn a_wrong_password_is_named_and_the_sender_keeps_trying() {
     let fd = godwinmix_capture_common::fifo::open_read(&fifo).unwrap();
     let sender = Sender::start(&s, fd, None).expect("the sender starts");
     let core = programme_into(&fifo);
-    std::thread::sleep(Duration::from_secs(2));
-    let why = sender.state.last_error.lock().unwrap().clone().unwrap_or_default();
+    // Until the refusal is named, not for a fixed two seconds: on a busy
+    // Linux runner the sender had not been answered by then and the error
+    // was still empty.
+    let slack = std::env::var("GODWINMIX_TIMING_SLACK").ok().and_then(|s| s.parse::<f64>().ok()).unwrap_or(1.0).max(1.0);
+    let until = std::time::Instant::now() + Duration::from_secs(10).mul_f64(slack);
+    let named = || sender.state.last_error.lock().unwrap().clone().unwrap_or_default();
+    while named().is_empty() && std::time::Instant::now() < until {
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    let why = named();
     let _ = core.set_state(gst::State::Null);
     drop(sender);
     let _ = std::fs::remove_dir_all(&dir);
