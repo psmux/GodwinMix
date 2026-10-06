@@ -12,6 +12,12 @@
 //! thread waits until the size has been still for `SETTLE` (or `SETTLE_MAX`
 //! has gone by) before it renders. Until then the board stretches the last
 //! picture, which is what it looked like a moment ago anyway.
+//!
+//! A render that fails is tried again after `RETRY` seconds, doubling, a few
+//! times, and then left until something changes. The first SVG render in a
+//! process on Windows can spend seconds building the font cache, and on a
+//! machine that was busy starting a show a set's desk timed out once and was
+//! never drawn: there was no earlier picture to keep, and nothing asked again.
 
 use super::carrier::Carrier;
 use super::layer::Layer;
@@ -24,6 +30,10 @@ use tracing::warn;
 
 const SETTLE: Duration = Duration::from_millis(60);
 const SETTLE_MAX: Duration = Duration::from_millis(400);
+/// The first wait before a failed render is tried again. It doubles each
+/// time, `RETRIES` times, so a file that never renders costs five tries.
+const RETRY: Duration = Duration::from_secs(1);
+const RETRIES: u32 = 5;
 
 /// What a render produced.
 pub struct Rendered {
@@ -56,12 +66,27 @@ pub fn spawn<P: Send + 'static>(name: &str, first: P, layer: Arc<Layer>, carrier
         let mut state = first;
         let mut drawn: Option<(u32, u32)> = None;
         let (mut dirty, mut content) = (true, true);
+        let mut failures = 0u32;
         loop {
             if dirty {
-                publish(&layer, &carrier, render(&state, drawn), content);
-                (dirty, content) = (false, false);
+                let shown = publish(&layer, &carrier, render(&state, drawn), content);
+                failures = if shown { 0 } else { failures + 1 };
+                (dirty, content) = (!shown, content && !shown);
             }
-            let Ok(first) = rx.recv() else { return };
+            let first = match failures {
+                0 => rx.recv().ok(),
+                n if n > RETRIES => {
+                    dirty = false;
+                    rx.recv().ok()
+                }
+                n => match rx.recv_timeout(RETRY * 2u32.pow(n - 1)) {
+                    Ok(m) => Some(m),
+                    Err(RecvTimeoutError::Timeout) => continue,
+                    Err(RecvTimeoutError::Disconnected) => None,
+                },
+            };
+            let Some(first) = first else { return };
+            failures = 0;
             let started = Instant::now();
             let mut next = Some(first);
             while let Some(msg) = next.take() {
@@ -94,7 +119,8 @@ pub fn spawn<P: Send + 'static>(name: &str, first: P, layer: Arc<Layer>, carrier
     tx
 }
 
-fn publish(layer: &Layer, carrier: &Carrier, rendered: Result<Rendered>, content: bool) {
+/// Put a render on screen. False when it failed and the last picture stays.
+fn publish(layer: &Layer, carrier: &Carrier, rendered: Result<Rendered>, content: bool) -> bool {
     match rendered {
         Ok(r) => {
             let picture = r.picture.map(Arc::new);
@@ -104,7 +130,15 @@ fn publish(layer: &Layer, carrier: &Carrier, rendered: Result<Rendered>, content
             layer.set_backdrop(r.backdrop.map(Arc::new));
             layer.set_motion(r.motion);
             layer.set_picture(picture);
+            true
         }
-        Err(e) => warn!(error = %e, "could not render a text or picture; the last one stays on screen"),
+        Err(e) => {
+            warn!(error = %e, "could not render a text or picture; the last one stays on screen and it is tried again shortly");
+            false
+        }
     }
 }
+
+#[cfg(test)]
+#[path = "worker_tests.rs"]
+mod tests;

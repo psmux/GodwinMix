@@ -14,23 +14,24 @@
 //! an operator like the whole mixer has stopped.
 //!
 //! So the programme tile's frames are stamped with the running time at which
-//! they arrive, less [`LAG`], instead of the running time they were made for.
-//! A frame is then never late for the mosaic, the tile shows the freshest
-//! programme there is, and when the mixers are not waiting nothing changes:
-//! arrival is within a frame of the stamp the frame already had. The source
-//! tiles keep their own stamps, so a tile that has stopped still shows
-//! stopped.
+//! they arrive, instead of the running time they were made for. A frame is
+//! then never late for the mosaic, the tile shows the freshest programme there
+//! is, and when the mixers are not waiting nothing changes: arrival is within
+//! a frame of the stamp the frame already had. The source tiles keep their own
+//! stamps, so a tile that has stopped still shows stopped.
+//!
+//! The stamp used to be a tenth of a second before arrival. That made each
+//! programme frame end a tenth of a second sooner than the mosaic frame it was
+//! needed for, so the mosaic waited for the next one before it drew anything,
+//! and every tile on it, not only the programme's, came out that much later:
+//! on 2026-10-06, a source tile 175 ms behind the wall clock with the lag and
+//! 105 ms without it, once the tiles lost their second `videorate` too.
 
 use gstreamer as gst;
 use gstreamer::prelude::*;
 
-/// How far behind the present a frame is stamped: under the mosaic's quarter
-/// second of latency, so the compositor reaches it within a frame or two and
-/// never finds it already behind.
-pub const LAG: gst::ClockTime = gst::ClockTime::from_mseconds(100);
-
-/// Restamp every buffer leaving `pad` with the running time it left at, less
-/// [`LAG`], in the pad's own segment.
+/// Restamp every buffer leaving `pad` with the running time it left at, in
+/// the pad's own segment.
 pub fn stamp_on_arrival(pad: &gst::Pad) {
     pad.add_probe(gst::PadProbeType::BUFFER, |pad, info| {
         let Some(now) = running_time_now(pad) else { return gst::PadProbeReturn::Ok };
@@ -58,8 +59,7 @@ fn running_time_now(pad: &gst::Pad) -> Option<gst::ClockTime> {
 
 /// The stream time in `segment` for a frame that arrived at running time `now`.
 pub fn restamp(segment: &gst::FormattedSegment<gst::ClockTime>, now: gst::ClockTime) -> Option<gst::ClockTime> {
-    let at = now.checked_sub(LAG)?;
-    segment.position_from_running_time(at)
+    segment.position_from_running_time(now)
 }
 
 #[cfg(test)]
@@ -67,11 +67,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_frame_is_stamped_just_behind_when_it_arrived() {
+    fn a_frame_is_stamped_when_it_arrived() {
         let _ = gst::init();
         let segment = gst::FormattedSegment::<gst::ClockTime>::new();
         let now = gst::ClockTime::from_seconds(31);
-        assert_eq!(restamp(&segment, now), Some(gst::ClockTime::from_mseconds(30_900)));
+        assert_eq!(restamp(&segment, now), Some(now));
     }
 
     #[test]
@@ -81,13 +81,6 @@ mod tests {
         segment.set_start(gst::ClockTime::from_seconds(100));
         segment.set_time(gst::ClockTime::from_seconds(100));
         // Running time 5 s is stream position 105 s in a segment that starts at 100.
-        assert_eq!(restamp(&segment, gst::ClockTime::from_mseconds(5_100)), Some(gst::ClockTime::from_seconds(105)));
-    }
-
-    #[test]
-    fn nothing_is_stamped_before_the_lag_has_passed() {
-        let _ = gst::init();
-        let segment = gst::FormattedSegment::<gst::ClockTime>::new();
-        assert_eq!(restamp(&segment, gst::ClockTime::from_mseconds(50)), None);
+        assert_eq!(restamp(&segment, gst::ClockTime::from_seconds(5)), Some(gst::ClockTime::from_seconds(105)));
     }
 }

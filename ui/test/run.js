@@ -9,6 +9,7 @@ import { graphicTests } from "./graphics.js";
 import { galleryTests } from "./gallery.js";
 import { studioTests } from "./studio.js";
 import { transitionTests } from "./transitions.js";
+import { studioNextTests } from "./studio-next.js";
 import { sceneFixTests, sceneFixLoadTests } from "./scene-fix.js";
 import { scenePictureTests } from "./scene-pictures.js";
 import { greenScreenTests } from "./green-screen.js";
@@ -347,6 +348,30 @@ test("reattaching a visible canvas restores the latest picture immediately", () 
   const detach = painter.attach(target, 0);
   eq([...target.getContext("2d").getImageData(0, 0, 1, 1).data], [255, 0, 0, 255]);
   detach(); painter.destroy();
+});
+
+test("attaching one canvas leaves the others as they are", () => {
+  // The Sources panel attaches every tile again on each render. Each attach
+  // used to repaint every canvas, the programme monitor included, dozens of
+  // times a second, and the page read its frames late for it.
+  const painter = new SheetPainter();
+  const bitmap = document.createElement("canvas");
+  bitmap.width = 2; bitmap.height = 2;
+  const brush = bitmap.getContext("2d");
+  brush.fillStyle = "#ff0000"; brush.fillRect(0, 0, 2, 2);
+  painter.bitmap = bitmap;
+  painter.setLayout({ cells: [{ index: 0, x: 0, y: 0, w: 2, h: 2 }] });
+  const monitor = document.createElement("canvas");
+  monitor.width = 2; monitor.height = 2;
+  painter.attach(monitor, 0);
+  const mark = monitor.getContext("2d");
+  mark.fillStyle = "#0000ff"; mark.fillRect(0, 0, 2, 2);
+  const tile = document.createElement("canvas");
+  tile.width = 2; tile.height = 2;
+  painter.attach(tile, 0);
+  eq([...tile.getContext("2d").getImageData(0, 0, 1, 1).data], [255, 0, 0, 255]);
+  eq([...mark.getImageData(0, 0, 1, 1).data], [0, 0, 255, 255], "the monitor was painted again");
+  painter.destroy();
 });
 
 test("a snapshot restores the frame layout without a separate layout event", () => {
@@ -1660,10 +1685,15 @@ async function sceneTabsSuite() {
     ok(made.face.querySelector("button.scene-add-source"), "the tile lost its add button");
   });
 
+  // Outside Studio mode, which is now where a new browser starts.
+  const { settings: tabSettings, setSetting: setTabSetting } = await import("../shell/settings.js");
   test("the Take button puts the focused scene on air", () => {
+    const studioWas = tabSettings().producer;
+    setTabSetting("producer", false);
     calls.length = 0;
     setFocusedScene("two-box");
     panel.take.click();
+    setTabSetting("producer", studioWas);
     eq(calls.filter((c) => c.method === "program.take").map((c) => c.params.scene), ["two-box"]);
   });
 
@@ -2685,6 +2715,7 @@ legacySuite()
   })
   .then(() => studioTests(test, eq, ok))
   .then(() => transitionTests(test, eq, ok))
+  .then(() => studioNextTests(test, eq, ok))
   .then(() => sceneFixTests(test, eq, ok))
   .then(() => sceneFixLoadTests(test, eq, ok))
   .then(() => scenePictureTests(test, eq, ok))

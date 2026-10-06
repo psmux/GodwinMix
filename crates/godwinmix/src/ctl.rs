@@ -766,11 +766,21 @@ impl Api {
         req: &Req,
         dry_run: bool,
     ) -> Result<T> {
-        let (verb, url) = self.route(method, id)?;
         let mut body = serde_json::to_value(req).unwrap_or(Value::Null);
         if !body.is_object() {
             body = Value::Object(Default::default());
         }
+        // A route with `{id}` in it and no id given takes the request's own
+        // name for it into the path. Left in the body, beside the literal
+        // `{id}` the path kept, the core read two names for one thing and
+        // `gmx ctl scene remove` was refused as a duplicate field.
+        let named = match id {
+            Some(_) => None,
+            None if rest_transform(method).is_some_and(|r| r.path.contains("{id}")) => take_id(&mut body),
+            None => None,
+        };
+        let id = id.or(named.as_deref());
+        let (verb, url) = self.route(method, id)?;
         if dry_run {
             if let Some(map) = body.as_object_mut() {
                 map.insert("dry_run".into(), Value::Bool(true));
@@ -792,6 +802,24 @@ impl Api {
         let r = request.send().await.with_context(|| format!("calling {method} at {url}"))?;
         read(method, r).await
     }
+}
+
+/// The field a request names its member by, taken out of the body: `id`,
+/// else `scene`, else `source`, the first that is a string.
+fn take_id(body: &mut Value) -> Option<String> {
+    let map = body.as_object_mut()?;
+    let key = ["id", "scene", "source"].into_iter().find(|k| map.get(*k).is_some_and(Value::is_string))?;
+    map.remove(key).and_then(|v| v.as_str().map(str::to_string))
+}
+
+#[cfg(test)]
+#[test]
+fn a_member_named_in_the_body_moves_into_the_path() {
+    let mut body = serde_json::json!({"scene": "Live", "dry_run": true});
+    assert_eq!(take_id(&mut body).as_deref(), Some("Live"));
+    assert_eq!(body, serde_json::json!({"dry_run": true}));
+    let mut none = serde_json::json!({"name": "x"});
+    assert_eq!(take_id(&mut none), None);
 }
 
 /// An object's fields as query pairs: a string as itself, anything else as

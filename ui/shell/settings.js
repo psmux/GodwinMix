@@ -18,7 +18,8 @@ export const GALLERY_MODES = [
 const DEFAULTS = {
   gallery: "live",
   snapshotSecs: 0,
-  producer: false,
+  // Studio mode: Preview beside Programme, and Take between them.
+  producer: true,
   meters: true,
   faders: true,
   lanes: true,
@@ -39,11 +40,18 @@ export function settings() {
   } catch {
     saved = {};
   }
+  // Every setting was saved whenever any one changed, so a stored `producer`
+  // is not proof anybody chose it: the page wrote `false` for everyone who
+  // ever changed a setting while Studio mode was off by default. Only a value
+  // set since `studioChosen` existed is kept; the rest start in Studio mode.
+  if (!saved || typeof saved !== "object") saved = {};
+  if (!saved.studioChosen) delete saved.producer;
   state = Object.assign({}, DEFAULTS, saved);
   return state;
 }
 
 export function setSetting(key, value) {
+  if (key === "producer") settings().studioChosen = true;
   settings()[key] = value;
   try {
     localStorage.setItem(KEY, JSON.stringify(state));

@@ -7,6 +7,7 @@
 import { el, on } from "./dom.js";
 import { modal } from "./modal.js";
 import { storeToken } from "../client/index.js";
+import { settings } from "./settings.js";
 
 let asking = null;
 
@@ -72,7 +73,9 @@ export function emptyState(onAdd) {
       el("h2", { text: "Nothing is set up yet" }),
       el("ol", {}, [
         el("li", { text: "Add a source: a camera, a file, a web page or an incoming stream." }),
-        el("li", { text: "Tap its tile to put it on air. The picture at the top is what your audience sees." }),
+        el("li", { text: settings().producer
+          ? "Tap its tile to put it in Preview, then press Take. Programme, the picture with the red frame, is what your audience sees."
+          : "Tap its tile to put it on air. The picture at the top is what your audience sees." }),
         el("li", { text: "Add an output to send that picture somewhere." }),
       ]),
       el("button.btn.primary", { text: "+ Add a camera or anything else", onclick: () => onAdd({ category: "cameras" }) }),
