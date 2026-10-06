@@ -66,7 +66,10 @@ What was fixed on branch `fix/release-bundles`:
   runtimes no longer fit.
 
 Trimmed sizes on the runners: Windows 154.6 MB, Linux 146.4 MB, macOS
-109.3 MB. Release rehearsal RELEASE_RUN_ID passed every job.
+109.3 MB. Release rehearsal 37405481320 passed every job (publish skipped,
+as on any rehearsal), including the macOS standalone check and the Windows
+installer budget: the NSIS installer is 195 MB and the `.msi` 271 MB against
+300, the `.dmg` 224 MB, the AppImage 448 MB and the `.deb` 441 MB.
 
 Still not in the Linux installer: `cmafmux`, `livesync`, the WHIP and WHEP
 plugin elements and `dav1ddec`, which need gst-plugins-rs and dav1d built for
