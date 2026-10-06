@@ -410,6 +410,7 @@ use crate::plugin::branch::{BranchCtx, ProgrammeBranch, VideoPads};
 
 pub mod group;
 mod allocation;
+mod catch_up;
 mod backoff;
 mod cue;
 mod exited;
@@ -962,6 +963,9 @@ pub struct TimelineAligner {
     /// before either branch's has decided the shift.
     clock: Option<gst::Clock>,
     base: Option<gst::ClockTime>,
+    /// How far behind its own frames this source runs, and the guard that
+    /// brings it back. See `mixer::catch_up`.
+    catch: catch_up::CatchUp,
 }
 
 impl TimelineAligner {
@@ -982,9 +986,15 @@ impl TimelineAligner {
             tiles: VideoPads::new(),
             clock: program.clock(),
             base: program.base_time(),
+            catch: catch_up::CatchUp::default(),
         });
         let clock = program.clock();
         let base = program.base_time();
+        for queue in [video_queue, audio_queue] {
+            this.catch.carry(&queue.static_pad("src").context("queue has no src pad")?);
+        }
+        this.watch_lead(video_queue, |a| &a.catch.video);
+        this.watch_lead(audio_queue, |a| &a.catch.audio);
 
         for (tag, queue) in [("video", video_queue), ("audio", audio_queue)] {
             let pad = queue.static_pad("src").context("queue has no src pad")?;
@@ -1042,7 +1052,7 @@ impl TimelineAligner {
         };
         self.vpads.set_offset(offset);
         self.apad.set_offset(offset);
-        self.tiles.set_offset(offset);
+        self.tiles.set_offset(offset - self.catch.total());
         self.applied.store(true, Ordering::Relaxed);
         offset
     }
@@ -1085,6 +1095,7 @@ impl TimelineAligner {
     pub fn reset(&self) {
         *self.offset.lock() = None;
         self.applied.store(false, Ordering::Relaxed);
+        self.catch.reset();
     }
 }
 
@@ -4411,6 +4422,12 @@ impl Mixer {
         }
         for id in restart {
             self.arm_stall_restart(id);
+        }        // A live source whose frames all wait before they are due is moved
+        // back to its newest frame. See `mixer::catch_up`.
+        for slot in &self.sources {
+            if let Some(aligner) = &slot.aligner {
+                aligner.keep_up(slot.input.declares_seek(), now);
+            }
         }
         for id in forgiven {
             info!(source = %id, "the source has stayed live since its last restart; its backoff starts again from nothing");
@@ -5647,6 +5664,7 @@ mod tests {
             tiles: VideoPads::new(),
             clock: Some(clock),
             base: Some(base),
+            catch: catch_up::CatchUp::default(),
         });
         let tile = gst::Pad::builder(gst::PadDirection::Src).name("tile").build();
         let peer = gst::Pad::builder(gst::PadDirection::Sink)
@@ -5701,6 +5719,7 @@ mod tests {
             tiles: VideoPads::new(),
             clock: None,
             base: None,
+            catch: catch_up::CatchUp::default(),
         };
         assert_eq!(aligner.offset(), None, "nothing is placed before a segment arrives");
 
