@@ -108,6 +108,7 @@ Start here if you have never run it.
 * [Connect an AI agent, and have it make your graphics](how-to/connect-an-ai-agent.md)
 * [Design graphics with an AI agent](how-to/design-graphics-with-ai.md)
 * [Build your own graphics gallery with an AI agent](how-to/build-a-graphics-gallery-with-ai.md): any agent saves lower thirds, backgrounds, tickers, bugs and sets, you put them on air in two clicks
+* [Make a graphic that moves](how-to/make-a-moving-graphic.md): an HTML template with fields and its own way in and out, transparent over the programme
 * [Use the mixer controls](how-to/preview-monitor.md)
 * [Run on a Raspberry Pi](how-to/run-on-a-raspberry-pi.md)
 * [Share a collection](how-to/share-a-collection.md)
@@ -178,6 +179,8 @@ Start here if you have never run it.
 * [Graphics](reference/graphics.md)
 * [Graphic templates: the SVG kind, the pack, the methods](reference/graphic-templates.md)
 * [The gallery methods](reference/gallery.md): `gallery.*`, their tools and their byte routes
+* [Graphics for agents](reference/graphics-for-agents.md): what a model must produce for each kind of graphic, with an example of each
+* [Agent setup](reference/agent-setup.md): `agent.tools`, `agent.setup` and `godwinmix agent setup`, the files each tool's setup writes
 * [The gallery's item format](reference/gallery-format.md): one folder and a `graphic.toml` per graphic, the kinds, the zip
 * [Metrics](reference/metrics.md)
 * [Preview monitor status](reference/preview-monitor.md)
