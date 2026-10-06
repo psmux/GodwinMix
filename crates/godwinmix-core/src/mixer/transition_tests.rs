@@ -27,20 +27,33 @@ async fn coloured(names: &[&str]) -> Mixer {
             toml::from_str(&format!("id = \"{name}\"\nuri = \"test://{name}\"\n")).expect("a source");
         mix.add_source(&cfg, None).expect("adding a coloured source");
     }
-    // A source that is not live is left out of every scene, and a test that
-    // went on after five seconds without asking took a wipe with no scene
-    // coming in. On a loaded machine a test pattern can take longer than that.
+    wait_live(&mix, names).await;
+    mix
+}
+
+/// Wait until every one of these sources is live and every slot holding one
+/// has had a frame.
+///
+/// A source that is not live is left out of every scene, and a test that
+/// went on after five seconds without asking took a wipe with no scene
+/// coming in. On a loaded machine a test pattern can take longer than that to
+/// start, and can be called stalled for a moment later on, so a test asks
+/// again just before it takes. A source is live before its slot has passed a
+/// frame, and a slot with no frame yet has no picture to crop, so a wipe onto
+/// it is the fade it falls back to and its picture arrives part way through.
+/// That is right for the programme and wrong for a test of the wipe.
+async fn wait_live(mix: &Mixer, names: &[&str]) {
     let until = std::time::Instant::now() + Duration::from_secs(30);
     let live = |mix: &Mixer| {
         names.iter().all(|n| {
             mix.sources.iter().any(|s| s.input.id == *n && matches!(s.input.observed_state(), crate::state::SourceState::Live))
+                && mix.pool.slots().iter().filter(|s| s.source().map(String::as_str) == Some(*n)).all(|s| s.pad().current_caps().is_some())
         })
     };
-    while !live(&mix) {
+    while !live(mix) {
         assert!(std::time::Instant::now() < until, "the coloured sources {names:?} were not all live in 30 s");
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
-    mix
 }
 
 fn full(canvas: &CanvasCaps, source: &str) -> Placement {
@@ -148,6 +161,7 @@ async fn cross(mix: &mut Mixer, spec: TransitionSpec, points: Vec<(i32, i32)>) -
     let tap = Arc::new(Tap::default());
     tap.watch(mix.pool.compositor(), points);
     let ms = spec.duration_ms;
+    wait_live(mix, &["red", "green"]).await;
     mix.take_scene_over(scene("b", vec![full(&canvas, "green")]), None, None, Some(spec)).expect("the take");
     let window = mix.transition_window().expect("a transition is on the canvas");
     // Settled once the compositor has made the window and a few frames past
@@ -286,6 +300,7 @@ async fn a_wipe_is_a_crop_on_the_slot_and_not_a_squash() {
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
     tokio::time::sleep(Duration::from_millis(300)).await;
+    wait_live(&mix, &["red", "green"]).await;
     let spec = TransitionSpec::new(Kind::Wipe { direction: Default::default() }, 1000);
     mix.take_scene_over(scene("b", vec![full(&canvas, "green")]), None, None, Some(spec)).expect("a wipe");
     let pad = mix
@@ -294,7 +309,10 @@ async fn a_wipe_is_a_crop_on_the_slot_and_not_a_squash() {
         .iter()
         .find(|s| s.source().map(String::as_str) == Some("green") && s.pad().control_binding("width").is_some())
         .map(|s| s.pad().clone())
-        .expect("the incoming pad is driven");
+        .unwrap_or_else(|| {
+            let states: Vec<_> = mix.sources.iter().map(|s| (s.input.id.clone(), s.input.observed_state())).collect();
+            panic!("the incoming pad is not driven; the sources were {states:?}")
+        });
     let index = mix.pool.slots().iter().find(|s| s.pad() == &pad).map(|s| s.index).expect("its slot");
     let element = |name: &str| mix.program.by_name(&format!("{name}-{index}")).expect("the slot's chain");
     let (arrived, cropped) = (count_buffers(&element("slot-gate"), "sink"), crop_widths(&element("slot-crop")));
