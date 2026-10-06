@@ -50,9 +50,6 @@ pub(crate) struct Inner {
     sampler: Mutex<Option<Sampler>>,
     /// The station, for a show: every claim goes there. See `remote.rs`.
     pub(crate) remote: RwLock<Option<Arc<dyn crate::remote::Remote>>>,
-    /// What the shows a station runs measure of themselves, thousandths of a
-    /// core. Their work is this governor's own, not another program's.
-    elsewhere: std::sync::atomic::AtomicU32,
 }
 
 /// One per machine. Cheap to clone; every clone is the same governor.
@@ -82,7 +79,6 @@ impl Governor {
                 book: Mutex::new(Book::default()),
                 sampler: Mutex::new(None),
                 remote: RwLock::new(None),
-                elsewhere: std::sync::atomic::AtomicU32::new(0),
             }),
         }
     }
@@ -107,20 +103,17 @@ impl Governor {
     }
 
     /// The latest load. Lock free. Work this governor admitted in other
-    /// processes (a station's shows) counts as its own, so it is not counted
-    /// twice: once as a ticket and again as another program's load.
+    /// processes (a station's shows) is in it as its own, so it is not
+    /// counted twice: once as a ticket and again as another program's load.
     pub fn load(&self) -> Load {
-        let mut l = self.inner.load.load();
-        let elsewhere = self.inner.elsewhere.load(std::sync::atomic::Ordering::Relaxed);
-        l.own_millicores = l.own_millicores.saturating_add(elsewhere);
-        l.others_peak_millicores = l.others_peak_millicores.saturating_sub(elsewhere);
-        l
+        self.inner.load.load()
     }
 
     /// What the processes this governor admits for measure of themselves,
-    /// summed. A station sets it from what its shows report.
+    /// summed. A station sets it from what its shows report, and the sampler
+    /// counts it as this process's own from its next reading on.
     pub fn set_elsewhere(&self, millicores: u32) {
-        self.inner.elsewhere.store(millicores, std::sync::atomic::Ordering::Relaxed);
+        self.inner.load.set_elsewhere(millicores);
     }
 
     /// Where the sampler writes. A test or another sampler may write here too.

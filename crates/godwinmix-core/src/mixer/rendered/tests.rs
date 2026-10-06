@@ -228,3 +228,4 @@ async fn what_does_not_fit_is_refused_with_advice_and_leaves_nothing() {
 
 mod hls;
 mod shed;
+mod unattached;

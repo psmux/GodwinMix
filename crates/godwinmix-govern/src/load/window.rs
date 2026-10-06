@@ -81,6 +81,21 @@ mod tests {
     }
 
     #[test]
+    fn a_show_that_dies_leaves_no_other_programs_peak_behind() {
+        // The shows' own load used to be taken off when the window was read.
+        // A show killed a second ago was still in the last ten readings, the
+        // shows now measured nothing, and its whole load read as another
+        // program's peak for ten seconds: the same show, started again, was
+        // refused its rendition with "0.0 cores is free".
+        let mut w = Window::new(10);
+        for _ in 0..5 {
+            w.push(r(3100, 100).with_elsewhere(3000));
+        }
+        let after = w.push(r(100, 100).with_elsewhere(0));
+        assert_eq!(after.others_peak_millicores, 0, "{after:?}");
+    }
+
+    #[test]
     fn the_average_follows_a_real_change_within_a_few_seconds() {
         let mut w = Window::new(10);
         w.push(r(1000, 0));

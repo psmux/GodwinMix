@@ -265,6 +265,16 @@ Each `advice.request` can be sent as the output's `rendition` as it is.
 Nothing is started by a refused call: the whole change is planned and
 admitted before any element is touched.
 
+An output the core attaches at start, from the config or from what it kept
+last time, has nobody to hear a refusal. A show a station starts again on a
+busy machine is the usual case. Such an output is kept: `output.list` shows
+it with `state: "failed"` and a `shed` saying why, it stays in the saved
+list, and the core asks for it again by itself, half a second after the
+refusal and then less often, never more than ten seconds apart while the
+governor is what said no. Once there is room it attaches and reads as any
+other output. `output.remove` takes it away; `output.set` tries the new
+settings at once and keeps them waiting if they are refused too.
+
 ### `rendition.presets {}`
 
 `{presets: [{id, title, group, request, ladder?, cost?, available, why?}]}`.

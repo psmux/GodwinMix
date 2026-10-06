@@ -42,6 +42,11 @@ pub struct LoadCell {
     available: AtomicU64,
     samples: AtomicU64,
     devices: Mutex<Vec<(String, u32)>>,
+    /// What other processes this one admits work for measure of themselves,
+    /// as last told. The sampler adds it to each reading's own figure, so a
+    /// show that dies leaves the window as the station's own work rather
+    /// than staying there for ten seconds as another program's.
+    elsewhere: AtomicU32,
 }
 
 impl Default for LoadCell {
@@ -54,11 +59,21 @@ impl Default for LoadCell {
             available: AtomicU64::new(UNKNOWN),
             samples: AtomicU64::new(0),
             devices: Mutex::new(Vec::new()),
+            elsewhere: AtomicU32::new(0),
         }
     }
 }
 
 impl LoadCell {
+    /// What the processes this one admits for measure, thousandths of a core.
+    pub fn set_elsewhere(&self, millicores: u32) {
+        self.elsewhere.store(millicores, Relaxed);
+    }
+
+    pub fn elsewhere(&self) -> u32 {
+        self.elsewhere.load(Relaxed)
+    }
+
     pub fn store(&self, l: &Load) {
         self.system.store(l.system_millicores, Relaxed);
         self.own.store(l.own_millicores, Relaxed);
