@@ -6,16 +6,18 @@ use super::gl::Gl;
 use crate::overlay::blend::Planes;
 use std::time::{Duration, Instant};
 
-/// Whether GStreamer GL runs a shader on this machine: one frame through a
+/// Whether GStreamer GL runs a shader on this machine: frames through a
 /// trivial transition. Asked once and remembered, and only when something
 /// wants to know (`fx.list`, or the first shader take).
 ///
 /// A GPU that is there but never answers (a runner with no GL context, where
-/// `glupload` builds and then waits for good) counts as none: the answer
+/// `glupload` builds and then waits for good) counts as none: each answer
 /// must come back inside three seconds. So does one that answers with the
-/// wrong picture: half way from grey 128 to black 16 must read about 72. On
-/// a macOS runner GL answered every frame with the old picture alone, so a
-/// shader take showed no transition at all while the probe said yes.
+/// wrong picture. On a macOS runner a shader take on GL showed the old scene
+/// for the whole window while one answer at progress 0.5 was right, so the
+/// probe now sends two progress values on the same pipeline, as a take does,
+/// and both must read as asked: from grey 128 to black 16, about 106 at 0.2
+/// and about 38 at 0.8.
 pub fn available() -> bool {
     static ANSWER: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     *ANSWER.get_or_init(|| {
@@ -26,19 +28,27 @@ pub fn available() -> bool {
         }
         let Ok(fragment) = super::fragment("vec4 transition(vec2 uv) { return mix(getFromColor(uv), getToColor(uv), progress); }") else { return false };
         let Ok(gl) = Gl::start(&fragment, (64, 36)) else { return false };
-        let pic = vec![128u8; 64 * 36];
-        let (mut y, mut u, mut v) = (vec![16u8; 64 * 36], vec![128u8; 32 * 18], vec![128u8; 32 * 18]);
-        let old = Pic { y: &pic, u: &pic, v: &pic, strides: [64, 32, 32] };
-        let mut planes = Planes { y: &mut y, u: &mut u, v: &mut v, strides: [64, 32, 32], width: 64, height: 36 };
-        let answered = settle(&gl, &old, &mut planes, 0.5, Duration::from_secs(3));
+        let read = [(0.2, 85..=125), (0.8, 20..=60)].into_iter().map(|(t, want)| (want, at(&gl, t))).collect::<Vec<_>>();
         gl.close();
-        let mean = planes.y.iter().map(|&p| u32::from(p)).sum::<u32>() / planes.y.len() as u32;
-        let mixed = (50..=100).contains(&mean);
-        if answered && !mixed {
-            tracing::warn!(mean, "GStreamer GL answered with the wrong picture (half way should read about 72); shaders run the software way");
+        let right = read.iter().all(|(want, got)| got.is_some_and(|m| want.contains(&m)));
+        if read.iter().all(|(_, got)| got.is_some()) && !right {
+            let got: Vec<Option<u32>> = read.iter().map(|(_, g)| *g).collect();
+            tracing::warn!(?got, "GStreamer GL answered with the wrong picture (about 106 at 0.2 and 38 at 0.8); shaders run the software way");
         }
-        answered && mixed
+        right
     })
+}
+
+/// The mean luma GL answers at progress `t`, grey 128 going to black 16.
+fn at(gl: &Gl, t: f64) -> Option<u32> {
+    let pic = vec![128u8; 64 * 36];
+    let (mut y, mut u, mut v) = (vec![16u8; 64 * 36], vec![128u8; 32 * 18], vec![128u8; 32 * 18]);
+    let old = Pic { y: &pic, u: &pic, v: &pic, strides: [64, 32, 32] };
+    let mut planes = Planes { y: &mut y, u: &mut u, v: &mut v, strides: [64, 32, 32], width: 64, height: 36 };
+    if !settle(gl, &old, &mut planes, t, Duration::from_secs(3)) {
+        return None;
+    }
+    Some(planes.y.iter().map(|&p| u32::from(p)).sum::<u32>() / planes.y.len() as u32)
 }
 
 /// Send one frame and draw the answer to it, waiting for it on this thread
