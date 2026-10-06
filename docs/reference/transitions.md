@@ -192,6 +192,21 @@ itself (video meta, no pool) with a probe that sees only queries. A GPU
 compositor's pads are left alone, because their answer carries the context an
 upload needs.
 
+The same renegotiation has a second half on the compositor's output. Each time
+the compositor takes a buffer with new caps it renegotiates its src pad, and
+that sends an allocation query downstream, which waits at every `queue` until
+the queue has pushed out what it holds: here, the encoder's backlog. A one
+second wipe on a 320x180 debug core sent 30 of them, the longest 67 ms on a
+quiet machine and 113 ms under load, and the compositor made no frame and
+took no buffer from any slot while each one waited. The output caps never
+change, so the answer never does: the compositor's src pad now keeps the first
+answer for its caps and gives it again (`mixer::allocation`), and a RECONFIGURE
+from downstream, which is an output being attached or taken away, makes it ask
+again. An answer that offers a pool object is never kept, so a GPU path asks
+every time as before. The test
+`a_wipe_does_not_send_the_encoder_an_allocation_query_every_frame` counts what
+reaches the encoder: one query, or none.
+
 A trimmed pad is told to fill its box for the window, because the box is cut
 to the shape of the trimmed picture; on the item's own policy a crop that
 arrived a frame after its box letterboxed it. The next apply puts the item's
@@ -204,8 +219,19 @@ only when the curve gives a different one. A binding reused by a later
 transition still remembers where the last one ended, while the property under
 it has been written by hand since. A curve that holds that same value from the
 first frame, a slide's incoming alpha at 1, was never written, and a slide
-after a wipe drew nothing. The first point of every curve is now moved by a
-millionth away from zero, which no binding can remember and no pad can show.
+after a wipe drew nothing.
+
+The first fix moved each curve's first point by a millionth. That held only
+when the compositor's first sync in the window landed before the curve's
+second point, 17 ms on, and a compositor running behind the clock is already
+a frame or two into the window when the curves are bound. On a loaded machine
+the incoming scene of a slide or a wipe was then missing for the whole window
+and appeared when the transition settled. Now every bind makes the binding
+forget the value it last wrote (it is reset to the `G_MAXDOUBLE` a new binding
+starts with, while the binding is disabled), so the first sync writes whatever
+the curve says wherever in the window it lands, even past the end.
+`mixer::transition::tests_binding` syncs a reused binding late by hand and
+checks the pad is drawn.
 
 ## Item transitions
 

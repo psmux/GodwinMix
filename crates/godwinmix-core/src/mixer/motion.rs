@@ -137,7 +137,7 @@ impl Mixer {
         slate: bool,
     ) {
         fill_trimmed_pads(&curves, self.pool.compositor());
-        let bound = self.controllers.bind(curves);
+        let (bound, start) = self.bind_in_time(curves, start);
         if !bound.unbound.is_empty() {
             let over = std::time::Duration::from_nanos(duration.nseconds());
             super::ramp_curves(bound.unbound.clone(), over, self.take_generation.clone());

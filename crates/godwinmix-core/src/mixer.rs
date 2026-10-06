@@ -409,6 +409,7 @@ fn needs_superimposed(page: Option<f64>, media: &[Option<f64>]) -> bool {
 use crate::plugin::branch::{BranchCtx, ProgrammeBranch, VideoPads};
 
 pub mod group;
+mod allocation;
 mod backoff;
 mod cue;
 mod exited;
@@ -418,6 +419,7 @@ mod keyed;
 mod lifecycle;
 mod memwatch;
 mod motion;
+mod on_time;
 mod offload;
 mod patience;
 mod rendered;
@@ -1586,6 +1588,10 @@ impl Mixer {
         // way. Declaring the figure in advance means a later arrival changes
         // nothing.
         crate::probe::set_int(&vmix, "min-upstream-latency", MIN_UPSTREAM_LATENCY_NS);
+        // A wipe renegotiates the compositor's output on every frame; its
+        // allocation query is answered here rather than waiting on the
+        // encoder's queue each time. See `mixer::allocation`.
+        allocation::remember_answers(&vmix);
 
         let vmix_caps = gstutil::capsfilter("vmix-caps", &programme_caps(&canvas, gfx))?;
         let vraw_tee = make("tee", "vraw-tee")?;
@@ -3772,7 +3778,7 @@ impl Mixer {
         if curves.is_empty() {
             return;
         }
-        let bound = self.controllers.bind(curves);
+        let (bound, start) = self.bind_in_time(curves, start);
         if !bound.unbound.is_empty() {
             ramp_curves(bound.unbound.clone(), over, self.take_generation.clone());
         }

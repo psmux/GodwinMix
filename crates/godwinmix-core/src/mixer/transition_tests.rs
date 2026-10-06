@@ -6,6 +6,9 @@
 //! its V sample alone: red is about 240, green about 34, black and white sit
 //! at 128 and are told apart by Y.
 
+mod probes;
+
+use probes::{count_buffers, crop_widths, xpos_half_way};
 use super::slots::{PadState, Placement};
 use super::tests::{scene, with_sources_cfg, Gaps};
 use super::transition::{item, Easing, Kind, TransitionSpec};
@@ -27,16 +30,33 @@ async fn coloured(names: &[&str]) -> Mixer {
             toml::from_str(&format!("id = \"{name}\"\nuri = \"test://{name}\"\n")).expect("a source");
         mix.add_source(&cfg, None).expect("adding a coloured source");
     }
-    for _ in 0..100 {
-        let live = names.iter().all(|n| {
+    wait_live(&mix, names).await;
+    mix
+}
+
+/// Wait until every one of these sources is live and every slot holding one
+/// has had a frame.
+///
+/// A source that is not live is left out of every scene, and a test that
+/// went on after five seconds without asking took a wipe with no scene
+/// coming in. On a loaded machine a test pattern can take longer than that to
+/// start, and can be called stalled for a moment later on, so a test asks
+/// again just before it takes. A source is live before its slot has passed a
+/// frame, and a slot with no frame yet has no picture to crop, so a wipe onto
+/// it is the fade it falls back to and its picture arrives part way through.
+/// That is right for the programme and wrong for a test of the wipe.
+async fn wait_live(mix: &Mixer, names: &[&str]) {
+    let until = std::time::Instant::now() + Duration::from_secs(30);
+    let live = |mix: &Mixer| {
+        names.iter().all(|n| {
             mix.sources.iter().any(|s| s.input.id == *n && matches!(s.input.observed_state(), crate::state::SourceState::Live))
-        });
-        if live {
-            break;
-        }
+                && mix.pool.slots().iter().filter(|s| s.source().map(String::as_str) == Some(*n)).all(|s| s.pad().current_caps().is_some())
+        })
+    };
+    while !live(mix) {
+        assert!(std::time::Instant::now() < until, "the coloured sources {names:?} were not all live in 30 s");
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
-    mix
 }
 
 fn full(canvas: &CanvasCaps, source: &str) -> Placement {
@@ -98,6 +118,25 @@ impl Tap {
         frames.iter().filter(|(t, _)| *t >= from).find(|(_, v)| v.iter().any(|p| is_green(*p))).map(|(t, _)| (t - from) / 1_000_000)
     }
 
+    /// Wait until the compositor has made a frame at or past `at` on its own
+    /// timeline, however far behind the clock it is running. False if none
+    /// came within `limit`.
+    pub(super) async fn wait_past(&self, at: u64, limit: Duration) -> bool {
+        let until = std::time::Instant::now() + limit;
+        while std::time::Instant::now() < until {
+            if self.frames.lock().iter().any(|(t, _)| *t >= at) {
+                return true;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        false
+    }
+
+    /// How many frames the compositor has made since the tap went on.
+    pub(super) fn count(&self) -> usize {
+        self.frames.lock().len()
+    }
+
     /// What the frame nearest to `at` showed.
     pub(super) fn at(&self, at: u64) -> Vec<(u8, u8)> {
         let frames = self.frames.lock();
@@ -125,9 +164,15 @@ async fn cross(mix: &mut Mixer, spec: TransitionSpec, points: Vec<(i32, i32)>) -
     let tap = Arc::new(Tap::default());
     tap.watch(mix.pool.compositor(), points);
     let ms = spec.duration_ms;
+    wait_live(mix, &["red", "green"]).await;
     mix.take_scene_over(scene("b", vec![full(&canvas, "green")]), None, None, Some(spec)).expect("the take");
     let window = mix.transition_window().expect("a transition is on the canvas");
-    tokio::time::sleep(Duration::from_millis(ms + 400)).await;
+    // Settled once the compositor has made the window and a few frames past
+    // it, on its own timeline. A sleep by the wall clock settled a loaded
+    // compositor before it had drawn the window at all.
+    let past = window.1 + 4 * mix.canvas.frame_duration().nseconds();
+    tokio::time::sleep(Duration::from_millis(ms)).await;
+    assert!(tap.wait_past(past, Duration::from_secs(30)).await, "the compositor made no frame past the window in 30 s");
     mix.handle(Command::TransitionEnd { transition: mix.transition_id() }).expect("the end");
     gaps.wait_for(6).await;
     (tap, window, gaps.largest.load(std::sync::atomic::Ordering::Relaxed))
@@ -149,12 +194,12 @@ fn landed_on_green(mix: &Mixer) {
 /// Windows runner a 300 ms zoom still showed the old scene at its centre
 /// half way through.
 ///
-/// Longer does not cure what fails here under load. With the whole mixer
-/// suite running beside it, three times in thirteen runs on a Windows
-/// laptop, the scene coming in was not drawn at all for the whole window
-/// (3 s at a slack of 3) and appeared 400 ms after it ended, when the
-/// transition settled. The message prints the window a tenth at a time and
-/// when the new scene first showed. See STATUS.md, 2026-10-06.
+/// Under load the scene coming in was once not drawn at all for the whole
+/// window and appeared when the transition settled. That was a reused
+/// control binding that remembered writing alpha 1 last time and so never
+/// wrote it again (`transition::forget`, and `tests_binding` for the same
+/// thing with no pipeline). The message still prints the window a tenth at a
+/// time and when the new scene first showed.
 fn spec(kind: Kind) -> TransitionSpec {
     let ms = (300.0 * crate::plugin::harness::timing_slack()) as u64;
     TransitionSpec::new(kind, ms)
@@ -214,7 +259,18 @@ async fn a_wipe_is_a_crop_on_the_slot_and_not_a_squash() {
     let mut mix = coloured(&["red", "green"]).await;
     let canvas = mix.canvas.clone();
     mix.take_scene(scene("a", vec![full(&canvas, "red")]), None).expect("the first scene");
+    // The compositor's first frames come a while after the pipeline starts,
+    // and then as fast as it can make them until it has caught up: counting
+    // frames across that would count the catching up.
+    let tap = Arc::new(Tap::default());
+    tap.watch(mix.pool.compositor(), Vec::new());
+    let limit = Duration::from_secs(30);
+    while tap.count() < 10 {
+        assert!(tap.wait_past(0, limit).await, "the compositor made no frame in 30 s");
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
     tokio::time::sleep(Duration::from_millis(300)).await;
+    wait_live(&mix, &["red", "green"]).await;
     let spec = TransitionSpec::new(Kind::Wipe { direction: Default::default() }, 1000);
     mix.take_scene_over(scene("b", vec![full(&canvas, "green")]), None, None, Some(spec)).expect("a wipe");
     let pad = mix
@@ -223,27 +279,69 @@ async fn a_wipe_is_a_crop_on_the_slot_and_not_a_squash() {
         .iter()
         .find(|s| s.source().map(String::as_str) == Some("green") && s.pad().control_binding("width").is_some())
         .map(|s| s.pad().clone())
-        .expect("the incoming pad is driven");
-    // The slot keeps up while its crop changes size every frame: a
-    // renegotiation that waited on the compositor let through five buffers
-    // in half a second.
+        .unwrap_or_else(|| {
+            let states: Vec<_> = mix.sources.iter().map(|s| (s.input.id.clone(), s.input.observed_state())).collect();
+            panic!("the incoming pad is not driven; the sources were {states:?}")
+        });
     let index = mix.pool.slots().iter().find(|s| s.pad() == &pad).map(|s| s.index).expect("its slot");
-    let crop = mix.program.by_name(&format!("slot-crop-{index}")).expect("the slot's crop");
-    let seen = Arc::new(std::sync::atomic::AtomicU64::new(0));
-    let counter = seen.clone();
-    crop.static_pad("src").expect("a src pad").add_probe(gst::PadProbeType::BUFFER, move |_p, _i| {
-        counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        gst::PadProbeReturn::Ok
-    });
-    tokio::time::sleep(Duration::from_millis(500)).await;
-    let through = seen.load(std::sync::atomic::Ordering::Relaxed);
-    assert!(through >= 10, "the slot let {through} frames through in half a second at 30 fps");
-    let caps = pad.current_caps().expect("the pad has caps");
-    let width: i32 = caps.structure(0).and_then(|s| s.get("width").ok()).expect("a width");
+    let element = |name: &str| mix.program.by_name(&format!("{name}-{index}")).expect("the slot's chain");
+    let (arrived, cropped) = (count_buffers(&element("slot-gate"), "sink"), crop_widths(&element("slot-crop")));
+    let window = mix.transition_window().expect("a transition is on the canvas");
+    let half = window.0 + 500_000_000;
+    let until = std::time::Instant::now() + limit;
+    while !cropped.lock().iter().any(|(t, _)| *t >= half) {
+        assert!(std::time::Instant::now() < until, "the slot's crop let no frame past half way through in 30 s");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    // The slot keeps up with its own source while its crop changes size every
+    // frame: a renegotiation that waited on the compositor let five buffers
+    // through in half a second. Counted against what reached the slot over
+    // the same span rather than against the wall clock, which on a loaded
+    // machine starves both alike.
+    let came = arrived.load(std::sync::atomic::Ordering::Relaxed);
+    let through = cropped.lock().len() as u64;
+    assert!(through + 2 >= came * 2 / 3, "the slot let {through} frames through while {came} reached it");
+    // Half way through by the crop's own frames, not by the clock.
+    let width = cropped.lock().iter().min_by_key(|(t, _)| t.abs_diff(half)).map(|(_, w)| *w).expect("a cropped frame");
     assert!(width > 8 && width < canvas.width - 8, "half way through the picture is {width} wide of {}", canvas.width);
-    tokio::time::sleep(Duration::from_millis(800)).await;
+    assert!(tap.wait_past(window.1, limit).await, "the compositor made no frame past the window in 30 s");
     mix.handle(Command::TransitionEnd { transition: mix.transition_id() }).expect("the end");
     landed_on_green(&mix);
+    mix.shutdown();
+}
+
+/// A wipe changes the incoming slot's caps on every frame, and the compositor
+/// renegotiates its output each time. Its allocation query used to go down to
+/// the encoder on every one of those frames and wait there for the encoder's
+/// queue to drain: 30 in a one second wipe, up to 113 ms each under load,
+/// with the programme stopped for each. Now a repeat is answered at the
+/// compositor (`mixer::allocation`) and at most one goes down.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_wipe_does_not_send_the_encoder_an_allocation_query_every_frame() {
+    let mut mix = coloured(&["red", "green"]).await;
+    let canvas = mix.canvas.clone();
+    mix.take_scene(scene("a", vec![full(&canvas, "red")]), None).expect("the first scene");
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    let below = mix.program.by_name("vmix-caps").and_then(|c| c.static_pad("sink")).expect("the compositor's caps filter");
+    let sent = Arc::new(std::sync::atomic::AtomicU64::new(0));
+    let count = sent.clone();
+    // On the way down only: a query probe with no direction is called again
+    // with the answer.
+    below.add_probe(gst::PadProbeType::QUERY_DOWNSTREAM | gst::PadProbeType::PUSH, move |_, info| {
+        if info.query().is_some_and(|q| matches!(q.view(), gst::QueryView::Allocation(_))) {
+            count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        }
+        gst::PadProbeReturn::Ok
+    });
+    let spec = TransitionSpec::new(Kind::Wipe { direction: Default::default() }, 1000);
+    mix.take_scene_over(scene("b", vec![full(&canvas, "green")]), None, None, Some(spec)).expect("a wipe");
+    let window = mix.transition_window().expect("a transition is on the canvas");
+    let tap = Arc::new(Tap::default());
+    tap.watch(mix.pool.compositor(), Vec::new());
+    assert!(tap.wait_past(window.1, Duration::from_secs(30)).await, "the compositor made no frame past the window in 30 s");
+    let sent = sent.load(std::sync::atomic::Ordering::Relaxed);
+    assert!(sent <= 1, "{sent} allocation queries went down to the encoder during a one second wipe");
+    mix.handle(Command::TransitionEnd { transition: mix.transition_id() }).expect("the end");
     mix.shutdown();
 }
 
@@ -330,11 +428,9 @@ async fn a_lower_third_slides_out_and_back_in_to_where_it_was_placed() {
     // Hidden: the same scene applied again without it.
     mix.take_scene_over(with(&background, None), None, None, None).expect("hide");
     let pad = pad_of(&mix);
-    assert!(mix.transition_window().is_some(), "hiding an item with an exit plays it");
-    tokio::time::sleep(Duration::from_millis(200)).await;
-    let x: i32 = pad.property("xpos");
+    let window = mix.transition_window().expect("hiding an item with an exit plays it");
+    let x = xpos_half_way(&mix, &pad, window).await;
     assert!(x < 0, "part way out the third is off the left edge, at {x}");
-    tokio::time::sleep(Duration::from_millis(400)).await;
     mix.handle(Command::TransitionEnd { transition: mix.transition_id() }).expect("the end");
     mix.apply_visibility(false);
     assert_eq!(pad.property::<f64>("alpha"), 0.0, "a hidden item is gone once it has left");
@@ -342,12 +438,10 @@ async fn a_lower_third_slides_out_and_back_in_to_where_it_was_placed() {
 
     // Shown: back in, landing on its own placement.
     mix.take_scene_over(with(&background, Some(&third)), None, None, None).expect("show");
-    assert!(mix.transition_window().is_some(), "showing an item with an enter plays it");
+    let window = mix.transition_window().expect("showing an item with an enter plays it");
     let pad = pad_of(&mix);
-    tokio::time::sleep(Duration::from_millis(150)).await;
-    let x: i32 = pad.property("xpos");
+    let x = xpos_half_way(&mix, &pad, window).await;
     assert!(x < 0, "part way in it is still coming from the left, at {x}");
-    tokio::time::sleep(Duration::from_millis(500)).await;
     mix.handle(Command::TransitionEnd { transition: mix.transition_id() }).expect("the end");
     mix.apply_visibility(false);
     let placed = PadState { xpos: third.xpos, ypos: third.ypos, width: third.width, height: third.height, alpha: 1.0 };

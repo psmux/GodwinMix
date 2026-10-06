@@ -76,6 +76,8 @@ mod slide;
 mod wipe;
 mod zoom;
 #[cfg(test)]
+mod tests_binding;
+#[cfg(test)]
 mod tests_shapes;
 
 pub use easing::Easing;
@@ -906,10 +908,10 @@ impl Controllers {
             entry.binding.set_disabled(true);
             entry.source.unset_all();
             let range = double_range(&curve.pad, curve.property);
-            for (i, (at, value)) in curve.points.iter().enumerate() {
-                let value = fitted(*value, range);
-                entry.source.set(*at, if i == 0 { nudged(value, range) } else { value });
+            for (at, value) in &curve.points {
+                entry.source.set(*at, fitted(*value, range));
             }
+            forget(&entry.binding);
             entry.binding.set_disabled(false);
             driven.push(Driven {
                 pad: curve.pad.clone(),
@@ -963,31 +965,35 @@ impl Controllers {
     }
 }
 
-/// The first value of a curve, moved by a millionth.
+/// Make a binding forget the last value it wrote.
 ///
-/// A `GstDirectControlBinding` remembers the last value it wrote and writes
-/// again only when the curve gives a different one. A binding reused by the
-/// next transition still remembers where the last one ended, while the
-/// property under it has been written by hand since (an apply hid the pad).
-/// A curve that holds that same value, a slide's incoming alpha at 1 from the
-/// first frame, was then never written at all, and the scene slid in at alpha
-/// 0: measured, a slide after a wipe drew nothing. A first value that cannot
-/// equal anything a binding remembers is written on the first frame, and a
-/// millionth is below anything a pad shows.
+/// A `GstDirectControlBinding` writes the property only when the curve gives
+/// a value different from the one it wrote last. A binding reused by the next
+/// transition still remembers where the last one ended, while the property
+/// under it has been written by hand since (an apply hid the pad). A curve
+/// that holds that same value, a slide's incoming alpha at 1 for the whole
+/// window, is then never written at all, and the scene is not drawn until
+/// the transition settles.
 ///
-/// An int property truncates it away, so it goes away from zero (a negative
-/// position is not truncated up by one). A double does not clamp: GObject
-/// refuses a value past the end of its range and logs a critical, which an
-/// alpha of 1 nudged to 1.000001 did for every frame of every transition. So
-/// a double with a range steps inward, down from its top and up from anywhere
-/// else.
-fn nudged(value: f64, range: Option<(f64, f64)>) -> f64 {
-    match range {
-        Some((_, max)) if value + 1e-6 > max => value - 1e-6,
-        Some(_) => value + 1e-6,
-        None if value < 0.0 => value - 1e-6,
-        None => value + 1e-6,
-    }
+/// The first value used to be moved by a millionth instead, which only works
+/// when the compositor's first sync in the window lands before the curve's
+/// second point, 17 ms on. A compositor behind the clock does not: it is
+/// already composing a frame or two into the window when the curves are
+/// bound, and on a loaded machine the incoming scene of a slide or a wipe was
+/// missing for the whole window and appeared on the settle. With the value
+/// forgotten, the first sync writes whatever the curve says wherever in the
+/// window it lands. `G_MAXDOUBLE` is what the binding starts with.
+///
+/// Written while the binding is disabled, so the aggregator, which skips a
+/// disabled binding, is not reading it. The field is in the public instance
+/// struct; GStreamer has no call for it.
+fn forget(binding: &gst::ControlBinding) {
+    let Some(direct) = binding.downcast_ref::<gstreamer_controller::DirectControlBinding>() else { return };
+    let raw: *mut gstreamer_controller::ffi::GstDirectControlBinding = direct.as_ptr();
+    // SAFETY: `raw` is a live GstDirectControlBinding we hold a reference to,
+    // and `last_value` is a plain double the binding reads and writes only
+    // in `sync_values`, which a disabled binding does not reach.
+    unsafe { std::ptr::write_volatile(std::ptr::addr_of_mut!((*raw).last_value), f64::MAX) };
 }
 
 /// A value kept inside a double property's range, for the easing curves whose
@@ -1011,18 +1017,11 @@ mod range_tests {
     use super::*;
 
     #[test]
-    fn an_alpha_of_one_is_nudged_down_and_never_past_its_top() {
+    fn an_alpha_is_kept_inside_its_range_and_a_position_is_not_touched() {
         let alpha = Some((0.0, 1.0));
-        assert!(nudged(1.0, alpha) < 1.0);
-        assert!(nudged(0.0, alpha) > 0.0);
         assert_eq!(fitted(1.0000000002, alpha), 1.0);
         assert_eq!(fitted(-1e-9, alpha), 0.0);
-    }
-
-    #[test]
-    fn an_int_position_still_goes_away_from_zero() {
-        assert!(nudged(-3.0, None) < -3.0);
-        assert!(nudged(3.0, None) > 3.0);
+        assert_eq!(fitted(-3.0, None), -3.0);
     }
 }
 
