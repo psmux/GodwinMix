@@ -14,10 +14,11 @@
 //! two pictures over and draws the newest answer that has come back, which
 //! is the previous frame's: during a shader transition the new scene is one
 //! frame behind, and nobody watching a ripple can tell. Before the first
-//! answer it draws the shader's software version where there is one (a
-//! slow GPU took longer than a whole transition to answer on a macOS
-//! runner, and the window showed only the old scene), or else the old
-//! picture.
+//! answer, and while the answers are more than `STALE` frames behind, it
+//! draws the shader's software version (or a dissolve): on a macOS runner
+//! the GPU answered once and then not again inside the transition, and the
+//! window showed only the old scene. The appsrc keeps one frame and drops
+//! the older, so a slow GPU works on the newest and never builds a backlog.
 
 use super::super::frame::Pic;
 use crate::overlay::blend::Planes;
@@ -27,7 +28,7 @@ use gstreamer::prelude::*;
 use gstreamer_app as gst_app;
 use gstreamer_video as gst_video;
 use parking_lot::Mutex;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Arc;
 
 pub struct Gl {
@@ -41,7 +42,13 @@ pub struct Gl {
     ratio: f32,
     /// Stopped already, by `close`, so dropping it has nothing to do.
     closed: AtomicBool,
+    /// Frames sent since the last answer came back.
+    waiting: AtomicU32,
 }
+
+/// How many frames behind the newest answer may be before the fallback
+/// draws instead: a tenth of a second at 30 fps.
+const STALE: u32 = 3;
 
 impl Gl {
     /// Build the pipeline and start it. Called off every streaming thread,
@@ -52,7 +59,7 @@ impl Gl {
             .fps(gst::Fraction::new(30, 1))
             .build()
             .context("the stacked frame's layout")?;
-        let desc = "appsrc name=src format=time is-live=false do-timestamp=false max-buffers=2 block=false \
+        let desc = "appsrc name=src format=time is-live=false do-timestamp=false max-buffers=1 block=false leaky-type=downstream \
                     ! glupload ! glcolorconvert ! glshader name=shader ! glcolorconvert ! gldownload \
                     ! video/x-raw,format=I420 ! appsink name=sink sync=false max-buffers=2 drop=true";
         let pipeline = gst::parse::launch(desc)?.downcast::<gst::Pipeline>().map_err(|_| anyhow::anyhow!("not a pipeline"))?;
@@ -62,7 +69,7 @@ impl Gl {
         src.set_caps(Some(&stacked.to_caps()?));
         shader.set_property("fragment", fragment);
         let ratio = size.0 as f32 / size.1.max(1) as f32;
-        let gl = Gl { pipeline, src, sink, shader, stacked, latest: Mutex::new(None), failed: Arc::default(), ratio, closed: AtomicBool::new(false) };
+        let gl = Gl { pipeline, src, sink, shader, stacked, latest: Mutex::new(None), failed: Arc::default(), ratio, closed: AtomicBool::new(false), waiting: AtomicU32::new(0) };
         gl.uniforms(0.0);
         // Not waited for: the GL context is made when the first frame
         // arrives, and a shader that will not compile says so on the bus,
@@ -89,8 +96,9 @@ impl Gl {
     }
 
     /// Draw the newest answer onto `f`, then send this frame's pictures.
-    /// Before the first answer, and after the GPU has failed, `fallback`
-    /// draws the frame; with none it is the old picture, then a dissolve.
+    /// Before the first answer, while the answers are stale, and after the
+    /// GPU has failed, `fallback` draws the frame; with none it is the newest
+    /// answer, else the old picture, then a dissolve.
     pub fn mix(&self, old: &Pic<'_>, f: &mut Planes<'_>, t: f64, fallback: Option<&dyn super::super::Mix>) {
         if self.failed.load(Ordering::Acquire) || self.error().is_some() {
             return match fallback {
@@ -100,7 +108,9 @@ impl Gl {
         }
         let stacked = frames::stack(&self.stacked, old, f);
         self.answered_now();
-        match (self.latest.lock().clone(), fallback) {
+        let fresh = self.waiting.load(Ordering::Relaxed) <= STALE;
+        let answer = self.latest.lock().clone().filter(|_| fresh || fallback.is_none());
+        match (answer, fallback) {
             (Some(answer), _) => frames::draw(&self.stacked, &answer, f),
             (None, Some(m)) => m.mix(old, f, t),
             (None, None) => super::super::matte::dissolve(old, f, 0.0),
@@ -108,63 +118,13 @@ impl Gl {
         if let Some(buffer) = stacked {
             self.uniforms(t);
             let _ = self.src.push_buffer(buffer);
+            self.waiting.fetch_add(1, Ordering::Relaxed);
         }
-    }
-
-    /// Whether an answer has come back yet.
-    pub fn answered(&self) -> bool {
-        self.latest.lock().is_some()
-    }
-
-    /// Draw the newest answer onto `f` and send nothing, for a caller that
-    /// waited for the answer to the one frame it sent.
-    pub fn draw_latest(&self, f: &mut Planes<'_>) {
-        if let Some(answer) = self.latest.lock().clone() {
-            frames::draw(&self.stacked, &answer, f);
-        }
-    }
-
-    /// Drop every answer so far, for a caller about to wait for a new one.
-    pub fn forget(&self) {
-        while self.sink.try_pull_sample(gst::ClockTime::ZERO).is_some() {}
-        *self.latest.lock() = None;
-    }
-
-    /// Take in what has come back, without drawing it.
-    pub fn answered_now(&self) -> bool {
-        while let Some(s) = self.sink.try_pull_sample(gst::ClockTime::ZERO) {
-            *self.latest.lock() = s.buffer_owned();
-        }
-        self.answered()
-    }
-
-    pub fn has_failed(&self) -> bool {
-        self.failed.load(Ordering::Acquire)
     }
 }
 
-impl Gl {
-    /// Stop the pipeline now, on this thread, for a caller that may wait:
-    /// the GL probe and the preview strip, which run on a worker. A process
-    /// that ends right after must not have a GL context still going down on
-    /// a thread of its own.
-    pub fn close(self) {
-        self.closed.store(true, Ordering::Release);
-        let _ = self.pipeline.set_state(gst::State::Null);
-    }
-}
-
-impl Drop for Gl {
-    fn drop(&mut self) {
-        if self.closed.load(Ordering::Acquire) {
-            return;
-        }
-        let pipeline = self.pipeline.clone();
-        let _ = std::thread::Builder::new().name("gmx-fx-gl-stop".into()).spawn(move || {
-            let _ = pipeline.set_state(gst::State::Null);
-        });
-    }
-}
+#[path = "gl_answers.rs"]
+mod answers;
 
 #[path = "gl_frames.rs"]
 mod frames;
