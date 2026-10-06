@@ -98,6 +98,20 @@ impl Tap {
         frames.iter().filter(|(t, _)| *t >= from).find(|(_, v)| v.iter().any(|p| is_green(*p))).map(|(t, _)| (t - from) / 1_000_000)
     }
 
+    /// Wait until the compositor has made a frame at or past `at` on its own
+    /// timeline, however far behind the clock it is running. False if none
+    /// came within `limit`.
+    pub(super) async fn wait_past(&self, at: u64, limit: Duration) -> bool {
+        let until = std::time::Instant::now() + limit;
+        while std::time::Instant::now() < until {
+            if self.frames.lock().iter().any(|(t, _)| *t >= at) {
+                return true;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        false
+    }
+
     /// What the frame nearest to `at` showed.
     pub(super) fn at(&self, at: u64) -> Vec<(u8, u8)> {
         let frames = self.frames.lock();
@@ -127,7 +141,12 @@ async fn cross(mix: &mut Mixer, spec: TransitionSpec, points: Vec<(i32, i32)>) -
     let ms = spec.duration_ms;
     mix.take_scene_over(scene("b", vec![full(&canvas, "green")]), None, None, Some(spec)).expect("the take");
     let window = mix.transition_window().expect("a transition is on the canvas");
-    tokio::time::sleep(Duration::from_millis(ms + 400)).await;
+    // Settled once the compositor has made the window and a few frames past
+    // it, on its own timeline. A sleep by the wall clock settled a loaded
+    // compositor before it had drawn the window at all.
+    let past = window.1 + 4 * mix.canvas.frame_duration().nseconds();
+    tokio::time::sleep(Duration::from_millis(ms)).await;
+    assert!(tap.wait_past(past, Duration::from_secs(30)).await, "the compositor made no frame past the window in 30 s");
     mix.handle(Command::TransitionEnd { transition: mix.transition_id() }).expect("the end");
     gaps.wait_for(6).await;
     (tap, window, gaps.largest.load(std::sync::atomic::Ordering::Relaxed))
@@ -149,12 +168,12 @@ fn landed_on_green(mix: &Mixer) {
 /// Windows runner a 300 ms zoom still showed the old scene at its centre
 /// half way through.
 ///
-/// Longer does not cure what fails here under load. With the whole mixer
-/// suite running beside it, three times in thirteen runs on a Windows
-/// laptop, the scene coming in was not drawn at all for the whole window
-/// (3 s at a slack of 3) and appeared 400 ms after it ended, when the
-/// transition settled. The message prints the window a tenth at a time and
-/// when the new scene first showed. See STATUS.md, 2026-10-06.
+/// Under load the scene coming in was once not drawn at all for the whole
+/// window and appeared when the transition settled. That was a reused
+/// control binding that remembered writing alpha 1 last time and so never
+/// wrote it again (`transition::forget`, and `tests_binding` for the same
+/// thing with no pipeline). The message still prints the window a tenth at a
+/// time and when the new scene first showed.
 fn spec(kind: Kind) -> TransitionSpec {
     let ms = (300.0 * crate::plugin::harness::timing_slack()) as u64;
     TransitionSpec::new(kind, ms)
