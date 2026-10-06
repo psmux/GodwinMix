@@ -64,6 +64,11 @@ pub struct GalleryPlaceRequest {
     /// air.
     #[serde(default, alias = "presenter")]
     pub camera: Option<String>,
+    /// For a set: what the camera stands in front of, "green", "blue" or
+    /// "none" (the person cut out with no screen). Default: what the set
+    /// says, else read off the camera's picture.
+    #[serde(default, alias = "green_screen", alias = "key")]
+    pub screen: Option<String>,
 }
 
 /// The answer to `gallery.place`.

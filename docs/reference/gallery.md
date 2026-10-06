@@ -113,7 +113,7 @@ for by this method has a lane of its own. Nothing is drawn while nobody asks.
 
 ## gallery.place
 
-`{id, scene?, zone?, values?, visible?, camera?}`. The item becomes one
+`{id, scene?, zone?, values?, visible?, camera?, screen?}`. The item becomes one
 source, named by its id (a second placement shows the same source), and an
 item on the scene, in its zone, with an enter and an exit that suit it.
 `visible` defaults to false. Placing an item that is on the scene already
@@ -126,8 +126,12 @@ scene.
 
 A `set` is placed as a new scene through `scene.create_from` with the layout
 `virtual-set`: the background, the `camera` (default: the source on air) and
-the foreground, with the set's settings. A `transition` or `effect` is refused:
-it is played by a take.
+the foreground, with the set's settings. `screen` says what the camera stands
+in front of: `green`, `blue`, or `none` to cut the person out with no screen.
+Left out, the set's own setting is used, and when that is `auto` the camera's
+picture decides: a green or blue screen it can find is keyed, and with none to
+find the person is cut out. A `transition` or `effect` is refused: it is
+played by a take.
 
 The answer is `{id, scene, source?, item?, visible, updated, new_scene, next}`.
 
