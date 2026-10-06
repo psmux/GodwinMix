@@ -32,12 +32,15 @@ than three frames old. The GL appsrc keeps one frame and drops the older
 (`leaky-type=downstream`), where before a GPU slower than the programme let
 frames pile up in it. `Gl`'s answer handling moved to `gl_answers.rs`.
 That was still not it: the next macOS run looked the same, so the answers
-were coming, fresh, and were the old picture. GL on that runner runs the
-pipeline and not the shader. The probe only asked for an answer; it now
-checks it too (half way from grey 128 to black 16 must read 50 to 100) and
-logs a warning when it is wrong, so such a machine draws shaders the
-software way. This laptop's Intel GPU still passes it (ripple at 1 reads
-200, as sent).
+were coming, fresh, and were the old picture. The probe only asked for an
+answer. Checking one answer at progress 0.5 passed there too, and the take
+still showed the old scene, so the probe now sends two progress values on
+one pipeline, as a take does, and both must read as asked (about 106 at 0.2
+and 38 at 0.8, grey 128 going to black 16); otherwise it logs a warning and
+shaders run the software way. This laptop's Intel GPU passes it (ripple at
+1 reads 200, as sent). Whether that is what the macOS runner gets wrong is
+for the next run to say: if the take there still shows only the old scene,
+the GPU path on macOS needs a machine to debug on.
 
 **The Icecast sender could die before its first sample.** The diagnostics
 added on this branch showed it on a macOS runner: 108,552 bytes of programme
@@ -108,7 +111,11 @@ millicores on a Linux runner), which still tells one share from none and from
 two. The smoke test expects the 14 standard and 6 minimal MCP tools the
 server has had since `call_tool` joined the hot lists.
 
-**More of the same, found on the way.** The wall test waits for calibration
+**More of the same, found on the way.** The two rung keyframe test compares
+keyframes only up to the big rung's last one, since on macOS the small
+rung's 5020 ms keyframe had arrived and the big one's not when the lists
+were read. The LL-HLS viewer test asks for the master again while it
+answers 503, as a player does. The wall test waits for calibration
 two minutes times the slack (a three core macOS runner was still calibrating
 at two). The mosaic latency test asks `mv-comp` again for two seconds before
 it calls a failed latency query a failure, since on Windows a tile was still
@@ -129,6 +136,9 @@ restart test was heard from for 34 s and then not at all, twice.
   The rest of the suite had the four cores. That is the governor doing what
   it says on a full machine; the test would need its own machine or a
   governor told it is a test.
+* The `node` test binary on the Windows runner crashed once with
+  0xC0000005 (access violation) after four of its seven tests passed. No
+  test printed anything first; it was not seen in any other run.
 * `switch::a_slow_switch_answers_at_once_and_finishes_as_a_task` on the
   Windows runner, once: the switch task failed with "show quiet is still
   starting after 15 seconds" (`station::relay::START_WAIT`). The error says
