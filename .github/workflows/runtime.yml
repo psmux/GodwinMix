@@ -25,7 +25,8 @@ jobs:
           sudo apt-get install -y build-essential dpkg-dev meson ninja-build nasm zlib1g-dev libbz2-dev liblzma-dev \
             libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
             gstreamer1.0-tools gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
-            gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav
+            gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav \
+            gstreamer1.0-nice
       - name: Build private FFmpeg and plugin
         run: ./dev/build-linux-libav.sh "$RUNNER_TEMP/gst-prefix"
       - name: Test packaging and validate the runtime budget
@@ -61,5 +62,25 @@ jobs:
         shell: pwsh
         run: ./dev/install-gstreamer-windows.ps1
       - name: Validate the stripped runtime budget and elements
+        id: bundle
+        continue-on-error: true
         shell: pwsh
         run: ./dev/bundle-gstreamer.ps1 -BudgetMb 160
+      # TEMPORARY diagnostics for the srt, dtls, webrtc and nice failures.
+      - name: Diagnose
+        if: always()
+        shell: pwsh
+        run: |
+          python -c "import sys; sys.path.insert(0,'dev'); from gst_symbols import strip_tool; print('strip tool:', strip_tool('windows'))"
+          $out = "tauri-app\gstreamer\windows"
+          $src = "C:\Program Files\gstreamer\1.0\msvc_x86_64"
+          python dev/diag_pe.py $out $src
+          $env:GST_PLUGIN_PATH = "$out\lib\gstreamer-1.0"
+          $env:GST_PLUGIN_SYSTEM_PATH = $env:GST_PLUGIN_PATH
+          $env:GST_PLUGIN_SCANNER = "$out\libexec\gstreamer-1.0\gst-plugin-scanner.exe"
+          $env:GST_REGISTRY = "$env:RUNNER_TEMP\diag.bin"
+          $env:PATH = "$out\bin;" + $env:PATH
+          $env:GST_DEBUG = "GST_PLUGIN_LOADING:5"
+          & "$out\bin\gst-inspect-1.0.exe" srtsink 2>&1 | Select-String -Pattern "srt|nice|dtls|webrtc|fail|error" | Select-Object -First 40
+          $env:GST_DEBUG = ""
+          & "$out\bin\gst-inspect-1.0.exe" -b
