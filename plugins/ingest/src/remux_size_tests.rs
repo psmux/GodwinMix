@@ -72,10 +72,13 @@ fn a_picture_that_changes_size_mid_stream_keeps_decoding_at_the_new_size() {
     for tag in wide.into_iter().chain(later) {
         remux.write(&crate::flv::write(&without_parameter_sets(&tag)));
     }
-    // Dropping the remuxer sends end of stream and stops it at once, so the
-    // file holds what it got through by then. Half a second was enough here
-    // and on Linux; a loaded Windows runner wrote 11 of the 45 upright
-    // pictures, so the wait is longer by GODWINMIX_TIMING_SLACK.
+    // Dropping the remuxer sends end of stream and waits for it to reach the
+    // file. Before it did, the file held what had got through when the
+    // pipeline stopped: here, 8 of the 45 upright pictures were in the file
+    // half a second in, the rest in the muxer's open cluster until the end
+    // of stream, and a loaded runner lost the race between that and NULL
+    // (0, 11 and 20 of 45, waiting up to six seconds). The pause is only so
+    // the tags have reached the muxer before it is told to finish.
     let slack = std::env::var("GODWINMIX_TIMING_SLACK").ok().and_then(|s| s.parse::<f64>().ok()).unwrap_or(1.0).max(1.0);
     std::thread::sleep(std::time::Duration::from_millis(500).mul_f64(slack));
     drop(remux);

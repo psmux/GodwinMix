@@ -84,6 +84,19 @@ encoder offers on that runner sometimes do not suit `flvmux`, and which caps
 they are is the next thing to print. The test now waits for the first buffer
 `GODWINMIX_TIMING_SLACK` times longer, which is fair but does not cure it.
 
+**A remuxed stream lost its last second when it stopped.** The remux size
+change test was treated as a timing problem in the last round and again on
+this branch; with the wait raised to six seconds a Linux runner still wrote
+0 of the 45 pictures after the size change, and Windows 20. Printing what
+the file held just before the end of stream answered it: 8 of the 45. The
+rest sat in `matroskamux`'s open cluster, which is written when the next
+cluster starts or the stream ends, and `Remux::drop` sent the end of stream
+and set the pipeline to NULL straight after it. Here the end of stream won
+that race; on a loaded runner NULL did, and no wait before the drop could
+help. `drop` now waits up to three seconds for the end of stream to reach
+the sink (the bus watch records it) before it stops the pipeline. Any
+relayed or listening RTMP source that ends had the same loss.
+
 **The RIST input test read the stats too early.** Its keyframes had
 arrived; the stats, published once a second, still said connecting. It now
 waits for both.
@@ -143,13 +156,6 @@ restart test was heard from for 34 s and then not at all, twice.
   The rest of the suite had the four cores. That is the governor doing what
   it says on a full machine; the test would need its own machine or a
   governor told it is a test.
-* `remux::size_tests::a_picture_that_changes_size_mid_stream_keeps_decoding_at_the_new_size`
-  is not a timing problem, though the last round treated it as one. With
-  the wait raised to six seconds a Linux runner decoded 45 pictures at the
-  first size and none at the second; on Windows 11 of 45. So the second
-  sequence header sometimes does not get through the remuxer to the file at
-  all. The wait is back where it was; the remuxer's handling of a size
-  change (the caps change into `matroskamux`) is the next place to look.
 * The `node` test binary on the Windows runner crashed once with
   0xC0000005 (access violation) after four of its seven tests passed. No
   test printed anything first; it was not seen in any other run.
