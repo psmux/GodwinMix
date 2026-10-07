@@ -6,6 +6,9 @@ name: runtime
 on:
   workflow_dispatch:
   push:
+    branches: ["**"]
+    # A tag push ignores paths, so the signing test's tags are left out here.
+    tags-ignore: ["v*-signtest*"]
     paths:
       - 'dev/build-linux-libav.sh'
       - 'dev/gst_*.py'

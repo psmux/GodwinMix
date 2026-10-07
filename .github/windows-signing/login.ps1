@@ -14,6 +14,7 @@
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'totp.ps1')
 . (Join-Path $PSScriptRoot 'simplysign.ps1')
+. (Join-Path $PSScriptRoot 'window.ps1')
 
 $user = $env:CERTUM_USERNAME
 $secret = $env:CERTUM_TOTP_SECRET
@@ -36,17 +37,16 @@ $cert = $null
 for ($try = 1; $try -le 3 -and -not $cert; $try++) {
     $window = Open-SimplySignLogin
     Save-Screen "try$try-1-window"
+    if ($try -eq 1) { Write-Host 'the login window holds:'; Write-UiTree $window }
     # At least fifteen seconds of validity left when the code is typed.
     $left = Get-TotpSecondsLeft
     if ($try -gt 1 -or $left -lt 15) { Start-Sleep ($left + 1) }
     $code = Get-Totp -Secret 'unused' -Key $key -Algorithm $algorithm
     Write-Host "::add-mask::$code"
 
-    Send-ToWindow $window '^a'
-    Send-ToWindow $window (ConvertTo-SendKeysText $user)
-    Send-ToWindow $window '{TAB}'
-    Send-ToWindow $window '^a'
-    Send-ToWindow $window $code
+    Set-LoginFields $window $user $code
+    Write-Host "$($code.Length) digit code, $(Get-TotpSecondsLeft) s left of its step"
+    Save-Screen "try$try-2-filled"
     Send-ToWindow $window '{ENTER}'
     Write-Host "login $try submitted, waiting for the certificate"
 
@@ -60,7 +60,8 @@ for ($try = 1; $try -le 3 -and -not $cert; $try++) {
         Save-Screen "try$try-3-failed"
         $still = Get-SimplySignWindow
         if ($still) {
-            Write-Host "login $try did not take; SimplySign still shows '$($still.MainWindowTitle)'"
+            $said = (Get-SimplySignMessages | Select-Object -Unique) -join ' | '
+            Write-Host "login $try did not take; SimplySign shows: $said"
             Send-ToWindow $still '{ENTER}'
             Start-Sleep 1
             Send-ToWindow $still '{ESC}'
