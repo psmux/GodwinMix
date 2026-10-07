@@ -108,3 +108,72 @@ jobs:
           path: ${{ runner.temp }}/simplysign
           retention-days: 1
           if-no-files-found: ignore
+
+  # The desktop path end to end on a stand in app: the real tauri-app with a
+  # small program in place of the mixer, a plugin and the browser renderer,
+  # and a small library in place of GStreamer. It runs the release's own
+  # steps (sign-staged.ps1, cargo tauri build with the signCommand,
+  # verify-bundles.ps1), and logs in at the same moment as the job above,
+  # which is what the release's two Windows jobs may do.
+  installers:
+    name: sign test (installers)
+    runs-on: windows-latest
+    timeout-minutes: 60
+    environment: windows-signing
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: tauri-app
+
+      - name: Stand ins for what the release stages
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force signtest, tauri-app/plugins/camera, tauri-app/gstreamer/windows/bin | Out-Null
+          'fn main() { println!("signed by GodwinMix"); }' | Set-Content signtest/hello.rs
+          '#[no_mangle] pub extern "C" fn gmx_signtest() -> i32 { 7 }' | Set-Content signtest/lib.rs
+          rustc -O -o signtest/hello.exe signtest/hello.rs
+          rustc -O --crate-type cdylib -o signtest/gstsigntest.dll signtest/lib.rs
+          $triple = (rustc -vV | Select-String '^host: (.+)$').Matches[0].Groups[1].Value
+          Copy-Item signtest/hello.exe "tauri-app/binaries/godwinmix-$triple.exe"
+          Copy-Item signtest/hello.exe tauri-app/plugins/camera/gmx-camera.exe
+          Copy-Item signtest/hello.exe tauri-app/browser/godwinmix-browser.exe
+          Copy-Item signtest/gstsigntest.dll tauri-app/gstreamer/windows/bin/
+
+      - name: Tauri CLI
+        run: cargo install tauri-cli --locked --version "^2.0" || cargo install tauri-cli --version "^2.0"
+
+      - name: Log in to Certum SimplySign
+        shell: pwsh
+        env:
+          CERTUM_USERNAME: ${{ secrets.CERTUM_USERNAME }}
+          CERTUM_TOTP_SECRET: ${{ secrets.CERTUM_TOTP_SECRET }}
+          CERTUM_TOTP_ALGORITHM: ${{ vars.CERTUM_TOTP_ALGORITHM }}
+          SIMPLYSIGN_SCREENSHOTS: ${{ runner.temp }}/simplysign
+        run: ./.github/windows-signing/login.ps1
+
+      - name: Sign what the installers carry
+        shell: pwsh
+        run: ./.github/windows-signing/sign-staged.ps1
+
+      - name: Bundle
+        working-directory: tauri-app
+        run: cargo tauri build --bundles msi,nsis ${{ env.WINDOWS_SIGN_CONFIG }}
+
+      - name: Verify the signatures
+        shell: pwsh
+        run: ./.github/windows-signing/verify-bundles.ps1
+
+      - name: Log out of Certum SimplySign
+        if: always()
+        shell: pwsh
+        run: ./.github/windows-signing/logout.ps1
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: simplysign-screens-installers
+          path: ${{ runner.temp }}/simplysign
+          retention-days: 1
+          if-no-files-found: ignore

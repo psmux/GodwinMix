@@ -53,3 +53,4 @@ if ($bad.Count) {
     exit 1
 }
 Write-Host "every file is signed"
+exit 0

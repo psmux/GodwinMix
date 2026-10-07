@@ -409,17 +409,10 @@ jobs:
         run: bash dev/fetch-models.sh --models tauri-app/models --runtime tauri-app/onnxruntime
 
       # Windows signing, on a v* tag only, and a tag that cannot sign fails
-      # here rather than publishing unsigned installers.
-      #
-      # Tauri's bundle.windows.signCommand signs the app itself after it
-      # patches it for each installer, the mixer sidecar, both installers,
-      # the NSIS uninstaller and plugins, and every .exe and .dll among the
-      # resources that is not signed already (tauri-bundler 2.9,
-      # bundle/windows/sign.rs and the msi and nsis modules). That last part
-      # means the GStreamer runtime, the plugins and the browser renderer. They
-      # are signed here first, in batches, which is much quicker than one
-      # signtool call per file, and Tauri then finds them signed and leaves
-      # them. The config goes in the runner's temp directory, not the checkout.
+      # here rather than publishing unsigned installers. sign-staged.ps1 signs
+      # what Tauri packs and hands Tauri a signCommand for the rest, and
+      # verify-bundles.ps1 opens both installers and checks everything in
+      # them. docs/how-to/sign-windows-builds.md has the whole story.
       - name: Log in to Certum SimplySign (Windows)
         if: runner.os == 'Windows' && startsWith(github.ref, 'refs/tags/v')
         shell: pwsh
@@ -432,35 +425,16 @@ jobs:
       - name: Sign what the installers carry (Windows)
         if: runner.os == 'Windows' && startsWith(github.ref, 'refs/tags/v')
         shell: pwsh
-        run: |
-          $dirs = 'binaries', 'plugins', 'browser', 'gstreamer', 'onnxruntime' | ForEach-Object { "tauri-app/$_" } | Where-Object { Test-Path $_ }
-          $all = @(Get-ChildItem $dirs -Recurse -File -Include *.exe, *.dll)
-          $unsigned = @($all | Where-Object { (Get-AuthenticodeSignature $_.FullName).Status -ne 'Valid' } | ForEach-Object FullName)
-          Write-Host "$($all.Count) executables and libraries staged, $($unsigned.Count) to sign"
-          if ($unsigned.Count) { ./.github/windows-signing/sign.ps1 $unsigned }
-          $script = (Resolve-Path .github/windows-signing/sign.ps1).Path
-          $conf = @{ bundle = @{ windows = @{ signCommand = @{
-            cmd = 'pwsh'; args = @('-NoProfile', '-NonInteractive', '-File', $script, '%1') } } } }
-          $path = Join-Path $env:RUNNER_TEMP 'windows-sign.conf.json'
-          $conf | ConvertTo-Json -Depth 8 | Set-Content -Path $path -Encoding utf8
-          Get-Content $path
-          Add-Content $env:GITHUB_ENV "WINDOWS_SIGN_CONFIG=--config $path"
+        run: ./.github/windows-signing/sign-staged.ps1
 
       - name: Bundle
         working-directory: tauri-app
         run: cargo tauri build --bundles ${{ matrix.bundles }} ${{ env.WINDOWS_SIGN_CONFIG }}
 
-      # Both installers are opened and everything in them checked, since
-      # Tauri puts the unsigned app back in target/release after bundling and
-      # the copy that matters is the one inside.
       - name: Verify the signatures (Windows)
         if: runner.os == 'Windows' && startsWith(github.ref, 'refs/tags/v')
         shell: pwsh
-        run: |
-          $msi = @(Get-ChildItem tauri-app/target/release/bundle/msi/*.msi)
-          $nsis = @(Get-ChildItem tauri-app/target/release/bundle/nsis/*-setup.exe)
-          if (-not $msi -or -not $nsis) { throw "expected an .msi and a -setup.exe, found $($msi.Count) and $($nsis.Count)" }
-          ./.github/windows-signing/verify.ps1 ($nsis + $msi).FullName
+        run: ./.github/windows-signing/verify-bundles.ps1
 
       # The .app is built above and the .dmg wraps it here, on its own, because
       # the dmg step drives `bundle_dmg.sh`, which asks Finder over AppleScript
