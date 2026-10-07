@@ -1,0 +1,110 @@
+name: sign test
+
+# The Windows signing of a release, on a tiny program, with nothing built and
+# nothing published. Push a tag such as v0.2.2-signtest.1 to run it, and
+# delete the tag afterwards:
+#
+#   git tag v0.2.2-signtest.1 && git push origin v0.2.2-signtest.1
+#   git push --delete origin v0.2.2-signtest.1 && git tag -d v0.2.2-signtest.1
+#
+# The tag has to start with v because the windows-signing environment only
+# lets v* tags at its secrets. release.yml and the other tag workflows skip
+# v*-signtest* tags, so this is the only thing such a tag starts.
+#
+# The job is a matrix in the same shape as release.yml's, with the same
+# environment expression, so the Linux leg shows that a leg the expression
+# leaves out gets no environment and none of its secrets.
+
+on:
+  push:
+    tags: ["v*-signtest*"]
+
+permissions:
+  contents: read
+
+jobs:
+  sign:
+    name: sign test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    environment: ${{ matrix.os == 'windows-latest' && startsWith(github.ref, 'refs/tags/v') && 'windows-signing' || '' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - name: No environment, no secrets (Linux)
+        if: runner.os == 'Linux'
+        env:
+          CERTUM_USERNAME: ${{ secrets.CERTUM_USERNAME }}
+        run: |
+          if [ -n "$CERTUM_USERNAME" ]; then
+            echo "::error::this leg was given the windows-signing environment"; exit 1
+          fi
+          echo "an empty environment expression means no environment: no secrets here"
+
+      - uses: actions/checkout@v4
+        if: runner.os == 'Windows'
+
+      - name: TOTP against the RFC 6238 vectors
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./.github/windows-signing/test-totp.ps1
+
+      # Twenty copies, to time a batch the size of the release's.
+      - name: A program to sign
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force signtest | Out-Null
+          'fn main() { println!("signed by GodwinMix"); }' | Set-Content signtest/hello.rs
+          rustc -O -o signtest/hello.exe signtest/hello.rs
+          if ($LASTEXITCODE -ne 0) { throw "rustc failed" }
+          1..20 | ForEach-Object { Copy-Item signtest/hello.exe "signtest/batch-$_.exe" }
+
+      - name: Log in to Certum SimplySign
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          CERTUM_USERNAME: ${{ secrets.CERTUM_USERNAME }}
+          CERTUM_TOTP_SECRET: ${{ secrets.CERTUM_TOTP_SECRET }}
+          CERTUM_TOTP_ALGORITHM: ${{ vars.CERTUM_TOTP_ALGORITHM }}
+          SIMPLYSIGN_SCREENSHOTS: ${{ runner.temp }}/simplysign
+        run: ./.github/windows-signing/login.ps1
+
+      # The batch the way the release signs staged files, then one file the
+      # way Tauri's signCommand calls the script.
+      - name: Sign
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $t = Measure-Command { ./.github/windows-signing/sign.ps1 (Get-ChildItem signtest/batch-*.exe).FullName }
+          Write-Host ("20 files in {0:n1} s" -f $t.TotalSeconds)
+          pwsh -NoProfile -File .github/windows-signing/sign.ps1 signtest/hello.exe
+          if ($LASTEXITCODE -ne 0) { throw "sign.ps1 failed as a signCommand" }
+
+      - name: Verify
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          ./.github/windows-signing/verify.ps1 signtest/hello.exe (Get-ChildItem signtest/batch-*.exe).FullName
+          $sig = Get-AuthenticodeSignature signtest/hello.exe
+          Write-Host "status:      $($sig.Status)"
+          Write-Host "signer:      $($sig.SignerCertificate.Subject)"
+          Write-Host "issuer:      $($sig.SignerCertificate.Issuer)"
+          Write-Host "timestamper: $($sig.TimeStamperCertificate.Subject)"
+          & signtest/hello.exe
+
+      - name: Log out of Certum SimplySign
+        if: always() && runner.os == 'Windows'
+        shell: pwsh
+        run: ./.github/windows-signing/logout.ps1
+
+      # Pictures of the login window, kept a day, for when the login fails.
+      - uses: actions/upload-artifact@v4
+        if: failure() && runner.os == 'Windows'
+        with:
+          name: simplysign-screens
+          path: ${{ runner.temp }}/simplysign
+          retention-days: 1
+          if-no-files-found: ignore
