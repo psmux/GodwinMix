@@ -58,7 +58,11 @@ jobs:
   platform:
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 90
+    # Two hours. On 2026-10-07 the Windows job passed its tests (46 minutes),
+    # the smoke test and both bundles' budgets, and the 90 minute limit
+    # stopped it inside `cargo tauri build`, after ten minutes installing
+    # the Tauri CLI. macOS ran into the same limit inside its tests.
+    timeout-minutes: 120
     strategy:
       fail-fast: false
       matrix:

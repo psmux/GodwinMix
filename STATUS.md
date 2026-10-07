@@ -187,6 +187,10 @@ above.
   into on this branch.
 * The LL-HLS viewer test on macOS answered 503 for a minute (the master
   never had segments); it now prints the answer and the output's own status.
+* The platforms job's limit is now 120 minutes. On 2026-10-07 the Windows
+  job passed its tests (46 minutes), the smoke test and the runtime budget,
+  and was stopped by the 90 minute limit inside `cargo tauri build`, after
+  ten minutes spent installing the Tauri CLI with no cache.
 * macOS jobs ran into the 90 minute limit or lost the runner ("The hosted
   runner lost communication with the server") in three of the last four
   rounds, which is a runner problem.
