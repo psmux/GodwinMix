@@ -51,6 +51,26 @@ fn at(gl: &Gl, t: f64) -> Option<u32> {
     Some(planes.y.iter().map(|&p| u32::from(p)).sum::<u32>() / planes.y.len() as u32)
 }
 
+/// Whether this shader, on this GPU, at the take's own size, draws
+/// something other than the old picture half way through. The probe's
+/// trivial mix passed on a macOS runner while a take of `glitch-slice` there
+/// showed the old scene for its whole window, so each shader is asked once,
+/// on its worker thread, before a take uses it. The old picture is grey 40
+/// and the new a ramp from 120 to 240; at 0.5 any transition shows some of
+/// the new.
+pub fn moves(gl: &Gl, size: (i32, i32)) -> bool {
+    let (w, h) = (size.0.max(2) as usize, size.1.max(2) as usize);
+    let (y0, c) = (vec![40u8; w * h], vec![128u8; (w / 2) * (h / 2)]);
+    let old = Pic { y: &y0, u: &c, v: &c, strides: [w, w / 2, w / 2] };
+    let mut y: Vec<u8> = (0..w * h).map(|i| 120 + ((i % w) * 120 / w) as u8).collect();
+    let (mut u, mut v) = (c.clone(), c.clone());
+    let mut planes = Planes { y: &mut y, u: &mut u, v: &mut v, strides: [w, w / 2, w / 2], width: w as i32, height: h as i32 };
+    let answered = settle(gl, &old, &mut planes, 0.5, Duration::from_secs(3));
+    gl.forget();
+    let mean = planes.y.iter().map(|&p| u64::from(p)).sum::<u64>() / planes.y.len() as u64;
+    answered && mean > 50
+}
+
 /// Send one frame and draw the answer to it, waiting for it on this thread
 /// up to `wait`. For the probe and the preview strip, never the programme.
 pub fn settle(gl: &Gl, old: &Pic<'_>, planes: &mut Planes<'_>, t: f64, wait: Duration) -> bool {

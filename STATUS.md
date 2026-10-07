@@ -38,9 +38,15 @@ still showed the old scene, so the probe now sends two progress values on
 one pipeline, as a take does, and both must read as asked (about 106 at 0.2
 and 38 at 0.8, grey 128 going to black 16); otherwise it logs a warning and
 shaders run the software way. This laptop's Intel GPU passes it (ripple at
-1 reads 200, as sent). Whether that is what the macOS runner gets wrong is
-for the next run to say: if the take there still shows only the old scene,
-the GPU path on macOS needs a machine to debug on.
+1 reads 200, as sent). The next macOS run passed that probe and the take
+still showed only the old scene, so it is the take's own shader at the
+take's own size that the GPU there gets wrong, not GL as such. Each shader
+is now asked once on its worker thread, before a take uses it, to draw
+progress 0.5 at the canvas size (`probe::moves`: the old picture is grey
+40, the new a ramp from 120 to 240, and the answer must average above 50);
+one that draws the old picture alone is closed with a warning and the take
+runs the software way. `fx_shader` asserts it on a machine with GL. Why
+`glitch-slice` draws nothing on that GPU is still unknown and needs a Mac.
 
 **The Icecast sender could die before its first sample.** The diagnostics
 added on this branch showed it on a macOS runner: 108,552 bytes of programme
