@@ -157,43 +157,45 @@ above.
   and receives nothing, and the hub shows why: the publisher is "live" with
   one reader and 0 bytes, no video and no audio. The SRT connection from the
   test's encoder is accepted and its media never arrives. Other SRT publisher
-  tests pass on the same runner, so this is the listener or that caller on
-  Windows, not the player path. It failed in every Windows mixer job of the
-  last four rounds and passes here three runs in three with the five SRT
-  tests moved to the LAN address (loopback UDP is broken on this machine).
-  The test now waits for the encoder's pictures before the player starts and
-  says so when they never come, so the next failure names the right side.
-  One guess to check: the listener's port is picked by binding and dropping
-  a socket, and on Windows a later socket bound to the same port with
-  `SO_REUSEADDR` (as `udpsrc` sets it) takes its datagrams.
-* `hls_direct` on the Windows runner: the governor refused an 8 millicore
-  AAC encode for four minutes with 7 millicores free and "not measured yet".
-  The rest of the suite had the four cores. That is the governor doing what
-  it says on a full machine; the test would need its own machine or a
-  governor told it is a test.
-* The `node` test binary on the Windows runner crashed once with
-  0xC0000005 (access violation) after four of its seven tests passed. No
-  test printed anything first; it was not seen in any other run.
+  tests pass on the same runner. It failed in four Windows mixer jobs in a
+  row and then passed in the last three, and passes here three runs in three
+  with the SRT tests moved to the LAN address (loopback UDP is broken on this
+  machine). The test now waits for the encoder's pictures before the player
+  starts and says so when they never come. One guess to check: the
+  listener's port is picked by binding and dropping a socket, and on Windows
+  a later socket bound to the same port with `SO_REUSEADDR` (as `udpsrc`
+  sets it) takes its datagrams.
+* `hls_direct` on the Windows runner, three times: the governor refused an
+  8 millicore AAC encode for four minutes with 0 to 7 millicores free and
+  "not measured yet". The rest of the suite had the four cores. That is the
+  governor doing what it says on a full machine; the test would need its
+  own machine, or a way to tell the governor it is a test.
+* Access violations (0xC0000005) on the Windows platforms runner: the `node`
+  test binary twice (after six of seven tests, the seventh being
+  `cutting_the_socket_fails_the_sources_and_reconnecting_restores_them`) and
+  the core library tests once (after the `node::clock` tests). A native
+  crash with nothing printed first, never in the mixer job on the same OS.
+  Not looked into; a crash dump from the runner is the next step.
 * `switch::a_slow_switch_answers_at_once_and_finishes_as_a_task` on the
   Windows runner, once: the switch task failed with "show quiet is still
   starting after 15 seconds" (`station::relay::START_WAIT`). The error says
   to try again; the task does not, and the test does not either.
-* The station tests on the macOS runner, last round (660 s for the binary):
+* The station tests on the macOS platforms runner in the last two rounds:
   `wall` still calibrating after 360 s (three cores, VideoToolbox listed),
-  which is beyond load and looks like a calibration that does not finish
-  there; `orphans` found three show processes still running 15 s after
-  their station went; `switch::compositing_turns_on...` had "the ingest
-  plugin, which runs shows without compositing, is not running". Not looked
-  into on this branch.
-* The LL-HLS viewer test on macOS answered 503 for a minute (the master
-  never had segments); it now prints the answer and the output's own status.
+  `orphans` with three show processes still running 15 s after their
+  station went, and `switch::compositing_turns_on...` with "the ingest
+  plugin, which runs shows without compositing, is not running". All three
+  passed on macOS in the rounds before, the station binary took 660 s and
+  more, and the job ran past two hours; whether a change on this branch or
+  main's merges plays a part was not settled.
+* The LL-HLS viewer test on macOS answered 503 for a minute once (the master
+  never had segments); it now prints the answer and the output's status.
 * The platforms job's limit is now 120 minutes. On 2026-10-07 the Windows
   job passed its tests (46 minutes), the smoke test and the runtime budget,
   and was stopped by the 90 minute limit inside `cargo tauri build`, after
-  ten minutes spent installing the Tauri CLI with no cache.
-* macOS jobs ran into the 90 minute limit or lost the runner ("The hosted
-  runner lost communication with the server") in three of the last four
-  rounds, which is a runner problem.
+  ten minutes spent installing the Tauri CLI with no cache. macOS jobs ran
+  past the limit or lost the runner ("The hosted runner lost communication
+  with the server") in most rounds of this branch, which is the runner.
 * (Found and fixed.) The Windows headless check of the desktop app failed
   after "every device plugin the app carries is loaded" with no FAIL line.
   With the exit code printed in hex it read "exit code 0x", empty, and the
@@ -203,8 +205,19 @@ above.
   `Start-Process -Wait -PassThru` and reads its exit code.
 
 **Diagnostics left in.** The SRT player test prints what libsrt counted on
-the player's socket and the hub's side of the stream. The Windows headless
-check prints its exit code in hex.
+the player's socket and the hub's side of the stream. An output's link
+error names the caps on both sides. The Windows headless check prints its
+exit code in hex. The Icecast tests print what the sender saw.
+
+**Where CI stands.** Last full round on `88763161`: build run 37614632790,
+platforms run 37614632675. Build: clippy, clients, the no GPU job and the
+Linux and Windows mixers pass; the macOS mixer lost its runner. Platforms:
+Linux passes everything; Windows failed on one access violation in the core
+library tests; macOS ran out of its two hours inside the tests with the
+three station failures above. In the round before (`850bdcfc`, build run
+37604255701) all three mixer jobs passed, macOS included, for the first
+time on this branch; the no GPU job failed there only on the planning time
+bound, which has the slack now.
 
 ## The camera that showed up late, 2026-10-06
 
