@@ -84,17 +84,17 @@ does. The receiver now sends each stream to a sink of its own, linked in a
 unlinked on macOS); a launch line doing the same over this machine's LAN
 address decoded 235 frames in 8 seconds.
 
-**Not fixed: an RTMP output on Windows that will not take the programme.** On
-the Windows runner `slow_output` failed to attach its RTMP output once
-("linking out-stuck-reconnect-mux-vq-0 into out-stuck-reconnect-mux-0: Pads
-do not have common format"). Linking against the pad templates alone made
-the attach succeed and then no buffer reached the output in 10 s, or in 30 s
-with the slack, in two runs in a row, so that change was reverted: a refusal
-that names the link is better than a silent stall. The caps the programme
-encoder offers on that runner sometimes do not suit `flvmux`. The same
-refusal came back once more through `output.set`
-(`setting_an_output_replaces_its_address_and_keeps_its_id`), so the link
-error now names the caps the queue offered and the caps the muxer takes. The test now waits for the first buffer
+**An RTMP output on Windows could not take a byte-stream programme.** On the
+Windows runner `output.add` and `output.set` of an RTMP output were refused
+now and then: "linking out-...-mux-vq-0 into out-...-mux-0: Pads do not have
+common format". Linking against the pad templates alone made the attach
+succeed and then no buffer ever reached the output, so that was reverted,
+and the link error was made to name both sides instead. The next run said
+it: the queue offered `video/x-h264, stream-format=byte-stream` (the form
+the programme encoder had settled on with its first consumer) and `flvmux`
+takes only `stream-format=avc`. The RTMP output now has its own `h264parse`
+(or `h265parse`) in front of the muxer, which converts the one into the
+other; the mixer and output tests pass with it here. The test now waits for the first buffer
 `GODWINMIX_TIMING_SLACK` times longer, which is fair but does not cure it.
 
 **A remuxed stream lost its last second when it stopped.** The remux size

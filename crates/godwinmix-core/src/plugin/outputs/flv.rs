@@ -29,6 +29,18 @@ pub fn muxer_for_codec(codec: VideoCodec) -> Result<&'static str> {
     }
 }
 
+/// The parser in front of the muxer, which turns a byte-stream picture into
+/// the `avc` or `hvc1` form FLV carries. The programme's encoder answers
+/// with the form its first consumer settled on, and on the Windows runner
+/// that was byte-stream, which `flvmux` refuses: "Pads do not have common
+/// format", and the output was not attached.
+pub fn parser_for(ctx: &OutputCtx<'_>) -> &'static str {
+    match ctx.taps.first().and_then(|t| t.video).map(|v| v.codec) {
+        Some(VideoCodec::H265) => "h265parse",
+        _ => "h264parse",
+    }
+}
+
 /// On an `eflvmux` pad, write enhanced RTMP (a FourCC per packet, no track
 /// id), which is what servers that take HEVC read. The pad's default is
 /// legacy FLV, whose HEVC codec id is a private extension nobody else
