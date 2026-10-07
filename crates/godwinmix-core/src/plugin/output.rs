@@ -214,7 +214,18 @@ pub fn link_to_mux(
             format!("{} refused a pad; tried {}", mux.name(), templates.join(", "))
         })?;
     let src = queue.static_pad("src").context("queue has no src pad")?;
-    src.link(&pad).with_context(|| format!("linking {} into {}", queue.name(), mux.name()))?;
+    // What each side offered, in the message: on the Windows runner this
+    // link sometimes fails with "Pads do not have common format" while the
+    // programme encoder starts, and which caps were offered is the question.
+    src.link(&pad).with_context(|| {
+        format!(
+            "linking {} into {}: the queue offered {} and the muxer takes {}",
+            queue.name(),
+            mux.name(),
+            src.query_caps(None),
+            pad.pad_template_caps()
+        )
+    })?;
     Ok(pad)
 }
 
