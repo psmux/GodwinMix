@@ -209,9 +209,9 @@ asked once, the first time something wants to know: two frames of a plain
 mix must come back as asked. Each shader is then asked once more, at the
 canvas size, before its first take on the GPU, and one that draws only the
 old picture half way through runs the software way instead, with a warning
-in the log. On macOS shaders always run the software way for now: on the
-macOS build machines GL passed both checks and a take still showed only the
-old scene.
+in the log. During a take the software version (or a dissolve) also draws
+until the GPU's first answer, and while its newest answer is more than three
+frames old.
 
 ## What it costs
 
