@@ -44,8 +44,11 @@ fn sixteen_sources_and_sixty_four_requests_plan_in_well_under_a_millisecond() {
         first.encodes().count()
     );
     // Debug builds are several times slower than release; this bound holds
-    // for both on a laptop.
-    assert!(each.as_micros() < 1000, "planning took {each:?}");
+    // for both on a laptop. Times GODWINMIX_TIMING_SLACK on a runner that
+    // says it is slow: a shared Linux runner took 1.096 ms with the rest of
+    // the suite beside it.
+    let slack = std::env::var("GODWINMIX_TIMING_SLACK").ok().and_then(|s| s.trim().parse::<f64>().ok()).filter(|s| s.is_finite() && *s >= 1.0).unwrap_or(1.0);
+    assert!((each.as_micros() as f64) < 1000.0 * slack, "planning took {each:?}");
 }
 
 #[test]

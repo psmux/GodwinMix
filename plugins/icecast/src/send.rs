@@ -98,14 +98,19 @@ impl Sender {
         let sink = audio.by_name("out").and_then(|o| o.downcast::<gst_app::AppSink>().ok()).ok_or("no appsink")?;
         route(&demux, &pipeline, audio);
         let (state, stop) = (Arc::new(State::default()), Arc::new(AtomicBool::new(false)));
-        let sending = mount::spawn(s, sink, stop.clone(), state.clone());
         let mut pipe = Pipe::wrap(pipeline);
         pipe.play(reporter)?;
+        // Only once playing: an appsink not yet started says it is at its end.
+        let sending = mount::spawn(s, sink, stop.clone(), state.clone());
         Ok(Sender { pipe, pump: Some(Pump::start(fifo, src)), state, stop, sending: Some(sending) })
     }
 
     pub fn sent(&self) -> u64 {
         self.state.sent.load(Ordering::Relaxed)
+    }
+
+    pub fn received(&self) -> u64 {
+        self.pump.as_ref().map_or(0, Pump::bytes)
     }
 }
 

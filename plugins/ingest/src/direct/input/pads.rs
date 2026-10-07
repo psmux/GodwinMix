@@ -30,7 +30,7 @@ pub struct Pads {
     pub sync: bool,
     /// The MPEG-TS program to take, set on any `tsdemux` parsebin makes.
     pub program: Option<u16>,
-    streams: Streams,
+    streams: Arc<Streams>,
     /// What went wrong putting the demuxer in, said once.
     pub note: Mutex<Vec<String>>,
 }
@@ -42,7 +42,7 @@ impl Pads {
             zero: Arc::new(Zero::default()),
             sync,
             program,
-            streams: Streams::default(),
+            streams: Arc::default(),
             note: Mutex::new(Vec::new()),
         })
     }
@@ -114,7 +114,7 @@ fn attach(pipeline: &gst::Pipeline, pad: &gst::Pad, pads: &Pads) -> Result<(), S
     // No queue of our own: parsebin already puts a multiqueue after a
     // demuxer, and two more threads per input is 400 for 200 shows.
     let parse = make(parser)?;
-    gate(pad, pads.streams.add(pad, slot, &name, vec![parse.clone(), sink.clone()]));
+    gate(pad, pads.streams.add(pad, slot, &name, vec![parse.clone(), sink.clone()]), Arc::downgrade(&pads.streams));
     link(pipeline, pad, &[&parse, &sink])
 }
 

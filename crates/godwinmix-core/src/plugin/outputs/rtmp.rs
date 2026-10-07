@@ -109,8 +109,10 @@ impl Output for RtmpOutput {
         crate::probe::set_bool(&sink, "sync", false);
         crate::probe::set_bool(&sink, "async", false);
 
-        ctx.pipeline.add_many([&mux, &sink]).context("adding the rtmp muxer and sink")?;
-        let vpad = link_to_mux(video, &mux, &["video"])?;
+        let parse = make(super::flv::parser_for(ctx), &format!("out-{id}-vparse-{gen}"))?;
+        ctx.pipeline.add_many([&parse, &mux, &sink]).context("adding the rtmp muxer and sink")?;
+        video.link(&parse).context("linking the picture to its parser")?;
+        let vpad = link_to_mux(&parse, &mux, &["video"])?;
         super::flv::enhanced(&vpad);
         link_to_mux(audio, &mux, &["audio"])?;
         mux.link(&sink).context("linking muxer to rtmp sink")?;

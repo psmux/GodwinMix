@@ -121,11 +121,18 @@ impl SourceHealth {
         (last != NEVER).then(|| self.now_ms().saturating_sub(last))
     }
 
-    /// True once video has been seen and has then been quiet for longer than
-    /// the timeout. A source that has never produced anything is `Connecting`,
-    /// not stalled, which is a different thing to show the operator.
+    /// True once media has been seen and has then been quiet for longer than
+    /// the timeout: the picture, or the sound for a source that has sent no
+    /// picture yet. A source that has never produced anything is
+    /// `Connecting`, not stalled, which is a different thing to show the
+    /// operator.
+    ///
+    /// The sound counts because a source reads `Live` on sound alone. One
+    /// that went live on its first sound and stopped before its first picture
+    /// (a test source on a loaded runner did) read `Live` for good and was
+    /// never restarted.
     pub fn is_stalled(&self, timeout_secs: f64) -> bool {
-        match self.video_idle_ms() {
+        match self.video_idle_ms().or_else(|| self.audio_idle_ms()) {
             Some(idle) => idle as f64 / 1000.0 > timeout_secs,
             None => false,
         }
@@ -161,6 +168,18 @@ mod tests {
         assert!(h.is_stalled(0.0));
         h.reset();
         assert!(!h.is_stalled(0.0));
+    }
+
+    #[test]
+    fn a_source_with_sound_and_no_picture_yet_stalls_on_its_sound() {
+        let h = SourceHealth::new(Instant::now());
+        h.mark_audio();
+        assert!(!h.is_stalled(10.0));
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        assert!(h.is_stalled(0.0), "sound alone went quiet");
+        // Once there is a picture, the picture is what counts.
+        h.mark_video();
+        assert!(!h.is_stalled(10.0));
     }
 
     /// Every subscriber must see the same number for the same event, and the

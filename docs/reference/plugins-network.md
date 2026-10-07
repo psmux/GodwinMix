@@ -280,7 +280,10 @@ once; the picture is dropped at the demuxer.
 | `public` | boolean | `false` | list the mount in the server's directory |
 
 Song title updates are not sent. Health says how much has been sent, or why
-the server refused.
+the server refused. The mount is dialled with the first encoded sound, so
+before that health says which side it is waiting for: the programme from the
+core, or the encoder. `stats` answers `{address, bytes_sent, bytes_received}`,
+the last being programme read from the core.
 
 `icecast/source` plays an audio stream over HTTP or HTTPS (`uri`) as a live
 source: `souphttpsrc` in ICY mode, `icydemux`, `parsebin`, and the sound as it

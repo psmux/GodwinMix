@@ -1,5 +1,224 @@
 # Where GodwinMix stands
 
+## What CI failed on main after the transitions merge, 2026-10-06
+
+Branch `fix/ci-main`, draft pull request #2, from main at `d5bcb319`. The
+build and platforms runs for `2b869013` were red on every platform. Each
+failure below says what it was, what changed, and how it was checked.
+
+**An import with nothing else running panicked.** `fx.import` of a shader
+draws its preview strip, the strip asks whether GL runs, and the GL probe
+built a `VideoInfo` before anything had started GStreamer. The probe and
+`Gl::start` now start GStreamer themselves. The test that found it
+(`a_shader_with_a_uniform_and_no_default_is_refused_by_name`) is the only
+one in the file that never called `gst::init`, which is how the import path
+got exercised cold.
+
+**The GPU shader test failed where there is no GPU.** On the no GPU Linux job
+and the Windows runner `glupload` builds and then never answers. The probe
+already treated that as no GL (three seconds without an answer), but the
+test started GL directly and asserted on it. It now asks the probe first; where
+the probe says no, it prints why it skipped the GPU half and checks what a
+take really runs there, the software version through `ShaderMix`.
+
+**A shader take on macOS looked like a cut, and it was the test.** On the
+macOS runner `glitch-slice` showed the old scene at every look and then the
+new one. It looked like the GPU, and three rounds went into the GPU path:
+`ShaderMix` draws the software version (or a dissolve) until the GPU has
+answered and whenever its newest answer is more than three frames old; the
+GL appsrc keeps one frame and drops the older (`leaky-type=downstream`);
+the GL probe asks two progress values on one pipeline and checks both
+answers; and each shader is asked once, at the canvas size, to draw
+progress 0.5 before a take uses the GPU (`probe::moves`), falling back to
+the software way when it draws the old picture alone. `Gl`'s answer
+handling moved to `gl_answers.rs`. None of that changed the macOS result,
+and with shaders forced onto the CPU there it looked the same, so it was
+never the GPU. The test looked at three points, and `glitch-slice` changes
+each of its 24 bands over at a moment from a sine hash, which is not the
+same to the last bit on every CPU: on the Apple silicon runner the three
+bands those points sat in changed at nearly one moment, between two looks.
+The test now looks at one point in every band. The GPU changes stay: they
+are each a real guard (a slow or wrong GPU now shows the software
+transition rather than a frozen old picture), and this laptop's GPU passes
+all of them.
+
+**The Icecast sender could die before its first sample.** The diagnostics
+added on this branch showed it on a macOS runner: 108,552 bytes of programme
+read, every pad linked and with caps, nothing sent, no error. The sender
+thread was started before the pipeline, and an appsink that has not started
+answers `is_eos` with true, so a thread that asked first took that for the
+end and left. It now starts after the pipeline plays, and believes `is_eos`
+only while the sink is playing. A race of that kind fits what the runs
+showed: one of the two sender tests in a run, never the same one, and only
+on Unix runners. Icecast health now says which side it waits for before the mount is
+dialled, and `stats` carries `bytes_received`. `mount.rs` was split
+(`mount_http.rs`) to stay under 150 lines.
+
+**A source live on sound alone was never judged stalled.** The stall storm
+test's diagnostics read "the last picture was None ms ago and the source
+reads Live": on a loaded runner the test source went live on its first sound,
+the test paused it before its first picture, and `is_stalled` only ever
+looked at the picture. A source that sends only sound and then stops was
+never restarted either. `SourceHealth::is_stalled` now uses the sound for a
+source that has sent no picture yet; `state::tests` has the case.
+
+**The RIST output test's receiver was the fault.** It decoded with
+`caps=video/x-raw(ANY)`, so the decoded sound had nowhere to go and its
+unlinked pad stopped the receiver after one to three frames ("streaming
+stopped, reason not-linked" from `rist_rtp_udpsrc0`, on Windows and macOS).
+Before the receiver listened on 127.0.0.1 it showed nothing at all on
+Windows, so it listens there now, as the carriage test that never failed
+does. The receiver now sends each stream to a sink of its own, linked in a
+`pad-added` handler (the launch parser's delayed linking left one pad
+unlinked on macOS); a launch line doing the same over this machine's LAN
+address decoded 235 frames in 8 seconds.
+
+**An RTMP output on Windows could not take a byte-stream programme.** On the
+Windows runner `output.add` and `output.set` of an RTMP output were refused
+now and then: "linking out-...-mux-vq-0 into out-...-mux-0: Pads do not have
+common format". Linking against the pad templates alone made the attach
+succeed and then no buffer ever reached the output, so that was reverted,
+and the link error was made to name both sides instead. The next run said
+it: the queue offered `video/x-h264, stream-format=byte-stream` (the form
+the programme encoder had settled on with its first consumer) and `flvmux`
+takes only `stream-format=avc`. The RTMP output now has its own `h264parse`
+(or `h265parse`) in front of the muxer, which converts the one into the
+other; the mixer and output tests pass with it here. The test now waits for the first buffer
+`GODWINMIX_TIMING_SLACK` times longer, which is fair but does not cure it.
+
+**A remuxed stream lost its last second when it stopped.** The remux size
+change test was treated as a timing problem in the last round and again on
+this branch; with the wait raised to six seconds a Linux runner still wrote
+0 of the 45 pictures after the size change, and Windows 20. Printing what
+the file held just before the end of stream answered it: 8 of the 45. The
+rest sat in `matroskamux`'s open cluster, which is written when the next
+cluster starts or the stream ends, and `Remux::drop` sent the end of stream
+and set the pipeline to NULL straight after it. Here the end of stream won
+that race; on a loaded runner NULL did, and no wait before the drop could
+help. `drop` now waits up to three seconds for the end of stream to reach
+the sink (the bus watch records it) before it stops the pipeline. Any
+relayed or listening RTMP source that ends had the same loss.
+
+**A direct input could wait for good on a sender restarted with a new
+layout.** On macOS the gst restart test's third sender (new PIDs, program
+7) was running, the input read its program and 2.3 Mbit/s, and gave no
+frame for 35 s, in most macOS runs of this branch. The new streams stood by
+for the old ones' pads to go, and on that runner the old pads were never
+removed. A stream standing by with buffers to give now takes its slot when
+the holder has given nothing for two seconds (`streams::claim_if_quiet`,
+with a unit test); a second stream in a live program, whose holder keeps
+giving, still stands by.
+
+**The RIST input test read the stats too early.** Its keyframes had
+arrived; the stats, published once a second, still said connecting. It now
+waits for both.
+
+**DASH pull on macOS is left out, with the reason printed.** On every macOS
+run the DASH half stayed connecting with no error. Here, with ffmpeg 9.0.2
+writing the same live DASH, a trace showed `dashdemux2` fetch four segments,
+then fetch the manifest every second and never ask for a segment again,
+while `dashdemux` on the same server took 680 buffers in 15 seconds. The
+macOS runner has Homebrew's ffmpeg 9.0.1. That is the demuxer and this
+encoder, so the test skips DASH on macOS and says so; HLS is still checked.
+Whether the ingest should prefer `dashdemux` for live DASH is open. The
+test also gives ffmpeg a forward slash path, since on Windows its DASH muxer
+wrote the segments into the working directory.
+
+**Tests that asked too much of a shared runner.** The fx take tests use
+`34 ms × 3 × GODWINMIX_TIMING_SLACK`, as the overlay clip test does, and
+measure from the take on, printing the worst interval before it. The HEVC
+transcode test and the direct plan test read for their window times the
+slack. The frame bus sound test uses 100 ms chunks: a reader more than eight
+chunks behind skips ahead by design, and with 10 ms chunks a reader held up
+80 ms on macOS did. The isolation test accepts the restarted show's
+rendition at half to one and a half times its first price (528 against 808
+millicores on a Linux runner), which still tells one share from none and from
+two. The smoke test expects the 14 standard and 6 minimal MCP tools the
+server has had since `call_tool` joined the hot lists.
+
+**More of the same, found on the way.** The two project tests take turns:
+they share one secret store on purpose, both make `sunday-service` with
+`key-1` in it, and run together one replaced the other's key between its
+export and its reveal. The two rung keyframe test compares
+keyframes only up to the big rung's last one, since on macOS the small
+rung's 5020 ms keyframe had arrived and the big one's not when the lists
+were read. The LL-HLS viewer test asks for the master again while it
+answers 503, as a player does. The wall test waits for calibration
+two minutes times the slack (a three core macOS runner was still calibrating
+at two). The mosaic latency test asks `mv-comp` again for two seconds before
+it calls a failed latency query a failure, since on Windows a tile was still
+attaching when it first asked. The restart tests say whether the sender was
+still running when nothing arrived; it was, which led to the stand by fix
+above.
+
+**Still open, with what is known.**
+
+* The SRT player test on Windows: the player connects (41 µs round trip)
+  and receives nothing, and the hub shows why: the publisher is "live" with
+  one reader and 0 bytes, no video and no audio. The SRT connection from the
+  test's encoder is accepted and its media never arrives. Other SRT publisher
+  tests pass on the same runner. It failed in four Windows mixer jobs in a
+  row and then passed in the last three, and passes here three runs in three
+  with the SRT tests moved to the LAN address (loopback UDP is broken on this
+  machine). The test now waits for the encoder's pictures before the player
+  starts and says so when they never come. One guess to check: the
+  listener's port is picked by binding and dropping a socket, and on Windows
+  a later socket bound to the same port with `SO_REUSEADDR` (as `udpsrc`
+  sets it) takes its datagrams.
+* `hls_direct` on the Windows runner, three times: the governor refused an
+  8 millicore AAC encode for four minutes with 0 to 7 millicores free and
+  "not measured yet". The rest of the suite had the four cores. That is the
+  governor doing what it says on a full machine; the test would need its
+  own machine, or a way to tell the governor it is a test.
+* Access violations (0xC0000005) on the Windows platforms runner: the `node`
+  test binary twice (after six of seven tests, the seventh being
+  `cutting_the_socket_fails_the_sources_and_reconnecting_restores_them`) and
+  the core library tests once (after the `node::clock` tests). A native
+  crash with nothing printed first, never in the mixer job on the same OS.
+  Not looked into; a crash dump from the runner is the next step.
+* `switch::a_slow_switch_answers_at_once_and_finishes_as_a_task` on the
+  Windows runner, once: the switch task failed with "show quiet is still
+  starting after 15 seconds" (`station::relay::START_WAIT`). The error says
+  to try again; the task does not, and the test does not either.
+* The station tests on the macOS platforms runner in the last two rounds:
+  `wall` still calibrating after 360 s (three cores, VideoToolbox listed),
+  `orphans` with three show processes still running 15 s after their
+  station went, and `switch::compositing_turns_on...` with "the ingest
+  plugin, which runs shows without compositing, is not running". All three
+  passed on macOS in the rounds before, the station binary took 660 s and
+  more, and the job ran past two hours; whether a change on this branch or
+  main's merges plays a part was not settled.
+* The LL-HLS viewer test on macOS answered 503 for a minute once (the master
+  never had segments); it now prints the answer and the output's status.
+* The platforms job's limit is now 120 minutes. On 2026-10-07 the Windows
+  job passed its tests (46 minutes), the smoke test and the runtime budget,
+  and was stopped by the 90 minute limit inside `cargo tauri build`, after
+  ten minutes spent installing the Tauri CLI with no cache. macOS jobs ran
+  past the limit or lost the runner ("The hosted runner lost communication
+  with the server") in most rounds of this branch, which is the runner.
+* (Found and fixed.) The Windows headless check of the desktop app failed
+  after "every device plugin the app carries is loaded" with no FAIL line.
+  With the exit code printed in hex it read "exit code 0x", empty, and the
+  step's failure was printed before the check's own output: the app is a
+  windowed executable, PowerShell does not wait for one, and
+  `$LASTEXITCODE` was never set. The step now runs it with
+  `Start-Process -Wait -PassThru` and reads its exit code.
+
+**Diagnostics left in.** The SRT player test prints what libsrt counted on
+the player's socket and the hub's side of the stream. An output's link
+error names the caps on both sides. The Windows headless check prints its
+exit code in hex. The Icecast tests print what the sender saw.
+
+**Where CI stands.** Last full round on `88763161`: build run 37614632790,
+platforms run 37614632675. Build: clippy, clients, the no GPU job and the
+Linux and Windows mixers pass; the macOS mixer lost its runner. Platforms:
+Linux passes everything; Windows failed on one access violation in the core
+library tests; macOS ran out of its two hours inside the tests with the
+three station failures above. In the round before (`850bdcfc`, build run
+37604255701) all three mixer jobs passed, macOS included, for the first
+time on this branch; the no GPU job failed there only on the planning time
+bound, which has the slack now.
+
 ## The camera that showed up late, 2026-10-06
 
 Branch `fix/preview-latency`. "The preview video appears so delayed. Everything

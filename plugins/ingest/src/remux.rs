@@ -53,6 +53,9 @@ pub struct Remux {
     /// Set when the pipeline has posted an error, so a caller stops pushing
     /// into something that will never drain.
     broken: Arc<AtomicBool>,
+    /// Set when the end of stream has reached the sink, so `drop` knows the
+    /// muxer has written what it was holding.
+    ended: Arc<AtomicBool>,
     watch: Option<std::thread::JoinHandle<()>>,
 }
 
@@ -141,13 +144,13 @@ impl Remux {
             }
         });
 
-        let broken = Arc::new(AtomicBool::new(false));
-        let watch = spawn_watch(&pipeline, Arc::clone(&broken));
+        let (broken, ended) = (Arc::new(AtomicBool::new(false)), Arc::new(AtomicBool::new(false)));
+        let watch = spawn_watch(&pipeline, Arc::clone(&broken), Arc::clone(&ended));
         let _ = &gate;
         pipeline
             .set_state(gst::State::Playing)
             .map_err(|e| format!("the remuxer would not start: {e}"))?;
-        Ok(Remux { pipeline, src, broken, watch })
+        Ok(Remux { pipeline, src, broken, ended, watch })
     }
 
     /// Push FLV bytes. Blocks when the muxer is behind, which is backpressure
@@ -170,9 +173,18 @@ impl Remux {
 
 impl Drop for Remux {
     fn drop(&mut self) {
-        // End of stream first, so the muxer finishes what it is holding rather
-        // than the last second of the show being truncated.
+        // End of stream first, and then wait for it to reach the sink, so the
+        // muxer writes the cluster it is holding. Going to NULL straight after
+        // the end of stream raced it: `matroskamux` keeps the current cluster
+        // until the next one starts or the stream ends, and on a busy runner
+        // NULL won, so the last second or two never reached the file (a size
+        // change test wrote 0, 11 or 20 of its last 45 pictures, however long
+        // it waited before stopping). Bounded, so a stuck pipeline still stops.
         let _ = self.src.end_of_stream();
+        let until = std::time::Instant::now() + DRAIN_WAIT;
+        while !self.ended.load(Ordering::Relaxed) && !self.broken.load(Ordering::Relaxed) && std::time::Instant::now() < until {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
         let _ = self.pipeline.set_state(gst::State::Null);
         self.broken.store(true, Ordering::Relaxed);
         if let Some(thread) = self.watch.take() {
@@ -180,6 +192,9 @@ impl Drop for Remux {
         }
     }
 }
+
+/// How long `drop` waits for the end of stream to reach the sink.
+const DRAIN_WAIT: std::time::Duration = std::time::Duration::from_secs(3);
 
 /// How long a single stream waits for the other one before it gives up and
 /// flows on its own. A publisher sending video only, or audio only, is normal;
@@ -312,10 +327,11 @@ fn branch(pipeline: &gst::Pipeline, pad: &gst::Pad, gate: &Gate) -> Result<(), S
     Ok(())
 }
 
-/// Pop the bus on its own thread and record a failure.
+/// Pop the bus on its own thread and record a failure or the end.
 fn spawn_watch(
     pipeline: &gst::Pipeline,
     broken: Arc<AtomicBool>,
+    ended: Arc<AtomicBool>,
 ) -> Option<std::thread::JoinHandle<()>> {
     let bus = pipeline.bus()?;
     std::thread::Builder::new()
@@ -329,9 +345,13 @@ fn spawn_watch(
                 let Some(message) = bus.timed_pop(Some(tick)) else {
                     continue;
                 };
-                if let gst::MessageView::Error(_) = message.view() {
-                    broken.store(true, Ordering::Relaxed);
-                    return;
+                match message.view() {
+                    gst::MessageView::Error(_) => {
+                        broken.store(true, Ordering::Relaxed);
+                        return;
+                    }
+                    gst::MessageView::Eos(_) => ended.store(true, Ordering::Relaxed),
+                    _ => {}
                 }
             }
         })

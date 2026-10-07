@@ -116,8 +116,22 @@ async fn a_viewer_key_plays_ll_hls_and_nothing_else_gets_in() {
 
     // The master waits for the first segments, then names the rung with the
     // key and a viewer id on every URI.
-    let master = get(&format!("{base}{path}")).await;
-    assert_eq!(master.status(), 200);
+    // A 503 says the first segments are not written yet and to ask again,
+    // which a player does; on a busy macOS runner the first ask got one.
+    let slack = godwinmix_core::plugin::harness::timing_slack();
+    let until = std::time::Instant::now() + std::time::Duration::from_secs(20).mul_f64(slack);
+    let mut master = get(&format!("{base}{path}")).await;
+    while master.status() == 503 && std::time::Instant::now() < until {
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        master = get(&format!("{base}{path}")).await;
+    }
+    if master.status() != 200 {
+        // What the server said and what the output says about itself: on
+        // a macOS runner the master answered 503 for a minute.
+        let code = master.status();
+        let said = master.text().await.unwrap_or_default();
+        panic!("the master answered {code}: {said}\nthe output: {}", output(&base).await);
+    }
     assert_eq!(master.headers()["content-type"], "application/vnd.apple.mpegurl");
     assert_eq!(master.headers()["cache-control"], "no-store");
     let text = master.text().await.unwrap();
