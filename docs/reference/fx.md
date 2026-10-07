@@ -205,7 +205,13 @@ which is the previous frame's, so during a shader the new scene is one frame
 behind. Where GL does not run, the two shipped shaders have software
 versions (`ripple`, `glitch-slice`), and any other shader runs as a dissolve.
 `fx.list` says which as `runs`: `gpu`, `cpu` or `fade`. Whether GL runs is
-asked once, the first time something wants to know.
+asked once, the first time something wants to know: two frames of a plain
+mix must come back as asked. Each shader is then asked once more, at the
+canvas size, before its first take on the GPU, and one that draws only the
+old picture half way through runs the software way instead, with a warning
+in the log. During a take the software version (or a dissolve) also draws
+until the GPU's first answer, and while its newest answer is more than three
+frames old.
 
 ## What it costs
 

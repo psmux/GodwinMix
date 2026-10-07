@@ -56,7 +56,11 @@ async fn a_reconnect_that_blocks_does_not_hold_the_mixer() {
         gst::PadProbeReturn::Ok
     });
     let thread = spawn(mix, cmd_rx, handle.clone());
-    parked_rx.recv_timeout(Duration::from_secs(10)).expect("a buffer reached the output");
+    // Ten seconds, times GODWINMIX_TIMING_SLACK: the programme encoder starts
+    // for this first consumer, and on a loaded Windows runner its first
+    // buffer had not crossed in ten (the same test passed in the next job).
+    let first = Duration::from_secs(10).mul_f64(crate::plugin::harness::timing_slack());
+    parked_rx.recv_timeout(first).expect("a buffer reached the output");
 
     handle.request(|ack| Command::ReconnectOutput(id.into(), Some(ack))).await.unwrap();
     let take = |id: &str| {

@@ -26,9 +26,13 @@ fn launch(text: &str) -> gst::Pipeline {
 #[test]
 fn sound_arrives_whole_and_in_order_with_the_owners_timestamps() {
     let dir = setup();
-    // 10 ms buffers, so a reader that lost one would show a hole in the pts.
+    // A reader that lost a chunk would show a hole in the pts. 100 ms chunks,
+    // the most a slot holds, not 10 ms: a reader more than eight chunks
+    // behind skips ahead by design (`ring::reader::CATCH_UP`), and with 10 ms
+    // chunks a reader thread held back 80 ms on a busy macOS runner skipped
+    // one. That is the ring doing its job, not losing sound.
     let owner = launch(&format!(
-        "audiotestsrc is-live=true samplesperbuffer=480 ! \
+        "audiotestsrc is-live=true samplesperbuffer=4800 ! \
          audio/x-raw,format=F32LE,layout=interleaved,rate=48000,channels=2 ! \
          gmxbussink bus-name=camera:snd#audio bus-dir={dir}"
     ));

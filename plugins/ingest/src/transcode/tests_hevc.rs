@@ -49,7 +49,15 @@ fn convert(hub: &Hub, decode: Value, encode: Value, id: &str) -> Vec<MediaTag> {
     let key = output_key("main", Some(id), Some("copy:main:audio"));
     let renditions = t.renditions();
     wait_for("the converted pair", 20, || renditions.is_live("church", &key));
-    read_for(&renditions, &key, 3)
+    // Three seconds, times GODWINMIX_TIMING_SLACK on a runner that says it
+    // is slow: an HEVC decode and encode beside the rest of the suite on the
+    // Windows runner sent fewer than 45 pictures in three.
+    let slack = std::env::var("GODWINMIX_TIMING_SLACK").ok().and_then(|s| s.parse::<f64>().ok()).unwrap_or(1.0).max(1.0);
+    read_for(&renditions, &key, (3.0 * slack).ceil() as u64)
+}
+
+fn pictures(tags: &[MediaTag]) -> usize {
+    tags.iter().filter(|t| t.kind == TagKind::Video).count()
 }
 
 #[test]
@@ -65,7 +73,7 @@ fn an_hevc_publisher_is_decoded_and_sent_on_as_h264() {
     let decode = json!({"id": "decode:main:video", "kind": "decode", "track": "video", "codec": "h265", "element": "avdec_h265", "parser": "h265parse"});
     let tags = convert(&hub, decode, encode(ENCODE, "scale:main:320x180p30", 320, 180, 300), ENCODE);
     assert_eq!(size(&tags), Some((320, 180)), "{:?}", first_tags(&tags));
-    assert!(tags.iter().filter(|t| t.kind == TagKind::Video).count() > 45);
+    assert!(pictures(&tags) > 45, "{} pictures came through", pictures(&tags));
     drop(source);
 }
 
@@ -86,6 +94,6 @@ fn an_h264_publisher_is_sent_on_as_enhanced_rtmp_hevc() {
     assert_eq!(crate::eflv::fourcc(&header.payload), Some(*crate::eflv::HEVC));
     let v = codec::read_video(header);
     assert_eq!((v.codec.as_str(), v.width, v.height), ("h265", 320, 180));
-    assert!(tags.iter().filter(|t| t.kind == TagKind::Video).count() > 45);
+    assert!(pictures(&tags) > 45, "{} pictures came through", pictures(&tags));
     drop(source);
 }

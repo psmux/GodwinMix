@@ -118,6 +118,26 @@ fn programme_path(_: &std::path::Path, test: &str) -> std::path::PathBuf {
     std::path::PathBuf::from(format!(r"\\.\pipe\gmx-icecast-{test}-{}", std::process::id()))
 }
 
+/// What the sender saw, for a failure message: what came in, what went out,
+/// what the bus said, and every pad in the send pipeline with whether it is
+/// linked and has caps.
+fn what_the_sender_saw(s: &Sender) -> String {
+    let mut pads = Vec::new();
+    for e in s.pipe.pipeline().iterate_recurse().into_iter().flatten() {
+        for p in e.pads() {
+            pads.push(format!("{}:{}{}{}", e.name(), p.name(), if p.is_linked() { "" } else { " unlinked" }, if p.current_caps().is_some() { "" } else { " no caps" }));
+        }
+    }
+    format!(
+        "read {} bytes of programme, sent {}, connected {}, bus said {:?}; pads {}",
+        s.received(),
+        s.sent(),
+        s.state.connected.load(std::sync::atomic::Ordering::Relaxed),
+        s.pipe.failure(),
+        pads.join(", ")
+    )
+}
+
 #[test]
 fn the_programmes_sound_reaches_an_icecast_mount_as_mp3_behind_the_source_login() {
     gmx_netkit::init().unwrap();
@@ -132,14 +152,15 @@ fn the_programmes_sound_reaches_an_icecast_mount_as_mp3_behind_the_source_login(
     let _ = core.bus().unwrap().timed_pop_filtered(gst::ClockTime::from_seconds(45), &[gst::MessageType::Eos, gst::MessageType::Error]);
     let _ = core.set_state(gst::State::Null);
     std::thread::sleep(Duration::from_millis(800));
+    let saw = what_the_sender_saw(&sender);
     drop(sender);
     let _ = std::fs::remove_dir_all(&dir);
     let request = head.lock().unwrap().clone();
-    assert!(request.contains("/church.mp3"), "the mount: {request}");
+    assert!(request.contains("/church.mp3"), "the mount: {request:?}; {saw}");
     assert!(request.to_lowercase().contains("audio/mpeg"), "the type: {request}");
     let n = got.lock().unwrap().len();
     let secs = seconds_of(&got.lock().unwrap(), "mpegaudioparse ! mpg123audiodec");
-    assert!(secs >= 3.0, "the mount got {n} bytes, {secs:.2} s of MP3 from 4 s of programme");
+    assert!(secs >= 3.0, "the mount got {n} bytes, {secs:.2} s of MP3 from 4 s of programme; {saw}");
 }
 
 #[test]
@@ -163,10 +184,11 @@ fn a_wrong_password_is_named_and_the_sender_keeps_trying() {
         std::thread::sleep(Duration::from_millis(100));
     }
     let why = named();
+    let saw = what_the_sender_saw(&sender);
     let _ = core.set_state(gst::State::Null);
     drop(sender);
     let _ = std::fs::remove_dir_all(&dir);
-    assert!(why.contains("refused the source login") && why.contains("password"), "{why}");
+    assert!(why.contains("refused the source login") && why.contains("password"), "{why:?}; {saw}");
 }
 
 /// A station: MP3 with an ICY title every 8 KB, for ever.

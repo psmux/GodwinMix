@@ -194,12 +194,17 @@ async fn two_rungs_started_apart_put_keyframes_on_the_same_frames() {
     // either side of one: macOS gave big 2021 and small 2020 for one frame,
     // which is a thirtieth of the 33 ms between two frames.
     let near = |a: u64, b: u64| a.abs_diff(b) <= 1;
-    let shared: Vec<&u64> = small.iter().skip(1).filter(|p| big.iter().any(|b| near(*b, **p))).collect();
+    // Up to the big rung's last keyframe: the lists are read at one moment,
+    // and on macOS the small rung's 5020 had arrived and the big one's not.
+    let last = big.last().copied().unwrap_or(0) + 1;
+    let compared: Vec<&u64> = small.iter().skip(1).filter(|p| **p <= last).collect();
+    let shared: Vec<&u64> = compared.iter().copied().filter(|p| big.iter().any(|b| near(*b, **p))).collect();
     assert!(small.len() >= 3, "the small rung made keyframes: {small:?}");
     assert_ne!(small[0], big[0], "the rungs started on different frames");
     let gaps: Vec<u64> = big.windows(2).skip(1).map(|w| w[1] - w[0]).collect();
     assert!(gaps.iter().all(|g| near(*g, 1000)), "one keyframe a second, as asked: {big:?}");
-    assert_eq!(shared.len(), small.len() - 1, "every keyframe after the first lines up: big {big:?} small {small:?}");
+    assert!(compared.len() >= 2, "the rungs shared enough time to compare: big {big:?} small {small:?}");
+    assert_eq!(shared.len(), compared.len(), "every keyframe after the first lines up: big {big:?} small {small:?}");
     mix.shutdown();
 }
 

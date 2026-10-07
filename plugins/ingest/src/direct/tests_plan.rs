@@ -96,10 +96,15 @@ fn a_changed_table_touches_only_what_changed() {
     // A second output, the other show gone, the first output untouched.
     host.apply(&json!({"direct": [row("x", json!([out("a", &url_a), out("b", &url_b)]))]}));
     assert!(!hub.is_live("direct.y", "main"), "a row gone stops its show at once");
-    let got_b = listen_udp(b, 2).join().unwrap();
+    // Two seconds, times GODWINMIX_TIMING_SLACK on a runner that says it is
+    // slow: on a macOS runner the new output's first two seconds held fewer
+    // than 30 pictures with the suite beside it.
+    let slack = std::env::var("GODWINMIX_TIMING_SLACK").ok().and_then(|s| s.parse::<f64>().ok()).unwrap_or(1.0).max(1.0);
+    let got_b = listen_udp(b, (2.0 * slack).ceil() as u64).join().unwrap();
     let got_a = reading.join().unwrap();
     let _ = encoder.set_state(gst::State::Null);
-    assert!(decode(&got_b, "b").0 >= 30, "the new output sends");
+    let pictures_b = decode(&got_b, "b").0;
+    assert!(pictures_b >= 30, "the new output sends: {pictures_b} pictures");
     // The first output's muxer never started again: one continuity run on
     // the video PID from start to end, so one output thread throughout.
     let cc: Vec<u8> = got_a

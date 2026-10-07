@@ -29,18 +29,56 @@ fn an_address_is_host_and_an_even_port() {
 }
 
 /// Frames a `uridecodebin` on `rist://` decodes, counted as they come.
+///
+/// On the loopback address, not 0.0.0.0. The port is one the system handed
+/// out a moment ago, and the sender binds its own sockets to ports the
+/// system hands out, with `SO_REUSEADDR` as `udpsink` sets it. On Windows a
+/// later socket on the same wildcard port takes the datagrams, and the
+/// receiver decoded nothing in 45 s with no error on either bus; a socket on
+/// the specific address is the one Windows delivers to, which is why the
+/// direct carriage test, bound to 127.0.0.1, never failed this way.
 fn receiver(port: u16) -> (gst::Pipeline, Arc<AtomicU64>) {
-    let line = format!("uridecodebin uri=rist://0.0.0.0:{port} caps=video/x-raw(ANY) ! fakesink name=end sync=false");
-    let p = gst::parse::launch(&line).unwrap().downcast::<gst::Pipeline>().unwrap();
+    // Every decoded stream to a sink of its own, the picture's counted. With
+    // only the picture asked for, the sound had nowhere to go and its
+    // unlinked pad stopped the receiver after one frame; with the launch
+    // parser's delayed linking, one of the two pads was not linked at all.
+    let p = gst::Pipeline::new();
+    let d = gst::ElementFactory::make("uridecodebin").property("uri", format!("rist://127.0.0.1:{port}")).build().unwrap();
+    p.add(&d).unwrap();
     let frames = Arc::new(AtomicU64::new(0));
-    let f = frames.clone();
-    let pad = p.by_name("end").unwrap().static_pad("sink").unwrap();
-    pad.add_probe(gst::PadProbeType::BUFFER, move |_, _| {
-        f.fetch_add(1, Ordering::Relaxed);
-        gst::PadProbeReturn::Ok
+    let (f, weak) = (frames.clone(), p.downgrade());
+    d.connect_pad_added(move |_, pad| {
+        let Some(p) = weak.upgrade() else { return };
+        let sink = gst::ElementFactory::make("fakesink").property("sync", false).build().unwrap();
+        p.add(&sink).unwrap();
+        sink.sync_state_with_parent().unwrap();
+        let video = pad.current_caps().and_then(|c| c.structure(0).map(|s| s.name().starts_with("video/"))).unwrap_or(false);
+        if video {
+            let f = f.clone();
+            sink.static_pad("sink").unwrap().add_probe(gst::PadProbeType::BUFFER, move |_, _| {
+                f.fetch_add(1, Ordering::Relaxed);
+                gst::PadProbeReturn::Ok
+            });
+        }
+        let _ = pad.link(&sink.static_pad("sink").unwrap());
     });
     p.set_state(gst::State::Playing).unwrap();
     (p, frames)
+}
+
+/// The errors and warnings a pipeline posted, for a failure message.
+fn said(p: &gst::Pipeline) -> Vec<String> {
+    let Some(bus) = p.bus() else { return Vec::new() };
+    let mut out = Vec::new();
+    while let Some(m) = bus.pop_filtered(&[gst::MessageType::Error, gst::MessageType::Warning]) {
+        let from = m.src().map(|s| s.name().to_string()).unwrap_or_default();
+        match m.view() {
+            gst::MessageView::Error(e) => out.push(format!("error from {from}: {} ({:?})", e.error(), e.debug())),
+            gst::MessageView::Warning(w) => out.push(format!("warning from {from}: {} ({:?})", w.error(), w.debug())),
+            _ => {}
+        }
+    }
+    out
 }
 
 #[test]
@@ -83,8 +121,9 @@ fn a_rist_receiver_decodes_the_programme_and_the_output_says_it_is_connected() {
     }
     let got = frames.load(Ordering::Relaxed);
     let connected = out.connected();
+    let (rx_said, tx_said) = (said(&rx), said(&tx));
     let _ = tx.set_state(gst::State::Null);
     let _ = rx.set_state(gst::State::Null);
-    assert!(got >= 60, "the RIST receiver decoded {got} frames in {wait:?}; wanted 60");
+    assert!(got >= 60, "the RIST receiver decoded {got} frames in {wait:?}; wanted 60. Port {port}; the receiver said {rx_said:?}, the sender {tx_said:?}");
     assert!(connected, "the receiver answered, so the output should say it is connected");
 }

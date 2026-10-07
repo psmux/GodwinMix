@@ -882,27 +882,27 @@ function Invoke-Smoke {
 
     $mcpLog = Join-Path $Work 'mcp.log'
     $mcpPy = Join-Path $Repo 'dev' 'smoke_mcp.py'
-    Invoke-Step 'gmx mcp lists 12 tools on standard' {
+    Invoke-Step 'gmx mcp lists 14 tools on standard' {
         $res = Invoke-Tool -File $python -Arguments @($mcpPy, $Gmx, $Base, $Token, 'standard')
         Add-Log $mcpLog $res.Err
         $count = $res.Out.Trim()
-        if ($count -eq '12') {
+        if ($count -eq '14') {
             Ok
         } else {
             $seen = if ($count) { $count } else { 'nothing' }
-            Bad "standard listed $seen, wanted 12"
+            Bad "standard listed $seen, wanted 14"
         }
     }
 
-    Invoke-Step 'gmx mcp lists 5 tools on minimal' {
+    Invoke-Step 'gmx mcp lists 6 tools on minimal' {
         $res = Invoke-Tool -File $python -Arguments @($mcpPy, $Gmx, $Base, $Token, 'minimal')
         Add-Log $mcpLog $res.Err
         $count = $res.Out.Trim()
-        if ($count -eq '5') {
+        if ($count -eq '6') {
             Ok
         } else {
             $seen = if ($count) { $count } else { 'nothing' }
-            Bad "minimal listed $seen, wanted 5"
+            Bad "minimal listed $seen, wanted 6"
         }
     }
 

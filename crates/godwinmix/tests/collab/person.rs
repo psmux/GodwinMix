@@ -56,8 +56,15 @@ impl Person {
     }
 
     /// The next presence list whose client ids satisfy `wanted`.
+    ///
+    /// For fifteen seconds times `GODWINMIX_TIMING_SLACK`, not eighty frames:
+    /// on a busy Linux runner the other events on the socket used up the
+    /// eighty before the list came. The message says the last list seen.
     pub async fn presence_until(&mut self, wanted: impl Fn(&[String]) -> bool) -> Vec<String> {
-        for _ in 0..80 {
+        let slack = godwinmix_core::plugin::harness::timing_slack();
+        let until = std::time::Instant::now() + Duration::from_secs(15).mul_f64(slack);
+        let mut last = Vec::new();
+        while std::time::Instant::now() < until {
             let Some(frame) = self.read().await else { break };
             if frame["method"] != "event/presence.changed" {
                 continue;
@@ -71,8 +78,9 @@ impl Person {
             if wanted(&ids) {
                 return ids;
             }
+            last = ids;
         }
-        panic!("the presence list never got there");
+        panic!("the presence list never got there; the last one was {last:?}");
     }
 
     pub async fn move_to(&mut self, item: &str, x: f64) {

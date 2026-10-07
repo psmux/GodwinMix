@@ -1007,13 +1007,20 @@ if [[ -n "$NODE_TOKEN" ]]; then
     done
     if [[ "$LIVE" == yes ]]; then ok; else bad "$(cat "$WORK/node-source.log"; tail -5 "$WORK/node-daemon.log")"; fi
 
+    # Asked for up to fifteen seconds: the gauge appears with the first beat
+    # or the first reconciler tick after enrolment, and on a busy Linux
+    # runner neither had happened when the source went live.
     step "the node's heartbeat is on /metrics"
-    if curl -fsS --max-time 30 "$BASE/metrics" "${AUTH[@]}" 2>/dev/null \
-        | grep -qE 'gmx_node_heartbeat_age_ms\{node="smoke-node"\}'; then
-        ok
-    else
-        bad "no gmx_node_heartbeat_age_ms for smoke-node"
-    fi
+    BEAT=""
+    for _ in $(seq 1 15); do
+        if curl -fsS --max-time 30 "$BASE/metrics" "${AUTH[@]}" 2>/dev/null \
+            | grep -qE 'gmx_node_heartbeat_age_ms\{node="smoke-node"\}'; then
+            BEAT=yes
+            break
+        fi
+        sleep 1
+    done
+    if [[ -n "$BEAT" ]]; then ok; else bad "no gmx_node_heartbeat_age_ms for smoke-node in 15 s"; fi
 
     step "an enrolment token works only once"
     SECOND="$(GODWINMIX_HOME="$WORK/node-home-2" "$TARGET/debug/godwinmix" node \
@@ -1034,13 +1041,13 @@ if [[ -n "$NODE_TOKEN" ]]; then
     fi
 fi
 
-step "gmx mcp lists 12 tools on standard"
+step "gmx mcp lists 14 tools on standard"
 COUNT="$(python3 "$REPO/dev/smoke_mcp.py" "$GMX" "$BASE" "$TOKEN" standard 2>>"$WORK/mcp.log")"
-if [[ "$COUNT" == "12" ]]; then ok; else bad "standard listed ${COUNT:-nothing}, wanted 12"; fi
+if [[ "$COUNT" == "14" ]]; then ok; else bad "standard listed ${COUNT:-nothing}, wanted 14"; fi
 
-step "gmx mcp lists 5 tools on minimal"
+step "gmx mcp lists 6 tools on minimal"
 COUNT="$(python3 "$REPO/dev/smoke_mcp.py" "$GMX" "$BASE" "$TOKEN" minimal 2>>"$WORK/mcp.log")"
-if [[ "$COUNT" == "5" ]]; then ok; else bad "minimal listed ${COUNT:-nothing}, wanted 5"; fi
+if [[ "$COUNT" == "6" ]]; then ok; else bad "minimal listed ${COUNT:-nothing}, wanted 6"; fi
 
 # --- shutdown ---------------------------------------------------------------
 
