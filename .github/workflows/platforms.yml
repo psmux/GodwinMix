@@ -28,6 +28,9 @@ name: platforms
 
 on:
   push:
+    # Every branch and tag, except the signing test's tags (sign-test.yml).
+    branches: ["**"]
+    tags-ignore: ["v*-signtest*"]
   pull_request:
   workflow_dispatch:
 

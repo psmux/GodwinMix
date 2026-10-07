@@ -12,7 +12,8 @@ name: release
 
 on:
   push:
-    tags: ["v*"]
+    # v*-signtest* tags run sign-test.yml and never publish.
+    tags: ["v*", "!v*-signtest*"]
   # For rehearsing the whole thing without cutting a tag. Produces artifacts
   # and an image tagged with the commit, and no GitHub release.
   workflow_dispatch:
