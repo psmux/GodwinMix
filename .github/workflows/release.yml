@@ -12,7 +12,8 @@ name: release
 
 on:
   push:
-    tags: ["v*"]
+    # v*-signtest* tags run sign-test.yml and never publish.
+    tags: ["v*", "!v*-signtest*"]
   # For rehearsing the whole thing without cutting a tag. Produces artifacts
   # and an image tagged with the commit, and no GitHub release.
   workflow_dispatch:
@@ -30,6 +31,12 @@ jobs:
     name: core (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
+    # The Windows leg of a release tag is code signed, and only it gets the
+    # windows-signing environment and its Certum secrets. Every other leg,
+    # and a rehearsal run by hand, gets an empty name, which GitHub treats as
+    # no environment at all (sign-test.yml checks that). The environment
+    # itself admits only v* tags.
+    environment: ${{ matrix.os == 'windows-latest' && startsWith(github.ref, 'refs/tags/v') && 'windows-signing' || '' }}
     strategy:
       fail-fast: false
       matrix:
@@ -74,6 +81,28 @@ jobs:
       - name: Build
         run: cargo build --release --locked --bins
 
+      # Signed before they go in the archive, so the zip and SHA256SUMS are
+      # made from the signed files. A release tag ships signed Windows
+      # binaries or nothing: these steps run on every v* tag whatever happened
+      # before them, and a failed login, signature or check fails the job,
+      # which holds back publish. .github/windows-signing has the scripts and
+      # docs/how-to/sign-windows-builds.md the story.
+      - name: Log in to Certum SimplySign (Windows)
+        if: runner.os == 'Windows' && startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          CERTUM_USERNAME: ${{ secrets.CERTUM_USERNAME }}
+          CERTUM_TOTP_SECRET: ${{ secrets.CERTUM_TOTP_SECRET }}
+          CERTUM_TOTP_ALGORITHM: ${{ vars.CERTUM_TOTP_ALGORITHM }}
+        run: ./.github/windows-signing/login.ps1
+
+      - name: Sign (Windows)
+        if: runner.os == 'Windows' && startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: |
+          ./.github/windows-signing/sign.ps1 target/release/godwinmix.exe target/release/gmx.exe
+          ./.github/windows-signing/verify.ps1 target/release/godwinmix.exe target/release/gmx.exe
+
       # Both binaries go in the archive. They are the same code under two
       # names: `godwinmix` is what a service unit and a package call it, `gmx`
       # is what an operator types.
@@ -103,6 +132,11 @@ jobs:
           path: |
             *.tar.gz
             *.zip
+
+      - name: Log out of Certum SimplySign (Windows)
+        if: always() && runner.os == 'Windows' && startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: ./.github/windows-signing/logout.ps1
 
   # A Raspberry Pi and any arm64 server. Built in an arm64 container under
   # QEMU rather than cross compiled, because getting the arm64 GStreamer
@@ -155,6 +189,12 @@ jobs:
     name: desktop (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 120
+    # The Windows leg of a release tag is code signed, and only it gets the
+    # windows-signing environment and its Certum secrets. Every other leg,
+    # and a rehearsal run by hand, gets an empty name, which GitHub treats as
+    # no environment at all (sign-test.yml checks that). The environment
+    # itself admits only v* tags.
+    environment: ${{ matrix.os == 'windows-latest' && startsWith(github.ref, 'refs/tags/v') && 'windows-signing' || '' }}
     strategy:
       fail-fast: false
       matrix:
@@ -368,9 +408,33 @@ jobs:
         shell: bash
         run: bash dev/fetch-models.sh --models tauri-app/models --runtime tauri-app/onnxruntime
 
+      # Windows signing, on a v* tag only, and a tag that cannot sign fails
+      # here rather than publishing unsigned installers. sign-staged.ps1 signs
+      # what Tauri packs and hands Tauri a signCommand for the rest, and
+      # verify-bundles.ps1 opens both installers and checks everything in
+      # them. docs/how-to/sign-windows-builds.md has the whole story.
+      - name: Log in to Certum SimplySign (Windows)
+        if: runner.os == 'Windows' && startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          CERTUM_USERNAME: ${{ secrets.CERTUM_USERNAME }}
+          CERTUM_TOTP_SECRET: ${{ secrets.CERTUM_TOTP_SECRET }}
+          CERTUM_TOTP_ALGORITHM: ${{ vars.CERTUM_TOTP_ALGORITHM }}
+        run: ./.github/windows-signing/login.ps1
+
+      - name: Sign what the installers carry (Windows)
+        if: runner.os == 'Windows' && startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: ./.github/windows-signing/sign-staged.ps1
+
       - name: Bundle
         working-directory: tauri-app
-        run: cargo tauri build --bundles ${{ matrix.bundles }}
+        run: cargo tauri build --bundles ${{ matrix.bundles }} ${{ env.WINDOWS_SIGN_CONFIG }}
+
+      - name: Verify the signatures (Windows)
+        if: runner.os == 'Windows' && startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: ./.github/windows-signing/verify-bundles.ps1
 
       # The .app is built above and the .dmg wraps it here, on its own, because
       # the dmg step drives `bundle_dmg.sh`, which asks Finder over AppleScript
@@ -455,6 +519,11 @@ jobs:
         with:
           name: desktop-${{ matrix.os }}
           path: bundles/
+
+      - name: Log out of Certum SimplySign (Windows)
+        if: always() && runner.os == 'Windows' && startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: ./.github/windows-signing/logout.ps1
 
   # ----------------------------------------------------------------- image ---
   image:

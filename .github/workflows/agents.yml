@@ -14,6 +14,9 @@ name: agents
 
 on:
   push:
+    branches: ["**"]
+    # A tag push ignores paths, so the signing test's tags are left out here.
+    tags-ignore: ["v*-signtest*"]
     paths:
       - "crates/**"
       - "skills/**"
