@@ -159,8 +159,8 @@ two minutes times the slack (a three core macOS runner was still calibrating
 at two). The mosaic latency test asks `mv-comp` again for two seconds before
 it calls a failed latency query a failure, since on Windows a tile was still
 attaching when it first asked. The restart tests say whether the sender was
-still running when nothing arrived: on macOS the third sender of the gst
-restart test was heard from for 34 s and then not at all, twice.
+still running when nothing arrived; it was, which led to the stand by fix
+above.
 
 **Still open, with what is known.**
 
