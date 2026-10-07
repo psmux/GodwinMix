@@ -56,6 +56,7 @@ Start here if you have never run it.
 * [Add a theme](how-to/add-a-theme.md)
 * [Make a preset](how-to/make-a-preset.md)
 * [Make a custom build](how-to/custom-build.md)
+* [Sign the Windows builds](how-to/sign-windows-builds.md) with the Certum cloud certificate, and test it on a tag that publishes nothing
 * [Upgrade from LiveboxMix](how-to/upgrade-from-liveboxmix.md)
 * [Write a UI of your own](how-to/write-a-ui.md)
 * [Run the smoke test](how-to/smoke-test.md)
