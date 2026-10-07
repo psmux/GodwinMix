@@ -116,7 +116,13 @@ async fn a_shader_transition_runs_and_lands_on_the_new_scene() {
     for name in ["glitch-slice", "ripple"] {
         let (handle, frames, thread) = blue_then_red().await;
         take_with(&handle, "b", Some(plan(name))).await;
-        let seen = watch(&frames, &[(20, 20), (160, 90), (300, 160)], 1_300).await;
+        // One point in each of glitch-slice's 24 bands, not three. Each band
+        // changes over at a moment from a sine hash, which is not the same to
+        // the last bit on every CPU: on the Apple silicon runner the three
+        // bands the old points sat in changed at nearly one moment, and the
+        // picture went from all old to all new between two looks, GPU or not.
+        let points: Vec<(usize, usize)> = (0..24).map(|b| (160, b * 180 / 24 + 3)).collect();
+        let seen = watch(&frames, &points, 1_300).await;
         settle(300).await;
         let end = frames.latest().unwrap().yuv(160, 90);
         let worst = frames.worst_interval();
