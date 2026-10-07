@@ -110,6 +110,16 @@ help. `drop` now waits up to three seconds for the end of stream to reach
 the sink (the bus watch records it) before it stops the pipeline. Any
 relayed or listening RTMP source that ends had the same loss.
 
+**A direct input could wait for good on a sender restarted with a new
+layout.** On macOS the gst restart test's third sender (new PIDs, program
+7) was running, the input read its program and 2.3 Mbit/s, and gave no
+frame for 35 s, in most macOS runs of this branch. The new streams stood by
+for the old ones' pads to go, and on that runner the old pads were never
+removed. A stream standing by with buffers to give now takes its slot when
+the holder has given nothing for two seconds (`streams::claim_if_quiet`,
+with a unit test); a second stream in a live program, whose holder keeps
+giving, still stands by.
+
 **The RIST input test read the stats too early.** Its keyframes had
 arrived; the stats, published once a second, still said connecting. It now
 waits for both.
