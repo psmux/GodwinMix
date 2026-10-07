@@ -125,7 +125,13 @@ async fn a_viewer_key_plays_ll_hls_and_nothing_else_gets_in() {
         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
         master = get(&format!("{base}{path}")).await;
     }
-    assert_eq!(master.status(), 200);
+    if master.status() != 200 {
+        // What the server said and what the output says about itself: on
+        // a macOS runner the master answered 503 for a minute.
+        let code = master.status();
+        let said = master.text().await.unwrap_or_default();
+        panic!("the master answered {code}: {said}\nthe output: {}", output(&base).await);
+    }
     assert_eq!(master.headers()["content-type"], "application/vnd.apple.mpegurl");
     assert_eq!(master.headers()["cache-control"], "no-store");
     let text = master.text().await.unwrap();
