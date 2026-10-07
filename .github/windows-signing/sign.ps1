@@ -13,7 +13,9 @@
 # because the timestamp server refusing a request now and then is the usual
 # reason, and signing a file again replaces its signature rather than adding
 # a second one.
-param([Parameter(Mandatory, ValueFromRemainingArguments)] [string[]] $Files)
+param([Parameter(Mandatory, ValueFromRemainingArguments)] [object[]] $Files)
+# Lists passed as one argument are flattened, so both `a b` and `@(a, b)` work.
+$Files = @($Files | ForEach-Object { $_ } | ForEach-Object { [string]$_ })
 $ErrorActionPreference = 'Stop'
 
 if (-not $env:SIGNTOOL -or -not $env:SIGN_THUMBPRINT) {

@@ -7,7 +7,9 @@
 #
 # The first file named gets the full `signtool verify /pa /v` output, which
 # shows the signer, the issuer chain and the timestamp.
-param([Parameter(Mandatory, ValueFromRemainingArguments)] [string[]] $Files)
+param([Parameter(Mandatory, ValueFromRemainingArguments)] [object[]] $Files)
+# Lists passed as one argument are flattened, so both `a b` and `@(a, b)` work.
+$Files = @($Files | ForEach-Object { $_ } | ForEach-Object { [string]$_ })
 $ErrorActionPreference = 'Stop'
 $bad = [System.Collections.Generic.List[string]]::new()
 

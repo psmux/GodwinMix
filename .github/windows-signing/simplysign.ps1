@@ -58,7 +58,7 @@ function Send-ToWindow($Process, [string] $Keys) {
     $shell = New-Object -ComObject WScript.Shell
     [void]$shell.AppActivate($Process.Id)
     Start-Sleep -Milliseconds 300
-    $shell.SendKeys($Keys)
+    if ($Keys) { $shell.SendKeys($Keys) }
 }
 
 # SendKeys treats + ^ % ~ ( ) { } [ ] as commands, so each is braced.
