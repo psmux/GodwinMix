@@ -86,8 +86,10 @@ do not have common format"). Linking against the pad templates alone made
 the attach succeed and then no buffer reached the output in 10 s, or in 30 s
 with the slack, in two runs in a row, so that change was reverted: a refusal
 that names the link is better than a silent stall. The caps the programme
-encoder offers on that runner sometimes do not suit `flvmux`, and which caps
-they are is the next thing to print. The test now waits for the first buffer
+encoder offers on that runner sometimes do not suit `flvmux`. The same
+refusal came back once more through `output.set`
+(`setting_an_output_replaces_its_address_and_keeps_its_id`), so the link
+error now names the caps the queue offered and the caps the muxer takes. The test now waits for the first buffer
 `GODWINMIX_TIMING_SLACK` times longer, which is fair but does not cure it.
 
 **A remuxed stream lost its last second when it stopped.** The remux size
