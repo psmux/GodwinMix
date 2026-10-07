@@ -21,37 +21,26 @@ test started GL directly and asserted on it. It now asks the probe first; where
 the probe says no, it prints why it skipped the GPU half and checks what a
 take really runs there, the software version through `ShaderMix`.
 
-**A shader take on a slow GPU showed only the old scene.** On the macOS
-runner the probe said GL runs, and `glitch-slice` drew 69 frames of the old
-scene and then the new one. Drawing the software version until the GPU's
-first answer was not enough (the next run looked the same): the GPU answered
-once, near progress 0, and not again inside the 1.3 second window, and that
-stale answer was drawn to the end. `ShaderMix` now hands the GPU its software
-version (or a dissolve), and that draws whenever the newest answer is more
-than three frames old. The GL appsrc keeps one frame and drops the older
-(`leaky-type=downstream`), where before a GPU slower than the programme let
-frames pile up in it. `Gl`'s answer handling moved to `gl_answers.rs`.
-That was still not it: the next macOS run looked the same, so the answers
-were coming, fresh, and were the old picture. The probe only asked for an
-answer. Checking one answer at progress 0.5 passed there too, and the take
-still showed the old scene, so the probe now sends two progress values on
-one pipeline, as a take does, and both must read as asked (about 106 at 0.2
-and 38 at 0.8, grey 128 going to black 16); otherwise it logs a warning and
-shaders run the software way. This laptop's Intel GPU passes it (ripple at
-1 reads 200, as sent). The next macOS run passed that probe and the take
-still showed only the old scene, so it is the take's own shader at the
-take's own size that the GPU there gets wrong, not GL as such. Each shader
-is now asked once on its worker thread, before a take uses it, to draw
-progress 0.5 at the canvas size (`probe::moves`: the old picture is grey
-40, the new a ramp from 120 to 240, and the answer must average above 50);
-one that draws the old picture alone is closed with a warning and the take
-runs the software way. `fx_shader` asserts it on a machine with GL. The
-next macOS run passed that check too and the take still showed only the old
-scene, so what goes wrong there happens only with frames arriving one after
-another. With no Mac to find it on, `probe::available` now answers no on
-macOS, with a line in the log, and takes there run the software versions or
-a dissolve, which at least move; the reference and the how-to say so. This
-is a gate with a reason, not a fix: the GPU path on macOS is open.
+**A shader take on macOS looked like a cut, and it was the test.** On the
+macOS runner `glitch-slice` showed the old scene at every look and then the
+new one. It looked like the GPU, and three rounds went into the GPU path:
+`ShaderMix` draws the software version (or a dissolve) until the GPU has
+answered and whenever its newest answer is more than three frames old; the
+GL appsrc keeps one frame and drops the older (`leaky-type=downstream`);
+the GL probe asks two progress values on one pipeline and checks both
+answers; and each shader is asked once, at the canvas size, to draw
+progress 0.5 before a take uses the GPU (`probe::moves`), falling back to
+the software way when it draws the old picture alone. `Gl`'s answer
+handling moved to `gl_answers.rs`. None of that changed the macOS result,
+and with shaders forced onto the CPU there it looked the same, so it was
+never the GPU. The test looked at three points, and `glitch-slice` changes
+each of its 24 bands over at a moment from a sine hash, which is not the
+same to the last bit on every CPU: on the Apple silicon runner the three
+bands those points sat in changed at nearly one moment, between two looks.
+The test now looks at one point in every band. The GPU changes stay: they
+are each a real guard (a slow or wrong GPU now shows the software
+transition rather than a frozen old picture), and this laptop's GPU passes
+all of them.
 
 **The Icecast sender could die before its first sample.** The diagnostics
 added on this branch showed it on a macOS runner: 108,552 bytes of programme

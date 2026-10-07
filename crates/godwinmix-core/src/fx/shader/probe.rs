@@ -26,16 +26,6 @@ pub fn available() -> bool {
         if gstreamer::init().is_err() {
             return false;
         }
-        // Not on macOS for now. On the macOS runners this probe passed, and
-        // so did each shader asked at the take's size (`moves`), and a take
-        // still showed the old scene for its whole window, every run: the
-        // GPU path there draws nothing while frames arrive one after another.
-        // Until that is found on a Mac, the software versions and the
-        // dissolve are what a take there shows, which at least moves.
-        if cfg!(target_os = "macos") {
-            tracing::info!("shaders run the software way on macOS: GStreamer GL there showed the old scene through a whole take");
-            return false;
-        }
         let Ok(fragment) = super::fragment("vec4 transition(vec2 uv) { return mix(getFromColor(uv), getToColor(uv), progress); }") else { return false };
         let Ok(gl) = Gl::start(&fragment, (64, 36)) else { return false };
         let read = [(0.2, 85..=125), (0.8, 20..=60)].into_iter().map(|(t, want)| (want, at(&gl, t))).collect::<Vec<_>>();
