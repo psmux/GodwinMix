@@ -181,9 +181,13 @@ above.
 * macOS jobs ran into the 90 minute limit or lost the runner ("The hosted
   runner lost communication with the server") in three of the last four
   rounds, which is a runner problem.
-* The Windows headless check of the desktop app failed once after "every
-  device plugin the app carries is loaded" with no FAIL line; it now prints
-  its exit code in hex, so the next failure says whether it crashed.
+* (Found and fixed.) The Windows headless check of the desktop app failed
+  after "every device plugin the app carries is loaded" with no FAIL line.
+  With the exit code printed in hex it read "exit code 0x", empty, and the
+  step's failure was printed before the check's own output: the app is a
+  windowed executable, PowerShell does not wait for one, and
+  `$LASTEXITCODE` was never set. The step now runs it with
+  `Start-Process -Wait -PassThru` and reads its exit code.
 
 **Diagnostics left in.** The SRT player test prints what libsrt counted on
 the player's socket and the hub's side of the stream. The Windows headless
