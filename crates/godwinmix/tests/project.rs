@@ -120,8 +120,20 @@ impl Core {
 
 /// One secret store for the whole process, as a real core has: it is opened
 /// once, by whichever test gets there first, so both must name the same one.
-fn shared_home() {
+///
+/// And so the two tests take turns. Both make the channel `sunday-service`
+/// with a key `key-1` in that one store, and run together the second one's
+/// key replaced the first one's between its export and its reveal (a Linux
+/// runner: the exported secret and the revealed one differed).
+fn shared_home() -> tokio::sync::MutexGuard<'static, ()> {
+    static TURN: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
     std::env::set_var("GODWINMIX_HOME", std::env::temp_dir().join(format!("gmx-project-home-{}", std::process::id())));
+    loop {
+        if let Ok(turn) = TURN.try_lock() {
+            return turn;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
 }
 
 /// The first mixer, set up by hand.
@@ -144,7 +156,7 @@ async fn a_working_mixer(dir: &Path) -> Core {
 async fn a_project_opened_on_a_fresh_mixer_brings_everything_and_a_merge_renames() {
     let root = std::env::temp_dir().join(format!("gmx-project-{}", std::process::id()));
     std::fs::create_dir_all(&root).unwrap();
-    shared_home();
+    let _turn = shared_home();
     let first = a_working_mixer(&root.join("first")).await;
 
     let file = first
@@ -211,7 +223,7 @@ async fn a_project_opened_on_a_fresh_mixer_brings_everything_and_a_merge_renames
 async fn without_keys_a_destination_waits_and_a_newer_file_is_refused() {
     let root = std::env::temp_dir().join(format!("gmx-project-keys-{}", std::process::id()));
     std::fs::create_dir_all(&root).unwrap();
-    shared_home();
+    let _turn = shared_home();
     let first = a_working_mixer(&root.join("first")).await;
     let file = first.call("project.export", json!({})).await.unwrap();
     let text = serde_json::to_string(&file).unwrap();
