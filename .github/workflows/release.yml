@@ -30,6 +30,9 @@ jobs:
     name: core (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
+    # Windows builds are code signed on a release tag and nowhere else. A
+    # rehearsal run by hand ships nothing, so it stays unsigned.
+    environment: ${{ github.ref_type == 'tag' && 'windows-signing' || '' }}
     strategy:
       fail-fast: false
       matrix:
@@ -74,6 +77,41 @@ jobs:
       - name: Build
         run: cargo build --release --locked --bins
 
+      # Signed before they go in the archive, so the zip and SHA256SUMS are
+      # made from the signed files.
+      - name: Log in to Certum SimplySign
+        id: certum
+        if: runner.os == 'Windows' && github.ref_type == 'tag'
+        uses: jay0lee/certum-cloud-code-sign@a3324503499c49090869856eeeecfe95fb613d87 # v1, reviewed 2026-10-07
+        with:
+          username: ${{ secrets.CERTUM_USERNAME }}
+          totp_secret: ${{ secrets.CERTUM_TOTP_SECRET }}
+          totp_algorithm: ${{ vars.CERTUM_TOTP_ALGORITHM || 'SHA-256' }}
+
+      - name: Sign (Windows)
+        if: steps.certum.outcome == 'success'
+        shell: pwsh
+        run: |
+          & "${{ steps.certum.outputs.signtool-path }}" sign /sha1 ${{ steps.certum.outputs.cert-thumbprint }} `
+            /tr http://time.certum.pl /td SHA256 /fd SHA256 /d "GodwinMix" `
+            target/release/godwinmix.exe target/release/gmx.exe
+          if ($LASTEXITCODE -ne 0) { throw "signtool could not sign godwinmix.exe and gmx.exe" }
+
+      # A release tag ships signed Windows binaries or nothing.
+      - name: Verify the signatures (Windows)
+        if: runner.os == 'Windows' && github.ref_type == 'tag'
+        shell: pwsh
+        run: |
+          $signtool = "${{ steps.certum.outputs.signtool-path }}"
+          if (-not $signtool) { Write-Host "::error::no signtool, so nothing was signed"; exit 1 }
+          $bad = 0
+          foreach ($f in @('target/release/godwinmix.exe', 'target/release/gmx.exe')) {
+            & $signtool verify /pa /q $f
+            if ($LASTEXITCODE -ne 0) { Write-Host "::error::not signed: $f"; $bad = 1 }
+            else { Write-Host "signed: $f" }
+          }
+          if ($bad) { exit 1 }
+
       # Both binaries go in the archive. They are the same code under two
       # names: `godwinmix` is what a service unit and a package call it, `gmx`
       # is what an operator types.
@@ -103,6 +141,10 @@ jobs:
           path: |
             *.tar.gz
             *.zip
+
+      - name: Log out of Certum SimplySign
+        if: always() && steps.certum.outcome != 'skipped' && steps.certum.outcome != ''
+        uses: jay0lee/certum-cloud-code-sign/teardown@a3324503499c49090869856eeeecfe95fb613d87
 
   # A Raspberry Pi and any arm64 server. Built in an arm64 container under
   # QEMU rather than cross compiled, because getting the arm64 GStreamer
@@ -155,6 +197,9 @@ jobs:
     name: desktop (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 120
+    # Windows builds are code signed on a release tag and nowhere else. A
+    # rehearsal run by hand ships nothing, so it stays unsigned.
+    environment: ${{ github.ref_type == 'tag' && 'windows-signing' || '' }}
     strategy:
       fail-fast: false
       matrix:
@@ -368,9 +413,74 @@ jobs:
         shell: bash
         run: bash dev/fetch-models.sh --models tauri-app/models --runtime tauri-app/onnxruntime
 
+      # Windows signing. Tauri signs the app, the mixer sidecar, both
+      # installers and the uninstaller through bundle.windows.signCommand. The
+      # plugins and the browser renderer travel as resources, which Tauri does
+      # not sign, so they are signed here before it packs them. The config
+      # goes in the runner's temp directory, not the checkout.
+      # The core job signs too, at about the same time, and parallel legs
+      # sign one at a time.
+      - name: Wait for the core job's signing (Windows)
+        if: runner.os == 'Windows' && github.ref_type == 'tag'
+        shell: pwsh
+        run: Start-Sleep -Seconds 35
+
+      - name: Log in to Certum SimplySign
+        id: certum
+        if: runner.os == 'Windows' && github.ref_type == 'tag'
+        uses: jay0lee/certum-cloud-code-sign@a3324503499c49090869856eeeecfe95fb613d87 # v1, reviewed 2026-10-07
+        with:
+          username: ${{ secrets.CERTUM_USERNAME }}
+          totp_secret: ${{ secrets.CERTUM_TOTP_SECRET }}
+          totp_algorithm: ${{ vars.CERTUM_TOTP_ALGORITHM || 'SHA-256' }}
+
+      - name: Sign the plugins and the browser renderer (Windows)
+        if: steps.certum.outcome == 'success'
+        shell: pwsh
+        env:
+          SIGNTOOL: ${{ steps.certum.outputs.signtool-path }}
+          CERTUM_THUMBPRINT: ${{ steps.certum.outputs.cert-thumbprint }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $signArgs = @('sign', '/sha1', $env:CERTUM_THUMBPRINT, '/tr', 'http://time.certum.pl',
+                        '/td', 'SHA256', '/fd', 'SHA256', '/d', 'GodwinMix')
+          $files = @(Get-ChildItem tauri-app/plugins -Recurse -Filter *.exe | ForEach-Object FullName) +
+                   @(Get-Item tauri-app/browser/godwinmix-browser.exe | ForEach-Object FullName)
+          $files | ForEach-Object { Write-Host "signing $_" }
+          & $env:SIGNTOOL @signArgs @files
+          if ($LASTEXITCODE -ne 0) { throw "signtool could not sign the plugins and the browser renderer" }
+          $conf = @{ bundle = @{ windows = @{ signCommand = @{ cmd = $env:SIGNTOOL; args = $signArgs + '%1' } } } }
+          $path = Join-Path $env:RUNNER_TEMP 'windows-sign.conf.json'
+          $conf | ConvertTo-Json -Depth 6 | Set-Content -Path $path -Encoding utf8
+          Add-Content $env:GITHUB_ENV "WINDOWS_SIGN_CONFIG=--config $path"
+
       - name: Bundle
         working-directory: tauri-app
-        run: cargo tauri build --bundles ${{ matrix.bundles }}
+        run: cargo tauri build --bundles ${{ matrix.bundles }} ${{ env.WINDOWS_SIGN_CONFIG }}
+
+      # A release tag ships a signed Windows app or nothing. Every first party
+      # executable, inside the installers and around them, is checked.
+      - name: Verify the signatures (Windows)
+        if: runner.os == 'Windows' && github.ref_type == 'tag'
+        shell: pwsh
+        run: |
+          $signtool = "${{ steps.certum.outputs.signtool-path }}"
+          if (-not $signtool) { Write-Host "::error::no signtool, so nothing was signed"; exit 1 }
+          $files = @(Get-ChildItem tauri-app/target/release/bundle/msi/*.msi,
+                                   tauri-app/target/release/bundle/nsis/*-setup.exe,
+                                   tauri-app/binaries/godwinmix-*.exe,
+                                   tauri-app/browser/godwinmix-browser.exe) +
+                   @(Get-ChildItem tauri-app/plugins -Recurse -Filter *.exe) +
+                   @(Get-Item tauri-app/target/release/godwinmix-desktop.exe)
+          if (-not (Get-ChildItem tauri-app/target/release/bundle/msi/*.msi)) { Write-Host "::error::no .msi was built"; exit 1 }
+          if (-not (Get-ChildItem tauri-app/target/release/bundle/nsis/*-setup.exe)) { Write-Host "::error::no -setup.exe was built"; exit 1 }
+          $bad = 0
+          foreach ($f in $files) {
+            & $signtool verify /pa /q $f.FullName
+            if ($LASTEXITCODE -ne 0) { Write-Host "::error::not signed: $($f.Name)"; $bad = 1 }
+            else { Write-Host "signed: $($f.Name)" }
+          }
+          if ($bad) { exit 1 }
 
       # The .app is built above and the .dmg wraps it here, on its own, because
       # the dmg step drives `bundle_dmg.sh`, which asks Finder over AppleScript
@@ -455,6 +565,10 @@ jobs:
         with:
           name: desktop-${{ matrix.os }}
           path: bundles/
+
+      - name: Log out of Certum SimplySign
+        if: always() && steps.certum.outcome != 'skipped' && steps.certum.outcome != ''
+        uses: jay0lee/certum-cloud-code-sign/teardown@a3324503499c49090869856eeeecfe95fb613d87
 
   # ----------------------------------------------------------------- image ---
   image:
