@@ -123,8 +123,12 @@ impl ShaderMix {
                 return;
             }
             match fragment(&source).and_then(|f| gl::Gl::start(&f, size)) {
-                Ok(g) => {
+                Ok(g) if probe::moves(&g, size) => {
                     let _ = slot.set(Runner::Gpu(Box::new(g)));
+                }
+                Ok(g) => {
+                    tracing::warn!(shader = %name, "the GPU drew this shader half way through as the old picture alone; drawing it the software way or as a dissolve");
+                    g.close();
                 }
                 Err(e) => tracing::warn!(shader = %name, error = %format!("{e:#}"), "the shader would not run on the GPU; drawing it the software way or as a dissolve"),
             }

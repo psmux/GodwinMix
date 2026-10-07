@@ -59,6 +59,7 @@ fn a_shader_runs_on_the_gpu_where_gstreamer_gl_does() {
     }
     let source = fragment(&shader("ripple")).expect("ripple is a gl-transitions shader");
     let gl = Gl::start(&source, (W as i32, H as i32)).expect("the probe ran GL, so the shader starts");
+    assert!(probe::moves(&gl, (W as i32, H as i32)), "ripple half way through on this GPU is the old picture alone");
     // The answer comes back a frame later; send until one has.
     let deadline = Instant::now() + Duration::from_secs(5);
     let mut last = Vec::new();
