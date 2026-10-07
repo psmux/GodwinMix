@@ -14,6 +14,7 @@ public delegate bool EnumProc(IntPtr h, IntPtr l);
 [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr SendMessage(IntPtr h, uint m, IntPtr w, System.Text.StringBuilder l);
 [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RECT r);
 [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);
+[DllImport("user32.dll")] public static extern bool PostMessage(IntPtr h, uint m, IntPtr w, IntPtr l);
 [StructLayout(LayoutKind.Sequential)] public struct RECT { public int Left, Top, Right, Bottom; }
 [DllImport("user32.dll")] public static extern bool EnumWindows(EnumProc cb, IntPtr l);
 [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
@@ -60,6 +61,30 @@ function Set-Field([IntPtr] $Handle, [string] $Text) {
     return $len -eq $Text.Length
 }
 
+function Get-ControlText([IntPtr] $Handle) {
+    $sb = [System.Text.StringBuilder]::new(512)
+    [void][GmxSign.Win32]::SendMessage($Handle, 0x000D, [IntPtr]512, $sb)
+    return $sb.ToString()
+}
+
+# Presses Ok. Enter alone was lost once when the window did not have the
+# keyboard, so the button is clicked with BM_CLICK, posted rather than sent
+# because the click may open a modal message box. Enter is the fallback.
+function Submit-Login($Window) {
+    Send-ToWindow $Window ''
+    $ok = Get-ChildControls $Window | Where-Object { $_.Class -match 'button' -and (Get-ControlText $_.Handle) -match '^&?ok$' } |
+        Select-Object -First 1
+    if ($ok) { [void][GmxSign.Win32]::PostMessage($ok.Handle, 0x00F5, [IntPtr]::Zero, [IntPtr]::Zero); return }
+    Write-Host 'no Ok button found; pressing Enter'
+    Send-ToWindow $Window '{ENTER}'
+}
+
+# Empties the account field, so a screenshot of a failed login shows no name.
+function Clear-AccountField($Window) {
+    $fields = Get-LoginFields $Window
+    if ($fields) { [void](Set-Field $fields[0] '') }
+}
+
 # The fallback: the account field has focus when the window opens.
 function Send-Slowly($Window, [string] $Text) {
     foreach ($ch in $Text.ToCharArray()) {
@@ -92,9 +117,8 @@ function Get-SimplySignMessages {
     foreach ($top in $tops) {
         foreach ($c in Get-ChildControls $null $top) {
             if ($c.Class -notmatch 'static') { continue }
-            $sb = [System.Text.StringBuilder]::new(512)
-            [void][GmxSign.Win32]::SendMessage($c.Handle, 0x000D, [IntPtr]512, $sb)
-            if ($sb.Length) { $sb.ToString() }
+            $text = Get-ControlText $c.Handle
+            if ($text) { $text }
         }
     }
 }

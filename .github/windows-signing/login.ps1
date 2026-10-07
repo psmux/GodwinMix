@@ -46,8 +46,7 @@ for ($try = 1; $try -le 3 -and -not $cert; $try++) {
 
     Set-LoginFields $window $user $code
     Write-Host "$($code.Length) digit code, $(Get-TotpSecondsLeft) s left of its step"
-    Save-Screen "try$try-2-filled"
-    Send-ToWindow $window '{ENTER}'
+    Submit-Login $window
     Write-Host "login $try submitted, waiting for the certificate"
 
     # The window closes on success, and the certificate shows up in the store
@@ -57,8 +56,9 @@ for ($try = 1; $try -le 3 -and -not $cert; $try++) {
         $cert = Find-CodeSigningCert
     }
     if (-not $cert) {
-        Save-Screen "try$try-3-failed"
         $still = Get-SimplySignWindow
+        Clear-AccountField $window
+        Save-Screen "try$try-3-failed"
         if ($still) {
             $said = (Get-SimplySignMessages | Select-Object -Unique) -join ' | '
             Write-Host "login $try did not take; SimplySign shows: $said"
