@@ -132,7 +132,10 @@ millicores on a Linux runner), which still tells one share from none and from
 two. The smoke test expects the 14 standard and 6 minimal MCP tools the
 server has had since `call_tool` joined the hot lists.
 
-**More of the same, found on the way.** The two rung keyframe test compares
+**More of the same, found on the way.** The two project tests take turns:
+they share one secret store on purpose, both make `sunday-service` with
+`key-1` in it, and run together one replaced the other's key between its
+export and its reveal. The two rung keyframe test compares
 keyframes only up to the big rung's last one, since on macOS the small
 rung's 5020 ms keyframe had arrived and the big one's not when the lists
 were read. The LL-HLS viewer test asks for the master again while it
