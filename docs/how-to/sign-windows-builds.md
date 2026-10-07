@@ -51,8 +51,9 @@ way to log in except its window, so `.github/windows-signing/login.ps1`:
    `Cert:\CurrentUser\My`, trying up to three codes.
 
 `sign.ps1` signs in batches and retries a batch the timestamp server refused.
-`verify.ps1` does the checking. `logout.ps1` stops SimplySign at the end of the
-job.
+`sign-staged.ps1` signs what Tauri is about to pack and writes the Tauri config
+with the `signCommand`. `verify.ps1` and `verify-bundles.ps1` do the checking.
+`logout.ps1` stops SimplySign at the end of the job.
 
 ## Set up the environment
 
@@ -73,8 +74,11 @@ name, which GitHub treats as no environment.
 
 ## Test it without releasing
 
-`.github/workflows/sign-test.yml` runs the login, signing and checks on a
-small program, on any tag matching `v*-signtest*`. Such a tag is allowed into
+`.github/workflows/sign-test.yml` runs on any tag matching `v*-signtest*`.
+One job signs and checks a small program. The other runs the release's own
+desktop steps on the real `tauri-app` with small stand ins for the mixer, a
+plugin, the browser renderer and a GStreamer library, and checks both
+installers it builds. It takes about twenty minutes, most of it compiling. Such a tag is allowed into
 the environment (it starts with `v`) and is ignored by `release.yml` and the
 other tag workflows, so it publishes nothing.
 
