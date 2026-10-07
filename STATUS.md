@@ -45,8 +45,13 @@ is now asked once on its worker thread, before a take uses it, to draw
 progress 0.5 at the canvas size (`probe::moves`: the old picture is grey
 40, the new a ramp from 120 to 240, and the answer must average above 50);
 one that draws the old picture alone is closed with a warning and the take
-runs the software way. `fx_shader` asserts it on a machine with GL. Why
-`glitch-slice` draws nothing on that GPU is still unknown and needs a Mac.
+runs the software way. `fx_shader` asserts it on a machine with GL. The
+next macOS run passed that check too and the take still showed only the old
+scene, so what goes wrong there happens only with frames arriving one after
+another. With no Mac to find it on, `probe::available` now answers no on
+macOS, with a line in the log, and takes there run the software versions or
+a dissolve, which at least move; the reference and the how-to say so. This
+is a gate with a reason, not a fix: the GPU path on macOS is open.
 
 **The Icecast sender could die before its first sample.** The diagnostics
 added on this branch showed it on a macOS runner: 108,552 bytes of programme

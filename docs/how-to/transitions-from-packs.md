@@ -132,7 +132,8 @@ Clips and mattes always run on the CPU, and cost what the table in the
 reference says. A shader runs on the GPU when GStreamer GL works there; on a
 Raspberry Pi or a server with no display it runs its software version if it
 has one (the two shipped shaders do) and as a dissolve if it does not.
-`fx.list` says which in `runs`.
+On macOS shaders run that way too for now, GPU or not. `fx.list` says which
+in `runs`.
 
 ## See also
 
