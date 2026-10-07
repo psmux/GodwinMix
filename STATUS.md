@@ -178,6 +178,15 @@ above.
   Windows runner, once: the switch task failed with "show quiet is still
   starting after 15 seconds" (`station::relay::START_WAIT`). The error says
   to try again; the task does not, and the test does not either.
+* The station tests on the macOS runner, last round (660 s for the binary):
+  `wall` still calibrating after 360 s (three cores, VideoToolbox listed),
+  which is beyond load and looks like a calibration that does not finish
+  there; `orphans` found three show processes still running 15 s after
+  their station went; `switch::compositing_turns_on...` had "the ingest
+  plugin, which runs shows without compositing, is not running". Not looked
+  into on this branch.
+* The LL-HLS viewer test on macOS answered 503 for a minute (the master
+  never had segments); it now prints the answer and the output's own status.
 * macOS jobs ran into the 90 minute limit or lost the runner ("The hosted
   runner lost communication with the server") in three of the last four
   rounds, which is a runner problem.
