@@ -287,10 +287,16 @@ jobs:
           if (-not (Test-Path tauri-app\target\release\gstreamer\windows)) {
             throw "the bundler did not place the runtime next to the executable"
           }
-          & .\tauri-app\target\release\godwinmix-desktop.exe --headless-check
-          # The exit code in hex: a crash reads as 0xC0000374 or 0xC0000005,
-          # where a check that failed on its own terms exits 1.
-          if ($LASTEXITCODE -ne 0) { throw ("--headless-check failed with exit code 0x{0:X8}" -f $LASTEXITCODE) }
+          # Waited for, not just started. The app is a windowed executable, and
+          # PowerShell runs one of those without waiting: the check's own
+          # output came after the failure, $LASTEXITCODE was still empty, and
+          # the step failed with "exit code 0x" after "every device plugin
+          # the app carries is loaded". Start-Process -Wait has the real code.
+          $check = Start-Process -FilePath .\tauri-app\target\release\godwinmix-desktop.exe `
+            -ArgumentList '--headless-check' -NoNewWindow -Wait -PassThru
+          # In hex: a crash reads as 0xC0000374 or 0xC0000005, where a check
+          # that failed on its own terms exits 1.
+          if ($check.ExitCode -ne 0) { throw ("--headless-check failed with exit code 0x{0:X8}" -f $check.ExitCode) }
 
       # What the mixer said when the headless check found it stopped. The
       # desktop app writes its logs under the platform's log directory, and a
