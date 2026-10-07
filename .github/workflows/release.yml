@@ -208,6 +208,9 @@ jobs:
       # and it needs a GStreamer to cut the bundled runtime out of.
       - name: Tauri dependencies and GStreamer (Linux)
         if: runner.os == 'Linux'
+        # A hung package mirror sat here for 78 minutes on the v0.2.1
+        # release; the step normally takes two or three.
+        timeout-minutes: 15
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev \
