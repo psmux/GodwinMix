@@ -214,9 +214,9 @@ pub fn event_name_and_payload(event: &Event) -> Option<(&'static str, Value)> {
             "source.state",
             payload(json!({ "source": source, "state": state, "detail": Value::Null })),
         ),
-        Event::OutputStateChanged { output, state, reconnects } => (
+        Event::OutputStateChanged { output, state, reconnects, error } => (
             "output.state",
-            payload(json!({ "output": output, "state": state, "reconnects": reconnects })),
+            payload(json!({ "output": output, "state": state, "reconnects": reconnects, "error": error })),
         ),
         Event::AdBreakChanged { ad } => ("adbreak.changed", payload(json!({ "ad": ad }))),
         Event::UiChanged { ui } => ("ui.changed", payload(json!({ "ui": ui }))),

@@ -10,6 +10,11 @@ This is how a service goes to YouTube and Facebook at once from the one
 encoder in the rack, while the mixer's own programme goes somewhere else or
 nowhere.
 
+If what you want on YouTube is the mixer's programme, this is the wrong page:
+use **Add destination** under Outputs, as in
+[Stream to YouTube, Facebook or Twitch](stream-to-a-platform.md). A channel
+with platforms and no encoder says so on its card and offers to move them.
+
 ## Add a destination
 
 Every channel card on the Channels tab ends in a strip headed Send on to. On a

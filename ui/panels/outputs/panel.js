@@ -19,6 +19,7 @@ import { startRecording, recordingRow, recordingState, isRecording } from "./rec
 // Destination setup is needed only when adding or editing an output.
 import { lazyAction } from "../../shell/lazy-action.js";
 import { addChannel } from "../channels/entry.js";
+import { failureLabel, failureAdvice, failureOf } from "./failure.js";
 const addDestination = lazyAction(() => import("./destination.js").then(m => m.addDestination), "Add destination");
 const editDestination = lazyAction(() => import("./destination.js").then(m => m.editDestination), "Edit destination");
 // Resources, plan lines and the HLS card: see views.js.
@@ -37,6 +38,9 @@ export function stateLabel(output) {
   // preset's placeholder is not going to connect, and "Reconnecting, attempt
   // 47" tells nobody why.
   if (output.has_key === false) return "Needs a stream key";
+  // What went wrong, when the core said, ahead of how many goes it has had.
+  const failed = failureLabel(output);
+  if (failed) return failed;
   switch (output.state) {
     case "connecting":
       return "Connecting";
@@ -59,6 +63,9 @@ export const ADVICE_AFTER = 10;
  * not running, and both are fixed away from this page.
  */
 export function stalledAdvice(output) {
+  // The core's own reason, when it gave one, says more than a count can.
+  const said = failureAdvice(output);
+  if (said) return said;
   if (output.has_key === false) return "";
   if (output.state !== "reconnecting") return "";
   if ((output.reconnects || 0) < ADVICE_AFTER) return "";
@@ -74,6 +81,8 @@ export function stalledAdvice(output) {
 export function dotClass(output) {
   if (output.state === "live") return "live";
   if (output.has_key === false) return "failed";
+  // Trying again after a refusal is not on its way up; it is failing.
+  if (failureOf(output)) return "failed";
   if (output.state === "connecting" || output.state === "reconnecting") return "connecting";
   return "failed";
 }

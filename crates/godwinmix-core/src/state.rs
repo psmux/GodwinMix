@@ -344,6 +344,7 @@ mod tests {
             output: "primary".into(),
             state: OutputState::Reconnecting,
             reconnects: 3,
+            error: None,
         })
         .unwrap();
         assert_eq!(v["type"], "output_state_changed");

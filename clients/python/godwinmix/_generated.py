@@ -2207,6 +2207,15 @@ class Ograf(TypedDict, total=False):
     supportsRealTime: bool
     version: Optional[str]
 
+class OutputError(TypedDict, total=False):
+    """What went wrong the last time this destination tried."""
+
+    detail: str
+    # The sink's own words with the key cut out. Empty when it said nothing.
+    message: str
+    # One or two sentences for a person: what happened and what to try.
+    reason: OutputErrorReason
+
 class OutputStats(TypedDict, total=False):
     """What one output is doing."""
 
@@ -2221,6 +2230,8 @@ class OutputStats(TypedDict, total=False):
     # waiting, connecting, live, reconnecting, failed, or off.
 
 class OutputStatus(TypedDict, total=False):
+    error: Union[OutputError, None]
+    # Why the last attempt to connect failed, while it is not connected. Cleared once it is live. See `output_error`.
     has_key: bool
     # False while the address still carries a placeholder a preset wrote in for somebody to replace, such as `YOUR-STREAM-KEY`. The key itself never leaves the core, so this is how a client knows to put its own form up and say "needs a stream key" without ever seeing the key. True for an address with no key in it at all, an SRT one for instance, because there is nothing there for anybody to replace.
     id: str
@@ -3990,6 +4001,9 @@ MultiviewExt = Union[bool, Dict[str, Any]]
 
 # Where an item came from.
 Origin = Literal['shipped', 'agent', 'uploaded']
+
+# The kinds of failure a client may want to tell apart.
+OutputErrorReason = Literal['refused', 'unreachable', 'timed-out', 'not-found', 'rejected', 'closed', 'stalled', 'other']
 
 OutputState = Literal['connecting', 'live', 'reconnecting', 'failed']
 

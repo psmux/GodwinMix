@@ -1953,6 +1953,16 @@ export interface Ograf {
 /** Where an item came from. */
 export type Origin = "shipped" | "agent" | "uploaded";
 
+/** What went wrong the last time this destination tried. */
+export interface OutputError {
+  detail?: string;
+  message: string;
+  reason: OutputErrorReason;
+}
+
+/** The kinds of failure a client may want to tell apart. */
+export type OutputErrorReason = "refused" | "unreachable" | "timed-out" | "not-found" | "rejected" | "closed" | "stalled" | "other";
+
 export type OutputState = "connecting" | "live" | "reconnecting" | "failed";
 
 /** What one output is doing. */
@@ -1967,6 +1977,7 @@ export interface OutputStats {
 }
 
 export interface OutputStatus {
+  error?: OutputError | null;
   has_key: boolean;
   id: string;
   queue_secs: number;
