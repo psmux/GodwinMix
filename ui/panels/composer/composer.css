@@ -152,25 +152,69 @@
 @media (max-width: 720px) {
   /* minmax(0, 1fr) and not 1fr, or the widest toolbar row sets the width of
    * the canvas under it and both run off a phone's screen. */
+  /* The picture first, at its own shape, where a thumb can work on it; the
+   * tools under it, one group to a row that swipes sideways; the inspector
+   * last. Tools first left a phone a strip of picture at the bottom. */
   .composer-body {
     grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto auto auto;
     grid-template-areas:
-      "bar"
       "health"
       "canvas"
+      "bar"
       "side";
+    min-height: 0;
+  }
+
+  .composer-canvas {
+    min-height: 0;
+    aspect-ratio: 16 / 9;
   }
 
   .composer-side {
     border-left: 0;
     border-top: var(--border) solid var(--line);
+    max-height: none;
+  }
+
+  .composer-bar {
+    border-bottom: 0;
+    border-top: var(--border) solid var(--line);
   }
 
   .composer-group {
-    flex-wrap: wrap;
+    flex: 1 1 100%;
+    flex-wrap: nowrap;
     min-width: 0;
     padding-right: 0;
     border-right: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .composer-group::-webkit-scrollbar {
+    display: none;
+  }
+
+  .composer-group > * {
+    flex: none;
+  }
+
+  .composer-group > .faint {
+    min-width: 5.5em;
+  }
+
+  /* The whole screen: a dialog's margin is room the picture needs. */
+  .scrim:has(> .composer) {
+    padding: 0;
+  }
+
+  .composer {
+    max-width: 100vw;
+    max-height: 100dvh;
+    height: 100dvh;
+    border-radius: 0;
+    border: 0;
   }
 }
 

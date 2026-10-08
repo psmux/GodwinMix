@@ -108,7 +108,9 @@ export function instantiate(id, client, config) {
     if (typeof node.setClient === "function") node.setClient(client);
     if (typeof node.setConfig === "function") node.setConfig(config || {});
     node.dataset.panel = id;
-    return { node, destroy: () => node.remove() };
+    // The element's own remove, never the panel's: Scenes and Sources have a
+    // remove(ids) of their own, which threw here and left the element behind.
+    return { node, destroy: () => Element.prototype.remove.call(node) };
   }
   const frame = el("iframe.panel", {
     src: spec.src,

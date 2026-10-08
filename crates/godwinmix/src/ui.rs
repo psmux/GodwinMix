@@ -249,6 +249,10 @@ const ASSETS: &[(&str, &str)] = &[
     ("shell/dock-model.js", include_str!("../../../ui/shell/dock-model.js")),
     ("shell/dock-pointer.js", include_str!("../../../ui/shell/dock-pointer.js")),
     ("shell/dock-menu.js", include_str!("../../../ui/shell/dock-menu.js")),
+    ("shell/phone-mode.js", include_str!("../../../ui/shell/phone-mode.js")),
+    ("shell/phone.js", include_str!("../../../ui/shell/phone.js")),
+    ("shell/phone-icons.js", include_str!("../../../ui/shell/phone-icons.js")),
+    ("shell/phone-more.js", include_str!("../../../ui/shell/phone-more.js")),
     ("shell/menu.js", include_str!("../../../ui/shell/menu.js")),
     ("shell/menubar.js", include_str!("../../../ui/shell/menubar.js")),
     ("shell/menus.js", include_str!("../../../ui/shell/menus.js")),
@@ -302,6 +306,7 @@ const ASSETS: &[(&str, &str)] = &[
     ("themes/base.css", include_str!("../../../ui/themes/base.css")),
     ("themes/dock.css", include_str!("../../../ui/themes/dock.css")),
     ("themes/touch.css", include_str!("../../../ui/themes/touch.css")),
+    ("themes/phone.css", include_str!("../../../ui/themes/phone.css")),
     ("themes/dark.css", include_str!("../../../ui/themes/dark.css")),
     ("themes/high-contrast.css", include_str!("../../../ui/themes/high-contrast.css")),
     ("themes/light.css", include_str!("../../../ui/themes/light.css")),
@@ -342,6 +347,7 @@ const DEV_ASSETS: &[(&str, &str)] = &[
     ("test/welcome.js", include_str!("../../../ui/test/welcome.js")),
     ("test/menubar.js", include_str!("../../../ui/test/menubar.js")),
     ("test/touch.js", include_str!("../../../ui/test/touch.js")),
+    ("test/phone.js", include_str!("../../../ui/test/phone.js")),
     ("test/presence.js", include_str!("../../../ui/test/presence.js")),
     ("test/touch-tray.js", include_str!("../../../ui/test/touch-tray.js")),
     // The Channels panel against a stub of the channel contract, as tests and
@@ -966,6 +972,8 @@ mod tests {
         reachable.extend(closure_of("panels/multiview/studio.js"));
         // Long press and double tap, where there is a touch screen.
         reachable.extend(closure_of("shell/touch.js"));
+        // The phone deck, on a screen 760px wide or less.
+        reachable.extend(closure_of("shell/phone.js"));
         // A refused undo, or a draft somebody else changed underneath.
         reachable.extend(closure_of("shell/conflicts.js"));
         // The menu bar's menus, the first time one opens, and File's project
@@ -1028,6 +1036,7 @@ mod tests {
         for (path, who) in [
             ("panels/composer/composer.js", "a double tap on a scene tile"),
             ("shell/dock-menu.js", "workspace or panel actions"),
+            ("shell/phone.js", "a screen 760px wide or less"),
             ("shell/picker.js", "adding a source or dropping a URI"),
             ("panels/sources/chooser.js", "adding sources to a scene"),
             ("panels/outputs/destination.js", "adding or editing a destination"),

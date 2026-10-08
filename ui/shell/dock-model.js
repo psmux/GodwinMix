@@ -25,6 +25,21 @@ export function initial(layout) {
   const controls = { axis: 'x', ratio: .2, a: leaf(sceneList), b: desk };
   return clean(program.length ? { axis: 'y', ratio: .6, a: leaf(program), b: controls } : controls);
 }
+/** Header and modal panels out of the tree, and every other registered panel somewhere in it. */
+export function adopt(state, specs) {
+  for (const spec of specs) {
+    if (!spec.slots.some(s => s === 'header' || s === 'modal')) continue;
+    state.tree = remove(state.tree, spec.id);
+    state.hidden = state.hidden.filter(id => id !== spec.id);
+  }
+  const known = new Set([...leaves(state.tree).flatMap(n => n.tabs), ...state.hidden]);
+  for (const spec of specs) {
+    if (spec.slots.includes('header') || spec.slots.includes('modal') || known.has(spec.id)) continue;
+    const utility = leaves(state.tree).find(n => n.tabs.includes('core/outputs'));
+    if (utility) utility.tabs.push(spec.id);
+    else state.tree = state.tree ? { axis: 'x', ratio: .75, a: state.tree, b: leaf([spec.id]) } : leaf([spec.id]);
+  }
+}
 export function load(layout) {
   try {
     const value = JSON.parse(localStorage.getItem(KEY));

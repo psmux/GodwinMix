@@ -3,6 +3,7 @@ import * as model from './dock-model.js';
 import * as registry from './registry.js';
 import { gestures } from './dock-pointer.js';
 import { positionWorkspace } from './dock-geometry.js';
+import { phoneOwns, watchWidth } from './phone-mode.js';
 // Layout dialogs load only when an operator opens them.
 import { lazyAction } from './lazy-action.js';
 const workspaceMenu = lazyAction(() => import('./dock-menu.js').then(m => m.workspaceMenu), 'Open workspace controls');
@@ -26,26 +27,17 @@ export class Workspace {
     this.observer.observe(this.root);
     this.live = el('span.sr-only', { 'aria-live': 'polite' });
     this.root.append(this.live);
+    watchWidth(this);
   }
   sync() {
-    for (const spec of registry.list()) {
-      if (!spec.slots.some(s => s === 'header' || s === 'modal')) continue;
-      this.state.tree = model.remove(this.state.tree, spec.id);
-      this.state.hidden = this.state.hidden.filter(id => id !== spec.id);
-    }
-    const known = new Set([...model.leaves(this.state.tree).flatMap(n => n.tabs), ...this.state.hidden]);
-    for (const spec of registry.list()) {
-      if (spec.slots.includes('header') || spec.slots.includes('modal') || known.has(spec.id)) continue;
-      const utility = model.leaves(this.state.tree).find(n => n.tabs.includes('core/outputs'));
-      if (utility) utility.tabs.push(spec.id);
-      else this.state.tree = this.state.tree ? { axis: 'x', ratio: .75, a: this.state.tree, b: model.leaf([spec.id]) } : model.leaf([spec.id]);
-    }
+    model.adopt(this.state, registry.list());
     this.render();
   }
   schedule() {
     if (!this.raf) this.raf = requestAnimationFrame(() => { this.raf = 0; this.position(); });
   }
   render() {
+    if (phoneOwns(this)) return;
     const groups = model.leaves(this.state.tree);
     const active = new Set(groups.map(n => n.active));
     const present = new Set(groups.flatMap(n => n.tabs));
@@ -88,6 +80,7 @@ export class Workspace {
     model.save(this.state);
   }
   activate(group, id) {
+    if (this.phone) return this.phone.open(id);
     group.active = id;
     this.render();
     this.frames.get(id)?.tabs.querySelector('[aria-selected="true"]')?.focus();
@@ -110,7 +103,7 @@ export class Workspace {
     gestures(this, handle, id);
   }
   position() {
-    positionWorkspace(this);
+    if (!this.phoneMode) positionWorkspace(this);
   }
 
   move(id, target, edge) {
@@ -125,6 +118,7 @@ export class Workspace {
     this.toolbar.querySelector('button').focus();
   }
   show(id) {
+    if (this.phone) return this.phone.open(id);
     this.state.hidden = this.state.hidden.filter(x => x !== id);
     // Already open somewhere: bring that tab forward. Adding it again put a
     // second "Channels" tab beside the first.
@@ -140,12 +134,10 @@ export class Workspace {
     this.sync();
   }
   destroy() {
+    this.phone?.destroy();
     this.observer.disconnect();
     cancelAnimationFrame(this.raf);
     for (const frame of this.frames.values()) frame.made.destroy();
     this.frames.clear();
   }
-}
-export function place(element, r) {
-  Object.assign(element.style, { left: r.x + 'px', top: r.y + 'px', width: Math.max(0, r.w) + 'px', height: Math.max(0, r.h) + 'px' });
 }

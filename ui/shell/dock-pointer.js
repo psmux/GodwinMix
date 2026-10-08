@@ -1,5 +1,5 @@
 import { el } from './dom.js';
-import { place } from './dock.js';
+import { place } from './dock-geometry.js';
 import { save } from './dock-model.js';
 
 function track(event, move, finish) {
