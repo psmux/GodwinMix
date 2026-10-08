@@ -2,8 +2,20 @@ import * as model from '../shell/dock-model.js';
 import { Workspace } from '../shell/dock.js';
 import { registerElement } from '../shell/registry.js';
 import { decodeLayout } from '../shell/dock-presets.js';
+import { NARROW } from '../shell/phone-mode.js';
 
+/**
+ * The dock, whatever the window is. A headless browser can open narrower than
+ * 760px, where the page is a phone and the dock draws no frames, so these
+ * tests answer the phone question no for as long as they run.
+ */
 export function dockTests(test, eq, ok) {
+  const real = window.matchMedia;
+  window.matchMedia = (q) => q === NARROW ? { matches: false, media: q, addEventListener() {}, removeEventListener() {} } : real.call(window, q);
+  try { deskTests(test, eq, ok); } finally { window.matchMedia = real; }
+}
+
+function deskTests(test, eq, ok) {
   test('workspace imports validate versions and normalize visible and hidden panels', () => {
     const loaded = decodeLayout({ version: 1, tree: model.leaf(['a', 'a']), hidden: ['a', 'b', 'b', null] });
     eq(loaded.tree.tabs, ['a']); eq(loaded.hidden, ['b']);
