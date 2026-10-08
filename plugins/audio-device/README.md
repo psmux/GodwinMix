@@ -68,7 +68,9 @@ would not listen.
 
 There are none here. Levels are the core's, measured where the sound reaches
 the mix, which is the only place a number means what an operator thinks it
-means. They arrive in `agent.state` and on the UI's faders.
+means. They arrive in `agent.state`, in `event/meters` for a client that asks,
+and on the source's tile in the UI, which says "Sound only, no video" and draws
+the level across it.
 
 ## When it fails
 

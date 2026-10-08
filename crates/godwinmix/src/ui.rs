@@ -216,6 +216,7 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/sources/panel.js", include_str!("../../../ui/panels/sources/panel.js")),
     ("panels/sources/setreq.js", include_str!("../../../ui/panels/sources/setreq.js")),
     ("panels/sources/tile.js", include_str!("../../../ui/panels/sources/tile.js")),
+    ("panels/sources/tile-level.js", include_str!("../../../ui/panels/sources/tile-level.js")),
     ("panels/sources/text-presets.js", include_str!("../../../ui/panels/sources/text-presets.js")),
     ("panels/sources/text-fields.js", include_str!("../../../ui/panels/sources/text-fields.js")),
     ("panels/sources/text-editor.js", include_str!("../../../ui/panels/sources/text-editor.js")),
@@ -351,6 +352,7 @@ const DEV_ASSETS: &[(&str, &str)] = &[
     ("test/phone.js", include_str!("../../../ui/test/phone.js")),
     ("test/presence.js", include_str!("../../../ui/test/presence.js")),
     ("test/touch-tray.js", include_str!("../../../ui/test/touch-tray.js")),
+    ("test/tile-levels.js", include_str!("../../../ui/test/tile-levels.js")),
     // The Channels panel against a stub of the channel contract, as tests and
     // as a page to look at: /test/channels.html?scene=cards&theme=light.
     ("test/channels.js", include_str!("../../../ui/test/channels.js")),

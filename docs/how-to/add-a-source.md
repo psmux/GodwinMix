@@ -190,6 +190,12 @@ the web UI. Neither is an MCP tool: the agent tool lists are held to a size.
   using has read scope and `device.discover` needs operate.
 * A source appears in the tray and never goes live. `gmx ctl status` says what
   state it is in, and the alerts panel says why.
+* A microphone is live and you cannot tell whether it hears anything. Its tile
+  says **Sound only, no video** and has a level bar across it that moves with
+  the sound, with the peak in dBFS beside it. A bar that stays empty while you
+  speak means the device is sending silence: check its input level in the
+  operating system's sound settings. See
+  [Input levels](preview-monitor.md#input-levels).
 
 If the supervisor restarts a source, its programme and preview branches resume
 with it. The source status reports video and audio again once buffers return,

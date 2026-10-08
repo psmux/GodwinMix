@@ -7,14 +7,14 @@
 
 import { el, svg } from "../../shell/dom.js";
 import { ICONS, KIND_COLOUR, kindOfSource } from "../../client/kinds.js";
-import { meterElement } from "../../shell/meter.js";
+import { levelParts, syncLevel } from "./tile-level.js";
 import { UNITY, gainToPos, gainLabel, fmtPosition } from "../../shell/fader.js";
 import { nameOf, colourOf, isLocal } from "./local.js";
 import { dragHandle } from "../../shell/pointer.js";
 
 /**
  * @param {object} source   a SourceStatus
- * @param {object} deps     {audio, scrub, onTake, onRename, onGear, onMute}
+ * @param {object} deps     {audio, scrub, onTake, onRename, onGear, onMute, meters}
  */
 export function buildTile(source, deps) {
   const kind = kindOfSource(source);
@@ -33,7 +33,10 @@ export function buildTile(source, deps) {
   const bar = el("div.bar", {}, [dragHandle(), dot, name, gear]);
 
   const playback = el("div.playback", { text: source.seekable ? "Clip" : "Continuous live source" });
-  node.append(pic, still, kindbox, slot, strip, bar, playback);
+  const level = levelParts(source, kind, deps.meters);
+  node.classList.toggle("sound", level.sound);
+  node.classList.toggle("metered", !!level.meter);
+  node.append(pic, still, kindbox, ...[level.face, level.meter].filter(Boolean), slot, strip, bar, playback);
 
   // ----------------------------------------------------------- the strip
 
@@ -57,8 +60,7 @@ export function buildTile(source, deps) {
     disabled: silent,
   });
   const gv = el("span.num.sm", { text: gainLabel(source.gain === undefined ? 1 : source.gain) });
-  const meter = meterElement("v");
-  strip.append(meter, fader, gv, mute);
+  strip.append(fader, gv, mute);
 
   let lane = null;
   let pos = null;
@@ -93,7 +95,10 @@ export function buildTile(source, deps) {
     gv,
     fader,
     mute,
-    meter,
+    meter: level.meter,
+    readout: level.readout,
+    note: level.note,
+    sound: level.sound,
     lane,
     pos,
     kind,
@@ -137,6 +142,7 @@ export function syncTile(tile, source, view) {
       : "Mute";
 
   tile.strip.hidden = !view.showStrip;
+  syncLevel(tile, source);
 
   if (tile.lane) {
     const p = view.position || { pos: 0, dur: null };
@@ -153,9 +159,10 @@ export function syncTile(tile, source, view) {
 
 /** Show the right picture for the gallery mode. Costs nothing to switch. */
 export function setTileMode(tile, mode) {
-  tile.pic.hidden = mode !== "live";
-  tile.still.hidden = mode !== "snapshot";
-  tile.kindbox.hidden = mode === "live" || mode === "snapshot";
+  // A sound only source has no picture in any mode: its face says so.
+  tile.pic.hidden = mode !== "live" || tile.sound;
+  tile.still.hidden = mode !== "snapshot" || tile.sound;
+  tile.kindbox.hidden = mode === "live" || mode === "snapshot" || tile.sound;
   tile.node.classList.toggle("mode-label", mode === "label");
   if (mode === "label") tile.kindbox.hidden = true;
 }
