@@ -1549,6 +1549,9 @@ impl InputPipeline {
                 gst::ClockTime::from_mseconds(wanted),
             )
             .with_context(|| format!("seeking {} to {wanted}ms", self.id))?;
+        // In this order: a clip that sat at its end for longer than the stall
+        // timeout read stalled for the tick between the two otherwise.
+        self.health.rearm();
         self.ended.store(false, Ordering::Relaxed);
         // Read back rather than reported: the seek snaps to a key unit, so where
         // it landed and what was asked for are rarely the same millisecond.

@@ -101,6 +101,16 @@ impl SourceHealth {
         self.last_audio_ms.store(self.now_ms(), Ordering::Relaxed);
     }
 
+    /// Start the stall clock again for what has been seen, without claiming
+    /// anything new arrived. For a seek: the stream starts over, and the
+    /// time it spent at the end of a clip before it is not a stall.
+    pub fn rearm(&self) {
+        let now = self.now_ms();
+        for last in [&self.last_video_ms, &self.last_audio_ms] {
+            let _ = last.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |t| (t != NEVER).then_some(now));
+        }
+    }
+
     pub fn saw_video(&self) -> bool {
         self.last_video_ms.load(Ordering::Relaxed) != NEVER
     }
@@ -168,6 +178,21 @@ mod tests {
         assert!(h.is_stalled(0.0));
         h.reset();
         assert!(!h.is_stalled(0.0));
+    }
+
+    /// A seek starts the stall clock again for what was seen, and does not
+    /// invent what was not.
+    #[test]
+    fn rearming_restarts_the_clock_without_claiming_new_media() {
+        let h = SourceHealth::new(Instant::now());
+        h.rearm();
+        assert!(!h.saw_video() && !h.saw_audio(), "nothing seen, nothing claimed");
+        h.mark_video();
+        std::thread::sleep(std::time::Duration::from_millis(30));
+        assert!(h.is_stalled(0.01));
+        h.rearm();
+        assert!(!h.is_stalled(0.01), "the clock started again");
+        assert!(!h.saw_audio(), "sound was never seen and still is not");
     }
 
     #[test]
