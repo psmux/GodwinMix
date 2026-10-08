@@ -61,6 +61,7 @@ import { connect } from "../client/index.js";
 import { shell, panelSection } from "../shell/shell.js";
 import { buildTile, syncTile } from "../panels/sources/tile.js";
 import { repeatRequest } from "../panels/sources/clip-end.js";
+import { withParams } from "../client/kind-params.js";
 import { settableOnly, setRequest } from "../panels/sources/setreq.js";
 import { SceneMirror } from "../kits/protocol/mirror.js";
 import { Prediction, mergeProps } from "../kits/protocol/predict.js";
@@ -329,6 +330,21 @@ test("Repeat on a clip's tile follows the clip and asks for the other word when 
   const old = buildTile({ ...clip, id: "old", at_end: undefined }, deps);
   syncTile(old, { ...clip, id: "old", at_end: undefined }, {});
   ok(old.repeat.hidden);
+});
+
+test("a built in kind's published params join its settings form, the drawable ones only", () => {
+  const page = { type: "object", properties: { name: { type: "string", title: "Name" } } };
+  const core = {
+    properties: {
+      at_end: { type: "string", enum: ["repeat", "hold", "leave"], default: "hold" },
+      alpha: { anyOf: [{ type: "boolean" }, { const: "auto" }] },
+      name: { type: "string", title: "Something else" },
+    },
+  };
+  const merged = withParams(page, core);
+  eq(Object.keys(merged.properties), ["name", "at_end"]);
+  eq(merged.properties.name.title, "Name", "the page's own box is kept");
+  eq(withParams(page, null).properties, page.properties);
 });
 
 test("control sections collapse without destroying their panels", () => {

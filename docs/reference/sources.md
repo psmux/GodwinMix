@@ -73,6 +73,13 @@ and before every clip went round, by a restart (below), and a clip in a
 runtime file from then that says nothing now holds. `loop = true`, which the OBS
 import used to write, still reads as `repeat`.
 
+A held clip sends no more frames, so a picture made after it came to rest (a
+mosaic built when a page opens, the Studio preview of its scene, a take that
+draws it in a new place) would have nothing of it to draw. Each of those has
+the clip seek to its last frame once and send it again. That costs one decode
+from the keyframe before it, and it is not a new end: it says nothing on the
+event bus and a clip set to leave does not leave again.
+
 Whatever it does, the clip reads `live` the whole time and never `connecting`
 or `stalled`. Its row in `source.list` and in the status carries `at_end`, and
 `ended: true` while it is holding its last frame. Each end is said once in

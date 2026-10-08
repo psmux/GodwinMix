@@ -25,6 +25,7 @@ use crate::input::InputPipeline;
 use crate::plugin::branch::ProgrammeBranch;
 use crate::state::{Event, SourceId};
 use anyhow::Result;
+use gstreamer as gst;
 use std::sync::Arc;
 use tracing::{debug, info, warn};
 
@@ -137,20 +138,26 @@ impl Mixer {
     /// quiet (`ClipEnd::quietly`), so a clip set to leave the scene does not
     /// leave it again.
     pub(super) fn show_held_clips_again(&mut self) {
-        let held: Vec<(SourceId, u64)> = self
-            .sources
-            .iter()
-            .filter(|s| s.clip_end.as_ref().is_some_and(|e| e.held()) && s.seekable())
-            .filter_map(|s| Some((s.input.id.clone(), s.input.duration_ms()?)))
-            .collect();
-        for (id, duration_ms) in held {
-            let Some(end) = self.sources.iter().find(|s| s.input.id == id).and_then(|s| s.clip_end.clone()) else {
+        for slot in &self.sources {
+            let Some(end) = slot.clip_end.as_ref().filter(|e| e.resting()) else { continue };
+            if !slot.seekable() {
                 continue;
-            };
+            }
+            // The newest picture's own place: the duration can lie past every
+            // picture, see `mixer::clip_frame`.
+            let duration = slot.input.duration_ms().map(|ms| gst::ClockTime::from_mseconds(ms.saturating_sub(1)));
+            let Some(at) = end.last_frame().or(duration) else { continue };
             end.quietly();
-            debug!(source = %id, "showing a held clip's last frame again for a picture made since");
-            if !matches!(self.seek(&id, duration_ms.saturating_sub(1)), SeekOutcome::Moved(_)) {
-                end.take_quiet();
+            // Placed again from now, as for any seek: see `Mixer::seek`.
+            if let Some(aligner) = &slot.aligner {
+                aligner.reset();
+            }
+            match slot.input.seek_exact(at) {
+                Ok(()) => debug!(source = %slot.input.id, "showing a held clip's last frame again for a picture made since"),
+                Err(e) => {
+                    end.take_quiet();
+                    warn!(source = %slot.input.id, ?e, "a held clip could not show its last frame again");
+                }
             }
         }
     }

@@ -413,6 +413,7 @@ mod allocation;
 mod catch_up;
 mod clip_act;
 mod clip_end;
+mod clip_frame;
 mod backoff;
 mod cue;
 mod exited;

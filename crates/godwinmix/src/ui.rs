@@ -38,6 +38,7 @@ const ASSETS: &[(&str, &str)] = &[
     ("client/devices.js", include_str!("../../../ui/client/devices.js")),
     ("client/frames.js", include_str!("../../../ui/client/frames.js")),
     ("client/index.js", include_str!("../../../ui/client/index.js")),
+    ("client/kind-params.js", include_str!("../../../ui/client/kind-params.js")),
     ("client/kinds.js", include_str!("../../../ui/client/kinds.js")),
     ("client/rpc.js", include_str!("../../../ui/client/rpc.js")),
     ("client/sandbox-client.js", include_str!("../../../ui/client/sandbox-client.js")),
