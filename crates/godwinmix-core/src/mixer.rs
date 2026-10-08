@@ -4752,9 +4752,6 @@ impl Mixer {
                 return SeekOutcome::Failed(format!("{e:#}"));
             }
         };
-        if let Some(end) = &slot.clip_end {
-            end.landed_at(landed);
-        }
         let now = SourcePositionState { position_ms: landed, duration_ms: slot.input.duration_ms() };
         info!(
             source = %id, asked_ms = position_ms, landed_ms = landed,

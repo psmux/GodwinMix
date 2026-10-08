@@ -2,9 +2,11 @@
 //! `params.at_end`. See `mixer::clip_end` for how the end is found.
 //!
 //! * `repeat`: a flushing seek to the start, the same one a scrubber makes.
-//!   The queues are empty by then, so the flush throws nothing away, and the
-//!   compositor holds the last frame for the few milliseconds the first one
-//!   takes to arrive. Nothing is restarted and the source stays `live`. A
+//!   The branch's queues are empty by then, so the flush throws nothing away;
+//!   the flush stops at the queue, so what the compositor still holds plays
+//!   out; and the seek is made when the last of that is due, so the first new
+//!   frame lands one decode after the last old one, placed by the aligner at
+//!   that moment. Nothing is restarted and the source stays `live`. A
 //!   clip that cannot be seeked (a file over HTTP from a server that refuses
 //!   ranges) is restarted as before, after its tail has played.
 //! * `hold`, the default: nothing happens to the pipeline. The last frame
@@ -51,7 +53,17 @@ impl Mixer {
             debug!(source = %id, generation, "a clip ended that has since been removed or replaced");
             return;
         };
-        let Some(end) = slot.clip_end.clone() else { return };
+        let Some(end) = slot.clip_end.clone().filter(|e| e.at_end()) else { return };
+        // The EOS left the branch with up to a second still queued at the
+        // compositor; this is told again when the last of it is drawn.
+        if let Some(wait) = end.wait_for_last_frame(slot.input.duration_ms()) {
+            let (handle, again) = (self.handle.clone(), id.clone());
+            self.rt.spawn(async move {
+                tokio::time::sleep(wait).await;
+                let _ = handle.send(Command::ClipEnded(again, generation));
+            });
+            return;
+        }
         let at_end = AtEnd::of(&slot.input.current_config().params);
         if at_end != AtEnd::Repeat {
             end.hold();
@@ -65,14 +77,6 @@ impl Mixer {
         }
         if !slot.seekable() {
             self.arm_source_restart(id.clone(), "the clip reached its end and cannot be seeked back to the start");
-            return;
-        }
-        if let Some(wait) = end.wait_before_repeat(slot.input.duration_ms()) {
-            let (handle, again) = (self.handle.clone(), id.clone());
-            self.rt.spawn(async move {
-                tokio::time::sleep(wait).await;
-                let _ = handle.send(Command::ClipEnded(again, generation));
-            });
             return;
         }
         let _ = self.events.send(Event::SourceEnded { source: id.clone(), at_end: at_end.as_str().into() });

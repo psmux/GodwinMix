@@ -11,12 +11,16 @@
 //! them, so every pass lost the end of the clip. An eight second test clip
 //! went round every 5.7 seconds.
 //!
-//! So a clip's end is judged where its programme branch hands frames to the
-//! compositor: the EOS is caught on the far side of the branch's two queues,
-//! after the last frame has gone out, and dropped there, so the compositor
-//! pad never ends and goes on drawing that last frame. Then the mixer is told
-//! (`Command::ClipEnded`) and does what `params.at_end` says; see
-//! `mixer::clip_act`.
+//! So the EOS is caught on the far side of the branch's two queues and dropped
+//! there, so the compositor pad never ends and goes on drawing the last frame
+//! it was given. Even there it is early: the compositor's own pad still holds
+//! up to a second of frames waiting for their time. What does say when the
+//! last frame is drawn is the clock. Each pass's first segment out of the
+//! queue is the moment the aligner puts that segment's first frame on air, so
+//! the last frame is due one duration, less where the segment started, after
+//! it. The mixer is told at the EOS (`Command::ClipEnded`), waits out what is
+//! left of that (`ClipEnd::wait_for_last_frame`), and then does what
+//! `params.at_end` says; see `mixer::clip_act`.
 //!
 //! The ad break is not one of these: its end is how the break knows to
 //! return, and it keeps its own EOS handling.
@@ -80,8 +84,7 @@ pub struct ClipEnd {
     told: AtomicBool,
     /// Holding its last frame: ended, and not asked to repeat.
     held: AtomicBool,
-    /// When the start of the clip was, or would have been, on air. A repeat
-    /// never begins sooner than one duration after it. See `wait_before_repeat`.
+    /// When the start of the clip was, or would have been, on air this pass.
     began: Mutex<Instant>,
 }
 
@@ -106,25 +109,27 @@ impl ClipEnd {
             let (watch, tell) = (this.clone(), tell.clone());
             pad.add_probe(gst::PadProbeType::EVENT_DOWNSTREAM, move |_pad, info| {
                 let Some(event) = info.event() else { return gst::PadProbeReturn::Ok };
-                watch.on_event(bit, event.type_(), &*tell)
+                watch.on_event(bit, event, &*tell)
             })
             .context("watching the branch for the end of the clip")?;
         }
         Ok(this)
     }
 
-    fn on_event(&self, bit: u8, kind: gst::EventType, tell: &dyn Fn()) -> gst::PadProbeReturn {
-        match kind {
-            gst::EventType::Segment => {
+    fn on_event(&self, bit: u8, event: &gst::EventRef, tell: &dyn Fn()) -> gst::PadProbeReturn {
+        match event.view() {
+            gst::EventView::Segment(segment) => {
                 if self.told.swap(false, Ordering::AcqRel) {
                     self.started.store(0, Ordering::Release);
                     self.ended.store(0, Ordering::Release);
                     self.held.store(false, Ordering::Release);
                 }
-                self.started.fetch_or(bit, Ordering::AcqRel);
+                if self.started.fetch_or(bit, Ordering::AcqRel) == 0 {
+                    self.began_at(segment_start(segment.segment()));
+                }
                 gst::PadProbeReturn::Ok
             }
-            gst::EventType::Eos => {
+            gst::EventView::Eos(_) => {
                 let ended = self.ended.fetch_or(bit, Ordering::AcqRel) | bit;
                 let started = self.started.load(Ordering::Acquire);
                 // Every branch that played this pass has finished. A clip with
@@ -138,6 +143,19 @@ impl ClipEnd {
         }
     }
 
+    /// The pass starts on air now, at `position` into the clip.
+    fn began_at(&self, position: Duration) {
+        let now = Instant::now();
+        *self.began.lock() = now.checked_sub(position).unwrap_or(now);
+    }
+
+    /// Whether this pass has ended. False again once the clip plays on, so a
+    /// notice still waiting for the last frame of a pass that a scrub cut
+    /// short finds nothing to do.
+    pub fn at_end(&self) -> bool {
+        self.told.load(Ordering::Acquire)
+    }
+
     pub fn hold(&self) {
         self.held.store(true, Ordering::Release);
     }
@@ -146,23 +164,22 @@ impl ClipEnd {
         self.held.load(Ordering::Acquire)
     }
 
-    /// Say where a seek landed, so the next repeat is timed from there. A
-    /// seek plays a held clip again.
-    pub fn landed_at(&self, position_ms: u64) {
-        self.held.store(false, Ordering::Release);
-        let back = Duration::from_millis(position_ms);
-        let now = Instant::now();
-        *self.began.lock() = now.checked_sub(back).unwrap_or(now);
-    }
-
-    /// How long to wait before repeating, if the end came sooner than the
-    /// clip lasts. A clip with sound is paced by the audio mixer and a clip in
-    /// a scene by the compositor; a clip with neither, on no scene, is pulled
-    /// as fast as it decodes, and would go round as fast as that without this.
-    pub fn wait_before_repeat(&self, duration_ms: Option<u64>) -> Option<Duration> {
+    /// How long until the last frame of this pass is drawn, if it is not yet.
+    /// Also what stops a clip that nothing paces (no sound, on no scene, so
+    /// pulled as fast as it decodes) going round as fast as that.
+    pub fn wait_for_last_frame(&self, duration_ms: Option<u64>) -> Option<Duration> {
         let due = *self.began.lock() + Duration::from_millis(duration_ms?);
         due.checked_duration_since(Instant::now()).filter(|d| !d.is_zero())
     }
+}
+
+/// Where in the clip a segment starts: zero from the top, the position after
+/// a seek.
+fn segment_start(segment: &gst::Segment) -> Duration {
+    segment
+        .downcast_ref::<gst::ClockTime>()
+        .and_then(|s| s.time().or(s.start()))
+        .map_or(Duration::ZERO, |t| Duration::from_nanos(t.nseconds()))
 }
 
 #[cfg(test)]

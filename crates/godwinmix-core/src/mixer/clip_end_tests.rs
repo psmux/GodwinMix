@@ -19,6 +19,19 @@ fn a_clip_holds_at_its_end_unless_its_params_say_otherwise() {
     }
 }
 
+fn segment_at(ms: u64) -> gst::Event {
+    let _ = gst::init();
+    let mut segment = gst::FormattedSegment::<gst::ClockTime>::new();
+    segment.set_start(gst::ClockTime::from_mseconds(ms));
+    segment.set_time(gst::ClockTime::from_mseconds(ms));
+    gst::event::Segment::new(&segment)
+}
+
+fn eos() -> gst::Event {
+    let _ = gst::init();
+    gst::event::Eos::new()
+}
+
 /// The end is said once, when every branch that played has ended, and the EOS
 /// never reaches the compositor or the audio mixer.
 #[test]
@@ -29,26 +42,27 @@ fn the_end_is_told_once_when_the_last_branch_ends() {
         told.fetch_add(1, Ordering::Relaxed);
     };
     for bit in [VIDEO, AUDIO] {
-        end.on_event(bit, gst::EventType::Segment, &tell);
+        end.on_event(bit, &segment_at(0), &tell);
     }
-    let video = end.on_event(VIDEO, gst::EventType::Eos, &tell);
+    let video = end.on_event(VIDEO, &eos(), &tell);
     assert!(matches!(video, gst::PadProbeReturn::Drop), "an EOS must never reach a mixer pad");
     assert_eq!(told.load(Ordering::Relaxed), 0, "the sound is still playing");
-    end.on_event(AUDIO, gst::EventType::Eos, &tell);
+    end.on_event(AUDIO, &eos(), &tell);
     assert_eq!(told.load(Ordering::Relaxed), 1);
-    end.on_event(AUDIO, gst::EventType::Eos, &tell);
+    assert!(end.at_end());
+    end.on_event(AUDIO, &eos(), &tell);
     assert_eq!(told.load(Ordering::Relaxed), 1, "one end, one notice");
     end.hold();
     assert!(end.held());
 
     // The seek back to the start sends new segments, and the next end is a
-    // new one. Playing again is not holding.
+    // new one. Playing again is neither holding nor at the end.
     for bit in [VIDEO, AUDIO] {
-        end.on_event(bit, gst::EventType::Segment, &tell);
+        end.on_event(bit, &segment_at(0), &tell);
     }
-    assert!(!end.held(), "a clip playing again is not held");
-    end.on_event(VIDEO, gst::EventType::Eos, &tell);
-    end.on_event(AUDIO, gst::EventType::Eos, &tell);
+    assert!(!end.held() && !end.at_end(), "a clip playing again is not held");
+    end.on_event(VIDEO, &eos(), &tell);
+    end.on_event(AUDIO, &eos(), &tell);
     assert_eq!(told.load(Ordering::Relaxed), 2);
 }
 
@@ -59,22 +73,33 @@ fn a_clip_with_no_sound_is_not_waited_on_for_it() {
     let tell = || {
         told.fetch_add(1, Ordering::Relaxed);
     };
-    end.on_event(VIDEO, gst::EventType::Segment, &tell);
-    end.on_event(VIDEO, gst::EventType::Eos, &tell);
+    end.on_event(VIDEO, &segment_at(0), &tell);
+    end.on_event(VIDEO, &eos(), &tell);
     assert_eq!(told.load(Ordering::Relaxed), 1);
 }
 
-/// A clip nothing paces would otherwise go round as fast as it decodes.
+/// The EOS leaves the branch while the compositor still holds frames, and a
+/// clip nothing paces would otherwise go round as fast as it decodes. The
+/// last frame is due one duration after the pass's first segment, less where
+/// that segment starts in the clip.
 #[test]
-fn a_repeat_waits_out_the_rest_of_the_clip_when_the_end_came_early() {
+fn the_last_frame_is_due_one_duration_after_the_pass_began() {
     let end = ClipEnd::new();
-    assert!(end.wait_before_repeat(None).is_none(), "with no duration there is nothing to wait for");
-    let wait = end.wait_before_repeat(Some(8_000)).expect("eight seconds have not passed");
+    let tell = || {};
+    end.on_event(VIDEO, &segment_at(0), &tell);
+    assert!(end.wait_for_last_frame(None).is_none(), "with no duration there is nothing to wait for");
+    let wait = end.wait_for_last_frame(Some(8_000)).expect("eight seconds have not passed");
     assert!(wait > Duration::from_secs(7), "{wait:?}");
-    // A seek to seven seconds in puts the start seven seconds back.
-    end.landed_at(7_000);
-    let wait = end.wait_before_repeat(Some(8_000)).expect("one second is left");
+    // The other branch's segment is the same pass and does not move it.
+    end.on_event(AUDIO, &segment_at(0), &tell);
+    assert!(end.wait_for_last_frame(Some(8_000)).unwrap() > Duration::from_secs(7));
+
+    // A scrub to seven seconds in: a flush, and a segment starting there.
+    let scrubbed = ClipEnd::new();
+    scrubbed.on_event(VIDEO, &segment_at(7_000), &tell);
+    let wait = scrubbed.wait_for_last_frame(Some(8_000)).expect("one second is left");
     assert!(wait <= Duration::from_secs(1), "{wait:?}");
-    end.landed_at(9_000);
-    assert!(end.wait_before_repeat(Some(8_000)).is_none(), "an end that is due repeats at once");
+    let past = ClipEnd::new();
+    past.on_event(VIDEO, &segment_at(9_000), &tell);
+    assert!(past.wait_for_last_frame(Some(8_000)).is_none(), "an end that is due is acted on at once");
 }

@@ -72,21 +72,39 @@ async fn play(mix: &mut Mixer, cmds: &mut mpsc::Receiver<Command>, bus: &mut mps
     run
 }
 
-/// Frames reaching the clip's compositor pad, and the longest wait between
-/// two of them, in milliseconds.
-fn watch_pad(pad: &gst::Pad) -> (Arc<AtomicU64>, Arc<AtomicU64>) {
-    let (frames, gap) = (Arc::new(AtomicU64::new(0)), Arc::new(AtomicU64::new(0)));
-    let (f, g) = (frames.clone(), gap.clone());
-    let last = parking_lot::Mutex::new(None::<Instant>);
-    pad.add_probe(gst::PadProbeType::BUFFER, move |_, _| {
-        let now = Instant::now();
-        if let Some(before) = last.lock().replace(now) {
-            g.fetch_max(now.duration_since(before).as_millis() as u64, Ordering::Relaxed);
-        }
+/// Frames reaching the clip's compositor pad, and the gaps in when they are
+/// drawn: the longest step forward between two frames' running times, and
+/// the longest step back, in milliseconds. Arrival times would say nothing:
+/// the pad holds up to a second of frames waiting for their time, so a pass
+/// that ends seamlessly still stops arriving a second before it stops being
+/// drawn.
+///
+/// Measured where the branch's queue hands frames on, with the shift the
+/// aligner gives every compositor pad drawing the source added: that sum is
+/// when the frame is drawn, wherever it is read.
+fn watch_pad(queue: &gst::Element, pads: Arc<crate::plugin::branch::VideoPads>) -> (Arc<AtomicU64>, Arc<AtomicU64>, Arc<AtomicU64>) {
+    let (frames, gap, back) = (Arc::new(AtomicU64::new(0)), Arc::new(AtomicU64::new(0)), Arc::new(AtomicU64::new(0)));
+    let (f, g, b) = (frames.clone(), gap.clone(), back.clone());
+    let last = parking_lot::Mutex::new(None::<i64>);
+    let pad = queue.static_pad("src").unwrap();
+    pad.add_probe(gst::PadProbeType::BUFFER, move |pad, info| {
+        let Some(gst::PadProbeData::Buffer(buffer)) = &info.data else { return gst::PadProbeReturn::Ok };
         f.fetch_add(1, Ordering::Relaxed);
+        let segment = pad.sticky_event::<gst::event::Segment>(0);
+        let Some(at) = segment
+            .and_then(|s| s.segment().downcast_ref::<gst::ClockTime>().and_then(|s| s.to_running_time(buffer.pts()?)))
+            .map(|t| t.nseconds() as i64 + pads.offset())
+        else {
+            return gst::PadProbeReturn::Ok;
+        };
+        if let Some(before) = last.lock().replace(at) {
+            let step = (at - before) / 1_000_000;
+            g.fetch_max(step.max(0) as u64, Ordering::Relaxed);
+            b.fetch_max((-step).max(0) as u64, Ordering::Relaxed);
+        }
         gst::PadProbeReturn::Ok
     });
-    (frames, gap)
+    (frames, gap, back)
 }
 
 struct Clip {
@@ -95,6 +113,7 @@ struct Clip {
     bus: mpsc::Receiver<BusEvent>,
     frames: Arc<AtomicU64>,
     gap: Arc<AtomicU64>,
+    back: Arc<AtomicU64>,
 }
 
 async fn with_clip(name: &str, params: &str) -> Option<Clip> {
@@ -111,9 +130,9 @@ async fn with_clip(name: &str, params: &str) -> Option<Clip> {
     mix.add_source(&src, None).expect("the clip is added");
     let id: SourceId = "clip".into();
     mix.take(Some(id.clone()), None).unwrap();
-    let pad = mix.pool.slots().iter().find(|s| s.source() == Some(&id)).unwrap().pad().clone();
-    let (frames, gap) = watch_pad(&pad);
-    Some(Clip { mix, cmds, bus, frames, gap })
+    let slot = mix.sources.iter().find(|s| s.input.id == id).unwrap();
+    let (frames, gap, back) = watch_pad(&slot.branch.vq, slot.branch.pads.clone());
+    Some(Clip { mix, cmds, bus, frames, gap, back })
 }
 
 fn clip_row(mix: &Mixer) -> crate::state::SourceStatus {
@@ -129,7 +148,7 @@ async fn a_clip_set_to_repeat_goes_round_by_seeking_and_never_reads_connecting()
     let Some(mut c) = with_clip("repeat", "params = { at_end = \"repeat\" }").await else { return };
     let run = play(&mut c.mix, &mut c.cmds, &mut c.bus, 7).await;
     let before = c.frames.load(Ordering::Relaxed);
-    play(&mut c.mix, &mut c.cmds, &mut c.bus, 1).await;
+    play(&mut c.mix, &mut c.cmds, &mut c.bus, 3).await;
     let after = c.frames.load(Ordering::Relaxed);
     let row = clip_row(&c.mix);
     c.mix.shutdown();
@@ -139,8 +158,11 @@ async fn a_clip_set_to_repeat_goes_round_by_seeking_and_never_reads_connecting()
     assert!(!run.restarted, "the clip was restarted at its end rather than seeked");
     assert_eq!(run.states_after_live, vec![SourceState::Live], "the clip left live while it repeated");
     assert!(after > before, "the clip's picture stopped reaching the programme after repeating");
-    let gap = c.gap.load(Ordering::Relaxed);
-    assert!(gap < 400, "the longest wait between two of the clip's pictures was {gap} ms");
+    // A frame lasts 40 ms. The seek, the decode and the queues between the
+    // last frame of one pass and the first of the next may add a few more,
+    // and no frame of a new pass may be due before the last of the old one.
+    let (gap, back) = (c.gap.load(Ordering::Relaxed), c.back.load(Ordering::Relaxed));    assert!(gap < 250, "a pass started {gap} ms after the last frame of the one before was due");
+    assert!(back < 20, "a pass started {back} ms before the last frame of the one before was drawn");
     assert_eq!(row.extra.get("at_end"), Some(&serde_json::json!("repeat")));
     assert_eq!(row.extra.get("ended"), None, "a repeating clip is never held");
 }
@@ -177,7 +199,7 @@ async fn a_clip_set_to_leave_says_so_and_repeat_set_while_held_plays_it_again() 
     assert!(matches!(applied, crate::plugin::Configure::Applied), "at_end alone is taken in place");
     c.mix.clip_reconfigured(&id);
     let before = c.frames.load(Ordering::Relaxed);
-    let again = play(&mut c.mix, &mut c.cmds, &mut c.bus, 1).await;
+    let again = play(&mut c.mix, &mut c.cmds, &mut c.bus, 3).await;
     let after = c.frames.load(Ordering::Relaxed);
     let row = clip_row(&c.mix);
     c.mix.shutdown();
