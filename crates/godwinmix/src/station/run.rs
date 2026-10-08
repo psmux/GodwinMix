@@ -20,6 +20,8 @@ pub struct Options {
     pub bind: Option<String>,
     pub rehearsal: bool,
     pub codecs: Option<PathBuf>,
+    /// Something starts this process again when it exits asking to be.
+    pub supervised: bool,
     /// Flags every show is started with as well.
     pub common: Vec<String>,
 }
@@ -27,6 +29,9 @@ pub struct Options {
 pub async fn run(opts: Options) -> Result<()> {
     let cfg = Config::load(&opts.config).with_context(|| format!("could not load {}", opts.config.display()))?;
     let bind = opts.bind.clone().unwrap_or_else(|| cfg.control.bind.clone());
+    // The station owns the control port, so it answers `network.share`.
+    crate::control::methods::lifecycle::set_supervised(opts.supervised);
+    crate::control::methods::network::configure(&bind, opts.bind.as_ref().is_some_and(|b| *b != cfg.control.bind), &opts.config);
     // The station keeps the machine's device tokens and answers `token.*`;
     // every show reads the same file (see `child::command`).
     let tokens = Arc::new(cfg.tokens(opts.rehearsal).with_devices(crate::devices::for_station(&opts.config)));

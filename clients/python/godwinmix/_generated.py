@@ -675,6 +675,8 @@ class CoreInfo(TypedDict, total=False):
     # True when the core was started with `--rehearsal`, which refuses `output.add` and accepts rehearsal tokens.
     restart: RestartInfo
     # Whether `core.restart` brings this core back, so a page can decide between a Restart button and a sentence.
+    started_ms: Optional[int]
+    # When the process answering started, in milliseconds since the Unix epoch. A different number from one read to the next means the mixer was restarted in between, which is how a page tells the new mixer from the old one still letting go of its port.
     supervised: bool
     # True when the core was started with `--supervised` (or `GODWINMIX_SUPERVISED=1`): a service manager, a container runtime or the desktop app starts it again after it exits.
     tls: Union[TlsInfo, None]
@@ -2133,6 +2135,10 @@ class NameRequest(TypedDict, total=False):
 
     name: str
     # File name as it appears in the media listing. The REST layer puts it in the path, where the transform rule calls it `id`, so both spellings are read.
+
+class NetworkShareRequest(TypedDict, total=False):
+    enabled: bool
+    # True lets phones and other computers on the same network reach this mixer. False keeps it to this computer.
 
 class NewKey(TypedDict, total=False):
     """A key as it is made, with its secret. Afterwards only an admin gets the secret again, one key at a time, from `channel.key.reveal`."""
@@ -4120,6 +4126,7 @@ METHODS = (
     {"name": "media.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/media"), "summary": 'The clips in the library, with durations and whether each has audio.'},
     {"name": "media.remove", "scope": "operate", "mutating": True, "destructive": True, "rest": ("DELETE", "/api/v1/media/{id}"), "summary": 'Delete a library file and its converted copy. Refused while it is a live source.'},
     {"name": "media.upload", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/media/upload"), "summary": 'Stream a file into the library. HTTP only: the body is the file.'},
+    {"name": "network.share", "scope": "admin", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/network/share"), "summary": 'Let phones and other computers on the same network reach this mixer (enabled: true), or keep it to this computer (false). The address is fixed while the mixer runs, so this restarts it on the same port and the programme is off air for a few seconds: under the desktop app, or under a supervisor when the address comes from the config file. Otherwise it answers restarting: false and says why. Refused on a mixer with no control token.'},
     {"name": "node.discover", "scope": "read", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/nodes/{id}/discover"), "summary": 'Look for nodes on the local network over mDNS. A network without multicast finds nothing and the [nodes] table in the config is the way there.'},
     {"name": "node.enrol", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/nodes/{id}/enrol"), "summary": 'Mint a one time enrolment token for a node. The answer carries the command to run on the other machine. The token is good for one enrolment and expires.'},
     {"name": "node.get", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/nodes/{id}"), "summary": 'One node: its clock offset, how long since its last heartbeat, the plugins it has, and the instances it is hosting.'},
@@ -5426,6 +5433,15 @@ class GeneratedMethods:
         """Stream a file into the library. HTTP only: the body is the file."""
         params: Dict[str, Any] = {}
         return await self._call("media.upload", params)
+
+    async def network_share(
+        self,
+        enabled: bool,
+    ) -> RestartAnswer:
+        """Let phones and other computers on the same network reach this mixer (enabled: true), or keep it to this computer (false). The address is fixed while the mixer runs, so this restarts it on the same port and the programme is off air for a few seconds: under the desktop app, or under a supervisor when the address comes from the config file. Otherwise it answers restarting: false and says why. Refused on a mixer with no control token."""
+        params: Dict[str, Any] = {}
+        params["enabled"] = enabled
+        return await self._call("network.share", params)
 
     async def node_discover(
         self,

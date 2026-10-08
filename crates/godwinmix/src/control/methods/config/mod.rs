@@ -72,3 +72,19 @@ pub fn register(reg: &mut Registry<Call>) {
         .destructive(),
     );
 }
+
+/// Write one key to the config file for another method, checked the way
+/// `config.set` checks it. Nothing is applied live: `network.share` moves
+/// `control.bind` and restarts.
+pub(crate) async fn write_for_restart(path: &std::path::Path, key: &str, value: serde_json::Value) -> Result<(), godwinmix_protocol::error::RpcError> {
+    use godwinmix_protocol::error::RpcError;
+    let change = godwinmix_core::config::settable::check(key, &value).map_err(write::refusal)?;
+    let path = path.to_path_buf();
+    let shown = path.display().to_string();
+    tokio::task::spawn_blocking(move || godwinmix_core::config::settable::write(&path, &[change], false))
+        .await
+        .map_err(|e| RpcError::internal(format!("the config write stopped: {e}")))?
+        .map_err(|e| RpcError::internal(format!("writing {shown}: {e:#}")))?
+        .map_err(write::refusal)?;
+    Ok(())
+}

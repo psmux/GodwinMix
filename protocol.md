@@ -108,6 +108,7 @@ Keys accepted on every method, handled before a method runs.
 | `media.list` | `GET /api/v1/media` | read |  | 1 | The clips in the library, with durations and whether each has audio. |
 | `media.remove` | `DELETE /api/v1/media/{id}` | operate | yes | 1 | Delete a library file and its converted copy. Refused while it is a live source. |
 | `media.upload` | `POST /api/v1/media/upload` | operate |  | 1 | Stream a file into the library. HTTP only: the body is the file. |
+| `network.share` | `POST /api/v1/network/share` | admin | yes | 1 | Let phones and other computers on the same network reach this mixer (enabled: true), or keep it to this computer (false). The address is fixed while the mixer runs, so this restarts it on the same port and the programme is off air for a few seconds: under the desktop app, or under a supervisor when the address comes from the config file. Otherwise it answers restarting: false and says why. Refused on a mixer with no control token. |
 | `node.discover` | `POST /api/v1/nodes/{id}/discover` | read |  | 1 | Look for nodes on the local network over mDNS. A network without multicast finds nothing and the [nodes] table in the config is the way there. |
 | `node.enrol` | `POST /api/v1/nodes/{id}/enrol` | admin |  | 1 | Mint a one time enrolment token for a node. The answer carries the command to run on the other machine. The token is good for one enrolment and expires. |
 | `node.get` | `GET /api/v1/nodes/{id}` | read |  | 1 | One node: its clock offset, how long since its last heartbeat, the plugins it has, and the instances it is hosting. |
@@ -1497,6 +1498,21 @@ Stream a file into the library. HTTP only: the body is the file.
   },
   "result": {
     "type": "object"
+  }
+}
+```
+
+#### `network.share`
+
+Let phones and other computers on the same network reach this mixer (enabled: true), or keep it to this computer (false). The address is fixed while the mixer runs, so this restarts it on the same port and the programme is off air for a few seconds: under the desktop app, or under a supervisor when the address comes from the config file. Otherwise it answers restarting: false and says why. Refused on a mixer with no control token.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/NetworkShareRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/RestartAnswer"
   }
 }
 ```

@@ -276,8 +276,11 @@ fn record(app: AppHandle, mut rx: tauri::async_runtime::Receiver<CommandEvent>, 
                 CommandEvent::Terminated(end) => {
                     put(format!("--- mixer exited with {:?} ---\n", end.code).as_bytes());
                     stopped.store(true, Ordering::Relaxed);
-                    if end.code == Some(crate::restart::RESTART_EXIT_CODE) {
-                        crate::restart::after_exit(app.clone());
+                    match end.code {
+                        Some(crate::restart::RESTART_EXIT_CODE) => crate::restart::after_exit(app.clone()),
+                        Some(crate::restart::SHARE_EXIT_CODE) => crate::restart::after_network_exit(app.clone(), true),
+                        Some(crate::restart::LOCAL_EXIT_CODE) => crate::restart::after_network_exit(app.clone(), false),
+                        _ => {}
                     }
                     break;
                 }
@@ -315,6 +318,10 @@ fn stamp() -> String {
 /// machine, which is what happens on macOS and Linux today.
 pub fn environment(app: &AppHandle) -> HashMap<String, String> {
     let mut env = HashMap::new();
+    // How the mixer knows who starts it again, so `network.share` asks this
+    // app with an exit status rather than rewriting a config this app's
+    // --bind would override.
+    env.insert("GODWINMIX_SHELL".into(), "desktop".into());
     // The registry cache goes beside the config, not next to the plugins: an
     // installed app's resources are read only on all three platforms and a
     // GStreamer that cannot write its registry rescans every plugin at every

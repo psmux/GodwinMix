@@ -10,10 +10,18 @@ phone, and accept the mixer's certificate once per phone.
 
 ## 1. Let other devices on the network reach the mixer
 
-**In the desktop app**, open the GodwinMix menu (the first menu on macOS,
-the app's menu bar on Windows and Linux) and turn on **Let other devices on
-this network connect**. The app asks first, because the mixer restarts to do
-it and the programme stops for a few seconds. Do it before the show.
+Open **Help > Open on another device**. While only this computer can reach
+the mixer, the card has one button, **Allow other devices**. Press it: the
+mixer restarts on the same address, listening on the network as well, the
+page reconnects by itself, and the card comes back with the form for a code.
+The programme is off air for a few seconds while it restarts, so do it
+before the show. It works from the desktop app's window, from a browser on
+the same computer, and from a mixer run under systemd or Docker. The
+button's method is [`network.share`](../reference/network-share.md).
+
+**In the desktop app** the same switch is also in the GodwinMix menu (the
+first menu on macOS, the app's menu bar on Windows and Linux): **Let other
+devices on this network connect**. The app asks first, for the same reason.
 
 From then on the mixer answers on the computer's network addresses as well
 as on the computer itself, on a port it keeps across launches, so a link a
@@ -26,8 +34,9 @@ token, and a phone needs a token of its own to get in. Turning the setting
 off again shuts every phone out at once; their tokens are kept, so turning it
 back on lets them in again.
 
-**On a server you started yourself**, bind the control port to the network
-and set a token, then restart the mixer:
+**On a server you started yourself in a terminal**, nothing would start the
+mixer again, so the button says so instead. Bind the control port to the
+network and set a token, then restart it:
 
 ```toml
 [control]

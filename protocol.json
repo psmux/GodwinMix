@@ -2434,6 +2434,15 @@
           },
           "description": "Whether `core.restart` brings this core back, so a page can decide\nbetween a Restart button and a sentence."
         },
+        "started_ms": {
+          "description": "When the process answering started, in milliseconds since the Unix\nepoch. A different number from one read to the next means the mixer\nwas restarted in between, which is how a page tells the new mixer from\nthe old one still letting go of its port.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
         "supervised": {
           "default": false,
           "description": "True when the core was started with `--supervised` (or\n`GODWINMIX_SUPERVISED=1`): a service manager, a container runtime or\nthe desktop app starts it again after it exits.",
@@ -7747,6 +7756,18 @@
       },
       "required": [
         "name"
+      ],
+      "type": "object"
+    },
+    "NetworkShareRequest": {
+      "properties": {
+        "enabled": {
+          "description": "True lets phones and other computers on the same network reach this\nmixer. False keeps it to this computer.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "enabled"
       ],
       "type": "object"
     },
@@ -16768,6 +16789,25 @@
       "scope": "operate",
       "since": "1",
       "summary": "Stream a file into the library. HTTP only: the body is the file."
+    },
+    {
+      "destructive": true,
+      "idempotent": false,
+      "mutating": true,
+      "name": "network.share",
+      "params": {
+        "$ref": "#/$defs/NetworkShareRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/network/share"
+      },
+      "result": {
+        "$ref": "#/$defs/RestartAnswer"
+      },
+      "scope": "admin",
+      "since": "1",
+      "summary": "Let phones and other computers on the same network reach this mixer (enabled: true), or keep it to this computer (false). The address is fixed while the mixer runs, so this restarts it on the same port and the programme is off air for a few seconds: under the desktop app, or under a supervisor when the address comes from the config file. Otherwise it answers restarting: false and says why. Refused on a mixer with no control token."
     },
     {
       "destructive": false,

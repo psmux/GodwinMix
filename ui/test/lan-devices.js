@@ -15,15 +15,25 @@ async function until(predicate, ms, what) {
 }
 
 /** A client that answers core.info with `tls` and keeps device tokens in a list. */
-function stub(tls) {
+function stub(tls, share = { restarting: true, how: "supervised", message: "" }) {
   const devices = [];
   const calls = [];
-  return {
+  const listeners = new Map();
+  const client = {
     calls,
     devices,
+    tls,
+    started: 1000,
+    on: (name, fn) => {
+      if (!listeners.has(name)) listeners.set(name, new Set());
+      listeners.get(name).add(fn);
+      return () => listeners.get(name).delete(fn);
+    },
+    emit: (name) => [...(listeners.get(name) || [])].forEach((fn) => fn()),
     call: async (method, params) => {
       calls.push([method, params]);
-      if (method === "core.info") return { version: "test", tls };
+      if (method === "core.info") return { version: "test", tls: client.tls, started_ms: client.started };
+      if (method === "network.share") return share;
       if (method === "token.create") {
         const d = { id: "phone", label: params.label, scope: params.scope, created: "2026-10-05T10:00:00Z" };
         devices.push(d);
@@ -34,6 +44,7 @@ function stub(tls) {
       return {};
     },
   };
+  return client;
 }
 
 function closeAll() {
@@ -70,12 +81,40 @@ export async function lanDeviceTests(test, eq, ok) {
   });
 
   closeAll();
-  await openDevices(stub({ urls: ["https://localhost:9000/"], fingerprint: "AB" }));
+  const lone = stub({ urls: ["https://localhost:9000/"], fingerprint: "AB" });
+  await openDevices(lone);
   const lonely = document.querySelector(".dialog[aria-label='Open on another device']");
-  test("a mixer on loopback says how to open it up instead of showing a useless code", () => {
+  const allow = lonely && [...lonely.querySelectorAll("button")].find((b) => b.textContent === "Allow other devices");
+  test("a mixer on loopback offers to let devices in, with no flags or config to edit", () => {
     ok(lonely, "the dialog opened");
-    ok(/only answers on the machine/.test(lonely.textContent), lonely.textContent);
-    ok(!lonely.querySelector("svg"), "no QR code");
+    ok(allow, "an Allow other devices button");
+    ok(!/--bind|control\.bind|config/.test(lonely.textContent), lonely.textContent);
+    ok(!lonely.querySelector("svg"), "no QR code yet");
+  });
+  allow.click();
+  await until(() => lone.calls.some(([m]) => m === "network.share"), 3000, "network.share");
+  await until(() => /Restarting the mixer/.test(lonely.textContent), 3000, "the restarting note");
+  // The old mixer still answers for a moment, as it did: still on loopback.
+  await tick(1200);
+  const waited = document.querySelector(".dialog[aria-label='Open on another device']") === lonely;
+  test("the card waits for the new mixer rather than the old one letting go of its port", () => ok(waited));
+  // The new one, started later and listening on the network.
+  lone.tls = tls;
+  lone.started = 2000;
+  await until(() => [...document.querySelectorAll(".dialog[aria-label='Open on another device'] button")].some((b) => b.textContent === "Make a code"), 3000, "the card again, with a code to make");
+  test("Allow other devices restarts the mixer and opens the card again ready for a code", () => {
+    eq(lone.calls.find(([m]) => m === "network.share")[1], { enabled: true });
+    eq(document.querySelectorAll(".dialog[aria-label='Open on another device']").length, 1, "one card, not two");
+  });
+  closeAll();
+
+  const stuck = stub({ urls: [] }, { restarting: false, how: "none", message: "Nothing would start this mixer again." });
+  await openDevices(stuck);
+  const still = document.querySelector(".dialog[aria-label='Open on another device']");
+  [...still.querySelectorAll("button")].find((b) => b.textContent === "Allow other devices").click();
+  await until(() => still.textContent.includes("Nothing would start this mixer again."), 3000, "the mixer's own answer");
+  test("a mixer that cannot restart from here says why in its own words and stays open", () => {
+    ok([...still.querySelectorAll("button")].find((b) => b.textContent === "Allow other devices").disabled === false);
   });
   closeAll();
 
