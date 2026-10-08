@@ -513,7 +513,8 @@ class SourcesPanel extends HTMLElement {
     const panel = this.scenesPanel();
     if (panel) {
       const scene = panel.scenes.scenes()[slot - 1];
-      if (scene) panel.activate(scene.id);
+      // A number is a tap on that scene's tile, so Sources follows it too.
+      if (scene) panel.choose(scene.id, true);
       return;
     }
     const id = this.order()[slot - 1];

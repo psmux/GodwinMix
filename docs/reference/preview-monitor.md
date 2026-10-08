@@ -72,6 +72,12 @@ see it. Putting a source in Preview disarms the scene with
 `scene.preview.set {}`, and arming a scene after that replaces the source, so
 there is one thing in Preview.
 
+An armed scene that is also on air counts as a suggestion, so Preview moves
+on after a take, except when it was picked in this page's Scenes panel since
+the programme last changed. The Scenes panel marks that pick on
+`document.body.dataset.chosen`, and the Programme panel clears it when the
+scene on air changes (`ui/panels/multiview/studio-armed.js`).
+
 A page loaded after a scene was armed reads the armed scene from `scene.list`,
 since the status document has no field for it; `event/preview.changed` keeps it
 current after that.

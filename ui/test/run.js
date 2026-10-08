@@ -1698,6 +1698,39 @@ async function sceneTabsSuite() {
     eq(calls.filter((c) => c.method === "program.take").map((c) => c.params.scene), ["two-box"]);
   });
 
+  // The tester's report: in tiles, Sources stayed on the newest scene whatever
+  // was clicked, because a tile armed or took without moving the focus.
+  const tap = (node) => { point(node, "pointerdown", 1, 1); point(node, "pointerup", 1, 1); };
+  const methods = () => calls.map((c) => `${c.method} ${c.params && c.params.scene}`);
+  test("a click on a tile moves the focus, and outside Studio mode takes it", () => {
+    const studioWas = tabSettings().producer;
+    setTabSetting("producer", false);
+    panel.setView("tiles");
+    setFocusedScene("two-box");
+    calls.length = 0;
+    tap(panel.tiles.get("wide").face);
+    setTabSetting("producer", studioWas);
+    eq(focusedScene(), "wide", "Sources would still list the scene focused before");
+    eq(methods(), ["program.take wide"]);
+  });
+
+  test("in Studio mode a tile and a tab both focus the scene and arm it for Preview", () => {
+    const studioWas = tabSettings().producer;
+    setTabSetting("producer", true);
+    calls.length = 0;
+    panel.setView("tiles");
+    tap(panel.tiles.get("two-box").face);
+    eq(focusedScene(), "two-box", "the tile");
+    eq(document.body.dataset.chosen, "two-box", "Preview is told which scene was picked here");
+    panel.setView("tabs");
+    panel.tabs.get("wide").click();
+    eq(focusedScene(), "wide", "the tab");
+    eq(document.body.dataset.chosen, "wide");
+    setTabSetting("producer", studioWas);
+    delete document.body.dataset.chosen;
+    eq(methods(), ["scene.preview.set two-box", "scene.preview.set wide"], "arming only, nothing taken");
+  });
+
   // The palette's entry, which a strip of tabs left with nothing to act on:
   // a tab is not a selection, so the row read as unavailable and choosing it
   // did nothing at all.
@@ -2072,7 +2105,7 @@ async function numberKeySuite() {
   const node = document.createElement("gmx-scenes");
   // The real element would build itself on append and it has no client here.
   node.built = true;
-  node.activate = (id) => taken.push(["scene", id]);
+  node.choose = (id) => taken.push(["scene", id]);
   node.scenes = { supported: true, scenes: () => [] };
   document.body.appendChild(node);
 

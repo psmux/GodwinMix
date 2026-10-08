@@ -3,7 +3,8 @@
 // In order:
 //
 // 1. A scene armed on the core (scene.preview.set), unless it is the one on
-//    air already.
+//    air already. The scene on air is held too when somebody on this page
+//    picked it since the last take: they chose it, so Take sends it.
 // 2. A source armed on this page, unless it is the one on air already.
 // 3. Otherwise a suggestion, the scene most likely to be taken next: the last
 //    scene that was on air before the one on air now, or with none, the first
@@ -68,11 +69,15 @@ export function follow(panel, s, kit) {
  * What Preview shows: `{kind: "scene"|"source", id, name, why}`, where why is
  * "armed", "before" (was on air before) or "next" (the first other scene),
  * or null when there is nothing at all to show.
+ *
+ * `chosen` is the scene picked on this page since the last take, if any. An
+ * armed scene that is on air is still what Preview holds when it is that one,
+ * because the person asked for it; after a take it is a suggestion again.
  */
-export function nextUp(panel, s, kit, armedSource) {
+export function nextUp(panel, s, kit, armedSource, chosen = null) {
   const live = liveScene(s, kit);
   const armed = armedScene(s, kit);
-  if (armed && idOf(kit, armed) !== live) {
+  if (armed && (idOf(kit, armed) !== live || (chosen && idOf(kit, chosen) === live))) {
     return { kind: "scene", id: idOf(kit, armed), name: armed, why: "armed" };
   }
   if (armedSource && !(s.program === armedSource && !s.scene)) {

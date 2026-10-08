@@ -62,8 +62,10 @@ also retains its instance, so switching tabs does not reset its local controls.
 Scenes and Sources acquire the same `SceneClient` through
 `ui/shell/scene-session.js`. The last panel releases its protocol listeners,
 so closing the Scenes dock does not turn the Sources dock into a global list.
-The focused scene selects the gallery. Older `gmx.sources.scope` preferences
-are ignored.
+The focused scene selects the gallery. It is `gmx.scene.focus` in this
+browser's storage, set by a click on a scene tab or a scene tile, by New scene
+and by the + on a tile, and read through `ui/shell/focus.js`. Older
+`gmx.sources.scope` preferences are ignored.
 
 The source chooser is loaded from `panels/sources/chooser.js` on demand. It
 extends the source picker with an existing-source category and reuses
