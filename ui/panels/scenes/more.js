@@ -21,7 +21,7 @@ export function menu(panel, id, e) {
   const ids = panel.selected();
   const many = ids.length > 1;
   contextMenu(e.clientX, e.clientY, [
-    id && { label: settings().producer ? "Arm" : "Put on air", key: "Click", run: () => panel.activate(id) },
+    id && { label: settings().producer ? "Arm" : "Put on air", key: "Click", run: () => panel.choose(id, true) },
     id && { label: "Open the composer", key: "Enter", disabled: many, run: () => panel.open(id) },
     id && { label: "Rename", key: "F2", disabled: many, run: () => panel.beginRename(id) },
     id && { kind: "colours", onColour: (colour) => panel.setColour(ids, colour) },

@@ -41,8 +41,8 @@ delete offers an Undo button in the toast rather than asking you first.
 
 | Gesture | What happens | The command underneath |
 |---|---|---|
-| tap a tile | it goes on air | `program.take {scene}` |
-| tap in Studio mode | it goes into Preview instead, and Take sends it | `scene.preview.set` then `program.take {scene}` |
+| tap a tile | it goes on air, and Sources shows its inputs | `program.take {scene}` |
+| tap in Studio mode | it goes into Preview instead, Take sends it, and Sources shows its inputs | `scene.preview.set` then `program.take {scene}` |
 | drag inputs onto empty space | a new scene, laid out by count | `scene.create_from` |
 | drag an input onto a scene tile | it joins that scene, in the next free slot | `scene.item.add` |
 | drag an item chip onto another scene | it moves there; hold Alt to copy | `scene.item.move`, `scene.item.copy` |
@@ -76,6 +76,24 @@ not drawn, because the mosaic has no picture of them.
 
 A new scene starts empty. **New scene** makes one, makes it the scene you are
 working on, and Sources shows it with nothing in it and an Add sources button.
+
+## The scene you are working on
+
+Sources lists the inputs of one scene at a time, the scene you are working on,
+and its name is at the top of the tray. Click a scene to choose it, by its tab
+or by its tile, and Sources changes to that scene's inputs. Both views do the
+same. The page remembers the choice in this browser.
+
+What else the click does depends on the view and on Studio mode:
+
+| | Tab | Tile |
+|---|---|---|
+| Studio mode on | the scene goes into Preview, and Take sends it | the same |
+| Studio mode off | nothing else; **Take** beside the tabs puts it on air | it goes on air |
+
+The scene you are working on is not always the one on air. The red frame marks
+the programme, and choosing another scene to work on leaves the programme
+alone in Studio mode and from a tab.
 
 ## A scene with a source that is not running
 
