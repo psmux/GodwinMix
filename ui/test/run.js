@@ -26,6 +26,7 @@ import { browserDeviceTests } from "./browser-devices.js";
 import { presenceTests } from "./presence.js";
 import { lanDeviceTests } from "./lan-devices.js";
 import { agentsTests } from "./agents.js";
+import { recordingStopTests } from "./recording-stop.js";
 // The test runner: forty lines, no dependencies, no toolchain. Open the page,
 // read the console, or read the list. Everything testable without a mixer is
 // here, including the legacy adapter against a stubbed server.
@@ -2791,6 +2792,12 @@ legacySuite()
   .catch((e) => {
     failed += 1;
     line("fail", "the connect an AI agent suite threw: " + e.message);
+    console.error(e);
+  })
+  .then(() => recordingStopTests(test, eq, ok))
+  .catch((e) => {
+    failed += 1;
+    line("fail", "the stop recording suite threw: " + e.message);
     console.error(e);
   })
   .then(outputNumbersSuite)
