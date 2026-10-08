@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+* The desktop app has **Open in browser**, in the GodwinMix menu and in the tray. It opens the mixer the window shows in the system's browser, signed in with the token in the address's fragment, which the page stores and removes before it draws. The app's mixer takes a new port and uses a generated token, so typing its address into a browser met a token prompt with no token to give it. See `docs/how-to/desktop-app.md`.
+
 ## 0.2.2 (2026-10-07)
 
 * The Windows release is code signed. On a `v*` tag every executable and library in the `-setup.exe` and the `.msi`, both installers themselves, and `godwinmix.exe` and `gmx.exe` in the zip carry an Authenticode signature from the project's Certum certificate with a Certum timestamp, so Windows names the publisher. The runner logs in to Certum's cloud signing with scripts in `.github/windows-signing` (no third party action), only the Windows legs of a tag run get the `windows-signing` environment, and a file left unsigned fails the release. A `v*-signtest*` tag runs the whole login and signing on a small program and publishes nothing. See `docs/how-to/sign-windows-builds.md`.
