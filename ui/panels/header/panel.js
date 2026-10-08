@@ -121,7 +121,8 @@ class HeaderPanel extends HTMLElement {
       this.recordSaid = secs;
       this.recordAt = performance.now();
     }
-    if (secs === undefined) this.recording.textContent = recs.length ? "REC starting" : "REC";
+    const failed = recs.some((o) => o.state === "failed");
+    if (secs === undefined) this.recording.textContent = failed ? "REC failed" : "REC starting";
     else this.recordClock();
     const what = live.length ? "Recording" : "A recording is starting or needs attention";
     this.recording.title = `${what}. Click to stop.`;
