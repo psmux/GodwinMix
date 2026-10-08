@@ -12,10 +12,11 @@ import { toast, errorToast } from "../../shell/toast.js";
 import { PLATFORMS, platform } from "../../client/destinations.js";
 import { schemeError } from "../outputs/destination.js";
 import { brandMark } from "./brands.js";
-import { tileState } from "./model.js";
+import { tileState, isLive } from "./model.js";
 import { field, keyField, streamChoice } from "./fields.js";
 import { formatStep, channelShape } from "../renditions/format-step.js";
 import { isRefusal, showRefusal } from "../renditions/refusal.js";
+import { waitingWords, sendProgramme } from "./to-programme.js";
 
 /** The tile grid, or straight to the form when the platform is known. */
 export function addDestination(view, channel, chosen) {
@@ -57,7 +58,12 @@ function addForm(view, channel, p) {
   // Copy first, as the strip promises; a platform's own format one press away.
   const format = formatStep(view.client, { platform: p.id, platformTitle: p.title, shape: channelShape(channel), id: () => p.id });
   const refused = el("div", { hidden: true });
+  // Said before the key is pasted, not after: this is where a person who
+  // wanted the programme on YouTube finds out a channel is something else.
+  const idle = !isLive(channel);
+  const instead = idle ? el("button.btn", { text: "Send the programme instead" }) : null;
   const body = el("div.chn-dform", {}, [
+    idle ? el("p.chn-addnote", { role: "note", text: waitingWords(channel, p.title) }) : null,
     el("div.chn-dhead", {}, [brandMark(p.id, 48), el("div", {}, [el("strong", { text: p.title }), el("p.chn-dim", { text: p.where })])]),
     p.fixed ? el("div.chn-fixed", {}, [el("span.chn-dim", { text: "Server " }), el("code", { text: p.server })]) : server.node,
     key && key.node,
@@ -65,7 +71,16 @@ function addForm(view, channel, p) {
     more,
     refused,
   ]);
-  const m = modal({ title: `Send ${channel.name} to ${p.title}`, body, footer: [el("button.btn", { text: "Cancel", onclick: () => m.close() }), start] });
+  const m = modal({ title: `Send ${channel.name} to ${p.title}`, body, footer: [el("button.btn", { text: "Cancel", onclick: () => m.close() }), instead, start] });
+  if (instead) {
+    // The same server and key, under Outputs, and nothing added to the channel.
+    instead.onclick = async () => {
+      instead.disabled = true;
+      const sent = await sendProgramme(view.client, p, p.fixed ? p.server : server.value(), key && key.value());
+      if (sent) m.close();
+      else instead.disabled = false;
+    };
+  }
   on(body, "keydown", (e) => { if (e.key === "Enter" && e.target.tagName === "INPUT") { e.preventDefault(); start.click(); } });
   start.onclick = async () => {
     const asked = addParams(p, channel, { server: server.value(), key: key && key.value(), stream: stream && stream.value(), label: label.value() });
@@ -89,7 +104,7 @@ function addForm(view, channel, p) {
       return false;
     }
     m.close();
-    toast({ text: `${p.title} added. It goes live whenever ${channel.name} does.` });
+    toast({ text: isLive(channel) ? `${p.title} added. It goes live with ${channel.name}.` : `${p.title} added. It waits for an encoder to send to ${channel.name}; nothing reaches ${p.title} until one does.` });
     return true;
   }
   (key || server).focus();

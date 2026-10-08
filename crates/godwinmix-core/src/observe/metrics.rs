@@ -565,7 +565,7 @@ pub fn observe_event(event: &Event) {
         Event::SourceStateChanged { source, state } => {
             gauge("gmx_source_state", &[("instance", source)]).set(source_state_code(*state));
         }
-        Event::OutputStateChanged { output, state, reconnects } => {
+        Event::OutputStateChanged { output, state, reconnects, .. } => {
             gauge("gmx_output_state", &[("instance", output)]).set(output_state_code(*state));
             counter("gmx_output_reconnects_total", &[("instance", output)])
                 .set(*reconnects as u64);

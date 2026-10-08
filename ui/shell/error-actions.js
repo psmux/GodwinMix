@@ -99,7 +99,12 @@ async function openPart(client, action) {
     const { openSettings } = await import("./settings.js");
     return openSettings(client, { key: action.key });
   }
-  const panel = action.panel && document.querySelector(`[data-panel="${CSS.escape(action.panel)}"]`);
+  if (!action.panel) return;
+  // A panel in a tab behind another, Outputs behind Channels say, is brought
+  // forward first: scrolling to a tab nobody can see did nothing.
+  const ws = document.querySelector("gmx-shell")?.workspace;
+  if (ws && typeof ws.show === "function") ws.show(action.panel);
+  const panel = document.querySelector(`[data-panel="${CSS.escape(action.panel)}"]`);
   if (panel) panel.scrollIntoView({ block: "nearest" });
 }
 

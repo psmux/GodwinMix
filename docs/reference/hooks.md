@@ -49,7 +49,7 @@ up. A typo in a webhook URL is not a reason a church cannot stream.
 | `source.added` | after `source.add` | no | `source`, `uri`, `state` |
 | `source.removed` | after `source.remove` | no | `source`, `uri` |
 | `source.state` | a source moved between connecting, live, stalled and failed | no | `source`, `state` |
-| `output.state` | a destination connected, dropped or is retrying | no | `output`, `state`, `reconnects` |
+| `output.state` | a destination connected, dropped or is retrying | no | `output`, `state`, `reconnects`, `error` (why it is not connected, or null; see [when it does not connect](../how-to/stream-to-a-platform.md#when-it-does-not-connect)) |
 | `alert.raised` | any alert | no | `severity`, `message` |
 | `session.start` | the control plane is up, before it serves | no | `version`, `bind`, `log` |
 | `session.end` | shutdown, before the mixer stops | no | `version` |

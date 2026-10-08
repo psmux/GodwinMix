@@ -57,6 +57,7 @@ pub mod mcp_schema;
 pub mod mcp_tools;
 pub mod method;
 pub mod openapi;
+pub mod output_error;
 pub mod plugin;
 pub mod presence;
 pub mod protocol;

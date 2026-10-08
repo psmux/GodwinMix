@@ -5,6 +5,24 @@ opening a config file.
 
 This page takes about five minutes.
 
+## Outputs, not a channel
+
+The programme goes to a platform from the **Outputs** panel. The Channels tab
+has platform tiles too, and they do something else: a channel takes a stream
+from an encoder pointed at it (OBS, a phone, a hardware encoder) and passes
+that stream on. A YouTube tile on a channel nobody is sending to waits, and
+YouTube Studio says "No data" for as long as it does.
+
+So the Channels tab says this whenever a channel has platforms and no
+encoder. The add form says it above the key box, with **Send the programme
+instead** beside **Start sending**: that adds the platform under Outputs with
+the server and key you just pasted, and nothing to the channel. A tile already
+saved on a waiting channel has **Send the programme to YouTube instead** under
+the strip. It asks for the key once more, because a channel keeps its keys
+sealed and never hands one back, adds the output, and takes the tile off the
+channel unless you switch that off, so two things never publish with the same
+key.
+
 ## From the Outputs panel
 
 Press **Add destination**. Pick the platform. The ingest address is already
@@ -28,6 +46,36 @@ Twitch also publishes ingest servers nearer to you than `live.twitch.tv`. The
 default works everywhere and you can paste a closer one over it, but if you do,
 paste the key again as well: changing the server rebuilds the whole address and
 the mixer will not give the key back to be reused.
+
+Press **Start sending** and the form closes on "Connecting to YouTube". That
+means the mixer took the address, not that YouTube did: the row under Outputs
+says **Connecting** while it dials and **Live** once the platform has accepted
+the stream, and a second note says so ("youtube is live"). If it does not get
+through, the next section is what you see.
+
+## When it does not connect
+
+The row says what went wrong as soon as the first attempt fails, in a word or
+two and then a count (**Refused, trying again (2)**), with a sentence under it
+saying what to do. The dot turns red, and an alert pops up once with the same sentence and a **Show
+Outputs** button. The header pill says `youtube is not sending` instead of
+"Destinations connecting", and hovering it gives the reason. The mixer keeps
+trying on its own, backing off, and the programme does not notice any of it.
+
+| The row says | What happened | What to do |
+|---|---|---|
+| Refused | The server answered and nothing was taking streams on that port | Check the server address and port, and that the server is running |
+| No answer | Nothing answered at all | Check the address, and that a firewall or VPN is not blocking outgoing connections to the port (1935 for RTMP, 443 for RTMPS) |
+| Server not found | The server name does not exist | Look for a typing mistake in the server address |
+| Unreachable | No route from this machine to the server | Check the address and the internet connection |
+| Key turned away | The server answered and refused the stream | The stream key is wrong or has expired. Copy it again and paste it under **Edit**, **Replace key** |
+| Hung up | The server closed the connection as the stream started | Usually a key the platform does not recognise, or no live stream set up on its side. Check both |
+| Stream not taken | The server took the connection and then accepted nothing, until the outage buffer filled (about ten seconds) | The same two causes as Hung up. Some servers turn a wrong key away this way, without an error the sink can read |
+| Failed | Anything else | The sentence under the row quotes what the connection said |
+
+The reason stays on the row until the destination is live, then goes. A
+destination that was live and drops gets one alert again, as a warning,
+saying it lost its connection.
 
 ## Replacing a key
 
@@ -73,6 +121,23 @@ where every CDN puts the key, is never sent anywhere. What you get instead is
 `has_key`, which is `false` while the address still carries a placeholder like
 `YOUR-STREAM-KEY`. That is enough for a surface to say "needs a stream key" and
 put a form up, and not nearly enough to reconstruct the key.
+
+While a destination is not connected the record also has `error`, the reason
+from the section above:
+
+```json
+{"id":"youtube","state":"reconnecting","reconnects":3,
+ "error":{"reason":"refused","message":"127.0.0.1:19351 refused the connection: nothing there is taking streams. Check the server address and port, and that the server is running.",
+          "detail":"Connection refused: Could not connect to 127.0.0.1: No connection could be made because the target machine actively refused it."}}
+```
+
+`reason` is one of `refused`, `timed-out`, `not-found`, `unreachable`,
+`rejected`, `closed`, `stalled` and `other`. `message` is the sentence the page shows.
+`detail` is the connection's own words with every part of the address's path
+cut out, since a server refusing a stream can quote the stream name back and
+the stream name is the key. `event/output.state` carries the same `error`,
+and so does the `output.state` hook. Once the destination is live, `error` is
+absent.
 
 ```sh
 curl -s -H "Authorization: Bearer $GODWINMIX_TOKEN" \

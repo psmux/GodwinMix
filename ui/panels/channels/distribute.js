@@ -13,6 +13,7 @@ import { brandMark } from "./brands.js";
 import { keyed, write } from "./keyed.js";
 import { tileState, ringState } from "./model.js";
 import { addDestination, editDestination } from "./destination-form.js";
+import { waitingNote } from "./to-programme.js";
 
 /** The platforms offered straight on an empty strip. The rest are behind More. */
 export const QUICK = ["youtube", "facebook", "twitch", "kick"];
@@ -27,9 +28,12 @@ export function destinationStrip(view, first) {
   ]);
   const quick = el("div.chn-quick");
   const lede = el("span.chn-dim");
+  // What a channel is for, while it has somewhere to go and nothing to send.
+  const waiting = waitingNote(view);
   const node = el("section.chn-dist", {}, [
     el("div.chn-disthead", {}, [el("span.chn-kicker", { text: "Send on to" }), lede]),
     tiles,
+    waiting.node,
     quick,
   ]);
 
@@ -42,6 +46,7 @@ export function destinationStrip(view, first) {
     if (add.parentNode !== tiles || tiles.lastChild !== add) tiles.appendChild(add);
     add.hidden = !list.length;
     quick.hidden = list.length > 0;
+    waiting.update(next);
     if (!quick.firstChild) quick.append(...QUICK.map((id) => quickTile(view, () => channel, id)), moreTile(view, () => channel));
   }
 

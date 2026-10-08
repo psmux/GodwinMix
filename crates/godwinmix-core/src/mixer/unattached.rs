@@ -82,6 +82,7 @@ impl UnattachedList {
             queue_secs: 0.0,
             rendition: u.config.rendition.clone(),
             shed: Some(format!("Not attached yet, and tried again by itself: {}", u.error)),
+            error: None,
             extra: Default::default(),
         })
     }

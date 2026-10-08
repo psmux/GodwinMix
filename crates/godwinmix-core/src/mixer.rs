@@ -4227,11 +4227,15 @@ impl Mixer {
                 // An output failing is expected over a long broadcast. Rebuild
                 // just its muxer and sink; the encoder never notices.
                 if let Some(out) = self.outputs.iter().find(|o| o.owns_pipeline(&pipeline)).cloned() {
+                    // Every one is read for its reason, the sink's own words
+                    // being more use than the stream errors behind them.
+                    out.note_error(&message);
                     // A dying connection emits several errors; only the first
                     // arms a retry.
                     if out.try_arm_reconnect() {
                         out.mark_failed();
                         self.emit_output_state(&out);
+                        self.tell_output_failure(&out);
                         self.arm_output_reconnect(out.id().clone());
                     }
                     return;
@@ -4463,6 +4467,10 @@ impl Mixer {
             .map(|o| o.id().clone())
             .collect();
         for id in overflowing {
+            if let Some(out) = self.outputs.iter().find(|o| o.id() == &id).cloned() {
+                out.note_stall();
+                self.tell_output_failure(&out);
+            }
             self.reconnect_output(&id);
         }
     }
@@ -4490,7 +4498,9 @@ impl Mixer {
         // destination that keeps refusing us backs off.
         if let Some(e) = failed {
             error!(output = %id, e, "reconnect failed, will retry");
+            out.note_error(&e);
             out.mark_failed();
+            self.tell_output_failure(&out);
             self.arm_output_reconnect(id.clone());
         }
         self.emit_output_state(&out);
@@ -4587,12 +4597,22 @@ impl Mixer {
         true
     }
 
+    /// Once per run of failures, the reason a destination is not sending,
+    /// where a person will see it whichever panel is open. The status says
+    /// the same thing for as long as it lasts; this is the moment it began.
+    fn tell_output_failure(&self, out: &OutputSlot) {
+        if let Some(alert) = out.failure_alert() {
+            let _ = self.events.send(alert);
+        }
+    }
+
     fn emit_output_state(&self, out: &OutputSlot) {
         let s = out.status();
         let _ = self.events.send(Event::OutputStateChanged {
             output: s.id,
             state: s.state,
             reconnects: s.reconnects,
+            error: s.error,
         });
     }
 
@@ -5558,6 +5578,7 @@ mod tests {
     mod slow_restart;
     mod stale_work;
     mod stall_storm;
+    mod refused_output;
     mod slow_output;
     mod thumb;
     use crate::plugin::branch::meter_name;

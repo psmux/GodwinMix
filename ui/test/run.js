@@ -52,6 +52,8 @@ import { kindOfUri } from "../client/kinds.js";
 import { PLATFORMS, platformOfHost, joinKey } from "../client/destinations.js";
 import { schemaFor, paramsFor, schemeError } from "../panels/outputs/destination.js";
 import { stateLabel, dotClass, stalledAdvice, ADVICE_AFTER } from "../panels/outputs/panel.js";
+import { followStart } from "../panels/outputs/failure.js";
+import { destinationsPill } from "../panels/header/destinations.js";
 import { tagFor } from "../shell/registry.js";
 import * as layout from "../shell/layout.js";
 import { ART } from "../panels/welcome/tiles.js";
@@ -859,6 +861,77 @@ test("the advice appears on the row and goes away again", () => {
   panel.render(state);
   ok(advice().hidden, "a destination that came up keeps saying nothing answered");
   panel.remove();
+});
+
+// The core's reason for a destination that is not connecting, as the row, the
+// dot and the header say it. Before it, a refused key and a firewall both read
+// "Reconnecting, attempt 3" while YouTube said "No data".
+const refused = (over = {}) => Object.assign({
+  id: "youtube", state: "reconnecting", reconnects: 2, queue_secs: 0, has_key: true, uri_host: "rtmp://127.0.0.1:19351/…",
+  error: { reason: "refused", message: "127.0.0.1:19351 refused the connection: nothing there is taking streams. Check the server address and port, and that the server is running." },
+}, over);
+
+test("a destination the core gave a reason for says the reason, at once, in red", () => {
+  eq(stateLabel(refused()), "Refused, trying again (2)");
+  eq(stateLabel(refused({ error: { reason: "rejected", message: "m" } })), "Key turned away, trying again (2)");
+  eq(stateLabel(refused({ error: { reason: "timed-out", message: "m" }, reconnects: 0 })), "No answer, trying again");
+  eq(dotClass(refused()), "failed");
+  ok(stalledAdvice(refused()).startsWith("127.0.0.1:19351 refused"), "the advice waited for ten attempts");
+  // Live is live, whatever an older status still carries.
+  eq(stateLabel(refused({ state: "live" })), "Live");
+  eq(stalledAdvice(refused({ state: "live" })), "");
+  // A missing key keeps its own words.
+  eq(stateLabel(refused({ has_key: false })), "Needs a stream key");
+});
+
+test("the row puts the reason under the destination and takes it away when it connects", () => {
+  const state = { outputs: [refused()] };
+  const panel = document.createElement("gmx-outputs");
+  panel.setClient({ state, onRender: () => () => {}, call: async () => ({}) });
+  document.body.appendChild(panel);
+  const advice = () => panel.querySelector(".output-advice");
+  ok(!advice().hidden && advice().textContent.includes("refused the connection"), advice().textContent);
+  ok(panel.querySelector(".output-row .dot.failed"), "the dot is not red");
+  state.outputs = [refused({ state: "live", error: null })];
+  panel.render(state);
+  ok(advice().hidden, "a live destination still explains a failure");
+  panel.remove();
+});
+
+test("the header pill says a destination is not sending, and why on hover", () => {
+  eq(destinationsPill([]).text, "No destinations");
+  const one = destinationsPill([refused()]);
+  eq(one.text, "youtube is not sending");
+  eq(one.kind, "failed");
+  ok(one.title.includes("refused the connection"), one.title);
+  eq(destinationsPill([refused(), refused({ id: "fb" })]).text, "2 destinations not sending");
+  const mixed = destinationsPill([refused(), refused({ id: "fb", state: "live", error: null })]);
+  eq(mixed.text, "1 destination live, 1 failing");
+  eq(mixed.kind, "live");
+  eq(destinationsPill([refused({ state: "connecting", reconnects: 0, error: null })]).text, "Destinations connecting");
+  eq(destinationsPill([refused({ has_key: false, error: null })]).text, "Destinations need a key");
+  eq(destinationsPill([{ id: "rec", type: "record/output", state: "live" }]).text, "No destinations");
+});
+
+test("after an add, the page says so when the destination goes live, and once", () => {
+  let render = null;
+  let offs = 0;
+  const said = [];
+  const client = { onRender: (fn) => ((render = fn), () => (offs += 1)) };
+  const stop = followStart(client, "youtube", (t) => said.push(t));
+  render({ outputs: [refused({ state: "connecting", error: null })] });
+  eq(said, []);
+  render({ outputs: [refused({ state: "live", error: null })] });
+  render({ outputs: [refused({ state: "live", error: null })] });
+  eq(said, ["youtube is live."]);
+  eq(offs, 1, "it kept listening after it had said");
+  stop();
+  // A failure is the core's alert to make; following stops without a word.
+  const quiet = [];
+  followStart(client, "youtube", (t) => quiet.push(t));
+  render({ outputs: [refused()] });
+  render({ outputs: [refused({ state: "live", error: null })] });
+  eq(quiet, []);
 });
 
 // ---------------------------------------------------------------- palette
