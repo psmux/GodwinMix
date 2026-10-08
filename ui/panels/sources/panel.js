@@ -22,6 +22,7 @@ import { addView, dropViews, takeMeters } from "../../shell/meter.js";
 import { sheetWidthFor } from "../../client/frames.js";
 import { SOURCE_KINDS, kindOfUri, discoverDevices } from "../../client/kinds.js";
 import { buildTile, syncTile, setTileMode } from "./tile.js";
+import { repeatRequest } from "./clip-end.js";
 import { setLocal, nameOf } from "./local.js";
 import { addSourceTile, openSceneSources } from "./chooser-loader.js";
 import { focusedScene, onFocusChanged } from "../../shell/focus.js";
@@ -256,6 +257,7 @@ class SourcesPanel extends HTMLElement {
         scrub: this.scrub,
         onGear: (id) => this.openDrawer(id),
         onMute: (id, muted) => this.audio.setMuted(id, muted).catch((e) => errorToast(e, "Mute")),
+        onRepeat: (s, on) => this.client.call("source.set", repeatRequest(s, on)).catch((e) => errorToast(e, "Repeat")),
       });
       this.tiles.set(source.id, tile);
       this.grid.appendChild(tile.node);

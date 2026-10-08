@@ -31,7 +31,10 @@ export async function openSourceDrawer(panel, source) {
   let schema = (await schemaForSource(client, source).catch(() => null)) || kind.schema;
   const found = await discoverDevices(client, 1500).catch(() => []);
   schema = easeSchema(schema, source.type || "", found, {});
-  const form = new SchemaForm(settableOnly(schema), { name: nameOf(source) });
+  // A clip says what it does at its end in its status, so that one box opens
+  // on the clip's own choice rather than the default.
+  const known = source.at_end ? { name: nameOf(source), at_end: source.at_end } : { name: nameOf(source) };
+  const form = new SchemaForm(settableOnly(schema), known);
   // What the form says before anybody has touched it. Only what differs
   // from this is sent. The mixer does not publish a source's settings, so
   // the boxes open at their defaults, and sending every one of them would
