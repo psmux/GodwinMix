@@ -32,9 +32,12 @@ work for the hidden surface. Plugin panels can opt into the same suspension
 contract. Older plugins are recreated on activation, so apply their unfinished
 forms before switching tabs.
 
-On a narrow screen the panes become a vertical stack. The saved desktop
-arrangement remains intact, and returns when the window becomes wider. Use
-the panel actions menu to rearrange panes when pointer docking is unavailable.
+On a phone, or any window 760 pixels wide or less, the dock gives way to the
+phone's tabs: one screen at a time, chosen from a bar along the bottom, with
+every panel the dock has reachable from Live, Sources, Audio, Outputs or More.
+The layout cannot be rearranged there. The saved desktop arrangement is left
+as it was and comes back when the window is wider again. See
+[Run the mixer from a phone or a tablet](use-a-phone-or-tablet.md).
 
 This workspace does not currently support separate native windows or floating
 panes outside the browser window.

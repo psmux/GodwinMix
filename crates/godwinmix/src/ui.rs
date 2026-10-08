@@ -347,6 +347,7 @@ const DEV_ASSETS: &[(&str, &str)] = &[
     ("test/welcome.js", include_str!("../../../ui/test/welcome.js")),
     ("test/menubar.js", include_str!("../../../ui/test/menubar.js")),
     ("test/touch.js", include_str!("../../../ui/test/touch.js")),
+    ("test/phone.js", include_str!("../../../ui/test/phone.js")),
     ("test/presence.js", include_str!("../../../ui/test/presence.js")),
     ("test/touch-tray.js", include_str!("../../../ui/test/touch-tray.js")),
     // The Channels panel against a stub of the channel contract, as tests and

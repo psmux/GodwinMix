@@ -16,23 +16,57 @@ the network rather than on `127.0.0.1` alone: `bind` under `[control]` in the
 shipped default of `0.0.0.0:8080` already does. A mixer with a `token` asks
 for it once and the browser keeps it.
 
-## Find your way round a narrow screen
+## Find your way round a phone
 
-Below 760 pixels wide the page is one column. The menu bar becomes one ☰
-button at the top, and every item in File, Edit, View, Sources, Scenes,
-Outputs and Help is under it. The panels stack one under another and the page
-scrolls between them; dragging a panel's title to rearrange the dock is a
-desktop thing and is switched off here, but Panels and layout still opens and
-closes panels.
+On a screen 760 pixels wide or less the page shows one screen at a time,
+with a bar of five tabs along the bottom:
+
+| Tab | What is on it |
+|---|---|
+| Live | Preview and Programme side by side, Take and Cut under them, the transition, then the scenes as cards with their pictures |
+| Sources | the tray of the scene you are working on, two tiles to a row, with a fader and a mute on each |
+| Audio | the programme level and a fader and mute for every source |
+| Outputs | destinations, recording and resources |
+| More | every other panel (Graphics, Media, Alerts, Channels and any plugin panel), a switch for Studio mode, Cut to black, Routing, the monitoring wall, both settings dialogs and Open on another device |
+
+Live is where a show is run from, so everything a take needs is on it
+together and nothing has to be scrolled to between choosing a shot and
+taking it. With Studio mode on, tap a scene card to put it in Preview and
+press Take. With Studio mode off, tap a card and press the Take button that
+sits at the foot of the screen while the scenes scroll. The red dot on the
+Live tab means something is on air, so it can be seen from any other tab.
+
+A panel opened from More has a back arrow beside its title. The page
+remembers which tab you were on.
+
+The header is two rows. The first has the name, the destinations and the ☰
+button, which holds the whole menu bar: every item in File, Edit, View,
+Sources, Scenes, Outputs and Help. The second is what is on air, as wide as
+the screen, with its level and how long the show has been running. The
+encoder's name, the palette button, the settings button and Cut to black
+leave the header on a phone; they are under ☰ and More.
+
+Turn the phone on its side and the tabs become a rail down the left, the
+header becomes one line, and Live puts the monitors and Take on the left
+with the scenes beside them.
+
+The composer opens over the whole screen with the picture first. Tap an item
+to select it and drag its handles; the Align, Space, Size and Structure
+buttons are under the picture, one row each, and swipe sideways. The
+inspector for the selected item is under those, and Apply stays at the
+bottom.
+
+To open the page like an app, use the browser's Add to Home Screen. It then
+starts full screen without the browser's address bar.
 
 Anything the keyboard does has a button or a menu item:
 
 | On a keyboard | On a phone |
 |---|---|
 | `1` to `9` | tap the scene tab or the tile |
-| `Space` (Studio mode) | the Take button on the take bar |
-| `0` | Cut to black in the header, or ☰, Scenes, Cut to black |
-| `Ctrl+K`, the palette | the ⌘K button in the header, or ☰, Edit, Command palette |
+| `Space` (Studio mode) | Take on the Live tab |
+| `0` | More, Cut to black, or ☰, Scenes, Cut to black |
+| `Ctrl+K`, the palette | ☰, Edit, Command palette |
 | `Ctrl+N` | the Add sources tile, or ☰, Sources, Add source |
 | `Ctrl+F` | the Filter box over the tray |
 | `F2`, `Delete`, `Ctrl+C`, `Ctrl+V`, `Ctrl+A` | a long press on the tile, then Rename, Remove, Copy, Paste or Select all |
@@ -66,7 +100,8 @@ an up or down swipe that starts on a fader still scrolls the page.
 ## On a tablet
 
 A tablet wider than 760 pixels gets the desktop layout, with targets sized
-for a finger. The panel titles and the dividers between panes can be dragged
+for a finger. A tablet held upright that is 760 pixels wide or less gets the
+phone's tabs. The panel titles and the dividers between panes can be dragged
 by finger to rearrange the dock, and a divider has a wider target than the
 line you see. A touch laptop with a mouse as well keeps the mouse's sizes
 and shows the ⠿ grip, so both work.

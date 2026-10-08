@@ -26,18 +26,6 @@ const TABS = [
 ];
 const KEY = "gmx.phone.page";
 
-/** The module, once its stylesheet has arrived, so the first paint is styled. */
-export function ready() {
-  const link = el("link", { rel: "stylesheet", href: new URL("../themes/phone.css", import.meta.url).href, "data-phone": "" });
-  document.head.appendChild(link);
-  return new Promise((done) => {
-    const go = () => done({ PhoneDeck });
-    link.addEventListener("load", go, { once: true });
-    link.addEventListener("error", go, { once: true });
-    setTimeout(go, 1500);
-  });
-}
-
 export class PhoneDeck {
   constructor(workspace) {
     this.w = workspace;
@@ -86,7 +74,9 @@ export class PhoneDeck {
   open(id) {
     const tab = TABS.find((t) => t.panels.includes(id));
     this.go(tab ? tab.id : "panel:" + id);
-    this.frames.get(id)?.element.scrollIntoView({ block: "start" });
+    // The deck's own scroll, never scrollIntoView, which scrolls the window too.
+    const at = this.frames.get(id)?.element;
+    if (at) this.w.root.scrollTop += at.getBoundingClientRect().top - this.w.root.getBoundingClientRect().top - 12;
   }
 
   render() {
