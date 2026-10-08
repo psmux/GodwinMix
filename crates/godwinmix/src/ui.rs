@@ -149,6 +149,7 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/audio/panel.js", include_str!("../../../ui/panels/audio/panel.js")),
     ("panels/outputs/recording.js", include_str!("../../../ui/panels/outputs/recording.js")),
     ("panels/outputs/record-start.js", include_str!("../../../ui/panels/outputs/record-start.js")),
+    ("panels/outputs/record-stop.js", include_str!("../../../ui/panels/outputs/record-stop.js")),
     ("panels/outputs/panel.js", include_str!("../../../ui/panels/outputs/panel.js")),
     ("panels/outputs/views.js", include_str!("../../../ui/panels/outputs/views.js")),
 ("panels/renditions/bars.js", include_str!("../../../ui/panels/renditions/bars.js")),
@@ -347,6 +348,7 @@ const DEV_ASSETS: &[(&str, &str)] = &[
     ("test/dock.js", include_str!("../../../ui/test/dock.js")),
     ("test/welcome.js", include_str!("../../../ui/test/welcome.js")),
     ("test/menubar.js", include_str!("../../../ui/test/menubar.js")),
+    ("test/recording-stop.js", include_str!("../../../ui/test/recording-stop.js")),
     ("test/touch.js", include_str!("../../../ui/test/touch.js")),
     ("test/phone.js", include_str!("../../../ui/test/phone.js")),
     ("test/presence.js", include_str!("../../../ui/test/presence.js")),
@@ -991,6 +993,8 @@ mod tests {
         reachable.extend(closure_of("panels/wall/bulk.js"));
         reachable.extend(closure_of("panels/wall/detail.js"));
         reachable.extend(closure_of("panels/outputs/record-start.js"));
+        // The REC button in the header, or Outputs > Stop recording.
+        reachable.extend(closure_of("panels/outputs/record-stop.js"));
         // Renditions: each is fetched by an `import()` the first time it is
         // wanted, from the destination form, the Outputs panel or its rows.
         for entry in [
@@ -1103,6 +1107,7 @@ mod tests {
             ("shell/project-open.js", "Open project"),
             ("shell/settings-dialog.js", "Settings for this page"),
             ("panels/outputs/record-start.js", "Record pressed"),
+            ("panels/outputs/record-stop.js", "REC or Stop recording pressed"),
             ("panels/sources/browser-device.js", "this browser's camera opened"),
             ("panels/sources/phone-camera.js", "A phone's camera picked in Add source"),
             ("join/publisher.js", "this browser's camera opened, or /join/"),

@@ -23,6 +23,37 @@ Allow up to five seconds after stopping for the file to finish.
 
 The public API is in [Recording outputs](../reference/recording.md).
 
+## Stop a recording from anywhere
+
+While a recording runs, the header shows a red **REC** button with how long it
+has been recording, `REC 12:04`. Press it, from whichever panel is on screen,
+and the mixer asks once, naming the file; **Stop recording** finishes the file
+and **Keep recording** leaves it going. **Outputs > Stop recording** asks the
+same question. Before the first bytes reach the file the button reads
+`REC starting` and is not red, and it stops that recording too.
+
+## After a restart
+
+A recording started with Record lasts until you stop it or the mixer exits.
+Quitting the app, or restarting the mixer, ends it, and the mixer does not
+start recording again when it comes back. Press Record for a new file.
+Destinations are different: one added in Outputs is saved and reconnects
+after a restart.
+
+To record every time the mixer starts, write the recorder into the config
+file:
+
+```toml
+[[outputs]]
+id = "archive"
+type = "record/output"
+uri = "record://programme"
+params = { format = "mp4" }
+```
+
+A recorder written there starts with the mixer every time, even after you
+stop it from the page.
+
 ## Optional file recording sidecar
 
 The remaining instructions describe `file-record/output`, the separate plugin

@@ -15,6 +15,7 @@ use anyhow::Result;
 use gstreamer as gst;
 use serde_json::{json, Value};
 use std::path::PathBuf;
+use std::time::Instant;
 use std::sync::{
     atomic::{AtomicU64, Ordering},
     Arc,
@@ -50,6 +51,9 @@ struct Recording {
     format: String,
     path: Option<PathBuf>,
     bytes: Arc<AtomicU64>,
+    /// When Record was pressed. A reconnect starts a new file but not a new
+    /// recording, so this is set once and the header's clock counts from it.
+    started: Option<Instant>,
 }
 
 impl Output for Recording {
@@ -59,6 +63,7 @@ impl Output for Recording {
 
     fn initialize(&mut self, hello: Hello) -> Result<Ready> {
         (self.folder, self.format) = files::settings(&hello.params)?;
+        self.started = Some(Instant::now());
         Ok(Ready {
             manifest: MANIFEST,
             latency_ms: 0,
@@ -123,6 +128,8 @@ impl Output for Recording {
             "bytes_muxed".into(),
             json!(self.bytes.load(Ordering::Relaxed)),
         );
+        let secs = self.started.map_or(0, |at| at.elapsed().as_secs());
+        status.insert("recording_secs".into(), json!(secs));
         status
     }
 

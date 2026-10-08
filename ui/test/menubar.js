@@ -36,7 +36,7 @@ export async function menubarTests(test, eq, ok) {
   test("the bar has the seven menus and registers the commands it adds", () => {
     eq(titles.map((t) => t.textContent), ["File", "Edit", "View", "Sources", "Scenes", "Outputs", "Help"]);
     eq(bar.getAttribute("role"), "menubar");
-    for (const id of ["project.new", "project.open", "project.save", "view.studio", "output.record", "help.about"]) ok(command(id), `${id} is registered`);
+    for (const id of ["project.new", "project.open", "project.save", "view.studio", "output.record", "output.stop-recording", "help.about"]) ok(command(id), `${id} is registered`);
     ok(typeof window.gmxMenu.run === "function", "the desktop app has a way in");
   });
 

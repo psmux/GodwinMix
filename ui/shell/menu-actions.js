@@ -71,6 +71,7 @@ const ACTIONS = {
   "source.add-kind": (client, category) => openPicker(client, "source", { category }),
   "data.open": (client) => import("../panels/data/dialog.js").then((m) => m.openLiveData(client)),
   "output.record": (client) => import("../panels/outputs/recording.js").then((m) => m.startRecording(client)),
+  "output.stop-recording": (client) => import("../panels/outputs/record-stop.js").then((m) => m.stopRecording(client)),
   "output.resources": async () => {
     await show("core/outputs");
     document.querySelector("gmx-outputs")?.show("resources");
