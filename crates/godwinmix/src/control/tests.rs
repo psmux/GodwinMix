@@ -266,6 +266,8 @@ fn the_table_matches_the_scopes_in_the_protocol_document() {
             // A graphic deleted takes its files with it, like a clip.
             "gallery.remove",
             "media.remove",
+            // It restarts the mixer on a new address, as core.restart does.
+            "network.share",
             "node.remove",
             "output.remove",
             "plugin.add",

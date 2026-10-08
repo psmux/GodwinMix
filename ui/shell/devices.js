@@ -12,6 +12,7 @@ import { modal } from "./modal.js";
 import { toast } from "./toast.js";
 import { qrPath } from "../panels/channels/qr.js";
 import { deviceList } from "./devices-list.js";
+import { sharePrompt, stopSharing } from "./devices-share.js";
 
 const HOW_TO = "https://github.com/psmux/GodwinMix/blob/main/docs/how-to/run-a-show-from-phones.md";
 const LOOPBACK = /^https?:\/\/(localhost|127\.[\d.]+|\[::1\])(:|\/|$)/i;
@@ -29,21 +30,6 @@ export function lanUrls(info, origin) {
 /** The address a phone opens: the page with the token in the fragment. */
 export function signInUrl(base, token) {
   return `${base.replace(/#.*$/, "").replace(/\/?$/, "/")}#token=${encodeURIComponent(token)}`;
-}
-
-function inDesktopApp() {
-  return /GodwinMix-Desktop/.test(navigator.userAgent);
-}
-
-/** What to do when nothing on the network can reach this mixer. */
-function notReachable() {
-  const how = inDesktopApp()
-    ? "In the GodwinMix menu, turn on \"Let other devices on this network connect\". The mixer restarts once, keeps the same port from then on, and this card shows a code."
-    : "Start the mixer bound to the network, for example with --bind 0.0.0.0:8080 or control.bind in the config, with a control token set, then open this card again.";
-  return el("div.col", {}, [
-    el("p", { text: "This mixer only answers on the machine it runs on, so a phone has nothing to connect to yet." }),
-    el("p.dim", { text: how }),
-  ]);
 }
 
 function qrPicture(url) {
@@ -95,8 +81,11 @@ export async function openDevices(client) {
   const body = el("div.col");
   const more = el("a", { href: HOW_TO, target: "_blank", rel: "noopener", text: "More: running a show from phones" });
   if (!urls.length) {
-    body.append(notReachable(), more);
-    return modal({ title: "Open on another device", body });
+    // One button that does the job, then this card again with a code.
+    let card = null;
+    body.append(sharePrompt(client, () => { card.close(); openDevices(client); }), more);
+    card = modal({ title: "Open on another device", body });
+    return card;
   }
   const { node, read } = form(urls);
   const shown = el("div.col");
@@ -125,5 +114,10 @@ export async function openDevices(client) {
     list.node,
     more,
   );
-  return modal({ title: "Open on another device", body });
+  const card = modal({ title: "Open on another device", body });
+  body.append(stopSharing(client, () => {
+    card.close();
+    toast({ text: "Only this computer can reach the mixer now. Phones keep their codes for next time." });
+  }));
+  return card;
 }

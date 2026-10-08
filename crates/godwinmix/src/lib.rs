@@ -780,14 +780,18 @@ pub async fn run() -> Result<()> {
     if args.show.is_none() {
         first_run(&config_path)?;
         let common = show_flags(&args);
-        return station::run(station::Options {
+        station::run(station::Options {
             config: config_path,
             bind: args.bind,
             rehearsal: args.rehearsal,
             codecs: args.codecs,
+            supervised: args.supervised,
             common,
         })
-        .await;
+        .await?;
+        // The station owns the port, so `network.share` stops it, not a show.
+        control::methods::lifecycle::exit_if_asked();
+        return Ok(());
     }
     if let (Some(id), Some(link)) = (args.show.as_deref(), args.station) {
         station::show::enter(id, link);
@@ -800,6 +804,7 @@ pub async fn run() -> Result<()> {
     godwinmix_core::vitals::configure(&cfg.extra);
     let bind = args.bind.unwrap_or_else(|| cfg.control.bind.clone());
     control::methods::lifecycle::set_supervised(args.supervised);
+    control::methods::network::configure(&bind, bind != cfg.control.bind, &config_path);
     if args.supervised {
         info!("supervised: core.restart exits and something starts this mixer again");
     }
@@ -1158,12 +1163,7 @@ pub async fn run() -> Result<()> {
     let _ = handle.send(mixer::Command::Shutdown);
     server.abort();
     let _ = tokio::task::spawn_blocking(move || mixer_thread.join()).await;
-    if control::methods::lifecycle::restart_asked() {
-        // Not a clean zero: the desktop app starts its mixer again on this
-        // status only, and every supervisor reads it as "start me again".
-        info!(code = control::methods::lifecycle::RESTART_EXIT_CODE, "exiting to be restarted");
-        std::process::exit(control::methods::lifecycle::RESTART_EXIT_CODE);
-    }
+    control::methods::lifecycle::exit_if_asked();
     Ok(())
 }
 
