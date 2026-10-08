@@ -20,6 +20,7 @@
 //! background tasks that feed the event stream are started.
 
 pub mod call;
+mod clip_leave;
 mod fx_rest;
 pub mod history;
 pub mod hls;
@@ -1620,6 +1621,7 @@ pub async fn serve_with(
     let snapshots =
         Tracker::new(state.snapshot.clone(), state.multiview.clone(), state.mixer.clone());
     spawn_background(state.clone());
+    clip_leave::spawn(state.clone(), snapshots.clone());
     state.feeds.start(crate::feeds::Ctx { app: state.clone(), snapshots: snapshots.clone() });
     godwinmix_core::vitals::spawn(state.mixer.clone(), snapshots.clone());
     let observe = crate::observe::router(observe_state(&state));

@@ -480,6 +480,14 @@ impl Guard {
         self.state.lock().luma_observed = observed;
     }
 
+    /// Who made the last take, if anybody has. A take the mixer makes on
+    /// somebody's behalf (a clip set to leave the scene, `control::clip_leave`)
+    /// is credited to them, so the operator watchdog goes on watching the
+    /// person and not a token that never calls.
+    pub fn operator(&self) -> Option<String> {
+        self.state.lock().operator.clone()
+    }
+
     /// Whether the operator who made the last take has gone quiet, and who it
     /// was. `None` while somebody is still calling, or when nobody has taken.
     pub fn silent_operator(&self) -> Option<String> {

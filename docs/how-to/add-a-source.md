@@ -176,6 +176,31 @@ removed, in memory, until it restarts. Asked for one it does not have, it
 answers with the ids it does. Undo after a removal, and paste, use these two in
 the web UI. Neither is an MCP tool: the agent tool lists are held to a size.
 
+## Choose what a clip does at its end
+
+A new clip plays once and holds its last frame. To have it go round, press
+**Repeat** on its tile in the Sources panel; it plays again from the start
+with no gap, and its tile never says connecting. With Repeat off, the gear on
+the tile opens its settings, where **At the end** picks between **Hold the
+last frame** and **Leave the scene**.
+
+Leave the scene is for an opener or a package: when the clip ends on air the
+programme moves on by itself. In Studio mode, arm the scene that comes next in
+Preview while the clip plays and that is what is taken. With nothing armed,
+the programme goes back to what was on air before the clip. If there is
+neither, the clip holds its last frame and an alert says so.
+
+From a terminal or an agent the same setting is `at_end`, `repeat`, `hold` or
+`leave`, on add or later:
+
+```sh
+gmx tool add_source '{"id": "opener", "uri": "/srv/media/opener.mp4", "params": {"at_end": "leave"}}'
+gmx tool set_source '{"id": "opener", "params": {"at_end": "repeat"}}'
+```
+
+Changing it does not restart the clip. The whole rule, and what the status
+says, is in [sources](../reference/sources.md#when-a-clip-reaches-its-end).
+
 ## When nothing turns up
 
 * The camera list is empty. Nothing is plugged in, another program has the

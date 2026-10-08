@@ -13877,6 +13877,30 @@
       "summary": "A source moved between connecting, live, stalled and failed."
     },
     {
+      "ext": null,
+      "legacy": "source_ended",
+      "name": "event/source.ended",
+      "pattern": "source.ended",
+      "payload": {
+        "properties": {
+          "at_end": {
+            "enum": [
+              "repeat",
+              "hold",
+              "leave"
+            ],
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "since": "1",
+      "summary": "A clip's last frame has gone out to the programme. at_end says what it does now: repeat plays it again from the start, hold keeps the last frame up, and leave holds it while the programme moves to the armed scene or the one on air before the clip."
+    },
+    {
       "ext": "positions",
       "legacy": "source_position",
       "name": "event/source.position",
@@ -14554,6 +14578,22 @@
                 }
               ],
               "description": "Whether the clip's transparency is kept. `auto` (or left out) keeps it when the file has it; `false` draws the clip flat through the compositor like any other source."
+            },
+            "at_end": {
+              "default": "hold",
+              "description": "What the clip does when its last frame has gone out. Repeat plays it again from the start with no gap and no reconnect. Hold the last frame, the default, keeps it up until the clip is scrubbed or restarted. Leave the scene holds it too, and if the clip is on air the programme moves to the scene armed in Preview, or else to what was on air before it. Changing it does not restart the clip.",
+              "enum": [
+                "repeat",
+                "hold",
+                "leave"
+              ],
+              "title": "At the end",
+              "type": "string",
+              "x-gmx-labels": [
+                "Repeat",
+                "Hold the last frame",
+                "Leave the scene"
+              ]
             }
           },
           "title": "file/source params",

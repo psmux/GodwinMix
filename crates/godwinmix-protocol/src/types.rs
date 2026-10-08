@@ -334,6 +334,9 @@ pub enum Event {
     /// preview until a client asks for one, so this costs a message.
     PreviewChanged { scene: Option<String> },
     SourceStateChanged { source: SourceId, state: SourceState },
+    /// A clip's last frame has gone out to the programme. `at_end` is what
+    /// it does now, from its `params.at_end`: `repeat`, `hold` or `leave`.
+    SourceEnded { source: SourceId, at_end: String },
     OutputStateChanged {
         output: OutputId,
         state: OutputState,

@@ -247,6 +247,12 @@ pub struct InputPipeline {
     /// the whole time, rather than as connecting for the few milliseconds
     /// between each attempt starting and being refused.
     retrying: AtomicBool,
+    /// Set when a clip has been read to its end: its last frames are playing
+    /// out of the programme queues, or it is holding the last one. It has
+    /// delivered everything it has, so it reads as live and not as stalled.
+    /// Cleared by a seek or a restart, which both play it again. See
+    /// `mixer::clip_act`.
+    ended: AtomicBool,
     /// Whether this pipeline can be scrubbed, once it has said. `None` until
     /// then, because nothing upstream answers a SEEKING query before the chain
     /// from the source to the proxies is built, and a query nobody answered is
@@ -877,6 +883,7 @@ impl InputPipeline {
             layer: parts.layer,
             failed: Arc::new(AtomicBool::new(false)),
             retrying: AtomicBool::new(false),
+            ended: AtomicBool::new(false),
             seekable: Mutex::new(None),
             restart_armed: AtomicBool::new(false),
             manifest: ready.manifest,
@@ -1396,6 +1403,7 @@ impl InputPipeline {
         // so a command that exits is simply run again.
         self.kind.lock().call("restart", serde_json::Value::Null)?;
         self.health.reset();
+        self.ended.store(false, Ordering::Relaxed);
         self.has_video.store(false, Ordering::Relaxed);
         self.has_audio.store(false, Ordering::Relaxed);
         self.retrying.store(self.failed.swap(false, Ordering::Relaxed), Ordering::Relaxed);
@@ -1530,6 +1538,22 @@ impl InputPipeline {
     /// The caller must reset this source's `TimelineAligner` first. A flushing
     /// seek restarts the segment, which makes the offset computed from the
     /// previous one wrong, and nothing here can see the aligner.
+    /// Move to exactly `position`, decoding from the keyframe before it.
+    ///
+    /// `seek_ms` asks for the key unit too, and a demuxer that honours it puts
+    /// the segment at the keyframe, so a clip with one keyframe at the start
+    /// plays the whole of itself again from there. This is for showing a held
+    /// clip's last frame (`mixer::clip_act`), where that is exactly wrong. The
+    /// caller resets the aligner first, as for `seek_ms`.
+    pub fn seek_exact(&self, position: gst::ClockTime) -> Result<()> {
+        self.pipeline
+            .seek_simple(gst::SeekFlags::FLUSH | gst::SeekFlags::ACCURATE, position)
+            .with_context(|| format!("seeking {} to exactly {position}", self.id))?;
+        self.health.rearm();
+        self.ended.store(false, Ordering::Relaxed);
+        Ok(())
+    }
+
     pub fn seek_ms(&self, position_ms: u64) -> Result<u64> {
         // With no duration to clamp against, the ceiling is the largest time
         // GStreamer can express: `ClockTime::from_mseconds` panics past it, and
@@ -1541,9 +1565,22 @@ impl InputPipeline {
                 gst::ClockTime::from_mseconds(wanted),
             )
             .with_context(|| format!("seeking {} to {wanted}ms", self.id))?;
+        // In this order: a clip that sat at its end for longer than the stall
+        // timeout read stalled for the tick between the two otherwise.
+        self.health.rearm();
+        self.ended.store(false, Ordering::Relaxed);
         // Read back rather than reported: the seek snaps to a key unit, so where
         // it landed and what was asked for are rarely the same millisecond.
         Ok(self.position_ms().unwrap_or(wanted))
+    }
+
+    /// A clip has been read to its end. See the field.
+    pub fn mark_ended(&self) {
+        self.ended.store(true, Ordering::Relaxed);
+    }
+
+    pub fn ended(&self) -> bool {
+        self.ended.load(Ordering::Relaxed)
     }
 
     pub fn observed_state(&self) -> SourceState {
@@ -1551,6 +1588,10 @@ impl InputPipeline {
             || (self.retrying.load(Ordering::Relaxed) && self.never_connected())
         {
             SourceState::Failed
+        } else if self.ended() {
+            // Nothing more is coming because there is nothing more, which is
+            // not a stall: restarting it would play it again unasked.
+            SourceState::Live
         } else if self.health.is_stalled(self.config.stall_timeout_secs) {
             SourceState::Stalled
         } else if self.health.saw_video() || self.health.saw_audio() {

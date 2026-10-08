@@ -11,10 +11,11 @@ import { levelParts, syncLevel } from "./tile-level.js";
 import { UNITY, gainToPos, gainLabel, fmtPosition } from "../../shell/fader.js";
 import { nameOf, colourOf, isLocal } from "./local.js";
 import { dragHandle } from "../../shell/pointer.js";
+import { repeatButton, syncRepeat, playbackText } from "./clip-end.js";
 
 /**
  * @param {object} source   a SourceStatus
- * @param {object} deps     {audio, scrub, onTake, onRename, onGear, onMute, meters}
+ * @param {object} deps     {audio, scrub, onTake, onRename, onGear, onMute, onRepeat, meters}
  */
 export function buildTile(source, deps) {
   const kind = kindOfSource(source);
@@ -32,7 +33,7 @@ export function buildTile(source, deps) {
   const gear = el("button.gear", { text: "⚙", title: "Settings", "aria-label": "Settings", "data-nodrag": "" });
   const bar = el("div.bar", {}, [dragHandle(), dot, name, gear]);
 
-  const playback = el("div.playback", { text: source.seekable ? "Clip" : "Continuous live source" });
+  const playback = el("div.playback", { text: playbackText(source) });
   const level = levelParts(source, kind, deps.meters);
   node.classList.toggle("sound", level.sound);
   node.classList.toggle("metered", !!level.meter);
@@ -64,10 +65,12 @@ export function buildTile(source, deps) {
 
   let lane = null;
   let pos = null;
+  let repeat = null;
   if (source.seekable) {
     pos = el("span.num.sm.dim", { style: { minWidth: "3.4em" } });
     lane = el("input", { type: "range", min: "0", max: "1000", step: "1", value: "0", title: "Position", "data-nodrag": "" });
-    const laneRow = el("div.strip", { style: { bottom: "0", opacity: "1", background: "transparent" } }, [lane, pos]);
+    repeat = repeatButton(source, (s, on) => deps.onRepeat && deps.onRepeat(s, on));
+    const laneRow = el("div.strip", { style: { bottom: "0", opacity: "1", background: "transparent" } }, [lane, pos, repeat]);
     node.appendChild(laneRow);
   }
 
@@ -102,6 +105,8 @@ export function buildTile(source, deps) {
     lane,
     pos,
     kind,
+    playback,
+    repeat,
   };
 }
 
@@ -143,6 +148,9 @@ export function syncTile(tile, source, view) {
 
   tile.strip.hidden = !view.showStrip;
   syncLevel(tile, source);
+  const playing = playbackText(source);
+  if (tile.playback.textContent !== playing) tile.playback.textContent = playing;
+  if (tile.repeat) syncRepeat(tile.repeat, source);
 
   if (tile.lane) {
     const p = view.position || { pos: 0, dur: null };
