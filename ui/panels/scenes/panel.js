@@ -4,7 +4,8 @@
 // is a tile, the same file manager gestures work on both, and every gesture is
 // one command on the public protocol:
 //
-//   tap                     program.take {scene}     (arm, in producer mode)
+//   tap                     program.take {scene}     (arm, in producer mode;
+//                                                     either way Sources follows)
 //   double tap, Enter       scene.edit.begin         the composer, on a copy
 //   F2                      scene.rename
 //   a colour from the menu  scene.rename {color}
@@ -140,7 +141,7 @@ class ScenesPanel extends HTMLElement {
       selection: this.selection,
       order: () => [...this.tiles.keys()],
       onChange: () => this.paintSelection(),
-      onActivate: (id) => this.activate(id),
+      onActivate: (id) => this.choose(id, true),
       onOpen: (id) => this.open(id),
       // Marked as ours, so a scene tile dropped on empty space is understood
       // as a tile being put down and not as a request to build a scene out of
@@ -272,7 +273,7 @@ class ScenesPanel extends HTMLElement {
             "data-id": summary.id,
             title: "Work on this scene. Double click to arrange it, Take to put it on air.",
             // In Studio mode a click also fills the preview, which is safe.
-            onclick: () => { setFocusedScene(summary.id); if (settings().producer) this.activate(summary.id); },
+            onclick: () => this.choose(summary.id, false),
             ondblclick: () => this.open(summary.id),
           },
           [el("span.ellipsis", { text: summary.name }), el("span.num.dim", { text: String(summary.items || 0) })]
@@ -431,10 +432,31 @@ class ScenesPanel extends HTMLElement {
     return this.selection.list([...this.tiles.keys()]);
   }
 
+  /**
+   * A scene picked by its tab or its tile. Either way it becomes the scene in
+   * hand, so Sources lists its inputs, and in Studio mode it is armed, so
+   * Preview holds it and Take sends it. Only a tile goes on air outside Studio
+   * mode, because that is the tile grammar; a tab leaves that to Take.
+   *
+   * A tile used to arm or take without moving the focus, so the tray went on
+   * showing whichever scene was focused last, usually the newest one. And the
+   * scene on air, once armed, read as nothing armed, so Preview went on
+   * suggesting another scene and Take sent that one. Marking the choice on
+   * the page lets Preview hold it until the next take (studio-next.js).
+   */
+  choose(id, tile) {
+    setFocusedScene(id);
+    if (settings().producer) document.body.dataset.chosen = id;
+    if (tile || settings().producer) return this.activate(id);
+  }
+
   async activate(id) {
     if (settings().producer) {
       try {
         await this.scenes.arm(id);
+        // Re-arming the scene already armed changes nothing the core reports,
+        // and Preview still has to look at the choice made here.
+        document.dispatchEvent(new Event("gmx-armed"));
       } catch (e) {
         errorToast(e, "Arm");
       }
