@@ -30,6 +30,7 @@ mod filters;
 pub(crate) mod fx;
 pub(crate) mod gallery;
 pub mod lifecycle;
+pub mod network;
 mod media;
 mod paths;
 mod nodes;
@@ -73,6 +74,7 @@ pub fn registry() -> Registry<Call> {
     register_core(&mut reg);
     register_introspection(&mut reg);
     lifecycle::register(&mut reg);
+    network::register(&mut reg);
     paths::register(&mut reg);
     program::register(&mut reg);
     sources::register(&mut reg);
@@ -135,6 +137,7 @@ fn register_core(reg: &mut Registry<Call>) {
                     restart: lifecycle::restart_info(),
                     tls: crate::tls::info(),
                     executable: std::env::current_exe().ok().map(|p| p.display().to_string()),
+                    started_ms: Some(lifecycle::started_ms()),
                 })
             }),
         )

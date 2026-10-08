@@ -598,6 +598,7 @@ export interface CoreInfo {
   limits: Limits;
   rehearsal: boolean;
   restart?: RestartInfo;
+  started_ms?: number | null;
   supervised?: boolean;
   tls?: TlsInfo | null;
   token?: TokenInfo | null;
@@ -1871,6 +1872,10 @@ export interface MultiviewStatus {
 /** `media.convert` and `media.remove` name a file rather than an id. */
 export interface NameRequest {
   name: string;
+}
+
+export interface NetworkShareRequest {
+  enabled: boolean;
 }
 
 /**
@@ -3536,6 +3541,7 @@ export interface MethodParams {
   "media.list": Record<string, never>;
   "media.remove": NameRequest;
   "media.upload": Record<string, never>;
+  "network.share": NetworkShareRequest;
   "node.discover": DiscoverRequest2;
   "node.enrol": EnrolRequest;
   "node.get": NodeName;
@@ -3755,6 +3761,7 @@ export interface MethodResults {
   "media.list": MediaListing;
   "media.remove": Record<string, unknown>;
   "media.upload": Record<string, unknown>;
+  "network.share": RestartAnswer;
   "node.discover": DiscoverAnswer;
   "node.enrol": Record<string, unknown>;
   "node.get": NodeView;
@@ -4025,6 +4032,7 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "media.list", summary: "The clips in the library, with durations and whether each has audio.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/media" } },
   { name: "media.remove", summary: "Delete a library file and its converted copy. Refused while it is a live source.", scope: "operate", mutating: true, destructive: true, rest: { method: "DELETE", path: "/api/v1/media/{id}" } },
   { name: "media.upload", summary: "Stream a file into the library. HTTP only: the body is the file.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/media/upload" } },
+  { name: "network.share", summary: "Let phones and other computers on the same network reach this mixer (enabled: true), or keep it to this computer (false). The address is fixed while the mixer runs, so this restarts it on the same port and the programme is off air for a few seconds: under the desktop app, or under a supervisor when the address comes from the config file. Otherwise it answers restarting: false and says why. Refused on a mixer with no control token.", scope: "admin", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/network/share" } },
   { name: "node.discover", summary: "Look for nodes on the local network over mDNS. A network without multicast finds nothing and the [nodes] table in the config is the way there.", scope: "read", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/nodes/{id}/discover" } },
   { name: "node.enrol", summary: "Mint a one time enrolment token for a node. The answer carries the command to run on the other machine. The token is good for one enrolment and expires.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/nodes/{id}/enrol" } },
   { name: "node.get", summary: "One node: its clock offset, how long since its last heartbeat, the plugins it has, and the instances it is hosting.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/nodes/{id}" } },
@@ -4598,6 +4606,11 @@ export class GeneratedMethods {
   /** Stream a file into the library. HTTP only: the body is the file. */
   mediaUpload(): Promise<Record<string, unknown>> {
     return this._call("media.upload", {}) as Promise<Record<string, unknown>>;
+  }
+
+  /** Let phones and other computers on the same network reach this mixer (enabled: true), or keep it to this computer (false). The address is fixed while the mixer runs, so this restarts it on the same port and the programme is off air for a few seconds: under the desktop app, or under a supervisor when the address comes from the config file. Otherwise it answers restarting: false and says why. Refused on a mixer with no control token. */
+  networkShare(params: NetworkShareRequest): Promise<RestartAnswer> {
+    return this._call("network.share", params as unknown as Record<string, unknown>) as Promise<RestartAnswer>;
   }
 
   /** Look for nodes on the local network over mDNS. A network without multicast finds nothing and the [nodes] table in the config is the way there. */

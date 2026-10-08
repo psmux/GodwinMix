@@ -202,6 +202,13 @@ certificate names the computer's LAN addresses and `.local` name as well as
 programme and every output stop for a few seconds. Turning it off restarts
 the mixer on `127.0.0.1` again.
 
+The page can make the same change. **Allow other devices** on the **Help >
+Open on another device** card calls `network.share`, and the mixer exits
+with status 76 (or 77 to turn it off); the app keeps the choice exactly as
+the menu item does, on the port the mixer is on now, and starts it again
+there, so the page that asked, in the window or in a browser, reconnects
+where it is. See [Letting other devices reach the mixer](../reference/network-share.md).
+
 It is never an open port. The mixer is always started with the token in
 `core-token`, and each phone signs in with a device token of its own, made
 under **Help > Open on another device** as a QR code. If the kept port is
