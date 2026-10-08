@@ -11,10 +11,11 @@ import { meterElement } from "../../shell/meter.js";
 import { UNITY, gainToPos, gainLabel, fmtPosition } from "../../shell/fader.js";
 import { nameOf, colourOf, isLocal } from "./local.js";
 import { dragHandle } from "../../shell/pointer.js";
+import { repeatButton, syncRepeat, playbackText } from "./clip-end.js";
 
 /**
  * @param {object} source   a SourceStatus
- * @param {object} deps     {audio, scrub, onTake, onRename, onGear, onMute}
+ * @param {object} deps     {audio, scrub, onTake, onRename, onGear, onMute, onRepeat}
  */
 export function buildTile(source, deps) {
   const kind = kindOfSource(source);
@@ -62,10 +63,12 @@ export function buildTile(source, deps) {
 
   let lane = null;
   let pos = null;
+  let repeat = null;
   if (source.seekable) {
     pos = el("span.num.sm.dim", { style: { minWidth: "3.4em" } });
     lane = el("input", { type: "range", min: "0", max: "1000", step: "1", value: "0", title: "Position", "data-nodrag": "" });
-    const laneRow = el("div.strip", { style: { bottom: "0", opacity: "1", background: "transparent" } }, [lane, pos]);
+    repeat = repeatButton(source, (s, on) => deps.onRepeat && deps.onRepeat(s, on));
+    const laneRow = el("div.strip", { style: { bottom: "0", opacity: "1", background: "transparent" } }, [lane, pos, repeat]);
     node.appendChild(laneRow);
   }
 
@@ -98,13 +101,8 @@ export function buildTile(source, deps) {
     pos,
     kind,
     playback,
+    repeat,
   };
-}
-
-/** What the clip label says. A clip with its loop off holds its last frame at its end. */
-function playbackText(source) {
-  if (!source.seekable) return "Continuous live source";
-  return source.ended ? "Clip, ended" : "Clip";
 }
 
 /** Write the changing parts into an existing tile. Never rebuilds anything. */
@@ -146,6 +144,7 @@ export function syncTile(tile, source, view) {
   tile.strip.hidden = !view.showStrip;
   const playing = playbackText(source);
   if (tile.playback.textContent !== playing) tile.playback.textContent = playing;
+  if (tile.repeat) syncRepeat(tile.repeat, source);
 
   if (tile.lane) {
     const p = view.position || { pos: 0, dur: null };

@@ -79,16 +79,17 @@ impl Mixer {
         self.play_from_start(id);
     }
 
-    /// Params taken in place: a clip held at its end that has just been set
-    /// to repeat starts again now rather than waiting for a seek.
+    /// Params taken in place. A clip held at its end that has just been set
+    /// to repeat starts again now rather than waiting for a seek, and every
+    /// page hears the new `at_end` at once: the Repeat toggle on the tile
+    /// follows it, in this browser and in every other.
     pub(super) fn clip_reconfigured(&mut self, id: &SourceId) {
-        let held = self.sources.iter().any(|s| {
-            &s.input.id == id
-                && s.clip_end.as_ref().is_some_and(|e| e.held())
-                && AtEnd::of(&s.input.current_config().params) == AtEnd::Repeat
-        });
-        if held {
+        let Some(slot) = self.sources.iter().find(|s| &s.input.id == id) else { return };
+        let Some(end) = &slot.clip_end else { return };
+        if end.held() && AtEnd::of(&slot.input.current_config().params) == AtEnd::Repeat {
             self.play_from_start(id);
+        } else {
+            self.broadcast_status();
         }
     }
 

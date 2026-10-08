@@ -33,7 +33,7 @@ export const SOURCE_KINDS = [
     title: "Video file",
     group: "Files and pages",
     icon: "file",
-    description: "A clip or a picture on this machine. Clips scrub and loop; pictures hold.",
+    description: "A clip or a picture on this machine. Clips scrub, and at their end repeat, hold the last frame or leave the scene; pictures hold.",
     plugin: "built in",
     schema: {
       type: "object",
