@@ -4,7 +4,8 @@
 // scene armed after a source clears the source, since arming a source
 // disarmed the scene and anything armed since is newer, and the label, the
 // Take and Cut buttons, the missing sources note and the words over the
-// picture all follow the answer.
+// picture all follow the answer. `body.dataset.chosen` is the scene picked
+// in the Scenes panel, kept until the programme moves.
 
 import { fillNote, sceneNotRunning } from "../scenes/fix-note.js";
 import { sceneKit, armedScene as armedName, follow, nextUp, whyText } from "./studio-next.js";
@@ -27,8 +28,12 @@ export function resolve(panel, s) {
   const scene = armedName(s, kit);
   if (scene && scene !== panel.lastPreview) delete document.body.dataset.armed;
   panel.lastPreview = scene;
+  // The scene picked in the Scenes panel stops counting once a take moves
+  // the programme, so Preview goes back to suggesting the next shot.
+  const was = panel.onAirKey;
   follow(panel, s, kit);
-  const next = nextUp(panel, s, kit, document.body.dataset.armed || null);
+  if (was !== undefined && was !== panel.onAirKey) delete document.body.dataset.chosen;
+  const next = nextUp(panel, s, kit, document.body.dataset.armed || null, document.body.dataset.chosen || null);
   panel.next = next;
   // Kept for whoever reads the old names: the take target and the armed scene.
   panel.armed = next ? next.id : null;

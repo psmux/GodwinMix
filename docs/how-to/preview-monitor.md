@@ -35,7 +35,8 @@ browser and opens the same way next time.
   one. On a narrow panel Preview sits above Programme, with Take and Cut in a
   band between them.
 * Click a scene tab, a scene tile or a source tile and it goes into Preview.
-  The number keys do the same for scenes 1 to 9. Nothing goes on air.
+  The number keys do the same for scenes 1 to 9. Nothing goes on air. A scene
+  clicked this way is also the one Sources lists, by tab or by tile.
 * **Take**, the big button at the top of the bar, sends Preview to Programme
   with the transition shown under it. Space does the same, and so does a
   double click on the Preview picture.
@@ -75,7 +76,9 @@ beside its name:
 
 Take and Space take the suggestion. It is this page's own guess: it is not
 armed on the mixer, other pages do not see it, and the frame round Preview is
-dashed while it shows one. Click a scene and that is what Preview holds.
+dashed while it shows one. Click a scene and that is what Preview holds, the
+scene on air included: you chose it, so Take sends it and no suggestion
+replaces it. After the next take Preview goes back to suggesting.
 
 A source in the previewed scene that has no picture yet shows its name and its
 state on its own box ("Late camera, connecting, no picture yet") rather than a

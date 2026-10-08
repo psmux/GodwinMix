@@ -33,6 +33,25 @@ export async function studioNextTests(test, eq, ok) {
     eq(next, { kind: 'scene', id: 'wide', name: 'Wide', why: 'before' });
     eq(whyText(next), 'Suggested: on air before this');
   });
+  // Picked in the Scenes panel while it is the one on air: the person asked
+  // for it, so Preview holds it and Take sends it, rather than a suggestion.
+  test('the scene on air, picked on this page, is what Preview holds', () => {
+    const s = { scene: 'Two shot', preview: 'Two shot' };
+    eq(nextUp(panel, s, kit('two'), null, 'two'), { kind: 'scene', id: 'two', name: 'Two shot', why: 'armed' });
+    eq(nextUp(panel, s, kit('two'), null, 'wide').why, 'before', 'a pick of another scene says nothing about this one');
+  });
+  const { resolve } = await import('../panels/multiview/studio-armed.js');
+  test('a take forgets the pick made on this page', () => {
+    const k = Object.assign(kit('two'), { supported: true });
+    const pane = { sceneSession: { scenes: k } };
+    document.body.dataset.chosen = 'two';
+    eq(resolve(pane, { scene: 'Two shot', preview: 'Two shot' }).why, 'armed');
+    k.live = () => 'wide';
+    const next = resolve(pane, { scene: 'Wide', preview: 'Two shot' });
+    eq(document.body.dataset.chosen, undefined, 'the pick outlived the take');
+    eq(next, { kind: 'scene', id: 'two', name: 'Two shot', why: 'armed' }, 'what is armed and not on air is still held');
+    delete document.body.dataset.chosen;
+  });
   test('a source armed here is held until it goes on air itself', () => {
     const s = { scene: 'Two shot', sources: [{ id: 'cam-wide', name: 'Wide camera' }] };
     eq(nextUp(panel, s, kit('two'), 'cam-wide').kind, 'source');
