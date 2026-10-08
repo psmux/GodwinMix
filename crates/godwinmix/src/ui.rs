@@ -846,7 +846,7 @@ mod tests {
     }
 
     #[test]
-    fn the_page_a_volunteer_opens_stays_under_372_kb() {
+    fn the_page_a_volunteer_opens_stays_under_396_kb() {
         // The budget from 07 Phase 3, against the set it was written about:
         // what a browser fetches to put a usable mixer on screen.
         //
@@ -859,6 +859,10 @@ mod tests {
         // eager set is what is measured here, the whole directory is measured
         // below, and `the_designer_is_not_in_the_eager_set` keeps the line
         // between them where it is.
+        //
+        // Raised to 396 kB for what testers of 0.2.2 could not find: a level on
+        // every input, a REC button that stops, why a destination is not
+        // sending, and a clip's Repeat toggle. Measured at 382 kB.
         //
         // Raised to 372 kB for the two things a phone signed in from a code
         // needs on this page: taking the token out of the address, and the
@@ -885,8 +889,8 @@ mod tests {
             bytes += source_of(extra).map(|b| b.len()).unwrap_or(0);
         }
         assert!(
-            bytes < 372 * 1024,
-            "the page loads {} files and {bytes} bytes, over the 372 kB budget",
+            bytes < 396 * 1024,
+            "the page loads {} files and {bytes} bytes, over the 396 kB budget",
             eager.len()
         );
     }
@@ -910,7 +914,7 @@ mod tests {
     }
 
     #[test]
-    fn the_page_with_the_composer_open_stays_under_480_kb() {
+    fn the_page_with_the_composer_open_stays_under_504_kb() {
         // The other half of the rule: the lazy set is not somewhere to hide
         // things. This is the heaviest thing a session can become, the page
         // plus the whole designer and the two kits only it uses, and it is the
@@ -924,7 +928,8 @@ mod tests {
         for extra in ["index.html", "themes/base.css", "themes/dock.css", "themes/touch.css", "themes/dark.css", "panels/composer/composer.css"] {
             bytes += source_of(extra).map(|b| b.len()).unwrap_or(0);
         }
-        assert!(bytes < 480 * 1024, "the page with the composer open is {bytes} bytes, over the 480 kB budget");
+        // Raised to 504 kB with the page's own budget, for the same four.
+        assert!(bytes < 504 * 1024, "the page with the composer open is {bytes} bytes, over the 504 kB budget");
     }
 
     #[test]
