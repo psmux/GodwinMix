@@ -19,6 +19,7 @@ import { channelTests } from "./channels.js";
 import { renditionTests } from "./renditions.js";
 import { menubarTests } from "./menubar.js";
 import { touchTests } from "./touch.js";
+import { phoneTests } from "./phone.js";
 import { showTests } from "./shows.js";
 import { wallTests } from "./wall.js";
 import { browserDeviceTests } from "./browser-devices.js";
@@ -2754,6 +2755,12 @@ legacySuite()
   .catch((e) => {
     failed += 1;
     line("fail", "the touch suite threw: " + e.message);
+    console.error(e);
+  })
+  .then(() => phoneTests(test, eq, ok))
+  .catch((e) => {
+    failed += 1;
+    line("fail", "the phone deck suite threw: " + e.message);
     console.error(e);
   })
   .then(() => showTests(test, eq, ok))

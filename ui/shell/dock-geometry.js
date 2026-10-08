@@ -1,6 +1,5 @@
 import * as model from './dock-model.js';
 import { splitter } from './dock-pointer.js';
-import { place } from './dock.js';
 
 export function positionWorkspace(workspace) {
   const box = { x: 0, y: 0, w: workspace.root.clientWidth, h: workspace.root.clientHeight };
@@ -20,4 +19,7 @@ export function positionWorkspace(workspace) {
     place(entry.element, rect);
     entry.element.setAttribute('aria-valuenow', Math.round(rect.node.ratio * 100));
   }
+}
+export function place(element, r) {
+  Object.assign(element.style, { left: r.x + 'px', top: r.y + 'px', width: Math.max(0, r.w) + 'px', height: Math.max(0, r.h) + 'px' });
 }

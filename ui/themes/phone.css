@@ -1,0 +1,252 @@
+/* phone.css: the phone deck (ui/shell/phone.js). Fetched with the deck, the
+   first time a screen 760px wide or less opens the page, and never on a desk.
+   Colours come from the theme's custom properties like everywhere else, so
+   light, dark and high contrast all apply here unchanged. */
+
+/* ------------------------------------------------------------ the frame */
+
+gmx-shell.phone.has-workspace {
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: "header" "workspace" "nav";
+  height: 100dvh;
+}
+gmx-shell.phone .dock-toolbar { display: none; }
+gmx-shell.phone .slot-header { border-bottom: 1px solid var(--line-soft); }
+
+.dock-workspace.phone-deck {
+  display: flex; flex-direction: column; gap: 12px;
+  margin: 0; padding: 12px 12px 20px;
+  overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+.phone-frame {
+  flex: 0 0 auto; min-width: 0;
+  background: var(--panel); border: 1px solid var(--line-soft); border-radius: 14px; overflow: hidden;
+}
+.phone-frame > * { display: block; }
+
+/* A screen's title, and the way back from a panel opened under More. */
+.phone-head { order: 0; display: flex; align-items: center; gap: 4px; min-height: 40px; margin: 2px 0 -2px; }
+.phone-head h1 { margin: 0; font-size: 24px; font-weight: 750; letter-spacing: -0.01em; }
+.phone-back {
+  display: grid; place-items: center; width: 40px; height: 40px; margin-left: -10px;
+  border: 0; border-radius: 12px; background: none; color: var(--accent);
+}
+.phone-back:active { background: var(--select-fill); }
+
+/* ---------------------------------------------------------- the tab bar */
+
+.phone-nav {
+  grid-area: nav; display: flex; gap: 2px;
+  padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
+  background: var(--panel); border-top: 1px solid var(--line-soft);
+}
+.phone-tab {
+  flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: 2px 0; border: 0; background: none; color: var(--dim);
+  font-size: 11px; font-weight: 600; letter-spacing: 0.01em;
+}
+.phone-tab .phone-icon {
+  position: relative; display: grid; place-items: center; width: 58px; height: 32px; border-radius: 16px;
+  transition: background var(--anim), color var(--anim);
+}
+.phone-icon svg { width: 22px; height: 22px; display: block; }
+.phone-tab[aria-current="true"] { color: var(--text); }
+.phone-tab[aria-current="true"] .phone-icon { background: var(--select-fill); color: var(--accent); }
+.phone-tab:active .phone-icon { background: var(--raise); }
+.phone-tab:focus-visible { outline: none; }
+.phone-tab:focus-visible .phone-icon { outline: 2px solid var(--accent); }
+/* Something is on air: a red light on Live, seen from any other screen. */
+body.onair .phone-tab[data-tab="live"] .phone-icon::after {
+  content: ""; position: absolute; top: 4px; right: 14px; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--live); box-shadow: 0 0 0 2px var(--panel);
+}
+
+/* ---------------------------------------------------------- the header */
+
+/* Two rows: the name, who else is here, the destinations and the menu; then
+   what is on air, as wide as the screen, with its level and its clock. The
+   encoder, the palette and the settings are in the menu on a phone. */
+gmx-shell.phone .header {
+  flex-wrap: wrap; height: auto; min-height: 0; gap: 8px;
+  padding: calc(8px + env(safe-area-inset-top)) 12px 10px;
+}
+gmx-shell.phone .header > * { order: 5; }
+gmx-shell.phone .header::after { content: ""; order: 7; flex-basis: 100%; height: 0; }
+gmx-shell.phone .header .wordmark { order: 1; font-size: 19px; }
+gmx-shell.phone .header .hdr-gap { order: 2; flex: 1 1 0; }
+gmx-shell.phone .header .presence { order: 3; }
+gmx-shell.phone .header .menubar-wrap { order: 6; }
+gmx-shell.phone .header .menubar { display: none; }
+gmx-shell.phone .header .menubar-all { display: inline-block; }
+gmx-shell.phone .header :is(.hdr-backend, .hdr-black, .hdr-palette, .hdr-settings, .hdr-peak, .shows.one) { display: none; }
+gmx-shell.phone .header .hdr-dest { max-width: 44vw; overflow: hidden; text-overflow: ellipsis; }
+gmx-shell.phone .header .pill { padding: 4px 10px; font-weight: 600; }
+gmx-shell.phone .header .menubar-all {
+  width: 42px; height: 42px; min-width: 0; min-height: 0; padding: 0;
+  border: 0; border-radius: 12px; background: var(--panel2); font-size: 20px;
+}
+gmx-shell.phone .header .tally {
+  order: 8; flex: 1 1 auto; min-width: 0; height: 40px; padding: 0 14px; gap: 10px;
+  border: 0; border-radius: 12px; font-size: 15px;
+}
+gmx-shell.phone .header .tally > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+gmx-shell.phone .header .tally .dot { width: 9px; height: 9px; }
+gmx-shell.phone .header .tally.on .dot { background: #fff; animation: phone-onair 1.6s ease-in-out infinite; }
+gmx-shell.phone .header .tally.on { box-shadow: 0 0 18px color-mix(in srgb, var(--live) 45%, transparent); }
+gmx-shell.phone .header .hdr-meter { order: 9; width: 64px !important; }
+gmx-shell.phone .header .hdr-meter .meter { width: 64px !important; height: 12px !important; }
+gmx-shell.phone .header .hdr-uptime { order: 10; min-width: 3.6em; text-align: right; font-size: 13px; }
+gmx-shell.phone .header .shows:not(.one) { order: 11; flex-basis: 100%; border: 0; padding: 0; }
+@keyframes phone-onair { 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) { gmx-shell.phone .header .tally.on .dot { animation: none; } }
+
+/* ---------------------------------------------------------------- Live */
+
+/* The monitors as a vision mixer lays them out: preview and programme side
+   by side, Take and Cut under both, the transitions under those. */
+.phone-deck gmx-program .monitor-stage { padding: 10px; gap: 10px; }
+.phone-deck gmx-program .monitor-pane { border-radius: 10px; }
+.phone-deck gmx-program .monitor-pane canvas, .phone-deck gmx-program .monitor-pane img { max-height: none; }
+.phone-deck gmx-program .monitor-label { height: 28px; padding: 0 9px; gap: 6px; }
+.phone-deck gmx-program.studio .monitor-stage {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: "pvw pgm" "take take";
+}
+.phone-deck gmx-program.studio .preview-pane { grid-area: pvw; width: auto; }
+.phone-deck gmx-program.studio .program { grid-area: pgm; width: auto; }
+.phone-deck gmx-program.studio .take-bar { grid-area: take; }
+.phone-deck gmx-program.studio .preview-why { display: none; }
+.phone-deck gmx-program .take-main .take-button { min-height: 64px; font-size: 22px; border-radius: 12px; }
+.phone-deck gmx-program .take-main .cut-button { min-height: 64px; border-radius: 12px; }
+.phone-deck gmx-program .take-more { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; }
+.phone-deck gmx-program .take-more .tp-picks { grid-template-columns: repeat(3, 50px); }
+.phone-deck gmx-program .take-more .tp-current { padding: 4px 10px; }
+.phone-deck gmx-program .take-more .tp-current > .transition-icon { display: none; }
+.phone-deck gmx-program .take-more .fx-open { padding: 0 10px; }
+.phone-deck gmx-program .take-more :is(.tp-current, .tp-pick, .fx-open) { border-radius: 10px; }
+/* Studio mode has a switch under More and in the menu; the row that holds it
+   here would cost the scenes a line. */
+.phone-deck gmx-program .monitor-controls { display: none; }
+
+/* --------------------------------------------------------------- More */
+
+.phone-more { order: 50; display: flex; flex-direction: column; gap: 10px; }
+.phone-group {
+  margin: 10px 4px 0; font-size: 12px; font-weight: 700; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--dim);
+}
+.phone-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.phone-card {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-height: 120px; padding: 14px;
+  text-align: left; background: var(--panel); border: 1px solid var(--line-soft); border-radius: 14px; color: var(--text);
+}
+.phone-card .phone-icon {
+  display: grid; place-items: center; width: 40px; height: 40px; margin-bottom: 6px;
+  border-radius: 12px; background: var(--select-fill); color: var(--accent);
+}
+.phone-card strong { font-size: 15px; }
+.phone-card span:last-child { color: var(--dim); font-size: 12px; line-height: 1.35; }
+.phone-card:active, .phone-row:active { background: var(--panel2); }
+.phone-list { display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--line-soft); border-radius: 14px; overflow: hidden; }
+.phone-row {
+  display: flex; align-items: center; gap: 14px; min-height: 60px; padding: 10px 14px;
+  text-align: left; background: none; border: 0; border-bottom: 1px solid var(--line-soft); color: var(--text);
+}
+.phone-row:last-child { border-bottom: 0; }
+.phone-row > .phone-icon { color: var(--dim); }
+.phone-row-text { display: flex; flex-direction: column; flex: 1 1 auto; min-width: 0; }
+.phone-row-text strong { font-size: 15px; font-weight: 600; }
+.phone-row-text span { color: var(--dim); font-size: 12px; }
+.phone-chevron { color: var(--faint); font-size: 22px; line-height: 1; }
+/* A switch for the rows that are on or off. */
+.phone-switch { position: relative; flex: none; width: 46px; height: 28px; border-radius: 14px; background: var(--line); transition: background var(--anim); }
+.phone-switch::after {
+  content: ""; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%;
+  background: #fff; transition: transform var(--anim);
+}
+.phone-row[aria-pressed="true"] .phone-switch { background: var(--ok); }
+.phone-row[aria-pressed="true"] .phone-switch::after { transform: translateX(18px); }
+
+/* The scenes as cards, two to a row: the picture, the name under it, the
+   pencil on the picture. Blue is the scene being worked on, green the one in
+   preview, red the one on air, the same as everywhere else. */
+.phone-deck .scene-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding: 0 12px 12px; }
+.phone-deck .scene-tab { position: relative; display: block; min-width: 0; }
+.phone-deck .scene-tabs .scene-tab > button[role="tab"] {
+  position: relative; display: flex; flex-direction: column; align-items: stretch; gap: 0;
+  width: 100%; max-width: none; min-height: 0; padding: 0; overflow: hidden;
+  border: 2px solid var(--line-soft); border-radius: 12px; background: var(--panel2); color: var(--text); text-align: left;
+}
+.phone-deck .scene-tabs .scene-tab > button[role="tab"] > canvas {
+  display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; border-radius: 0; background: #000;
+}
+.phone-deck .scene-tabs .scene-tab > button[role="tab"] > .ellipsis { padding: 8px 10px 9px; font-weight: 600; font-size: 14px; }
+.phone-deck .scene-tabs .scene-tab > button[role="tab"] > .num {
+  position: absolute; left: 6px; top: 6px; min-width: 22px; padding: 1px 6px; border-radius: 6px; text-align: center;
+  font-size: 11px; color: #fff; background: rgba(0, 0, 0, 0.6);
+}
+.phone-deck .scene-tabs .scene-tab > button[role="tab"].on { border-color: var(--accent); }
+body.producer .phone-deck .scene-tabs .scene-tab > button[role="tab"].armed { border-color: var(--ok); }
+.phone-deck .scene-tabs .scene-tab > button[role="tab"].program { border-color: var(--live); box-shadow: 0 0 14px color-mix(in srgb, var(--live) 35%, transparent); }
+.phone-deck .scene-tabs .scene-tab > button.scene-edit:not(.btn) {
+  position: absolute; top: 6px; right: 6px; width: 36px; height: 36px; min-height: 0;
+  border-radius: 10px; background: rgba(0, 0, 0, 0.55); color: #fff; font-size: 16px;
+}
+.phone-deck .scene-tabs .scene-tab > .scene-warn { position: absolute; top: 12px; right: 48px; }
+/* Take, outside Studio mode: floats at the foot of the screen while the
+   scenes scroll under it, so the shot and the button are never apart. */
+.phone-deck .scene-tabs > .btn {
+  position: sticky; bottom: 0; z-index: 2; grid-column: 1 / -1; min-height: 52px; margin: 0;
+  border-radius: 12px; background: var(--accent); border-color: var(--accent); color: var(--on-accent);
+  font-size: 17px; font-weight: 700; letter-spacing: 0.04em; box-shadow: 0 -6px 16px var(--panel);
+}
+
+/* Sources: the scene's name and the picture mode on a line, the filter under
+   them. The screen's title already says Sources. */
+.phone-frame > :is(gmx-sources, gmx-outputs, gmx-media, gmx-alerts) > .row { flex-wrap: wrap; }
+.phone-frame > :is(gmx-sources, gmx-outputs, gmx-media, gmx-alerts) > .row > strong:first-child { display: none; }
+.phone-frame > gmx-sources > .row > .grow { display: none; }
+.phone-frame > gmx-sources > .row > .ellipsis { flex: 1 1 0; font-weight: 600; font-size: 15px; }
+.phone-frame > gmx-sources > .row > select { width: auto; flex: none; }
+.phone-frame > gmx-sources > .row > input[type="search"] { order: 9; flex-basis: 100%; max-width: none !important; }
+.phone-frame .gallery { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding: 0 12px 12px; }
+.phone-frame .gallery.mode-icon, .phone-frame .gallery.mode-label { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.phone-frame .tile { border-radius: 12px; }
+
+/* ------------------------------------------------------------ sideways */
+
+/* A phone on its side: the tabs become a rail down the left, the header one
+   line, and Live puts the monitors beside the scenes. Height is what runs
+   out, so nothing here is stacked that can sit side by side. */
+@media (orientation: landscape) and (max-height: 500px) {
+  gmx-shell.phone.has-workspace {
+    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas: "nav header" "nav workspace";
+  }
+  .phone-nav {
+    flex-direction: column; justify-content: center; gap: 6px;
+    padding: calc(6px + env(safe-area-inset-top)) 4px calc(6px + env(safe-area-inset-bottom)) calc(4px + env(safe-area-inset-left));
+    border-top: 0; border-right: 1px solid var(--line-soft);
+  }
+  .phone-tab { flex: 0 0 auto; width: 68px; }
+  .phone-tab .phone-icon { width: 52px; height: 30px; }
+  gmx-shell.phone .header { flex-wrap: nowrap; padding: 6px max(12px, env(safe-area-inset-right)) 6px 12px; }
+  gmx-shell.phone .header::after, gmx-shell.phone .header .hdr-gap { display: none; }
+  gmx-shell.phone .header .tally { order: 2; height: 36px; }
+  gmx-shell.phone .header .hdr-meter { order: 3; }
+  gmx-shell.phone .header .hdr-uptime { order: 4; }
+  gmx-shell.phone .header .menubar-all { width: 38px; height: 38px; }
+  .dock-workspace.phone-deck { padding: 10px max(12px, env(safe-area-inset-right)) 12px 12px; gap: 10px; }
+  gmx-shell.phone[data-phone-page="live"] .dock-workspace.phone-deck {
+    display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); align-items: start;
+  }
+  .phone-deck gmx-program .monitor-stage { padding: 8px; gap: 8px; }
+  .phone-deck gmx-program .take-main .take-button, .phone-deck gmx-program .take-main .cut-button { min-height: 52px; }
+  .phone-deck .scene-tabs { padding: 0 10px 10px; gap: 8px; }
+  .phone-frame .gallery, .phone-frame .gallery.mode-icon, .phone-frame .gallery.mode-label { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); }
+  .phone-cards { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); }
+  .phone-head { min-height: 32px; }
+  .phone-head h1 { font-size: 20px; }
+}
