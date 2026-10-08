@@ -39,6 +39,17 @@ impl Target {
             format!("{}/?token={}", self.base, urlencode(&self.token))
         }
     }
+
+    /// The address for a browser outside this app, which has no script to
+    /// lift a token out of the query. The page itself reads `#token=`, and a
+    /// fragment never reaches the server, so the token is in no log.
+    pub fn browser_url(&self) -> String {
+        if self.token.is_empty() {
+            format!("{}/", self.base)
+        } else {
+            format!("{}/#token={}", self.base, urlencode(&self.token))
+        }
+    }
 }
 
 /// What a core says it is. Sent to the connect page and put in the title bar.
@@ -269,6 +280,12 @@ mod tests {
     fn nonsense_is_refused_with_a_sentence() {
         assert!(normalise("").unwrap_err().contains("studio.local"));
         assert!(normalise("ftp://box").unwrap_err().contains("http"));
+    }
+
+    #[test]
+    fn the_browser_url_carries_the_token_in_the_fragment() {
+        assert_eq!(Target::new("http://127.0.0.1:9000/", "").browser_url(), "http://127.0.0.1:9000/");
+        assert_eq!(Target::new("http://127.0.0.1:9000", "a b/c").browser_url(), "http://127.0.0.1:9000/#token=a%20b%2Fc");
     }
 
     #[test]

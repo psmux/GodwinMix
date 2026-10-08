@@ -26,6 +26,7 @@
 // into the application data directory on first run.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod browser;
 mod commands;
 mod core_link;
 mod lan;
