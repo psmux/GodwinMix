@@ -34,7 +34,14 @@ class HeaderPanel extends HTMLElement {
     this.uptime = el("span.num.sm.dim.hdr-uptime");
     this.backend = el("span.sm.faint.ellipsis.hdr-backend");
     this.destinations = el("span.pill.hdr-dest", { text: "No destinations", role: "status" });
-    this.recording = el("span.pill.live", { text: "REC", hidden: true, role: "status" });
+    // A button, because a recording has to be stoppable from wherever the
+    // person is. It was a label, and with Outputs not the tab on screen there
+    // was no way to stop a recording at all.
+    this.recording = el("button.pill.live.hdr-rec", {
+      text: "REC",
+      hidden: true,
+      onclick: () => import("../outputs/record-stop.js").then((m) => m.stopRecording(this.client)),
+    });
     this.ad = el("span.pill.live", { text: "AD BREAK", hidden: true });
 
     this.append(
@@ -93,6 +100,33 @@ class HeaderPanel extends HTMLElement {
     if (this.uptimeAt === undefined) return;
     const since = this.connected ? (performance.now() - this.uptimeAt) / 1000 : 0;
     this.uptime.textContent = fmtDuration(Math.floor((this.uptimeSaid || 0) + since));
+    this.recordClock();
+  }
+
+  /** How long the recording has run, counted on between snapshots like the uptime. */
+  recordClock() {
+    if (this.recordSaid === undefined) return;
+    const along = this.connected ? (performance.now() - this.recordAt) / 1000 : 0;
+    this.recording.textContent = "REC " + fmtDuration(Math.floor(this.recordSaid + along));
+  }
+
+  /** The REC button: shown while anything records, red once a file is growing. */
+  renderRecording(outputs) {
+    const recs = outputs.filter((o) => o.type === "record/output");
+    const live = recs.filter((o) => o.state === "live");
+    this.recording.hidden = !recs.length;
+    this.recording.classList.toggle("live", live.length > 0);
+    const secs = live.length ? Math.max(...live.map((o) => o.recording_secs || 0)) : undefined;
+    if (secs !== this.recordSaid) {
+      this.recordSaid = secs;
+      this.recordAt = performance.now();
+    }
+    const failed = recs.some((o) => o.state === "failed");
+    if (secs === undefined) this.recording.textContent = failed ? "REC failed" : "REC starting";
+    else this.recordClock();
+    const what = live.length ? "Recording" : "A recording is starting or needs attention";
+    this.recording.title = `${what}. Click to stop.`;
+    this.recording.setAttribute("aria-label", `${what}. Stop recording`);
   }
 
   render(s) {
@@ -124,7 +158,7 @@ class HeaderPanel extends HTMLElement {
     const dialling = streams.some(o => o.has_key !== false);
     this.destinations.textContent = !streams.length ? "No destinations" : live ? `${live} destination${live === 1 ? "" : "s"} live` : dialling ? "Destinations connecting" : "Destinations need a key";
     this.destinations.classList.toggle("live", live > 0);
-    this.recording.hidden = !outputs.some(o => o.type === "record/output" && o.state === "live");
+    this.renderRecording(outputs);
     this.ad.hidden = !(s.ad && s.ad.on_air);
   }
 }

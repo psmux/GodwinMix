@@ -3178,6 +3178,8 @@ impl Mixer {
     fn persist_runtime(&self) {
         let Some(path) = &self.runtime_store else { return };
         let RuntimeConfigs { sources: mut live, outputs, .. } = self.runtime_configs();
+        // A recording is for this run only. See `config::recordings`.
+        let outputs = crate::config::recordings::kept_across_restart(&outputs);
         // A source that could not start this time is still wanted next time.
         for cfg in self.unstarted.configs() {
             if !live.iter().any(|c| c.id == cfg.id) {
@@ -5553,6 +5555,7 @@ mod tests {
     mod full_pool;
     mod full_pool_draw;
     mod odd_segment;
+    mod recording_store;
     mod restart;
     mod preview_churn;
     mod slow_restart;

@@ -12,6 +12,7 @@ use std::path::Path;
 pub mod first_run;
 pub mod edit;
 pub mod keys;
+pub mod recordings;
 pub mod schema;
 pub mod settable;
 #[cfg(test)]
@@ -1633,7 +1634,7 @@ impl Config {
                     path = %store.display(), count = outputs.len(),
                     "using outputs managed at runtime"
                 );
-                cfg.outputs = outputs;
+                cfg.outputs = recordings::at_boot(&cfg.outputs, outputs);
             }
             if let Some(ui) = stored.ui {
                 if !ui.is_empty() {
