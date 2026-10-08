@@ -2231,9 +2231,13 @@ impl Mixer {
         // operator mid-break, and the program return cell already shows it.
         if in_multiview {
             if let (Some(mv), Some(thumb)) = (&mut self.multiview, input.thumb_proxy()) {
+                let clip = input.declares_seek() && !is_ad;
                 mv.add_tile_with(Some(cfg.id.clone()), &thumb, |pad| {
                     if let Some(a) = &aligner {
                         a.follow_tile(pad);
+                    }
+                    if clip {
+                        clip_end::ClipEnd::keep_last_frame(pad);
                     }
                 })
                 .context("adding multiview tile")?;
@@ -3274,6 +3278,10 @@ impl Mixer {
         self.settle_transition();
         self.apply_visibility(true);
 
+        // A held clip taken now may be drawn by a slot that never had its
+        // last frame. See `mixer::clip_act`.
+        self.show_held_clips_again();
+
         let at = self.running_time().unwrap_or(gst::ClockTime::ZERO);
         info!(source = ?source, at_ms = at.mseconds(), "took source to program");
         let _ = self.events.send(Event::Took {
@@ -3399,6 +3407,7 @@ impl Mixer {
             }
         }
 
+        self.show_held_clips_again();
         let at = self.running_time().unwrap_or(gst::ClockTime::ZERO);
         info!(
             scene = %name,
@@ -5086,6 +5095,9 @@ impl Mixer {
                         if let Some(a) = &slot.aligner {
                             a.follow_tile(pad);
                         }
+                        if slot.clip_end.is_some() {
+                            clip_end::ClipEnd::keep_last_frame(pad);
+                        }
                     })
                     .context("adding multiview tile")?;
                 }
@@ -5106,6 +5118,7 @@ impl Mixer {
                 // cell never fills.
                 self.attach_programme_return()
                     .context("attaching the programme return branch for the mosaic")?;
+                self.show_held_clips_again();
                 info!(?shape, "multiview built for a subscriber");
             }
             Demand::Preview => {}
@@ -5155,6 +5168,7 @@ impl Mixer {
                 let cells = self.preview_cells.clone();
                 mv.apply_preview(&self.canvas, &cells).context("drawing the armed scene")?;
                 info!(?shape, items = cells.len(), "preview composited for a subscriber");
+                self.show_held_clips_again();
             }
             None => {
                 mv.preview_off();
@@ -5177,6 +5191,9 @@ impl Mixer {
             if let Err(e) = mv.apply_preview(&self.canvas, &cells) {
                 warn!(?e, "the armed scene could not be drawn in the preview");
             }
+        }
+        if self.multiview.is_some() {
+            self.show_held_clips_again();
         }
     }
 

@@ -117,12 +117,15 @@ struct Clip {
 }
 
 async fn with_clip(name: &str, params: &str) -> Option<Clip> {
+    with_clip_cfg(name, params, programme_config(crate::config::Accel::Software)).await
+}
+
+async fn with_clip_cfg(name: &str, params: &str, cfg: crate::config::Config) -> Option<Clip> {
     let _ = gst::init();
     let Some(path) = write_clip(name) else {
         println!("skipping: could not write a test clip with jpegenc and avimux");
         return None;
     };
-    let cfg = programme_config(crate::config::Accel::Software);
     let (mut mix, _handle, cmds, bus) = Mixer::build(cfg).expect("mixer builds");
     mix.start().expect("the programme starts");
     let uri = crate::input::file_uri(&path);
@@ -181,6 +184,35 @@ async fn a_new_clip_holds_its_last_frame() {
     assert_eq!(run.states_after_live, vec![SourceState::Live], "the held clip left live");
     assert_eq!(row.extra.get("ended"), Some(&serde_json::Value::Bool(true)), "{row:?}");
     assert_eq!(row.extra.get("at_end"), Some(&serde_json::json!("hold")));
+}
+
+/// A held clip sends nothing more, so a mosaic built after it came to rest
+/// had no frame of it and drew its tile black, and the Studio preview drawn
+/// off that tile with it. Building one shows the last frame again, quietly.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_mosaic_built_after_a_clip_came_to_rest_still_gets_its_last_frame() {
+    let mut cfg = programme_config(crate::config::Accel::Software);
+    cfg.multiview.enabled = true;
+    cfg.multiview.width = 320;
+    cfg.multiview.height = 180;
+    cfg.multiview.fps = 8;
+    cfg.multiview.linger_secs = 0;
+    let Some(mut c) = with_clip_cfg("late", "", cfg).await else { return };
+    let first = play(&mut c.mix, &mut c.cmds, &mut c.bus, 5).await;
+    assert_eq!(first.ended, vec!["hold".to_string()], "the clip came to rest before the mosaic was built");
+
+    let shape = crate::multiview::MultiviewShape { fps: 8, width: 320, height: 180 };
+    c.mix
+        .multiview_demand(DemandAt { demand: Demand::Build(shape), generation: c.mix.mv.generation() })
+        .expect("a subscriber builds the mosaic");
+    let after = play(&mut c.mix, &mut c.cmds, &mut c.bus, 3).await;
+    let warm = c.mix.mv.warm();
+    let row = clip_row(&c.mix);
+    c.mix.shutdown();
+
+    assert!(warm, "the held clip's tile never got a frame");
+    assert!(after.ended.is_empty(), "showing the last frame again was said as a new end: {:?}", after.ended);
+    assert_eq!(row.extra.get("ended"), Some(&serde_json::Value::Bool(true)), "{row:?}");
 }
 
 /// `leave` holds the clip the same way and says so on the event bus, which

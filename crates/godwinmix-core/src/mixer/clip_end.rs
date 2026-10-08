@@ -50,8 +50,6 @@ pub enum AtEnd {
 }
 
 impl AtEnd {
-    pub const NAMES: [&'static str; 3] = ["repeat", "hold", "leave"];
-
     /// From a clip's params. `hold` when nothing is said. A `loop = true`
     /// written by the OBS import before `at_end` existed still repeats.
     pub fn of(params: &Params) -> AtEnd {
@@ -79,11 +77,19 @@ pub struct ClipEnd {
     started: AtomicU8,
     /// The branches whose EOS has gone by this pass.
     ended: AtomicU8,
-    /// Whether the mixer has been told about this pass's end. Cleared by the
-    /// next segment, which is the clip playing again.
+    /// Whether the mixer has been told about this pass's end.
     told: AtomicBool,
+    /// A flush has come through: the next segment starts a new pass. A seek
+    /// or a restart flushes both branches before either sends a segment, and
+    /// the flush is the only way to tell the start of a pass from the other
+    /// branch's segment arriving late in the same one. Near the end of a clip
+    /// the picture can be through a whole pass before the sound's segment
+    /// turns up.
+    fresh: AtomicBool,
     /// Holding its last frame: ended, and not asked to repeat.
     held: AtomicBool,
+    /// The next end is a held clip shown again, not a new end.
+    quiet: AtomicBool,
     /// When the start of the clip was, or would have been, on air this pass.
     began: Mutex<Instant>,
 }
@@ -94,7 +100,9 @@ impl ClipEnd {
             started: AtomicU8::new(0),
             ended: AtomicU8::new(0),
             told: AtomicBool::new(false),
+            fresh: AtomicBool::new(false),
             held: AtomicBool::new(false),
+            quiet: AtomicBool::new(false),
             began: Mutex::new(Instant::now()),
         }
     }
@@ -112,6 +120,17 @@ impl ClipEnd {
                 watch.on_event(bit, event, &*tell)
             })
             .context("watching the branch for the end of the clip")?;
+            // On the way in: the queue's src pad never sees a flush, which
+            // `gstutil::stop_flushes_here` drops there.
+            let sink = queue.static_pad("sink").context("the branch queue has no sink pad")?;
+            let watch = this.clone();
+            sink.add_probe(gst::PadProbeType::EVENT_FLUSH | gst::PadProbeType::EVENT_DOWNSTREAM, move |_pad, info| {
+                if info.event().is_some_and(|e| e.type_() == gst::EventType::FlushStop) {
+                    watch.fresh.store(true, Ordering::Release);
+                }
+                gst::PadProbeReturn::Ok
+            })
+            .context("watching the branch for a seek")?;
         }
         Ok(this)
     }
@@ -119,9 +138,10 @@ impl ClipEnd {
     fn on_event(&self, bit: u8, event: &gst::EventRef, tell: &dyn Fn()) -> gst::PadProbeReturn {
         match event.view() {
             gst::EventView::Segment(segment) => {
-                if self.told.swap(false, Ordering::AcqRel) {
+                if self.fresh.swap(false, Ordering::AcqRel) {
                     self.started.store(0, Ordering::Release);
                     self.ended.store(0, Ordering::Release);
+                    self.told.store(false, Ordering::Release);
                     self.held.store(false, Ordering::Release);
                 }
                 if self.started.fetch_or(bit, Ordering::AcqRel) == 0 {
@@ -147,6 +167,27 @@ impl ClipEnd {
     fn began_at(&self, position: Duration) {
         let now = Instant::now();
         *self.began.lock() = now.checked_sub(position).unwrap_or(now);
+    }
+
+    /// Keep a clip's EOS off one more pad: a mosaic tile's entry, so the
+    /// tile and the Studio preview drawn from it keep the last frame too.
+    pub fn keep_last_frame(pad: &gst::Pad) {
+        pad.add_probe(gst::PadProbeType::EVENT_DOWNSTREAM, |_pad, info| match info.event().map(|e| e.type_()) {
+            Some(gst::EventType::Eos) => gst::PadProbeReturn::Drop,
+            _ => gst::PadProbeReturn::Ok,
+        });
+    }
+
+    /// The next end is a held clip showing its last frame again for a
+    /// picture that was not there to get it the first time (see
+    /// `Mixer::show_held_clips_again`), and is not news: it says nothing and
+    /// leaves no scene.
+    pub fn quietly(&self) {
+        self.quiet.store(true, Ordering::Release);
+    }
+
+    pub fn take_quiet(&self) -> bool {
+        self.quiet.swap(false, Ordering::AcqRel)
     }
 
     /// Whether this pass has ended. False again once the clip plays on, so a

@@ -14,7 +14,7 @@ fn a_clip_holds_at_its_end_unless_its_params_say_otherwise() {
     // What the OBS import wrote for a looping media source before at_end.
     assert_eq!(AtEnd::of(&params("loop = true")), AtEnd::Repeat);
     assert_eq!(AtEnd::of(&params("loop = true\nat_end = \"hold\"")), AtEnd::Hold, "at_end wins");
-    for name in AtEnd::NAMES {
+    for name in ["repeat", "hold", "leave"] {
         assert_eq!(AtEnd::of(&params(&format!("at_end = \"{name}\""))).as_str(), name);
     }
 }
@@ -55,8 +55,9 @@ fn the_end_is_told_once_when_the_last_branch_ends() {
     end.hold();
     assert!(end.held());
 
-    // The seek back to the start sends new segments, and the next end is a
-    // new one. Playing again is neither holding nor at the end.
+    // The seek back to the start flushes, then sends new segments, and the
+    // next end is a new one. Playing again is neither holding nor at the end.
+    end.fresh.store(true, Ordering::Release);
     for bit in [VIDEO, AUDIO] {
         end.on_event(bit, &segment_at(0), &tell);
     }
@@ -64,6 +65,25 @@ fn the_end_is_told_once_when_the_last_branch_ends() {
     end.on_event(VIDEO, &eos(), &tell);
     end.on_event(AUDIO, &eos(), &tell);
     assert_eq!(told.load(Ordering::Relaxed), 2);
+}
+
+/// Seeked to its last frame, a clip's picture can be through its whole pass
+/// before the sound's segment arrives. That segment belongs to the same pass
+/// and is not a second end.
+#[test]
+fn a_late_segment_in_the_same_pass_is_not_a_new_end() {
+    let end = ClipEnd::new();
+    let told = AtomicU32::new(0);
+    let tell = || {
+        told.fetch_add(1, Ordering::Relaxed);
+    };
+    end.fresh.store(true, Ordering::Release);
+    end.on_event(VIDEO, &segment_at(1_999), &tell);
+    end.on_event(VIDEO, &eos(), &tell);
+    end.on_event(AUDIO, &segment_at(1_999), &tell);
+    end.on_event(AUDIO, &eos(), &tell);
+    assert_eq!(told.load(Ordering::Relaxed), 1, "one pass, one end");
+    assert!(end.at_end());
 }
 
 #[test]
