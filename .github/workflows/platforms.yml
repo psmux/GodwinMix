@@ -287,6 +287,11 @@ jobs:
             || { echo "::error::the bundler did not place the runtime" >&2; exit 1; }
           xvfb-run -a ./tauri-app/target/release/godwinmix-desktop --headless-check
 
+      - name: Firewall rule paths (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./tauri-app/setup/test-firewall.ps1
+
       - name: --headless-check (Windows)
         if: runner.os == 'Windows'
         shell: pwsh

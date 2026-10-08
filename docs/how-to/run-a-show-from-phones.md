@@ -111,10 +111,18 @@ The control port has to be reachable from the phones. That is the one TCP
 port shown in the address, the port the desktop app keeps, or 8080 on a
 server.
 
-* **Windows:** the first time the mixer listens on the network, Windows asks
-  whether to allow it. Allow it on private networks. If you dismissed the
-  question, allow `godwinmix.exe` under *Windows Security > Firewall & network
-  protection > Allow an app through firewall*.
+* **Windows:** the installer allows the mixer and each plugin it carries on
+  private and domain networks, so Windows does not ask. The rules are in the
+  group *GodwinMix* in *Windows Defender Firewall with Advanced Security*,
+  one per program, and the uninstaller removes them. They are written for the
+  person who ran the installer, because the app runs its plugins from that
+  person's AppData; another account on the same computer is asked once per
+  program. Windows still asks on a network it calls public. If this is your
+  own network, make it private under *Settings > Network & internet*, choose
+  the connection, then *Private network*. If you dismissed the question,
+  allow the program under *Windows Security > Firewall & network protection
+  > Allow an app through firewall*. A plugin installed later, from a
+  marketplace or by hand, asks once.
 * **macOS:** if the firewall is on, macOS asks whether to accept incoming
   connections for the mixer. Allow it.
 * **Linux:** with `ufw`, `sudo ufw allow 8080/tcp`, using your port.
