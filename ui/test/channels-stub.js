@@ -180,6 +180,14 @@ const METHODS = {
     this.changed(c.id);
     return c;
   },
+  // The programme sent to a platform instead, from the note on a channel
+  // with no encoder. The core answers with the output, without its address.
+  "output.add"(p) {
+    if (this.state.outputs.some((o) => o.id === p.id)) throw Object.assign(new Error(`output ${p.id} already exists`), { code: -32602, data: { id: p.id } });
+    const o = { id: p.id, uri_host: p.uri.replace(/^(\w+:\/\/[^/?]+).*$/, "$1/…"), has_key: true, state: "connecting", reconnects: 0, queue_secs: 0 };
+    this.state.outputs.push(o);
+    return o;
+  },
 };
 
 /** A publisher arriving on a channel, as the server would describe it. */

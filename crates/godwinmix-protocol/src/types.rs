@@ -208,6 +208,10 @@ pub struct OutputStatus {
     /// it has. The output stays connected and resumes by itself.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub shed: Option<String>,
+    /// Why the last attempt to connect failed, while it is not connected.
+    /// Cleared once it is live. See `output_error`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<crate::output_error::OutputError>,
     #[serde(flatten, default, skip_serializing_if = "extra_is_empty")]
     pub extra: Extra,
 }
@@ -330,7 +334,15 @@ pub enum Event {
     /// preview until a client asks for one, so this costs a message.
     PreviewChanged { scene: Option<String> },
     SourceStateChanged { source: SourceId, state: SourceState },
-    OutputStateChanged { output: OutputId, state: OutputState, reconnects: u32 },
+    OutputStateChanged {
+        output: OutputId,
+        state: OutputState,
+        reconnects: u32,
+        /// Why it is not connected, as on the output's status. Absent once
+        /// it is live, and from a core that does not say.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        error: Option<crate::output_error::OutputError>,
+    },
     /// An ad break started or ended.
     AdBreakChanged { ad: Option<AdStatus> },
     /// Peak level per channel, in dBFS, from the program bus. The mosaic
@@ -721,6 +733,7 @@ mod tests {
             queue_secs: 0.2,
             rendition: None,
             shed: None,
+            error: None,
             extra: Extra::new(),
         };
         let v = serde_json::to_value(&o).unwrap();

@@ -3521,6 +3521,23 @@ pub type Origin = String;
 /// The values api_level 1 knows for [`Origin`].
 pub const ORIGIN_VALUES: &[&str] = &["shipped", "agent", "uploaded"];
 
+/// What went wrong the last time this destination tried.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct OutputError {
+    /// The sink's own words with the key cut out. Empty when it said nothing.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+    /// One or two sentences for a person: what happened and what to try.
+    pub message: String,
+    pub reason: OutputErrorReason,
+}
+
+/// The kinds of failure a client may want to tell apart.
+pub type OutputErrorReason = String;
+/// The values api_level 1 knows for [`OutputErrorReason`].
+pub const OUTPUT_ERROR_REASON_VALUES: &[&str] = &["refused", "unreachable", "timed-out", "not-found", "rejected", "closed", "stalled", "other"];
+
 pub type OutputState = String;
 /// The values api_level 1 knows for [`OutputState`].
 pub const OUTPUT_STATE_VALUES: &[&str] = &["connecting", "live", "reconnecting", "failed"];
@@ -3549,6 +3566,10 @@ pub struct OutputStats {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct OutputStatus {
+    /// Why the last attempt to connect failed, while it is not connected.
+    /// Cleared once it is live. See `output_error`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<OutputError>,
     /// False while the address still carries a placeholder a preset wrote in
     /// for somebody to replace, such as `YOUR-STREAM-KEY`. The key itself
     /// never leaves the core, so this is how a client knows to put its own

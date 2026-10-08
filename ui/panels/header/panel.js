@@ -11,6 +11,7 @@ import { programLabel } from "../../client/store.js";
 import { menubar } from "../../shell/menubar.js";
 import { showTabs } from "../../shell/show-tabs.js";
 import { presenceButton } from "../../shell/presence.js";
+import { destinationsPill } from "./destinations.js";
 
 class HeaderPanel extends HTMLElement {
   static get panel() {
@@ -152,12 +153,11 @@ class HeaderPanel extends HTMLElement {
       ? `The video encoder in use: ${b.video_encoder}, running in ${how}.`
       : "";
     const outputs = s.outputs || [];
-    const streams = outputs.filter(o => o.type !== "record/output");
-    const live = streams.filter(o => o.state === "live").length;
-    // One still waiting for its key is not connecting and never will be.
-    const dialling = streams.some(o => o.has_key !== false);
-    this.destinations.textContent = !streams.length ? "No destinations" : live ? `${live} destination${live === 1 ? "" : "s"} live` : dialling ? "Destinations connecting" : "Destinations need a key";
-    this.destinations.classList.toggle("live", live > 0);
+    const pill = destinationsPill(outputs);
+    this.destinations.textContent = pill.text;
+    this.destinations.title = pill.title;
+    this.destinations.classList.toggle("live", pill.kind === "live");
+    this.destinations.classList.toggle("failed", pill.kind === "failed");
     this.renderRecording(outputs);
     this.ad.hidden = !(s.ad && s.ad.on_air);
   }

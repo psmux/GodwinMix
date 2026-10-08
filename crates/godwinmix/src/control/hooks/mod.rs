@@ -247,10 +247,11 @@ pub fn spawn_watch(hooks: Arc<Hooks>, mut events: tokio::sync::broadcast::Receiv
                         serde_json::json!({ "source": source, "state": state })
                     });
                 }
-                Event::OutputStateChanged { output, state, reconnects } => {
+                Event::OutputStateChanged { output, state, reconnects, error } => {
                     hooks.fire(name::OUTPUT_STATE, || {
                         serde_json::json!({
-                            "output": output, "state": state, "reconnects": reconnects
+                            "output": output, "state": state, "reconnects": reconnects,
+                            "error": error
                         })
                     });
                 }
