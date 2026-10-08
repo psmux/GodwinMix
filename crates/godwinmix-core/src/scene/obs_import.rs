@@ -345,7 +345,7 @@ fn map_source(source: &ObsSource) -> Mapped {
             let kind = kind_for_uri(&path);
             let mut params = json!({ "uri": path });
             if s.get("looping").and_then(Value::as_bool) == Some(true) {
-                params["loop"] = Value::Bool(true);
+                params["at_end"] = Value::String("repeat".into());
             }
             Mapped::Core { kind, uri: Some(path), params }
         }
