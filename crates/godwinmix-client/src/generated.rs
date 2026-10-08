@@ -1083,6 +1083,12 @@ pub struct CoreInfo {
     /// between a Restart button and a sentence.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub restart: Option<RestartInfo>,
+    /// When the process answering started, in milliseconds since the Unix
+    /// epoch. A different number from one read to the next means the mixer
+    /// was restarted in between, which is how a page tells the new mixer from
+    /// the old one still letting go of its port.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub started_ms: Option<u64>,
     /// True when the core was started with `--supervised` (or
     /// `GODWINMIX_SUPERVISED=1`): a service manager, a container runtime or
     /// the desktop app starts it again after it exits.
@@ -3389,6 +3395,14 @@ pub struct NameRequest {
     /// in the path, where the transform rule calls it `id`, so both spellings
     /// are read.
     pub name: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct NetworkShareRequest {
+    /// True lets phones and other computers on the same network reach this
+    /// mixer. False keeps it to this computer.
+    pub enabled: bool,
 }
 
 /// A key as it is made, with its secret. Afterwards only an admin gets the
@@ -6201,7 +6215,7 @@ pub struct MethodInfo {
     pub rest: Option<(&'static str, &'static str)>,
 }
 
-pub const METHODS: [MethodInfo; 215] = [
+pub const METHODS: [MethodInfo; 216] = [
     MethodInfo { name: "adbreak.end", summary: "Cut a running ad short, or disarm one that is scheduled.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/end")) },
     MethodInfo { name: "adbreak.start", summary: "Interrupt the programme with a clip, then rejoin live when it ends.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/start")) },
     MethodInfo { name: "agent.setup", summary: "Set an AI agent tool up to use this mixer: its MCP config gets one entry, godwinmix, that runs this mixer's own executable, and its skills folder gets the GodwinMix skills. Other entries are kept and a changed file is copied aside first. dry_run answers every file it would write. The answer says how to start the tool and a first thing to ask it.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/agent/setup")) },
@@ -6276,6 +6290,7 @@ pub const METHODS: [MethodInfo; 215] = [
     MethodInfo { name: "media.list", summary: "The clips in the library, with durations and whether each has audio.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/media")) },
     MethodInfo { name: "media.remove", summary: "Delete a library file and its converted copy. Refused while it is a live source.", scope: "operate", mutating: true, destructive: true, rest: Some(("DELETE", "/api/v1/media/{id}")) },
     MethodInfo { name: "media.upload", summary: "Stream a file into the library. HTTP only: the body is the file.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/media/upload")) },
+    MethodInfo { name: "network.share", summary: "Let phones and other computers on the same network reach this mixer (enabled: true), or keep it to this computer (false). The address is fixed while the mixer runs, so this restarts it on the same port and the programme is off air for a few seconds: under the desktop app, or under a supervisor when the address comes from the config file. Otherwise it answers restarting: false and says why. Refused on a mixer with no control token.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/network/share")) },
     MethodInfo { name: "node.discover", summary: "Look for nodes on the local network over mDNS. A network without multicast finds nothing and the [nodes] table in the config is the way there.", scope: "read", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/nodes/{id}/discover")) },
     MethodInfo { name: "node.enrol", summary: "Mint a one time enrolment token for a node. The answer carries the command to run on the other machine. The token is good for one enrolment and expires.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/nodes/{id}/enrol")) },
     MethodInfo { name: "node.get", summary: "One node: its clock offset, how long since its last heartbeat, the plugins it has, and the instances it is hosting.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/nodes/{id}")) },
@@ -7096,6 +7111,11 @@ impl Client {
     /// Stream a file into the library. HTTP only: the body is the file.
     pub async fn media_upload(&self) -> Result<BTreeMap<String, Value>> {
         self.call("media.upload", &serde_json::json!({})).await
+    }
+
+    /// Let phones and other computers on the same network reach this mixer (enabled: true), or keep it to this computer (false). The address is fixed while the mixer runs, so this restarts it on the same port and the programme is off air for a few seconds: under the desktop app, or under a supervisor when the address comes from the config file. Otherwise it answers restarting: false and says why. Refused on a mixer with no control token.
+    pub async fn network_share(&self, params: &NetworkShareRequest) -> Result<RestartAnswer> {
+        self.call("network.share", params).await
     }
 
     /// Look for nodes on the local network over mDNS. A network without multicast finds nothing and the [nodes] table in the config is the way there.

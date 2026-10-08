@@ -24,7 +24,7 @@ pub fn menu_item(app: &AppHandle) -> tauri::Result<CheckMenuItem<Wry>> {
     Ok(item)
 }
 
-fn show_checked(on: bool) {
+pub(crate) fn show_checked(on: bool) {
     if let Some(item) = ITEM.lock().unwrap().as_ref() {
         let _ = item.set_checked(on);
     }

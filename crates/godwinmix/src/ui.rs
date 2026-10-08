@@ -260,6 +260,7 @@ const ASSETS: &[(&str, &str)] = &[
     ("shell/agents-manual.js", include_str!("../../../ui/shell/agents-manual.js")),
     ("shell/devices.js", include_str!("../../../ui/shell/devices.js")),
     ("shell/devices-list.js", include_str!("../../../ui/shell/devices-list.js")),
+    ("shell/devices-share.js", include_str!("../../../ui/shell/devices-share.js")),
     ("shell/menu-actions.js", include_str!("../../../ui/shell/menu-actions.js")),
     ("shell/project.js", include_str!("../../../ui/shell/project.js")),
     ("shell/project-open.js", include_str!("../../../ui/shell/project-open.js")),

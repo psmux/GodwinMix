@@ -11,7 +11,7 @@
 //! that turns the programme off and leaves it off is the worst thing it
 //! could do.
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 
 use godwinmix_protocol::method::{schema_of, MethodDef, Registry};
 use godwinmix_protocol::scope::Scope;
@@ -27,21 +27,58 @@ use crate::control::call::Call;
 pub const RESTART_EXIT_CODE: i32 = 75;
 
 static SUPERVISED: AtomicBool = AtomicBool::new(false);
-static RESTART_ASKED: AtomicBool = AtomicBool::new(false);
+/// The status to exit with once the core stops, when a method asked for one.
+/// Zero is none: a clean exit.
+static EXIT_WITH: AtomicI32 = AtomicI32::new(0);
 
-/// Called once at start with what `--supervised` said.
+/// Called once at start with what `--supervised` said. Also when this
+/// process started, for `core.info`.
 pub fn set_supervised(on: bool) {
     SUPERVISED.store(on, Ordering::Relaxed);
+    started_ms();
+}
+
+/// When this process started, in milliseconds since the Unix epoch.
+pub fn started_ms() -> u64 {
+    static STARTED: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
+    *STARTED.get_or_init(|| {
+        std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0)
+    })
 }
 
 pub fn supervised() -> bool {
     SUPERVISED.load(Ordering::Relaxed)
 }
 
-/// True once `core.restart` has been accepted, so the way out can use
-/// [`RESTART_EXIT_CODE`] instead of a clean zero.
-pub fn restart_asked() -> bool {
-    RESTART_ASKED.load(Ordering::Relaxed)
+/// The status the core leaves with: [`RESTART_EXIT_CODE`] once `core.restart`
+/// was accepted, one of `network.share`'s for the desktop app, or `None` for a
+/// clean zero.
+pub fn exit_code() -> Option<i32> {
+    match EXIT_WITH.load(Ordering::Relaxed) {
+        0 => None,
+        code => Some(code),
+    }
+}
+
+/// Stop the core and leave with `code`, for whatever starts it again to read.
+pub(super) fn leave_with(call: &Call, code: i32) {
+    leave(code, &call.app.quit);
+}
+
+/// The same for a process that is not a core on its own: the station.
+pub fn leave(code: i32, quit: &tokio::sync::Notify) {
+    EXIT_WITH.store(code, Ordering::Relaxed);
+    quit.notify_one();
+}
+
+/// Once everything has stopped: exit with the status a method asked for.
+/// Not a clean zero, since the desktop app starts its mixer again on these
+/// statuses only, and every supervisor reads one as "start me again".
+pub fn exit_if_asked() {
+    if let Some(code) = exit_code() {
+        tracing::info!(code, "exiting to be restarted");
+        std::process::exit(code);
+    }
 }
 
 /// What `core.info` reports under `restart`.
@@ -101,8 +138,7 @@ pub(super) fn register(reg: &mut Registry<Call>) {
                 }
                 if supervised {
                     tracing::info!(trace_id = %call.trace_id, token = %call.token.id, "restart requested");
-                    RESTART_ASKED.store(true, Ordering::Relaxed);
-                    call.app.quit.notify_one();
+                    leave_with(&call, RESTART_EXIT_CODE);
                 }
                 body(answer(supervised))
             }),

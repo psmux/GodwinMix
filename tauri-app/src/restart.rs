@@ -25,6 +25,12 @@ use crate::{sidecar, Shell};
 /// this shell does not link the daemon, so it is written twice.
 pub const RESTART_EXIT_CODE: i32 = 75;
 
+/// The statuses `network.share` exits with: start the mixer again for other
+/// devices, or for this computer only. The same numbers as `SHARE_EXIT_CODE`
+/// and `LOCAL_EXIT_CODE` in the daemon's `control::methods::network`.
+pub const SHARE_EXIT_CODE: i32 = 76;
+pub const LOCAL_EXIT_CODE: i32 = 77;
+
 /// One restart at a time: a menu click during a restart the mixer asked for
 /// must not start a second mixer beside the first.
 static RESTARTING: AtomicBool = AtomicBool::new(false);
@@ -67,6 +73,25 @@ pub fn after_setting_change(app: &AppHandle) {
 
 /// The mixer exited asking to be started again.
 pub fn after_exit(app: AppHandle) {
+    tauri::async_runtime::spawn(async move { report(&app, restart(&app).await) });
+}
+
+/// The mixer exited because a page asked, with `network.share`, for other
+/// devices to be let in or kept out: from this window, a browser or a phone.
+/// The choice is kept as the menu item keeps it, and on the port the mixer is
+/// on now, so the page that asked reconnects where it is.
+pub fn after_network_exit(app: AppHandle, enabled: bool) {
+    let port = app.state::<Shell>().local.lock().unwrap().as_ref().map(|l| l.port);
+    let mut lan = crate::lan::load(&app);
+    lan.enabled = enabled;
+    if enabled && port.is_some() {
+        lan.port = port;
+    }
+    if let Err(why) = crate::lan::save(&app, lan) {
+        report(&app, Err(why));
+        return;
+    }
+    crate::lan_menu::show_checked(enabled);
     tauri::async_runtime::spawn(async move { report(&app, restart(&app).await) });
 }
 

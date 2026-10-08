@@ -526,6 +526,12 @@ pub struct CoreInfo {
     /// whether or not the binary is on the PATH.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub executable: Option<String>,
+    /// When the process answering started, in milliseconds since the Unix
+    /// epoch. A different number from one read to the next means the mixer
+    /// was restarted in between, which is how a page tells the new mixer from
+    /// the old one still letting go of its port.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub started_ms: Option<u64>,
 }
 
 /// `core.info.tls`: what the control port answers HTTPS with.

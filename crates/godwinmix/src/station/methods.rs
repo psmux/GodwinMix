@@ -25,6 +25,7 @@ pub fn answers(method: &str, params: &Value) -> bool {
     method.starts_with("show.")
         || method.starts_with("channel.")
         || method.starts_with("token.")
+        || method == "network.share"
         || method == "governor.status"
         || method == "governor.calibrate"
         || (method == "rendition.plan"
@@ -57,6 +58,11 @@ pub async fn call(st: &Arc<Station>, token: &Token, method: &str, params: Value)
             Ok(serde_json::to_value(status).unwrap_or_default())
         }
         "governor.calibrate" => calibrate(st, &params),
+        "network.share" => {
+            let here = crate::control::methods::network::Here { open: st.tokens.is_open(), quit: &st.quit };
+            let dry_run = params.get("dry_run").and_then(Value::as_bool).unwrap_or(false);
+            crate::control::methods::network::share(here, params, dry_run).await
+        }
         "rendition.plan" => plan(st, &params),
         "task.get" | "task.cancel" => {
             let req: crate::control::methods::task_request::TaskRequest = serde_json::from_value(params)
@@ -135,6 +141,7 @@ mod tests {
         assert!(answers("show.list", &json!({})));
         assert!(answers("channel.add", &json!({})));
         assert!(answers("governor.status", &json!({})));
+        assert!(answers("network.share", &json!({"enabled": true})), "the station owns the port");
         assert!(answers("rendition.plan", &json!({"scope": "channel:church"})));
         assert!(!answers("rendition.plan", &json!({})));
         assert!(!answers("program.take", &json!({})));
