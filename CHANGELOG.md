@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+* Windows no longer asks whether to allow the mixer and each of its plugins through the firewall. Both installers, the setup `.exe` and the `.msi`, write a Windows Firewall rule for `godwinmix.exe` and for every plugin it carries, at the path the app runs it from in the installing person's AppData, on private and domain networks, in a group named GodwinMix that the uninstaller removes. Windows asked once for every program and again after every update, because each plugin version runs from its own folder. On a network Windows calls public it still asks. The script is `tauri-app/setup/firewall.ps1`; it never fails an install, and `-Action List` prints the paths without changing anything. macOS and Linux bundles are unchanged. See `docs/how-to/run-a-show-from-phones.md`.
+
 ## 0.2.2 (2026-10-07)
 
 * The Windows release is code signed. On a `v*` tag every executable and library in the `-setup.exe` and the `.msi`, both installers themselves, and `godwinmix.exe` and `gmx.exe` in the zip carry an Authenticode signature from the project's Certum certificate with a Certum timestamp, so Windows names the publisher. The runner logs in to Certum's cloud signing with scripts in `.github/windows-signing` (no third party action), only the Windows legs of a tag run get the `windows-signing` environment, and a file left unsigned fails the release. A `v*-signtest*` tag runs the whole login and signing on a small program and publishes nothing. See `docs/how-to/sign-windows-builds.md`.
