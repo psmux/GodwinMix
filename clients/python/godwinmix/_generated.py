@@ -3825,6 +3825,10 @@ class SourceStateEvent(TypedDict, total=False):
     source: str
     state: SourceState
 
+class SourceEndedEvent(TypedDict, total=False):
+    at_end: Literal['repeat', 'hold', 'leave']
+    source: str
+
 class SourcePositionEvent(TypedDict, total=False):
     duration_ms: Optional[int]
     position_ms: int
@@ -4290,6 +4294,7 @@ EVENT_NAMES = (
     "scene.patch",
     "preview.changed",
     "source.state",
+    "source.ended",
     "source.position",
     "output.state",
     "adbreak.changed",

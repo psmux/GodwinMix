@@ -64,6 +64,8 @@ import { mosaicWanted } from "../panels/multiview/wanted.js";
 import { connect } from "../client/index.js";
 import { shell, panelSection } from "../shell/shell.js";
 import { buildTile, syncTile } from "../panels/sources/tile.js";
+import { repeatRequest } from "../panels/sources/clip-end.js";
+import { withParams } from "../client/kind-params.js";
 import { settableOnly, setRequest } from "../panels/sources/setreq.js";
 import { SceneMirror } from "../kits/protocol/mirror.js";
 import { Prediction, mergeProps } from "../kits/protocol/predict.js";
@@ -297,6 +299,56 @@ test("a source with no audio says why its mute and fader are dead", () => {
   const other = buildTile(heard, { audio: { bindFader() {} }, scrub: {}, onMute: () => {} });
   syncTile(other, heard, {});
   eq(other.mute.title, "Mute");
+});
+
+test("a clip held at its end says so on its tile, and says Clip again once it plays", () => {
+  const clip = { id: "intro", uri: "file:///intro.mp4", seekable: true, gain: 1, at_end: "hold" };
+  const tile = buildTile(clip, { audio: { bindFader() {} }, scrub: { bind() {} }, onMute: () => {} });
+  syncTile(tile, clip, {});
+  eq(tile.playback.textContent, "Clip");
+  syncTile(tile, { ...clip, ended: true }, {});
+  eq(tile.playback.textContent, "Clip, ended");
+  syncTile(tile, clip, {});
+  eq(tile.playback.textContent, "Clip");
+});
+
+test("Repeat on a clip's tile follows the clip and asks for the other word when pressed", () => {
+  const asked = [];
+  const clip = { id: "opener", uri: "file:///opener.mp4", seekable: true, gain: 1, at_end: "leave" };
+  const deps = { audio: { bindFader() {} }, scrub: { bind() {} }, onMute: () => {}, onRepeat: (s, on) => asked.push(repeatRequest(s, on)) };
+  const tile = buildTile(clip, deps);
+  syncTile(tile, clip, {});
+  ok(!tile.repeat.hidden, "a clip that says what it does at its end shows the toggle");
+  eq(tile.repeat.getAttribute("aria-pressed"), "false");
+  tile.repeat.click();
+  eq(asked[0], { id: "opener", params: { at_end: "repeat" } });
+  syncTile(tile, { ...clip, at_end: "repeat" }, {});
+  eq(tile.repeat.getAttribute("aria-pressed"), "true");
+  ok(tile.repeat.classList.contains("on"));
+  // Off again goes back to leaving the scene, which is what it was set to.
+  tile.repeat.click();
+  eq(asked[1], { id: "opener", params: { at_end: "leave" } });
+  // A clip that never said otherwise goes back to holding its last frame.
+  eq(repeatRequest({ id: "other", at_end: "repeat" }, false), { id: "other", params: { at_end: "hold" } });
+  // A core that does not say at_end gets no toggle, rather than one that lies.
+  const old = buildTile({ ...clip, id: "old", at_end: undefined }, deps);
+  syncTile(old, { ...clip, id: "old", at_end: undefined }, {});
+  ok(old.repeat.hidden);
+});
+
+test("a built in kind's published params join its settings form, the drawable ones only", () => {
+  const page = { type: "object", properties: { name: { type: "string", title: "Name" } } };
+  const core = {
+    properties: {
+      at_end: { type: "string", enum: ["repeat", "hold", "leave"], default: "hold" },
+      alpha: { anyOf: [{ type: "boolean" }, { const: "auto" }] },
+      name: { type: "string", title: "Something else" },
+    },
+  };
+  const merged = withParams(page, core);
+  eq(Object.keys(merged.properties), ["name", "at_end"]);
+  eq(merged.properties.name.title, "Name", "the page's own box is kept");
+  eq(withParams(page, null).properties, page.properties);
 });
 
 test("control sections collapse without destroying their panels", () => {

@@ -1,6 +1,7 @@
 //! `file/source`: a finite clip. The kind an ad break is built from.
 //!
-//! It ends with EOS, which is how the break knows to return, and it can be
+//! It ends with EOS, which is how the break knows to return; anywhere else
+//! its end is `params.at_end`'s to decide, see `mixer::clip_act`. And it can be
 //! scrubbed, which is why it is the one built in kind declaring `seek`. It gets
 //! no `livesync`: a file has neither drift nor gaps, and its timestamps start
 //! at zero while the programme's running time is minutes in, so livesync judged
@@ -56,12 +57,16 @@ fn claims(uri: &str) -> Option<u16> {
 }
 
 fn new(req: SourceRequest<'_>) -> Result<Box<dyn Source>> {
-    Ok(Box::new(FileSource { ctx: req.ctx(), pipeline: None }))
+    Ok(Box::new(FileSource { ctx: req.ctx(), pipeline: None, params: Params::new() }))
 }
 
 pub struct FileSource {
     ctx: BuildCtx,
     pipeline: Option<gst::Pipeline>,
+    /// The params it runs with, so a change to `at_end` alone can be taken in
+    /// place: the mixer reads it at the clip's end, and nothing in the
+    /// pipeline depends on it.
+    params: Params,
 }
 
 impl Source for FileSource {
@@ -71,6 +76,7 @@ impl Source for FileSource {
 
     fn initialize(&mut self, hello: Hello) -> Result<Ready> {
         validate(&hello.params)?;
+        self.params = hello.params.clone();
         self.ctx.canvas = hello.canvas;
         Ok(Ready {
             manifest: MANIFEST,
@@ -95,7 +101,11 @@ impl Source for FileSource {
 
     fn configure(&mut self, params: &Params) -> Result<Configure> {
         validate(params)?;
-        Ok(Configure::RestartRequired("a clip takes a new path by being reopened".into()))
+        if !same_but_at_end(&self.params, params, &self.ctx.cfg.uri) {
+            return Ok(Configure::RestartRequired("a clip takes a new path by being reopened".into()));
+        }
+        self.params = params.clone();
+        Ok(Configure::Applied)
     }
 
     fn health(&self) -> Health {
@@ -114,7 +124,35 @@ pub fn validate(params: &Params) -> Result<()> {
     if let Some(v) = params.get("uri") {
         anyhow::ensure!(v.is_str(), "file/source params.uri must be a string");
     }
+    if let Some(v) = params.get("at_end") {
+        anyhow::ensure!(
+            v.as_str().is_some_and(|s| AT_END.contains(&s)),
+            "file/source params.at_end must be \"repeat\", \"hold\" or \"leave\", not {v}. Repeat plays \
+             the clip again from the start, hold keeps its last frame up, leave holds it while the \
+             programme moves off it"
+        );
+    }
+    if let Some(v) = params.get("loop") {
+        anyhow::ensure!(v.is_bool(), "file/source params.loop must be true or false, not {v}. Write at_end = \"repeat\" instead");
+    }
     Ok(())
+}
+
+/// What `params.at_end` may say. Read by `mixer::clip_end::AtEnd`.
+const AT_END: [&str; 3] = ["repeat", "hold", "leave"];
+
+/// Whether two sets of params differ in what the clip does at its end at
+/// most. A missing `uri` is the source's own address, which is how a client
+/// that sends only the field it changed writes it.
+fn same_but_at_end(was: &Params, now: &Params, uri: &str) -> bool {
+    let strip = |p: &Params| {
+        let mut p = p.clone();
+        p.remove("at_end");
+        p.remove("loop");
+        p.entry("uri").or_insert_with(|| toml::Value::String(uri.to_string()));
+        p
+    };
+    strip(was) == strip(now)
 }
 
 /// A path with nothing at it, said before the pipeline is built. Left to
@@ -145,6 +183,32 @@ fn missing_file(uri: &str) -> Option<godwinmix_protocol::Actionable> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn params(s: &str) -> Params {
+        toml::from_str(s).unwrap()
+    }
+
+    #[test]
+    fn at_end_takes_three_words_and_names_them_when_refused() {
+        for word in AT_END {
+            validate(&params(&format!("at_end = \"{word}\""))).unwrap();
+        }
+        let refused = validate(&params("at_end = \"loop\"")).unwrap_err().to_string();
+        assert!(refused.contains("\"repeat\", \"hold\" or \"leave\""), "{refused}");
+        assert!(validate(&params("at_end = true")).is_err());
+    }
+
+    /// Changing what a clip does at its end is taken in place, so a person
+    /// flicking Repeat on a clip that is on air does not restart it.
+    #[test]
+    fn only_at_end_changing_needs_no_restart() {
+        let uri = "/clips/intro.mp4";
+        let was = params("uri = \"/clips/intro.mp4\"");
+        assert!(same_but_at_end(&was, &params("at_end = \"repeat\""), uri));
+        assert!(same_but_at_end(&params("at_end = \"leave\""), &params("at_end = \"hold\""), uri));
+        assert!(!same_but_at_end(&was, &params("at_end = \"repeat\"\nalpha = true"), uri));
+        assert!(!same_but_at_end(&was, &params("uri = \"/clips/other.mp4\""), uri));
+    }
 
     #[test]
     fn a_clip_that_is_not_there_yet_says_so_and_opens_media() {

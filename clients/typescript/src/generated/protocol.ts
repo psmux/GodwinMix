@@ -3396,6 +3396,11 @@ export interface SourceStateEvent {
   state?: SourceState;
 }
 
+export interface SourceEndedEvent {
+  at_end?: "repeat" | "hold" | "leave";
+  source?: string;
+}
+
 export interface SourcePositionEvent {
   duration_ms?: number | null;
   position_ms?: number;
@@ -3925,6 +3930,7 @@ export interface EventPayloads {
   "scene.patch": ScenePatchEvent;
   "preview.changed": PreviewChangedEvent;
   "source.state": SourceStateEvent;
+  "source.ended": SourceEndedEvent;
   "source.position": SourcePositionEvent;
   "output.state": OutputStateEvent;
   "adbreak.changed": AdbreakChangedEvent;
@@ -4205,6 +4211,7 @@ export const EVENT_NAMES: readonly EventName[] = [
   "scene.patch",
   "preview.changed",
   "source.state",
+  "source.ended",
   "source.position",
   "output.state",
   "adbreak.changed",

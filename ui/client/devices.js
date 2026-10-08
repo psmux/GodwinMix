@@ -159,7 +159,7 @@ export async function schemaForSource(client, source) {
  * "Capture element", a list of GStreamer element names, stood on the camera
  * form beside the camera itself.
  */
-const ESSENTIAL = /^(name|label|device|monitor|window|screen|display_index|uri|url|address|host|port|path|file|folder|key|stream_key|passphrase|password|text|title|message|mode|app|channel|source|input|output|resolution)$/;
+const ESSENTIAL = /^(name|label|at_end|device|monitor|window|screen|display_index|uri|url|address|host|port|path|file|folder|key|stream_key|passphrase|password|text|title|message|mode|app|channel|source|input|output|resolution)$/;
 
 /**
  * Show the word a nought stands for.

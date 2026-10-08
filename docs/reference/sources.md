@@ -21,7 +21,7 @@ from the URL, so there is nothing to configure beyond the address:
 | `text:Some words` | words rendered by the mixer, no browser (`text/source`); see [text sources](text-sources.md) |
 | `ticker:Some words` | words crawling across a bar, or credits rolling up (`ticker/source`) |
 | a numbered pattern, `/slides/f%04d.png` | the pictures played in order at `params.fps` (25), looping (`image/source`) |
-| a path, `file://…`, `https://host/clip.mp4` | file |
+| a path, `file://…`, `https://host/clip.mp4` | a clip (`file/source`), which does what `params.at_end` says at its end; see below |
 
 The distinction that matters is continuous versus finite rather than the
 protocol. A continuous source is re-timed onto programme time and restarted when
@@ -45,6 +45,73 @@ says `the source did not start; trying it again later` with the count and the
 wait. A source waiting on a piece being set up, a plugin or the browser
 renderer, is not on this clock: it starts when the piece is ready. Removing
 the source stops the tries.
+
+### When a clip reaches its end
+
+A clip (`file/source`) does one of three things when its last frame has gone
+out to the programme, set per clip with `params.at_end`:
+
+| `at_end` | What happens |
+|---|---|
+| `hold` (the default) | The last frame stays up until the clip is scrubbed or restarted. |
+| `repeat` | The clip plays again from the start: a seek, the same one the scrubber makes, with no reconnect and no gap. |
+| `leave` | The last frame is held, and if the clip is on air the programme moves off it (below). |
+
+Set it when adding the clip or on a clip that is running. Changing it does not
+restart the clip, and a clip held at its end that is set to `repeat` starts
+again at once:
+
+```sh
+gmx tool set_source '{"id": "intro", "params": {"at_end": "repeat"}}'
+```
+
+The tile in the Sources panel has a **Repeat** toggle; with Repeat off, the
+clip's settings drawer chooses between holding the last frame and leaving the
+scene. A clip from the Graphics gallery is added with `repeat`, since those
+are made to go round; one imported from OBS with Loop ticked is too. In 0.2.2
+and before every clip went round, by a restart (below), and a clip in a
+runtime file from then that says nothing now holds. `loop = true`, which the OBS
+import used to write, still reads as `repeat`.
+
+A held clip sends no more frames, so a picture made after it came to rest (a
+mosaic built when a page opens, the Studio preview of its scene, a take that
+draws it in a new place) would have nothing of it to draw. Each of those has
+the clip seek to its last frame once and send it again. That costs one decode
+from the keyframe before it, and it is not a new end: it says nothing on the
+event bus and a clip set to leave does not leave again.
+
+Whatever it does, the clip reads `live` the whole time and never `connecting`
+or `stalled`. Its row in `source.list` and in the status carries `at_end`, and
+`ended: true` while it is holding its last frame. Each end is said once in
+`event/source.ended`, `{"source": "intro", "at_end": "hold"}`.
+
+**Leaving the scene.** A clip set to `leave` that ends while it is on air,
+alone or in the scene on air, has the programme taken to:
+
+1. the scene armed in Preview, in Studio mode, unless it is the scene on air
+   or also shows the clip;
+2. otherwise what was on air before the clip's scene, a scene or a source on
+   its own, as long as it does not show the clip either.
+
+The take is a `program.take` made by the control plane when it hears
+`event/source.ended`, with that scene's own transition, under the same safety
+rules as any take, and credited in the history to whoever made the last take.
+Nothing in the media path waits for it. If there is nowhere to go, or the take
+is refused, the clip holds its last frame on air and an alert says why. The
+programme is never cut to black for a clip. A clip that ends off air only
+holds.
+
+**How the end is found.** The clip's own pipeline reads the file to its end
+while the last second or so of it is still in its programme queues, so the
+end is taken from the far side of those queues, when the last frame has gone
+to the compositor. In 0.2.2 and before, the end of the file was treated like a source
+that had stopped: the pipeline was restarted, the source read `connecting`
+for half a second, the tail still queued was thrown away (933 ms of picture
+and a second of sound, measured), and an eight second clip went round every
+5.7 seconds. A clip over HTTP from a server that refuses range requests
+cannot be seeked, so `repeat` on one still restarts it, after its tail has
+played. A clip with transparency is drawn by the overlay board without the
+timeline aligner the seek needs, and repeats the same way.
 
 ### When a source stops delivering
 
@@ -90,8 +157,7 @@ count above are kept too. All of it is forgiven once the source has stayed
 live for 60 seconds. A source that is really dead is still restarted, a few
 times an hour rather than a few times a minute, and it reads `stalled` the
 whole time. A restart for an end of stream or a pipeline error is not a
-strike: a clip that loops restarts at each end, and its next loop starts half
-a second later as it always did. Each strike is written to the log with
+strike. A clip's end is not a restart at all; see below. Each strike is written to the log with
 `strikes` and `next_stall_limit_secs`, and `the source has stayed live since
 its last restart` when a source is forgiven.
 

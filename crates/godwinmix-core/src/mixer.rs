@@ -411,6 +411,9 @@ use crate::plugin::branch::{BranchCtx, ProgrammeBranch, VideoPads};
 pub mod group;
 mod allocation;
 mod catch_up;
+mod clip_act;
+mod clip_end;
+mod clip_frame;
 mod backoff;
 mod cue;
 mod exited;
@@ -424,6 +427,7 @@ mod on_time;
 mod offload;
 mod patience;
 mod rendered;
+mod reported;
 pub mod slots;
 mod slot_guard;
 pub mod transition;
@@ -527,6 +531,10 @@ pub enum Command {
     /// A removed source's pipeline has finished stopping on its own thread,
     /// so an add under the same id may go ahead. Never sent by the API.
     SourceStopped(SourceId),
+    /// The last frame of one instance of a clip has gone out to the
+    /// programme. Sent from its branch; never by the API. See
+    /// `mixer::clip_end`.
+    ClipEnded(SourceId, u64),
     /// Move a source's audio controls: the operator's own fader and mute, which
     /// every source has, and for a superimposed one the balance between its page
     /// sound and the videos drawn under it. Every part is optional and only what
@@ -868,6 +876,11 @@ struct SourceSlot {
     /// Maps this source's running time onto the programme's. `None` for an ad,
     /// which sets its own offset from its cue.
     aligner: Option<Arc<TimelineAligner>>,
+    /// Watches a clip's branch for its end. `None` for anything that is not a
+    /// clip, and for the ad. See `mixer::clip_end`.
+    clip_end: Option<Arc<clip_end::ClipEnd>>,
+    /// The state last said in `event/source.state`. See `mixer::reported`.
+    reported: SourceState,
     /// Held here rather than in a shared list so that removing the source also
     /// silences its bus. A watcher outliving its pipeline keeps reporting a
     /// dead source's errors forever.
@@ -2219,9 +2232,13 @@ impl Mixer {
         // operator mid-break, and the program return cell already shows it.
         if in_multiview {
             if let (Some(mv), Some(thumb)) = (&mut self.multiview, input.thumb_proxy()) {
+                let clip = input.declares_seek() && !is_ad;
                 mv.add_tile_with(Some(cfg.id.clone()), &thumb, |pad| {
                     if let Some(a) = &aligner {
                         a.follow_tile(pad);
+                    }
+                    if clip {
+                        clip_end::ClipEnd::keep_last_frame(pad);
                     }
                 })
                 .context("adding multiview tile")?;
@@ -2241,6 +2258,12 @@ impl Mixer {
         // a live pipeline. A leaked failed ad blocked every later break and
         // kept posting its errors.
         let generation = self.new_generation();
+        // Before the slot is registered, so a failure here costs the clip its
+        // seamless loop and nothing else: it then ends the old way, by restart.
+        let clip_end = self.watch_clip_end(&input, &branch, generation).unwrap_or_else(|e| {
+            warn!(source = %cfg.id, ?e, "could not watch the clip for its end; it restarts at its end instead");
+            None
+        });
         self.sources.push(SourceSlot {
             input: Arc::new(input),
             generation,
@@ -2249,6 +2272,8 @@ impl Mixer {
             first_reported: false,
             silent_ticks: 0,
             aligner,
+            clip_end,
+            reported: SourceState::Connecting,
             _watch: watch,
         });
 
@@ -3256,6 +3281,10 @@ impl Mixer {
         self.settle_transition();
         self.apply_visibility(true);
 
+        // A held clip taken now may be drawn by a slot that never had its
+        // last frame. See `mixer::clip_act`.
+        self.show_held_clips_again();
+
         let at = self.running_time().unwrap_or(gst::ClockTime::ZERO);
         info!(source = ?source, at_ms = at.mseconds(), "took source to program");
         let _ = self.events.send(Event::Took {
@@ -3381,6 +3410,7 @@ impl Mixer {
             }
         }
 
+        self.show_held_clips_again();
         let at = self.running_time().unwrap_or(gst::ClockTime::ZERO);
         info!(
             scene = %name,
@@ -4005,6 +4035,7 @@ impl Mixer {
             Command::RetryUnstarted(_) => "source.retry",
             Command::SourceRestarted(..) => "source.restarted",
             Command::SourceStopped(_) => "source.stopped",
+            Command::ClipEnded(..) => "source.clip_ended",
             Command::SetAudio { .. } => "source.audio.set",
             Command::Seek { .. } => "source.seek",
             Command::ConfigureSource { .. } => "source.set",
@@ -4131,6 +4162,7 @@ impl Mixer {
                 self.restarted(&id, generation, failed)
             }
             Command::SourceStopped(_) => self.release_stopped(),
+            Command::ClipEnded(id, generation) => self.clip_ended(&id, generation),
             Command::OutputReconnected(out, failed) => self.output_reconnected(&out, failed),
             Command::RetryOutput(out) => self.retry_output(&out),
             Command::SetAudio { source, gain, muted, page, media, reply } => {
@@ -4146,6 +4178,7 @@ impl Mixer {
                 };
                 if matches!(r, Ok(crate::plugin::Configure::Applied)) {
                     self.persist_runtime();
+                    self.clip_reconfigured(&source);
                 }
                 let _ = reply.send(r);
             }
@@ -4248,8 +4281,9 @@ impl Mixer {
                 // out of a name.
                 if let Some(id) = pipeline.source() {
                     let id = id.to_string();
-                    if let Some(slot) = self.sources.iter().find(|s| s.input.id == id) {
+                    if let Some(slot) = self.sources.iter_mut().find(|s| s.input.id == id) {
                         slot.input.mark_failed();
+                        slot.reported = SourceState::Failed;
                         let _ = self.events.send(Event::SourceStateChanged {
                             source: id.clone(),
                             state: SourceState::Failed,
@@ -4303,6 +4337,12 @@ impl Mixer {
                     if let Err(e) = self.end_ad_break() {
                         error!(?e, "failed to return to live after the ad");
                     }
+                    return;
+                }
+                // A clip's own pipeline ends while a second or so of it is still
+                // in its programme queues. Its branch says when the last frame
+                // has really gone out, and that is what is acted on.
+                if pipeline.source().is_some_and(|id| self.clip_read_to_end(id)) {
                     return;
                 }
                 warn!(%pipeline, "end of stream");
@@ -4426,6 +4466,7 @@ impl Mixer {
         for id in judged_stalled {
             self.log_timeline(&id, "judged stalled", true);
         }
+        self.report_states();
         for id in restart {
             self.arm_stall_restart(id);
         }        // A live source whose frames all wait before they are due is moved
@@ -4840,6 +4881,9 @@ impl Mixer {
                 if s.input.superimposed() {
                     status.put_extra("superimposed", true);
                 }
+                // A clip says what it does at its end, and whether it is
+                // there now, holding its last frame.
+                Self::clip_status(s, &mut status);
                 // Only a source with separate sounds has levels, so this is
                 // absent for everything else and the UI draws no faders for it.
                 if let Some(levels) = s.input.levels() {
@@ -5074,6 +5118,9 @@ impl Mixer {
                         if let Some(a) = &slot.aligner {
                             a.follow_tile(pad);
                         }
+                        if slot.clip_end.is_some() {
+                            clip_end::ClipEnd::keep_last_frame(pad);
+                        }
                     })
                     .context("adding multiview tile")?;
                 }
@@ -5094,6 +5141,7 @@ impl Mixer {
                 // cell never fills.
                 self.attach_programme_return()
                     .context("attaching the programme return branch for the mosaic")?;
+                self.show_held_clips_again();
                 info!(?shape, "multiview built for a subscriber");
             }
             Demand::Preview => {}
@@ -5143,6 +5191,7 @@ impl Mixer {
                 let cells = self.preview_cells.clone();
                 mv.apply_preview(&self.canvas, &cells).context("drawing the armed scene")?;
                 info!(?shape, items = cells.len(), "preview composited for a subscriber");
+                self.show_held_clips_again();
             }
             None => {
                 mv.preview_off();
@@ -5165,6 +5214,9 @@ impl Mixer {
             if let Err(e) = mv.apply_preview(&self.canvas, &cells) {
                 warn!(?e, "the armed scene could not be drawn in the preview");
             }
+        }
+        if self.multiview.is_some() {
+            self.show_held_clips_again();
         }
     }
 
@@ -5570,6 +5622,7 @@ pub fn spawn(
 
 #[cfg(test)]
 mod tests {
+    mod clip_end;
     mod endurance;
     mod flush_window;
     mod full_pool;

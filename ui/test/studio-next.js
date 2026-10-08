@@ -80,6 +80,9 @@ export async function studioNextTests(test, eq, ok) {
     eq(sourceTrouble({ sources: [{ id: 'x', state: 'failed' }] }, 'x'), 'failed, trying again');
     eq(sourceTrouble({ sources }, 'cam-wide'), null);
   });
+  test('a clip held on its last frame has a picture, so its box carries no words', () => {
+    eq(sourceTrouble({ sources: [{ id: 'clip', state: 'live', ended: true, has_video: true }] }, 'clip'), null);
+  });
 
   // Take with nothing armed sends the suggestion, by id, with the transition.
   const studio = await import('../panels/multiview/studio.js');

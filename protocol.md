@@ -3847,6 +3847,7 @@ Subscribe with `core.subscribe`. Patterns match the part after `event/`, so `pro
 | `event/scene.patch` |  |  | One change to the scene document, as records rather than a snapshot: what was added, what changed with its before and after, and what was removed. One per transaction, batched and ended by event/flush. |
 | `event/preview.changed` |  |  | A scene was armed, or the arming was cleared. The armed scene is the preview, and program.take with no argument takes it. |
 | `event/source.state` |  | `source_state_changed` | A source moved between connecting, live, stalled and failed. |
+| `event/source.ended` |  | `source_ended` | A clip's last frame has gone out to the programme. at_end says what it does now: repeat plays it again from the start, hold keeps the last frame up, and leave holds it while the programme moves to the armed scene or the one on air before the clip. |
 | `event/source.position` | `positions` | `source_position` | How far through a seekable source has got, a few times a second. Never sent for a camera, which has no position to report. |
 | `event/output.state` |  | `output_state_changed` | A destination connected, dropped or is retrying. |
 | `event/adbreak.changed` |  | `ad_break_changed` | An ad break was armed, went on air, or ended. |
