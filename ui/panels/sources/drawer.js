@@ -11,6 +11,7 @@ import { shell } from "../../shell/shell.js";
 import { SchemaForm } from "../../client/schema-form.js";
 import { SOURCE_KINDS, kindOfSource, discoverDevices } from "../../client/kinds.js";
 import { schemaForSource, easeSchema, unease } from "../../client/devices.js";
+import { coreParams, withParams } from "../../client/kind-params.js";
 import { settableOnly, setRequest } from "./setreq.js";
 import { nameOf, setLocal } from "./local.js";
 
@@ -28,7 +29,10 @@ export async function openSourceDrawer(panel, source) {
   // `plugin.describe` for an instance, which that method does not take, so
   // every source got the built in form for its address, and a camera has
   // no address to tell it by.
-  let schema = (await schemaForSource(client, source).catch(() => null)) || kind.schema;
+  let schema = await schemaForSource(client, source).catch(() => null);
+  // A kind built into the core says its params in `core.api`: a clip's
+  // At the end box comes from there.
+  if (!schema) schema = withParams(kind.schema, await coreParams(client, source.type));
   const found = await discoverDevices(client, 1500).catch(() => []);
   schema = easeSchema(schema, source.type || "", found, {});
   // A clip says what it does at its end in its status, so that one box opens

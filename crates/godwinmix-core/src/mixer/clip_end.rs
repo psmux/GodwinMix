@@ -25,6 +25,7 @@
 //! The ad break is not one of these: its end is how the break knows to
 //! return, and it keeps its own EOS handling.
 
+use super::clip_frame::LastFrame;
 use crate::config::Params;
 use crate::plugin::branch::ProgrammeBranch;
 use anyhow::{Context, Result};
@@ -92,11 +93,19 @@ pub struct ClipEnd {
     quiet: AtomicBool,
     /// When the start of the clip was, or would have been, on air this pass.
     began: Mutex<Instant>,
+    /// Where its newest picture sits in the clip. See `mixer::clip_frame`.
+    last: Arc<LastFrame>,
 }
 
 impl ClipEnd {
+    #[cfg(test)]
     fn new() -> ClipEnd {
+        Self::with_last(Arc::default())
+    }
+
+    fn with_last(last: Arc<LastFrame>) -> ClipEnd {
         ClipEnd {
+            last,
             started: AtomicU8::new(0),
             ended: AtomicU8::new(0),
             told: AtomicBool::new(false),
@@ -110,7 +119,8 @@ impl ClipEnd {
     /// Install on the branch, before any data flows. `tell` runs on a
     /// streaming thread, once per end, and must not block.
     pub fn install(branch: &ProgrammeBranch, tell: impl Fn() + Send + Sync + 'static) -> Result<Arc<Self>> {
-        let this = Arc::new(Self::new());
+        let picture = branch.vq.static_pad("src").context("the branch queue has no src pad")?;
+        let this = Arc::new(Self::with_last(LastFrame::watch(&picture)));
         let tell = Arc::new(tell);
         for (bit, queue) in [(VIDEO, &branch.vq), (AUDIO, &branch.aq)] {
             let pad = queue.static_pad("src").context("the branch queue has no src pad")?;
@@ -184,6 +194,19 @@ impl ClipEnd {
     /// leaves no scene.
     pub fn quietly(&self) {
         self.quiet.store(true, Ordering::Release);
+    }
+
+    /// Where the newest picture sits in the clip, once one has gone past.
+    pub fn last_frame(&self) -> Option<gst::ClockTime> {
+        self.last.at()
+    }
+
+    /// Held, or on its way back to held after showing its last frame again.
+    /// A second picture made while the first is still being sent its frame
+    /// asks again: what was already decoded went to the pictures that were
+    /// there then.
+    pub fn resting(&self) -> bool {
+        self.held() || self.quiet.load(Ordering::Acquire)
     }
 
     pub fn take_quiet(&self) -> bool {

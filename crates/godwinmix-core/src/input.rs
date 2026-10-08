@@ -1538,6 +1538,22 @@ impl InputPipeline {
     /// The caller must reset this source's `TimelineAligner` first. A flushing
     /// seek restarts the segment, which makes the offset computed from the
     /// previous one wrong, and nothing here can see the aligner.
+    /// Move to exactly `position`, decoding from the keyframe before it.
+    ///
+    /// `seek_ms` asks for the key unit too, and a demuxer that honours it puts
+    /// the segment at the keyframe, so a clip with one keyframe at the start
+    /// plays the whole of itself again from there. This is for showing a held
+    /// clip's last frame (`mixer::clip_act`), where that is exactly wrong. The
+    /// caller resets the aligner first, as for `seek_ms`.
+    pub fn seek_exact(&self, position: gst::ClockTime) -> Result<()> {
+        self.pipeline
+            .seek_simple(gst::SeekFlags::FLUSH | gst::SeekFlags::ACCURATE, position)
+            .with_context(|| format!("seeking {} to exactly {position}", self.id))?;
+        self.health.rearm();
+        self.ended.store(false, Ordering::Relaxed);
+        Ok(())
+    }
+
     pub fn seek_ms(&self, position_ms: u64) -> Result<u64> {
         // With no duration to clamp against, the ceiling is the largest time
         // GStreamer can express: `ClockTime::from_mseconds` panics past it, and
