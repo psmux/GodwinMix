@@ -1,5 +1,17 @@
 {
   "bundle": {
-    "licenseFile": "windows-licence.txt"
+    "licenseFile": "windows-licence.txt",
+    "resources": {
+      "setup/firewall.ps1": "setup/firewall.ps1"
+    },
+    "windows": {
+      "nsis": {
+        "installerHooks": "setup/installer-hooks.nsh"
+      },
+      "wix": {
+        "fragmentPaths": ["setup/firewall.wxs"],
+        "componentRefs": ["GmxFirewall"]
+      }
+    }
   }
 }
