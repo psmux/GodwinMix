@@ -1,4 +1,5 @@
-import { addView, dropViews } from '../../shell/meter.js';
+import { dropViews } from '../../shell/meter.js';
+import { watchLevel } from './tile-level.js';
 
 /** Preserve tile selection and controls while releasing work for a hidden tab. */
 export function setWorkspaceActive(panel, active) {
@@ -17,7 +18,7 @@ export function setWorkspaceActive(panel, active) {
   panel.render(panel.client.state);
   for (const source of panel.sources(panel.client.state)) {
     const tile = panel.tiles.get(source.id);
-    if (tile && source.has_audio !== false) addView('tile:' + source.id, 'src:' + source.id, tile.meter, 'v');
+    if (tile) watchLevel(tile);
   }
   panel.refreshStills(true);
 }

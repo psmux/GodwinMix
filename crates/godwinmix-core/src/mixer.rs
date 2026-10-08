@@ -5556,6 +5556,7 @@ mod tests {
     mod restart;
     mod preview_churn;
     mod slow_restart;
+    mod sound_only;
     mod stale_work;
     mod stall_storm;
     mod slow_output;
