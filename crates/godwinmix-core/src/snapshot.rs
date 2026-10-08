@@ -717,6 +717,7 @@ mod tests {
                 queue_secs: 0.1,
                 rendition: None,
                 shed: None,
+                error: None,
                 extra: Default::default(),
             }],
             multiview: MultiviewStatus {

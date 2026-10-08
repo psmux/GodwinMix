@@ -7859,6 +7859,72 @@
           }
         ]
       },
+      "OutputError": {
+        "description": "What went wrong the last time this destination tried.",
+        "properties": {
+          "detail": {
+            "description": "The sink's own words with the key cut out. Empty when it said nothing.",
+            "type": "string"
+          },
+          "message": {
+            "description": "One or two sentences for a person: what happened and what to try.",
+            "type": "string"
+          },
+          "reason": {
+            "$ref": "#/components/schemas/OutputErrorReason"
+          }
+        },
+        "required": [
+          "reason",
+          "message"
+        ],
+        "type": "object"
+      },
+      "OutputErrorReason": {
+        "description": "The kinds of failure a client may want to tell apart.",
+        "oneOf": [
+          {
+            "const": "refused",
+            "description": "The host answered and nothing was listening on that port.",
+            "type": "string"
+          },
+          {
+            "const": "unreachable",
+            "description": "No route to the host, or the network is down.",
+            "type": "string"
+          },
+          {
+            "const": "timed-out",
+            "description": "The host never answered.",
+            "type": "string"
+          },
+          {
+            "const": "not-found",
+            "description": "The server name does not exist.",
+            "type": "string"
+          },
+          {
+            "const": "rejected",
+            "description": "The server answered and turned the stream away, which for a platform\nis a stream key it does not know.",
+            "type": "string"
+          },
+          {
+            "const": "closed",
+            "description": "The server hung up during the handshake or as the stream started.",
+            "type": "string"
+          },
+          {
+            "const": "stalled",
+            "description": "The server took the connection and never took the stream: no error,\nno data accepted, until the outage buffer filled. Some servers answer\na key they do not know this way.",
+            "type": "string"
+          },
+          {
+            "const": "other",
+            "description": "Anything else. `detail` says what.",
+            "type": "string"
+          }
+        ]
+      },
       "OutputState": {
         "enum": [
           "connecting",
@@ -7917,6 +7983,17 @@
       "OutputStatus": {
         "additionalProperties": true,
         "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OutputError"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why the last attempt to connect failed, while it is not connected.\nCleared once it is live. See `output_error`."
+          },
           "has_key": {
             "description": "False while the address still carries a placeholder a preset wrote in\nfor somebody to replace, such as `YOUR-STREAM-KEY`. The key itself\nnever leaves the core, so this is how a client knows to put its own\nform up and say \"needs a stream key\" without ever seeing the key.\n\nTrue for an address with no key in it at all, an SRT one for instance,\nbecause there is nothing there for anybody to replace.",
             "type": "boolean"

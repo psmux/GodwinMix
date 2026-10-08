@@ -42,6 +42,7 @@ use tokio::sync::mpsc;
 use tracing::{debug, info, warn};
 
 mod boundary;
+pub mod failure;
 mod flow;
 pub mod retire;
 
@@ -106,6 +107,8 @@ pub struct OutputSlot {
     taps: Vec<crate::render::Tap>,
     /// What reaches the sink, which is what `live` is judged on.
     flow: flow::Flow,
+    /// Why the last attempt failed, in words. See `failure`.
+    failure: failure::Failure,
 }
 
 impl OutputSlot {
@@ -189,6 +192,7 @@ impl OutputSlot {
             capabilities: ready.capabilities,
             taps,
             flow: Default::default(),
+            failure: Default::default(),
         });
         // An address still carrying a preset's placeholder is not one anybody
         // can publish to, and dialling it anyway had the example config
@@ -287,6 +291,7 @@ impl OutputSlot {
             .with_context(|| format!("building the {} half of output {id}", self.manifest.provide_id()))?;
 
         self.connected.store(false, Ordering::Relaxed);
+        self.failure.attempt();
         self.flow.watch(&pipeline);
 
         let watch = gstutil::watch_bus(&pipeline, BusOwner::Output(id.clone()), self.bus_tx.clone())
@@ -412,6 +417,29 @@ impl OutputSlot {
         owner.output() == Some(self.cfg.id.as_str())
     }
 
+    /// One error off this output's bus, kept as the reason it is not live.
+    pub fn note_error(&self, message: &str) {
+        self.failure.note(message, &self.cfg.uri);
+    }
+
+    /// The watchdog is about to rebuild this output because its buffer has
+    /// been full too long. Not live, that is a reason in itself; live, it is
+    /// a slow link and the reconnect is the whole story.
+    pub fn note_stall(&self) {
+        if self.state() != OutputState::Live {
+            self.failure.note(failure::STALLED, &self.cfg.uri);
+        }
+    }
+
+    /// The alert for a failure nobody has been told about yet, or nothing.
+    pub fn failure_alert(&self) -> Option<godwinmix_protocol::types::Event> {
+        let alert = self.failure.alert(&self.cfg.id);
+        if let Some(e) = self.failure.current().filter(|_| alert.is_some()) {
+            warn!(output = %self.cfg.id, reason = e.reason.as_str(), detail = %e.detail, "output is not connected");
+        }
+        alert
+    }
+
     pub fn mark_failed(&self) {
         self.failed.store(true, Ordering::Relaxed);
         self.connected.store(false, Ordering::Relaxed);
@@ -454,6 +482,7 @@ impl OutputSlot {
         };
         if now != self.connected.swap(now, Ordering::Relaxed) {
             if now {
+                self.failure.connected();
                 info!(output = %self.cfg.id, kind = %self.manifest.provide_id(), "output connection established");
             } else {
                 warn!(output = %self.cfg.id, kind = %self.manifest.provide_id(), "output connection lost");
@@ -523,6 +552,9 @@ impl OutputSlot {
             rendition: self.cfg.rendition.clone(),
             // Filled in by the mixer, which knows what the governor did.
             shed: None,
+            // Only while it is not live. A connection that came back has
+            // nothing left to explain.
+            error: if self.connected.load(Ordering::Relaxed) { None } else { self.failure.current() },
             // Per kind data, for an output built by a plugin rather than by
             // the core. Nothing the core builds itself has any.
             // Skipped for a turn while a reconnect holds the kind; see
@@ -806,6 +838,24 @@ mod tests {
             assert_ne!(slot.state(), OutputState::Live);
             std::thread::sleep(std::time::Duration::from_millis(50));
         }
+        slot.shutdown();
+        let _ = program.set_state(gst::State::Null);
+    }
+
+    /// A buffer that filled on a destination that never went live is a reason
+    /// of its own on the status: the server took the connection and nothing
+    /// else, which is how the mixer's own ingest answers a wrong key.
+    #[test]
+    fn a_stall_before_going_live_is_named() {
+        init();
+        let (program, vtee, atee, tx) = harness();
+        let slot = OutputSlot::attach(&program, &vtee, &atee, &cfg("stalls"), tx).unwrap();
+        assert!(slot.status().error.is_none(), "an error before anything failed");
+        slot.note_stall();
+        let error = slot.status().error.expect("the stall is on the status");
+        assert_eq!(error.reason, godwinmix_protocol::output_error::OutputErrorReason::Stalled);
+        assert!(error.message.starts_with("127.0.0.1:1935 answered"), "{}", error.message);
+        assert!(slot.failure_alert().is_some(), "no alert for the stall");
         slot.shutdown();
         let _ = program.set_state(gst::State::Null);
     }

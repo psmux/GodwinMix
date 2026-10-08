@@ -335,7 +335,9 @@ export class Client {
         this.emit("position", params);
         break;
       case "output.state":
-        s.patchOutput(params.output, { state: params.state, reconnects: params.reconnects });
+        // `error` is written even when absent, so a reason from an earlier
+        // failure does not outlive the connection that replaced it.
+        s.patchOutput(params.output, { state: params.state, reconnects: params.reconnects, error: params.error ?? null });
         break;
       case "adbreak.changed":
         s.patch({ ad: params.ad ?? null });

@@ -20,6 +20,7 @@ import { el, on } from "../../shell/dom.js";
 import { modal } from "../../shell/modal.js";
 import { toast, errorToast } from "../../shell/toast.js";
 import { PLATFORMS, platform, platformOfHost, joinKey } from "../../client/destinations.js";
+import { followStart } from "./failure.js";
 
 /** What the two reconnect policies are called where somebody has to pick one. */
 const OWN_LABEL = "Retry quickly (a server you run)";
@@ -340,7 +341,10 @@ async function openForm(client, p, output, onDone) {
       return false;
     }
     m.close();
-    toast({ text: editing ? `${params.id} saved. It reconnects now.` : "Sending started." });
+    // Accepted is not connected. Say what is happening, and say it again
+    // when it is live; a failure arrives as the core's own alert.
+    toast({ text: editing ? `${params.id} saved. It reconnects now.` : `Connecting to ${p.title}. Outputs shows when it is live, or why not.` });
+    if (params.uri !== undefined) followStart(client, params.id, (text) => toast({ kind: "info", text }));
     if (onDone) await onDone();
     return true;
   }

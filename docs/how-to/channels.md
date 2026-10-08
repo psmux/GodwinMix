@@ -21,6 +21,26 @@ platforms like any other.
 Everything here is done on the Channels tab. The same things can be done
 through the `channel.*` methods in [the channel reference](../reference/channels.md).
 
+## A channel does not send the programme
+
+A channel passes on what an encoder sends it. Its platform tiles under
+**Send on to** forward that encoder's stream to YouTube or Facebook; they do
+not send the picture this mixer makes. A YouTube tile on a channel nothing is
+sending to says **Waits for the stream**, and YouTube gets nothing.
+
+To send the programme, use **Add destination** on the Outputs panel. See
+[Stream to YouTube, Facebook or Twitch](stream-to-a-platform.md).
+
+The Channels tab says this itself while a channel has platforms and no
+encoder: a note under the tiles explains it and has a **Send the programme to
+YouTube instead** button for each waiting platform. That asks for the stream
+key once more (a channel never hands a key back), adds the platform under
+Outputs, and takes the tile off the channel unless you switch that off. The
+form for adding a platform to an idle channel says the same above the key
+box, and its **Send the programme instead** button adds the output straight
+away with the server and key you pasted, without adding anything to the
+channel.
+
 ## Before you start
 
 The listener is the ingest plugin. If the Channels tab says nothing is

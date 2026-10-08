@@ -210,6 +210,13 @@
 .a-knob { fill: var(--line); }
 .chn-note { border: var(--border) solid var(--line); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 10px; background: var(--panel2); }
 .chn-note h3 { font-size: 15px; }
+/* Under the tiles, while a channel has places to go and no encoder: what a
+   channel is for, and a way to send the programme there instead. */
+.chn-idle { margin-top: 10px; padding: 12px; border-color: var(--warn); }
+.chn-idle[hidden] { display: none; }
+.chn-idle p { margin: 0; }
+.chn-idle-acts { display: flex; flex-wrap: wrap; gap: 8px; }
+.chn-addnote { margin: 0; padding: 10px 12px; border-radius: 10px; border: var(--border) solid var(--warn); }
 
 /* ------------------------------------------------------------ dialogs */
 

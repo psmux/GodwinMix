@@ -161,6 +161,9 @@ label { display: block; }
   border: var(--border) solid var(--line); background: var(--panel2);
 }
 .pill.live { background: var(--live); border-color: var(--live); color: #fff; }
+/* A destination that is failing: a fault, so --bad, and an outline rather
+   than a fill, because a filled red pill in the header means on air. */
+.pill.failed { border-color: var(--bad); color: var(--bad); }
 
 /* ---------------------------------------------------------------- header */
 
