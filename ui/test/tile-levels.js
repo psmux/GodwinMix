@@ -79,6 +79,12 @@ export async function tileLevelTests(test, eq, ok) {
     await settle(50);
   }
   const fills = [...tile.meter.querySelectorAll(".fill")].map((f) => f.style.clipPath);
+  // Drawn, not only computed: the stylesheet once gave a horizontal fill no
+  // width at all, so the clip was right and nothing was on screen.
+  const widths = [...tile.meter.querySelectorAll(".ch")].map((ch) => [
+    Math.round(ch.querySelector(".fill").getBoundingClientRect().width),
+    Math.round(ch.getBoundingClientRect().width),
+  ]);
   const readout = tile.readout.textContent;
   dropViews("tile:mic");
   const released = JSON.stringify(client.extSpec());
@@ -91,6 +97,9 @@ export async function tileLevelTests(test, eq, ok) {
     for (const f of fills) {
       const right = Number(/inset\(0(?:px)? ([\d.]+)%/.exec(f)?.[1]);
       ok(right > 20 && right < 32, `the bar is not lit to -6 dB: ${f}`);
+    }
+    for (const [fill, channel] of widths) {
+      ok(channel > 0 && fill === channel, `a horizontal fill is ${fill} px wide in a ${channel} px channel`);
     }
     eq(readout, "-6.0");
     eq(released, "{}", "the ask outlived the tile");

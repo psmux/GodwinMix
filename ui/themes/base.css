@@ -197,7 +197,11 @@ label { display: block; }
   background: linear-gradient(to top, var(--ok) 0%, var(--ok) 62%, var(--warn) 82%, var(--live) 100%);
 }
 .meter.h { flex-direction: column; align-items: stretch; }
-.meter.h .fill { top: 0; right: auto; background: linear-gradient(to right, var(--ok) 0%, var(--ok) 62%, var(--warn) 82%, var(--live) 100%); }
+/* The fill spans the whole channel and clip-path cuts it to the level. With
+   `right: auto` and no width it was zero pixels wide, so every horizontal
+   meter (the header's programme bar, the Audio panel) drew nothing at all
+   while its number moved. */
+.meter.h .fill { top: 0; right: 0; background: linear-gradient(to right, var(--ok) 0%, var(--ok) 62%, var(--warn) 82%, var(--live) 100%); }
 
 /* A scroll bar that belongs to the theme: thin, and the colour of a line,
    so a panel that does scroll does not grow a bright grey gutter. */
