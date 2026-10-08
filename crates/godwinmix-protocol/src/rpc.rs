@@ -214,6 +214,9 @@ pub fn event_name_and_payload(event: &Event) -> Option<(&'static str, Value)> {
             "source.state",
             payload(json!({ "source": source, "state": state, "detail": Value::Null })),
         ),
+        Event::SourceEnded { source, at_end } => {
+            ("source.ended", payload(json!({ "source": source, "at_end": at_end })))
+        }
         Event::OutputStateChanged { output, state, reconnects } => (
             "output.state",
             payload(json!({ "output": output, "state": state, "reconnects": reconnects })),

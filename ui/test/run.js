@@ -295,6 +295,17 @@ test("a source with no audio says why its mute and fader are dead", () => {
   eq(other.mute.title, "Mute");
 });
 
+test("a clip held at its end says so on its tile, and says Clip again once it plays", () => {
+  const clip = { id: "intro", uri: "file:///intro.mp4", seekable: true, gain: 1 };
+  const tile = buildTile(clip, { audio: { bindFader() {} }, scrub: { bind() {} }, onMute: () => {} });
+  syncTile(tile, clip, {});
+  eq(tile.playback.textContent, "Clip");
+  syncTile(tile, { ...clip, ended: true }, {});
+  eq(tile.playback.textContent, "Clip, ended");
+  syncTile(tile, clip, {});
+  eq(tile.playback.textContent, "Clip");
+});
+
 test("control sections collapse without destroying their panels", () => {
   const panel = document.createElement("div");
   const section = panelSection("core/sources", panel);

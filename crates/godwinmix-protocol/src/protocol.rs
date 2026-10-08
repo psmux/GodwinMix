@@ -172,6 +172,25 @@ fn state_events() -> Vec<EventDef> {
             },
         },
         EventDef {
+            name: "source.ended",
+            since: "1",
+            summary: "A clip's last frame has gone out to the programme. at_end says what it does \
+                      now: repeat plays it again from the start, hold keeps the last frame up, and \
+                      leave holds it while the programme moves to the armed scene or the one on \
+                      air before the clip.",
+            ext: None,
+            legacy: Some("source_ended"),
+            payload: |_| {
+                inline(json!({
+                    "type": "object",
+                    "properties": {
+                        "source": { "type": "string" },
+                        "at_end": { "type": "string", "enum": ["repeat", "hold", "leave"] }
+                    }
+                }))
+            },
+        },
+        EventDef {
             name: "source.position",
             since: "1",
             summary: "How far through a seekable source has got, a few times a second. \

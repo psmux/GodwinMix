@@ -46,6 +46,20 @@ fn file() -> Value {
         "$schema": "http://json-schema.org/draft-07/schema#",
         "title": "file/source params",
         "type": "object",
-        "properties": { "alpha": alpha("clip") }
+        "properties": {
+            "alpha": alpha("clip"),
+            "at_end": {
+                "title": "At the end",
+                "description": "What the clip does when its last frame has gone out. `repeat` plays it again \
+                                from the start with no gap and no reconnect; `hold`, the default, keeps the last \
+                                frame up until it is scrubbed or restarted; `leave` holds it too, and if the clip \
+                                is on air the programme moves to the scene armed in Preview, or else to what was \
+                                on air before it. Changing it does not restart the clip.",
+                "type": "string",
+                "enum": ["repeat", "hold", "leave"],
+                "x-gmx-labels": ["Repeat", "Hold the last frame", "Leave the scene"],
+                "default": "hold"
+            }
+        }
     })
 }

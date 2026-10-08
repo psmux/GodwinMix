@@ -119,6 +119,11 @@ async fn source_for(call: &Call, e: &Entry, values: Option<&Map<String, Value>>)
             params = godwinmix_core::gallery::manifest::to_json_map(&e.manifest.source.as_ref().map(|s| s.params.clone()).unwrap_or_default());
             params.extend(values.cloned().unwrap_or_default());
         }
+        // A clip from the gallery is a moving background or a loop, made to
+        // go round. A clip added from a file holds its last frame instead.
+        GalleryKind::Clip => {
+            params.insert("at_end".into(), Value::String("repeat".into()));
+        }
         _ => {}
     }
     let configs = call.app.mixer.configs().await.map_err(|err| call.mixer_error(err))?;

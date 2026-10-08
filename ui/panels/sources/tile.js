@@ -32,7 +32,7 @@ export function buildTile(source, deps) {
   const gear = el("button.gear", { text: "⚙", title: "Settings", "aria-label": "Settings", "data-nodrag": "" });
   const bar = el("div.bar", {}, [dragHandle(), dot, name, gear]);
 
-  const playback = el("div.playback", { text: source.seekable ? "Clip" : "Continuous live source" });
+  const playback = el("div.playback", { text: playbackText(source) });
   node.append(pic, still, kindbox, slot, strip, bar, playback);
 
   // ----------------------------------------------------------- the strip
@@ -97,7 +97,14 @@ export function buildTile(source, deps) {
     lane,
     pos,
     kind,
+    playback,
   };
+}
+
+/** What the clip label says. A clip with its loop off holds its last frame at its end. */
+function playbackText(source) {
+  if (!source.seekable) return "Continuous live source";
+  return source.ended ? "Clip, ended" : "Clip";
 }
 
 /** Write the changing parts into an existing tile. Never rebuilds anything. */
@@ -137,6 +144,8 @@ export function syncTile(tile, source, view) {
       : "Mute";
 
   tile.strip.hidden = !view.showStrip;
+  const playing = playbackText(source);
+  if (tile.playback.textContent !== playing) tile.playback.textContent = playing;
 
   if (tile.lane) {
     const p = view.position || { pos: 0, dur: null };
