@@ -30,18 +30,7 @@ export class Workspace {
     watchWidth(this);
   }
   sync() {
-    for (const spec of registry.list()) {
-      if (!spec.slots.some(s => s === 'header' || s === 'modal')) continue;
-      this.state.tree = model.remove(this.state.tree, spec.id);
-      this.state.hidden = this.state.hidden.filter(id => id !== spec.id);
-    }
-    const known = new Set([...model.leaves(this.state.tree).flatMap(n => n.tabs), ...this.state.hidden]);
-    for (const spec of registry.list()) {
-      if (spec.slots.includes('header') || spec.slots.includes('modal') || known.has(spec.id)) continue;
-      const utility = model.leaves(this.state.tree).find(n => n.tabs.includes('core/outputs'));
-      if (utility) utility.tabs.push(spec.id);
-      else this.state.tree = this.state.tree ? { axis: 'x', ratio: .75, a: this.state.tree, b: model.leaf([spec.id]) } : model.leaf([spec.id]);
-    }
+    model.adopt(this.state, registry.list());
     this.render();
   }
   schedule() {
@@ -145,6 +134,7 @@ export class Workspace {
     this.sync();
   }
   destroy() {
+    this.phone?.destroy();
     this.observer.disconnect();
     cancelAnimationFrame(this.raf);
     for (const frame of this.frames.values()) frame.made.destroy();

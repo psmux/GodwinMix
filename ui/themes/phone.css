@@ -78,6 +78,8 @@ gmx-shell.phone .header .wordmark { order: 1; font-size: 19px; }
 gmx-shell.phone .header .hdr-gap { order: 2; flex: 1 1 0; }
 gmx-shell.phone .header .presence { order: 3; }
 gmx-shell.phone .header .menubar-wrap { order: 6; }
+gmx-shell.phone .header .menubar { display: none; }
+gmx-shell.phone .header .menubar-all { display: inline-block; }
 gmx-shell.phone .header :is(.hdr-backend, .hdr-black, .hdr-palette, .hdr-settings, .hdr-peak, .shows.one) { display: none; }
 gmx-shell.phone .header .hdr-dest { max-width: 44vw; overflow: hidden; text-overflow: ellipsis; }
 gmx-shell.phone .header .pill { padding: 4px 10px; font-weight: 600; }
@@ -192,7 +194,13 @@ body.producer .phone-deck .scene-tabs .scene-tab > button[role="tab"].armed { bo
   border-radius: 10px; background: rgba(0, 0, 0, 0.55); color: #fff; font-size: 16px;
 }
 .phone-deck .scene-tabs .scene-tab > .scene-warn { position: absolute; top: 12px; right: 48px; }
-.phone-deck .scene-tabs > .btn { grid-column: 1 / -1; min-height: 48px; margin: 0; border-radius: 12px; }
+/* Take, outside Studio mode: floats at the foot of the screen while the
+   scenes scroll under it, so the shot and the button are never apart. */
+.phone-deck .scene-tabs > .btn {
+  position: sticky; bottom: 0; z-index: 2; grid-column: 1 / -1; min-height: 52px; margin: 0;
+  border-radius: 12px; background: var(--accent); border-color: var(--accent); color: var(--on-accent);
+  font-size: 17px; font-weight: 700; letter-spacing: 0.04em; box-shadow: 0 -6px 16px var(--panel);
+}
 
 /* Sources: the scene's name and the picture mode on a line, the filter under
    them. The screen's title already says Sources. */
@@ -205,3 +213,40 @@ body.producer .phone-deck .scene-tabs .scene-tab > button[role="tab"].armed { bo
 .phone-frame .gallery { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding: 0 12px 12px; }
 .phone-frame .gallery.mode-icon, .phone-frame .gallery.mode-label { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .phone-frame .tile { border-radius: 12px; }
+
+/* ------------------------------------------------------------ sideways */
+
+/* A phone on its side: the tabs become a rail down the left, the header one
+   line, and Live puts the monitors beside the scenes. Height is what runs
+   out, so nothing here is stacked that can sit side by side. */
+@media (orientation: landscape) and (max-height: 500px) {
+  gmx-shell.phone.has-workspace {
+    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas: "nav header" "nav workspace";
+  }
+  .phone-nav {
+    flex-direction: column; justify-content: center; gap: 6px;
+    padding: calc(6px + env(safe-area-inset-top)) 4px calc(6px + env(safe-area-inset-bottom)) calc(4px + env(safe-area-inset-left));
+    border-top: 0; border-right: 1px solid var(--line-soft);
+  }
+  .phone-tab { flex: 0 0 auto; width: 68px; }
+  .phone-tab .phone-icon { width: 52px; height: 30px; }
+  gmx-shell.phone .header { flex-wrap: nowrap; padding: 6px max(12px, env(safe-area-inset-right)) 6px 12px; }
+  gmx-shell.phone .header::after, gmx-shell.phone .header .hdr-gap { display: none; }
+  gmx-shell.phone .header .tally { order: 2; height: 36px; }
+  gmx-shell.phone .header .hdr-meter { order: 3; }
+  gmx-shell.phone .header .hdr-uptime { order: 4; }
+  gmx-shell.phone .header .menubar-all { width: 38px; height: 38px; }
+  .dock-workspace.phone-deck { padding: 10px max(12px, env(safe-area-inset-right)) 12px 12px; gap: 10px; }
+  gmx-shell.phone[data-phone-page="live"] .dock-workspace.phone-deck {
+    display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); align-items: start;
+  }
+  .phone-deck gmx-program .monitor-stage { padding: 8px; gap: 8px; }
+  .phone-deck gmx-program .take-main .take-button, .phone-deck gmx-program .take-main .cut-button { min-height: 52px; }
+  .phone-deck .scene-tabs { padding: 0 10px 10px; gap: 8px; }
+  .phone-frame .gallery, .phone-frame .gallery.mode-icon, .phone-frame .gallery.mode-label { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); }
+  .phone-cards { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); }
+  .phone-head { min-height: 32px; }
+  .phone-head h1 { font-size: 20px; }
+}
