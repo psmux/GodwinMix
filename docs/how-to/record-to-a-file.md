@@ -30,7 +30,8 @@ has been recording, `REC 12:04`. Press it, from whichever panel is on screen,
 and the mixer asks once, naming the file; **Stop recording** finishes the file
 and **Keep recording** leaves it going. **Outputs > Stop recording** asks the
 same question. Before the first bytes reach the file the button reads
-`REC starting` and is not red, and it stops that recording too.
+`REC starting`, and `REC failed` when the recorder has stopped writing; it is
+not red then, and pressing it stops that recording too.
 
 ## After a restart
 
