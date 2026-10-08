@@ -19,7 +19,7 @@ export function stopRecording(client) {
   const dialog = modal({
     title: "Stop recording",
     body: el("div.col", {}, [
-      el("p", { text: many ? "These files are finished and kept on the mixer:" : "The file is finished and kept on the mixer:" }),
+      el("p", { text: many ? "Stopping finishes these files and keeps them on the mixer:" : "Stopping finishes this file and keeps it on the mixer:" }),
       ...running.map((o) => el("p.sm.dim", { style: { overflowWrap: "anywhere", margin: "0" }, text: o.recording_path || "Preparing a new file" })),
       el("p.sm.dim", { text: "Allow a few seconds before moving it. Record starts a new file." }),
     ]),
