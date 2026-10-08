@@ -152,6 +152,15 @@ started from a terminal, never fight over 8080. The one exception is a mixer
 other devices may connect to, which keeps its port, so a phone's saved link
 keeps working.
 
+Because of that, typing `127.0.0.1` and a port into a browser rarely works:
+the port changed at the last launch, and the page asks for a token nobody
+was shown. **Open in browser**, in the GodwinMix menu and in the tray, opens
+the mixer the window is showing in the system's browser, already signed in.
+The token travels in the part of the address after `#`, which the browser
+never sends to the mixer, and the page takes it off the address bar before
+it draws. The browser remembers it for that port only, so after the app
+restarts, use the menu item again.
+
 To check all of this without a screen, on your machine or in CI:
 
 ```sh

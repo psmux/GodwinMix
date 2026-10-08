@@ -102,12 +102,13 @@ pub fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     MenuBuilder::new(app).items(&[&app_menu, &edit, &window]).build()
 }
 
-/// The shell's own submenu: About, updates, connect, restart, whether other
-/// devices may connect, folders, quit.
+/// The shell's own submenu: About, updates, connect, open in a browser,
+/// restart, whether other devices may connect, folders, quit.
 pub fn app_submenu(app: &AppHandle) -> tauri::Result<Submenu<tauri::Wry>> {
     let connect = MenuItemBuilder::with_id("connect", "Connect to a mixer...")
         .accelerator("CmdOrCtrl+Shift+C")
         .build(app)?;
+    let browser = MenuItemBuilder::with_id(crate::browser::MENU_ID, crate::browser::MENU_TITLE).build(app)?;
     let logs = MenuItemBuilder::with_id("logs", "Open logs folder").build(app)?;
     let config = MenuItemBuilder::with_id("config", "Open config folder").build(app)?;
     let restart = MenuItemBuilder::with_id("restart", "Restart the mixer").build(app)?;
@@ -121,7 +122,7 @@ pub fn app_submenu(app: &AppHandle) -> tauri::Result<Submenu<tauri::Wry>> {
     let about = PredefinedMenuItem::about(app, Some("About GodwinMix"), Some(about_metadata()))?;
     let separator = || PredefinedMenuItem::separator(app);
     SubmenuBuilder::new(app, "GodwinMix")
-        .items(&[&about, &updates, &separator()?, &connect, &restart, &lan, &separator()?, &logs, &config, &separator()?, &quit, &quit_all])
+        .items(&[&about, &updates, &separator()?, &connect, &browser, &restart, &lan, &separator()?, &logs, &config, &separator()?, &quit, &quit_all])
         .build()
 }
 
@@ -137,13 +138,14 @@ fn about_metadata() -> AboutMetadata<'static> {
     }
 }
 
-/// The tray icon: Show, Connect, Quit. It is what gets the window back after
+/// The tray icon: Show, Connect, Open in browser, Quit. It is what gets the window back after
 /// someone closes it, which on macOS leaves the app running.
 pub fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     let show = MenuItemBuilder::with_id("show", "Show GodwinMix").build(app)?;
     let connect = MenuItemBuilder::with_id("connect", "Connect to a mixer...").build(app)?;
+    let browser = MenuItemBuilder::with_id(crate::browser::MENU_ID, crate::browser::MENU_TITLE).build(app)?;
     let quit = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
-    let menu = MenuBuilder::new(app).items(&[&show, &connect, &quit]).build()?;
+    let menu = MenuBuilder::new(app).items(&[&show, &connect, &browser, &quit]).build()?;
     let mut tray = TrayIconBuilder::with_id("main")
         .tooltip("GodwinMix")
         .menu(&menu)
@@ -165,6 +167,7 @@ pub fn on_menu(app: &AppHandle, id: &str) {
     match id {
         "show" => show(app),
         "connect" => connect(app),
+        crate::browser::MENU_ID => crate::browser::open(app),
         "logs" => reveal(app, crate::settings::log_dir(app).ok()),
         "config" => reveal(app, crate::settings::data_dir(app).ok()),
         "updates" => check_for_updates(app.clone()),
