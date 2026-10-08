@@ -6063,6 +6063,15 @@ pub struct SourceStateEvent {
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
+pub struct SourceEndedEvent {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub at_end: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct SourcePositionEvent {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub duration_ms: Option<i64>,
@@ -6434,12 +6443,13 @@ pub const METHODS: [MethodInfo; 216] = [
     MethodInfo { name: "vitals.set", summary: "Change the alarm thresholds, or whether a mosaic is kept up for the black and freeze checks while nobody is looking. Fields left out keep their defaults; a duration of 0 switches that check off. Applies within a second.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/vitals/set")) },
 ];
 
-pub const EVENT_NAMES: [&str; 34] = [
+pub const EVENT_NAMES: [&str; 35] = [
     "snapshot",
     "program.took",
     "scene.patch",
     "preview.changed",
     "source.state",
+    "source.ended",
     "source.position",
     "output.state",
     "adbreak.changed",
@@ -6498,6 +6508,8 @@ pub enum Event {
     PreviewChanged(PreviewChangedEvent),
     /// A source moved between connecting, live, stalled and failed.
     SourceState(SourceStateEvent),
+    /// A clip's last frame has gone out to the programme. at_end says what it does now: repeat plays it again from the start, hold keeps the last frame up, and leave holds it while the programme moves to the armed scene or the one on air before the clip.
+    SourceEnded(SourceEndedEvent),
     /// How far through a seekable source has got, a few times a second. Never sent for a camera, which has no position to report.
     SourcePosition(SourcePositionEvent),
     /// A destination connected, dropped or is retrying.
@@ -6584,6 +6596,10 @@ impl Event {
             },
             "source.state" => match serde_json::from_value(params.clone()) {
                 Ok(payload) => Event::SourceState(payload),
+                Err(_) => Event::Other { name: pattern.to_string(), params },
+            },
+            "source.ended" => match serde_json::from_value(params.clone()) {
+                Ok(payload) => Event::SourceEnded(payload),
                 Err(_) => Event::Other { name: pattern.to_string(), params },
             },
             "source.position" => match serde_json::from_value(params.clone()) {
@@ -6706,6 +6722,7 @@ impl Event {
             Event::ScenePatch(_) => "scene.patch",
             Event::PreviewChanged(_) => "preview.changed",
             Event::SourceState(_) => "source.state",
+            Event::SourceEnded(_) => "source.ended",
             Event::SourcePosition(_) => "source.position",
             Event::OutputState(_) => "output.state",
             Event::AdbreakChanged(_) => "adbreak.changed",
