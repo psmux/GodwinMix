@@ -18,7 +18,8 @@ import { confirmModal } from "../../shell/modal.js";
 import { openPicker } from "../../shell/picker-loader.js";
 import { settings, setSetting, onSettingsChanged, GALLERY_MODES } from "../../shell/settings.js";
 import { audioFor, ScrubGestures } from "../../shell/fader.js";
-import { addView, dropViews, takeMeters } from "../../shell/meter.js";
+import { dropViews, takeMeters } from "../../shell/meter.js";
+import { watchLevel } from "./tile-level.js";
 import { sheetWidthFor } from "../../client/frames.js";
 import { SOURCE_KINDS, kindOfUri, discoverDevices } from "../../client/kinds.js";
 import { buildTile, syncTile, setTileMode } from "./tile.js";
@@ -96,6 +97,7 @@ class SourcesPanel extends HTMLElement {
           this.applyMode();
         }
         if (key === "tileWidth" || key === "multiviewFps") this.retune();
+        if (key === "meters") this.render(this.client.state);
       }),
       on(document, "visibilitychange", () => { this.retune(); this.refreshStills(!document.hidden); }),
       onFocusChanged(() => this.render(this.client.state)),
@@ -199,7 +201,11 @@ class SourcesPanel extends HTMLElement {
     this.count.textContent = list.length ? `${list.length}` : "";
     this.paintScope();
 
-    const signature = list.map((x) => [x.id, x.has_audio !== false, x.seekable === true].join(":")).join("|");
+    // Whether a tile has a picture and whether it has a level are both built
+    // in, so a change to either, or to "Show meters on tiles", rebuilds.
+    const signature = settings().meters + "/" + list
+      .map((x) => [x.id, x.has_audio !== false, x.has_video !== false, x.seekable === true].join(":"))
+      .join("|");
     if (signature !== this.signature) {
       this.signature = signature;
       this.rebuild(list);
@@ -256,10 +262,11 @@ class SourcesPanel extends HTMLElement {
         scrub: this.scrub,
         onGear: (id) => this.openDrawer(id),
         onMute: (id, muted) => this.audio.setMuted(id, muted).catch((e) => errorToast(e, "Mute")),
+        meters: settings().meters,
       });
       this.tiles.set(source.id, tile);
       this.grid.appendChild(tile.node);
-      if (source.has_audio !== false) addView("tile:" + source.id, "src:" + source.id, tile.meter, "v");
+      watchLevel(tile);
     }
     this.grid.appendChild(this.addTile);
     this.applyMode();
@@ -304,7 +311,8 @@ class SourcesPanel extends HTMLElement {
       this.positionWant.release();
       this.positionWant = null;
     }
-    const live = [...this.tiles.entries()].filter(([id]) => this.mode(id) === "live");
+    // A sound only tile has no picture to draw, so it never asks for one.
+    const live = [...this.tiles.entries()].filter(([id, tile]) => this.mode(id) === "live" && !tile.sound);
     const wanted = this.visible && !document.hidden && live.length > 0 && s.multiview && s.multiview.enabled;
     if (!wanted) {
       this.release();
@@ -351,7 +359,7 @@ class SourcesPanel extends HTMLElement {
     if (this.stillTimer) clearInterval(this.stillTimer);
     this.stillTimer = null;
     if (this.workspaceActive === false || !this.visible || document.hidden) return;
-    const still = [...this.tiles.entries()].filter(([id]) => this.mode(id) === "snapshot");
+    const still = [...this.tiles.entries()].filter(([id, tile]) => this.mode(id) === "snapshot" && !tile.sound);
     if (!still.length) return;
     const load = () => {
       for (const [id, tile] of still) this.loadStill(id, tile);
