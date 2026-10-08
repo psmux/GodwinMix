@@ -290,6 +290,10 @@
           "title": "Record"
         },
         {
+          "command": "output.stop-recording",
+          "title": "Stop recording"
+        },
+        {
           "command": "output.resources",
           "title": "Resources"
         }
