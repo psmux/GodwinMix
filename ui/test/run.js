@@ -26,6 +26,7 @@ import { browserDeviceTests } from "./browser-devices.js";
 import { presenceTests } from "./presence.js";
 import { lanDeviceTests } from "./lan-devices.js";
 import { agentsTests } from "./agents.js";
+import { tileLevelTests } from "./tile-levels.js";
 // The test runner: forty lines, no dependencies, no toolchain. Open the page,
 // read the console, or read the list. Everything testable without a mixer is
 // here, including the legacy adapter against a stubbed server.
@@ -2708,7 +2709,13 @@ function summarise() {
   console.log(failed ? `FAILED: ${summary}` : `ALL PASSED: ${summary}`);
 }
 
-legacySuite()
+tileLevelTests(test, eq, ok)
+  .catch((e) => {
+    failed += 1;
+    line("fail", "the tile level suite threw: " + e.message);
+    console.error(e);
+  })
+  .then(legacySuite)
   .catch((e) => {
     failed += 1;
     line("fail", "the legacy suite threw: " + e.message);

@@ -88,10 +88,30 @@ something is in Preview.
 
 Closing or hiding the monitor releases its preview subscriptions.
 
+## Input levels
+
+Every tile in **Sources** that carries sound has a level bar between its
+picture and its name. It is there without hovering and in every gallery mode,
+so a glance at the tray says which inputs are making a sound. The bar is the
+core's own measurement at the point the sound reaches the mix, after the
+source's gain and before its mute, ten times a second.
+
+A source with sound and no picture, a microphone or a line input, has no
+picture box. Its tile says **Sound only, no video**, its bar is wider, and the
+loudest channel is printed in dBFS beside it. A microphone that has not sent
+anything yet says **Sound only, nothing heard yet**; if it stays like that, the
+device is held by another program or the operating system has not given the
+mixer permission to use it.
+
+**Settings > Show meters on tiles** turned off takes the bars away. With no
+meter on the page the page stops asking the core for levels, so they cost
+nothing.
+
 ## Audio desk
 
 Open **Audio** from **Panels and layout** for programme meters and a level and
-mute control for each audio source. The same source controls in Sources and
+mute control for each audio source. In the default layout it is a tab beside
+Graphics. The same source controls in Sources and
 Audio share their gesture state. Moving between panels does not change the
 mix. Double click a fader to return it to unity gain.
 

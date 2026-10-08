@@ -262,7 +262,23 @@ label { display: block; }
   display: flex; align-items: center; gap: 6px;
 }
 .tile:hover .strip, .tile:focus-within .strip { opacity: 1; }
-.tile .strip .meter { height: 16px; width: 14px; }
+/* The level is never behind a hover: a slim bar between the picture and the
+   name, in every gallery mode, so a glance says which inputs are making a
+   sound. The hover strip moves up by the bar's height to stay clear of it. */
+.tile .meter.level { height: 6px; padding: 1px 6px; gap: 1px; background: var(--panel); }
+.tile.metered .strip { bottom: 32px; }
+/* A source with sound and no picture shows that, not a black box that reads as
+   a camera that failed, and its level is the widest thing on it. */
+.tile .soundface {
+  aspect-ratio: 16 / 9; display: grid; place-items: center; align-content: center; gap: 6px;
+  background: var(--panel2);
+  background: color-mix(in srgb, var(--tile-color, var(--kind-other)) 14%, var(--panel2));
+}
+.tile .soundface svg { width: 30%; max-width: 40px; color: var(--tile-color, var(--kind-other)); }
+.tile .soundface .row { display: flex; gap: 8px; align-items: baseline; }
+.tile.sound .meter.level { height: 14px; }
+.tile.sound.metered .strip { bottom: 40px; }
+.tile.mode-label .soundface { display: none; }
 .tile input[type=range] { width: 100%; accent-color: var(--accent); }
 
 .marquee {
