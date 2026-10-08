@@ -30,10 +30,10 @@ class HeaderPanel extends HTMLElement {
     this.meter = meterElement("h");
     this.meter.style.width = "110px";
     this.meter.style.height = "14px";
-    this.peak = el("span.num.sm.dim", { style: { minWidth: "3.2em" } });
-    this.uptime = el("span.num.sm.dim");
-    this.backend = el("span.sm.faint.ellipsis");
-    this.destinations = el("span.pill", { text: "No destinations", role: "status" });
+    this.peak = el("span.num.sm.dim.hdr-peak", { style: { minWidth: "3.2em" } });
+    this.uptime = el("span.num.sm.dim.hdr-uptime");
+    this.backend = el("span.sm.faint.ellipsis.hdr-backend");
+    this.destinations = el("span.pill.hdr-dest", { text: "No destinations", role: "status" });
     this.recording = el("span.pill.live", { text: "REC", hidden: true, role: "status" });
     this.ad = el("span.pill.live", { text: "AD BREAK", hidden: true });
 
@@ -47,26 +47,26 @@ class HeaderPanel extends HTMLElement {
       this.ad,
       this.destinations,
       this.recording,
-      el("div.row", { style: { width: "110px" } }, [this.meter]),
+      el("div.row.hdr-meter", { style: { width: "110px" } }, [this.meter]),
       this.peak,
-      el("span.grow"),
+      el("span.grow.hdr-gap"),
       // How many other people are operating this mixer, from a phone or a
       // desk. Hidden while there is nobody else.
       presenceButton(this.client),
       this.uptime,
       this.backend,
-      el("button.btn", {
+      el("button.btn.hdr-black", {
         text: "Cut to black",
         title: "0",
         onclick: () => this.client.call("program.take", { source: "" }).catch((e) => errorToast(e, "Cut to black")),
       }),
       // The palette arrives when it is asked for, here and on Ctrl+K.
-      el("button.btn.icon", {
+      el("button.btn.icon.hdr-palette", {
         text: "⌘K",
         title: "Command palette",
         onclick: () => import("../../shell/palette.js").then((m) => m.openPalette()),
       }),
-      el("button.btn.icon", { text: "⚙", title: "Settings", "aria-label": "Settings", onclick: () => openSettings(this.client) })
+      el("button.btn.icon.hdr-settings", { text: "⚙", title: "Settings", "aria-label": "Settings", onclick: () => openSettings(this.client) })
     );
 
     addView("header", "program", this.meter, "h", this.peak);
