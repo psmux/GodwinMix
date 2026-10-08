@@ -110,8 +110,8 @@ nothing.
 ## Audio desk
 
 Open **Audio** from **Panels and layout** for programme meters and a level and
-mute control for each audio source. In the default layout it is a tab beside
-Graphics. The same source controls in Sources and
+mute control for each audio source, each with its own level bar. In the
+default layout it is a tab beside Graphics. The same source controls in Sources and
 Audio share their gesture state. Moving between panels does not change the
 mix. Double click a fader to return it to unity gain.
 
