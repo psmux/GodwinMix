@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The MSI's half of the Windows Firewall rules: run firewall.ps1 after the
+  files are in place and before they are removed. What the rules are and why
+  is in firewall.ps1 beside this file.
+
+  The component is there so tauri.windows.conf.json can reference this
+  fragment; WiX links a fragment only when something in it is referenced.
+
+  The actions run as the system, so the person running the installer's AppData
+  is passed in, resolved before the elevated part starts. "[INSTALLDIR]." and
+  "[AppDataFolder]." end in a dot because both properties end in a backslash,
+  which would escape the closing quote.
+
+  On a major upgrade the old product's removal skips its uninstall action, and
+  the new install writes the rules again.
+-->
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Fragment>
+    <DirectoryRef Id="INSTALLDIR">
+      <Component Id="GmxFirewall" Guid="6E0C8E1B-6B4F-4E9C-9C55-3A1D2B7F4A10">
+        <RegistryValue Root="HKMU" Key="Software\GodwinMix\Firewall" Name="Group" Type="string" Value="GodwinMix" KeyPath="yes" />
+      </Component>
+    </DirectoryRef>
+    <CustomAction Id="GmxFirewallInstall" Directory="INSTALLDIR" Execute="deferred" Impersonate="no" Return="ignore"
+      ExeCommand='"[System64Folder]WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "[INSTALLDIR]setup\firewall.ps1" -Action Install -InstallDir "[INSTALLDIR]." -AppData "[AppDataFolder]."' />
+    <CustomAction Id="GmxFirewallUninstall" Directory="INSTALLDIR" Execute="deferred" Impersonate="no" Return="ignore"
+      ExeCommand='"[System64Folder]WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "[INSTALLDIR]setup\firewall.ps1" -Action Uninstall' />
+    <InstallExecuteSequence>
+      <Custom Action="GmxFirewallUninstall" After="InstallInitialize">REMOVE="ALL" AND NOT UPGRADINGPRODUCTCODE</Custom>
+      <Custom Action="GmxFirewallInstall" Before="InstallFinalize">NOT REMOVE</Custom>
+    </InstallExecuteSequence>
+  </Fragment>
+</Wix>
