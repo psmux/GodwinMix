@@ -18,6 +18,7 @@ use tokio_tungstenite::tungstenite::Message;
 /// A two second clip with picture and sound, from elements every GStreamer
 /// install has.
 fn write_clip(name: &str) -> Option<String> {
+    let _ = gstreamer::init();
     let dir = std::env::temp_dir().join(format!("gmx-leave-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).ok()?;

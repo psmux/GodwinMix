@@ -65,6 +65,12 @@ impl Mixer {
             return;
         }
         let at_end = AtEnd::of(&slot.input.current_config().params);
+        if end.take_quiet() && at_end != AtEnd::Repeat {
+            end.hold();
+            slot.input.mark_ended();
+            self.broadcast_status();
+            return;
+        }
         if at_end != AtEnd::Repeat {
             end.hold();
             // Said here as well as on the bus's EOS, which a clip with no
@@ -117,6 +123,35 @@ impl Mixer {
         status.put_extra("at_end", AtEnd::of(&slot.input.current_config().params).as_str());
         if end.held() {
             status.put_extra("ended", true);
+        }
+    }
+
+    /// Show every held clip's last frame again, for pictures made since it
+    /// came to rest.
+    ///
+    /// A held clip sends nothing more, so a mosaic built after it ended, a
+    /// Studio preview of its scene armed after, or a compositor slot bound to
+    /// it by a later take, had no frame of it and drew black. Called when one
+    /// of those is made: a seek to the last frame decodes from the keyframe
+    /// before it, once, and sends that frame down every branch. Its end is
+    /// quiet (`ClipEnd::quietly`), so a clip set to leave the scene does not
+    /// leave it again.
+    pub(super) fn show_held_clips_again(&mut self) {
+        let held: Vec<(SourceId, u64)> = self
+            .sources
+            .iter()
+            .filter(|s| s.clip_end.as_ref().is_some_and(|e| e.held()) && s.seekable())
+            .filter_map(|s| Some((s.input.id.clone(), s.input.duration_ms()?)))
+            .collect();
+        for (id, duration_ms) in held {
+            let Some(end) = self.sources.iter().find(|s| s.input.id == id).and_then(|s| s.clip_end.clone()) else {
+                continue;
+            };
+            end.quietly();
+            debug!(source = %id, "showing a held clip's last frame again for a picture made since");
+            if !matches!(self.seek(&id, duration_ms.saturating_sub(1)), SeekOutcome::Moved(_)) {
+                end.take_quiet();
+            }
         }
     }
 
