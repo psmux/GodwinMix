@@ -124,4 +124,31 @@ mod tests {
         assert!(gone.message.contains("comes once an encoder publishes"), "{}", gone.message);
         assert_eq!(gone.data["state"], "idle");
     }
+
+    /// Run `work` on a thread of its own and give it `within`; None when it
+    /// did not come back, which is what a deadlock looks like from outside.
+    fn bounded<T: Send + 'static>(within: Duration, work: impl FnOnce() -> T + Send + 'static) -> Option<T> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = tx.send(work());
+        });
+        rx.recv_timeout(within).ok()
+    }
+
+    /// A picture asked of a channel that is not there is refused, and the
+    /// channels answer afterwards. Before the fix the refusal took `records`
+    /// a second time on the thread that held it, and every `channel.list`
+    /// from then on waited for good.
+    #[tokio::test]
+    async fn a_picture_of_a_channel_that_is_not_there_is_refused_and_the_list_still_answers() {
+        let channels = super::super::default::tests::open_bare("thumb-missing");
+        let asker = channels.clone();
+        let req: ChannelThumbnailRequest = serde_json::from_value(json!({"id": "gone", "stream": "phone"})).unwrap();
+        let refused = bounded(Duration::from_secs(5), move || asker.thumbnail(&req).map(|_| ()))
+            .expect("channel.thumbnail did not answer within five seconds");
+        let e = refused.expect_err("there is no channel called gone");
+        assert!(e.message.contains("gone"), "{}", e.message);
+        let lister = channels.clone();
+        bounded(Duration::from_secs(5), move || lister.list()).expect("channel.list did not answer within five seconds");
+    }
 }
