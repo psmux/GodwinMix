@@ -94,6 +94,7 @@ mod tests {
             kbps: 0,
             reconnects: 2,
             error: Some("the far end closed the connection".into()),
+            file: None,
         };
         channels.hook_destination("church", "youtube", &live);
         let fired = rec.fired.lock();
