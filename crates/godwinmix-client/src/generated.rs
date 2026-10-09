@@ -270,7 +270,7 @@ pub struct Alarm {
 /// What an alarm is about.
 pub type AlarmKind = String;
 /// The values api_level 1 knows for [`AlarmKind`].
-pub const ALARM_KIND_VALUES: &[&str] = &["no-input", "stall", "black", "freeze", "silence", "cc-errors", "loss", "output-failed", "governor-refused", "shed"];
+pub const ALARM_KIND_VALUES: &[&str] = &["no-input", "stall", "black", "freeze", "silence", "cc-errors", "loss", "output-failed", "governor-refused", "shed", "memory"];
 
 /// A show's alarms, as a person sets them from the page. Left out fields
 /// keep the measuring side's defaults; a duration of 0 switches that check

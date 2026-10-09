@@ -5,6 +5,7 @@
 export const ALARMS = {
   "no-input": "No input", stall: "Stalled", black: "Black", freeze: "Frozen", silence: "Silent",
   "cc-errors": "CC errors", loss: "Loss", "output-failed": "Output failed", "governor-refused": "Refused", shed: "Shed",
+  memory: "Memory",
 };
 
 const RANK = { alarm: 3, warning: 2, ok: 1, off: 0 };

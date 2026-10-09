@@ -52,6 +52,7 @@ never for a number alone. The numbers themselves are read with `show.stats`.
 | `output-failed` | an output's state is `failed`. One alarm per output, named in `detail` | both |
 | `governor-refused` | the governor refused a rendition the show asked for | the station |
 | `shed` | the governor stopped a rendition to keep what is on air whole | the station for direct shows, the show itself when it composites |
+| `memory` | the show's private memory passed `[memory] guard_mb`. `detail` gives the size, the threshold and the fullest queue. See [memory](#memory) | the show itself, when it composites |
 
 ## Thresholds
 
@@ -153,6 +154,8 @@ own queue.
   exists only while somebody is looking, and with the alarms on the show
   keeps one up for them.
 * Outputs come from the status once a second: `failed` and `shed`.
+* Memory comes from the show's memory guard, which reads the process's
+  private memory every five seconds. See [memory](#memory) below.
 
 The show sends `event/health {health}` to its own clients, and the same
 health to its station on the link (`show.health {health}`, a line beside
@@ -170,6 +173,33 @@ and sent the first health it judged, about a second after it starts. A show
 the station gave up on (`failed`) reads the same way. A show a person
 stopped reads `off`, and so does one that was started on purpose and has not
 linked yet.
+
+## Memory
+
+A show that composites watches its own memory. Every five seconds it reads
+the process's private memory, off the mixer thread, and compares it with
+`[memory] guard_mb` ([configuration](configuration.md#memory)). Unset, the
+threshold is a quarter of the machine's memory or 4 GB, whichever is lower.
+
+Past it, three things happen. The log gets an error naming the five fullest
+queues in every pipeline, by bytes, with the pipeline each one is in; it is
+repeated once a minute while the show stays over. The show's health gets a
+`memory` alarm, which reaches the wall like any other. And if one of those
+queues holds 64 MB or more and belongs to a source, that source is restarted,
+the same restart `source.restart` gives it, with its last frame held on
+programme. A queue belongs to a source when it is in that source's own
+pipeline (`input-<id>`) or hangs off that source's branch in the programme
+(`pgm-vq-<id>`, a slot fed by it). After a restart the guard waits 30 seconds
+before it restarts anything else. The programme, the encoder and the outputs
+are never restarted by it.
+
+The alarm clears when the show falls under nine tenths of the threshold.
+
+The line in the log to look for is `the show's memory is past its guard's
+threshold`, with `queues` listing what held the most. A queue that reached its
+byte or buffer limit before its time limit also says so on its own, as
+`this queue filled by its byte or buffer backstop`, which names the element
+whose timestamps stopped counting. That is the one to report.
 
 ## Thumbnails
 
