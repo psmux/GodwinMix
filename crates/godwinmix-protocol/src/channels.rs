@@ -255,3 +255,16 @@ pub struct KeyRevealed {
 pub struct ChannelRemoved {
     pub removed: String,
 }
+
+/// `channel.thumbnail`.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct ChannelThumbnailRequest {
+    /// The channel.
+    pub id: String,
+    /// Which of its streams. The first live one when left out.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stream: Option<String>,
+    /// Pixels across, 16 to 640, made even. 320 when left out.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub width: Option<u32>,
+}

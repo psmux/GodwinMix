@@ -16,7 +16,9 @@
 //! ```
 //!
 //! Nothing here decodes a frame that is not a keyframe, and nothing decodes
-//! at all for a show with its alarms off that nobody is looking at. A copy
+//! at all for a show with its alarms off that nobody is looking at. A
+//! channel stream gets a tap of its own only while somebody asks for its
+//! picture (`peek.rs`), and loses it ten seconds after the last ask. A copy
 //! only show's black and freeze checks therefore see one picture per
 //! keyframe, at most one a second: they are good to about a second, or to
 //! the GOP when that is longer. `docs/reference/show-health.md` has the
@@ -26,6 +28,7 @@ mod calls;
 mod chain;
 mod judge;
 mod measure;
+mod peek;
 mod picture;
 mod pool;
 mod show;
@@ -41,6 +44,8 @@ mod tests;
 mod tests_host;
 #[cfg(test)]
 mod tests_codecs;
+#[cfg(test)]
+mod tests_peek;
 #[cfg(test)]
 mod bench;
 

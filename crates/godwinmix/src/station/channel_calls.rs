@@ -36,6 +36,7 @@ fn run(c: &Channels, method: &str, params: Value, caller: &str) -> Result<Value,
     match method {
         "channel.list" => out(Ok(c.list())),
         "channel.get" => out(c.get(&parse::<IdRequest>(method, params)?.id)),
+        "channel.thumbnail" => c.thumbnail(&parse::<ChannelThumbnailRequest>(method, params)?),
         "channel.add" => out(c.add(parse::<ChannelAddRequest>(method, params)?)),
         "channel.set" => out(c.set(parse::<ChannelSetRequest>(method, params)?)),
         "channel.remove" => out(c.remove(&parse::<IdRequest>(method, params)?.id)),

@@ -31,6 +31,7 @@ mod destinations;
 mod edit;
 mod events;
 mod handover;
+pub mod hooks;
 pub(crate) mod keys;
 mod live;
 pub(crate) mod net;
@@ -40,6 +41,7 @@ mod reveal;
 mod sending;
 mod store;
 pub mod target;
+mod thumb;
 mod tls;
 pub(crate) mod transcode;
 mod view;
@@ -63,6 +65,7 @@ pub use live::Live;
 pub use ports::Ports;
 pub use whip::Whip;
 pub use store::Record;
+pub use thumb::jpeg as thumbnail_jpeg;
 
 /// The plugin that holds the listener.
 pub const PLUGIN: &str = "ingest";
@@ -97,6 +100,9 @@ pub struct Channels {
     /// The default channel was made once, or never will be: this mixer had
     /// channels of its own before it existed. See `default.rs`.
     default_made: AtomicBool,
+    /// Where `channel.stream.state` and `channel.destination.state` go; unset
+    /// until the owner of the hooks hands them over. See `hooks.rs`.
+    hooks: OnceLock<Arc<dyn hooks::Hook>>,
     /// Itself, for the watch thread.
     me: OnceLock<Weak<Channels>>,
     plugins: Arc<Supervisor>,
@@ -148,6 +154,7 @@ impl Channels {
             handed: Mutex::new(None),
             watching: AtomicBool::new(false),
             default_made: AtomicBool::new(made),
+            hooks: OnceLock::new(),
             me: OnceLock::new(),
             ports,
             plugins,
