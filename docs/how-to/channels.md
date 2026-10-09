@@ -275,7 +275,9 @@ settings table. A line says:
   `1920×1080 30 fps 4.1 Mb/s`;
 * how long it has been publishing, counting up each second;
 * how many of its push destinations are sending, as `3 of 4 sending`, with a
-  small ring for each one in the colours the tiles use.
+  small ring for each one in the colours the tiles use. Record and Watch link
+  count among them. The count turns red while one is retrying or has
+  stopped; hover it to see which one and why.
 
 Press a line to go back to the cards with that channel's card in view.
 

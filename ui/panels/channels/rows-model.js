@@ -21,6 +21,9 @@ export function rowOf(channel, now = Date.now()) {
   const first = (channel.streams || []).find((s) => s.state === "live");
   const dests = channel.destinations || [];
   const sending = dests.filter((d) => d.enabled && d.state === "live").length;
+  // Retrying, stopped, or still dialling after a first dial failed: the
+  // same rule the wall's red chip has.
+  const failing = dests.filter((d) => d.enabled && (d.state === "failed" || d.state === "reconnecting" || (d.state === "connecting" && d.error)));
   return {
     id: channel.id,
     name: channel.name || channel.id,
@@ -29,6 +32,7 @@ export function rowOf(channel, now = Date.now()) {
     spec: first ? specOf(first) : "",
     began: first ? startedAt(first.since_ms, now) : 0,
     sending: dests.length ? `${sending} of ${dests.length} sending` : "No push destinations",
+    failing: failing.map((d) => `${d.label || d.platform}: ${d.error || d.state}`),
     rings: dests.map((d) => ({ id: d.id, label: d.label || d.platform, state: ringState(d) })),
   };
 }

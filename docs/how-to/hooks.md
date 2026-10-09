@@ -91,7 +91,8 @@ http = "https://alerts.example/godwinmix"
 The body says which channel and destination, its state (`reconnecting` while
 it retries, `failed` when retrying will not help, `live` once it is sending
 again) and in `error` why. On a station the channels are the station's, so
-put the block in the station's config.
+put the block in the station's config. A recording fires it like any other
+destination; a watch link does not fire it yet.
 
 ## The three ways to be called
 

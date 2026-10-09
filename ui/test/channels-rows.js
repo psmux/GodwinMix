@@ -7,6 +7,7 @@ import { rowsOf, rowOf, specOf } from "../panels/channels/rows-model.js";
 import { rowsView } from "../panels/channels/rows.js";
 import { Channels, tileState, startedAt } from "../panels/channels/model.js";
 import { parsePasted, addPasted } from "../panels/channels/paste.js";
+import { distinctLabels } from "../panels/channels/paste-labels.js";
 import { setAll, bulkItems } from "../panels/channels/bulk.js";
 import { rank } from "../shell/palette.js";
 import { all } from "../shell/commands.js";
@@ -65,6 +66,8 @@ export async function channelRowsTests(test, eq, ok) {
     eq(specOf({ video: { width: 1280, height: 720, kbps: 900 } }), "1280×720 900 kb/s");
     const one = rowOf({ id: "x", enabled: true, streams: [stream("main")], destinations: [] }, NOW);
     eq(one.status, "Live");
+    const tried = rowOf({ id: "y", enabled: true, streams: [], destinations: [{ id: "c", label: "Custom RTMP", enabled: true, state: "connecting", error: "nothing answered at rtmp://127.0.0.1:19999" }] }, NOW);
+    eq(tried.failing, ["Custom RTMP: nothing answered at rtmp://127.0.0.1:19999"], "a first dial that failed counts as failing");
   });
 
   test("rows: a line a channel, and a press opens that channel", () => {
@@ -77,6 +80,10 @@ export async function channelRowsTests(test, eq, ok) {
     const main = view.node.children[0];
     ok(main.textContent.includes("3 of 4 sending"), main.textContent);
     eq(main.querySelectorAll(".chn-rring").length, 4);
+    const count = main.querySelector(".chn-rsend");
+    ok(count.classList.contains("bad"), "3 of 4 is red while d has failed");
+    eq(count.title, "d: failed");
+    ok(!view.node.children[1].querySelector(".chn-rsend").classList.contains("bad"), "a waiting one is not");
     main.click();
     eq(opened, "main");
   });
@@ -87,6 +94,8 @@ export async function channelRowsTests(test, eq, ok) {
     eq(tileState(d, NOW - 65000, NOW), "Live, 2.6 Mb/s, 1:05");
     eq(tileState(d), "Live, 2.6 Mb/s");
     eq(tileState({ ...d, kbps: 0 }, NOW - 5000, NOW), "Live, 0:05");
+    eq(tileState({ enabled: true, state: "connecting" }), "Connecting");
+    eq(tileState({ enabled: true, state: "connecting", error: "nothing answered at rtmp://127.0.0.1:19999" }), "Trying again", "a first dial that failed is not still connecting");
     // A destination's since_ms is how long ago, as of the answer it came in.
     const model = new Channels();
     model.put({ id: "main", destinations: [{ id: "yt", since_ms: 5000 }] }, NOW);
@@ -130,6 +139,14 @@ export async function channelRowsTests(test, eq, ok) {
     eq(result.added, 2);
     eq(result.failed.map((f) => f.line), [2, 3]);
     eq(result.failed[1].error, "nothing answered at rtmp://bad");
+  });
+
+  test("paste: two servers on one host, or a name the channel has, get names that differ", () => {
+    const two = distinctLabels(parsePasted("rtmp://127.0.0.1:19420/FakeYT/main?psk=k1\nrtmp://127.0.0.1:19420/FakeFB main?psk=k2\nrtmp://10.0.0.9/live/hall"));
+    eq(two.map((l) => l.label), ["127.0.0.1/FakeYT", "127.0.0.1/FakeFB", "10.0.0.9"]);
+    const again = distinctLabels(parsePasted("rtmp://a.rtmp.youtube.com/live2 k1\nrtmp://10.0.0.9/live/hall\nrtmp://10.0.0.9/live/foyer"), ["YouTube"]);
+    eq(again.map((l) => l.label), ["YouTube 2", "10.0.0.9/live", "10.0.0.9/live 2"]);
+    eq(distinctLabels(parsePasted("ftp://x/y"))[0].error.includes("ftp:"), true, "a bad line is left as it was");
   });
 
   const bulk = stubView((p) => (p.destination === "b" ? "the key was refused" : null));

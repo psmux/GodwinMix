@@ -92,7 +92,13 @@ terminal:
 ```sh
 gmx ctl rpc channel.add '{"name":"Church","app":"Church","secret":"Sunday-2024"}'
 gmx ctl rpc channel.key.add '{"id":"church","label":"Livebox","secret":"another-pw"}'
+gmx ctl rpc channel.list
 ```
+
+The last one prints every channel as JSON, its keys by label and last four
+characters, never the keys themselves. `gmx` talks to the mixer named by
+`--url` or `GODWINMIX_URL`, with `--token` or `GODWINMIX_TOKEN`; given
+neither, it tries the desktop app's mixer, then `http://127.0.0.1:8080`.
 
 An agent sees `secret` among the `add_channel` tool's parameters. The method
 reference is [The channel methods](../reference/channels.md).

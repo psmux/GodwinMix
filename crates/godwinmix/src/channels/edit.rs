@@ -211,7 +211,7 @@ fn taken(app: &str, other: &Record) -> RpcError {
         format!(" (as '{}': encoders reach a channel whatever case they type, so two cannot differ only in case)", other.app)
     };
     RpcError::invalid_params(format!(
-        "the application name '{app}' is already the channel '{by}'{case}. Two channels cannot \
+        "the address '{app}' is already the channel '{by}'{case}. Two channels cannot \
          share one: give this one another name, or change '{by}' first. To let more encoders \
          into '{by}', add a key to it."
     ))

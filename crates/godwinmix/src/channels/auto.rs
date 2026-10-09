@@ -37,6 +37,12 @@ impl Channels {
             cfg.params.insert("stream".into(), toml::Value::String(format!("{}/{stream}", record.app)));
             match self.target.add_source(cfg) {
                 Ok(()) => info!(source = %id, "a channel's stream became a source"),
+                // A busy show answers late but still adds it. Unclaimed, the
+                // stream would never show its source, and the source would
+                // stay behind when the encoder stops.
+                Err(why) if super::target::arrived_late(&*self.target, &id, &why) => {
+                    info!(source = %id, %why, "a channel's stream became a source, after the mixer answered late");
+                }
                 Err(why) => {
                     warn!(source = %id, %why, "the mixer would not take a channel's stream as a source");
                     // On the stream as well as in the log, so the page that
@@ -127,3 +133,7 @@ impl Channels {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "auto_tests.rs"]
+mod tests;

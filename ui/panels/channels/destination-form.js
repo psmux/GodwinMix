@@ -65,7 +65,7 @@ function addForm(view, channel, p) {
   const start = el("button.btn.primary", { text: "Start sending" });
   const more = el("details.chn-more-opts", {}, [el("summary", { text: "More options" }), label.node, stream && stream.node]);
   // Copy first, as the strip promises; a platform's own format one press away.
-  const format = formatStep(view.client, { platform: p.id, platformTitle: p.title, shape: channelShape(channel), id: () => p.id });
+  const format = formatStep(view.client, { platform: p.id, platformTitle: p.title, shape: channelShape(channel), id: () => p.id, copyFirst: true });
   const refused = el("div", { hidden: true });
   // Said before the key is pasted, not after: this is where a person who
   // wanted the programme on YouTube finds out a channel is something else.

@@ -108,7 +108,7 @@ const METHODS = {
     const id = slugify(app || name);
     const address = app || id;
     const other = [...this.channels.values()].find((c) => c.app.toLowerCase() === address.toLowerCase());
-    if (other) throw Object.assign(new Error(`the application name '${address}' is already the channel '${other.id}'. Two channels cannot share one.`), { code: -32602, data: { field: "app", channel: other.id } });
+    if (other) throw Object.assign(new Error(`the address '${address}' is already the channel '${other.id}'. Two channels cannot share one.`), { code: -32602, data: { field: "app", channel: other.id } });
     if (this.channels.has(id)) throw Object.assign(new Error(`A channel called "${id}" is here already. Pick another name.`), { code: -32602, data: { id } });
     if (secret !== undefined && secret.length < 6) throw Object.assign(new Error("that secret cannot be a key: it is too short."), { code: -32602, data: { field: "secret", min_len: 6 } });
     const c = {

@@ -56,4 +56,28 @@ export async function defaultChannelTests(test, eq, ok) {
   });
   onAir.view.stop();
   onAir.remove();
+
+  // A mixer with no channels, then the Livebox box makes one: the listener
+  // opens the RTMP port a moment later, and only channel.list says so.
+  const empty = new ChannelStub();
+  const fresh = await panelOver(empty);
+  const made = await empty.call("channel.add", { name: "Church", app: "Church" });
+  fresh.view.accept(made.channel);
+  const before = fresh.querySelector(".chn-ports").textContent.trim();
+  fresh.view.portsLater(5);
+  await wait(60);
+  test("the ports line reads the list again after a channel is made, rather than saying no port is open", () => {
+    eq(before, "No port is open for encoders.", "what the first, empty list said");
+    eq(fresh.querySelector(".chn-ports").textContent.trim(), "Open ports: RTMP 1935 for church");
+  });
+  fresh.style.width = "620px";
+  await wait(150);
+  test("in a narrow panel the Cards and Rows switch keeps its width and the lede gives way", () => {
+    const seg = fresh.querySelector(".chn-top > .chn-viewas");
+    eq(getComputedStyle(seg).flexShrink, "0");
+    const rows = [...seg.querySelectorAll("button")].at(-1);
+    ok(rows.scrollWidth <= rows.clientWidth + 1, `Rows is drawn whole (${rows.scrollWidth} of ${rows.clientWidth})`);
+  });
+  fresh.view.stop();
+  fresh.remove();
 }

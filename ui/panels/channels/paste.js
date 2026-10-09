@@ -8,6 +8,7 @@ import { el } from "../../shell/dom.js";
 import { modal } from "../../shell/modal.js";
 import { toast } from "../../shell/toast.js";
 import { platformOfHost } from "../../client/destinations.js";
+import { distinctLabels } from "./paste-labels.js";
 
 const SCHEMES = { "rtmp:": "custom", "rtmps:": "custom", "srt:": "srt" };
 
@@ -56,7 +57,9 @@ function short(text) {
 export async function addPasted(view, channelId, lines) {
   const failed = [];
   let added = 0;
-  for (const item of lines) {
+  const channel = view.model && view.model.byId && view.model.byId.get(channelId);
+  const taken = ((channel && channel.destinations) || []).map((d) => d.label);
+  for (const item of distinctLabels(lines, taken)) {
     if (item.error) {
       failed.push(item);
       continue;
