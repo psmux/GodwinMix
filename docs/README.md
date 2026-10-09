@@ -120,6 +120,7 @@ Start here if you have never run it.
 * [Take streams from several encoders into one channel](how-to/channels.md)
 * [Customize the workspace](how-to/customize-the-workspace.md)
 * [Run the mixer from a phone or a tablet](how-to/use-a-phone-or-tablet.md): long press for the item menu, double tap to open, drag by the grip
+* [Install the control page as an app](how-to/install-as-an-app.md): on a phone or a desktop, and the certificate a phone needs for it
 * [Take headend feeds into direct shows](how-to/headend-feeds.md)
 * [Watch many shows at once](how-to/monitor-many-shows.md)
 * [Send a channel on to YouTube, Facebook or Twitch](how-to/restream-a-channel.md)
