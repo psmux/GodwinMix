@@ -37,9 +37,9 @@ fn raw_video_is_costed_by_the_frame_and_encoded_media_at_a_flat_rate() {
     assert_eq!(bytes_for(Some(&hd), 1.0), (1_382_400.0 * 30.0 * RAW_HEADROOM) as u32);
     let unknown_rate = caps("video/x-raw,format=NV12,width=1280,height=720,framerate=0/1");
     assert_eq!(bytes_for(Some(&unknown_rate), 1.0), (1_382_400.0 * 60.0 * RAW_HEADROOM) as u32);
-    // A queue a tenth of a second long still holds four 4K frames.
+    // A queue a twentieth of a second long still holds four 4K frames.
     let uhd = caps("video/x-raw,format=BGRA,width=3840,height=2160,framerate=30/1");
-    assert_eq!(bytes_for(Some(&uhd), 0.1), 3840 * 2160 * 4 * 4);
+    assert_eq!(bytes_for(Some(&uhd), 0.05), 3840 * 2160 * 4 * 4);
     // A second of stereo 16 bit sound is 192 kB, far under the floor.
     let sound = caps("audio/x-raw,format=S16LE,rate=48000,channels=2,layout=interleaved");
     assert_eq!(bytes_for(Some(&sound), 1.0), MIN_BYTES as u32);
@@ -125,6 +125,7 @@ fn finish(rig: Stalled) {
 /// limit and holds the source there.
 #[test]
 fn a_source_that_stops_timestamping_is_held_at_the_backstop() {
+    let _ = gst::init();
     let rig = stalled(queue_thread("untimed").unwrap());
     let pushed = push_until_held(&rig, 600, false);
     let q = &rig.queue;
@@ -141,10 +142,28 @@ fn a_source_that_stops_timestamping_is_held_at_the_backstop() {
     assert!(pushed < 600 && pushed <= (cap as usize / FRAME) + 4, "{pushed} frames went in");
 }
 
+/// The queue as it was before the backstop, time limit only, under the same
+/// stall: it takes everything. This is the 11.8 GB, at test size.
+#[test]
+fn a_time_only_queue_takes_everything_an_untimed_source_gives_it() {
+    let _ = gst::init();
+    let bare = make("queue", "time-only").unwrap();
+    bare.set_property("max-size-buffers", 0u32);
+    bare.set_property("max-size-bytes", 0u32);
+    bare.set_property("max-size-time", 1_000_000_000u64);
+    let rig = stalled(bare);
+    let pushed = push_until_held(&rig, 300, false);
+    let bytes = rig.queue.property::<u32>("current-level-bytes");
+    finish(rig);
+    assert_eq!(pushed, 300, "a time only queue stopped an untimed source");
+    assert!(bytes as usize >= 298 * FRAME, "{bytes} bytes held");
+}
+
 /// The control: the same stall with sane timestamps fills by time, a second
 /// of frames, well inside the backstop. The backstop changes nothing here.
 #[test]
 fn a_timestamped_source_still_fills_by_time() {
+    let _ = gst::init();
     let rig = stalled(queue_thread("timed").unwrap());
     let pushed = push_until_held(&rig, 600, true);
     let q = &rig.queue;

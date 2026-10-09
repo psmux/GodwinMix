@@ -63,7 +63,7 @@ pub struct Pressure {
 /// What the guard keeps between checks.
 #[derive(Default)]
 pub struct Guard {
-    due: Option<Instant>,
+    pub(super) due: Option<Instant>,
     shared: Arc<Shared>,
 }
 

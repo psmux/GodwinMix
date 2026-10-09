@@ -200,4 +200,5 @@ pub fn take_live(into: &mut Config, from: &Config) {
     into.safety = from.safety.clone();
     into.browser = from.browser.clone();
     into.stall = from.stall.clone();
+    into.memory = from.memory.clone();
 }
