@@ -94,6 +94,7 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/alerts/panel.js", include_str!("../../../ui/panels/alerts/panel.js")),
     ("panels/channels/art.js", include_str!("../../../ui/panels/channels/art.js")),
     ("panels/channels/brands.js", include_str!("../../../ui/panels/channels/brands.js")),
+    ("panels/channels/bulk.js", include_str!("../../../ui/panels/channels/bulk.js")),
     ("panels/channels/card.js", include_str!("../../../ui/panels/channels/card.js")),
     ("panels/channels/channels.css", include_str!("../../../ui/panels/channels/channels.css")),
     ("panels/channels/connect-key.js", include_str!("../../../ui/panels/channels/connect-key.js")),
@@ -105,16 +106,22 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/channels/edit.js", include_str!("../../../ui/panels/channels/edit.js")),
     ("panels/channels/entry.js", include_str!("../../../ui/panels/channels/entry.js")),
     ("panels/channels/fields.js", include_str!("../../../ui/panels/channels/fields.js")),
+    ("panels/channels/go.js", include_str!("../../../ui/panels/channels/go.js")),
     ("panels/channels/install.js", include_str!("../../../ui/panels/channels/install.js")),
     ("panels/channels/keyed.js", include_str!("../../../ui/panels/channels/keyed.js")),
     ("panels/channels/keys.js", include_str!("../../../ui/panels/channels/keys.js")),
+    ("panels/channels/layout.js", include_str!("../../../ui/panels/channels/layout.js")),
     ("panels/channels/model.js", include_str!("../../../ui/panels/channels/model.js")),
+    ("panels/channels/paste.js", include_str!("../../../ui/panels/channels/paste.js")),
     ("panels/channels/panel.js", include_str!("../../../ui/panels/channels/panel.js")),
     ("panels/channels/plans.js", include_str!("../../../ui/panels/channels/plans.js")),
     ("panels/channels/protocols.js", include_str!("../../../ui/panels/channels/protocols.js")),
     ("panels/channels/qr-grid.js", include_str!("../../../ui/panels/channels/qr-grid.js")),
     ("panels/channels/qr.js", include_str!("../../../ui/panels/channels/qr.js")),
     ("panels/channels/reveal.js", include_str!("../../../ui/panels/channels/reveal.js")),
+    ("panels/channels/rows.css", include_str!("../../../ui/panels/channels/rows.css")),
+    ("panels/channels/rows.js", include_str!("../../../ui/panels/channels/rows.js")),
+    ("panels/channels/rows-model.js", include_str!("../../../ui/panels/channels/rows-model.js")),
     ("panels/channels/streams.js", include_str!("../../../ui/panels/channels/streams.js")),
     ("panels/channels/ways.js", include_str!("../../../ui/panels/channels/ways.js")),
     ("panels/composer/canvas.js", include_str!("../../../ui/panels/composer/canvas.js")),
@@ -408,6 +415,7 @@ const DEV_ASSETS: &[(&str, &str)] = &[
     ("test/channels-ways.js", include_str!("../../../ui/test/channels-ways.js")),
     ("test/channels-default.js", include_str!("../../../ui/test/channels-default.js")),
     ("test/channels-programme.js", include_str!("../../../ui/test/channels-programme.js")),
+    ("test/channels-rows.js", include_str!("../../../ui/test/channels-rows.js")),
     ("test/channels-preview.js", include_str!("../../../ui/test/channels-preview.js")),
     ("test/channels.html", include_str!("../../../ui/test/channels.html")),
     // hls.js against an HLS output on this core, beside a clock to the
@@ -1050,6 +1058,8 @@ mod tests {
         reachable.extend(closure_of("shell/devices.js"));
         reachable.extend(closure_of("panels/outputs/destination.js"));
         reachable.extend(closure_of("panels/channels/panel.js"));
+        // The palette's Open Channels, Channels as rows and Paste several push addresses.
+        reachable.extend(closure_of("panels/channels/go.js"));
         reachable.extend(closure_of("shell/sandbox.js"));
         reachable.extend(closure_of("panels/welcome/tiles.js"));
         reachable.extend(closure_of("panels/welcome/after.js"));

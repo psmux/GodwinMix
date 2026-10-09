@@ -38,3 +38,11 @@ export function emptyArt(onAdd) {
     el("button.btn.primary.chn-big", { text: "Add Channel", onclick: onAdd }),
   ]);
 }
+
+/** What the panel shows when `channel.list` failed, with a way to ask again. */
+export function failed(message, retry) {
+  return el("div.chn-note", {}, [
+    el("p", { text: `The channels could not be read: ${message}` }),
+    el("button.btn", { text: "Try again", onclick: retry }),
+  ]);
+}
