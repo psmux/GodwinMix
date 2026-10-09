@@ -61,8 +61,7 @@ function channelRow(open) {
       write(sending, "textContent", r.sending);
       // Red while a destination fails, with which one and why on hover.
       sending.classList.toggle("bad", r.failing.length > 0);
-      write(sending, "title", r.failing.join("
-"));
+      write(sending, "title", r.failing.join("\n"));
       node.setAttribute("aria-label", [r.name, r.status, r.spec, r.sending].filter(Boolean).join(", "));
       const shape = r.rings.map((g) => g.state).join(" ");
       if (rings.dataset.shape !== shape) {
