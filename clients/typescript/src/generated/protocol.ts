@@ -1975,7 +1975,7 @@ export interface OutputError {
 /** The kinds of failure a client may want to tell apart. */
 export type OutputErrorReason = "refused" | "unreachable" | "timed-out" | "not-found" | "rejected" | "closed" | "stalled" | "other";
 
-export type OutputState = "connecting" | "live" | "reconnecting" | "failed";
+export type OutputState = "connecting" | "live" | "reconnecting" | "failed" | "stopped";
 
 /** What one output is doing. */
 export interface OutputStats {
@@ -3593,6 +3593,8 @@ export interface MethodParams {
   "output.reconnect": IdRequest;
   "output.remove": IdRequest;
   "output.set": SetOutputRequest;
+  "output.start": IdRequest;
+  "output.stop": IdRequest;
   "path.create": PathCreateRequest;
   "path.list": PathListRequest;
   "pipeline.clock": Record<string, never>;
@@ -3814,6 +3816,8 @@ export interface MethodResults {
   "output.reconnect": OutputStatus;
   "output.remove": Record<string, unknown>;
   "output.set": OutputStatus;
+  "output.start": OutputStatus;
+  "output.stop": OutputStatus;
   "path.create": PathListing;
   "path.list": PathListing;
   "pipeline.clock": Record<string, unknown>;
@@ -4087,6 +4091,8 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "output.reconnect", summary: "Drop and re-establish one destination's connection now, without waiting for its reconnect policy.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/outputs/{id}/reconnect" } },
   { name: "output.remove", summary: "Stop sending to a destination and forget it. Other outputs are unaffected.", scope: "operate", mutating: true, destructive: true, rest: { method: "DELETE", path: "/api/v1/outputs/{id}" } },
   { name: "output.set", summary: "Change a destination in place: a new address with a new stream key, a new reconnect policy, a deeper outage buffer. The address is write only, so a client that only wants the buffer never has to hold the key.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/outputs/{id}/set" } },
+  { name: "output.start", summary: "Send to a stopped destination again, with the address and key it kept.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/outputs/{id}/start" } },
+  { name: "output.stop", summary: "Stop sending the programme to one destination and keep it, address, key and all, for output.start. Viewers on that platform see the stream end.", scope: "operate", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/outputs/{id}/stop" } },
   { name: "path.create", summary: "Make one new folder inside a folder path.list shows, and list it. A folder that is already there is listed rather than refused.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/path/create" } },
   { name: "path.list", summary: "The folders in one folder on the mixer, and whether each is writable, for a folder picker. Only the home folder and the mixer's own folders are shown; files never are.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/path/list" } },
   { name: "pipeline.clock", summary: "The clock every pipeline is running against, and how far each one has got.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/pipeline/clock" } },
@@ -4715,6 +4721,16 @@ export class GeneratedMethods {
   /** Change a destination in place: a new address with a new stream key, a new reconnect policy, a deeper outage buffer. The address is write only, so a client that only wants the buffer never has to hold the key. */
   outputSet(params: SetOutputRequest): Promise<OutputStatus> {
     return this._call("output.set", params as unknown as Record<string, unknown>) as Promise<OutputStatus>;
+  }
+
+  /** Send to a stopped destination again, with the address and key it kept. */
+  outputStart(params: IdRequest): Promise<OutputStatus> {
+    return this._call("output.start", params as unknown as Record<string, unknown>) as Promise<OutputStatus>;
+  }
+
+  /** Stop sending the programme to one destination and keep it, address, key and all, for output.start. Viewers on that platform see the stream end. */
+  outputStop(params: IdRequest): Promise<OutputStatus> {
+    return this._call("output.stop", params as unknown as Record<string, unknown>) as Promise<OutputStatus>;
   }
 
   /** Make one new folder inside a folder path.list shows, and list it. A folder that is already there is listed rather than refused. */

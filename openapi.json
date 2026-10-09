@@ -7991,13 +7991,22 @@
         ]
       },
       "OutputState": {
-        "enum": [
-          "connecting",
-          "live",
-          "reconnecting",
-          "failed"
-        ],
-        "type": "string"
+        "oneOf": [
+          {
+            "enum": [
+              "connecting",
+              "live",
+              "reconnecting",
+              "failed"
+            ],
+            "type": "string"
+          },
+          {
+            "const": "stopped",
+            "description": "A person stopped it with `output.stop`. Nothing is sent, and the\naddress and key are kept for `output.start`.",
+            "type": "string"
+          }
+        ]
       },
       "OutputStats": {
         "description": "What one output is doing.",
@@ -16537,6 +16546,104 @@
           "output"
         ],
         "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/outputs/{id}/start": {
+      "post": {
+        "description": "JSON-RPC method `output.start`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "output.start",
+        "parameters": [
+          {
+            "description": "The id, as listed by the matching list call.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IdRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OutputStatus"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Send to a stopped destination again, with the address and key it kept.",
+        "tags": [
+          "output"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/outputs/{id}/stop": {
+      "post": {
+        "description": "JSON-RPC method `output.stop`. Needs the `operate` scope. Destructive: accepts `dry_run: true`, and on a token whose policy is `confirm = required` it is refused once with -32020 and a confirm token. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "output.stop",
+        "parameters": [
+          {
+            "description": "The id, as listed by the matching list call.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IdRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OutputStatus"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Stop sending the programme to one destination and keep it, address, key and all, for output.start. Viewers on that platform see the stream end.",
+        "tags": [
+          "output"
+        ],
+        "x-destructive": true,
         "x-idempotent": true,
         "x-scope": "operate"
       }

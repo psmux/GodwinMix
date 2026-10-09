@@ -8164,13 +8164,22 @@
       ]
     },
     "OutputState": {
-      "enum": [
-        "connecting",
-        "live",
-        "reconnecting",
-        "failed"
-      ],
-      "type": "string"
+      "oneOf": [
+        {
+          "enum": [
+            "connecting",
+            "live",
+            "reconnecting",
+            "failed"
+          ],
+          "type": "string"
+        },
+        {
+          "const": "stopped",
+          "description": "A person stopped it with `output.stop`. Nothing is sent, and the\naddress and key are kept for `output.start`.",
+          "type": "string"
+        }
+      ]
     },
     "OutputStats": {
       "description": "What one output is doing.",
@@ -17311,6 +17320,58 @@
       "scope": "operate",
       "since": "1",
       "summary": "Change a destination in place: a new address with a new stream key, a new reconnect policy, a deeper outage buffer. The address is write only, so a client that only wants the buffer never has to hold the key."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "start_output"
+      },
+      "mutating": true,
+      "name": "output.start",
+      "params": {
+        "$ref": "#/$defs/IdRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/outputs/{id}/start"
+      },
+      "result": {
+        "$ref": "#/$defs/OutputStatus"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "Send to a stopped destination again, with the address and key it kept."
+    },
+    {
+      "destructive": true,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": true,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "stop_output"
+      },
+      "mutating": true,
+      "name": "output.stop",
+      "params": {
+        "$ref": "#/$defs/IdRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/outputs/{id}/stop"
+      },
+      "result": {
+        "$ref": "#/$defs/OutputStatus"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "Stop sending the programme to one destination and keep it, address, key and all, for output.start. Viewers on that platform see the stream end."
     },
     {
       "destructive": false,
