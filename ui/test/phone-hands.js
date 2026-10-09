@@ -50,7 +50,30 @@ async function renameOnce() {
   return calls;
 }
 
+/** A long press on the tab of a scene that was not selected. */
+async function tabMenu() {
+  const { default: ScenesPanel } = await import("../panels/scenes/panel.js");
+  const { Selection } = await import("../shell/selection.js");
+  const opened = [];
+  const panel = Object.assign(Object.create(ScenesPanel.prototype), {
+    selection: new Selection(),
+    tiles: new Map([["wide", {}], ["talk", {}]]),
+    paintSelection() {},
+    more: () => Promise.resolve({ menu: (_panel, id) => opened.push([id, _panel.selected()]) }),
+  });
+  const e = new MouseEvent("contextmenu", { cancelable: true });
+  panel.tabMenu("talk", e);
+  const prevented = e.defaultPrevented;
+  await new Promise((r) => setTimeout(r, 0));
+  return { prevented, opened };
+}
+
 export async function phoneHandsTests(test, eq, ok) {
+  const menu = await tabMenu();
+  test("a long press on a scene's tab opens that scene's menu, with the scene selected for it", () => {
+    ok(menu.prevented, "prevented at once, so the lifting finger is not a tap");
+    eq(menu.opened, [["talk", ["talk"]]]);
+  });
   const renames = await renameOnce();
   test("a rename ended with Enter is sent once, not again by the blur that ending it causes", () => {
     eq(renames, ["Stage left"]);
