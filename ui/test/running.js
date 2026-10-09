@@ -172,7 +172,7 @@ export async function runningTests(test, eq, ok) {
     ok(buttons.includes("Start streaming") && !buttons.includes("Reconnect"), buttons.join(","));
   });
   press(outputs, "Start streaming");
-  await until(() => rows.sent.length, "output.start");
-  test("Start streaming sends output.start", () => eq(rows.sent[0], ["output.start", { id: "facebook" }]));
+  await until(() => rows.sent.some(([m]) => m === "output.start"), "output.start");
+  test("Start streaming sends output.start", () => eq(rows.sent.find(([m]) => m === "output.start"), ["output.start", { id: "facebook" }]));
   outputs.remove();
 }

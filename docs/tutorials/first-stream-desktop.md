@@ -52,12 +52,15 @@ the platform's own page to see the picture arrive, which takes a few seconds.
 
 ## 5. Stop
 
-**Quit** in the menu closes the app and stops the mixer with it, which closes
-the destination properly.
+Press the red pill at the top, the one that says "1 destination live". **What
+is running** opens. Press **Stop** beside YouTube, then **Stop streaming** when
+it asks. The destination stays under Outputs with its stream key, and **Start
+streaming** there sends to it again next time.
 
-Closing the window does not stop anything: the window hides, the mixer keeps
-streaming, and the tray icon brings the window back. That is deliberate. A
-broadcast should not end because somebody tidied their desktop.
+Closing the window while something is still live asks what to do: **Stop
+everything and quit**, **Keep running in the background** or **Cancel**. With
+nothing live it simply quits. See
+[stop streaming, and quit](../how-to/stop-streaming-and-quit.md).
 
 ## What next
 

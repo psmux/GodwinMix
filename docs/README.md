@@ -102,6 +102,7 @@ Start here if you have never run it.
 * [Change a setting](how-to/change-a-setting.md)
 * [Debug a show](how-to/debug-a-show.md)
 * [The desktop app](how-to/desktop-app.md)
+* [Stop streaming, and quit without leaving anything running](how-to/stop-streaming-and-quit.md)
 * [Run a show from phones](how-to/run-a-show-from-phones.md): let the network in, scan a code, take shots from a phone
 * [Import your scenes from OBS](how-to/import-from-obs.md)
 * [Make a graphic](how-to/make-a-graphic.md)

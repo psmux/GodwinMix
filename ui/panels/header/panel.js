@@ -85,7 +85,11 @@ class HeaderPanel extends HTMLElement {
     ];
     // What is running, counted and timed on the pill, fetched once the page
     // has drawn: it is not what a first paint waits for.
-    import("./running-watch.js").then((m) => this.offs && this.offs.push(m.watchRunning(this.client, this.destinations)));
+    import("./running-watch.js").then((m) => {
+      const off = m.watchRunning(this.client, this.destinations);
+      if (this.isConnected) this.offs.push(off);
+      else off();
+    });
     // The core's uptime arrives with a snapshot and with nothing else, so the
     // clock counts on from the last one by itself. A number that stands still
     // on a live mixer reads as a page that has hung.
