@@ -44,9 +44,9 @@ pub fn free(base: &str, taken: impl Fn(&str) -> bool) -> String {
 /// An application name must be something every encoder accepts in a URL.
 ///
 /// A single space between words is allowed, because Livebox allowed one and
-/// a channel moved from it keeps the address its encoders already have. OBS
-/// and ffmpeg send the space as typed; an encoder that escapes it sends
-/// `%20`, and the listener decodes that before it compares.
+/// a channel moved from it keeps the address its encoders already have. An
+/// encoder carries it as `%20` (see `in_url`), and the listener decodes
+/// that before it compares.
 pub fn check_app(app: &str) -> Result<(), RpcError> {
     let ok = !app.is_empty()
         && app.len() <= 64
@@ -71,6 +71,15 @@ pub fn check_app(app: &str) -> Result<(), RpcError> {
 /// listener matches the same way, so two channels may not differ only so.
 pub fn same_app(a: &str, b: &str) -> bool {
     a.eq_ignore_ascii_case(b)
+}
+
+/// An application name as an encoder must send it. OBS and ffmpeg end the
+/// address at a raw space and read the rest as options (ffmpeg, given
+/// `rtmp://host/Youth Hall/main`, asks for the application `Youth`), so an
+/// address shown to a person carries the space as `%20`, which the listener
+/// decodes.
+pub fn in_url(app: &str) -> String {
+    app.replace(' ', "%20")
 }
 
 /// The last four characters, for a person to tell keys apart by.

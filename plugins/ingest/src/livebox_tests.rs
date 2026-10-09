@@ -12,6 +12,8 @@ fn table() -> Table {
     Table::from_params(&json!({"channels": [
         {"id": "church", "app": "Church", "enabled": true, "key_mode": "query",
          "keys": [{"id": "livebox", "secret": PASSWORD}]},
+        {"id": "youth-hall", "app": "Youth Hall", "enabled": true, "key_mode": "query",
+         "keys": [{"id": "livebox", "secret": "my hall pw"}]},
     ]}))
 }
 
@@ -56,12 +58,17 @@ fn an_encoder_set_up_for_livebox_is_let_in_unchanged() {
         return;
     };
     let mut lower = publish(&format!("rtmp://127.0.0.1:{port}/church/cam2?psk={PASSWORD}")).unwrap();
+    // A space travels as %20, in the address and in the password; ffmpeg cuts
+    // the address at a raw one.
+    let mut hall = publish(&format!("rtmp://127.0.0.1:{port}/Youth%20Hall/cam?psk=my%20hall%20pw")).unwrap();
     let mut wrong = publish(&format!("rtmp://127.0.0.1:{port}/Church/main2?psk=Sunday-2025")).unwrap();
     let both = wait_for(|| device.hub().is_live("Church", "main") && device.hub().is_live("Church", "cam2"));
+    let spaced = wait_for(|| device.hub().is_live("Youth Hall", "cam"));
     let refused = wrong.wait().map(|s| !s.success()).unwrap_or(false);
-    let _ = (livebox.kill(), lower.kill());
-    let _ = (livebox.wait(), lower.wait());
+    let _ = (livebox.kill(), lower.kill(), hall.kill());
+    let _ = (livebox.wait(), lower.wait(), hall.wait());
     assert!(both, "Church/main and church/cam2 were both let in, under the channel's own spelling");
+    assert!(spaced, "Youth%20Hall arrived as the channel Youth Hall");
     assert!(refused, "a password the channel does not have is still turned away");
     assert!(!device.hub().is_live("Church", "main2"));
 }

@@ -138,13 +138,22 @@ export function keyLabel(channel, keyId) {
 }
 
 /**
+ * A channel address or a key as an encoder must send it. OBS and ffmpeg end
+ * the address at a raw space (whatever follows is read as an option), so a
+ * space moved over from Livebox travels as %20, which the listener decodes.
+ */
+export function inUrl(text) {
+  return String(text || "").replace(/ /g, "%20");
+}
+
+/**
  * What OBS asks for, in the two boxes it has: Server, and Stream Key. OBS puts
  * a slash between them, so the key box carries the stream name and, for a
  * channel that reads the key from the query, the key after it.
  */
 export function obsFields(channel, secret, base, stream = "main") {
-  const server = (base ? base.replace(/\/+$/, "") + "/" + channel.app : channel.publish && channel.publish.server) || "";
-  const key = channel.key_mode === "stream" ? secret : `${stream}?psk=${secret}`;
+  const server = (base ? base.replace(/\/+$/, "") + "/" + inUrl(channel.app) : channel.publish && channel.publish.server) || "";
+  const key = channel.key_mode === "stream" ? inUrl(secret) : `${stream}?psk=${inUrl(secret)}`;
   return { server, key, url: server + "/" + key };
 }
 
@@ -166,7 +175,7 @@ export function bases(model, channel) {
   const urls = (model.rtmp && model.rtmp.urls) || [];
   if (urls.length) return urls;
   const server = (channel.publish && channel.publish.server) || "";
-  return server ? [server.slice(0, server.length - channel.app.length - 1)] : [];
+  return server ? [server.slice(0, server.length - inUrl(channel.app).length - 1)] : [];
 }
 
 /** The words under a tile, which say what to do when there is something to do. */

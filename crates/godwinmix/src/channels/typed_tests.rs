@@ -81,6 +81,14 @@ async fn an_address_that_differs_only_in_case_is_taken() {
     let err = channels.add(add(json!({"name": "church again", "app": "church"}))).unwrap_err();
     assert_eq!(err.data["field"], "app");
     assert_eq!(err.data["channel"], "church", "names the channel that has it: {}", err.message);
+    assert_eq!(err.data["app"], "Church");
+    assert!(err.message.contains("whatever case"), "{}", err.message);
+
+    // A space is kept, and shown as an encoder has to send it.
+    let hall = channels.add(add(json!({"name": "Youth Hall", "app": "Youth Hall"}))).unwrap().channel;
+    assert_eq!((hall.id.as_str(), hall.app.as_str()), ("youth-hall", "Youth Hall"));
+    assert!(hall.publish.server.ends_with("/Youth%20Hall"), "{}", hall.publish.server);
+    assert!(hall.publish.example.ends_with("/Youth%20Hall/main?psk=<key>"), "{}", hall.publish.example);
     std::fs::remove_dir_all(&dir).ok();
 }
 
