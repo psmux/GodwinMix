@@ -4516,6 +4516,21 @@ impl Mixer {
             }
             self.reconnect_output(&id);
         }
+        self.redial_stuck_outputs();
+    }
+
+    /// Rebuild an output that has been down too long with nothing on the way
+    /// to bring it back. See `output::deadline`.
+    fn redial_stuck_outputs(&mut self) {
+        let now = std::time::Instant::now();
+        let stuck: Vec<_> = self.outputs.iter().filter(|o| o.stuck_down(now)).cloned().collect();
+        for out in stuck {
+            let down_s = out.down_for(now).map(|d| d.as_secs()).unwrap_or(0);
+            warn!(output = %out.id(), down_s, "the output has been down with no error and no reconnect on the way; rebuilding it");
+            out.note_stall();
+            self.tell_output_failure(&out);
+            self.reconnect_off_thread(out);
+        }
     }
 
     /// Rebuild an output's pipeline on a thread of its own; see
