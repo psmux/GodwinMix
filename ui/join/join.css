@@ -42,6 +42,9 @@ body.join-page { overflow: auto; }
 
 /* The publisher inside the mixer's page: a card that floats over the
    workspace and stays while the operator works. */
+/* Folded, it sits under dialogs (40), so it never hides the button that
+   finishes one; opened, the operator is reading it and it comes over them.
+   Either way the head drags it somewhere else (shell/float-drag.js). */
 .pub-dock {
   position: fixed; right: 16px; bottom: 16px; z-index: 45; width: 340px; max-width: calc(100vw - 32px);
   background: var(--panel); border: var(--border) solid var(--line); border-radius: var(--radius);
@@ -50,5 +53,6 @@ body.join-page { overflow: auto; }
 .pub-dock-head { padding: 6px var(--pad); border-bottom: var(--border) solid var(--line-soft); cursor: default; }
 .pub-dock-body { padding: var(--pad); overflow: auto; }
 .pub-dock-note:empty { display: none; }
+.pub-dock.min { z-index: 38; width: auto; min-width: 220px; }
 .pub-dock.min .pub-dock-body { display: none; }
 .pub-dock.min .pub-dock-head { border-bottom: 0; }

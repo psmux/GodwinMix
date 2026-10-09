@@ -54,7 +54,11 @@ export function presenceButton(client) {
   onPresence((list) => {
     const here = others(list);
     button.hidden = here.length === 0;
-    button.textContent = here.length === 1 ? "1 other here" : `${here.length} others here`;
+    // The words, and a count a phone's header has room for instead.
+    button.replaceChildren(
+      el("span.presence-n", { text: "+" + here.length }),
+      el("span.presence-words", { text: here.length === 1 ? "1 other here" : `${here.length} others here` })
+    );
     button.title = here.length ? `Also operating this mixer: ${sentence(here)}` : "";
   });
   return button;
