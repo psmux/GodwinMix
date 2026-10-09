@@ -10,13 +10,14 @@ use crate::station::registry::Record;
 use crate::station::state::Station;
 use godwinmix_protocol::destination::StoredDestination;
 use serde_json::{json, Value};
-use std::sync::mpsc::Receiver;
+use crate::channels::transcode::RETRY;
+use std::sync::mpsc::{Receiver, RecvTimeoutError};
 use std::sync::Weak;
 use tracing::warn;
 
 pub fn start(st: Weak<Station>, wake: Receiver<()>) {
     let spawned = std::thread::Builder::new().name("direct-table".into()).spawn(move || {
-        while wake.recv().is_ok() {
+        while woken(&st, &wake) {
             while wake.try_recv().is_ok() {}
             let Some(st) = st.upgrade() else { return };
             let asked = st.direct.asked();
@@ -29,6 +30,22 @@ pub fn start(st: Weak<Station>, wake: Receiver<()>) {
     if let Err(e) = spawned {
         warn!(?e, "no thread for the direct table; shows without compositing will not run");
     }
+}
+
+/// Wait for an ask, and answer whether to build a table: true for an ask,
+/// and true every [`RETRY`] while the governor has turned a rendition away,
+/// so it is asked again once there is room. Before, a direct show's refused
+/// rendition was asked about again only when something else changed, and a
+/// show whose input had settled waited for ever on a machine that had long
+/// since freed up: four minutes on the Windows runner, with the governor
+/// showing two and a half cores free. The channels ask again on the same
+/// clock (`channels::transcode::shed`). False once the station has gone.
+fn woken(st: &Weak<Station>, wake: &Receiver<()>) -> bool {
+    let refused = st.upgrade().is_some_and(|st| st.direct.transcode.refused());
+    if !refused {
+        return wake.recv().is_ok();
+    }
+    !matches!(wake.recv_timeout(RETRY), Err(RecvTimeoutError::Disconnected))
 }
 
 impl Direct {
