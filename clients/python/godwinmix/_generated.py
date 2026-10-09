@@ -585,6 +585,16 @@ ChannelStream = TypedDict("ChannelStream", {
     "video": "Union[StreamVideo, None]",
 }, total=False)
 
+class ChannelThumbnailRequest(TypedDict, total=False):
+    """`channel.thumbnail`."""
+
+    id: str
+    # The channel.
+    stream: Optional[str]
+    # Which of its streams. The first live one when left out.
+    width: Optional[int]
+    # Pixels across, 16 to 640, made even. 320 when left out.
+
 class ConfigChanged(TypedDict, total=False):
     """One key this call changed, and when the change takes effect."""
 
@@ -4095,6 +4105,7 @@ METHODS = (
     {"name": "channel.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/channels"), "summary": 'Every channel with its keys (as hints), the address to publish to over each protocol it has on, and what is live on it; and which ingest ports are open and for which channels.'},
     {"name": "channel.remove", "scope": "admin", "mutating": True, "destructive": True, "rest": ("DELETE", "/api/v1/channels/{id}"), "summary": 'Remove a channel and forget its keys. Sources it made that no scene holds go with it.'},
     {"name": "channel.set", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/channels/{id}/set"), "summary": 'Rename a channel, switch it on or off, or change its application name, whether its streams become sources, how its key is given, which protocols it takes (rtmp, srt, whip) or RTMPS and its port. A port opens when the first channel needs it and closes when the last one stops. Only what is named moves.'},
+    {"name": "channel.thumbnail", "scope": "read", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/channels/{id}/thumbnail"), "summary": "A live channel stream's picture as a small JPEG in base64, {channel, stream, jpeg, width, height, at_ms}, or {pending: true, retry_after_ms} while the first keyframe is on its way. Keyframes only, about one a second, for ten seconds after an ask; nothing is decoded between asks. GET /api/v1/channels/{id}/streams/{stream}/thumbnail.jpg serves the JPEG itself."},
     {"name": "codec.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/codecs"), "summary": 'Every codec and element in the catalogue, which of them this machine actually has, and what it would pick.'},
     {"name": "config.get", "scope": "admin", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/config"), "summary": "The mixer's settings: each key's value in the config file, its default, when a change to it takes effect, and which keys are waiting for a restart. Secrets say only whether one is set."},
     {"name": "config.reset", "scope": "admin", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/config/reset"), "summary": 'Put settings back to their defaults by taking them out of the config file. Answers like config.set.'},
@@ -4631,6 +4642,22 @@ class GeneratedMethods:
         if rtmps is not None:
             params["rtmps"] = rtmps
         return await self._call("channel.set", params)
+
+    async def channel_thumbnail(
+        self,
+        id: str,
+        *,
+        stream: Optional[str] = None,
+        width: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """A live channel stream's picture as a small JPEG in base64, {channel, stream, jpeg, width, height, at_ms}, or {pending: true, retry_after_ms} while the first keyframe is on its way. Keyframes only, about one a second, for ten seconds after an ask; nothing is decoded between asks. GET /api/v1/channels/{id}/streams/{stream}/thumbnail.jpg serves the JPEG itself."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        if stream is not None:
+            params["stream"] = stream
+        if width is not None:
+            params["width"] = width
+        return await self._call("channel.thumbnail", params)
 
     async def codec_list(
         self,

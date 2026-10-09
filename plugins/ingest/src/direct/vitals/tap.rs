@@ -40,6 +40,9 @@ pub struct Tap {
     burst: Vec<MediaTag>,
     /// Unix ms of the last frame offered from a decode that already exists.
     pub offered_at: u64,
+    /// A channel stream somebody asked a picture of, not a show: never
+    /// judged, and let go when the asks stop (`peek.rs`).
+    pub peek: bool,
 }
 
 impl Tap {
@@ -55,6 +58,7 @@ impl Tap {
             last_sound: 0,
             burst: Vec::new(),
             offered_at: 0,
+            peek: false,
         }
     }
 

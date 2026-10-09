@@ -368,6 +368,60 @@ on changes, never on a timer. The Channels page calls `channel.list` every two
 seconds while it is on screen and something is live, which is where its bit
 rates come from.
 
+## `channel.thumbnail`
+
+Read scope. A live stream's picture as a small JPEG, for the Channels page and
+the monitoring wall.
+
+```json
+{"id": "sunday-service", "stream": "main", "width": 320}
+```
+
+`stream` is the first live one when left out. `width` is 16 to 640, made even,
+320 when left out; the height follows the picture's shape. The answer:
+
+```json
+{"channel": "sunday-service", "stream": "main", "jpeg": "/9j/4AAQ...", "width": 320, "height": 180, "at_ms": 1791043200000}
+```
+
+`jpeg` is base64 and `at_ms` is when the keyframe it was decoded from arrived.
+While the first keyframe is on its way the answer is
+`{"channel", "stream", "pending": true, "retry_after_ms": 1000}`.
+
+The ingest plugin makes the picture from the stream it already holds. The
+first ask puts a tap on the stream that decodes keyframes and nothing else,
+about one a second, scales each to the width asked for and keeps the newest
+JPEG. Every ask keeps the tap for ten seconds more; ten seconds after the
+last ask it goes, with its decoder. A channel nobody is looking at is never
+decoded.
+
+| Code | When |
+|---|---|
+| `-32004` | No channel by that id. `data.valid` lists the ids |
+| `-32001` | Nothing is live on it, or not under that stream name. `data.state` is `idle` and `data.live` lists the streams that are; the picture comes once an encoder publishes |
+| `-32001` | The ingest plugin is not running, with why and what to do, or it did not answer: `data.retry_after_ms` |
+
+### `GET /api/v1/channels/{id}/streams/{stream}/thumbnail.jpg?width=320`
+
+The same picture as the JPEG itself, for an `<img>`. Read, with the token as a
+header or `?token=`. `200` with `image/jpeg`; `409` with the error body above
+and `data.retry_after_ms` while the first keyframe is on its way or the
+listener did not answer in three seconds, `409` with `data.state: "idle"` when
+nothing is publishing to that stream, `404` for a channel that is not there.
+A station serves it for its own channels on its control port.
+
+```sh
+curl -s -o main.jpg -H "Authorization: Bearer $TOKEN" \
+  "http://127.0.0.1:8080/api/v1/channels/sunday-service/streams/main/thumbnail.jpg?width=320"
+```
+
+## Hooks
+
+Two hook events follow a channel, configured like any other in
+[hooks](hooks.md): `channel.stream.state` when a stream goes live or leaves,
+and `channel.destination.state` when a destination's state, error or
+reconnect count moves. Neither is built unless a hook asks for it.
+
 ## What a refused publisher is told
 
 | Why | The sentence |

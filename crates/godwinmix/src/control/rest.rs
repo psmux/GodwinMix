@@ -27,6 +27,9 @@ pub fn router(ctx: Ctx, max_upload: usize) -> Router<Ctx> {
             post(upload).layer(DefaultBodyLimit::max(max_upload)),
         )
         .route("/api/v1/snapshot/{id}", get(snapshot))
+        // A live channel stream's picture, for an <img> on the Channels
+        // panel and the wall.
+        .route("/api/v1/channels/{id}/streams/{stream}/thumbnail.jpg", get(channel_thumbnail))
         // An fx item's preview strip, and a pack dropped on the picker.
         .route("/api/v1/fx/{name}/preview.jpg", get(super::fx_rest::preview))
         .route("/api/v1/fx/upload", post(super::fx_rest::upload).layer(DefaultBodyLimit::max(max_upload)))
@@ -360,6 +363,28 @@ async fn gallery_preview(
             jpeg,
         )
             .into_response(),
+        Err(e) => error_response(&e, &trace_id),
+    }
+}
+
+/// `GET /api/v1/channels/{id}/streams/{stream}/thumbnail.jpg?width=320`:
+/// `channel.thumbnail`'s JPEG itself, with the token as a header or
+/// `?token=`.
+async fn channel_thumbnail(
+    State(ctx): State<Ctx>,
+    axum::extract::Path((id, stream)): axum::extract::Path<(String, String)>,
+    Query(q): Query<HashMap<String, String>>,
+    headers: HeaderMap,
+) -> Response {
+    let trace_id = trace_of(&headers, None);
+    let presented = bearer(&headers).or_else(|| q.get("token").cloned());
+    if let Err(f) = ctx.app.tokens.authenticate(presented.as_deref()) {
+        return unauthorised(f.message(), &trace_id);
+    }
+    let width = q.get("width").and_then(|w| w.parse::<u32>().ok());
+    let req = godwinmix_protocol::channels::ChannelThumbnailRequest { id, stream: Some(stream), width };
+    match crate::channels::thumbnail_jpeg(ctx.app.channels.clone(), req).await {
+        Ok(jpeg) => (StatusCode::OK, [(header::CONTENT_TYPE, "image/jpeg"), (header::CACHE_CONTROL, "no-store")], jpeg).into_response(),
         Err(e) => error_response(&e, &trace_id),
     }
 }

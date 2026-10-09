@@ -42,6 +42,24 @@ pub fn register(reg: &mut Registry<Call>) {
     );
     reg.register(
         MethodDef::new(
+            "channel.thumbnail",
+            Scope::Read,
+            "A live channel stream's picture as a small JPEG in base64, {channel, stream, jpeg, \
+             width, height, at_ms}, or {pending: true, retry_after_ms} while the first keyframe \
+             is on its way. Keyframes only, about one a second, for ten seconds after an ask; \
+             nothing is decoded between asks. GET /api/v1/channels/{id}/streams/{stream}/thumbnail.jpg \
+             serves the JPEG itself.",
+            handler(|call: Call, params| async move {
+                let req: ChannelThumbnailRequest = call.params(&params)?;
+                run(&call, move |c| c.thumbnail(&req)).await
+            }),
+        )
+        .params(schema_of::<ChannelThumbnailRequest>)
+        .result(godwinmix_protocol::method::any_object)
+        .mutating(false),
+    );
+    reg.register(
+        MethodDef::new(
             "channel.add",
             Scope::Admin,
             "Make a channel and its first key, which is in this answer. channel.key.reveal \

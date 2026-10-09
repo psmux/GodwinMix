@@ -54,7 +54,7 @@ impl Channels {
         }
     }
 
-    fn went_live(&self, v: &Value) {
+    pub(super) fn went_live(&self, v: &Value) {
         let Some(record) = self.record_for(v) else { return };
         let Some(mut incoming) = Live::from_plugin(v) else { return };
         incoming.channel = record.id.clone();
@@ -75,6 +75,7 @@ impl Channels {
         };
         if fresh {
             info!(channel = %record.id, stream = %incoming.name, from = %incoming.from, "a stream went live");
+            self.hook_stream(&record.id, &incoming.name, "live", Some(&incoming));
             if record.auto_source && record.enabled {
                 self.adopt(&record, &incoming.name, &incoming.relay);
             }
@@ -87,7 +88,7 @@ impl Channels {
         self.announce(&record.id);
     }
 
-    fn went_idle(&self, v: &Value) {
+    pub(super) fn went_idle(&self, v: &Value) {
         let Some(record) = self.record_for(v) else { return };
         let name = v["stream"].as_str().unwrap_or_default().to_string();
         let source = {
@@ -100,6 +101,7 @@ impl Channels {
             source
         };
         info!(channel = %record.id, stream = %name, "a stream left");
+        self.hook_stream(&record.id, &name, "idle", None);
         if let Some(source) = source {
             let gone = self.let_go(&source);
             let mut live = self.live.lock();

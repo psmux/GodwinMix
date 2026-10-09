@@ -50,6 +50,8 @@ pub mod name {
     pub const PLUGIN_STATE: &str = "plugin.state";
     pub const PLUGIN_LOADED: &str = "plugin.loaded";
     pub const PLUGIN_FAILED: &str = "plugin.failed";
+    pub const CHANNEL_STREAM_STATE: &str = "channel.stream.state";
+    pub const CHANNEL_DESTINATION_STATE: &str = "channel.destination.state";
 }
 
 /// Whether a hook of this name is allowed to delay the decision behind it.

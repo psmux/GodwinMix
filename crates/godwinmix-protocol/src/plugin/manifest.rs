@@ -329,6 +329,8 @@ pub const HOOKS: &[&str] = &[
     "plugin.loaded",
     "plugin.failed",
     "plugin.state",
+    "channel.stream.state",
+    "channel.destination.state",
 ];
 
 /// What a `media` stream key may say.
