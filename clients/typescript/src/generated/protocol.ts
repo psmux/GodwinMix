@@ -3180,6 +3180,7 @@ export interface ThumbnailRequest {
  * warning once, and check the fingerprint is this one".
  */
 export interface TlsInfo {
+  authority?: string | null;
   fingerprint: string;
   names?: string[];
   source: string;
