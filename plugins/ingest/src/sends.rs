@@ -184,3 +184,7 @@ impl Drop for Sends {
 #[cfg(test)]
 #[path = "sends/tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "sends/record_tests.rs"]
+mod record_tests;
