@@ -8,10 +8,17 @@ use std::sync::{
     Arc,
 };
 
+/// `parser` is the picture's parser, `h264parse` or `h265parse`. It sits
+/// between the programme's encoder and the muxer because `openh264enc`,
+/// `mfh264enc` and the hardware encoders send byte-stream, which `mp4mux`
+/// and `matroskamux` refuse: the link failed outright on the Windows runner
+/// whose programme encoder was one of those. The parser repacks it as AVC,
+/// as it already does in front of the RTMP muxer.
 pub fn build(
     pipeline: &gst::Pipeline,
     video: &gst::Element,
     audio: &gst::Element,
+    parser: &str,
     path: &Path,
     format: &str,
     bytes: Arc<AtomicU64>,
@@ -34,9 +41,14 @@ pub fn build(
         .property("sync", false)
         .property("async", false)
         .build()?;
-    pipeline.add_many([&mux, &sink])?;
+    let parse = gst::ElementFactory::make(parser)
+        .build()
+        .with_context(|| format!("recording needs {parser}; install the GStreamer bad plugins"))?;
+    pipeline.add_many([&parse, &mux, &sink])?;
     video
-        .link(&mux)
+        .link(&parse)
+        .context("linking encoded picture to its parser")?;
+    crate::plugin::output::link_to_mux(&parse, &mux, &["video_%u"])
         .context("linking encoded picture to the recorder")?;
     audio
         .link(&mux)
