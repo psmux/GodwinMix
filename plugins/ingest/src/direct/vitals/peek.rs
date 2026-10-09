@@ -45,6 +45,9 @@ impl Vitals {
             let mut tap = Tap::new(show, app, stream);
             tap.peek = true;
             taps.insert(id.clone(), tap);
+            // On stderr, which the core logs: a tap is the only cost a
+            // picture has, so its start and end are worth a line each.
+            eprintln!("channel.thumbnail: decoding keyframes of {app}/{stream} for its picture while somebody asks");
         }
         let show = taps[&id].show.clone();
         drop(taps);
@@ -59,7 +62,13 @@ impl Vitals {
     /// Let go of every looked at stream nobody has asked about for
     /// `ASKED_FOR_MS`, and of its hub reader.
     pub(super) fn forget_peeks(&self, now: u64) {
-        lock(&self.taps).retain(|_, t| !t.peek || t.show.wants_jpeg(now));
+        lock(&self.taps).retain(|_, t| {
+            let keep = !t.peek || t.show.wants_jpeg(now);
+            if !keep {
+                eprintln!("channel.thumbnail: stopped decoding {}/{}: nobody asked for its picture in {} s", t.app, t.stream, ASKED_FOR_MS / 1000);
+            }
+            keep
+        });
     }
 
     /// How many channel streams are being looked at now.
