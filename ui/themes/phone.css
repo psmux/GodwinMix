@@ -23,6 +23,10 @@ gmx-shell.phone .slot-header { border-bottom: 1px solid var(--line-soft); }
 .phone-frame {
   flex: 0 0 auto; min-width: 0;
   background: var(--panel); border: 1px solid var(--line-soft); border-radius: 14px; overflow: hidden;
+  /* Clip, not hidden, where the browser has it: hidden made the frame a
+     scroll container of its own, so Take, sticky to the foot of the screen,
+     stuck to the foot of this frame instead and scrolled off with it. */
+  overflow: clip;
 }
 .phone-frame > * { display: block; }
 
