@@ -354,6 +354,18 @@ body:has(> gmx-shell.phone) .source-choice { padding-right: 8px; }
 body:has(> gmx-shell.phone) .source-choice > .grow { flex: 1 1 100%; }
 body:has(> gmx-shell.phone) .source-choice > .btn { flex: 1 1 0; }
 
+/* A tile's name bar: the name gives way, never the grip or the gear. On a
+   360 pixel phone the gear was squeezed to 19 pixels, too narrow to hit. */
+.phone-frame .tile .bar > :is(.drag-handle, .dot, .gear) { flex: none; }
+.phone-frame .tile .bar > .gear { width: 44px; }
+.phone-frame .tile .bar > .name { min-width: 0; }
+/* The scene chips on Sources, the warning mark on a scene card and Copy on
+   a channel: each up to a finger's 44 pixels. */
+.src-scene { height: 44px; border-radius: 22px; }
+.phone-deck .scene-tabs .scene-tab > .scene-warn::before { content: ""; position: absolute; inset: 0 -13px; }
+.phone-deck .scene-tabs .scene-tab > .scene-warn { position: absolute; }
+body:has(> gmx-shell.phone) .chn-copy { min-width: 44px; justify-content: center; }
+
 /* Who else is here: a small pill with a finger sized target round it. */
 gmx-shell.phone .header .presence { position: relative; }
 gmx-shell.phone .header .presence::before { content: ""; position: absolute; inset: -7px -4px; }
@@ -381,7 +393,7 @@ gmx-shell.phone .header .presence::before { content: ""; position: absolute; ins
   gmx-shell.phone .header .tally { order: 2; height: 36px; }
   gmx-shell.phone .header .hdr-meter { order: 3; }
   gmx-shell.phone .header .hdr-uptime { order: 4; }
-  gmx-shell.phone .header .menubar-all { width: 38px; height: 38px; }
+  gmx-shell.phone .header .menubar-all { width: 44px; height: 44px; }
   .dock-workspace.phone-deck { padding: 10px max(12px, env(safe-area-inset-right)) 12px 12px; gap: 10px; }
   gmx-shell.phone[data-phone-page="live"] .dock-workspace.phone-deck {
     display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); align-items: start;
