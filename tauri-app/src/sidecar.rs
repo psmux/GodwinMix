@@ -123,7 +123,7 @@ pub async fn start_on(app: &AppHandle, port: u16) -> Result<Local, String> {
 
     let (rx, child) = command.spawn().map_err(|e| format!("the mixer would not start: {e}"))?;
     let stopped = Arc::new(AtomicBool::new(false));
-    record(app.clone(), rx, log.clone(), stopped.clone());
+    record(app.clone(), rx, log.clone(), stopped.clone(), child.pid());
     let local = Local { target, port, log, child: Some(child), stopped };
 
     match wait_until_answering(app, &local).await {
@@ -248,11 +248,12 @@ fn log_file(app: &AppHandle) -> Result<PathBuf, String> {
 
 /// Pipe the daemon's output into the log file, and notice when it exits.
 /// An exit with `RESTART_EXIT_CODE` is the mixer asking to be started again
-/// (`core.restart`), and it is.
+/// (`core.restart`), and it is. Any other exit this app did not cause is a
+/// crash, and `revive` decides whether to start it again.
 ///
 /// A task rather than the main thread: the daemon writes a line per source
 /// event and the shell must never be the reason a write blocks.
-fn record(app: AppHandle, mut rx: tauri::async_runtime::Receiver<CommandEvent>, path: PathBuf, stopped: Arc<AtomicBool>) {
+fn record(app: AppHandle, mut rx: tauri::async_runtime::Receiver<CommandEvent>, path: PathBuf, stopped: Arc<AtomicBool>, pid: u32) {
     tauri::async_runtime::spawn(async move {
         let mut file = OpenOptions::new().create(true).append(true).open(&path).ok();
         let mut put = |bytes: &[u8]| {
@@ -280,7 +281,7 @@ fn record(app: AppHandle, mut rx: tauri::async_runtime::Receiver<CommandEvent>, 
                         Some(crate::restart::RESTART_EXIT_CODE) => crate::restart::after_exit(app.clone()),
                         Some(crate::restart::SHARE_EXIT_CODE) => crate::restart::after_network_exit(app.clone(), true),
                         Some(crate::restart::LOCAL_EXIT_CODE) => crate::restart::after_network_exit(app.clone(), false),
-                        _ => {}
+                        code => crate::revive::after_exit(&app, pid, code),
                     }
                     break;
                 }
