@@ -3,7 +3,7 @@
 // file as it arrives; Watch link serves it as HLS from the mixer's own port.
 // Both copy the stream, so neither costs an encode.
 
-import { el, on } from "../../shell/dom.js";
+import { el, on, coarse } from "../../shell/dom.js";
 import { modal, confirmModal } from "../../shell/modal.js";
 import { toast, errorToast } from "../../shell/toast.js";
 import { brandMark } from "./brands.js";
@@ -73,7 +73,8 @@ export function addLocal(view, channel, id) {
     const when = isLive(channel) ? "It starts now." : `It starts when an encoder sends to ${channel.name}.`;
     toast({ text: id === "file" ? `Recording ${channel.name}. ${when}` : `Watch link made. ${when}` });
   };
-  (folder || start).focus();
+  if (!folder) start.focus();
+  else if (!coarse()) folder.focus();
   return m;
 }
 
