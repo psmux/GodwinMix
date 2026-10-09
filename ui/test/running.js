@@ -167,7 +167,7 @@ export async function runningTests(test, eq, ok) {
   outputs.setClient(rows);
   document.body.append(outputs);
   test("a stopped destination says so and offers Start streaming, not Reconnect", () => {
-    ok(outputs.textContent.includes("Stopped, stream key kept"), outputs.textContent);
+    ok(outputs.textContent.includes("Stopped") && outputs.textContent.includes("stream key are kept"), outputs.textContent);
     const buttons = [...outputs.querySelectorAll("button")].map((b) => b.textContent);
     ok(buttons.includes("Start streaming") && !buttons.includes("Reconnect"), buttons.join(","));
   });
