@@ -11,7 +11,8 @@ import { errorToast } from "../../shell/toast.js";
 import { platform } from "../../client/destinations.js";
 import { brandMark } from "./brands.js";
 import { keyed, write } from "./keyed.js";
-import { tileState, ringState } from "./model.js";
+import { tileState, ringState, startedAt } from "./model.js";
+import { bulkButton } from "./bulk.js";
 import { addDestination, editDestination } from "./destination-form.js";
 import { waitingNote } from "./to-programme.js";
 
@@ -30,8 +31,14 @@ export function destinationStrip(view, first) {
   const lede = el("span.chn-dim");
   // What a channel is for, while it has somewhere to go and nothing to send.
   const waiting = waitingNote(view);
+  const bulk = bulkButton(view, () => channel);
   const node = el("section.chn-dist", {}, [
-    el("div.chn-disthead", {}, [el("span.chn-kicker", { text: "Send on to" }), lede]),
+    el("div.chn-disthead", {}, [
+      el("span.chn-kicker", { text: "Send on to" }),
+      el("span.chn-aka", { text: "(push destinations)" }),
+      lede,
+      bulk,
+    ]),
     tiles,
     waiting.node,
     quick,
@@ -51,7 +58,9 @@ export function destinationStrip(view, first) {
   }
 
   update(first);
-  return { node, update };
+  // A live tile's duration moves with the panel's one second clock.
+  const tick = () => { for (const t of rows.values()) t.tick(); };
+  return { node, update, tick };
 }
 
 function quickTile(view, getChannel, id) {
@@ -71,6 +80,7 @@ function moreTile(view, getChannel) {
 
 function destinationTile(view, getChannel) {
   let dest = null;
+  let began = 0;
   const ring = el("span.chn-ring");
   const label = el("span.chn-tlabel");
   const words = el("span.chn-tstate");
@@ -90,7 +100,9 @@ function destinationTile(view, getChannel) {
       if (!ring.firstChild) ring.appendChild(brandMark(d.platform, 34));
       node.dataset.state = ringState(d);
       write(label, "textContent", d.label || p.title);
-      write(words, "textContent", tileState(d));
+      const seen = view.model && view.model.seenAt.get(getChannel().id + "#" + d.id);
+      began = d.state === "live" && d.since_ms != null ? startedAt(d.since_ms, seen) : 0;
+      write(words, "textContent", tileState(d, began));
       write(box, "checked", !!d.enabled);
       // What the planner made of it: "Copied", or the encoder, whole on hover.
       const id = getChannel().id;
@@ -103,6 +115,9 @@ function destinationTile(view, getChannel) {
       write(error, "textContent", why);
       error.hidden = !error.textContent;
       node.title = why ? `${p.title}: ${why}` : `${p.title}, ${tileState(d).toLowerCase()}`;
+    },
+    tick() {
+      if (began) write(words, "textContent", tileState(dest, began));
     },
   };
 }

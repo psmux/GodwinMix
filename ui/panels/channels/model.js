@@ -39,6 +39,8 @@ export class Channels {
   put(channel, now = Date.now()) {
     if (!channel || !channel.id) return;
     this.byId.set(channel.id, channel);
+    // A destination's since_ms is how long ago, as of this answer.
+    for (const d of channel.destinations || []) this.seenAt.set(channel.id + "#" + d.id, now);
     for (const s of channel.streams || []) {
       const key = channel.id + "/" + s.name;
       this.seenAt.set(key, now);
@@ -178,14 +180,17 @@ export function bases(model, channel) {
   return server ? [server.slice(0, server.length - inUrl(channel.app).length - 1)] : [];
 }
 
-/** The words under a tile, which say what to do when there is something to do. */
-export function tileState(d) {
+/**
+ * The words under a tile, which say what to do when there is something to do.
+ * A live one says for how long when `began` (epoch ms) is known.
+ */
+export function tileState(d, began = 0, now = Date.now()) {
   if (!d.enabled || d.state === "off") return "Off";
   if (d.has_key === false && d.platform !== "srt" && d.platform !== "custom") return "Needs a key";
   switch (d.state) {
     case "waiting": return "Waits for the stream";
     case "connecting": return "Connecting";
-    case "live": return d.kbps ? `Live, ${fmtKbps(d.kbps)}` : "Live";
+    case "live": return ["Live", d.kbps ? fmtKbps(d.kbps) : "", began ? fmtUptime(now - began) : ""].filter(Boolean).join(", ");
     case "reconnecting": return d.reconnects ? `Trying again (${d.reconnects})` : "Trying again";
     case "failed": return "Stopped";
     default: return d.state || "";

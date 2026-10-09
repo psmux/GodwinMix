@@ -47,6 +47,41 @@ and if that one stops while another is still live, it moves on to that one.
 
 The key is never shown again after it is saved.
 
+Livebox and similar servers call these push destinations, and the strip says
+so in small letters under its heading.
+
+## Paste several addresses at once
+
+To add a list of destinations in one go (the "Bulk RTMP url" box in Livebox),
+press **Bulk actions** at the right of the Send on to heading and choose
+**Paste several addresses**. Put one destination on each line:
+
+```
+rtmp://a.rtmp.youtube.com/live2 xxxx-xxxx-xxxx-xxxx
+rtmps://live-api-s.facebook.com:443/rtmp/FB-123456?s_bl=1
+rtmp://10.0.0.9:1935/live/hall
+srt://10.0.0.9:9000?passphrase=longsecretphrase
+```
+
+The stream key goes either on the end of the address or after a space.
+Addresses start with `rtmp://`, `rtmps://` or `srt://`; an SRT line takes no
+key. Empty lines and lines starting with `#` are skipped.
+
+**Add them** adds each line as its own destination, switched on, in order. A
+line that could not be added is listed with its number and the reason the
+page or the mixer gave, for instance `Line 2: No stream key. Put it on the end
+of the address or after a space.` Adding does not dial anything: a server that
+does not answer shows on its tile afterwards, as below. Only those
+lines are left in the box, so fixing them and pressing again does not add
+the good ones twice.
+
+Every line is added as Custom RTMP (or SRT), named after its server: YouTube,
+Facebook and the other platforms by their own names, anything else by its host,
+such as `10.0.0.9`. The tile shows the custom mark rather than the platform's.
+Press a tile to rename it. The palette offers the same
+dialog as **Paste several push addresses**, and asks which channel when there
+is more than one.
+
 ## Read the tiles
 
 Each destination is a tile with the platform's mark in a ring, and a switch.
@@ -56,7 +91,7 @@ Each destination is a tile with the platform's mark in a ring, and a switch.
 | Off | grey | switched off with its switch |
 | Waits for the stream | dashed | on, and nothing is being published to the channel yet |
 | Connecting | amber, turning | dialling the platform |
-| Live, 2.6 Mb/s | green | sending, at that rate |
+| Live, 2.6 Mb/s, 1:02:13 | green | sending, at that rate, for that long |
 | Trying again | amber, turning slowly | the platform went away and is being dialled again |
 | Stopped | red | the platform refused the key three times and it has stopped asking |
 | Needs a key | red | a platform that needs a key has none |
@@ -121,6 +156,12 @@ is, but not converted.
 
 The switch on a tile turns that destination on or off without opening
 anything. Off, it stops sending and keeps its key.
+
+**Bulk actions** on the Send on to heading has **Start all** and **Stop all**,
+the Turn ON all and Turn OFF all of Livebox. They flip each destination's
+switch in turn and leave alone the ones already that way. Stop all asks once
+first when any destination is live, saying how many. One that could not be
+switched is named in a message, and the rest are still done.
 
 Press the tile itself to rename it, change which stream it sends, give it
 another server, replace its key or **Remove** it. Leave the key box alone and

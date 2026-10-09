@@ -70,7 +70,9 @@ function line(label, value, read, hidden) {
     const text = await read();
     if (text) copy(button, text);
   };
-  return el("div.chn-obsrow", {}, [el("span.chn-obslabel", { text: label }), el("div.chn-obsval", {}, [code, button])]);
+  // A Livebox user, and most encoders, call the RTMP server the Stream URL.
+  const tip = label === "Server" && /^rtmps?:/.test(value) ? "Called Stream URL in Livebox and most encoders" : null;
+  return el("div.chn-obsrow", {}, [el("span.chn-obslabel", { text: label, title: tip }), el("div.chn-obsval", {}, [code, button])]);
 }
 
 function qrOf(url) {
