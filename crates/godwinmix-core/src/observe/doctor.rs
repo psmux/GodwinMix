@@ -500,7 +500,7 @@ fn free_bytes(_dir: &Path) -> Option<u64> {
 
 /// Physical memory in bytes, or `None` where we cannot ask.
 #[cfg(target_os = "linux")]
-fn total_memory_bytes() -> Option<u64> {
+pub(crate) fn total_memory_bytes() -> Option<u64> {
     let text = std::fs::read_to_string("/proc/meminfo").ok()?;
     let line = text.lines().find(|l| l.starts_with("MemTotal:"))?;
     let kb: u64 = line.split_whitespace().nth(1)?.parse().ok()?;
@@ -508,7 +508,7 @@ fn total_memory_bytes() -> Option<u64> {
 }
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]
-fn total_memory_bytes() -> Option<u64> {
+pub(crate) fn total_memory_bytes() -> Option<u64> {
     let name = std::ffi::CString::new("hw.memsize").ok()?;
     let mut value: u64 = 0;
     let mut len = std::mem::size_of::<u64>();
@@ -527,7 +527,7 @@ fn total_memory_bytes() -> Option<u64> {
 }
 
 #[cfg(windows)]
-fn total_memory_bytes() -> Option<u64> {
+pub(crate) fn total_memory_bytes() -> Option<u64> {
     #[repr(C)]
     struct MemoryStatusEx {
         length: u32,
@@ -554,7 +554,7 @@ fn total_memory_bytes() -> Option<u64> {
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "ios", windows)))]
-fn total_memory_bytes() -> Option<u64> {
+pub(crate) fn total_memory_bytes() -> Option<u64> {
     None
 }
 

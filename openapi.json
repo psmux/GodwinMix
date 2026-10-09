@@ -538,7 +538,8 @@
           "loss",
           "output-failed",
           "governor-refused",
-          "shed"
+          "shed",
+          "memory"
         ],
         "type": "string"
       },
@@ -6026,7 +6027,7 @@
           },
           {
             "const": "alarm",
-            "description": "Something a viewer notices, or nothing is going out: no input, a\nstall, black, a frozen picture, silence, a failed output, a rendition\nthe governor refused or shed.",
+            "description": "Something a viewer notices, or nothing is going out: no input, a\nstall, black, a frozen picture, silence, a failed output, a rendition\nthe governor refused or shed, a show past its memory guard.",
             "type": "string"
           },
           {
