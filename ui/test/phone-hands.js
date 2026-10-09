@@ -24,7 +24,38 @@ function pointer(finger, fn) {
   try { return fn(); } finally { window.matchMedia = real; }
 }
 
-export function phoneHandsTests(test, eq, ok) {
+/** A rename typed into a tile's name and ended with Enter, then the blur. */
+async function renameOnce() {
+  const { default: SourcesPanel } = await import("../panels/sources/panel.js");
+  const name = document.createElement("span");
+  name.textContent = "Cam";
+  document.body.append(name);
+  const calls = [];
+  const panel = Object.assign(Object.create(SourcesPanel.prototype), {
+    tiles: new Map([["cam", { name }]]),
+    // Never answers, so nothing after the call (undo, a toast) runs in the test page.
+    client: { state: {}, call: (_method, params) => { calls.push(params.name); return new Promise(() => {}); } },
+    render() {},
+  });
+  try {
+    panel.beginRename("cam");
+    name.textContent = "Stage left";
+    name.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    name.blur();
+    name.dispatchEvent(new FocusEvent("blur"));
+    await new Promise((r) => setTimeout(r, 0));
+  } finally {
+    name.remove();
+  }
+  return calls;
+}
+
+export async function phoneHandsTests(test, eq, ok) {
+  const renames = await renameOnce();
+  test("a rename ended with Enter is sent once, not again by the blur that ending it causes", () => {
+    eq(renames, ["Stage left"]);
+  });
+
   test("the composer's chips show one group of tools at a time, named as the groups are", () => {
     const groups = [group("Align", ["Left", "Right"]), group("Size", ["Fit the canvas"])];
     const chips = toolTabs(groups);

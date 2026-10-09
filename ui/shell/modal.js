@@ -65,7 +65,7 @@ export function opening(box) {
   if (!first || !coarse()) return first;
   const typed = "textarea, input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]):not([type=file])";
   if (box.querySelectorAll(typed).length <= 1) return first;
-  return box.querySelector("footer button.primary, footer button, button");
+  return box.querySelector("footer button.primary") || box.querySelector("footer button") || first;
 }
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
