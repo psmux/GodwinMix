@@ -394,8 +394,10 @@ stream.
 ## Destinations
 
 A channel's destinations are where its stream is sent on to as it arrives:
-YouTube, Facebook, Twitch, any RTMP or RTMPS server, or an SRT receiver. The
-publisher's own bytes are remuxed and sent. Nothing is decoded or encoded, so
+YouTube, Facebook, Twitch, any RTMP or RTMPS server, or an SRT receiver; or
+kept on this machine, as a recording (`file`) or a watch link (`hls`), see
+[Record and Watch link](#record-and-watch-link). The publisher's own bytes are
+remuxed and sent. Nothing is decoded or encoded, so
 a destination costs a socket and a little memory, not a CPU core, unless it
 asks for a rendition of its own (see below).
 
@@ -411,9 +413,9 @@ its `destinations` list as below. A core started with `--rehearsal` refuses
 | Param | | |
 |---|---|---|
 | `id` | required | the channel |
-| `platform` | required | `youtube`, `facebook`, `twitch`, `instagram`, `kick`, `linkedin`, `x`, `tiktok`, `custom` or `srt` |
+| `platform` | required | `youtube`, `facebook`, `twitch`, `instagram`, `kick`, `linkedin`, `x`, `tiktok`, `custom` or `srt`; or `file` or `hls` |
 | `label` | optional | what the list calls it. The platform's name when left out |
-| `server` | optional | the ingest address. Left out, the platform's own. `custom` and `srt` need one |
+| `server` | optional | the ingest address. Left out, the platform's own. `custom` and `srt` need one. For `file` a folder, for `hls` the link's params |
 | `key` | optional | the stream key. Write only |
 | `stream` | optional | which of the channel's streams to send. `*`, the default, is the one live longest, and when it leaves, the next one still live |
 | `enabled` | optional | `true` unless given |
@@ -547,6 +549,8 @@ touched. It is destructive, so `dry_run: true` answers what it would stop.
 | `rendition` | what it asked to be converted to; absent for a plain copy |
 | `plan` | what the plan gave it, while its stream is live; absent for a plain copy |
 | `refused` | why it is not sending what it asked for, and what would fit; absent otherwise |
+| `file` | a recording's file: `name`, `path`, `bytes`, `duration_ms`, and `open` while it is written. The last file stays after the stream stops. Absent on every other platform |
+| `playback` | a watch link's `master_url_path`, `dash_url_path` and `viewers`. Absent on every other platform |
 
 The states:
 
@@ -566,6 +570,45 @@ first, then nothing until a keyframe, so a platform never sees a picture it
 cannot decode. A destination that falls behind loses whole GOPs from the
 front of its own queue and starts again at the next keyframe; the publisher
 and the other destinations do not wait for it.
+
+### Record and Watch link
+
+Two platforms keep the stream on this machine. Neither has a key or a far
+end, and neither converts anything: a `rendition` on either is refused with
+`data.field: "rendition"`.
+
+| Platform | Title | `server` | What it does |
+|---|---|---|---|
+| `file` | Record | a folder on the mixer, as `D:/Recordings` or `file:///srv/recordings`. Left out, `Videos/GodwinMix` in the home folder of the user the mixer runs as, the folder `record/output` uses | writes the stream as MPEG-TS, copied, to `<channel>-<stream>-<yyyymmdd-hhmmss>.ts` in that folder, with the local time the file opened |
+| `hls` | Watch link | `hls://` with params, as `hls://?segment_ms=2000&window=6&low_latency=true`, or left out for the defaults. The params are an `hls/output`'s, see [hls-output.md](hls-output.md) | packages the stream as HLS, copied, and serves it from the control port |
+
+A recording starts a new file every time its stream goes live, and closes
+the file when the stream stops or the destination is switched off. MPEG-TS
+needs no index, so a file cut short by a power cut still plays. Its `uri_host`
+is the folder. `state` is `live` while it writes; `file.bytes` and
+`file.duration_ms` move with every `channel.get`.
+
+A watch link is packaged by the station's HLS packager, the process a show
+without compositing uses for its `hls://` output, and it runs only while a
+watch link or such an output is switched on. It reads the stream from the
+listener's loopback relay, so nothing is decoded. Its link is
+
+```
+/hls/channel/<channel>/<destination>/index.m3u8?key=<viewer key>
+```
+
+with `manifest.mpd` beside `index.m3u8` for DASH. The viewer key opens this
+one link and nothing else on the mixer, so the link needs no control token;
+it is made from the channel and the destination's id with this machine's
+secret key, so it is the same after a restart. `playback.viewers` counts the
+players that fetched something in the last two windows. A request with a
+wrong key is answered 401; one for a link the channel does not have, 404
+with the links it has.
+
+HLS carries H.264 or HEVC and AAC. A stream with other sound or picture is
+`failed` with an `error` that names the codec and says to change the encoder,
+since the link converts nothing. Under a single process core with no station,
+a watch link is `failed` with a sentence saying it needs the station.
 
 The platform servers are in `godwinmix_protocol::destination::PLATFORMS`.
 The web page's form keeps its own copy in `ui/client/destinations.js`, and a

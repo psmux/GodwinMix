@@ -123,6 +123,7 @@ Start here if you have never run it.
 * [Take headend feeds into direct shows](how-to/headend-feeds.md)
 * [Watch many shows at once](how-to/monitor-many-shows.md)
 * [Send a channel on to YouTube, Facebook or Twitch](how-to/restream-a-channel.md)
+* [Record a channel and share a watch link](how-to/record-a-channel.md)
 * [Save and open a project](how-to/save-and-open-a-project.md)
 * [Send in several formats](how-to/send-in-several-formats.md)
 * [Receive and send MPEG-TS over UDP and multicast](how-to/udp-and-multicast.md)

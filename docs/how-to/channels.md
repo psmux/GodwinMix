@@ -297,6 +297,7 @@ See [the reference](../reference/channels.md#a-publisher-that-went-away-without-
 ## Where to go next
 
 * [Send a channel on to YouTube, Facebook or Twitch](restream-a-channel.md)
+* [Record a channel and share a watch link](record-a-channel.md)
 * [The channel reference](../reference/channels.md), every method and field
 * [Receive a phone or an OBS stream](receive-a-phone-or-obs-stream.md), for one encoder on a port of its own
 * [Install a plugin](install-a-plugin.md)
