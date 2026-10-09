@@ -3589,6 +3589,8 @@ class ThumbnailRequest(TypedDict, total=False):
 class TlsInfo(TypedDict, total=False):
     """`core.info.tls`: what the control port answers HTTPS with. Enough for a page to say "open this address, accept the certificate warning once, and check the fingerprint is this one"."""
 
+    authority: Optional[str]
+    # SHA-256 of the machine's local certificate authority, which signed a certificate this mixer made and is what a phone is told to trust. Its certificate is served at `/ca.crt`. Absent for an operator's own.
     fingerprint: str
     # SHA-256 of the certificate, upper case hex in colon separated pairs, the way a browser's certificate viewer shows it.
     names: List[str]

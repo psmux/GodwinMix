@@ -5716,6 +5716,11 @@ pub struct ThumbnailRequest {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct TlsInfo {
+    /// SHA-256 of the machine's local certificate authority, which signed a
+    /// certificate this mixer made and is what a phone is told to trust. Its
+    /// certificate is served at `/ca.crt`. Absent for an operator's own.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub authority: Option<String>,
     /// SHA-256 of the certificate, upper case hex in colon separated pairs,
     /// the way a browser's certificate viewer shows it.
     pub fingerprint: String,
