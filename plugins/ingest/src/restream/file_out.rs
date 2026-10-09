@@ -5,6 +5,11 @@
 //! `file:///recordings/bbc-one.ts`. A file already there is never written
 //! over: the new one gets the time it started in its name. Each
 //! connection (a reconnect after a full disk, say) starts a new file.
+//!
+//! A channel's `file` destination names its files with `{time}` in the
+//! address (`file:///C:/Videos/GodwinMix/sunday-main-{time}.ts`), which
+//! becomes the local time the file was opened, `20261009-103000`, so every
+//! time the stream goes live there is a new file named for when it began.
 
 use std::fs::{File, OpenOptions};
 use std::io::{BufWriter, Write};
@@ -24,10 +29,25 @@ pub struct FileLink {
 }
 
 /// The path out of `file:///a/b.ts`, or the address itself when it has no
-/// scheme.
+/// scheme. `file:///C:/a/b.ts` is `C:/a/b.ts`: the slash before a drive
+/// letter is the URL's, not the path's.
 pub fn path_of(url: &str) -> PathBuf {
     let p = url.strip_prefix("file://").unwrap_or(url);
-    PathBuf::from(p.split('?').next().unwrap_or(p))
+    let p = p.split('?').next().unwrap_or(p);
+    let drive = p.as_bytes();
+    let p = if drive.len() > 2 && drive[0] == b'/' && drive[1].is_ascii_alphabetic() && drive[2] == b':' { &p[1..] } else { p };
+    PathBuf::from(p)
+}
+
+/// The local time now, as a file name carries it: `20261009-103000`.
+pub fn stamp() -> String {
+    glib::DateTime::now_local()
+        .and_then(|now| now.format("%Y%m%d-%H%M%S"))
+        .map(|s| s.to_string())
+        .unwrap_or_else(|_| {
+            let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+            secs.to_string()
+        })
 }
 
 /// `path`, or, when that is taken, the same name with the time in it.
@@ -51,7 +71,7 @@ fn free(path: &Path) -> PathBuf {
 
 impl FileLink {
     pub fn dial(target: &Target) -> Result<FileLink, Failure> {
-        let wanted = path_of(&target.url);
+        let wanted = path_of(&target.url.replace("{time}", &stamp()));
         if wanted.as_os_str().is_empty() || wanted.is_dir() {
             return Err(Failure::Refused(format!(
                 "'{}' is not a file to record to. Give the whole path with a name, as in file:///recordings/show.ts",
@@ -88,10 +108,34 @@ impl Link for FileLink {
     fn close(&mut self) {
         let _ = self.out.flush();
     }
+
+    fn file(&self) -> Option<&Path> {
+        Some(&self.path)
+    }
 }
 
 impl Drop for FileLink {
     fn drop(&mut self) {
         let _ = self.out.flush();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_drive_letter_keeps_its_place_and_a_unix_path_its_slash() {
+        assert_eq!(path_of("file:///C:/Videos/a.ts"), PathBuf::from("C:/Videos/a.ts"));
+        assert_eq!(path_of("file:///recordings/a.ts?x=1"), PathBuf::from("/recordings/a.ts"));
+        assert_eq!(path_of("D:/rec/a.ts"), PathBuf::from("D:/rec/a.ts"));
+    }
+
+    #[test]
+    fn the_stamp_is_the_date_then_the_time_to_the_second() {
+        let s = stamp();
+        assert_eq!(s.len(), 15, "{s}");
+        assert_eq!(&s[8..9], "-", "{s}");
+        assert!(s.chars().filter(|c| *c != '-').all(|c| c.is_ascii_digit()), "{s}");
     }
 }

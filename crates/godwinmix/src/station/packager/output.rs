@@ -45,7 +45,7 @@ pub enum End {
 
 impl Packager {
     /// Start one. With no source yet it runs nothing, waits, and says why.
-    pub fn start(stream: Arc<Stream>, source: Option<Source>, why_not: Option<String>, sound: impl Fn(&str) -> String + Send + 'static) -> Packager {
+    pub fn start(stream: Arc<Stream>, source: Option<Source>, why_not: Option<String>, sound: impl Fn(bool, &str) -> String + Send + 'static) -> Packager {
         let (stop, board) = (Arc::new(AtomicBool::new(false)), Arc::new(Board::default()));
         let Some(src) = source else {
             board.set(S::Waiting, why_not);
@@ -71,7 +71,7 @@ impl Drop for Packager {
     }
 }
 
-fn run(src: &Source, stream: &Arc<Stream>, board: &Board, stop: &AtomicBool, sound: &dyn Fn(&str) -> String) {
+fn run(src: &Source, stream: &Arc<Stream>, board: &Board, stop: &AtomicBool, sound: &dyn Fn(bool, &str) -> String) {
     let mut ever = false;
     while !stop.load(Ordering::Relaxed) {
         if board.state() != S::Failed {

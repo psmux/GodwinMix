@@ -95,7 +95,13 @@ impl Sender {
                         self.board.reconnected();
                     }
                     (ever, attempt, refusals) = (true, 0, 0);
-                    match self.pump(link, pending.take()) {
+                    if let Some(path) = link.file() {
+                        self.board.opened(path);
+                    }
+                    let end = self.pump(link, pending.take());
+                    // The link is dropped by now, so a recording is closed.
+                    self.board.closed();
+                    match end {
                         End::Stopped => return,
                         End::Closed => return self.board.state(S::Waiting),
                         End::Lost(f) => f,

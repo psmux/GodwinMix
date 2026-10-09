@@ -20,7 +20,7 @@ struct Learned {
     session: Option<Session>,
 }
 
-pub(super) fn session(mut reader: flv::Reader, stream: &Arc<Stream>, board: &Board, stop: &AtomicBool, sound: &dyn Fn(&str) -> String) -> End {
+pub(super) fn session(mut reader: flv::Reader, stream: &Arc<Stream>, board: &Board, stop: &AtomicBool, sound: &dyn Fn(bool, &str) -> String) -> End {
     let mut at = Learned::default();
     loop {
         if stop.load(Ordering::Relaxed) {
@@ -47,12 +47,9 @@ pub(super) fn session(mut reader: flv::Reader, stream: &Arc<Stream>, board: &Boa
 
 /// One tag: learn a header, start the pipeline at the first keyframe, push
 /// a frame. Answers how the connection ends, when this tag ends it.
-fn take(at: &mut Learned, stream: &Arc<Stream>, tag: &Tag, read: &Read, board: &Board, sound: &dyn Fn(&str) -> String) -> Option<End> {
+fn take(at: &mut Learned, stream: &Arc<Stream>, tag: &Tag, read: &Read, board: &Board, sound: &dyn Fn(bool, &str) -> String) -> Option<End> {
     match (read, tag.kind) {
-        (Read::Unsupported(codec), Kind::Audio) => return Some(End::Refused(sound(codec))),
-        (Read::Unsupported(codec), _) => {
-            return Some(End::Refused(format!("the input's picture is {codec}, which HLS here does not carry. Ask the output for a rendition in H.264.")))
-        }
+        (Read::Unsupported(codec), kind) => return Some(End::Refused(sound(kind == Kind::Audio, codec))),
         (Read::Header(c), kind) => {
             let slot = if kind == Kind::Video { &mut at.video } else { &mut at.audio };
             let moved = slot.as_ref().is_some_and(|was| was != c) || (kind == Kind::Audio && at.session.as_ref().is_some_and(|s| !s.has_audio()));

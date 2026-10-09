@@ -41,7 +41,8 @@ pub enum DestinationState {
 pub struct Destination {
     /// A slug, unique within its channel: `youtube`, `youtube-2`.
     pub id: String,
-    /// A platform id from the table: youtube, facebook, twitch, custom, srt.
+    /// A platform id from the table: youtube, facebook, twitch, custom, srt,
+    /// or the two that stay on this machine, file and hls.
     pub platform: String,
     pub label: String,
     /// The scheme, host and port, and nothing that could carry a key.
@@ -67,7 +68,8 @@ pub struct Destination {
 }
 
 /// The links of an output served as HLS from the control port, each with
-/// the output's viewer key on it.
+/// the output's viewer key on it. A channel's watch link is one too:
+/// `/hls/channel/<channel>/<destination>/index.m3u8?key=...`.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct Playback {
     /// `/hls/viewers/master.m3u8?show=bbc-one&key=...`.
@@ -90,6 +92,24 @@ pub struct DestinationLive {
     pub reconnects: u32,
     /// What went wrong last, in words a person can act on.
     pub error: Option<String>,
+    /// The file a recording destination is writing, or wrote last.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file: Option<RecordingFile>,
+}
+
+/// The file a `file` destination writes: one per time the stream goes live.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct RecordingFile {
+    /// `sunday-service-main-20261009-103000.ts`.
+    pub name: String,
+    /// The whole path on the machine running the mixer.
+    pub path: String,
+    /// Bytes written so far.
+    pub bytes: u64,
+    /// How long it has been recording, or ran for once it has closed.
+    pub duration_ms: u64,
+    /// Whether it is still being written.
+    pub open: bool,
 }
 
 /// A destination as it is kept, key and all. Never sent to a client; the

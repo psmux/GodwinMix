@@ -20,14 +20,17 @@ pub fn settings(params: &Params) -> Result<(PathBuf, String)> {
                 .context("record/output directory is empty or not text; choose a writable folder on the mixer")?;
             PathBuf::from(text)
         }
-        None => std::env::var_os("USERPROFILE")
-            .or_else(|| std::env::var_os("HOME"))
-            .map(PathBuf::from)
-            .context("the mixer has no home directory; set params.directory")?
-            .join("Videos")
-            .join("GodwinMix"),
+        None => default_folder().context("the mixer has no home directory; set params.directory")?,
     };
     Ok((folder, format.into()))
+}
+
+/// Where recordings go when nobody said: `Videos/GodwinMix` in the home
+/// folder of the user the mixer runs as. A channel's recordings go here too.
+pub fn default_folder() -> Option<PathBuf> {
+    std::env::var_os("USERPROFILE")
+        .or_else(|| std::env::var_os("HOME"))
+        .map(|home| PathBuf::from(home).join("Videos").join("GodwinMix"))
 }
 
 pub fn reserve(folder: &Path, id: &str, format: &str) -> Result<PathBuf> {

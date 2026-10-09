@@ -28,6 +28,9 @@ pub const PEER_HEADER: &str = "x-godwinmix-peer";
 pub const LISTENING: &str = "GODWINMIX-PACKAGER";
 /// The flag that starts this binary as the packager.
 pub const FLAG: &str = "--hls-packager";
+/// What a channel's watch link has in place of a show, in every key and
+/// header: `channel:sunday-service`. A show id never has a colon in it.
+pub const CHANNEL: &str = "channel:";
 /// Where the station hands over the outputs and reads them back.
 pub const OUTPUTS: &str = "/packager/outputs";
 

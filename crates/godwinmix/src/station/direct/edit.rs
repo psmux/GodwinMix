@@ -33,6 +33,11 @@ pub fn add(list: &mut Vec<StoredDestination>, show: &str, spec: &ShowOutputSpec)
         let msg = format!("params are for an hls:// output, and this one is {platform}. Leave them out.");
         return Err(RpcError::invalid_params(msg).with("field", "params"));
     }
+    if platform == "file" {
+        let msg = "a show without compositing has no file output; record its input on the channel it comes from, \
+                   with channel.destination.add {platform: \"file\"}, or turn compositing on and add a record/output.";
+        return Err(RpcError::invalid_params(msg).with("field", "platform"));
+    }
     let label = spec.label.clone().or_else(|| spec.id.clone());
     let made = if platform == hls::SCHEME {
         super::hls::edit::add(list, label, uri, spec)?

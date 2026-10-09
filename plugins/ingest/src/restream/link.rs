@@ -32,6 +32,10 @@ pub trait Link: Send {
     fn poll(&mut self) -> Result<(), Failure>;
     /// Say goodbye, where the carriage has a way to.
     fn close(&mut self);
+    /// The file it writes, for a recording.
+    fn file(&self) -> Option<&std::path::Path> {
+        None
+    }
 }
 
 /// Connect to a target, by the scheme of its address.

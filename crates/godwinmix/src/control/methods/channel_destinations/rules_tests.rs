@@ -107,3 +107,39 @@ fn remove_takes_one_and_names_the_rest_when_it_misses() {
     assert_eq!(remove(&mut list, "sunday", "twitch").unwrap().id, "twitch");
     assert!(list.is_empty());
 }
+
+#[test]
+fn a_recording_and_a_watch_link_need_no_address_and_no_key() {
+    let mut list = Vec::new();
+    assert_eq!(add(&mut list, &add_req("file")).unwrap(), "record");
+    assert_eq!(add(&mut list, &add_req("hls")).unwrap(), "watch-link");
+    assert!(list.iter().all(|d| d.server.is_empty() && d.key.is_none() && d.has_key()));
+    // A key sent anyway is not kept: there is nobody to give it to.
+    let keyed = AddDestinationRequest { key: Some("k".into()), ..add_req("file") };
+    add(&mut list, &keyed).unwrap();
+    assert_eq!(list[2].key, None);
+    // A folder of its own, and params for the link.
+    let there = AddDestinationRequest { server: Some("D:/Recordings".into()), ..add_req("file") };
+    add(&mut list, &there).unwrap();
+    let quick = AddDestinationRequest { server: Some("hls://?segment_ms=1000".into()), ..add_req("hls") };
+    add(&mut list, &quick).unwrap();
+}
+
+#[test]
+fn a_recording_or_a_watch_link_refuses_what_it_cannot_do_and_says_what_to_send() {
+    let mut list = Vec::new();
+    let elsewhere = AddDestinationRequest { server: Some("rtmp://host/live".into()), ..add_req("file") };
+    let err = add(&mut list, &elsewhere).unwrap_err();
+    assert_eq!(field(&err), "server");
+    assert!(err.message.contains("a folder on this machine"), "{}", err.message);
+    let err = add(&mut list, &AddDestinationRequest { server: Some("srt://h:9000".into()), ..add_req("hls") }).unwrap_err();
+    assert!(err.message.contains("Leave `server` out"), "{}", err.message);
+    let converted = AddDestinationRequest {
+        rendition: Some(serde_json::from_value(serde_json::json!({"preset": "youtube-720p30"})).unwrap()),
+        ..add_req("hls")
+    };
+    let err = add(&mut list, &converted).unwrap_err();
+    assert_eq!(field(&err), "rendition");
+    assert!(err.message.contains("converts nothing"), "{}", err.message);
+    assert!(list.is_empty());
+}
