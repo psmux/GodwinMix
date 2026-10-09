@@ -30,7 +30,7 @@ gmx-shell.phone .slot-header { border-bottom: 1px solid var(--line-soft); }
 .phone-head { order: 0; display: flex; align-items: center; gap: 4px; min-height: 40px; margin: 2px 0 -2px; }
 .phone-head h1 { margin: 0; font-size: 24px; font-weight: 750; letter-spacing: -0.01em; }
 .phone-back {
-  display: grid; place-items: center; width: 40px; height: 40px; margin-left: -10px;
+  display: grid; place-items: center; width: 44px; height: 44px; margin-left: -12px;
   border: 0; border-radius: 12px; background: none; color: var(--accent);
 }
 .phone-back:active { background: var(--select-fill); }
@@ -253,6 +253,16 @@ body:has(> gmx-shell.phone) .pub-dock {
   right: 12px; bottom: calc(80px + env(safe-area-inset-bottom)); max-width: calc(100vw - 24px);
   max-height: calc(100dvh - 210px);
 }
+/* Opened, the card takes most of a phone's screen, so a dialog the operator
+   opens goes over it rather than under it: under it, the card covered the
+   buttons that finish the dialog. */
+body:has(> gmx-shell.phone):has(.slot-modal .scrim) > .pub-dock { z-index: 38; }
+/* Where it starts, the folded card sits over the foot of every screen: the
+   screens scroll far enough to bring their last line out from under it, and
+   Take, which floats at the foot of Live, floats above it. Moved, it is
+   wherever the operator put it, and neither is needed. */
+body:has(> gmx-shell.phone):has(> .pub-dock:not([style*="top:"])) .dock-workspace.phone-deck { padding-bottom: 96px; }
+body:has(> gmx-shell.phone):has(> .pub-dock.min:not([style*="top:"])) .phone-deck .scene-tabs > .btn { bottom: 78px; }
 
 /* Outputs carries the Channels panel on a phone, and its own Add Channel. */
 .phone-deck .out-add-channel { display: none; }
@@ -332,6 +342,13 @@ gmx-shell.phone .header .hdr-dest { flex: 0 1 auto; min-width: 0; max-width: cal
 gmx-shell.phone .header:has(.presence:not([hidden])) .hdr-dest { max-width: calc(100vw - 254px - env(safe-area-inset-left) - env(safe-area-inset-right)); }
 gmx-shell.phone .header .hdr-rec { order: 8; }
 gmx-shell.phone .header .tally { flex-basis: 0; }
+
+/* Existing sources in the scene chooser: the name on its own line and
+   Preview, Add and Remove sharing the one under it. Beside a name they ran
+   off the dialog, and a long name sent Remove to a line of its own. */
+body:has(> gmx-shell.phone) .source-choice { padding-right: 8px; }
+body:has(> gmx-shell.phone) .source-choice > .grow { flex: 1 1 100%; }
+body:has(> gmx-shell.phone) .source-choice > .btn { flex: 1 1 0; }
 
 /* Who else is here: a small pill with a finger sized target round it. */
 gmx-shell.phone .header .presence { position: relative; }
