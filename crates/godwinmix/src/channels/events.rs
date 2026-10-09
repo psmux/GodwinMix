@@ -125,7 +125,7 @@ impl Channels {
             .records
             .lock()
             .iter()
-            .find(|r| r.id == asked || super::keys::same_app(&r.app, asked))
+            .find(|r| r.id == asked || super::keys::same_app(&r.app, &asked))
             .map(|r| r.id.clone())
             .unwrap_or(asked);
         self.mixer.emit(Event::ChannelRefused {

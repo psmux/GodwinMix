@@ -20,8 +20,10 @@ import { openPorts, portProblems } from "./ways.js";
 import { ChannelPlans } from "./plans.js";
 
 import { addChannel } from "./create.js";
+import { importLivebox } from "./livebox.js";
+import { contextMenu } from "../../shell/menu.js";
 
-export { addChannel };
+export { addChannel, importLivebox };
 
 const CSS_ID = "gmx-channels-css";
 /** Seconds between two readings of the bit rates while something is live. */
@@ -51,6 +53,11 @@ export class ChannelsView {
     this.list = el("div.chn-list");
     this.count = el("span.chn-count");
     const add = (this.addButton = el("button.btn.primary.chn-add", { text: "Add Channel", onclick: () => this.add() }));
+    const more = el("button.btn.chn-topmore", { type: "button", text: "⋯", title: "More ways to add channels", "aria-label": "More ways to add channels" });
+    more.onclick = () => {
+      const r = more.getBoundingClientRect();
+      contextMenu(r.left, r.bottom + 4, [{ label: "Bring channels from Livebox", run: () => importLivebox(this.client) }]);
+    };
     // What is open, in the text's own colour; a port a channel wants that
     // would not open is the only part said in amber.
     this.portsOpen = el("span");
@@ -62,6 +69,7 @@ export class ChannelsView {
         el("p.chn-lede", { text: "Encoders publish to the mixer by RTMP, SRT or WHIP. Each channel can go on air and on to the platforms." }),
         this.ports,
       ]),
+      more,
       add,
     ]);
     this.root = el("div.chn", {}, [this.head, this.list]);

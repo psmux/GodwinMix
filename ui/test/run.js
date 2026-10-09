@@ -16,6 +16,7 @@ import { greenScreenTests } from "./green-screen.js";
 import { dockTests } from "./dock.js";
 import { welcomeStepTests } from "./welcome.js";
 import { channelTests } from "./channels.js";
+import { liveboxTests } from "./channels-livebox.js";
 import { renditionTests } from "./renditions.js";
 import { menubarTests } from "./menubar.js";
 import { touchTests } from "./touch.js";
@@ -2903,6 +2904,12 @@ tileLevelTests(test, eq, ok)
   .catch((e) => {
     failed += 1;
     line("fail", "the channels suite threw: " + e.message);
+    console.error(e);
+  })
+  .then(() => liveboxTests(test, eq, ok))
+  .catch((e) => {
+    failed += 1;
+    line("fail", "the Livebox suite threw: " + e.message);
     console.error(e);
   })
   .then(() => renditionTests(test, eq, ok))

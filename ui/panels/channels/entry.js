@@ -13,3 +13,5 @@ class Channels extends HTMLElement {
 customElements.define("gmx-channels", Channels);
 window.godwinmixPanels?.push(Channels);
 register({ id: "channel.add", title: "Add Channel", group: "Channels", run: () => addChannel(window.gmxClient) });
+const livebox = lazyAction(() => load().then((m) => m.importLivebox), "Bring channels from Livebox");
+register({ id: "channel.import.livebox", title: "Bring channels from Livebox", group: "Channels", run: () => livebox(window.gmxClient) });
