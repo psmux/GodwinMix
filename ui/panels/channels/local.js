@@ -46,7 +46,9 @@ export function localPlan(d) {
 
 function head(id, channel) {
   const p = local(id);
-  return el("div.chn-dhead", {}, [brandMark(id, 48), el("div", {}, [el("strong", { text: p.title }), el("p.chn-dim", { text: localLine(id, channel) })])]);
+  // The title is above it, so the line starts at what it does.
+  const line = localLine(id, channel).slice(p.title.length + 2);
+  return el("div.chn-dhead", {}, [brandMark(id, 48), el("div", {}, [el("strong", { text: p.title }), el("p.chn-dim", { text: line })])]);
 }
 
 /** The form for one: a folder for a recording, the stream when there is a choice. */
