@@ -58,9 +58,13 @@ async fn a_show_killed_is_started_again_the_other_runs_on_and_its_share_goes_bac
     let in_main = get(&st, "/api/v1/scenes").await.to_string();
     assert!(in_second.contains("Only in second") && !in_main.contains("Only in second"), "{in_second} / {in_main}");
 
-    let recordings = dir.join("recordings");
-    let output = json!({"id": "archive", "uri": "record://programme", "type": "record/output",
-        "params": {"format": "mkv", "directory": recordings}, "rendition": {"preset": "youtube-720p30"}});
+    // A stream, not a recording. A recording started at runtime is never
+    // saved in the runtime store (`config::recordings`), so a show started
+    // again rightly comes back without one, and with a recorder here the
+    // restarted show held 17 millicores against 808: the test was waiting for
+    // an output the show had been told to forget. UDP to the discard port
+    // needs nothing listening and is priced like any 720p30 rendition.
+    let output = json!({"id": "archive", "uri": "udp://127.0.0.1:9", "rendition": {"preset": "youtube-720p30"}});
     let mut second = rpc(&st, "?show=second").await;
     // A shared runner is running the other station tests beside this one,
     // and the governor sees their encoders as other programs: it can say no
