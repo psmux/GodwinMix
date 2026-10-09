@@ -65,7 +65,7 @@ async fn a_show_killed_is_started_again_the_other_runs_on_and_its_share_goes_bac
     // an output the show had been told to forget. An HLS output is served by
     // the show itself, needs nothing listening anywhere, and is priced like
     // any 720p30 rendition.
-    let output = json!({"id": "archive", "uri": "hls://archive", "rendition": {"preset": "youtube-720p30"}});
+    let output = json!({"id": "archive", "uri": "hls://archive", "type": "hls/output", "rendition": {"preset": "youtube-720p30"}});
     let mut second = rpc(&st, "?show=second").await;
     // A shared runner is running the other station tests beside this one,
     // and the governor sees their encoders as other programs: it can say no
