@@ -51,6 +51,8 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use tracing::{debug, info, warn};
 
+mod retire;
+
 /// `[program] encoder`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum EncoderPolicy {
@@ -399,26 +401,24 @@ impl EncodeChain {
     /// chain back up: a locked element is skipped by its parent's state
     /// changes and stays where it was put.
     pub fn detach(&mut self) {
-        let Some(pad) = self.pad.take() else {
-            // Never attached, but still lock it down so the pipeline's own
-            // state changes leave it alone.
-            for el in &self.chain {
-                el.set_locked_state(true);
-                let _ = el.set_state(gst::State::Null);
-            }
-            return;
-        };
-        if let Some(peer) = pad.peer() {
+        self.unhook().run();
+    }
+
+    /// Unlink from the tee, which waits for nothing, and hand back the part
+    /// that does: the chain to NULL and the tee pad released. See `retire`.
+    fn unhook(&mut self) -> retire::Retire {
+        let pad = self.pad.take();
+        if let Some((pad, peer)) = pad.as_ref().and_then(|p| p.peer().map(|peer| (p, peer))) {
             if let Err(e) = pad.unlink(&peer) {
                 warn!(chain = self.tag, ?e, "could not unlink the encode chain");
             }
         }
-        self.tee.release_request_pad(&pad);
-        for el in self.chain.iter().rev() {
+        // Never attached, it is still locked down and taken to NULL, so the
+        // pipeline's own state changes leave it alone.
+        for el in &self.chain {
             el.set_locked_state(true);
-            let _ = el.set_state(gst::State::Null);
         }
-        debug!(chain = self.tag, "encode chain detached");
+        retire::Retire { tag: self.tag, tee: self.tee.clone(), pad, chain: self.chain.clone() }
     }
 }
 
@@ -431,11 +431,14 @@ pub struct Encoder {
     handle: EncoderHandle,
     video: EncodeChain,
     audio: EncodeChain,
+    /// Set while the last stop is still taking the chains down on its own
+    /// thread; true once it has.
+    stopping: Option<Arc<AtomicBool>>,
 }
 
 impl Encoder {
     pub fn new(handle: EncoderHandle, video: EncodeChain, audio: EncodeChain) -> Self {
-        Self { handle, video, audio }
+        Self { handle, video, audio, stopping: None }
     }
 
     pub fn handle(&self) -> EncoderHandle {
@@ -501,17 +504,45 @@ impl Encoder {
             return Ok(());
         }
         if wanted {
+            if self.stopping.as_ref().is_some_and(|done| !done.load(Ordering::SeqCst)) {
+                // Asked for again when the stop has finished: see `stop`.
+                debug!("the programme encoder is still stopping; it starts again once it has");
+                return Ok(());
+            }
+            self.stopping = None;
             self.video.attach()?;
             self.audio.attach()?;
             self.handle.mark_running(true);
             info!("programme encoder started for its first consumer");
         } else {
-            self.video.detach();
-            self.audio.detach();
-            self.handle.mark_running(false);
-            info!("programme encoder stopped, nothing is reading it");
+            self.stop();
         }
         Ok(())
+    }
+
+    /// Unlinked here, taken down on a thread of its own. Taking an encoder to
+    /// NULL waits for whatever its driver is doing, and the mixer thread must
+    /// never wait on a hardware encoder. When it is done the count is asked
+    /// again, so a consumer that came meanwhile gets it back.
+    fn stop(&mut self) {
+        let work = [self.video.unhook(), self.audio.unhook()];
+        self.handle.mark_running(false);
+        let done = Arc::new(AtomicBool::new(false));
+        let (flag, handle) = (done.clone(), self.handle.clone());
+        let started = crate::mixer::offload::run("encoder-stop", "programme", move || {
+            for chain in work {
+                chain.run();
+            }
+            flag.store(true, Ordering::SeqCst);
+            handle.shared.settle();
+        });
+        // Without a thread the chains stay up, unlinked; an attach can take
+        // them as they are.
+        if !started {
+            done.store(true, Ordering::SeqCst);
+        }
+        self.stopping = Some(done);
+        info!("programme encoder stopping, nothing is reading it");
     }
 
     /// Take everything down, for shutdown.

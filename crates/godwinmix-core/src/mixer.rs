@@ -424,7 +424,7 @@ mod lifecycle;
 mod memwatch;
 mod motion;
 mod on_time;
-mod offload;
+pub(crate) mod offload;
 mod patience;
 mod rendered;
 mod reported;
@@ -3091,7 +3091,7 @@ impl Mixer {
             anyhow::bail!("no such output {id}");
         };
         let slot = self.outputs.remove(pos);
-        slot.detach(&self.program);
+        self.detach_off_thread(slot);
         self.release_encoder_for(id);
         self.drop_rendition(id);
         self.note_on_air();
@@ -5653,6 +5653,7 @@ mod tests {
     mod stall_storm;
     mod refused_output;
     mod slow_output;
+    mod stuck_detach;
     mod thumb;
     use crate::plugin::branch::meter_name;
     use super::*;
