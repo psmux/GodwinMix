@@ -35,6 +35,7 @@ export function rowOf(channel, now = Date.now()) {
 
 /** "1920×1080 30 fps 4.5 Mb/s", leaving out what the encoder did not say. */
 export function specOf(s) {
-  const parts = [resolution(s), s.video && s.video.fps ? fmtFps(s.video.fps) : "", fmtKbps(streamKbps(s))];
+  // A measured rate wanders (29.05, 30.51); one line wants the whole number.
+  const parts = [resolution(s), s.video && s.video.fps ? fmtFps(Math.round(s.video.fps)) : "", fmtKbps(streamKbps(s))];
   return parts.filter(Boolean).join(" ");
 }

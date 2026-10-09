@@ -1,9 +1,9 @@
 /* The Rows view, the Cards and Rows switch, and the bulk menu's pieces. Its
    own file so channels.css stops growing; loaded with the panel by layout.js. */
 
-.chn-mode { align-self: center; }
-.chn-mode button { font-family: inherit; font-weight: 600; }
-.chn-mode[hidden] { display: none; }
+.chn-viewas { align-self: center; }
+.chn-viewas button { font-family: inherit; font-weight: 600; }
+.chn-viewas[hidden] { display: none; }
 
 .chn-rows { display: flex; flex-direction: column; border: var(--border) solid var(--line); border-radius: 12px; overflow: hidden; background: var(--panel); }
 .chn-rows[hidden] { display: none; }
@@ -22,6 +22,7 @@
 .chn-rspec, .chn-rtime { font-family: var(--num); font-size: 11.5px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .chn-rtime { text-align: right; color: var(--text); }
 .chn-rdest { display: flex; align-items: center; gap: 8px; justify-content: flex-end; min-width: 0; font-size: 11.5px; color: var(--dim); white-space: nowrap; }
+.chn-rrings:empty { display: none; }
 .chn-rrings { display: inline-flex; gap: 3px; flex-wrap: wrap; }
 .chn-rring { width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--line); box-sizing: border-box; }
 .chn-rring[data-state="waiting"] { border-style: dashed; border-color: var(--dim); }

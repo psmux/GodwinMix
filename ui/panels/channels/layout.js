@@ -28,7 +28,7 @@ function saveMode(mode) {
 /** The Cards and Rows buttons. `pick(mode)` is told of a press. */
 export function modeSwitch(mode, pick) {
   const buttons = ["cards", "rows"].map((m) => el("button", { type: "button", text: m === "cards" ? "Cards" : "Rows", "data-mode": m }));
-  const node = el("div.chn-seg.chn-mode", { role: "group", "aria-label": "Show channels as" }, buttons);
+  const node = el("div.chn-seg.chn-viewas", { role: "group", "aria-label": "Show channels as" }, buttons);
   const set = (next) => {
     for (const b of buttons) {
       b.classList.toggle("on", b.dataset.mode === next);

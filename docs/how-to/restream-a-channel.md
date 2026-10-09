@@ -75,8 +75,10 @@ does not answer shows on its tile afterwards, as below. Only those
 lines are left in the box, so fixing them and pressing again does not add
 the good ones twice.
 
-Every line is added as Custom RTMP (or SRT), so a YouTube address pasted this
-way shows the custom mark rather than YouTube's. The palette offers the same
+Every line is added as Custom RTMP (or SRT), named after its server: YouTube,
+Facebook and the other platforms by their own names, anything else by its host,
+such as `10.0.0.9`. The tile shows the custom mark rather than the platform's.
+Press a tile to rename it. The palette offers the same
 dialog as **Paste several push addresses**, and asks which channel when there
 is more than one.
 
