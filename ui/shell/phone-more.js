@@ -73,7 +73,7 @@ export function installRow(way, onclick) {
   if (way === "trust") {
     return el("a.phone-row", { href: TRUST_HELP, target: "_blank", rel: "noopener" }, [
       icon("install"),
-      el("span.phone-row-text", {}, [el("strong", { text: "Install app" }), el("span", { text: "Trust this mixer on your phone first: how" })]),
+      el("span.phone-row-text", {}, [el("strong", { text: "Install app" }), el("span", { text: "Trust this mixer on your phone first" })]),
       el("span.phone-chevron", { "aria-hidden": "true", text: "›" }),
     ]);
   }
