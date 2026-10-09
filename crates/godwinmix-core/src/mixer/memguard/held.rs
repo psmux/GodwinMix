@@ -22,7 +22,7 @@ pub(super) fn describe(queues: &[Held]) -> String {
     let named: Vec<String> = queues
         .iter()
         .take(NAMED)
-        .map(|q| format!("{} in {}: {} MB", q.element, q.pipeline, q.bytes / MB))
+        .map(|q| format!("{} in {}: {:.1} MB", q.element, q.pipeline, q.bytes as f64 / MB as f64))
         .collect();
     if named.is_empty() {
         "no queue holds anything".into()

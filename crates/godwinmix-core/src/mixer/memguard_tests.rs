@@ -47,6 +47,6 @@ fn a_queue_is_traced_to_its_source_by_pipeline_or_by_the_chain_above_it() {
 #[test]
 fn the_log_names_the_fullest_queues_and_says_so_when_there_are_none() {
     let queues = [held("pgm-vq-cam-a", 700, Some("cam-a")), held("venc-q", 3, None)];
-    assert_eq!(describe(&queues), "pgm-vq-cam-a in programme: 700 MB, venc-q in programme: 3 MB");
+    assert_eq!(describe(&queues), "pgm-vq-cam-a in programme: 700.0 MB, venc-q in programme: 3.0 MB");
     assert_eq!(describe(&[]), "no queue holds anything");
 }
