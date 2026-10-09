@@ -15,10 +15,11 @@ import { leaves } from "../../shell/dock-model.js";
 import { Channels, isLive } from "./model.js";
 import { keyed, write } from "./keyed.js";
 import { channelCard } from "./card.js";
-import { emptyArt } from "./art.js";
+import { emptyArt, failed } from "./art.js";
 import { installCard } from "./install.js";
 import { openPorts, portProblems } from "./ways.js";
 import { ChannelPlans } from "./plans.js";
+import { channelLayout } from "./layout.js";
 
 import { addChannel } from "./create.js";
 import { importLivebox } from "./livebox.js";
@@ -54,6 +55,7 @@ export class ChannelsView {
     this.plans = new ChannelPlans(client, () => this.render());
     this.cards = new Map();
     this.list = el("div.chn-list");
+    this.layout = channelLayout(this.list, () => this.cards);
     this.count = el("span.chn-count");
     const add = (this.addButton = el("button.btn.primary.chn-add", { text: "Add Channel", onclick: () => this.add() }));
     const more = el("button.btn.chn-topmore", { type: "button", text: "⋯", title: "More ways to add channels", "aria-label": "More ways to add channels" });
@@ -73,9 +75,10 @@ export class ChannelsView {
         this.ports,
       ]),
       more,
+      this.layout.switch,
       add,
     ]);
-    this.root = el("div.chn", {}, [this.head, this.list]);
+    this.root = el("div.chn", {}, [this.head, this.list, this.layout.rows]);
     host.appendChild(this.root);
   }
 
@@ -149,6 +152,7 @@ export class ChannelsView {
       this.head.hidden = !this.missing && !this.failure;
       // Without the plugin there is nothing to add a channel to.
       this.addButton.hidden = this.missing;
+      this.layout.update([]);
       this.clock(false);
       return;
     }
@@ -159,6 +163,7 @@ export class ChannelsView {
     write(this.portsBad, "textContent", problems.join(" "));
     if (!this.cards.size) clear(this.list);
     keyed(this.list, this.cards, channels, (c) => c.id, (c) => channelCard(this, c), (c) => (c.enabled ? "on" : "off"));
+    this.layout.update(channels);
     if (first) this.openOnDefault(channels);
     if (this.running) this.plans.sync(channels);
     this.clock(channels.some(isLive));
@@ -187,6 +192,7 @@ export class ChannelsView {
 
   tick() {
     for (const card of this.cards.values()) card.tick?.();
+    this.layout.tick();
     this.ticks = (this.ticks || 0) + 1;
     if (this.ticks % RATE_TICKS === 0) this.poll();
     if (this.ticks % PICTURE_TICKS === 0 && !document.hidden) for (const card of this.cards.values()) card.picture?.();
@@ -205,13 +211,6 @@ export class ChannelsView {
       this.polling = false;
     }
   }
-}
-
-function failed(message, retry) {
-  return el("div.chn-note", {}, [
-    el("p", { text: `The channels could not be read: ${message}` }),
-    el("button.btn", { text: "Try again", onclick: retry }),
-  ]);
 }
 
 /** Make the Channels tab the one on show, wherever it has been docked. */
