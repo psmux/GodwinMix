@@ -154,7 +154,7 @@
 
 /* A narrow window puts the inspector under the picture rather than beside it,
  * because a 300 px column on a phone leaves no picture at all. */
-@media (max-width: 720px) {
+@media (max-width: 720px), (orientation: landscape) and (max-height: 500px) {
   /* minmax(0, 1fr) and not 1fr, or the widest toolbar row sets the width of
    * the canvas under it and both run off a phone's screen. */
   /* The picture first, at its own shape, where a thumb can work on it; the
@@ -273,6 +273,54 @@
     height: 100dvh;
     border-radius: 0;
     border: 0;
+  }
+}
+
+/* A phone on its side has width and no height: the picture down the left,
+ * as tall as the screen allows, and the tools and the inspector beside it,
+ * scrolling on their own. Stacked, the picture began below the footer and
+ * could only be reached by scrolling a strip 230 pixels high. */
+@media (orientation: landscape) and (max-height: 500px) {
+  .composer-body {
+    grid-template-columns: minmax(0, 1fr) minmax(280px, 42%);
+    grid-template-rows: auto auto auto;
+    grid-template-areas:
+      "health health"
+      "canvas bar"
+      "canvas side";
+  }
+
+  /* The tools and the inspector scroll as one column; the picture stays put
+   * beside them, the height of what is left between the title and Apply. */
+  .composer-canvas {
+    aspect-ratio: auto;
+    max-height: none;
+    align-self: start;
+    height: calc(100dvh - 110px);
+  }
+
+  .composer-body:has(> .composer-health:not([hidden])) .composer-canvas {
+    height: calc(100dvh - 156px);
+  }
+
+  .composer-bar,
+  .composer-side {
+    border-top: 0;
+    border-left: var(--border) solid var(--line);
+  }
+
+  .composer-side {
+    overflow: auto;
+  }
+
+  .composer {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+
+  .composer > header,
+  .composer > footer {
+    padding-block: 4px;
   }
 }
 
