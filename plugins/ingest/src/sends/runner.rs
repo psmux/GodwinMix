@@ -5,7 +5,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
-use godwinmix_protocol::destination::{DestinationLive, DestinationState};
+use godwinmix_protocol::destination::{DestinationLive, DestinationState, RecordingFile};
 
 use super::Wanted;
 use crate::hub::{Hub, Reader, Recv};
@@ -28,11 +28,14 @@ struct Now {
     /// person sees keeps counting across a publisher coming and going.
     earlier_reconnects: u32,
     waiting_since: Instant,
+    /// What a recording wrote last time the stream was live, so a person
+    /// still sees the file once the encoder stops.
+    last_file: Option<RecordingFile>,
 }
 
 impl Runner {
     pub fn start(wanted: Wanted, hub: Hub) -> Arc<Runner> {
-        let now = Now { sending: None, earlier_reconnects: 0, waiting_since: Instant::now() };
+        let now = Now { sending: None, earlier_reconnects: 0, waiting_since: Instant::now(), last_file: None };
         let runner = Arc::new(Runner { wanted, stop: Default::default(), now: Mutex::new(now) });
         let me = runner.clone();
         let name = format!("gmx-send-{}", runner.wanted.id);
@@ -68,7 +71,7 @@ impl Runner {
                 ended: ended.clone(),
             };
             let w = &self.wanted;
-            let handle = restream::start(Target::new(&w.id, &w.platform, &w.url), feed);
+            let handle = restream::start(Target::new(&w.id, &w.platform, &address(&w.url, &stream)), feed);
             self.now().sending = Some(handle);
             while !self.stopped() && !ended.load(Ordering::Relaxed) {
                 std::thread::sleep(LOOK);
@@ -76,7 +79,11 @@ impl Runner {
             // The publisher left, or the destination was switched off.
             let mut now = self.now();
             if let Some(h) = now.sending.take() {
-                now.earlier_reconnects += h.stats().live.reconnects;
+                let live = h.stats().live;
+                now.earlier_reconnects += live.reconnects;
+                if let Some(f) = live.file {
+                    now.last_file = Some(RecordingFile { open: false, ..f });
+                }
                 h.stop();
             }
             now.waiting_since = Instant::now();
@@ -99,9 +106,20 @@ impl Runner {
                 state: DestinationState::Waiting,
                 since_ms: now.waiting_since.elapsed().as_millis() as u64,
                 reconnects: now.earlier_reconnects,
+                file: now.last_file.clone(),
                 ..Default::default()
             },
         }
+    }
+}
+
+/// The address for one session: a recording's `{stream}` becomes the
+/// stream it records, since `*` is only known once one is live.
+fn address(url: &str, stream: &str) -> String {
+    if url.starts_with("file://") {
+        url.replace("{stream}", stream)
+    } else {
+        url.to_string()
     }
 }
 

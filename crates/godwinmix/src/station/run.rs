@@ -144,6 +144,7 @@ fn open_channels(st: &Arc<Station>, cfg: &Config, config: &std::path::Path, even
     channels.use_governor(st.render.governor().clone());
     let _ = st.channels.set(channels);
     super::direct::Direct::attach(st, supervisor.clone());
+    super::direct::hls::channel::Links::attach(st);
     let (starting, station) = (supervisor.clone(), st.clone());
     std::thread::spawn(move || {
         if plugin::loader::get(crate::channels::PLUGIN).is_none() {

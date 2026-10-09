@@ -100,7 +100,11 @@ impl Sends {
             .iter()
             .map(|r| {
                 let live = live_of(r, &self.transcoders);
-                json!({"channel": r.wanted.channel, "destination": r.wanted.id, "state": live.state, "kbps": live.kbps})
+                let mut row = json!({"channel": r.wanted.channel, "destination": r.wanted.id, "state": live.state, "kbps": live.kbps});
+                if let Some(f) = &live.file {
+                    row["file"] = json!(f);
+                }
+                row
             })
             .collect()
     }
@@ -136,7 +140,7 @@ impl Sends {
 /// Raise `event/channel.destination` for one runner if what it says moved.
 fn report(r: &Runner, said: &mut Vec<(String, String, Value)>, reporter: Option<&Reporter>, t: &Transcoders) {
     let live = live_of(r, t);
-    let key = json!([live.state, live.error, live.reconnects]);
+    let key = json!([live.state, live.error, live.reconnects, live.file.as_ref().map(|f| (&f.name, f.open))]);
     let (channel, id) = (&r.wanted.channel, &r.wanted.id);
     match said.iter_mut().find(|(c, d, _)| c == channel && d == id) {
         Some((.., last)) if *last == key => return,

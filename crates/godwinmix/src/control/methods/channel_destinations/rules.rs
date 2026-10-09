@@ -104,6 +104,9 @@ fn key_for(p: &Platform, key: Option<&str>) -> Option<String> {
 /// The rules a stored destination has to meet, whichever method made it.
 fn check(p: &Platform, d: &StoredDestination) -> Result<(), RpcError> {
     let field = |e: RpcError, f: &str| e.with("field", f).with("platform", p.id).with("destination", d.id.clone());
+    if p.carriage.is_local() {
+        return local(p, d).map_err(|(e, f)| field(e, f));
+    }
     let example = if p.carriage == Carriage::Srt { "srt://192.168.1.50:9000" } else { "rtmp://host/live" };
     if d.server.is_empty() {
         let msg = format!("{} needs a server address. Send `server`, as in {example}.", p.title);
@@ -113,6 +116,7 @@ fn check(p: &Platform, d: &StoredDestination) -> Result<(), RpcError> {
     let fits = match p.carriage {
         Carriage::Rtmp => scheme == "rtmp" || scheme == "rtmps",
         Carriage::Srt => scheme == "srt",
+        Carriage::File | Carriage::Hls => true,
     };
     if !fits {
         let msg = format!("{} takes an address like {example}, and this one does not start that way.", p.title);
@@ -130,6 +134,31 @@ fn check(p: &Platform, d: &StoredDestination) -> Result<(), RpcError> {
         return Err(field(RpcError::invalid_params(msg), "key"));
     }
     Ok(())
+}
+
+/// A recording or a watch link: no key, an optional folder or `hls://`
+/// params, and the stream as it arrives.
+fn local(p: &Platform, d: &StoredDestination) -> Result<(), (RpcError, &'static str)> {
+    if d.rendition.is_some() {
+        let msg = format!(
+            "{} copies the stream as the encoder sends it and converts nothing. Leave `rendition` out;              to change the format, change it in the encoder.",
+            p.title
+        );
+        return Err((RpcError::invalid_params(msg), "rendition"));
+    }
+    let server = d.server.trim();
+    let scheme = server.split_once("://").map(|(s, _)| s.to_ascii_lowercase());
+    match p.carriage {
+        Carriage::Hls if !server.is_empty() && scheme.as_deref() != Some("hls") => {
+            let msg = "A watch link takes no address. Leave `server` out, or send hls:// with params, as in hls://?segment_ms=2000.";
+            Err((RpcError::invalid_params(msg), "server"))
+        }
+        Carriage::File if scheme.as_deref().is_some_and(|s| s != "file") => {
+            let msg = "Record takes a folder on this machine, as in D:/Recordings or file:///srv/recordings, or nothing for the recordings folder.";
+            Err((RpcError::invalid_params(msg), "server"))
+        }
+        _ => Ok(()),
+    }
 }
 
 fn slug(label: &str) -> Option<String> {

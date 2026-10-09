@@ -10,13 +10,15 @@ use crate::rendition::RenditionChoice;
 pub struct AddDestinationRequest {
     /// The channel.
     pub id: String,
-    /// youtube, facebook, twitch, custom or srt.
+    /// youtube, facebook, twitch, custom or srt; or `file` to record the
+    /// stream on this machine, or `hls` to serve it as a watch link.
     pub platform: String,
     /// What the list calls it. The platform's name when left out.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,
     /// The ingest address. Left out, the platform's own; custom and srt need
-    /// one.
+    /// one. For `file`, a folder on the mixer (the recordings folder when
+    /// left out); for `hls`, `hls://` with params such as `?segment_ms=2000`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub server: Option<String>,
     /// The stream key. Write only: no method reads it back.
