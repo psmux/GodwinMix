@@ -3,6 +3,7 @@
 
 import { toolTabs } from "../panels/composer/tool-tabs.js";
 import { opening } from "../shell/modal.js";
+import { tidyRules } from "../shell/menu.js";
 
 function group(name, buttons) {
   const g = document.createElement("div");
@@ -77,6 +78,13 @@ export async function phoneHandsTests(test, eq, ok) {
   const renames = await renameOnce();
   test("a rename ended with Enter is sent once, not again by the blur that ending it causes", () => {
     eq(renames, ["Stage left"]);
+  });
+
+  test("a menu with items left out keeps no rule first, last or twice in a row", () => {
+    const menu = document.createElement("div");
+    menu.innerHTML = "<hr><hr><button>Add a source</button><hr><hr><button>Select all</button><hr>";
+    tidyRules(menu);
+    eq([...menu.children].map((n) => n.tagName), ["BUTTON", "HR", "BUTTON"]);
   });
 
   test("the composer's chips show one group of tools at a time, named as the groups are", () => {
