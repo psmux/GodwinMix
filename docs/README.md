@@ -10,6 +10,10 @@ Where a feature does not exist yet, the page says so in a sentence and names
 the command that will do it. Nothing here shows output from a command that
 cannot be run today.
 
+Engineers and operators who want everything on one page, the install paths,
+what has been verified, the pipeline and the platforms, start at
+[Technical details](technical-details.md).
+
 ## Tutorials
 
 Start here if you have never run it.

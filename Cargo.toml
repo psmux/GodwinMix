@@ -32,7 +32,7 @@ exclude = [
 ]
 
 [workspace.package]
-version = "0.2.3"
+version = "0.3.0"
 edition = "2021"
 rust-version = "1.82"
 license = "Apache-2.0"
@@ -41,12 +41,12 @@ repository = "https://github.com/psmux/godwinmix"
 # One version per dependency for the whole tree. A crate opts in with
 # `dep = { workspace = true }` and adds only the features it needs.
 [workspace.dependencies]
-godwinmix-protocol = { path = "crates/godwinmix-protocol", version = "0.2.3" }
-godwinmix-core = { path = "crates/godwinmix-core", version = "0.2.3" }
-godwinmix-host = { path = "crates/godwinmix-host", version = "0.2.3" }
-godwinmix-govern = { path = "crates/godwinmix-govern", version = "0.2.3" }
-godwinmix-framebus = { path = "crates/godwinmix-framebus", version = "0.2.3" }
-godwinmix-render = { path = "crates/godwinmix-render", version = "0.2.3" }
+godwinmix-protocol = { path = "crates/godwinmix-protocol", version = "0.3.0" }
+godwinmix-core = { path = "crates/godwinmix-core", version = "0.3.0" }
+godwinmix-host = { path = "crates/godwinmix-host", version = "0.3.0" }
+godwinmix-govern = { path = "crates/godwinmix-govern", version = "0.3.0" }
+godwinmix-framebus = { path = "crates/godwinmix-framebus", version = "0.3.0" }
+godwinmix-render = { path = "crates/godwinmix-render", version = "0.3.0" }
 
 gstreamer = "0.24"
 gstreamer-video = "0.24"
@@ -112,7 +112,7 @@ getrandom = "0.3"
 # component model has not moved under it.
 wasmtime = { version = "36", default-features = false, features = ["cranelift", "component-model", "runtime", "std", "gc-drc"] }
 wasmtime-wasi = { version = "36", default-features = false }
-godwinmix-wasm = { path = "crates/godwinmix-wasm", version = "0.2.3" }
+godwinmix-wasm = { path = "crates/godwinmix-wasm", version = "0.3.0" }
 # The node bridge. rustls and tokio-rustls are already in the tree under
 # reqwest; naming them here makes the core a TLS server as well as a client,
 # which is what mutual TLS between a node and the core needs.
