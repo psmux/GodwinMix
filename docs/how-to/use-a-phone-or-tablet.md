@@ -42,34 +42,57 @@ Sources on that scene. It only changes which scene you are looking at; it
 never puts anything in Preview or on air. Back on Sources, the row of scene
 names across the top does the same from there.
 
+Hold a finger on a scene's card for half a second and its menu opens: Put on
+air, Open the composer, Rename, a colour, Copy the layout, Duplicate and
+Remove. Rename turns the scenes into tiles for as long as the name is being
+typed, then back into cards.
+
 A panel opened from More has a back arrow beside its title. The page
 remembers which tab you were on.
 
 The header is two rows. The first has the name, `+1` when someone else has
 the page open (tap it to see who), the destinations and the ☰ button, which holds the whole menu bar: every item in File, Edit, View,
 Sources, Scenes, Outputs and Help. The second is what is on air, as wide as
-the screen, with its level and how long the show has been running. The
+the screen, with its level and how long the show has been running, and
+`REC` with the time while a recording runs. The
 encoder's name, the palette button, the settings button and Cut to black
 leave the header on a phone; they are under ☰ and More.
+
+Messages, such as a destination that would not start, appear just above
+the tab bar, the width of the screen, with their button under the words.
+While a dialog is open they appear at the top instead, clear of the buttons
+that finish it.
 
 Turn the phone on its side and the tabs become a rail down the left, the
 header becomes one line, and Live puts the monitors and Take on the left
 with the scenes beside them.
 
 The composer opens over the whole screen with the picture first. Tap an item
-to select it and drag its handles; the Align, Space, Size and Structure
-buttons are under the picture, one row each, and swipe sideways. The
-inspector for the selected item is under those, and Apply stays at the
-bottom.
+to select it and drag it, or drag its handles; a handle takes a finger that
+lands a little off it. Under the picture are four chips, Align, Space, Size
+and Structure, and the buttons of the chosen one, all in sight. The
+inspector for the selected item is under those. The picture stays at the
+top while the inspector scrolls, so a number typed there can be seen to
+move the item, and Apply stays at the bottom. On its side the phone shows
+the picture down the left and the tools and the inspector beside it.
+
+A dialog that is a form, Add destination for one, opens without raising
+the keyboard, so the whole form can be read first; tap a field to type in
+it. A dialog that asks for one thing, a name, puts the keyboard up at once.
+On Android the page shrinks to fit above the keyboard, so a dialog's
+buttons stay in reach, and the tab bar steps out of the way while you type.
+Pulling down does not reload the page, so a drag that runs on cannot stop
+the show's page by accident.
 
 To open the page like an app, install it. On Android, More has Install app
 under This mixer once Chrome has offered to install the page; on an iPhone
 or iPad, tap Share, then Add to Home Screen. It then starts full screen
 without the browser's address bar. Chrome only offers to install a page over
-`https://` with a certificate the phone trusts, and the mixer's own self
-signed one cannot be made trusted on a phone as it is:
+`https://` with a certificate the phone trusts. The mixer signs its own
+certificate with a small authority of its own, which a phone trusts once it
+is installed from `/ca.crt` or `/ca.pem`:
 [install the control page as an app](install-as-an-app.md) says what works on
-which phone and how to get a certificate a phone will trust.
+which phone and has the steps.
 
 Anything the keyboard does has a button or a menu item:
 
@@ -94,12 +117,15 @@ Anything the keyboard does has a button or a menu item:
 | tap | the same as a click: a tile goes on air, or is armed in Studio mode | click |
 | long press, about half a second | the item menu: Put on air, Rename, colours, Settings, Copy, Remove | right click |
 | double tap | open: a scene opens in the composer, a source's settings open, a show tab is renamed, a fader goes back to 0 dB | double click |
-| drag by the ⠿ grip | move a tile, or drop a source on a scene | drag the tile |
+| drag by the ⠿ grip | drop a source on a scene, where Scenes and Sources are on screen together | drag the tile |
 | swipe anywhere else | scroll the page | the scroll wheel |
 
 The grip is the six dots at the left of each tile's name bar. It is there so a
-swipe across the picture still scrolls the tray, which on a phone matters more
-than rearranging it. A tap on the grip that does not move selects the tile and
+swipe across the picture still scrolls the tray. On a phone Scenes is on
+another screen, so a source goes into a scene through the scene's
+`N sources ›` button and Add sources instead. Dropping one tile on another
+does not reorder the tray; what is in front of what in a scene is set in the
+composer, under Structure, with Bring to front and Send to back. A tap on the grip that does not move selects the tile and
 does not put it on air. A long press that turns into a menu never puts the
 tile on air either, when the finger lifts. A button with no menu, Take for one,
 still does its job when it is held down a moment too long.

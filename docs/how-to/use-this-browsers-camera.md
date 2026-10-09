@@ -74,7 +74,11 @@ a different error opens it again.
 
 Drag the bar by its name to put it anywhere else on the page. It stays there,
 inside the window, and comes back there next time. Folded, it sits under any
-dialog, so it never covers the button that finishes one.
+dialog, so it never covers the button that finishes one. On a phone it goes
+under a dialog open as well, since open it fills most of the screen. Left
+where it starts on a phone, just above the tab bar, every screen scrolls far
+enough to bring its last line out from under it, and Take outside Studio
+mode floats above it.
 
 Under the picture, once a second while the bar is open, is what is going
 out: the bit rate, the picture size and frame rate, and the round trip to the
