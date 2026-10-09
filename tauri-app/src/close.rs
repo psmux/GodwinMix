@@ -114,7 +114,8 @@ pub fn request(app: &AppHandle, stop_core: bool) {
         let (target, local) = {
             let shell = app.state::<Shell>();
             let local = shell.local.lock().unwrap().as_ref().map(|l| l.target.base.clone());
-            (shell.target.lock().unwrap().clone(), local)
+            let target = shell.target.lock().unwrap().clone();
+            (target, local)
         };
         let local = local.is_some() && target.as_ref().map(|t| t.base.clone()) == local;
         let http = app.state::<Shell>().http.clone();

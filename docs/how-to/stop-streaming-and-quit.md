@@ -42,7 +42,8 @@ that is still connecting is stopped without the question, since nobody is
 watching it yet.
 
 Stopping keeps the destination, its address and its stream key. Its row under
-Outputs says "Stopped, stream key kept" and offers **Start streaming**, which
+Outputs says "Stopped", with "Nothing is sent. The address and stream key are
+kept, so Start streaming sends again." under it, and offers **Start streaming**, which
 sends to it again with the same key. **Remove** is different: it stops and
 forgets the address and the key.
 

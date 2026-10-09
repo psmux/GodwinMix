@@ -35,7 +35,7 @@ const REFRESH_MS = 1000;
 export function stateLabel(output) {
   if (output.state === "live") return "Live";
   // Stopped by a person with output.stop: nothing is sent, the key is kept.
-  if (output.state === "stopped") return "Stopped, stream key kept";
+  if (output.state === "stopped") return "Stopped";
   // Ahead of the connection state on purpose: a destination still carrying a
   // preset's placeholder is not going to connect, and "Reconnecting, attempt
   // 47" tells nobody why.
@@ -66,6 +66,7 @@ export const ADVICE_AFTER = 10;
  */
 export function stalledAdvice(output) {
   // The core's own reason, when it gave one, says more than a count can.
+  if (output.state === "stopped") return "Nothing is sent. The address and stream key are kept, so Start streaming sends again.";
   const said = failureAdvice(output);
   if (said) return said;
   if (output.has_key === false) return "";
