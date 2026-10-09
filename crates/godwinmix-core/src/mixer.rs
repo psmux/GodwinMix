@@ -430,6 +430,7 @@ mod rendered;
 mod reported;
 pub mod slots;
 mod slot_guard;
+pub mod held;
 pub mod transition;
 pub mod unattached;
 pub mod unstarted;
@@ -506,6 +507,10 @@ pub enum Command {
     /// and the swap happens here so nothing can land between the two halves.
     SetOutput(Box<OutputConfig>, Option<Ack>),
     RemoveOutput(OutputId, Option<Ack>),
+    /// Stop sending to a destination and keep it, address and key. See `held`.
+    StopOutput(OutputId, Option<Ack>),
+    /// Start a stopped destination again under the same id.
+    StartOutput(OutputId, Option<Ack>),
     /// An output's reconnect has finished on its own thread, with the output
     /// it was started for and why it failed if it did. Applied only if that
     /// output is still in place. Never sent by the API.
@@ -1222,6 +1227,8 @@ pub struct Mixer {
     unstarted: unstarted::UnstartedList,
     /// Outputs that would not attach at start. See `unattached.rs`.
     unattached: unattached::UnattachedList,
+    /// Outputs a person stopped. See `held.rs`.
+    held: held::HeldList,
 
     handle: MixerHandle,
     events: EventBus,
@@ -1934,6 +1941,7 @@ impl Mixer {
             removed: Vec::new(),
             unstarted: Default::default(),
             unattached: Default::default(),
+            held: Default::default(),
             handle: handle.clone(),
             events,
             rt,
@@ -1981,6 +1989,10 @@ impl Mixer {
     /// again when the last one leaves. See `multiview.rs`.
     pub fn start(&mut self) -> Result<()> {
         for out in self.cfg.outputs.clone() {
+            if !out.enabled {
+                self.hold(&out);
+                continue;
+            }
             match self.attach_output(&out) {
                 Ok(slot) => self.outputs.push(slot),
                 // Kept and tried again from the tick: a show started again
@@ -2997,10 +3009,16 @@ impl Mixer {
         // config wins, and the caller hears how this attempt went.
         self.unattached.forget(&cfg.id);
         anyhow::ensure!(
-            !self.outputs.iter().any(|o| o.id() == &cfg.id),
+            !self.outputs.iter().any(|o| o.id() == &cfg.id) && !self.held.has(&cfg.id),
             "output {} already exists",
             cfg.id
         );
+        if !cfg.enabled {
+            self.hold(cfg);
+            self.persist_runtime();
+            self.broadcast_status();
+            return Ok(());
+        }
         let slot = self
             .attach_output(cfg)
             .with_context(|| format!("attaching output {}", cfg.id))?;
@@ -3026,6 +3044,14 @@ impl Mixer {
     /// air with nothing.
     pub fn set_output(&mut self, cfg: &OutputConfig) -> Result<()> {
         crate::plugin::output::check_uri(cfg)?;
+        if self.held.has(&cfg.id) {
+            // Stopped: the change is kept for the next start, and nothing
+            // is built for it now.
+            self.held.put(cfg);
+            self.persist_runtime();
+            self.broadcast_status();
+            return Ok(());
+        }
         if self.unattached.has(&cfg.id) {
             // Nothing attached to take down: try the new config now, and
             // keep it waiting if it will not attach either.
@@ -3081,6 +3107,15 @@ impl Mixer {
 
     /// Detach a destination. The programme and every other output carry on.
     pub fn remove_output(&mut self, id: &OutputId) -> Result<()> {
+        // Only a stopped one with nothing attached: `stop_output` keeps the
+        // config here before it detaches the running output.
+        let attached = self.outputs.iter().any(|o| o.id() == id) || self.unattached.has(id);
+        if !attached && self.held.take(id).is_some() {
+            info!(output = %id, "a stopped output removed");
+            self.persist_runtime();
+            self.broadcast_status();
+            return Ok(());
+        }
         if self.unattached.forget(id) {
             info!(output = %id, "output removed before it was attached");
             self.persist_runtime();
@@ -3129,7 +3164,12 @@ impl Mixer {
         }
         // One that would not attach this time is still wanted next time.
         let outputs: Vec<OutputConfig> =
-            self.outputs.iter().map(|o| o.cfg.clone()).chain(self.unattached.configs().cloned()).collect();
+            self.outputs
+                .iter()
+                .map(|o| o.cfg.clone())
+                .chain(self.unattached.configs().cloned())
+                .chain(self.held.configs().cloned())
+                .collect();
         RuntimeConfigs {
             sources,
             outputs,
@@ -4030,6 +4070,8 @@ impl Mixer {
             Command::AddOutput(..) => "output.add",
             Command::SetOutput(..) => "output.set",
             Command::RemoveOutput(..) => "output.remove",
+            Command::StopOutput(..) => "output.stop",
+            Command::StartOutput(..) => "output.start",
             Command::OutputReconnected(..) => "output.reconnected",
             Command::RetryOutput(_) => "output.retry",
             Command::RestartSource(_) => "source.restart",
@@ -4211,6 +4253,16 @@ impl Mixer {
             }
             Command::RemoveOutput(id, ack) => {
                 let r = self.remove_output(&id);
+                reply(ack, &r);
+                r?;
+            }
+            Command::StopOutput(id, ack) => {
+                let r = self.stop_output(&id);
+                reply(ack, &r);
+                r?;
+            }
+            Command::StartOutput(id, ack) => {
+                let r = self.start_output(&id);
                 reply(ack, &r);
                 r?;
             }
@@ -4932,6 +4984,7 @@ impl Mixer {
                 .iter()
                 .map(|o| OutputStatus { shed: self.shed_reason(o.id()), ..o.status() })
                 .chain(self.unattached.statuses())
+                .chain(self.held.statuses())
                 .collect(),
             // With no mosaic running the configured shape is still what a
             // client would get if it asked, so `enabled` answers "may I have
@@ -5666,6 +5719,7 @@ mod tests {
     mod sound_only;
     mod stale_work;
     mod stall_storm;
+    mod stopped_output;
     mod refused_output;
     mod slow_output;
     mod stuck_detach;
