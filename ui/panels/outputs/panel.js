@@ -20,7 +20,6 @@ import { startRecording, recordingRow, recordingState, isRecording } from "./rec
 import { lazyAction } from "../../shell/lazy-action.js";
 import { addChannel } from "../channels/entry.js";
 import { failureLabel, failureAdvice, failureOf } from "./failure.js";
-import { streamToggle } from "./stream-toggle.js";
 const addDestination = lazyAction(() => import("./destination.js").then(m => m.addDestination), "Add destination");
 const editDestination = lazyAction(() => import("./destination.js").then(m => m.editDestination), "Edit destination");
 // Resources, plan lines and the HLS card: see views.js.
@@ -275,7 +274,10 @@ class OutputsPanel extends HTMLElement {
           onclick: () => editDestination(this.client, current),
         }),
         // Stop keeps the destination and its key; Remove forgets both.
-        streamToggle(this.client, () => current),
+        el("button.btn.icon" + (output.state === "stopped" ? ".primary" : ".danger"), {
+          text: output.state === "stopped" ? "Start streaming" : "Stop streaming",
+          onclick: () => import("./stream-toggle.js").then((m) => m.toggle(this.client, current)),
+        }),
         // A destination with no key is never dialled, so there is nothing to
         // reconnect until the key is in, and a stopped one is not dialled.
         needsKey || output.state === "stopped" ? null : el("button.btn.icon", {

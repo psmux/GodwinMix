@@ -464,12 +464,6 @@ label { display: block; }
 .header > .pill, .header > .tally { flex-shrink: 0; white-space: nowrap; }
 /* REC is a button: pressing it stops the recording, after one question. */
 .hdr-rec, .hdr-dest { cursor: pointer; font-family: inherit; color: inherit; font-variant-numeric: tabular-nums; }
-/* What is running, from the pill, and the banner a page opens with when
-   something was already running. */
-.running-dialog { min-width: min(520px, 94vw); }
-.running-row { gap: 10px; padding: 8px 0; border-bottom: var(--border) solid var(--line-soft); }
-.running-row .col { min-width: 0; gap: 2px; }
-.still-running { position: fixed; top: 0; left: 0; right: 0; z-index: 38; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 16px; background: var(--panel2); border-bottom: 2px solid var(--live); box-shadow: 0 2px 10px rgba(0,0,0,.35); }
 .shows { display: flex; align-items: center; min-width: 60px; padding-left: 6px; border-left: var(--border) solid var(--line-soft); }
 .showtabs { display: flex; gap: 2px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
 .showtab, .shows-add { display: flex; align-items: center; gap: 6px; padding: 4px 10px; border: 0; border-radius: var(--radius-sm); background: none; color: var(--dim); white-space: nowrap; }

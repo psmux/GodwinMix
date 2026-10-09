@@ -1145,7 +1145,9 @@ mod tests {
         // The REC button in the header, or Outputs > Stop recording.
         reachable.extend(closure_of("panels/outputs/record-stop.js"));
         // The header's pill: What is running, the banner, and Stop.
+        reachable.extend(closure_of("panels/header/running-watch.js"));
         reachable.extend(closure_of("panels/header/running.js"));
+        reachable.extend(closure_of("panels/outputs/stream-toggle.js"));
         reachable.extend(closure_of("panels/header/banner.js"));
         // Renditions: each is fetched by an `import()` the first time it is
         // wanted, from the destination form, the Outputs panel or its rows.
@@ -1269,6 +1271,8 @@ mod tests {
             ("panels/header/running.js", "the header's pill pressed"),
             ("panels/header/banner.js", "a page opened with something already running"),
             ("panels/header/stop.js", "Stop pressed"),
+            ("panels/header/running-watch.js", "the header, once the page has drawn"),
+            ("panels/outputs/stream-toggle.js", "Stop streaming or Start streaming pressed"),
             ("panels/sources/browser-device.js", "this browser's camera opened"),
             ("panels/sources/phone-camera.js", "A phone's camera picked in Add source"),
             ("join/publisher.js", "this browser's camera opened, or /join/"),
