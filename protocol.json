@@ -17348,10 +17348,10 @@
       "summary": "Send to a stopped destination again, with the address and key it kept."
     },
     {
-      "destructive": true,
+      "destructive": false,
       "idempotent": true,
       "mcp": {
-        "destructiveHint": true,
+        "destructiveHint": false,
         "idempotentHint": true,
         "profile": "search",
         "readOnlyHint": false,
