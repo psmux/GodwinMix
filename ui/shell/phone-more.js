@@ -6,6 +6,7 @@ import { el } from "./dom.js";
 import { run } from "./commands.js";
 import { settings } from "./settings.js";
 import { icon } from "./phone-icons.js";
+import { installWay, promptInstall, onInstallChange } from "./install.js";
 
 /** What a panel is for, in a line, for the panels the core ships. */
 const ABOUT = {
@@ -15,8 +16,15 @@ const ABOUT = {
   "core/channels": ["channels", "Streams to a platform, by channel"],
 };
 
+/** The deck showing More, so the Install app row comes and goes with the offer. */
+let shown = null;
+onInstallChange(() => {
+  if (shown && shown.page === "more" && shown.more.isConnected) shown.render();
+});
+
 /** The screen's children, built again each time it is shown. */
 export function morePage(deck, extras) {
+  shown = deck;
   const studio = !!settings().producer;
   const cards = extras.map((p) => {
     const [art, line] = ABOUT[p.id] || ["plugin", p.plugin ? "From the " + p.plugin + " plugin" : "A panel"];
@@ -39,8 +47,23 @@ export function morePage(deck, extras) {
       row("settings", "Page settings", "Theme, tiles and how this page behaves", () => run("shell.settings")),
       row("mixer", "Mixer settings", "Canvas, encoder, token and safety", () => run("mixer.settings")),
       row("device", "Open on another device", "A code or a link for a second phone", () => run("help.devices")),
+      installRow(installWay(), () => promptInstall()),
     ]),
-  ];
+  ].filter(Boolean);
+}
+
+/**
+ * Install app, in the form this browser allows: a button where the browser
+ * has offered to install, a line saying where Add to Home Screen is on an
+ * iPhone or iPad, and nothing at all where neither applies or it is done.
+ */
+export function installRow(way, onclick) {
+  if (way === "prompt") return row("install", "Install app", "Open the mixer from the home screen, full screen", onclick);
+  if (way !== "ios") return null;
+  return el("div.phone-row.phone-row-note", {}, [
+    icon("install"),
+    el("span.phone-row-text", {}, [el("strong", { text: "Install app" }), el("span", { text: "Tap Share, then Add to Home Screen" })]),
+  ]);
 }
 
 function row(art, title, line, onclick, on) {
