@@ -16601,7 +16601,7 @@
     },
     "/api/v1/outputs/{id}/stop": {
       "post": {
-        "description": "JSON-RPC method `output.stop`. Needs the `operate` scope. Destructive: accepts `dry_run: true`, and on a token whose policy is `confirm = required` it is refused once with -32020 and a confirm token. Accepts `idempotency_key`, honoured for 24 hours.",
+        "description": "JSON-RPC method `output.stop`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
         "operationId": "output.stop",
         "parameters": [
           {
@@ -16643,7 +16643,7 @@
         "tags": [
           "output"
         ],
-        "x-destructive": true,
+        "x-destructive": false,
         "x-idempotent": true,
         "x-scope": "operate"
       }

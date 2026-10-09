@@ -122,7 +122,7 @@ Keys accepted on every method, handled before a method runs.
 | `output.remove` | `DELETE /api/v1/outputs/{id}` | operate | yes | 1 | Stop sending to a destination and forget it. Other outputs are unaffected. |
 | `output.set` | `POST /api/v1/outputs/{id}/set` | operate |  | 1 | Change a destination in place: a new address with a new stream key, a new reconnect policy, a deeper outage buffer. The address is write only, so a client that only wants the buffer never has to hold the key. |
 | `output.start` | `POST /api/v1/outputs/{id}/start` | operate |  | 1 | Send to a stopped destination again, with the address and key it kept. |
-| `output.stop` | `POST /api/v1/outputs/{id}/stop` | operate | yes | 1 | Stop sending the programme to one destination and keep it, address, key and all, for output.start. Viewers on that platform see the stream end. |
+| `output.stop` | `POST /api/v1/outputs/{id}/stop` | operate |  | 1 | Stop sending the programme to one destination and keep it, address, key and all, for output.start. Viewers on that platform see the stream end. |
 | `path.create` | `POST /api/v1/path/create` | operate |  | 1 | Make one new folder inside a folder path.list shows, and list it. A folder that is already there is listed rather than refused. |
 | `path.list` | `GET /api/v1/path/list` | read |  | 1 | The folders in one folder on the mixer, and whether each is writable, for a folder picker. Only the home folder and the mixer's own folders are shown; files never are. |
 | `pipeline.clock` | `GET /api/v1/pipeline/clock` | read |  | 1 | The clock every pipeline is running against, and how far each one has got. |
@@ -1740,7 +1740,7 @@ MCP tool `start_output` in the `search` profile: readOnlyHint false, destructive
 
 Stop sending the programme to one destination and keep it, address, key and all, for output.start. Viewers on that platform see the stream end.
 
-MCP tool `stop_output` in the `search` profile: readOnlyHint false, destructiveHint true, idempotentHint true.
+MCP tool `stop_output` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
 
 ```json
 {
