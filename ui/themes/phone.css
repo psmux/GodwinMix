@@ -366,6 +366,20 @@ body:has(> gmx-shell.phone) .source-choice > .btn { flex: 1 1 0; }
 .phone-deck .scene-tabs .scene-tab > .scene-warn { position: absolute; }
 body:has(> gmx-shell.phone) .chn-copy { min-width: 44px; justify-content: center; }
 
+/* The page draws under a notch and a home bar (viewport-fit=cover), so a
+   dialog keeps out of both: its title and × stayed under the status bar and
+   its buttons on the home bar's swipe. */
+body:has(> gmx-shell.phone) .scrim:not(:has(> .composer)) {
+  padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+}
+body:has(> gmx-shell.phone) .dialog {
+  max-height: calc(100dvh - max(8px, env(safe-area-inset-top)) - max(8px, env(safe-area-inset-bottom)));
+}
+
+/* Routing covers the screen to its foot: its last line scrolls clear of the
+   home bar. */
+body:has(> gmx-shell.phone) .rt-scroll { padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
+
 /* Who else is here: a small pill with a finger sized target round it. */
 gmx-shell.phone .header .presence { position: relative; }
 gmx-shell.phone .header .presence::before { content: ""; position: absolute; inset: -7px -4px; }
