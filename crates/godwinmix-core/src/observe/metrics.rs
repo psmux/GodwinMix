@@ -84,7 +84,7 @@ const DEFS: &[(&str, Kind, &str, &[f64])] = &[
     (
         "gmx_output_state",
         Kind::Gauge,
-        "Output state: 0 connecting, 1 live, 2 reconnecting, 3 failed.",
+        "Output state: 0 connecting, 1 live, 2 reconnecting, 3 failed, 4 stopped by a person.",
         &[],
     ),
     ("gmx_rpc_calls_total", Kind::Counter, "Control calls answered.", &[]),
@@ -697,6 +697,7 @@ fn output_state_code(s: OutputState) -> f64 {
         OutputState::Live => 1.0,
         OutputState::Reconnecting => 2.0,
         OutputState::Failed => 3.0,
+        OutputState::Stopped => 4.0,
     }
 }
 

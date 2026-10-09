@@ -35,6 +35,7 @@ mod media;
 mod paths;
 mod nodes;
 mod outputs;
+mod output_stop;
 mod preview;
 pub(crate) mod plugins;
 mod presence;
@@ -79,6 +80,7 @@ pub fn registry() -> Registry<Call> {
     program::register(&mut reg);
     sources::register(&mut reg);
     outputs::register(&mut reg);
+    output_stop::register(&mut reg);
     channel_destinations::register(&mut reg);
     media::register(&mut reg);
     templates::register(&mut reg);

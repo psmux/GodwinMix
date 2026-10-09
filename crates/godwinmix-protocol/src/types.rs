@@ -48,6 +48,9 @@ pub enum OutputState {
     Live,
     Reconnecting,
     Failed,
+    /// A person stopped it with `output.stop`. Nothing is sent, and the
+    /// address and key are kept for `output.start`.
+    Stopped,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
