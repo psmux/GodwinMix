@@ -121,7 +121,8 @@ impl Host {
     }
 
     /// The calls the station makes as `tool.call`: `direct.stats {ids?}`,
-    /// and `direct.thumbnail {show, width?}`, which the vitals answer.
+    /// and `direct.thumbnail {show, width?}` and `channel.thumbnail {app,
+    /// stream, width?}`, which the vitals answer.
     /// `None` for a name that is not the host's.
     pub fn call(&self, name: &str, arguments: &Value) -> Option<Value> {
         if name == "direct.stats" {

@@ -24,6 +24,7 @@ import { phoneTests } from "./phone.js";
 import { phoneReachTests } from "./phone-reach.js";
 import { showTests } from "./shows.js";
 import { wallTests } from "./wall.js";
+import { wallChannelTests } from "./wall-channels.js";
 import { browserDeviceTests } from "./browser-devices.js";
 import { presenceTests } from "./presence.js";
 import { lanDeviceTests } from "./lan-devices.js";
@@ -2948,6 +2949,12 @@ tileLevelTests(test, eq, ok)
   .catch((e) => {
     failed += 1;
     line("fail", "the wall suite threw: " + e.message);
+    console.error(e);
+  })
+  .then(() => wallChannelTests(test, eq, ok))
+  .catch((e) => {
+    failed += 1;
+    line("fail", "the wall channels suite threw: " + e.message);
     console.error(e);
   })
   .then(() => browserDeviceTests(test, eq, ok))

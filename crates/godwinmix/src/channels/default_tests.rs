@@ -46,6 +46,11 @@ fn open(dir: &Path, stored: bool) -> Arc<Channels> {
     )
 }
 
+/// A registry with no channels file, for a test of something else.
+pub(in crate::channels) fn open_bare(name: &str) -> Arc<Channels> {
+    open(&scratch(name), false)
+}
+
 #[tokio::test]
 async fn a_fresh_mixer_gets_live_once_and_not_again_after_it_is_removed() {
     let dir = scratch("fresh");

@@ -91,6 +91,7 @@ export function channelCard(view, first) {
     update,
     connect: (want) => fold(want, false),
     tick: () => { for (const row of rows.values()) row.tick?.(); },
+    picture: () => { for (const row of rows.values()) row.picture?.(); },
   };
 }
 

@@ -2139,6 +2139,35 @@
       ],
       "type": "object"
     },
+    "ChannelThumbnailRequest": {
+      "description": "`channel.thumbnail`.",
+      "properties": {
+        "id": {
+          "description": "The channel.",
+          "type": "string"
+        },
+        "stream": {
+          "description": "Which of its streams. The first live one when left out.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "width": {
+          "description": "Pixels across, 16 to 640, made even. 320 when left out.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object"
+    },
     "ConfigChanged": {
       "description": "One key this call changed, and when the change takes effect.",
       "properties": {
@@ -15572,6 +15601,25 @@
     {
       "destructive": false,
       "idempotent": true,
+      "mutating": false,
+      "name": "channel.thumbnail",
+      "params": {
+        "$ref": "#/$defs/ChannelThumbnailRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/channels/{id}/thumbnail"
+      },
+      "result": {
+        "type": "object"
+      },
+      "scope": "read",
+      "since": "1",
+      "summary": "A live channel stream's picture as a small JPEG in base64, {channel, stream, jpeg, width, height, at_ms}, or {pending: true, retry_after_ms} while the first keyframe is on its way. Keyframes only, about one a second, for ten seconds after an ask; nothing is decoded between asks. GET /api/v1/channels/{id}/streams/{stream}/thumbnail.jpg serves the JPEG itself."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
       "mcp": {
         "destructiveHint": false,
         "idempotentHint": true,
@@ -20232,6 +20280,11 @@
       "method": "GET",
       "note": "one of a gallery item's own files: an HTML graphic's page for the browser source, a clip for a moving preview. Open to a process on the mixer's machine; a token with read from anywhere else",
       "path": "/api/v1/gallery/{id}/files/{*path}"
+    },
+    {
+      "method": "GET",
+      "note": "a live channel stream's picture as a JPEG, for an <img>: ?width= (16 to 640, 320 when left out), as channel.thumbnail makes it; the token may be ?token=. 409 with data.retry_after_ms while the first keyframe is on its way, 409 with data.state idle when nothing is publishing",
+      "path": "/api/v1/channels/{id}/streams/{stream}/thumbnail.jpg"
     },
     {
       "method": "GET",

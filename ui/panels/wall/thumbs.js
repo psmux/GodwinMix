@@ -20,9 +20,11 @@ export function thumbUrl(client, id, width, t) {
 }
 
 export class Thumbs {
-  constructor(client, width = 160) {
+  /** `urlOf(id, width, t)` addresses something other than a show: a channel stream. */
+  constructor(client, width = 160, urlOf = null) {
     this.client = client;
     this.width = width;
+    this.urlOf = urlOf;
     this.imgs = new Map();
     this.ids = [];
     this.asked = 0;
@@ -80,7 +82,8 @@ export class Thumbs {
     };
     next.onload = () => done(true);
     next.onerror = () => done(false);
-    next.src = thumbUrl(this.client, id, this.width, Math.floor(Date.now() / EVERY_MS));
+    const t = Math.floor(Date.now() / EVERY_MS);
+    next.src = this.urlOf ? this.urlOf(id, this.width, t) : thumbUrl(this.client, id, this.width, t);
   }
 
   stop() {

@@ -66,16 +66,17 @@ impl Channels {
                     if s.live.state != live.state {
                         s.since = since;
                     }
-                    s.live = live;
+                    s.live = live.clone();
                     moved
                 }
                 None => {
-                    sending.push(Sending { channel: channel.clone(), id, live, since });
+                    sending.push(Sending { channel: channel.clone(), id: id.clone(), live: live.clone(), since });
                     true
                 }
             }
         };
         if moved {
+            self.hook_destination(&channel, &id, &live);
             self.announce(&channel);
         }
     }

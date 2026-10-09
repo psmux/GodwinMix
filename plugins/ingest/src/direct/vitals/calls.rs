@@ -29,8 +29,12 @@ impl Vitals {
     /// `direct.thumbnail {show, width?}`: `{jpeg, width, height, at_ms}` with the
     /// JPEG in base64, or `{pending: true}` while the first keyframe is on
     /// its way, or `{status: 404, why}` for a show this host does not run.
+    /// `channel.thumbnail` is a channel stream's picture (`peek.rs`).
     /// `None` for any other call, which is somebody else's.
     pub fn call(&self, name: &str, params: &Value) -> Option<Value> {
+        if name == "channel.thumbnail" {
+            return Some(self.peek_call(params));
+        }
         if name != "direct.thumbnail" {
             return None;
         }
