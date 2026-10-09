@@ -22,25 +22,25 @@ impl Channels {
     /// Does anything still want this source: a scene that places it, or the
     /// programme showing it bare?
     pub(super) fn held(&self, source: &str) -> bool {
-        self.target.holds(source)
+        self.target().holds(source)
     }
 
     /// Make a live stream a source, or find the one it already has.
     pub(super) fn adopt(&self, record: &Record, stream: &str, relay: &str) {
         let id = slug(&format!("{}-{}", record.app, stream));
-        let exists = self.target.has_source(&id).unwrap_or(false);
+        let exists = self.target().has_source(&id).unwrap_or(false);
         if !exists {
             let mut cfg = SourceConfig::bare(&id, "");
             cfg.type_id = Some(SOURCE_TYPE.into());
             cfg.name = Some(format!("{} {stream}", record.name));
             cfg.params.insert("relay".into(), toml::Value::String(relay.to_string()));
             cfg.params.insert("stream".into(), toml::Value::String(format!("{}/{stream}", record.app)));
-            match self.target.add_source(cfg) {
+            match self.target().add_source(cfg) {
                 Ok(()) => info!(source = %id, "a channel's stream became a source"),
                 // A busy show answers late but still adds it. Unclaimed, the
                 // stream would never show its source, and the source would
                 // stay behind when the encoder stops.
-                Err(why) if super::target::arrived_late(&*self.target, &id, &why) => {
+                Err(why) if super::target::arrived_late(self.target(), &id, &why) => {
                     info!(source = %id, %why, "a channel's stream became a source, after the mixer answered late");
                 }
                 Err(why) => {
@@ -88,7 +88,7 @@ impl Channels {
         if !ours || self.held(id) {
             return false;
         }
-        self.target.remove_source(id);
+        self.target().remove_source(id);
         info!(source = %id, "a channel's stream left and its source went with it");
         for r in self.records.lock().iter_mut() {
             r.auto_sources.retain(|s| s != id);

@@ -64,6 +64,6 @@ impl Channels {
             Some(json!({"cert": cert, "key": key}))
         });
         let value = pair.and_then(|p| toml::Value::try_from(p).map_err(|e| warn!(%e, "the certificate would not convert")).ok());
-        self.plugins.set_extra(PLUGIN, "tls", value);
+        self.plugins().set_extra(PLUGIN, "tls", value);
     }
 }

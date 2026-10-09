@@ -113,12 +113,12 @@ impl Channels {
     fn send(&self, table: Value, now: bool) {
         self.hand_over_tls();
         match toml::Value::try_from(&table) {
-            Ok(value) => self.plugins.set_extra(PLUGIN, "channels", Some(value)),
+            Ok(value) => self.plugins().set_extra(PLUGIN, "channels", Some(value)),
             Err(e) => warn!(%e, "the channel table would not convert for the plugin"),
         }
         *self.handed.lock() = Some(table);
         if now {
-            for (instance, answer) in self.plugins.configure_plugin(PLUGIN) {
+            for (instance, answer) in self.plugins().configure_plugin(PLUGIN) {
                 if let Err(e) = answer {
                     warn!(%instance, error = %format!("{e:#}"), "the channel server did not take the new channel table");
                 }

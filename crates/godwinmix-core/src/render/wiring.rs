@@ -1,5 +1,5 @@
 //! Joining a node's body to the graph and taking it out again: the element
-//! surgery `graph` does, on the mixer thread.
+//! surgery `graph` does on the mixer thread, and the NULL that waits, off it.
 
 use super::elements::Body;
 use super::keyframes;
@@ -54,16 +54,34 @@ pub fn is_audio(kind: &NodeKind) -> bool {
 
 /// Unlink first, so nothing is pushed into an element on its way to NULL.
 pub fn take_down(pipeline: &gst::Pipeline, live: Live) {
-    if let Some((tee, pad)) = live.upstream {
+    if let Some((_, pad)) = &live.upstream {
         if let Some(peer) = pad.peer() {
             let _ = pad.unlink(&peer);
         }
-        tee.release_request_pad(&pad);
     }
-    for el in live.elements.iter() {
+    retire(pipeline, live.elements, live.upstream);
+}
+
+/// Out of the programme here, which waits for nothing, and down to NULL on
+/// a thread of its own, because NULL joins each element's streaming thread
+/// and a rendition's encoder may be a hardware one whose driver decides how
+/// long that takes. The tee pad goes back last, once nothing pushes into it.
+pub fn retire(pipeline: &gst::Pipeline, elements: Vec<gst::Element>, upstream: Option<(gst::Element, gst::Pad)>) {
+    for el in &elements {
         el.set_locked_state(true);
-        let _ = el.set_state(gst::State::Null);
         let _ = pipeline.remove(el);
+    }
+    let name = elements.first().map(|e| e.name().to_string()).unwrap_or_default();
+    let started = crate::mixer::offload::run("rendition-stop", &name, move || {
+        for el in &elements {
+            let _ = el.set_state(gst::State::Null);
+        }
+        if let Some((tee, pad)) = upstream {
+            tee.release_request_pad(&pad);
+        }
+    });
+    if !started {
+        tracing::warn!(node = %name, "no thread to take a rendition node down on; it is left out of the programme as it is");
     }
 }
 

@@ -28,14 +28,17 @@ impl Channels {
     /// first keyframe is on its way. Blocks on the listener; call it on the
     /// blocking pool.
     pub fn thumbnail(&self, req: &ChannelThumbnailRequest) -> Result<Value, RpcError> {
-        let record = self.records.lock().iter().find(|r| r.id == req.id).cloned().ok_or_else(|| self.not_found(&req.id))?;
+        // Two statements: the guard lives to the end of the one that took
+        // it, and `not_found` takes `records` again. See `guard`.
+        let found = self.records.lock().iter().find(|r| r.id == req.id).cloned();
+        let record = found.ok_or_else(|| self.not_found(&req.id))?;
         let stream = self.live_stream(&record.id, req.stream.as_deref())?;
-        if !self.plugins.is_running(PLUGIN) {
+        if !self.plugins().is_running(PLUGIN) {
             return Err(RpcError::not_in_state(format!("channel {} has no picture: {}", record.id, net::why_not_listening(PLUGIN)))
                 .with("channel", record.id.as_str()));
         }
         let args = json!({"name": "channel.thumbnail", "arguments": {"app": record.app, "stream": stream, "width": req.width.unwrap_or(320)}});
-        let answer = self.plugins.call_provide(PLUGIN, "discover", "tool.call", args).map_err(|e| {
+        let answer = self.plugins().call_provide(PLUGIN, "discover", "tool.call", args).map_err(|e| {
             RpcError::not_in_state(format!("channel {} has no picture yet: the listener said {e:#}. Ask again in a second.", record.id))
                 .with("channel", record.id.as_str())
                 .with("retry_after_ms", 1000)
@@ -120,5 +123,32 @@ mod tests {
         let gone = read_answer("church", "main", json!({"status": 404, "why": "nothing is publishing to church/main"})).unwrap_err();
         assert!(gone.message.contains("comes once an encoder publishes"), "{}", gone.message);
         assert_eq!(gone.data["state"], "idle");
+    }
+
+    /// Run `work` on a thread of its own and give it `within`; None when it
+    /// did not come back, which is what a deadlock looks like from outside.
+    fn bounded<T: Send + 'static>(within: Duration, work: impl FnOnce() -> T + Send + 'static) -> Option<T> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = tx.send(work());
+        });
+        rx.recv_timeout(within).ok()
+    }
+
+    /// A picture asked of a channel that is not there is refused, and the
+    /// channels answer afterwards. Before the fix the refusal took `records`
+    /// a second time on the thread that held it, and every `channel.list`
+    /// from then on waited for good.
+    #[tokio::test]
+    async fn a_picture_of_a_channel_that_is_not_there_is_refused_and_the_list_still_answers() {
+        let channels = super::super::default::tests::open_bare("thumb-missing");
+        let asker = channels.clone();
+        let req: ChannelThumbnailRequest = serde_json::from_value(json!({"id": "gone", "stream": "phone"})).unwrap();
+        let refused = bounded(Duration::from_secs(5), move || asker.thumbnail(&req).map(|_| ()))
+            .expect("channel.thumbnail did not answer within five seconds");
+        let e = refused.expect_err("there is no channel called gone");
+        assert!(e.message.contains("gone"), "{}", e.message);
+        let lister = channels.clone();
+        bounded(Duration::from_secs(5), move || lister.list()).expect("channel.list did not answer within five seconds");
     }
 }
