@@ -60,6 +60,7 @@ impl Vitals {
     }
 
     /// How many channel streams are being looked at now.
+    #[cfg(test)]
     pub fn peeking(&self) -> usize {
         lock(&self.taps).values().filter(|t| t.peek).count()
     }
