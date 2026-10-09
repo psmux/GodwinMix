@@ -65,6 +65,10 @@ impl Mixer {
             });
             return;
         }
+        if !end.act_once() {
+            debug!(source = %id, "a second notice of a clip's end that has been acted on");
+            return;
+        }
         let at_end = AtEnd::of(&slot.input.current_config().params);
         if end.take_quiet() && at_end != AtEnd::Repeat {
             end.hold();

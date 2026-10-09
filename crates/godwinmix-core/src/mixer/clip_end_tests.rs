@@ -86,6 +86,32 @@ fn a_late_segment_in_the_same_pass_is_not_a_new_end() {
     assert!(end.at_end());
 }
 
+/// Seeked to its last frame, a clip's branches can each be flushed more than
+/// once, and the sound can reach its EOS between two flushes: one pass, two
+/// notices. The mixer acts on the first and on no other until a new pass.
+#[test]
+fn a_pass_told_twice_is_acted_on_once() {
+    let end = ClipEnd::new();
+    let told = AtomicU32::new(0);
+    let tell = || {
+        told.fetch_add(1, Ordering::Relaxed);
+    };
+    for _ in 0..2 {
+        end.fresh.store(true, Ordering::Release);
+        end.on_event(AUDIO, &segment_at(1_966), &tell);
+        end.on_event(AUDIO, &eos(), &tell);
+    }
+    assert_eq!(told.load(Ordering::Relaxed), 2, "the case this guards: two notices for one pass");
+    assert!(end.act_once(), "the first notice is acted on");
+    assert!(!end.act_once(), "the second is not");
+    end.on_event(VIDEO, &segment_at(1_966), &tell);
+    assert!(!end.act_once(), "the picture's late segment is the same pass");
+
+    end.fresh.store(true, Ordering::Release);
+    end.on_event(VIDEO, &segment_at(0), &tell);
+    assert!(end.act_once(), "a new pass ends anew");
+}
+
 #[test]
 fn a_clip_with_no_sound_is_not_waited_on_for_it() {
     let end = ClipEnd::new();
