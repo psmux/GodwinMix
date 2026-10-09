@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/media/readme/wordmark-dark.svg">
-    <img alt="GodwinMix" src="docs/media/readme/wordmark-light.svg" width="400">
+    <source media="(prefers-color-scheme: dark)" srcset="docs/media/readme/wordmark-dark.png">
+    <img alt="GodwinMix" src="docs/media/readme/wordmark-light.png" width="400">
   </picture>
 </p>
 
@@ -17,7 +17,6 @@
   <a href="https://github.com/psmux/GodwinMix/releases"><img alt="Downloads" src="https://img.shields.io/github/downloads/psmux/GodwinMix/total?color=38a4ff"></a>
   <a href="LICENSE"><img alt="Apache 2.0" src="https://img.shields.io/badge/licence-Apache%202.0-2ea44f"></a>
   <img alt="Windows, macOS, Linux" src="https://img.shields.io/badge/runs%20on-Windows%20%7C%20macOS%20%7C%20Linux-555">
-  <a href="https://github.com/psmux/GodwinMix/actions/workflows/build.yml"><img alt="build" src="https://github.com/psmux/GodwinMix/actions/workflows/build.yml/badge.svg"></a>
 </p>
 
 <p align="center">
@@ -44,7 +43,7 @@
 3. **Add your stream key and press Take.** Paste the address YouTube, Facebook or Twitch gives you under Add destination. It turns green and you are live.
 
 <p align="center">
-  <img src="docs/media/readme/presets.gif" alt="The welcome screen with starting points for a church service, a classroom and a game stream" width="720">
+  <img src="docs/media/readme/welcome.jpg" alt="The welcome screen with starting points for a church service, a classroom and a game stream" width="720">
 </p>
 
 The full walk through, with screenshots, is [your first stream on the desktop app](docs/tutorials/first-stream-desktop.md). Fifteen minutes, one camera, one destination.
