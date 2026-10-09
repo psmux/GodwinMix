@@ -24,10 +24,10 @@ with a bar of five tabs along the bottom:
 | Tab | What is on it |
 |---|---|
 | Live | Preview and Programme side by side, Take and Cut under them, the transition, then the scenes as cards with their pictures |
-| Sources | the tray of the scene you are working on, two tiles to a row, with a fader and a mute on each |
+| Sources | the tray of the scene you are working on, two tiles to a row, with a fader and a mute on each. A row of scene names across the top switches scene |
 | Audio | the programme level and a fader and mute for every source |
-| Outputs | destinations, recording and resources |
-| More | every other panel (Graphics, Media, Alerts, Channels and any plugin panel), a switch for Studio mode, Cut to black, Routing, the monitoring wall, both settings dialogs and Open on another device |
+| Outputs | destinations, recording and resources, then the channels, where an RTMP, SRT or WHIP feed comes in |
+| More | every other panel (Graphics, Media, Alerts and any plugin panel), a switch for Studio mode, Cut to black, Routing, the monitoring wall, both settings dialogs and Open on another device |
 
 Live is where a show is run from, so everything a take needs is on it
 together and nothing has to be scrolled to between choosing a shot and
@@ -36,11 +36,17 @@ press Take. With Studio mode off, tap a card and press the Take button that
 sits at the foot of the screen while the scenes scroll. The red dot on the
 Live tab means something is on air, so it can be seen from any other tab.
 
+To see what is in a scene, tap the button at the foot of its picture on
+Live. It reads `2 sources ›`, or `Add sources ›` on an empty scene, and opens
+Sources on that scene. It only changes which scene you are looking at; it
+never puts anything in Preview or on air. Back on Sources, the row of scene
+names across the top does the same from there.
+
 A panel opened from More has a back arrow beside its title. The page
 remembers which tab you were on.
 
-The header is two rows. The first has the name, the destinations and the ☰
-button, which holds the whole menu bar: every item in File, Edit, View,
+The header is two rows. The first has the name, `+1` when someone else has
+the page open (tap it to see who), the destinations and the ☰ button, which holds the whole menu bar: every item in File, Edit, View,
 Sources, Scenes, Outputs and Help. The second is what is on air, as wide as
 the screen, with its level and how long the show has been running. The
 encoder's name, the palette button, the settings button and Cut to black
