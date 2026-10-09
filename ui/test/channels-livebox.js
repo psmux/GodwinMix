@@ -97,7 +97,8 @@ export async function liveboxTests(test, eq, ok) {
   typed.value = "Choir Loft";
   typed.dispatchEvent(new Event("input", { bubbles: true }));
   test("Add Channel's preview writes a space in the address as %20, as the card after it does", () => {
-    ok(top().querySelector(".chn-preview code").textContent.endsWith("/Choir%20Loft"), top().querySelector(".chn-preview code").textContent);
+    const shown = top().querySelector(".chn-preview code").textContent;
+    ok(shown.endsWith("Choir%20Loft") && !shown.includes(" "), shown);
   });
   closeAll();
 }
