@@ -22,10 +22,10 @@ which channels, and why one a channel wants is not.
 |---|---|---|---|---|
 | `channel.list` | `GET /api/v1/channels` | read | no | Every channel, and the port they share |
 | `channel.get {id}` | `GET /api/v1/channels/{id}` | read | no | One channel |
-| `channel.add {name, app?, auto_source?, key_mode?, protocols?}` | `POST /api/v1/channels` | admin | no | A channel and its first key |
+| `channel.add {name, app?, auto_source?, key_mode?, protocols?, secret?}` | `POST /api/v1/channels` | admin | no | A channel and its first key |
 | `channel.set {id, name?, app?, enabled?, auto_source?, key_mode?, protocols?, rtmps?}` | `POST /api/v1/channels/{id}/set` | admin | no | Change what is named, leave the rest |
 | `channel.remove {id}` | `DELETE /api/v1/channels/{id}` | admin | yes | The channel, its keys, and the sources it made that no scene holds |
-| `channel.key.add {id, label?}` | `POST /api/v1/channels/{id}/key/add` | admin | no | One more key |
+| `channel.key.add {id, label?, secret?}` | `POST /api/v1/channels/{id}/key/add` | admin | no | One more key |
 | `channel.key.remove {id, key}` | `POST /api/v1/channels/{id}/key/remove` | admin | yes | Take one key back |
 | `channel.key.reveal {id, key}` | `POST /api/v1/channels/{id}/key/reveal` | admin | no | Read one key back, to give it out again |
 | `channel.certificate.set {cert, key}` | `POST /api/v1/channels/certificate/set` | admin | no | Give RTMPS a certificate and its private key, as PEM |
@@ -41,7 +41,10 @@ Every refusal says what state things are in and what to do, with `data` a
 client can act on (`docs/reference/errors.md`). An unknown channel or key
 answers `-32004` with the ids that would have worked in `data.valid`. A bad
 application name or one already taken answers `-32602` with `data.field` set
-to `app`, and `data.channel` naming the channel that has it.
+to `app`, and `data.channel` and `data.app` naming the channel that has it
+and its spelling. A `secret` that cannot be a key answers `-32602` with
+`data.field` set to `secret` and the rule in `data.min_len`, `data.max_len`
+and `data.allowed`.
 
 ## The Channel record
 
@@ -85,14 +88,14 @@ to `app`, and `data.channel` naming the channel that has it.
 | Field | What it is |
 |---|---|
 | `id` | A slug made from the name when the channel is made. It never changes |
-| `app` | The RTMP application name, the path segment after the port. Letters, digits, dashes and underscores, up to 64. Defaults to the id |
+| `app` | The RTMP application name, the path segment after the port, kept as it was typed: `Church` stays `Church`. Letters, digits, dashes, underscores and single spaces between words, up to 64, starting with a letter or digit. Defaults to the id. Matched without regard to case, so two channels cannot differ only in case. See [Case and spaces in an application name](#case-and-spaces-in-an-application-name) |
 | `enabled` | Off turns every publisher away with a sentence saying the channel is switched off, and cuts off the ones already live |
 | `auto_source` | A stream that goes live becomes a mixer source by itself. On by default |
 | `key_mode` | `query`: the key rides on the stream name as `?psk=`, `?key=`, `?token=` or `?Token=`, or is the SRT passphrase, or the WHIP bearer token. `stream`: the whole stream name is the key, over every protocol |
 | `protocols` | Which of `rtmp`, `srt` and `whip` it takes publishers over. At least one, unless RTMPS is on. A channel made before protocols existed is `["rtmp"]` |
 | `rtmps` | `{enabled, port}`. RTMPS on a port of its own, 443 offered first. It needs the mixer's certificate |
-| `keys` | Hints only. `hint` is the last four characters. The key itself is in the answer that made it, and after that only `channel.key.reveal` sends it |
-| `publish.server` | What an RTMP encoder's server box takes. The address is this machine's address on its network |
+| `keys` | Hints only. `hint` is the last four characters. The key itself is in the answer that made it, and after that only `channel.key.reveal` sends it. `imported: true` marks a key whose secret a person typed (`secret` on `channel.add` or `channel.key.add`); a key the mixer made leaves it out |
+| `publish.server` | What an RTMP encoder's server box takes. The address is this machine's address on its network. A space in `app` is written `%20` here and in every address, because that is how an encoder has to send it |
 | `publish.addresses` | The same for every protocol it has on, RTMP first: `{protocol, server, example}` with `<key>` where the key goes |
 | `streams` | Every live stream, and any stream that left while a scene still holds its source (`state: "idle"`) |
 | `streams[].key` | The id of the key that let it in |
@@ -160,10 +163,65 @@ The secret is 24 lower case letters and digits, with 0, o, 1 and l left out
 so it reads back over a phone. No list or event carries it. An admin reads it
 again with `channel.key.reveal`.
 
+`secret` keeps a password encoders already send instead, the one after
+`?psk=` in the address they publish to:
+
+```json
+{ "jsonrpc": "2.0", "id": 1, "method": "channel.add",
+  "params": { "name": "Church", "app": "Church", "secret": "Sunday-2024" } }
+```
+
+The channel's id is still a slug, `church`; its `app` is `Church`, and its
+first key carries `imported: true`. A typed secret is sealed in the secret
+store exactly as a made one is, and never written to the channels file or a
+log. The rule for one:
+
+| Rule | Value |
+|---|---|
+| Length | 6 to 128 characters, after spaces at either end are trimmed |
+| Characters | `A` to `Z`, `a` to `z`, `0` to `9`, `-`, `_`, `.`, `~`, and spaces |
+
+Those are the characters a URL query carries without escaping, plus the
+space, which Livebox allowed in a password. An encoder may send a space as it
+is, as `%20` or as `+`; the listener reads all three as a space, which is why
+`+` itself is refused. A refusal never repeats the secret:
+
+```json
+{ "code": -32602,
+  "message": "that secret cannot be a key: it is 3 characters long, and a key needs at least 6. Use 6 to 128 letters, digits, dashes, underscores, dots, tildes or spaces, or leave it out and the mixer makes one.",
+  "data": { "field": "secret", "min_len": 6, "max_len": 128, "allowed": "A-Z a-z 0-9 - _ . ~ space", "retryable": false } }
+```
+
+A refused secret makes nothing: the channel is not made without its key.
+
+### Case and spaces in an application name
+
+The listener finds a channel by its `app` without regard to case, so an
+encoder sending `church`, `Church` or `CHURCH` reaches the channel whose
+`app` is `Church`. Encoders are set up by hand, and a capital typed one way
+on one encoder and another way on the next is a common reason a stream does not
+arrive. The stream is then named with the channel's own spelling everywhere
+after the listener (the hub, the source `<app>/<stream>` a show reads, the
+events), so one stream never has two names. Because of that, `channel.add`
+and `channel.set` refuse an `app` that differs from another channel's only in
+case, and the refusal says so.
+
+A space is allowed between words because Livebox allowed one in a channel
+name. OBS and ffmpeg both end an RTMP address at a raw space and read what
+follows as options: ffmpeg given `rtmp://host/Youth Hall/main` asks for the
+application `Youth`. So the space has to travel as `%20`
+(`rtmp://host/Youth%20Hall/main`), every address the mixer shows is written
+that way, and the listener decodes `%XX` in the application name and the key
+before it compares. An encoder that does send a raw space is still let in.
+
 ## `channel.key.add` and `channel.key.remove`
 
-`channel.key.add {id, label?}` answers `{key: {id, label, secret}}`. The id is
-a slug of the label, `Key 2` when there is no label. `channel.key.remove {id,
+`channel.key.add {id, label?, secret?}` answers `{key: {id, label, secret}}`. The id is
+a slug of the label, `Key 2` when there is no label. `secret` follows the
+rule under [`channel.add`](#channeladd) and marks the key `imported`. A secret
+the channel already has as another key is refused with `data.field` set to
+`secret` and `data.key` naming that key, since encoders sending it are let in
+already. `channel.key.remove {id,
 key}` answers with the channel. A publisher live on the key taken back is cut
 off at once; publishers on the other keys are not touched.
 

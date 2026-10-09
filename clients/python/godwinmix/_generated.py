@@ -482,12 +482,14 @@ class ChannelAddRequest(TypedDict, total=False):
     """`channel.add`."""
 
     app: Optional[str]
-    # Defaults to a slug of the name.
+    # The application name encoders put after the port, as they already type it: `Church`, or `Youth Hall`. Defaults to a slug of the name. Matched without regard to case, so two channels cannot differ only in case.
     auto_source: Optional[bool]
     key_mode: Union[KeyMode, None]
     name: str
     protocols: Optional[List[ChannelProtocol]]
     # Defaults to RTMP alone.
+    secret: Optional[str]
+    # The first key's secret, when encoders already send one (the password after `?psk=`): 6 to 128 letters, digits, `-`, `_`, `.`, `~` or single spaces between them. Left out, the mixer makes one.
 
 class ChannelAdded(TypedDict, total=False):
     """What `channel.add` answers: the channel and its first key."""
@@ -503,6 +505,8 @@ class ChannelKey(TypedDict, total=False):
     hint: str
     # The last four characters, so a person can tell two keys apart.
     id: str
+    imported: bool
+    # True when a person typed the secret (`secret` on `channel.add` or `channel.key.add`), usually to keep a password their encoders already send; false when the mixer made it.
     label: str
 
 class ChannelKeyAddRequest(TypedDict, total=False):
@@ -510,6 +514,8 @@ class ChannelKeyAddRequest(TypedDict, total=False):
 
     id: str
     label: Optional[str]
+    secret: Optional[str]
+    # The secret to keep, when encoders already send one. The same rule as `secret` on `channel.add`. Left out, the mixer makes one.
 
 class ChannelKeyRemoveRequest(TypedDict, total=False):
     """`channel.key.remove`."""
@@ -4422,6 +4428,7 @@ class GeneratedMethods:
         auto_source: Optional[bool] = None,
         key_mode: Optional[Union[KeyMode, None]] = None,
         protocols: Optional[List[ChannelProtocol]] = None,
+        secret: Optional[str] = None,
     ) -> ChannelAdded:
         """Make a channel and its first key, which is in this answer. channel.key.reveal reads it again later."""
         params: Dict[str, Any] = {}
@@ -4434,6 +4441,8 @@ class GeneratedMethods:
             params["key_mode"] = key_mode
         if protocols is not None:
             params["protocols"] = protocols
+        if secret is not None:
+            params["secret"] = secret
         return await self._call("channel.add", params)
 
     async def channel_certificate_generate(
@@ -4543,12 +4552,15 @@ class GeneratedMethods:
         id: str,
         *,
         label: Optional[str] = None,
+        secret: Optional[str] = None,
     ) -> KeyAdded:
         """Make another key for a channel, to give to one more person or encoder. The key is in this answer, and channel.key.reveal reads it again later."""
         params: Dict[str, Any] = {}
         params["id"] = id
         if label is not None:
             params["label"] = label
+        if secret is not None:
+            params["secret"] = secret
         return await self._call("channel.key.add", params)
 
     async def channel_key_remove(

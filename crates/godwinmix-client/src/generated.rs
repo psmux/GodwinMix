@@ -773,7 +773,10 @@ pub struct Channel {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ChannelAddRequest {
-    /// Defaults to a slug of the name.
+    /// The application name encoders put after the port, as they already
+    /// type it: `Church`, or `Youth Hall`. Defaults to a slug of the name.
+    /// Matched without regard to case, so two channels cannot differ only in
+    /// case.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub app: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -784,6 +787,11 @@ pub struct ChannelAddRequest {
     /// Defaults to RTMP alone.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub protocols: Option<Vec<ChannelProtocol>>,
+    /// The first key's secret, when encoders already send one (the password
+    /// after `?psk=`): 6 to 128 letters, digits, `-`, `_`, `.`, `~` or single
+    /// spaces between them. Left out, the mixer makes one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub secret: Option<String>,
 }
 
 /// What `channel.add` answers: the channel and its first key.
@@ -803,6 +811,11 @@ pub struct ChannelKey {
     /// The last four characters, so a person can tell two keys apart.
     pub hint: String,
     pub id: String,
+    /// True when a person typed the secret (`secret` on `channel.add` or
+    /// `channel.key.add`), usually to keep a password their encoders already
+    /// send; false when the mixer made it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub imported: Option<bool>,
     pub label: String,
 }
 
@@ -813,6 +826,10 @@ pub struct ChannelKeyAddRequest {
     pub id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,
+    /// The secret to keep, when encoders already send one. The same rule as
+    /// `secret` on `channel.add`. Left out, the mixer makes one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub secret: Option<String>,
 }
 
 /// `channel.key.remove`.

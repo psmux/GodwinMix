@@ -45,7 +45,7 @@ impl Channels {
     fn record_for(&self, v: &Value) -> Option<super::Record> {
         let id = v["channel"].as_str().unwrap_or_default();
         let app = v["app"].as_str().unwrap_or_default();
-        self.records.lock().iter().find(|r| r.id == id || (!app.is_empty() && r.app == app)).cloned()
+        self.records.lock().iter().find(|r| r.id == id || (!app.is_empty() && super::keys::same_app(&r.app, app))).cloned()
     }
 
     fn note_port(&self, relay: &str) {
@@ -125,7 +125,7 @@ impl Channels {
             .records
             .lock()
             .iter()
-            .find(|r| r.id == asked || r.app == asked)
+            .find(|r| r.id == asked || super::keys::same_app(&r.app, &asked))
             .map(|r| r.id.clone())
             .unwrap_or(asked);
         self.mixer.emit(Event::ChannelRefused {

@@ -431,6 +431,7 @@ export interface ChannelAddRequest {
   key_mode?: KeyMode | null;
   name: string;
   protocols?: ChannelProtocol[] | null;
+  secret?: string | null;
 }
 
 /** What `channel.add` answers: the channel and its first key. */
@@ -444,6 +445,7 @@ export interface ChannelKey {
   created: string;
   hint: string;
   id: string;
+  imported?: boolean;
   label: string;
 }
 
@@ -451,6 +453,7 @@ export interface ChannelKey {
 export interface ChannelKeyAddRequest {
   id: string;
   label?: string | null;
+  secret?: string | null;
 }
 
 /** `channel.key.remove`. */
