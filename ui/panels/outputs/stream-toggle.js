@@ -4,16 +4,11 @@
 // key as well. Stop keeps the destination and its key (`output.stop`), asks
 // once while it is live, and Start sends to it again (`output.start`).
 
-import { el } from "../../shell/dom.js";
 import { errorToast, toast } from "../../shell/toast.js";
 
-/** The button for a row, acting on whatever `current()` is when pressed. */
-export function streamToggle(client, current) {
-  const stopped = current().state === "stopped";
-  return el("button.btn.icon" + (stopped ? ".primary" : ".danger"), {
-    text: stopped ? "Start streaming" : "Stop streaming",
-    onclick: () => (stopped ? start(client, current()) : stop(client, current())),
-  });
+/** What the row's button does: start a stopped destination, stop any other. */
+export function toggle(client, output) {
+  return output.state === "stopped" ? start(client, output) : stop(client, output);
 }
 
 async function start(client, output) {

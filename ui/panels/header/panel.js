@@ -11,7 +11,6 @@ import { programLabel } from "../../client/store.js";
 import { menubar } from "../../shell/menubar.js";
 import { showTabs } from "../../shell/show-tabs.js";
 import { presenceButton } from "../../shell/presence.js";
-import { watchRunning } from "./running-watch.js";
 
 class HeaderPanel extends HTMLElement {
   static get panel() {
@@ -83,8 +82,10 @@ class HeaderPanel extends HTMLElement {
     this.offs = [
       this.client.onRender((s) => this.render(s)),
       this.client.on("meters", (p) => takeMeters(p)),
-      watchRunning(this.client, this.destinations),
     ];
+    // What is running, counted and timed on the pill, fetched once the page
+    // has drawn: it is not what a first paint waits for.
+    import("./running-watch.js").then((m) => this.offs && this.offs.push(m.watchRunning(this.client, this.destinations)));
     // The core's uptime arrives with a snapshot and with nothing else, so the
     // clock counts on from the last one by itself. A number that stands still
     // on a live mixer reads as a page that has hung.
