@@ -209,6 +209,34 @@ impl Hooks {
     }
 }
 
+/// The channels' hooks, `channel.stream.state` and
+/// `channel.destination.state`, fired through these. The channels raise them
+/// on a thread of their own, so the runtime a hook's task is spawned on is
+/// kept here.
+pub struct ForChannels {
+    hooks: Arc<Hooks>,
+    runtime: tokio::runtime::Handle,
+}
+
+impl ForChannels {
+    /// `None` outside a Tokio runtime, where no hook could run.
+    pub fn new(hooks: &Arc<Hooks>) -> Option<Arc<ForChannels>> {
+        let runtime = tokio::runtime::Handle::try_current().ok()?;
+        Some(Arc::new(ForChannels { hooks: hooks.clone(), runtime }))
+    }
+}
+
+impl crate::channels::hooks::Hook for ForChannels {
+    fn wants(&self, event: &str) -> bool {
+        self.hooks.any(event)
+    }
+
+    fn fire(&self, event: &'static str, payload: Value) {
+        let _inside = self.runtime.enter();
+        self.hooks.fire(event, || payload);
+    }
+}
+
 /// Whether this hook name is one that delays a decision. Re-exported so a call
 /// site does not have to reach into the engine crate for it.
 pub use godwinmix_core::hooks::name;
@@ -295,6 +323,38 @@ mod tests {
             .await;
         assert!(refusal.is_none());
         assert!(!built, "the payload should not be built when nothing is listening");
+    }
+
+    #[tokio::test]
+    async fn a_channel_hook_reaches_its_webhook_and_an_unconfigured_one_builds_nothing() {
+        use crate::channels::hooks::Hook;
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}/hook", listener.local_addr().unwrap());
+        let hooks = Hooks::new(
+            &[HookConfig { event: name::CHANNEL_DESTINATION_STATE.into(), http: Some(url), ..HookConfig::default() }],
+            recorder().0,
+        );
+        let sink = ForChannels::new(&hooks).unwrap();
+        assert!(sink.wants(name::CHANNEL_DESTINATION_STATE));
+        assert!(!sink.wants(name::CHANNEL_STREAM_STATE), "nothing configured for it");
+        // The channels fire from a thread of their own, outside the runtime.
+        let fired = sink.clone();
+        std::thread::spawn(move || {
+            fired.fire(name::CHANNEL_DESTINATION_STATE, serde_json::json!({"channel": "church", "destination": "youtube", "state": "failed"}));
+        });
+        let (mut socket, _) = tokio::time::timeout(std::time::Duration::from_secs(5), listener.accept()).await.unwrap().unwrap();
+        let mut got = Vec::new();
+        let mut buf = [0u8; 4096];
+        while !String::from_utf8_lossy(&got).contains("youtube") {
+            let n = socket.read(&mut buf).await.unwrap();
+            assert!(n > 0, "the webhook closed before its body arrived");
+            got.extend_from_slice(&buf[..n]);
+        }
+        let _ = socket.write_all(b"HTTP/1.1 200 OK\r\ncontent-length: 0\r\n\r\n").await;
+        let text = String::from_utf8_lossy(&got);
+        assert!(text.contains("\"hook\":\"channel.destination.state\""), "{text}");
+        assert!(text.contains("\"state\":\"failed\""), "{text}");
     }
 
     #[test]

@@ -100,4 +100,4 @@ fn record() -> Record {
 
 #[cfg(test)]
 #[path = "default_tests.rs"]
-mod tests;
+pub(super) mod tests;
