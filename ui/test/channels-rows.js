@@ -103,10 +103,10 @@ export async function channelRowsTests(test, eq, ok) {
       "rtmp://127.0.0.1:19410/other/main?psk=k1",
     ].join("\n"));
     eq(got, [
-      { line: 1, platform: "custom", server: "rtmp://a.rtmp.youtube.com/live2", key: "abcd-1234" },
-      { line: 4, platform: "custom", server: "rtmps://live-api-s.facebook.com:443/rtmp/FB-1?s_bl=1" },
-      { line: 5, platform: "srt", server: "srt://10.0.0.9:9000?passphrase=secret" },
-      { line: 6, platform: "custom", server: "rtmp://127.0.0.1:19410/other/main?psk=k1" },
+      { line: 1, platform: "custom", label: "YouTube", server: "rtmp://a.rtmp.youtube.com/live2", key: "abcd-1234" },
+      { line: 4, platform: "custom", label: "Facebook", server: "rtmps://live-api-s.facebook.com:443/rtmp/FB-1?s_bl=1" },
+      { line: 5, platform: "srt", label: "10.0.0.9", server: "srt://10.0.0.9:9000?passphrase=secret" },
+      { line: 6, platform: "custom", label: "127.0.0.1", server: "rtmp://127.0.0.1:19410/other/main?psk=k1" },
     ]);
   });
 
@@ -124,8 +124,8 @@ export async function channelRowsTests(test, eq, ok) {
   const result = await addPasted(view, "main", lines);
   test("paste: every good line is one channel.destination.add, and failures keep their line", () => {
     eq(view.calls.map(([m]) => m), ["channel.destination.add", "channel.destination.add", "channel.destination.add"]);
-    eq(view.calls[0][1], { id: "main", platform: "custom", server: "rtmp://good/live/k1" });
-    eq(view.calls[1][1], { id: "main", platform: "custom", server: "rtmp://bad/live", key: "k2" });
+    eq(view.calls[0][1], { id: "main", platform: "custom", label: "good", server: "rtmp://good/live/k1" });
+    eq(view.calls[1][1], { id: "main", platform: "custom", label: "bad", server: "rtmp://bad/live", key: "k2" });
     eq(view.calls[2][1].platform, "srt");
     eq(result.added, 2);
     eq(result.failed.map((f) => f.line), [2, 3]);

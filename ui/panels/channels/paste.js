@@ -7,11 +7,12 @@
 import { el } from "../../shell/dom.js";
 import { modal } from "../../shell/modal.js";
 import { toast } from "../../shell/toast.js";
+import { platformOfHost } from "../../client/destinations.js";
 
 const SCHEMES = { "rtmp:": "custom", "rtmps:": "custom", "srt:": "srt" };
 
 /**
- * The lines of a paste as `{line, platform, server, key?}`, or `{line, error}`
+ * The lines of a paste as `{line, platform, label, server, key?}`, or `{line, error}`
  * for a line that cannot be one. Empty lines and lines starting with # are
  * skipped, so a list copied out of a notes file still works.
  */
@@ -36,7 +37,10 @@ export function parsePasted(text) {
     if (platform === "custom" && !key && path.length < 2) {
       return out.push({ line, error: "No stream key. Put it on the end of the address or after a space." });
     }
-    out.push(key ? { line, platform, server, key } : { line, platform, server });
+    // Named for whose server it is, so a list of them is not all "Custom RTMP".
+    const known = platformOfHost(url.hostname);
+    const label = known && known.id !== "custom" && known.id !== "srt" ? known.title : url.hostname;
+    out.push(key ? { line, platform, label, server, key } : { line, platform, label, server });
   });
   return out;
 }
@@ -94,6 +98,8 @@ export function pasteAddresses(view, channel) {
     ]),
     footer: [el("button.btn", { text: "Cancel", onclick: () => m.close() }), add],
   });
+  // The modal focuses the first button it finds, which is its close button.
+  area.focus();
   add.onclick = async () => {
     const lines = parsePasted(area.value);
     if (!lines.length) return area.focus();
