@@ -122,7 +122,7 @@ fn plan_channels(call: &Call, bundle: &Bundle, replace: bool, report: &mut Repor
     let mut out = Vec::new();
     for value in &bundle.channels {
         let taken = |name: &str, what: &str| {
-            let pick = |(id, app): &(String, String)| if what == "id" { id == name } else { app == name };
+            let pick = |(id, app): &(String, String)| if what == "id" { id == name } else { app.eq_ignore_ascii_case(name) };
             placed.iter().any(pick) || (!replace && here.iter().any(pick))
         };
         let (incoming, was) = channel_file::read(value, &taken).map_err(|e| {

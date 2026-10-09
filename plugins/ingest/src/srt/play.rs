@@ -36,7 +36,7 @@ mod pipeline;
 /// Let a player in when its key is good and the stream is on air.
 pub fn decide(table: &Table, hub: &Hub, route: &Route) -> Decision {
     let refuse = |code, why: String| Decision::Refuse { code, channel: route.app.clone(), stream: route.name().to_string(), why };
-    let channel = table.channels.iter().find(|c| c.app == route.app);
+    let channel = table.find_app(&route.app);
     let decided = if route.has_key() || channel.is_some_and(|c| c.key_in_name) || channel.is_none() {
         let code = if channel.is_none() { NOT_FOUND } else { UNAUTHORIZED };
         table.admit_via(Protocol::Srt, &route.app, &route.stream).map(|a| (a, None)).map_err(|r| (code, r.why))
