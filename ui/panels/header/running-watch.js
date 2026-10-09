@@ -44,6 +44,9 @@ export function watchRunning(client, pill) {
 
   async function load() {
     lastRead = Date.now();
+    // A status pushed while nothing changed carries the live clocks as they
+    // were then. The outputs are read fresh, so "for 1:56:23" is now.
+    if (!looked && client.refreshOutputs) await client.refreshOutputs().catch(() => {});
     try {
       const answer = await client.call("channel.list", {});
       channels = (answer && answer.channels) || [];
