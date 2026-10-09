@@ -162,7 +162,7 @@ const METHODS = {
     c.destinations.push({
       id: n === 1 ? base : `${base}-${n}`, platform: p.platform, label: p.label || "", uri_host: (p.server || "").replace(/^(\w+:\/\/[^/?]+).*$/, "$1"),
       // A whole address pasted into a custom server carries its own key.
-      has_key: !!p.key || p.platform === "srt" || (p.platform === "custom" && /^\w+:\/\/[^/]+\/[^/]+\/./.test(p.server || "")), stream: p.stream || "*", enabled: p.enabled !== false, state: p.enabled === false ? "off" : "waiting",
+      has_key: !!p.key || p.platform === "srt" || p.platform === "file" || p.platform === "hls" || (p.platform === "custom" && /^\w+:\/\/[^/]+\/[^/]+\/./.test(p.server || "")), stream: p.stream || "*", enabled: p.enabled !== false, state: p.enabled === false ? "off" : "waiting",
       since_ms: 0, kbps: 0, reconnects: 0, error: null,
       ...(p.rendition ? { rendition: p.rendition } : {}),
     });

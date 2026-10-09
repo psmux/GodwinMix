@@ -170,6 +170,13 @@
 .chn-tile[data-state="failed"] .chn-ring { border-color: var(--bad); }
 .chn-tile[data-state="failed"] .chn-tstate { color: var(--bad); font-weight: 600; }
 
+/* A watch link's card under the tiles: the link, its QR code, the embed code. */
+.chn-watches { display: flex; flex-direction: column; gap: 10px; }
+.chn-watches[hidden] { display: none; }
+.chn-watch { display: flex; flex-direction: column; gap: 4px; }
+.chn-watch .rnd-hls { margin: 0; max-width: none; }
+.chn-embed { width: 100%; box-sizing: border-box; font-family: var(--num); font-size: 11.5px; line-height: 1.4; resize: vertical; margin: 6px 0; }
+
 .chn-quick { display: flex; flex-wrap: wrap; gap: 8px; }
 .chn-qtile {
   display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px 6px 6px; border-radius: 999px;
@@ -376,7 +383,7 @@
 .chn-certbtns { display: flex; gap: 8px; flex-wrap: wrap; }
 
 /* What the planner did for a destination: "Copied", or which encoder. */
-.chn-tplan { font-size: 10.5px; color: var(--faint); margin: -4px 8px 8px; text-align: center; }
+.chn-tplan { font-size: 10.5px; color: var(--faint); margin: -4px 8px 8px; text-align: center; overflow-wrap: anywhere; }
 .chn-tplan:empty { display: none; }
 
 /* Bring channels from Livebox: the paste box and what each line came to. */

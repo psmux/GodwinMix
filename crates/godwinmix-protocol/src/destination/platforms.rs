@@ -26,6 +26,18 @@ pub enum Carriage {
     Rtmp,
     /// MPEG-TS over SRT.
     Srt,
+    /// MPEG-TS written to a file on this machine, in the recordings folder.
+    File,
+    /// HLS packaged on this machine and served from its control port.
+    Hls,
+}
+
+impl Carriage {
+    /// Whether the stream stays on this machine: a recording or a watch
+    /// link, which has no far end, no key and no address to dial.
+    pub fn is_local(self) -> bool {
+        matches!(self, Carriage::File | Carriage::Hls)
+    }
 }
 
 /// One tile on the destination form.
@@ -135,6 +147,27 @@ pub const PLATFORMS: &[Platform] = &[
         policy: RetryPolicy::Own,
         hosts: &[],
     },
+    // The two below never leave this machine. `server` is a folder for a
+    // recording and `hls://` params for a watch link, both optional, so the
+    // destination form draws them itself rather than from this table.
+    Platform {
+        id: "file",
+        title: "Record",
+        server: "",
+        key: KeyRule::None,
+        carriage: Carriage::File,
+        policy: RetryPolicy::Own,
+        hosts: &[],
+    },
+    Platform {
+        id: "hls",
+        title: "Watch link",
+        server: "",
+        key: KeyRule::None,
+        carriage: Carriage::Hls,
+        policy: RetryPolicy::Own,
+        hosts: &[],
+    },
 ];
 
 /// The platform with this id.
@@ -209,7 +242,7 @@ mod tests {
         let js = include_str!("../../../../ui/client/destinations.js");
         // The output kinds above the table have ids of their own.
         let js = &js[js.find("export const PLATFORMS").expect("the table is there")..];
-        for p in PLATFORMS {
+        for p in PLATFORMS.iter().filter(|p| !p.carriage.is_local()) {
             let id = format!("id: \"{}\"", p.id);
             let at = js.find(&id).unwrap_or_else(|| panic!("destinations.js has no {}", p.id));
             let rest = &js[at..];

@@ -75,7 +75,8 @@ pub struct AddDestinationRequest {
     /// What the list calls it. The platform's name when left out.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,
-    /// youtube, facebook, twitch, custom or srt.
+    /// youtube, facebook, twitch, custom or srt; or `file` to record the
+    /// stream on this machine, or `hls` to serve it as a watch link.
     pub platform: String,
     /// Convert the stream before sending it: `{"preset": "youtube-720p30"}`
     /// or a rendition request written out. Left out, or one the stream
@@ -83,7 +84,8 @@ pub struct AddDestinationRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rendition: Option<RenditionChoice>,
     /// The ingest address. Left out, the platform's own; custom and srt need
-    /// one.
+    /// one. For `file`, a folder on the mixer (the recordings folder when
+    /// left out); for `hls`, `hls://` with params such as `?segment_ms=2000`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub server: Option<String>,
     /// Which of the channel's streams to send. `*`, the default, is the first
@@ -1247,6 +1249,9 @@ pub struct Destination {
     /// What went wrong last, in words a person can act on.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+    /// The file a recording destination is writing, or wrote last.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file: Option<RecordingFile>,
     pub has_key: bool,
     /// A slug, unique within its channel: `youtube`, `youtube-2`.
     pub id: String,
@@ -1256,7 +1261,8 @@ pub struct Destination {
     /// What the plan gave it, while its stream is live.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub plan: Option<DestinationPlan>,
-    /// A platform id from the table: youtube, facebook, twitch, custom, srt.
+    /// A platform id from the table: youtube, facebook, twitch, custom, srt,
+    /// or the two that stay on this machine, file and hls.
     pub platform: String,
     /// Where a player opens it, for an output this machine serves as HLS.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -3849,7 +3855,8 @@ pub struct PlanView {
 }
 
 /// The links of an output served as HLS from the control port, each with
-/// the output's viewer key on it.
+/// the output's viewer key on it. A channel's watch link is one too:
+/// `/hls/channel/<channel>/<destination>/index.m3u8?key=...`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Playback {
@@ -4152,6 +4159,22 @@ pub struct Record {
     /// for a scene, which hangs off the document itself.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parent: Option<Id>,
+}
+
+/// The file a `file` destination writes: one per time the stream goes live.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct RecordingFile {
+    /// Bytes written so far.
+    pub bytes: u64,
+    /// How long it has been recording, or ran for once it has closed.
+    pub duration_ms: u64,
+    /// `sunday-service-main-20261009-103000.ts`.
+    pub name: String,
+    /// Whether it is still being written.
+    pub open: bool,
+    /// The whole path on the machine running the mixer.
+    pub path: String,
 }
 
 /// One file the import would not take.

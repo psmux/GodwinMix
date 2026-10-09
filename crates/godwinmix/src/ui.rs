@@ -114,6 +114,7 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/channels/livebox.js", include_str!("../../../ui/panels/channels/livebox.js")),
     ("panels/channels/livebox-parse.js", include_str!("../../../ui/panels/channels/livebox-parse.js")),
     ("panels/channels/layout.js", include_str!("../../../ui/panels/channels/layout.js")),
+    ("panels/channels/local.js", include_str!("../../../ui/panels/channels/local.js")),
     ("panels/channels/model.js", include_str!("../../../ui/panels/channels/model.js")),
     ("panels/channels/paste.js", include_str!("../../../ui/panels/channels/paste.js")),
     ("panels/channels/panel.js", include_str!("../../../ui/panels/channels/panel.js")),
@@ -127,6 +128,7 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/channels/rows.js", include_str!("../../../ui/panels/channels/rows.js")),
     ("panels/channels/rows-model.js", include_str!("../../../ui/panels/channels/rows-model.js")),
     ("panels/channels/streams.js", include_str!("../../../ui/panels/channels/streams.js")),
+    ("panels/channels/watch.js", include_str!("../../../ui/panels/channels/watch.js")),
     ("panels/channels/ways.js", include_str!("../../../ui/panels/channels/ways.js")),
     ("panels/composer/canvas.js", include_str!("../../../ui/panels/composer/canvas.js")),
     ("panels/composer/catalogue.js", include_str!("../../../ui/panels/composer/catalogue.js")),
@@ -424,6 +426,7 @@ const DEV_ASSETS: &[(&str, &str)] = &[
     ("test/channels-default.js", include_str!("../../../ui/test/channels-default.js")),
     ("test/channels-programme.js", include_str!("../../../ui/test/channels-programme.js")),
     ("test/channels-rows.js", include_str!("../../../ui/test/channels-rows.js")),
+    ("test/channels-local.js", include_str!("../../../ui/test/channels-local.js")),
     ("test/channels-preview.js", include_str!("../../../ui/test/channels-preview.js")),
     ("test/channels.html", include_str!("../../../ui/test/channels.html")),
     // hls.js against an HLS output on this core, beside a clock to the
@@ -1096,6 +1099,8 @@ mod tests {
         reachable.extend(closure_of("panels/channels/panel.js"));
         // The palette's Open Channels, Channels as rows and Paste several push addresses.
         reachable.extend(closure_of("panels/channels/go.js"));
+        // A channel's watch link card, once the channel has a link on.
+        reachable.extend(closure_of("panels/channels/watch.js"));
         reachable.extend(closure_of("shell/sandbox.js"));
         reachable.extend(closure_of("panels/welcome/tiles.js"));
         reachable.extend(closure_of("panels/welcome/after.js"));
