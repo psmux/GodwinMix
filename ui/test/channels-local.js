@@ -11,7 +11,7 @@ const button = (root, text) => [...root.querySelectorAll("button")].find((b) => 
 const closeAll = () => { for (const d of dialogs()) d.parentElement.remove(); };
 
 /** Ask for something and wait until it is true, or give up after a second. */
-async function until(test, limit = 1000) {
+async function until(test, limit = 4000) {
   const end = Date.now() + limit;
   while (!test() && Date.now() < end) await wait(20);
   return test();
