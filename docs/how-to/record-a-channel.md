@@ -17,7 +17,7 @@ On the Channels tab, the channel's **Send on to** strip offers **Record**
 beside the platforms (behind **Add** once the channel has a destination). The
 form says what it saves, for instance:
 
-> Record. Saves sunday-service-main-20261009-103000.ts, copied, not converted.
+> Saves sunday-service-main-20261009-103000.ts, copied, not converted.
 
 Leave **Folder on the mixer** empty to save into `Videos/GodwinMix` in the
 home folder of the user the mixer runs as, the folder a programme recording
