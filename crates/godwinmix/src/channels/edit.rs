@@ -32,7 +32,7 @@ impl Channels {
         let record = {
             let mut records = self.records.lock();
             if let Some(other) = records.iter().find(|r| same_app(&r.app, &app)) {
-                return Err(taken(&app, &other.id));
+                return Err(taken(&app, other));
             }
             let id = free(&base, |id| records.iter().any(|r| r.id == id));
             let record = Record {
@@ -74,7 +74,7 @@ impl Channels {
             let mut records = self.records.lock();
             if let Some(app) = &req.app {
                 if let Some(other) = records.iter().find(|r| same_app(&r.app, app.trim()) && r.id != req.id) {
-                    return Err(taken(app.trim(), &other.id));
+                    return Err(taken(app.trim(), other));
                 }
             }
             let ids: Vec<String> = records.iter().map(|r| r.id.clone()).collect();
@@ -203,11 +203,19 @@ impl Channels {
     }
 }
 
-fn taken(app: &str, by: &str) -> RpcError {
+fn taken(app: &str, other: &Record) -> RpcError {
+    let by = &other.id;
+    let case = if other.app == app {
+        String::new()
+    } else {
+        format!(" (as '{}': encoders reach a channel whatever case they type, so two cannot differ only in case)", other.app)
+    };
     RpcError::invalid_params(format!(
-        "the application name '{app}' is already the channel '{by}'. Two channels cannot \
-         share one: give this one another name, or change '{by}' first."
+        "the application name '{app}' is already the channel '{by}'{case}. Two channels cannot \
+         share one: give this one another name, or change '{by}' first. To let more encoders \
+         into '{by}', add a key to it."
     ))
     .with("field", "app")
-    .with("channel", by)
+    .with("channel", by.as_str())
+    .with("app", other.app.as_str())
 }
