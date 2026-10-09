@@ -1,13 +1,21 @@
 //! Starting the mixer again after it died on its own.
 //!
-//! The daemon can end in ways nobody asked for: tokio aborts the whole
-//! process when its I/O driver fails (on Windows a kernel that is short of
-//! memory answers a socket poll with error 1450), GStreamer can crash in a
-//! plugin, a person can end it in Task Manager. Every one of those took the
+//! The daemon can end in ways nobody asked for: a debug build aborts the
+//! whole process when tokio's I/O driver fails (on Windows a kernel that is
+//! short of memory answers a socket poll with error 1450), GStreamer can
+//! crash in a plugin, a person can end it in Task Manager. Every one of those took the
 //! programme off air and left it off, because this app only started the
 //! mixer again for the exit codes that ask for it. Now an exit this app did
 //! not cause is answered with a restart on the same port and token, so the
 //! page reconnects by itself and the programme is back in seconds.
+//!
+//! A release build does not exit on that I/O driver failure, so nothing here
+//! sees it. tokio 1.53 only aborts on a worker panic under
+//! `debug_assertions`; in release the panic ends one worker thread, which
+//! leaves the runtime's idle count wrong so that sleeping workers are no
+//! longer woken for new work. The process stays up on fewer threads, and if
+//! the poll keeps failing, on none. Telling that apart from a busy mixer
+//! needs a liveness check on the control port, which this app does not make.
 //!
 //! Left alone: a clean exit (`core.shutdown`, status zero), an exit while
 //! this app is stopping or restarting the mixer itself (it has taken the

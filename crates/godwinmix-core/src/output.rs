@@ -42,6 +42,9 @@ use tokio::sync::mpsc;
 use tracing::{debug, info, warn};
 
 mod boundary;
+mod deadline;
+#[cfg(test)]
+mod deadline_tests;
 pub mod failure;
 mod flow;
 pub mod retire;
@@ -109,6 +112,8 @@ pub struct OutputSlot {
     flow: flow::Flow,
     /// Why the last attempt failed, in words. See `failure`.
     failure: failure::Failure,
+    /// Since when it has been down. See `deadline`.
+    deadline: deadline::Deadline,
 }
 
 impl OutputSlot {
@@ -193,6 +198,7 @@ impl OutputSlot {
             taps,
             flow: Default::default(),
             failure: Default::default(),
+            deadline: Default::default(),
         });
         // An address still carrying a preset's placeholder is not one anybody
         // can publish to, and dialling it anyway had the example config
@@ -299,6 +305,7 @@ impl OutputSlot {
         pipeline.set_state(gst::State::Playing).context("starting output pipeline")?;
 
         *self.pipeline.lock() = Some(Live { pipeline, watch });
+        self.deadline.built(std::time::Instant::now());
 
         // Ask the encoder for a keyframe. Without it the freshly connected
         // server has nothing decodable until the next scheduled one, which at a
@@ -480,6 +487,7 @@ impl OutputSlot {
             }
             None => false,
         };
+        self.deadline.live(now, std::time::Instant::now());
         if now != self.connected.swap(now, Ordering::Relaxed) {
             if now {
                 self.failure.connected();
@@ -520,6 +528,22 @@ impl OutputSlot {
             self.overfull_ticks.store(0, Ordering::Relaxed);
         }
         false
+    }
+
+    /// Down for `deadline::DOWN_FOR` with no reconnect armed or running and
+    /// nothing in the way of one: the mixer rebuilds it. See `deadline`.
+    pub fn stuck_down(&self, at: std::time::Instant) -> bool {
+        self.deadline.overdue(at)
+            && !self.reconnect_armed.load(Ordering::SeqCst)
+            && !self.turn.restarting()
+            && !self.turn.stopped()
+            && self.has_key()
+            && self.kind.try_lock().is_some_and(|k| k.redial_when_down())
+    }
+
+    /// How long it has been down, for the line that says it was rebuilt.
+    pub fn down_for(&self, at: std::time::Instant) -> Option<std::time::Duration> {
+        self.deadline.down_for(at)
     }
 
     pub fn state(&self) -> OutputState {

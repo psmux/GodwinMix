@@ -140,6 +140,12 @@ impl Output for RtmpOutput {
             > 0
     }
 
+    /// An RTMP server answers a publish in a second or two; one that has not
+    /// in twenty, with no error either, is not going to.
+    fn redial_when_down(&self) -> bool {
+        true
+    }
+
     fn configure(&mut self, params: &Params) -> Result<Configure> {
         validate(params)?;
         Ok(Configure::RestartRequired("an rtmp output takes a new address by reconnecting".into()))
