@@ -11,7 +11,7 @@ import { programLabel } from "../../client/store.js";
 import { menubar } from "../../shell/menubar.js";
 import { showTabs } from "../../shell/show-tabs.js";
 import { presenceButton } from "../../shell/presence.js";
-import { destinationsPill } from "./destinations.js";
+import { watchRunning } from "./running-watch.js";
 
 class HeaderPanel extends HTMLElement {
   static get panel() {
@@ -34,7 +34,9 @@ class HeaderPanel extends HTMLElement {
     this.peak = el("span.num.sm.dim.hdr-peak", { style: { minWidth: "3.2em" } });
     this.uptime = el("span.num.sm.dim.hdr-uptime");
     this.backend = el("span.sm.faint.ellipsis.hdr-backend");
-    this.destinations = el("span.pill.hdr-dest", { text: "No destinations", role: "status" });
+    // A button since 0.3: a tester streamed to YouTube and found nothing on
+    // the page that stopped it. It opens What is running, which does.
+    this.destinations = el("button.pill.hdr-dest", { text: "No destinations", "aria-haspopup": "dialog" });
     // A button, because a recording has to be stoppable from wherever the
     // person is. It was a label, and with Outputs not the tab on screen there
     // was no way to stop a recording at all.
@@ -81,6 +83,7 @@ class HeaderPanel extends HTMLElement {
     this.offs = [
       this.client.onRender((s) => this.render(s)),
       this.client.on("meters", (p) => takeMeters(p)),
+      watchRunning(this.client, this.destinations),
     ];
     // The core's uptime arrives with a snapshot and with nothing else, so the
     // clock counts on from the last one by itself. A number that stands still
@@ -152,13 +155,8 @@ class HeaderPanel extends HTMLElement {
     this.backend.title = b
       ? `The video encoder in use: ${b.video_encoder}, running in ${how}.`
       : "";
-    const outputs = s.outputs || [];
-    const pill = destinationsPill(outputs);
-    this.destinations.textContent = pill.text;
-    this.destinations.title = pill.title;
-    this.destinations.classList.toggle("live", pill.kind === "live");
-    this.destinations.classList.toggle("failed", pill.kind === "failed");
-    this.renderRecording(outputs);
+    // The destinations pill is written by `running-watch.js`.
+    this.renderRecording(s.outputs || []);
     this.ad.hidden = !(s.ad && s.ad.on_air);
   }
 }

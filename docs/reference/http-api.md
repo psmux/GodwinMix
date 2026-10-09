@@ -47,6 +47,8 @@ same thing without a mixer. The ones the how to pages reach for:
 | `POST /api/v1/sources/{id}/restore` | `source.restore`: puts back one of the last sixteen sources `source.remove` took away, with its id, fader and mute |
 | `POST /api/v1/outputs` | `output.add`: `{"id","uri","policy"}` |
 | `POST /api/v1/outputs/{id}/set` | `output.set`: `{"uri","policy","queue_secs"}`, naming only what moves. `uri` is write only and an absent one keeps the address in force, which is how a stream key is replaced without anything ever reading it back. See [stream to a platform](../how-to/stream-to-a-platform.md) |
+| `POST /api/v1/outputs/{id}/stop` | `output.stop`: no body. Stops sending to one destination and keeps it, address, key and all; its state reads `stopped` until `output.start`. See [stop streaming and quit](../how-to/stop-streaming-and-quit.md) |
+| `POST /api/v1/outputs/{id}/start` | `output.start`: no body. Sends to a stopped destination again with the address and key it kept |
 | `POST /api/v1/tool/call` | `tool.call`: `{"name","arguments"}`, the name being `<plugin>/<tool>` |
 | `GET /api/v1/plugins/{id}/settings` | a plugin's settings, and `POST` with `{"settings":{...}}` changes the keys it names |
 | `GET /api/v1/channels` | `channel.list`: every RTMP channel with its keys as hints, its streams and its destinations, and the port they share. See [channels.md](channels.md) |

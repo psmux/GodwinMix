@@ -154,6 +154,11 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/graphics/prompts.js", include_str!("../../../ui/panels/graphics/prompts.js")),
     ("panels/header/panel.js", include_str!("../../../ui/panels/header/panel.js")),
     ("panels/header/destinations.js", include_str!("../../../ui/panels/header/destinations.js")),
+    ("panels/header/running-model.js", include_str!("../../../ui/panels/header/running-model.js")),
+    ("panels/header/running-watch.js", include_str!("../../../ui/panels/header/running-watch.js")),
+    ("panels/header/running.js", include_str!("../../../ui/panels/header/running.js")),
+    ("panels/header/stop.js", include_str!("../../../ui/panels/header/stop.js")),
+    ("panels/header/banner.js", include_str!("../../../ui/panels/header/banner.js")),
     ("panels/media/entry.js", include_str!("../../../ui/panels/media/entry.js")),
     ("panels/media/panel.js", include_str!("../../../ui/panels/media/panel.js")),
     ("panels/multiview/panel.js", include_str!("../../../ui/panels/multiview/panel.js")),
@@ -176,6 +181,7 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/outputs/recording.js", include_str!("../../../ui/panels/outputs/recording.js")),
     ("panels/outputs/record-start.js", include_str!("../../../ui/panels/outputs/record-start.js")),
     ("panels/outputs/record-stop.js", include_str!("../../../ui/panels/outputs/record-stop.js")),
+    ("panels/outputs/stream-toggle.js", include_str!("../../../ui/panels/outputs/stream-toggle.js")),
     ("panels/outputs/panel.js", include_str!("../../../ui/panels/outputs/panel.js")),
     ("panels/outputs/views.js", include_str!("../../../ui/panels/outputs/views.js")),
 ("panels/renditions/bars.js", include_str!("../../../ui/panels/renditions/bars.js")),
@@ -411,6 +417,7 @@ const DEV_ASSETS: &[(&str, &str)] = &[
     ("test/welcome.js", include_str!("../../../ui/test/welcome.js")),
     ("test/menubar.js", include_str!("../../../ui/test/menubar.js")),
     ("test/recording-stop.js", include_str!("../../../ui/test/recording-stop.js")),
+    ("test/running.js", include_str!("../../../ui/test/running.js")),
     ("test/touch.js", include_str!("../../../ui/test/touch.js")),
     ("test/phone.js", include_str!("../../../ui/test/phone.js")),
     ("test/phone-reach.js", include_str!("../../../ui/test/phone-reach.js")),
@@ -1137,6 +1144,9 @@ mod tests {
         reachable.extend(closure_of("panels/outputs/record-start.js"));
         // The REC button in the header, or Outputs > Stop recording.
         reachable.extend(closure_of("panels/outputs/record-stop.js"));
+        // The header's pill: What is running, the banner, and Stop.
+        reachable.extend(closure_of("panels/header/running.js"));
+        reachable.extend(closure_of("panels/header/banner.js"));
         // Renditions: each is fetched by an `import()` the first time it is
         // wanted, from the destination form, the Outputs panel or its rows.
         for entry in [
@@ -1256,6 +1266,9 @@ mod tests {
             ("shell/settings-dialog.js", "Settings for this page"),
             ("panels/outputs/record-start.js", "Record pressed"),
             ("panels/outputs/record-stop.js", "REC or Stop recording pressed"),
+            ("panels/header/running.js", "the header's pill pressed"),
+            ("panels/header/banner.js", "a page opened with something already running"),
+            ("panels/header/stop.js", "Stop pressed"),
             ("panels/sources/browser-device.js", "this browser's camera opened"),
             ("panels/sources/phone-camera.js", "A phone's camera picked in Add source"),
             ("join/publisher.js", "this browser's camera opened, or /join/"),

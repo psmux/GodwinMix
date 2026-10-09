@@ -20,6 +20,7 @@ import { startRecording, recordingRow, recordingState, isRecording } from "./rec
 import { lazyAction } from "../../shell/lazy-action.js";
 import { addChannel } from "../channels/entry.js";
 import { failureLabel, failureAdvice, failureOf } from "./failure.js";
+import { streamToggle } from "./stream-toggle.js";
 const addDestination = lazyAction(() => import("./destination.js").then(m => m.addDestination), "Add destination");
 const editDestination = lazyAction(() => import("./destination.js").then(m => m.editDestination), "Edit destination");
 // Resources, plan lines and the HLS card: see views.js.
@@ -34,6 +35,8 @@ const REFRESH_MS = 1000;
 /** The state of one destination, in words that say what to do about it. */
 export function stateLabel(output) {
   if (output.state === "live") return "Live";
+  // Stopped by a person with output.stop: nothing is sent, the key is kept.
+  if (output.state === "stopped") return "Stopped, stream key kept";
   // Ahead of the connection state on purpose: a destination still carrying a
   // preset's placeholder is not going to connect, and "Reconnecting, attempt
   // 47" tells nobody why.
@@ -47,7 +50,7 @@ export function stateLabel(output) {
     case "reconnecting":
       return `Reconnecting, attempt ${output.reconnects || 1}`;
     case "failed":
-      return "Stopped";
+      return "Not sending";
     default:
       return output.state || "";
   }
@@ -80,6 +83,7 @@ export function stalledAdvice(output) {
 /** Which dot a destination gets. A missing key is a fault, not a warning. */
 export function dotClass(output) {
   if (output.state === "live") return "live";
+  if (output.state === "stopped") return "stopped";
   if (output.has_key === false) return "failed";
   // Trying again after a refusal is not on its way up; it is failing.
   if (failureOf(output)) return "failed";
@@ -270,9 +274,11 @@ class OutputsPanel extends HTMLElement {
           text: needsKey ? "Add key" : "Edit",
           onclick: () => editDestination(this.client, current),
         }),
+        // Stop keeps the destination and its key; Remove forgets both.
+        streamToggle(this.client, () => current),
         // A destination with no key is never dialled, so there is nothing to
-        // reconnect until the key is in.
-        needsKey ? null : el("button.btn.icon", {
+        // reconnect until the key is in, and a stopped one is not dialled.
+        needsKey || output.state === "stopped" ? null : el("button.btn.icon", {
           text: "Reconnect",
           onclick: async () => {
             try {
@@ -286,7 +292,8 @@ class OutputsPanel extends HTMLElement {
         el("button.btn.icon.danger", {
           text: "Remove",
           onclick: async () => {
-            if (settings().confirmRemove && !(await confirmModal(`Stop sending to "${current.id}"?`, "Stop"))) return;
+            const ask = `Remove "${current.id}"? It stops sending and forgets the address and stream key. Stop streaming keeps them.`;
+            if (settings().confirmRemove && !(await confirmModal(ask, "Remove"))) return;
             try {
               await this.client.call("output.remove", { id: current.id });
             } catch (e) {
@@ -330,7 +337,7 @@ export function write(node, key, value) {
  */
 export function shape(output) {
   if (isRecording(output)) return "recording:" + (recordingState(output).dot === "failed" ? "failed" : "ok");
-  return "destination:" + (output.has_key === false ? "needs-key" : "keyed");
+  return "destination:" + (output.has_key === false ? "needs-key" : "keyed") + (output.state === "stopped" ? ":stopped" : "");
 }
 
 customElements.define("gmx-outputs", OutputsPanel);

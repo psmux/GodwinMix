@@ -14,7 +14,9 @@
 //   * a connect dialog, so the same app drives a headless server;
 //   * a tray icon, a menu, remembered window geometry, one instance;
 //   * two ways out, as menu items and as `godwinmix://quit` and
-//     `godwinmix://quit-all` navigations from the page;
+//     `godwinmix://quit-all` navigations from the page, and the window's
+//     own close button, all of which ask first while anything is streaming,
+//     recording or receiving (see `close`);
 //   * "Let other devices on this network connect", off by default, which
 //     binds the mixer to every network on a port it keeps (see `lan`);
 //   * a restart of the mixer on this computer, from the menu, from a
@@ -26,7 +28,9 @@
 // into the application data directory on first run.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod background;
 mod browser;
+mod close;
 mod commands;
 mod core_link;
 mod lan;
@@ -35,9 +39,12 @@ mod page_menu;
 mod plugins;
 mod restart;
 mod revive;
+mod running;
+mod running_net;
 mod settings;
 mod shipped;
 mod sidecar;
+mod tray;
 mod ui;
 
 use std::sync::Mutex;
@@ -102,21 +109,20 @@ fn main() {
             app.on_menu_event(|app, event| ui::on_menu(app, event.id().as_ref()));
             ui::build_tray(&handle)?;
             ui::build_window(&handle)?;
+            background::watch(&handle);
             Ok(())
         })
         .build(tauri::generate_context!())
         .expect("failed to start the GodwinMix desktop shell")
         .run(|app, event| match event {
-            // Closing the window hides it rather than ending the app. A mixer
-            // that stopped because someone tidied their desktop would be a
-            // mixer that took the programme off air; the tray icon and Show
-            // bring it back, and Quit is the way out.
+            // Closing the window quits, mixer and all, when nothing is
+            // running. When something is, it asks: stop everything and quit,
+            // keep running in the background, or cancel. It never hides the
+            // window into the tray without that answer. See `close`.
             RunEvent::WindowEvent { label, event: WindowEvent::CloseRequested { api, .. }, .. } => {
                 if label == "main" {
                     api.prevent_close();
-                    if let Some(window) = app.get_webview_window("main") {
-                        let _ = window.hide();
-                    }
+                    close::request(app, false);
                 }
             }
             // Any other route to the door: the last window closing on
@@ -128,7 +134,7 @@ fn main() {
                 if app.state::<Shell>().local.lock().unwrap().is_some() =>
             {
                 api.prevent_exit();
-                quit(app, false);
+                close::request(app, false);
             }
             // The door itself, which on macOS is where Quit in the Dock and
             // a quit Apple Event arrive: no ExitRequested first, and the run

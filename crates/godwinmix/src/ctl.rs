@@ -381,6 +381,14 @@ pub enum OutputCmd {
     Reconnect {
         id: String,
     },
+    /// Stop sending to a destination and keep its address and key.
+    Stop {
+        id: String,
+    },
+    /// Send to a stopped destination again.
+    Start {
+        id: String,
+    },
 }
 
 pub async fn run(base: &str, token: Option<&str>, cmd: Ctl) -> Result<()> {
@@ -635,6 +643,14 @@ async fn output(api: &Api, cmd: OutputCmd) -> Result<()> {
         OutputCmd::Reconnect { id } => {
             let _: OutputStatus = api.call("output.reconnect", Some(&id), &()).await?;
             println!("reconnecting output {id}");
+        }
+        OutputCmd::Stop { id } => {
+            let _: OutputStatus = api.call("output.stop", Some(&id), &()).await?;
+            println!("stopped output {id}; its address and key are kept for gmx ctl output start {id}");
+        }
+        OutputCmd::Start { id } => {
+            let _: OutputStatus = api.call("output.start", Some(&id), &()).await?;
+            println!("starting output {id}");
         }
     }
     Ok(())
@@ -1305,6 +1321,8 @@ mod tests {
             at("output.reconnect", Some("yt")),
             "POST http://mixer:8080/api/v1/outputs/yt/reconnect"
         );
+        assert_eq!(at("output.stop", Some("yt")), "POST http://mixer:8080/api/v1/outputs/yt/stop");
+        assert_eq!(at("output.start", Some("yt")), "POST http://mixer:8080/api/v1/outputs/yt/start");
         assert_eq!(at("media.list", None), "GET http://mixer:8080/api/v1/media");
         // A trailing slash on the base must not double up.
         assert!(!at("core.info", None).contains("//api"));
