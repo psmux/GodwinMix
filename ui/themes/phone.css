@@ -76,7 +76,11 @@ gmx-shell.phone .header > * { order: 5; }
 gmx-shell.phone .header::after { content: ""; order: 7; flex-basis: 100%; height: 0; }
 gmx-shell.phone .header .wordmark { order: 1; font-size: 19px; }
 gmx-shell.phone .header .hdr-gap { order: 2; flex: 1 1 0; }
-gmx-shell.phone .header .presence { order: 3; }
+gmx-shell.phone .header .presence {
+  order: 3; min-width: 0; min-height: 0; height: 30px; padding: 0 10px; border-radius: 15px; font-size: 13px; font-weight: 600;
+}
+gmx-shell.phone .header .presence .presence-words { display: none; }
+gmx-shell.phone .header .presence .presence-n { display: inline; }
 gmx-shell.phone .header .menubar-wrap { order: 6; }
 gmx-shell.phone .header .menubar { display: none; }
 gmx-shell.phone .header .menubar-all { display: inline-block; }
@@ -194,6 +198,16 @@ body.producer .phone-deck .scene-tabs .scene-tab > button[role="tab"].armed { bo
   border-radius: 10px; background: rgba(0, 0, 0, 0.55); color: #fff; font-size: 16px;
 }
 .phone-deck .scene-tabs .scene-tab > .scene-warn { position: absolute; top: 12px; right: 48px; }
+/* The way into a scene's inputs, at the foot of its picture. The count it
+   carries replaces the badge in the corner. */
+.phone-deck .scene-tab { container-type: inline-size; }
+.phone-deck .scene-tabs .scene-tab > button[role="tab"] > .num { display: none; }
+.phone-deck .scene-tabs .scene-tab > button.scene-inputs {
+  position: absolute; left: 6px; top: calc(100cqw * 9 / 16 - 38px); display: inline-flex; align-items: center;
+  height: 32px; min-height: 0; padding: 0 10px; border: 0; border-radius: 9px;
+  background: rgba(0, 0, 0, 0.62); color: #fff; font-size: 13px; font-weight: 600;
+}
+.phone-deck .scene-tabs .scene-tab > button.scene-inputs:active { background: var(--accent); }
 /* Take, outside Studio mode: floats at the foot of the screen while the
    scenes scroll under it, so the shot and the button are never apart. */
 .phone-deck .scene-tabs > .btn {
@@ -210,9 +224,30 @@ body.producer .phone-deck .scene-tabs .scene-tab > button[role="tab"].armed { bo
 .phone-frame > gmx-sources > .row > .ellipsis { flex: 1 1 0; font-weight: 600; font-size: 15px; }
 .phone-frame > gmx-sources > .row > select { width: auto; flex: none; }
 .phone-frame > gmx-sources > .row > input[type="search"] { order: 9; flex-basis: 100%; max-width: none !important; }
+/* The scene this screen lists, switchable: a row of chips that scrolls
+   sideways when there are more scenes than fit. The name on the bar above
+   would only repeat the lit chip. */
+.phone-frame > gmx-sources > .src-scenes:not([hidden]) {
+  position: relative; display: flex; gap: 8px; padding: 0 12px 12px; overflow-x: auto; scrollbar-width: none;
+}
+.phone-frame > gmx-sources:has(> .src-scenes:not([hidden])) > .row > .ellipsis { visibility: hidden; }
+.src-scene {
+  flex: none; display: inline-flex; align-items: center; gap: 8px; max-width: 70vw; height: 40px; padding: 0 14px;
+  border: 1px solid var(--line-soft); border-radius: 20px; background: var(--panel2); color: var(--text); font-weight: 600;
+}
+.src-scene .num { min-width: 20px; padding: 1px 6px; border-radius: 10px; background: var(--raise); color: var(--dim); font-size: 12px; text-align: center; }
+.src-scene[aria-selected="true"] { border-color: var(--accent); background: var(--select-fill); color: var(--accent); }
 .phone-frame .gallery { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding: 0 12px 12px; }
 .phone-frame .gallery.mode-icon, .phone-frame .gallery.mode-label { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .phone-frame .tile { border-radius: 12px; }
+
+/* This browser's camera card (join/join.css) floats; on a phone its corner
+   is where the tab bar is, so it starts above the bar instead. Dragged, it
+   goes where it was put. */
+body:has(> gmx-shell.phone) .pub-dock {
+  right: 12px; bottom: calc(80px + env(safe-area-inset-bottom)); max-width: calc(100vw - 24px);
+  max-height: calc(100dvh - 210px);
+}
 
 /* ------------------------------------------------------------ sideways */
 
@@ -249,4 +284,5 @@ body.producer .phone-deck .scene-tabs .scene-tab > button[role="tab"].armed { bo
   .phone-cards { grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); }
   .phone-head { min-height: 32px; }
   .phone-head h1 { font-size: 20px; }
+  body:has(> gmx-shell.phone) .pub-dock { bottom: 12px; max-height: calc(100dvh - 24px); }
 }

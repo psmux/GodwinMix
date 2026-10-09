@@ -283,7 +283,7 @@ class ScenesPanel extends HTMLElement {
         // it, because a button may not hold another button.
         const edit = this.editButton(summary);
         this.tabs.set(summary.id, tab);
-        this.strip.appendChild(el("span.scene-tab", {}, [tab, edit]));
+        this.strip.appendChild(el("span.scene-tab", {}, [tab, edit, inputsButton(summary)]));
       }
       this.strip.appendChild(this.take);
     }
@@ -816,3 +816,24 @@ function nameOfItem(record) {
 customElements.define("gmx-scenes", ScenesPanel);
 window.godwinmixPanels.push(ScenesPanel);
 export default ScenesPanel;
+
+/**
+ * The way into a scene's inputs on a phone, where Sources is another screen:
+ * make it the scene in hand and go there. It never arms or takes. The desk
+ * hides it, since its Sources panel is already beside the scenes.
+ */
+function inputsButton(summary) {
+  const n = summary.items || 0;
+  return el("button.scene-inputs", {
+    type: "button",
+    "data-nodrag": "",
+    "aria-label": `Sources in ${summary.name}`,
+    text: n ? `${n} source${n === 1 ? "" : "s"} ›` : "Add sources ›",
+    onclick: (event) => {
+      event.stopPropagation();
+      setFocusedScene(summary.id);
+      document.querySelector("gmx-shell")?.workspace?.show("core/sources");
+    },
+    ondblclick: (event) => event.stopPropagation(),
+  });
+}

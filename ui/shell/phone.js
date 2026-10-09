@@ -4,8 +4,10 @@
 // has room for one thing, so the deck shows one screen and a tab bar along the
 // bottom, where a thumb already is. Live holds what a show is run from: the
 // monitors, Take and the scenes, together, so nobody scrolls between the shot
-// and the button. Sources, Audio and Outputs have a tab each. More lists every
-// other panel, plugin panels included, and a few things from the menus.
+// and the button. Sources, Audio and Outputs have a tab each, and Outputs
+// carries the channels too, because a channel is where an RTMP feed comes in
+// and its Add Channel button is on Outputs. More lists every other panel,
+// plugin panels included, and a few things from the menus.
 //
 // Panels are the same elements the dock uses, made through the registry. A
 // screen that is not showing has its panels suspended where they support it
@@ -21,7 +23,7 @@ const TABS = [
   { id: "live", title: "Live", panels: ["core/program", "core/scenes"] },
   { id: "sources", title: "Sources", panels: ["core/sources"] },
   { id: "audio", title: "Audio", panels: ["core/audio"] },
-  { id: "outputs", title: "Outputs", panels: ["core/outputs"] },
+  { id: "outputs", title: "Outputs", panels: ["core/outputs", "core/channels"] },
   { id: "more", title: "More", panels: [] },
 ];
 const KEY = "gmx.phone.page";

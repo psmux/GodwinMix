@@ -5,6 +5,7 @@
 import { el } from "../../shell/dom.js";
 import { confirmModal } from "../../shell/modal.js";
 import { errorToast } from "../../shell/toast.js";
+import { movable } from "../../shell/float-drag.js";
 import { mountPublisher } from "../../join/publisher.js";
 import { deviceName, sourceIdFor, streamOf } from "./browser-channel.js";
 
@@ -21,15 +22,20 @@ export class BrowserDock {
     this.note = el("div.pub-dock-note.sm.dim");
     this.body = el("div.pub-dock-body", {}, [this.note]);
     this.title = el("strong.grow.ellipsis", { text: this.label });
-    this.node = el("section.pub-dock.min", { role: "dialog", "aria-label": "This browser's camera and microphone" }, [
-      el("div.row.pub-dock-head", {}, [
-        this.title,
-        el("button.btn.icon", { type: "button", text: "_", title: "Fold away", "aria-label": "Fold away", onclick: () => this.fold() }),
-        el("button.btn.icon", { type: "button", text: "×", title: "Close", "aria-label": "Close", onclick: () => this.close() }),
-      ]),
-      this.body,
+    const head = el("div.row.pub-dock-head", { title: "Drag to move" }, [
+      this.title,
+      el("button.btn.icon", { type: "button", text: "_", title: "Fold away", "aria-label": "Fold away", onclick: () => this.fold() }),
+      el("button.btn.icon", { type: "button", text: "×", title: "Close", "aria-label": "Close", onclick: () => this.close() }),
     ]);
+    // A tap on the folded bar opens it, which is what a thumb tries first.
+    head.addEventListener("click", (e) => {
+      if (!e.target.closest("button") && this.node.classList.contains("min")) this.show();
+    });
+    this.node = el("section.pub-dock.min", { role: "dialog", "aria-label": "This browser's camera and microphone" }, [head, this.body]);
     document.body.appendChild(this.node);
+    // It floats over whatever is under it, a dialog's buttons included, so it
+    // goes wherever the operator drags it, and stays there.
+    this.unmove = movable(this.node, head, "gmx.pubdock.at");
     const where = `Publishing to ${channel.app || channel.id}/${this.stream}, which becomes the source ${this.source}.`;
     this.pub = mountPublisher(this.body, {
       url: `/whip/${encodeURIComponent(channel.app || channel.id)}/${encodeURIComponent(this.stream)}`,
@@ -124,6 +130,7 @@ export class BrowserDock {
 
   destroy() {
     for (const off of this.offs) off();
+    this.unmove();
     removeEventListener("beforeunload", this.onUnload);
     this.pub.destroy();
     this.node.remove();

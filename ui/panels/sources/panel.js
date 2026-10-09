@@ -27,6 +27,7 @@ import { repeatRequest } from "./clip-end.js";
 import { setLocal, nameOf } from "./local.js";
 import { addSourceTile, openSceneSources } from "./chooser-loader.js";
 import { focusedScene, onFocusChanged } from "../../shell/focus.js";
+import { SceneStrip } from "./scene-strip.js";
 import { acquireScenes } from "../../shell/scene-session.js";
 import { setWorkspaceActive } from "./workspace.js";
 
@@ -75,7 +76,8 @@ class SourcesPanel extends HTMLElement {
     ]);
 
     this.grid = el("div.gallery", { role: "listbox", "aria-label": "Sources" });
-    this.append(this.bar, this.grid);
+    this.strip = new SceneStrip();
+    this.append(this.bar, this.strip.node, this.grid);
 
     this.drag = new DragSelect({
       container: this.grid,
@@ -240,6 +242,8 @@ class SourcesPanel extends HTMLElement {
   paintScope() {
     const scene = this.focusedSummary();
     this.sceneLabel.textContent = scene ? scene.name : "Sources";
+    const scenes = this.sceneClient();
+    this.strip.paint(scenes ? scenes.scenes() : [], scene ? scene.id : null);
     this.addTile.setAttribute("aria-label", scene ? `Add sources to ${scene.name}` : "Add source");
   }
 
