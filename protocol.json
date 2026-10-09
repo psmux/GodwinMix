@@ -2091,6 +2091,13 @@
             "null"
           ]
         },
+        "source_error": {
+          "description": "Why the mixer would not make this stream a source, while it will not:\nthe stream is in, and nothing in a scene can show it. Gone once it does.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "state": {
           "description": "`live`, or `idle` for one that left while a scene holds its source.",
           "type": "string"

@@ -65,6 +65,10 @@ Tap its name to open it out. Open, it has:
 * **Stop**, and **Send to the mixer** to start again after a stop
 
 It opens out by itself when something goes wrong, so the reason is on screen.
+That includes the mixer taking the stream but refusing to make it a source,
+which is the one case where the bar says live and still nothing can go in a
+scene. The card then says why, for example that another program on the
+mixer's computer already holds the RTMP port.
 Fold it away and the same error, coming back on each retry, leaves it folded;
 a different error opens it again.
 

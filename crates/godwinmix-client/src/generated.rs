@@ -924,6 +924,10 @@ pub struct ChannelStream {
     /// The mixer source it feeds, when it feeds one.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source: Option<String>,
+    /// Why the mixer would not make this stream a source, while it will not:
+    /// the stream is in, and nothing in a scene can show it. Gone once it does.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_error: Option<String>,
     /// `live`, or `idle` for one that left while a scene holds its source.
     pub state: String,
     #[serde(skip_serializing_if = "Option::is_none")]

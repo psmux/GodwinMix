@@ -17,13 +17,13 @@ export class SceneStrip {
 
   /** Draw the chips for `list` (scene summaries) with `focused` lit. */
   paint(list, focused) {
-    const signature = list.map((s) => `${s.id}/${s.name}/${s.items || 0}`).join("|");
+    const signature = list.map((s) => `${s.id}/${s.name}/${count(s)}`).join("|");
     if (signature !== this.signature) {
       this.signature = signature;
       this.node.replaceChildren(...list.map((s) => el("button.src-scene", {
         type: "button", role: "tab", "data-id": s.id,
         onclick: () => setFocusedScene(s.id),
-      }, [el("span.ellipsis", { text: s.name }), el("span.num", { text: String(s.items || 0) })])));
+      }, [el("span.ellipsis", { text: s.name }), el("span.num", { text: String(count(s)) })])));
     }
     this.node.hidden = list.length < 2;
     for (const chip of this.node.children) {
@@ -39,4 +39,9 @@ export class SceneStrip {
     const left = chip.offsetLeft;
     if (left < row.scrollLeft || left + chip.offsetWidth > row.scrollLeft + row.clientWidth) row.scrollLeft = left - 12;
   }
+}
+
+/** The sources a scene draws, each once: the number of tiles Sources shows for it. */
+export function count(summary) {
+  return Array.isArray(summary.sources) ? new Set(summary.sources).size : summary.items || 0;
 }

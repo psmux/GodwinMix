@@ -101,6 +101,7 @@ to `app`, and `data.channel` naming the channel that has it.
 | `streams[].source` | The mixer source it feeds, `<app>-<stream>` |
 | `streams[].dropped_gops` | Whole GOPs readers of this stream lost by falling behind, this session. A reader that falls behind loses from the front of its queue and starts again at the next keyframe; the publisher is never slowed |
 | `streams[].relay` | Where a mixer on this machine reads the stream: the listener's own port on loopback, `127.0.0.1:<rtmp port>`. Any show under a station adds the stream as a source with `source.add {type: "ingest/rtmp", relay, stream: "<app>/<name>"}`, and every show that does reads the one stream the station received. Absent while nothing is live |
+| `streams[].source_error` | Why the mixer would not make the stream a source, for a channel with `auto_source` on, for instance that the plugin could not listen on its RTMP port because another program holds it. The stream is in but no scene can show it. Absent once the source is made, and whenever nothing was refused |
 
 In `stream` key mode the stream is named after the key's id, so a key never
 becomes part of a source id or a log line.

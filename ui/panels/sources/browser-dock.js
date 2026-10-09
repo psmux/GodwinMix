@@ -7,7 +7,7 @@ import { confirmModal } from "../../shell/modal.js";
 import { errorToast } from "../../shell/toast.js";
 import { movable } from "../../shell/float-drag.js";
 import { mountPublisher } from "../../join/publisher.js";
-import { deviceName, sourceIdFor, streamOf } from "./browser-channel.js";
+import { deviceName, dockNote, sourceIdFor, streamOf } from "./browser-channel.js";
 
 export class BrowserDock {
   constructor(client, { channel, key }, camera, devices, onGone) {
@@ -70,11 +70,15 @@ export class BrowserDock {
     return this;
   }
 
-  /** Open up when there is something to read, but not again for an error the operator folded away. */
+  /** Open up when there is something to read, but not again for a problem the operator folded away. */
   stateChanged(s) {
     this.error = s && s.state !== "live" ? s.error || null : null;
-    if (this.error && this.error !== this.dismissed) this.show();
+    this.attend();
     this.paint();
+  }
+
+  attend() {
+    if ((this.error || this.refusal) && (this.error || this.refusal) !== this.dismissed) this.show();
   }
 
   /** Call `fn` with the mixer source once it exists: now, or when it arrives. */
@@ -84,10 +88,11 @@ export class BrowserDock {
     return this;
   }
 
-  /** Hand the source to whoever is waiting for it, once each. */
+  /** Hand the source to each waiting add in turn, so two for one scene see each other. */
   arrived(source) {
-    const waiting = this.waiting.splice(0);
-    for (const fn of waiting) Promise.resolve(fn(source)).catch((e) => errorToast(e, this.label));
+    for (const fn of this.waiting.splice(0)) {
+      this.queue = (this.queue || Promise.resolve()).then(() => fn(source)).catch((e) => errorToast(e, this.label));
+    }
   }
 
   /** The line above the picture: what the mixer has made of the stream. */
@@ -96,11 +101,9 @@ export class BrowserDock {
     const source = (this.client.state.sources || []).find((x) => x.id === this.source);
     const inMixer = !!source;
     if (source && this.pub.active()) this.arrived(source);
-    let text = "";
-    if (this.pub.active() && inMixer) text = `In the mixer as ${this.source}.`;
-    else if (this.pub.active() && s && s.state === "live") text = `The channel has the stream; ${this.source} is on its way.`;
-    else if (this.pub.active()) text = "Sending to the mixer.";
-    this.note.textContent = text;
+    this.refusal = !inMixer && s && s.source_error ? s.source_error : null;
+    this.attend();
+    this.note.textContent = dockNote(this.pub.active(), inMixer, s, this.source);
     const state = this.pub.state();
     const word = { live: "live", connecting: "connecting", reconnecting: "reconnecting", stopped: "stopped" }[state];
     this.title.textContent = word ? `${this.label}: ${word}` : this.label;
@@ -113,7 +116,7 @@ export class BrowserDock {
   }
 
   fold(folding = !this.node.classList.contains("min")) {
-    if (folding) this.dismissed = this.error;
+    if (folding) this.dismissed = this.error || this.refusal || null;
     this.node.classList.toggle("min", folding);
     this.pub.setVisible(!folding);
   }

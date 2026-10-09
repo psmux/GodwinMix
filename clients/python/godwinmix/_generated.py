@@ -574,6 +574,7 @@ ChannelStream = TypedDict("ChannelStream", {
     "relay": "Optional[str]",
     "since_ms": "int",
     "source": "Optional[str]",
+    "source_error": "Optional[str]",
     "state": "str",
     "video": "Union[StreamVideo, None]",
 }, total=False)

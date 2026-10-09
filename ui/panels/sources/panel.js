@@ -418,6 +418,8 @@ class SourcesPanel extends HTMLElement {
     const id = status && status.id;
     const target = scene || this.untouchedScene();
     if (!scenes || !id || !target) return;
+    // A second add queued for this scene before the source existed: it is there already.
+    if ((scenes.summary(target.id)?.sources || []).includes(id)) return;
     try {
       // A text or a ticker made from a preset says where it goes.
       await scenes.itemAdd(target.id, { source: id }, status.placement ? { transform: status.placement } : undefined);
