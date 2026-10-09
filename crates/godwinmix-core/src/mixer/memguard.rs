@@ -164,7 +164,7 @@ fn raise(handle: &MixerHandle, bytes: u64, limit: u64, queues: &[Held]) {
     let mut held = handle.memory.lock();
     let since_ms = held.as_ref().map_or_else(now_ms, |p| p.since_ms);
     let top = queues.first().map_or_else(String::new, |q| {
-        format!(" The fullest queue is {} in {} with {} MB.", q.element, q.pipeline, q.bytes / MB)
+        format!(" The fullest queue is {} in {} with {:.1} MB.", q.element, q.pipeline, q.bytes as f64 / MB as f64)
     });
     let detail = format!("The show holds {} MB, past its {} MB guard.{top}", bytes / MB, limit / MB);
     *held = Some(Pressure { since_ms, detail });
