@@ -128,9 +128,9 @@ function destinationTile(view, getChannel) {
       write(plan, "textContent", own ? own.line : view.plans ? view.plans.line(id, d.id, true) : "");
       write(plan, "title", own ? own.title : view.plans ? view.plans.line(id, d.id, false) : "");
       box.setAttribute("aria-label", `Send to ${d.label || p.title}`);
-      const why = d.state === "failed" || d.state === "reconnecting" ? d.error || "" : "";
-      // Trying again says why too: a person looking at an amber ring wants
-      // to know whether it is their server or their key.
+      const why = ["failed", "reconnecting", "connecting"].includes(d.state) ? d.error || "" : "";
+      // Trying again says why too, as does a first dial that already failed:
+      // an amber ring wants to say whether it is the server or the key.
       write(error, "textContent", why);
       error.hidden = !error.textContent;
       node.title = why ? `${p.title}: ${why}` : `${p.title}, ${tileState(d).toLowerCase()}`;

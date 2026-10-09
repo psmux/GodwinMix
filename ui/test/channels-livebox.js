@@ -84,4 +84,10 @@ export async function liveboxTests(test, eq, ok) {
     ok(top().querySelector(".chn-results li:nth-child(2)").textContent.includes("added the password to church"));
   });
   closeAll();
+
+  const { bring } = await import("../panels/channels/livebox.js");
+  const hall = await bring(stub, { line: 1, app: "Youth Hall", stream: "cam", secret: "youth-pass-1" });
+  test("a channel name with a space is said the way an encoder has to send it", () => {
+    ok(hall.textContent.includes("…/Youth%20Hall/cam"), hall.textContent);
+  });
 }

@@ -1,7 +1,11 @@
 /* The Rows view, the Cards and Rows switch, and the bulk menu's pieces. Its
    own file so channels.css stops growing; loaded with the panel by layout.js. */
 
+/* The switch and the buttons beside it keep their width; the title and
+   its lede are what give way, so a panel beside the programme does not
+   cut Rows down to "Ro". */
 .chn-viewas { align-self: center; }
+.chn-top > .chn-viewas, .chn-top > button { flex: none; }
 .chn-viewas button { font-family: inherit; font-weight: 600; }
 .chn-viewas[hidden] { display: none; }
 
@@ -29,6 +33,7 @@
 .chn-rring[data-state="connecting"], .chn-rring[data-state="reconnecting"] { border-color: var(--warn); }
 .chn-rring[data-state="live"] { border-color: var(--ok); background: color-mix(in srgb, var(--ok) 35%, transparent); }
 .chn-rring[data-state="failed"] { border-color: var(--bad); }
+.chn-rsend.bad { color: var(--bad); font-weight: 600; }
 
 /* A card a row was pressed for, lit for a moment. */
 .chn-card.chn-flash { box-shadow: 0 0 0 2px var(--accent); }

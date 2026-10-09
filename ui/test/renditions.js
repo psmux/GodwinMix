@@ -54,6 +54,8 @@ export async function renditionTests(test, eq, ok) {
     const w = words.refusalWords(refusal("youtube").data);
     eq(w.need, "This format needs about 1.8 CPU cores, one GPU encoder session and 6 Mb/s of upload.");
     eq(w.room, "Right now there is room for 60% of one CPU core, no GPU sessions and 30 Mb/s of upload.");
+    const free = words.refusalWords({ need: { cpu_millicores: 80, device_sessions: 1 }, have: { cpu_millicores: 60, device_sessions: 4294967295 } });
+    eq(free.room, "Right now there is room for 6% of one CPU core.", "an encoder with no session limit is not 4294967295 sessions");
     ok(words.isRefusal(refusal("x")), "a governor refusal");
     ok(!words.isRefusal({ data: { action: {} } }), "not any other");
   });
@@ -121,6 +123,13 @@ async function formatStepTests(test, eq, ok) {
   test("when the programme already is YouTube 1080p, copy stays first and picked", () => {
     eq(picked(same.node), "copy");
     ok(same.node.querySelector('[data-id="copy"]').textContent.includes("Already matches YouTube 1080p"));
+  });
+  const channelDest = formatStep(stub, { platform: "youtube", platformTitle: "YouTube", copyFirst: true });
+  await channelDest.ready;
+  test("a channel's new destination opens on Same as the source, and the YouTube preset only says it is suggested", () => {
+    eq(picked(channelDest.node), "copy");
+    eq(channelDest.value(), undefined, "nothing is re-encoded unless asked");
+    ok(channelDest.node.querySelector('[data-id="youtube-1080p30"]').textContent.includes("Suggested for YouTube"));
   });
   const old = formatStep(renditionStub({ presets: false }), { platform: "youtube" });
   await old.ready;

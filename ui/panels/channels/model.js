@@ -194,7 +194,7 @@ export function tileState(d, began = 0, now = Date.now()) {
   }
   switch (d.state) {
     case "waiting": return "Waits for the stream";
-    case "connecting": return "Connecting";
+    case "connecting": return d.error ? "Trying again" : "Connecting";
     case "live": return ["Live", d.kbps ? fmtKbps(d.kbps) : "", began ? fmtUptime(now - began) : ""].filter(Boolean).join(", ");
     case "reconnecting": return d.reconnects ? `Trying again (${d.reconnects})` : "Trying again";
     case "failed": return "Stopped";
