@@ -79,9 +79,12 @@ encoder is a keyframe. An output that arrives at an idle core gets a decodable
 picture immediately, not two seconds of nothing.
 
 **The frame interval must not move.** The raw tees carry `allow-not-linked`, so
-a branch joining or leaving is nothing to them; the state changes happen on the
-mixer thread and not on a streaming thread; and nothing is ever blocked. The
-programme's frame interval across an encoder start stays where it was.
+a branch joining or leaving is nothing to them; a start happens on the mixer
+thread, never on a streaming thread; and nothing is ever blocked. A stop is
+unlinked on the mixer thread and taken to NULL on a thread of its own, because
+NULL waits for the encoder, and a hardware encoder's driver can make that wait
+as long as it likes. The programme's frame interval across an encoder start
+stays where it was.
 
 ## Why a preview cannot stop the programme
 
