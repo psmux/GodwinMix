@@ -684,7 +684,7 @@ export async function openForm(client, what, kind, preset, opts = {}) {
     // a failure in the follow up is the caller's to explain.
     if (opts.onAdded) await opts.onAdded(answer);
   };
-  form.focusFirst();
+  if (!coarse()) form.focusFirst();
   return m;
 }
 

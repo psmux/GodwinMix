@@ -16,7 +16,7 @@
 // one in force". Nothing here ever has to hold a key it did not just take off
 // the clipboard.
 
-import { el, on } from "../../shell/dom.js";
+import { el, on, coarse } from "../../shell/dom.js";
 import { modal } from "../../shell/modal.js";
 import { toast, errorToast } from "../../shell/toast.js";
 import { PLATFORMS, platform, platformOfHost, joinKey } from "../../client/destinations.js";
@@ -353,6 +353,6 @@ async function openForm(client, p, output, onDone) {
   const advanced = form.el.querySelector("details");
   if (advanced) advanced.before(format.node);
   else form.el.after(format.node);
-  form.focusFirst();
+  if (!coarse()) form.focusFirst();
   return m;
 }
