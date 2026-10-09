@@ -141,6 +141,7 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/composer/ops.js", include_str!("../../../ui/panels/composer/ops.js")),
     ("panels/composer/others.js", include_str!("../../../ui/panels/composer/others.js")),
     ("panels/composer/motion.js", include_str!("../../../ui/panels/composer/motion.js")),
+    ("panels/composer/tool-tabs.js", include_str!("../../../ui/panels/composer/tool-tabs.js")),
     // The Graphics gallery. Only entry.js loads with the page.
     ("panels/graphics/actions.js", include_str!("../../../ui/panels/graphics/actions.js")),
     ("panels/graphics/card.js", include_str!("../../../ui/panels/graphics/card.js")),
@@ -413,6 +414,7 @@ const DEV_ASSETS: &[(&str, &str)] = &[
     ("test/touch.js", include_str!("../../../ui/test/touch.js")),
     ("test/phone.js", include_str!("../../../ui/test/phone.js")),
     ("test/phone-reach.js", include_str!("../../../ui/test/phone-reach.js")),
+    ("test/phone-hands.js", include_str!("../../../ui/test/phone-hands.js")),
     // Install app on More, and which requests the service worker answers.
     ("test/install.js", include_str!("../../../ui/test/install.js")),
     ("test/presence.js", include_str!("../../../ui/test/presence.js")),

@@ -19,6 +19,7 @@ import { Catalogue } from "./catalogue.js";
 import { operations } from "./ops.js";
 import { fillNote, notRunning, sourcesOf } from "../scenes/fix-note.js";
 import { othersHere, staleDraft } from "./others.js";
+import { toolTabs } from "./tool-tabs.js";
 
 let styled = false;
 
@@ -179,7 +180,8 @@ export class Composer {
 
   body() {
     this.note = el("span.sm.faint.grow");
-    this.bar = el("div.composer-bar.row", {}, [...this.tools(), el("span.grow"), this.others.el, this.note, ...this.toggles()]);
+    const groups = this.tools();
+    this.bar = el("div.composer-bar.row", {}, [toolTabs(groups), ...groups, el("span.grow"), this.others.el, this.note, ...this.toggles()]);
     const side = el("div.composer-side", {}, [this.inspector.el]);
     this.health = el("div.composer-health", { role: "status", hidden: true });
     return el("div.composer-body", {}, [this.bar, this.health, this.canvas.el, side]);
@@ -235,7 +237,7 @@ export class Composer {
       });
       return el("label.inline.sm", {}, [input, el("span", { text: label })]);
     };
-    const full = el("button.btn.sm", {
+    const full = el("button.btn.sm.composer-full-button", {
       text: "Full screen",
       onclick: () => {
         this.dialog.el.classList.toggle("composer-full");

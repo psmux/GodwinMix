@@ -16,7 +16,7 @@
 // a rail for its own sake.
 
 import { setupBlock } from "./picker-setup.js";
-import { el, clear, svg, on, fmtBytes } from "./dom.js";
+import { el, clear, svg, on, fmtBytes, coarse } from "./dom.js";
 import { sourceFiles } from "./source-files.js";
 import { modal } from "./modal.js";
 import { toast, errorToast } from "./toast.js";
@@ -141,7 +141,7 @@ function openSourcePicker(client, kinds, plugins, opts) {
 
   on(search, "input", draw);
   draw();
-  search.focus();
+  if (!coarse()) search.focus();
   rescan();
   loadMedia();
   return m;
@@ -597,7 +597,7 @@ function openTiles(client, what, kinds, opts) {
 
   on(search, "input", draw);
   draw();
-  search.focus();
+  if (!coarse()) search.focus();
   return m;
 }
 
@@ -684,7 +684,7 @@ export async function openForm(client, what, kind, preset, opts = {}) {
     // a failure in the follow up is the caller's to explain.
     if (opts.onAdded) await opts.onAdded(answer);
   };
-  form.focusFirst();
+  if (!coarse()) form.focusFirst();
   return m;
 }
 

@@ -100,6 +100,13 @@ export function accel(e) {
   return IS_MAC ? e.metaKey : e.ctrlKey;
 }
 
+/** True when the main pointer is a finger. Focusing a field then raises the
+ *  on screen keyboard over half the screen, so a field is only focused for a
+ *  finger when typing is the one thing that screen is for. */
+export function coarse() {
+  return typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
+}
+
 /** True when a keystroke belongs to whatever the operator is typing into. */
 export function typing(target) {
   if (!target) return false;

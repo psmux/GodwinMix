@@ -4,7 +4,7 @@
 // than the twenty lines here. A scrim, a box, focus moved in, focus put back,
 // Escape closes. Nothing else.
 
-import { el, on } from "./dom.js";
+import { el, on, coarse } from "./dom.js";
 
 /**
  * @param {{title: string, body: Node, footer?: Node[], wide?: boolean,
@@ -48,10 +48,24 @@ export function modal(opts) {
     if (returnFocus && returnFocus.focus) returnFocus.focus();
   }
 
-  const first = box.querySelector("input, select, textarea, button.primary, button");
+  const first = opening(box);
   if (first) first.focus();
 
   return { el: box, body, close };
+}
+
+/**
+ * What has focus as the dialog opens: its first control. Under a finger, a
+ * text field only when it is the dialog's one field, a prompt for a name say,
+ * because focus raises the keyboard. A prompt wants it; a form of six fields
+ * does not, as it hides the half of the form the operator came to read.
+ */
+export function opening(box) {
+  const first = box.querySelector("input, select, textarea, button.primary, button");
+  if (!first || !coarse()) return first;
+  const typed = "textarea, input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]):not([type=file])";
+  if (box.querySelectorAll(typed).length <= 1) return first;
+  return box.querySelector("footer button.primary") || box.querySelector("footer button") || first;
 }
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';

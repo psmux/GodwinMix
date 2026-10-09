@@ -6,7 +6,7 @@
 // box with a Show button, is trimmed, and is never read back: an edit that
 // leaves it alone sends none.
 
-import { el, on } from "../../shell/dom.js";
+import { el, on, coarse } from "../../shell/dom.js";
 import { modal, confirmModal } from "../../shell/modal.js";
 import { toast, errorToast } from "../../shell/toast.js";
 import { PLATFORMS, platform } from "../../client/destinations.js";
@@ -116,7 +116,7 @@ function addForm(view, channel, p) {
     toast({ text: isLive(channel) ? `${p.title} added. It goes live with ${channel.name}.` : `${p.title} added. It waits for an encoder to send to ${channel.name}; nothing reaches ${p.title} until one does.` });
     return true;
   }
-  (key || server).focus();
+  if (!coarse()) (key || server).focus();
   return m;
 }
 

@@ -22,6 +22,7 @@ import { menubarTests } from "./menubar.js";
 import { touchTests } from "./touch.js";
 import { phoneTests } from "./phone.js";
 import { phoneReachTests } from "./phone-reach.js";
+import { phoneHandsTests } from "./phone-hands.js";
 import { channelRowsTests } from "./channels-rows.js";
 import { installTests } from "./install.js";
 import { showTests } from "./shows.js";
@@ -1597,7 +1598,9 @@ async function scopedSourcesSuite() {
   // The page goes on to drive the real panels against a real core, and the
   // focus is remembered on the device the tests run on.
   setFocusedScene(null);
-  node.remove();
+  // Element.remove, not the panel's own remove(ids), which once the scenes
+  // panel is defined is what node.remove means, and removes scenes instead.
+  Element.prototype.remove.call(node);
 }
 
 // ------------------------------------------------------- the source drawer
@@ -2269,7 +2272,7 @@ async function numberKeySuite() {
     eq(taken, [], "it must not fall through to the ninth input");
   });
 
-  node.remove();
+  Element.prototype.remove.call(node); // as above: the panel's remove(ids) is not this
 }
 
 // ------------------------------------------------------------- the kits
@@ -2936,6 +2939,7 @@ tileLevelTests(test, eq, ok)
   })
   .then(() => phoneTests(test, eq, ok))
   .then(() => phoneReachTests(test, eq, ok))
+  .then(() => phoneHandsTests(test, eq, ok))
   .catch((e) => {
     failed += 1;
     line("fail", "the phone deck suite threw: " + e.message);

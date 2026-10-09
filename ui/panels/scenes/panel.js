@@ -276,6 +276,7 @@ class ScenesPanel extends HTMLElement {
             // In Studio mode a click also fills the preview, which is safe.
             onclick: () => this.choose(summary.id, false),
             ondblclick: () => this.open(summary.id),
+            oncontextmenu: (e) => this.tabMenu(summary.id, e),
           },
           [el("span.ellipsis", { text: summary.name }), el("span.num.dim", { text: String(summary.items || 0) })]
         );
@@ -525,7 +526,10 @@ class ScenesPanel extends HTMLElement {
   beginRename(id) {
     const tile = this.tiles.get(id);
     if (!tile) return false;
-    if (this.grid.hidden) this.setView("tiles");
+    // And back to the tabs once the name is in, the phone's only view of
+    // its scenes, where Take and the way into a scene's sources are.
+    const fromTabs = this.grid.hidden;
+    if (fromTabs) this.setView("tiles");
     const before = tile.name.textContent;
     tile.name.contentEditable = "true";
     tile.name.focus();
@@ -546,15 +550,16 @@ class ScenesPanel extends HTMLElement {
       const after = tile.name.textContent.trim();
       if (!commit || !after || after === before) {
         tile.name.textContent = before;
-        return;
+      } else {
+        try {
+          await this.scenes.rename(id, { name: after });
+          this.scenes.undo.record(`Renamed to ${after}`);
+        } catch (e) {
+          tile.name.textContent = before;
+          errorToast(e, "Rename");
+        }
       }
-      try {
-        await this.scenes.rename(id, { name: after });
-        this.scenes.undo.record(`Renamed to ${after}`);
-      } catch (e) {
-        tile.name.textContent = before;
-        errorToast(e, "Rename");
-      }
+      if (fromTabs) this.setView("tabs");
     };
 
     const off = on(tile.name, "keydown", (e) => {
@@ -769,6 +774,21 @@ class ScenesPanel extends HTMLElement {
    */
   more() {
     return import("./more.js");
+  }
+
+  /**
+   * A right click or a long press on a scene's tab: the menu its tile has.
+   * The phone shows scenes only as tabs, so without this a scene could not be
+   * renamed, coloured, duplicated or removed there. Prevented at once, before
+   * the menu module arrives, so the finger lifting is not taken for a tap.
+   */
+  tabMenu(id, e) {
+    e.preventDefault();
+    if (!this.selection.has(id)) {
+      this.selection.click(id, [...this.tiles.keys()], {});
+      this.paintSelection();
+    }
+    this.more().then((m) => m.menu(this, id, e));
   }
 
   commands() {
