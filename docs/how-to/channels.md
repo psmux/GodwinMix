@@ -124,7 +124,7 @@ given for the chosen protocol, each with **Copy**:
 
 | Protocol | Fields |
 |---|---|
-| RTMP, RTMPS | Server, Stream key, Full URL |
+| RTMP, RTMPS | Server (what Livebox and most encoders call the Stream URL), Stream key, Full URL |
 | SRT | Server, Stream ID, Passphrase, Full URL |
 | WHIP | WHIP URL, Bearer token |
 
@@ -247,6 +247,34 @@ scene or take. A second encoder on `cam2`, by SRT say, appears beside it as
 
 The numbers are read every two seconds while the tab is on screen and
 something is live, and not at all otherwise.
+
+## See every channel on one line
+
+With more than two or three channels the cards get long. **Rows**, beside
+**Cards** at the top of the Channels tab, puts each channel on one line
+instead. Someone coming from Livebox will know it as the bulk channel
+settings table. A line says:
+
+* the dot, green when live, hollow when the channel is switched off;
+* the name, and Live (Live, 2 streams with more than one), Waiting for an
+  encoder, or Switched off;
+* the first live stream's picture size, frame rate and bit rate, as
+  `1920×1080 30 fps 4.1 Mb/s`;
+* how long it has been publishing, counting up each second;
+* how many of its push destinations are sending, as `3 of 4 sending`, with a
+  small ring for each one in the colours the tiles use.
+
+Press a line to go back to the cards with that channel's card in view.
+
+The choice between Cards and Rows is kept in this browser, so a laptop can
+show rows while a phone shows cards. Rows reads the same numbers the cards do,
+on the same two second reading, so it costs the mixer nothing extra. On a
+phone the Channels tab is under **Outputs**, and each line folds onto two or
+three lines to fit.
+
+The palette (Ctrl+K) finds the tab as **Open Channels**, and also when you
+type the words other products use: push destination, restream, stream key,
+stream URL, channel dashboard. **Channels as rows** comes up for bulk.
 
 ## When the encoder stops
 
