@@ -447,10 +447,15 @@ mod tests {
 
         let mut last_seq = None;
         let mut last_at = None;
+        // Five seconds, times the slack a slow runner declares, as every
+        // other wait on a live pipeline here is. The software codecs runner,
+        // with the rest of the suite beside it, once went five seconds
+        // without the first frame; a branch that never delivers still fails.
+        let wait = std::time::Duration::from_secs(5).mul_f64(crate::plugin::harness::timing_slack());
         for i in 0..10 {
-            let frame = tokio::time::timeout(std::time::Duration::from_secs(5), frames.recv())
+            let frame = tokio::time::timeout(wait, frames.recv())
                 .await
-                .unwrap_or_else(|_| panic!("no frame {i} within five seconds"))
+                .unwrap_or_else(|_| panic!("no frame {i} within {wait:?}"))
                 .expect("the frame channel closed");
             assert_eq!(
                 frame.len(),
