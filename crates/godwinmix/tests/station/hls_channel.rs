@@ -60,7 +60,7 @@ async fn video_segment(st: &Running, master: &str, file: &Path) -> String {
     assert_eq!(status, 200, "{playlist}");
     let dir = format!("{base}{}", &rung[..=rung.find('/').unwrap()]);
     let map = playlist.lines().find_map(|l| l.split("URI=\"").nth(1)).and_then(|r| r.split('"').next()).expect("an init segment");
-    let last = playlist.lines().filter(|l| !l.starts_with('#') && !l.is_empty()).last().expect("a segment");
+    let last = playlist.lines().rev().find(|l| !l.starts_with('#') && !l.is_empty()).expect("a segment");
     let mut body = fetch(st, &format!("{dir}{map}")).await;
     body.extend(fetch(st, &format!("{dir}{last}")).await);
     std::fs::write(file, body).unwrap();

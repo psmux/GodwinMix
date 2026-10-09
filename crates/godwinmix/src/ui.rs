@@ -978,6 +978,8 @@ mod tests {
         reachable.extend(closure_of("shell/devices.js"));
         reachable.extend(closure_of("panels/outputs/destination.js"));
         reachable.extend(closure_of("panels/channels/panel.js"));
+        // A channel's watch link card, once the channel has a link on.
+        reachable.extend(closure_of("panels/channels/watch.js"));
         reachable.extend(closure_of("shell/sandbox.js"));
         reachable.extend(closure_of("panels/welcome/tiles.js"));
         reachable.extend(closure_of("panels/welcome/after.js"));
