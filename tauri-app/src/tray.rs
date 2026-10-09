@@ -43,7 +43,7 @@ pub fn live_icon(icon: &Image<'_>) -> Image<'static> {
             }
         }
     }
-    Image::new_owned(rgba, w, h)
+    Image::new(&rgba, w, h).to_owned()
 }
 
 fn menu(app: &AppHandle, lines: &[String]) -> tauri::Result<tauri::menu::Menu<Wry>> {
@@ -79,7 +79,8 @@ mod tests {
 
     #[test]
     fn the_live_icon_has_a_red_corner_and_keeps_its_size() {
-        let plain = Image::new_owned(vec![0u8; 32 * 32 * 4], 32, 32);
+        let pixels = vec![0u8; 32 * 32 * 4];
+        let plain = Image::new(&pixels, 32, 32);
         let live = live_icon(&plain);
         assert_eq!((live.width(), live.height()), (32, 32));
         let corner = ((28 * 32 + 28) * 4) as usize;
