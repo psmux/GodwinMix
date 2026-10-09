@@ -163,6 +163,8 @@ gmx-shell.phone .header .shows:not(.one) { order: 11; flex-basis: 100%; border: 
 .phone-row-text strong { font-size: 15px; font-weight: 600; }
 .phone-row-text span { color: var(--dim); font-size: 12px; }
 .phone-chevron { color: var(--faint); font-size: 22px; line-height: 1; }
+/* A row that only says something, like where Add to Home Screen is: no press. */
+.phone-row-note:active { background: none; }
 /* A switch for the rows that are on or off. */
 .phone-switch { position: relative; flex: none; width: 46px; height: 28px; border-radius: 14px; background: var(--line); transition: background var(--anim); }
 .phone-switch::after {

@@ -12,6 +12,7 @@ import { toast, confirmHook } from "./shell/toast.js";
 import { proposeGalleryMode } from "./shell/settings.js";
 import { meterClient } from "./shell/meter.js";
 import { applyCoreDefaults, watchCoreDefaults } from "./panels/welcome/defaults.js";
+import { startInstall } from "./shell/install.js";
 
 const PANELS = [
   "./panels/header/panel.js",
@@ -65,6 +66,9 @@ async function authorise(base) {
 }
 
 async function main() {
+  // First, so the browser's offer to install is not missed while the page
+  // waits on the mixer. The service worker itself waits for the load.
+  startInstall();
   migrateLegacyKeys();
   takeTokenFromAddress(location, history);
   initTheme();
