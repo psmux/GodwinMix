@@ -190,13 +190,24 @@ fn a_dead_destination_and_a_blocked_reader_slow_neither_the_publisher_nor_the_li
     wait_for("the converted pair", 15, || renditions.is_live("church", &key));
     let blocked = renditions.subscribe("church", &key);
     wait_for("the live destination to receive", 15, || got.load(Ordering::Relaxed) > 10);
+    // Four seconds, and a 20 ms push, both times GODWINMIX_TIMING_SLACK on a
+    // runner that says it is slow. On the macOS runner, with the rest of the
+    // suite beside it, the publisher's software encode, the decode and the
+    // re-encode together managed 61 frames in four seconds and one push took
+    // 25 ms: the runner's speed, with nothing waiting on anything. A
+    // publisher held up by the blocked reader would wait for the rest of the
+    // test, and a destination held up by the dead one would send nothing, so
+    // the wider bounds still catch both.
+    let slack = std::env::var("GODWINMIX_TIMING_SLACK").ok().and_then(|s| s.parse::<f64>().ok()).unwrap_or(1.0).max(1.0);
+    let window = (4.0 * slack).ceil() as u64;
     let before = got.load(Ordering::Relaxed);
-    std::thread::sleep(Duration::from_secs(4));
+    std::thread::sleep(Duration::from_secs(window));
     let sent = got.load(Ordering::Relaxed) - before;
-    assert!(sent >= 100, "the live destination kept its frame rate: {sent} frames in 4 s");
+    assert!(sent >= 100, "the live destination kept its frame rate: {sent} frames in {window} s");
     assert!(blocked.dropped_gops() > 0 || blocked.waiting().0 > 0, "the blocked reader held or lost GOPs of its own");
     let worst = slowest.load(Ordering::Relaxed);
-    assert!(worst < 20_000, "the publisher never waited on a reader: slowest push {worst} µs");
+    let bound = (20_000.0 * slack) as u64;
+    assert!(worst < bound, "the publisher never waited on a reader: slowest push {worst} µs");
     let states: Vec<String> = sends.rates().iter().map(|r| r["state"].as_str().unwrap_or("").to_string()).collect();
     assert!(states.contains(&"live".to_string()), "{states:?}");
     drop(source);
