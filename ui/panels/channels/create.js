@@ -6,7 +6,7 @@
 import { el, on } from "../../shell/dom.js";
 import { modal } from "../../shell/modal.js";
 import { toast, errorToast } from "../../shell/toast.js";
-import { slugify } from "./model.js";
+import { slugify, inUrl } from "./model.js";
 import { field, keyField } from "./fields.js";
 import { showKey } from "./reveal.js";
 import { current, bringForward, stylesheet } from "./panel.js";
@@ -58,7 +58,8 @@ export async function addChannel(client) {
   input.id = "chn-name";
   const draw = () => {
     const s = more.address.value().trim() || slugify(input.value);
-    slug.textContent = s || "your-channel";
+    // As an encoder has to send it: a space is %20 in an RTMP address.
+    slug.textContent = inUrl(s) || "your-channel";
     slug.classList.toggle("chn-unset", !s);
     create.disabled = !slugify(input.value) && !slugify(more.address.value());
   };
