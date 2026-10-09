@@ -36,8 +36,7 @@ export function showBanner(client, items) {
     },
   });
   const bar = el("div.still-running", { role: "alert" }, [
-    el("span.dot.live"),
-    el("span.grow", { text: bannerText(items) }),
+    el("span.grow", {}, [el("span.dot.live", { style: { display: "inline-block", marginRight: "8px" } }), bannerText(items)]),
     el("button.btn", { text: "Details", onclick: () => import("./running.js").then((m) => m.openRunning(client)) }),
     stop,
     el("button.btn", {

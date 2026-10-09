@@ -60,8 +60,8 @@ export async function runningTests(test, eq, ok) {
 
   test("the model lists what streams, records and receives, and leaves out what is stopped", () => {
     const items = runningThings({ outputs: [YOUTUBE, RECORDING, STOPPED, NO_KEY] }, [CHANNEL], { youtube: 4400 }, 1000000 + 90000);
-    eq(items.map((i) => i.key), ["output:youtube", "output:recording-1", "channel:church#youtube", "ingest:church"]);
-    const [yt, rec, sent, ingest] = items;
+    eq(items.map((i) => i.key), ["output:youtube", "channel:church#youtube", "output:recording-1", "ingest:church"]);
+    const [yt, sent, rec, ingest] = items;
     eq(yt.title, "YouTube");
     eq(yt.since_secs, 6983);
     eq(yt.kbps, 4400);
@@ -82,7 +82,7 @@ export async function runningTests(test, eq, ok) {
   });
 
   test("a live stream is stopped only after the question, in plain words", () => {
-    const [yt, rec] = runningThings({ outputs: [YOUTUBE, RECORDING] });
+    const [yt, rec] = runningThings({ outputs: [RECORDING, YOUTUBE] });
     eq(confirmWording(yt), { title: "Stop streaming to YouTube?", body: "Viewers see the stream end.", yes: "Stop streaming" });
     eq(confirmWording(rec).title, "Stop recording?");
     const dialling = runningThings({ outputs: [{ ...YOUTUBE, state: "connecting", live_secs: undefined }] })[0];

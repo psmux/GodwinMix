@@ -94,7 +94,9 @@ function fromChannel(c, now) {
 export function runningThings(status, channels, rates, now = Date.now()) {
   const items = ((status && status.outputs) || []).map((o) => fromOutput(o, rates)).filter(Boolean);
   for (const c of channels || []) items.push(...fromChannel(c, now));
-  return items;
+  // Streams before recordings, whatever order the status lists them in.
+  const rank = (i) => ["output", "watch", "send", "recording", "ingest"].indexOf(i.kind);
+  return items.sort((a, b) => rank(a) - rank(b));
 }
 
 /** What goes out: streams, watch links and recordings, not encoders coming in. */

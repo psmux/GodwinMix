@@ -23,7 +23,7 @@ const REREAD_MS = 10000;
 const CSS = `.running-dialog{min-width:min(520px,94vw)}
 .running-row{gap:10px;padding:8px 0;border-bottom:var(--border) solid var(--line-soft)}
 .running-row .col{min-width:0;gap:2px}
-.still-running{position:fixed;top:0;left:0;right:0;z-index:38;display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:8px 16px;background:var(--panel2);border-bottom:2px solid var(--live);box-shadow:0 2px 10px rgba(0,0,0,.35)}`;
+.still-running{position:fixed;top:var(--header-h,44px);left:0;right:0;z-index:38;display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:8px 16px;background:var(--panel2);border-bottom:2px solid var(--live);box-shadow:0 2px 10px rgba(0,0,0,.35)}`;
 
 function style() {
   if (document.getElementById("gmx-running-css")) return;
