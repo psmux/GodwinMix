@@ -22,6 +22,7 @@ import { menubarTests } from "./menubar.js";
 import { touchTests } from "./touch.js";
 import { phoneTests } from "./phone.js";
 import { phoneReachTests } from "./phone-reach.js";
+import { phoneHandsTests } from "./phone-hands.js";
 import { channelRowsTests } from "./channels-rows.js";
 import { installTests } from "./install.js";
 import { showTests } from "./shows.js";
@@ -2936,6 +2937,7 @@ tileLevelTests(test, eq, ok)
   })
   .then(() => phoneTests(test, eq, ok))
   .then(() => phoneReachTests(test, eq, ok))
+  .then(() => phoneHandsTests(test, eq, ok))
   .catch((e) => {
     failed += 1;
     line("fail", "the phone deck suite threw: " + e.message);

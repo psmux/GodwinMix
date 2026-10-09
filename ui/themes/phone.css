@@ -257,6 +257,35 @@ body:has(> gmx-shell.phone) .pub-dock {
 /* Outputs carries the Channels panel on a phone, and its own Add Channel. */
 .phone-deck .out-add-channel { display: none; }
 
+/* --------------------------------------------- above the tab bar, and touch */
+
+/* How tall the tab bar is, for the things that float above it. */
+body:has(> gmx-shell.phone) { --phone-nav-h: calc(69px + env(safe-area-inset-bottom)); }
+
+/* The transition and effects sheets rise from the foot of the screen, which
+   on a phone is the tab bar: they stop above it, so the tabs stay in reach. */
+body:has(> gmx-shell.phone) .studio-sheet.bottom {
+  bottom: calc(var(--phone-nav-h) + 8px); max-height: calc(100dvh - var(--phone-nav-h) - 24px);
+}
+.phone-deck .tp-lengths .btn { min-width: 44px; min-height: 44px; }
+
+/* A message across the top, the width of the screen. At the foot it covered
+   the tab bar and the buttons that finish a dialog, and centred on half the
+   width it wrapped a sentence to five lines. */
+body:has(> gmx-shell.phone) .toasts {
+  left: 8px; right: 8px; top: calc(8px + env(safe-area-inset-top)); bottom: auto; transform: none; align-items: stretch;
+}
+body:has(> gmx-shell.phone) .toast { max-width: none; }
+
+/* Targets under a finger: 44 pixels, or a hit area grown to 44 round a
+   smaller mark where a bigger one would cover the picture it sits on. */
+gmx-shell.phone .header .menubar-all { width: 44px; height: 44px; }
+.phone-deck .scene-tabs .scene-tab > :is(button.scene-edit, button.scene-inputs)::before {
+  content: ""; position: absolute; inset: -6px;
+}
+.phone-deck .chn-seg button { min-height: 44px; }
+.phone-deck .chn-copy { display: inline-flex; align-items: center; min-height: 44px; padding: 0 8px; }
+
 /* ------------------------------------------------------------ sideways */
 
 /* A phone on its side: the tabs become a rail down the left, the header one
@@ -293,4 +322,7 @@ body:has(> gmx-shell.phone) .pub-dock {
   .phone-head { min-height: 32px; }
   .phone-head h1 { font-size: 20px; }
   body:has(> gmx-shell.phone) .pub-dock { bottom: 12px; max-height: calc(100dvh - 24px); }
+  /* The tabs are a rail on the left here, so nothing floats over the foot. */
+  body:has(> gmx-shell.phone) { --phone-nav-h: env(safe-area-inset-bottom); }
+  body:has(> gmx-shell.phone) .studio-sheet.bottom { left: calc(84px + env(safe-area-inset-left)); }
 }
