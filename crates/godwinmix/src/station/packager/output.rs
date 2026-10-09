@@ -25,8 +25,11 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
-/// How long one read waits before the stop flag is looked at.
-const READ: Duration = Duration::from_secs(1);
+/// How long one read waits before the stop flag is looked at. Longer than
+/// the gap to an encoder's next keyframe, which the relay waits for after
+/// the headers: two seconds is common from OBS and hardware encoders, and a
+/// one second wait here dropped and dialled such a stream again forever.
+const READ: Duration = Duration::from_secs(5);
 
 pub struct Packager {
     pub stream: Arc<Stream>,

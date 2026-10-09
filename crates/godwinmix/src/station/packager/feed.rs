@@ -32,7 +32,7 @@ pub(super) fn session(mut reader: flv::Reader, stream: &Arc<Stream>, board: &Boa
         let tag = match reader.next() {
             Ok(t) => t,
             Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => return End::Lost("the input's stream ended; waiting for it again".into()),
-            Err(e) => return End::Lost(format!("nothing came from the input for a second ({e})")),
+            Err(e) => return End::Lost(format!("nothing came from the input for five seconds ({e})")),
         };
         let read = match tag.kind {
             Kind::Video => caps::video(&tag.body),
