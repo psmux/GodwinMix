@@ -109,7 +109,7 @@ class OutputsPanel extends HTMLElement {
         el("span.grow"),
         el("button.btn", { text: "Record", onclick: () => startRecording(this.client) }),
         el("button.btn", { text: "Add destination", onclick: () => this.add() }),
-        el("button.btn", { text: "Add Channel", onclick: () => addChannel(this.client) }),
+        el("button.btn.out-add-channel", { text: "Add Channel", onclick: () => addChannel(this.client) }),
       ]),
       this.list
     );

@@ -359,6 +359,7 @@ const DEV_ASSETS: &[(&str, &str)] = &[
     ("test/recording-stop.js", include_str!("../../../ui/test/recording-stop.js")),
     ("test/touch.js", include_str!("../../../ui/test/touch.js")),
     ("test/phone.js", include_str!("../../../ui/test/phone.js")),
+    ("test/phone-reach.js", include_str!("../../../ui/test/phone-reach.js")),
     ("test/presence.js", include_str!("../../../ui/test/presence.js")),
     ("test/touch-tray.js", include_str!("../../../ui/test/touch-tray.js")),
     ("test/tile-levels.js", include_str!("../../../ui/test/tile-levels.js")),

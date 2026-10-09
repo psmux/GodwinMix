@@ -50,8 +50,8 @@ another size the mixer's camera source holds still, and its log says why.
 
 A browser's camera belongs to the tab that opened it, so a slim bar stays at
 the bottom right of the page while it is sending, with the state after its
-name: `This browser's camera: live`. Press **_** on it to open it out. Open,
-it has:
+name: `This browser's camera: live`. On a phone it sits just above the tabs.
+Tap its name to open it out. Open, it has:
 
 * the picture, mirrored, the way a selfie camera shows you
 * a level bar for the microphone
@@ -65,6 +65,12 @@ it has:
 * **Stop**, and **Send to the mixer** to start again after a stop
 
 It opens out by itself when something goes wrong, so the reason is on screen.
+Fold it away and the same error, coming back on each retry, leaves it folded;
+a different error opens it again.
+
+Drag the bar by its name to put it anywhere else on the page. It stays there,
+inside the window, and comes back there next time. Folded, it sits under any
+dialog, so it never covers the button that finishes one.
 
 Under the picture, once a second while the bar is open, is what is going
 out: the bit rate, the picture size and frame rate, and the round trip to the

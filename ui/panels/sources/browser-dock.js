@@ -33,8 +33,7 @@ export class BrowserDock {
     });
     this.node = el("section.pub-dock.min", { role: "dialog", "aria-label": "This browser's camera and microphone" }, [head, this.body]);
     document.body.appendChild(this.node);
-    // It floats over whatever is under it, a dialog's buttons included, so it
-    // goes wherever the operator drags it, and stays there.
+    // It floats over whatever is under it, so it goes wherever it is dragged.
     this.unmove = movable(this.node, head, "gmx.pubdock.at");
     const where = `Publishing to ${channel.app || channel.id}/${this.stream}, which becomes the source ${this.source}.`;
     this.pub = mountPublisher(this.body, {
@@ -71,9 +70,10 @@ export class BrowserDock {
     return this;
   }
 
-  /** Open up when there is something to read; the bar alone cannot say it. */
+  /** Open up when there is something to read, but not again for an error the operator folded away. */
   stateChanged(s) {
-    if (s && s.error && s.state !== "live") this.show();
+    this.error = s && s.state !== "live" ? s.error || null : null;
+    if (this.error && this.error !== this.dismissed) this.show();
     this.paint();
   }
 
@@ -113,6 +113,7 @@ export class BrowserDock {
   }
 
   fold(folding = !this.node.classList.contains("min")) {
+    if (folding) this.dismissed = this.error;
     this.node.classList.toggle("min", folding);
     this.pub.setVisible(!folding);
   }

@@ -20,6 +20,7 @@ import { renditionTests } from "./renditions.js";
 import { menubarTests } from "./menubar.js";
 import { touchTests } from "./touch.js";
 import { phoneTests } from "./phone.js";
+import { phoneReachTests } from "./phone-reach.js";
 import { showTests } from "./shows.js";
 import { wallTests } from "./wall.js";
 import { browserDeviceTests } from "./browser-devices.js";
@@ -2924,6 +2925,7 @@ tileLevelTests(test, eq, ok)
     console.error(e);
   })
   .then(() => phoneTests(test, eq, ok))
+  .then(() => phoneReachTests(test, eq, ok))
   .catch((e) => {
     failed += 1;
     line("fail", "the phone deck suite threw: " + e.message);

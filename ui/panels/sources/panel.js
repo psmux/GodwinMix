@@ -77,7 +77,7 @@ class SourcesPanel extends HTMLElement {
 
     this.grid = el("div.gallery", { role: "listbox", "aria-label": "Sources" });
     this.strip = new SceneStrip();
-    this.append(this.bar, this.strip.node, this.grid);
+    this.append(this.strip.node, this.bar, this.grid);
 
     this.drag = new DragSelect({
       container: this.grid,

@@ -67,8 +67,19 @@ export function movable(node, handle, key) {
 export function place(node, x, y) {
   const r = node.getBoundingClientRect();
   const left = Math.max(EDGE, Math.min(x, innerWidth - r.width - EDGE));
-  const top = Math.max(EDGE, Math.min(y, innerHeight - r.height - EDGE));
+  const top = Math.max(EDGE, Math.min(y, floor() - r.height - EDGE));
   Object.assign(node.style, { left: left + "px", top: top + "px", right: "auto", bottom: "auto" });
+}
+
+/**
+ * The lowest a card may reach: the top of a phone's tab bar when there is one
+ * along the bottom, so the card never covers the way to another screen, and
+ * the foot of the window otherwise. Sideways the bar is a rail at the left.
+ */
+function floor() {
+  const bar = document.querySelector(".phone-nav");
+  const r = bar && bar.getBoundingClientRect();
+  return r && r.width > innerWidth / 2 ? r.top : innerHeight;
 }
 
 /** A card that has been moved, kept inside after the window or the card changed size. */

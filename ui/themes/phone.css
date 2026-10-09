@@ -225,12 +225,14 @@ body.producer .phone-deck .scene-tabs .scene-tab > button[role="tab"].armed { bo
 .phone-frame > gmx-sources > .row > select { width: auto; flex: none; }
 .phone-frame > gmx-sources > .row > input[type="search"] { order: 9; flex-basis: 100%; max-width: none !important; }
 /* The scene this screen lists, switchable: a row of chips that scrolls
-   sideways when there are more scenes than fit. The name on the bar above
+   sideways when there are more scenes than fit. The name on the bar under
    would only repeat the lit chip. */
 .phone-frame > gmx-sources > .src-scenes:not([hidden]) {
-  position: relative; display: flex; gap: 8px; padding: 0 12px 12px; overflow-x: auto; scrollbar-width: none;
+  position: relative; display: flex; gap: 8px; padding: 12px 12px 0; overflow-x: auto; scrollbar-width: none;
 }
-.phone-frame > gmx-sources:has(> .src-scenes:not([hidden])) > .row > .ellipsis { visibility: hidden; }
+.phone-frame > gmx-sources:has(> .src-scenes:not([hidden])) > .row > :is(.ellipsis, .sm.dim) { display: none; }
+.phone-frame > gmx-sources:has(> .src-scenes:not([hidden])) > .row > input[type="search"] { flex: 1 1 0; min-width: 0; }
+.phone-frame > gmx-sources:has(> .src-scenes:not([hidden])) > .row > select { order: 10; }
 .src-scene {
   flex: none; display: inline-flex; align-items: center; gap: 8px; max-width: 70vw; height: 40px; padding: 0 14px;
   border: 1px solid var(--line-soft); border-radius: 20px; background: var(--panel2); color: var(--text); font-weight: 600;
@@ -248,6 +250,9 @@ body:has(> gmx-shell.phone) .pub-dock {
   right: 12px; bottom: calc(80px + env(safe-area-inset-bottom)); max-width: calc(100vw - 24px);
   max-height: calc(100dvh - 210px);
 }
+
+/* Outputs carries the Channels panel on a phone, and its own Add Channel. */
+.phone-deck .out-add-channel { display: none; }
 
 /* ------------------------------------------------------------ sideways */
 

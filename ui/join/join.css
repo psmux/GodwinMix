@@ -55,4 +55,7 @@ body.join-page { overflow: auto; }
 .pub-dock-note:empty { display: none; }
 .pub-dock.min { z-index: 38; width: auto; min-width: 220px; }
 .pub-dock.min .pub-dock-body { display: none; }
+/* A phone camera is upright, and its picture would otherwise take the card
+   and most of the screen with it. */
+.pub-dock .pub-picture { max-height: min(32vh, 240px); }
 .pub-dock.min .pub-dock-head { border-bottom: 0; }
