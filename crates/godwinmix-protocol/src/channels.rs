@@ -120,6 +120,10 @@ pub struct ChannelStream {
     /// does reads the one stream the station received.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub relay: Option<String>,
+    /// Why the mixer would not make this stream a source, while it will not:
+    /// the stream is in, and nothing in a scene can show it. Gone once it does.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_error: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]

@@ -39,6 +39,9 @@ impl Channels {
                 Ok(()) => info!(source = %id, "a channel's stream became a source"),
                 Err(why) => {
                     warn!(source = %id, %why, "the mixer would not take a channel's stream as a source");
+                    // On the stream as well as in the log, so the page that
+                    // published it can say why nothing reached the scene.
+                    self.not_a_source(record, stream, format!("{why:#}"));
                     return;
                 }
             }
@@ -46,11 +49,19 @@ impl Channels {
         self.claim(record, stream, &id, !exists);
     }
 
+    /// The mixer turned the stream down: keep why on it until it is taken.
+    fn not_a_source(&self, record: &Record, stream: &str, why: String) {
+        if let Some(l) = self.live.lock().iter_mut().find(|l| l.channel == record.id && l.name == stream) {
+            l.source_error = Some(why);
+        }
+    }
+
     /// Write down that the stream feeds `id`, and that the channel owns it
     /// when it made it.
     fn claim(&self, record: &Record, stream: &str, id: &str, made: bool) {
         if let Some(l) = self.live.lock().iter_mut().find(|l| l.channel == record.id && l.name == stream) {
             l.source = Some(id.to_string());
+            l.source_error = None;
         }
         if made {
             if let Some(r) = self.records.lock().iter_mut().find(|r| r.id == record.id) {
@@ -111,6 +122,7 @@ impl Channels {
                 source: Some(source.clone()),
                 relay: String::new(),
                 declared_fps: None,
+                source_error: None,
             });
         }
     }

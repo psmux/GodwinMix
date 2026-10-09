@@ -31,6 +31,7 @@ import { shell } from "../../shell/shell.js";
 import { toast, errorToast } from "../../shell/toast.js";
 import { settings, onSettingsChanged } from "../../shell/settings.js";
 import { openSceneSources } from "../sources/chooser-loader.js";
+import { count } from "../sources/scene-strip.js";
 import { acquireScenes } from "../../shell/scene-session.js";
 import { sceneNotRunning } from "../../shell/scene-health.js";
 
@@ -260,7 +261,7 @@ class ScenesPanel extends HTMLElement {
    * runs on every change the document sends.
    */
   renderTabs(list) {
-    const signature = list.map((s) => `${s.id}/${s.name}/${s.items || 0}`).join("|");
+    const signature = list.map((s) => `${s.id}/${s.name}/${s.items || 0}/${(s.sources || []).join(",")}`).join("|");
     if (signature !== this.tabSignature) {
       this.tabSignature = signature;
       clear(this.strip);
@@ -823,7 +824,7 @@ export default ScenesPanel;
  * hides it, since its Sources panel is already beside the scenes.
  */
 function inputsButton(summary) {
-  const n = summary.items || 0;
+  const n = count(summary);
   return el("button.scene-inputs", {
     type: "button",
     "data-nodrag": "",

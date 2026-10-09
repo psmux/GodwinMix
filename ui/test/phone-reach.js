@@ -1,7 +1,8 @@
 // What a phone operator could not reach: a scene's sources, the channels,
 // and every tab once this browser's camera was folded over the tab bar.
 
-import { SceneStrip } from "../panels/sources/scene-strip.js";
+import { SceneStrip, count } from "../panels/sources/scene-strip.js";
+import { dockNote } from "../panels/sources/browser-channel.js";
 import { focusedScene, setFocusedScene } from "../shell/focus.js";
 import { place } from "../shell/float-drag.js";
 import { BrowserDock } from "../panels/sources/browser-dock.js";
@@ -59,5 +60,17 @@ export function phoneReachTests(test, eq, ok) {
     eq(shown, 1);
     dock.stateChanged({ state: "reconnecting", error: "no route" });
     eq(shown, 2);
+  });
+
+  test("a scene's count is its sources, each once, as Sources shows them", () => {
+    eq(count({ items: 2, sources: ["phone", "phone"] }), 1);
+    eq(count({ items: 3 }), 3);
+  });
+
+  test("the camera card says why the mixer would not make its stream a source", () => {
+    const refused = { state: "live", source_error: "could not listen for RTMP on 0.0.0.0:1935" };
+    ok(dockNote(true, false, refused, "browser-x").includes("could not make it a source, so it cannot go in a scene. could not listen"));
+    eq(dockNote(true, true, refused, "browser-x"), "In the mixer as browser-x.");
+    eq(dockNote(true, false, { state: "live" }, "browser-x"), "The channel has the stream; browser-x is on its way.");
   });
 }

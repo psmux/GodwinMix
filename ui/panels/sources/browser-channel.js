@@ -61,6 +61,20 @@ export function streamOf(channel, name) {
 }
 
 /**
+ * The camera card's line above the picture: what the mixer has made of the
+ * stream `s`. A stream the mixer would not make a source says why, or the
+ * card reads live while nothing can reach a scene.
+ */
+export function dockNote(active, inMixer, s, source) {
+  if (!inMixer && s && s.source_error) {
+    return `The mixer has the stream but could not make it a source, so it cannot go in a scene. ${s.source_error}`;
+  }
+  if (active && inMixer) return `In the mixer as ${source}.`;
+  if (active && s && s.state === "live") return `The channel has the stream; ${source} is on its way.`;
+  return active ? "Sending to the mixer." : "";
+}
+
+/**
  * Make sure the ingest plugin, which takes a browser's stream in, is on this
  * mixer and running: install it or switch it on when it is not. `say` is told
  * what is happening, because an install can take a minute.

@@ -515,6 +515,7 @@ export interface ChannelStream {
   relay?: string | null;
   since_ms: number;
   source?: string | null;
+  source_error?: string | null;
   state: string;
   video?: StreamVideo | null;
 }
