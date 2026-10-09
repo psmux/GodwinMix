@@ -9,6 +9,8 @@ import { el } from "../../shell/dom.js";
 import { hlsCard, hlsUrl, reachableBase } from "../renditions/hls-card.js";
 import { keyed, write, copy } from "./keyed.js";
 import { embedCode } from "./model.js";
+import { reachable } from "../../shell/devices-share.js";
+import { run } from "../../shell/commands.js";
 
 /** One link's card, with its embed code below. Call `update` with each state. */
 export function watchCard(view, channel, first) {
@@ -22,7 +24,13 @@ export function watchCard(view, channel, first) {
     code,
     copyCode,
   ]);
-  const node = el("div.chn-watch", {}, [el("span.chn-kicker", { text: `Watch ${channel.name}` }), card.node, embed]);
+  // A mixer that answers on this computer only gives a phone nothing to open.
+  const alone = el("p.chn-dim", { hidden: true }, [
+    "This link opens on this computer only, because the mixer is not on the network yet. ",
+    el("button.btn.sm", { type: "button", text: "Let other devices in", onclick: () => run("help.devices") }),
+  ]);
+  client.call("core.info", {}).then((info) => { alone.hidden = reachable(info); }).catch(() => {});
+  const node = el("div.chn-watch", {}, [el("span.chn-kicker", { text: `Watch ${channel.name}` }), alone, card.node, embed]);
   let base = (client.transport && client.transport.base) || location.origin;
   let dest = first;
   const draw = () => write(code, "value", embedCode(hlsUrl(dest, base) || "the link appears once it has started"));

@@ -13,7 +13,7 @@ import { el } from "./dom.js";
 const LOOPBACK = /^https?:\/\/(localhost|127\.[\d.]+|\[::1\])(:|\/|$)/i;
 
 /** Whether core.info names an address other devices can open. */
-function reachable(info) {
+export function reachable(info) {
   return ((info && info.tls && info.tls.urls) || []).some((u) => !LOOPBACK.test(u));
 }
 
