@@ -48,10 +48,12 @@ function words(s) {
     n(s.shows, s.shows === 1 ? "show" : "shows"),
     n(s.live, "live"),
     n(s.alarm, "in alarm", s.alarm ? ".bad" : ""),
+    // A channel with a failing destination is red below; the count says so too.
+    s.channelAlarms ? n(s.channelAlarms, s.channelAlarms === 1 ? "channel in alarm" : "channels in alarm", ".bad") : null,
     el("span.wl-stat", { title: s.partial ? "Summed over the shows read so far" : "" }, [`in `, el("strong", { text: kbps(s.inK) || "0 kb/s" }), s.partial ? "*" : ""]),
     el("span.wl-stat", {}, ["out ", el("strong", { text: kbps(s.outK) || "0 kb/s" })]),
   ];
   if (s.cpu != null) parts.push(n(`${s.cpu}%`, "CPU", s.cpu > 85 ? ".bad" : ""));
   if (s.gpu != null) parts.push(n(`${s.gpu}%`, "GPU", s.gpu > 85 ? ".bad" : ""));
-  return parts;
+  return parts.filter(Boolean);
 }

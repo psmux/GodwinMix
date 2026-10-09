@@ -74,7 +74,7 @@ export function openWall(client) {
       root.classList.toggle("narrow", narrow);
       root.classList.toggle("tiles", tiles);
       top.sync(opts);
-      top.counts(summary(data.shows, data.stats, data.gov));
+      top.counts({ ...summary(data.shows, data.stats, data.gov), channelAlarms: new Set(chans.items.filter((it) => it.failing).map((it) => it.channel)).size });
       view.items = [...rows(data.shows, data.stats, opts), ...channelGroup(chans.items, opts)];
       view.cols = tiles ? Math.max(1, Math.floor((scroll.clientWidth - 24) / (narrow ? 170 : 236))) : 1;
       head.replaceChildren(tiles || narrow ? "" : header(opts.sort, opts.dir));
