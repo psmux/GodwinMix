@@ -184,7 +184,7 @@ Then just ask:
 
 > Take the presenter with a dip through black, then put the scoreboard up at half time.
 
-> When the guest's phone comes online, take her scene with a fade.
+> Build me a modern news studio set and put me in it, no green screen.
 
 The agent sees the whole show in one labelled picture, every camera plus the programme, so it compares shots in a single look.
 
