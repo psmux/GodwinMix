@@ -131,7 +131,7 @@ export interface Alarm {
 }
 
 /** What an alarm is about. */
-export type AlarmKind = "no-input" | "stall" | "black" | "freeze" | "silence" | "cc-errors" | "loss" | "output-failed" | "governor-refused" | "shed";
+export type AlarmKind = "no-input" | "stall" | "black" | "freeze" | "silence" | "cc-errors" | "loss" | "output-failed" | "governor-refused" | "shed" | "memory";
 
 /**
  * A show's alarms, as a person sets them from the page. Left out fields

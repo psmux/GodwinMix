@@ -162,6 +162,33 @@ queue at the top is the one that is blocking. `GET /api/v1/pipeline/list` says
 what names exist, and every one of these answers with that list when you get a
 name wrong.
 
+### When the show's memory climbs
+
+A `memory` alarm on the wall, or a show process growing in Task Manager, is
+the guard's business first. Search the log for these two lines:
+
+```
+gmx logs | grep -E "memory is past its guard|backstop"
+```
+
+`the show's memory is past its guard's threshold` names the five fullest
+queues and the pipeline each is in. `this queue filled by its byte or buffer
+backstop` names a queue whose time limit stopped counting, and is the line to
+put in a bug report. The guard restarts the source whose queue holds the most;
+if the alarm is still up after that, take a support bundle while it is.
+
+To move the threshold, or switch the guard off with 0:
+
+```sh
+curl -s -X POST -H "authorization: Bearer $GODWINMIX_TOKEN" \
+  -H 'content-type: application/json' \
+  -d '{"values": {"memory.guard_mb": 3000}}' \
+  http://127.0.0.1:8080/api/v1/config/set
+```
+
+[Show health](../reference/show-health.md#memory) says what the guard does,
+and [configuration](../reference/configuration.md#memory) has the key.
+
 ## 6. `gmx support-bundle`: keep it
 
 ```

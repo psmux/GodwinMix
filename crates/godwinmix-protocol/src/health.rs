@@ -46,7 +46,7 @@ pub enum AlarmKind {
     OutputFailed,
     GovernorRefused,
     Shed,
-    /// The show's own memory passed its guard's threshold. See `[memory]`.
+    // The show's own memory passed its guard's threshold. See `[memory]`.
     Memory,
 }
 
