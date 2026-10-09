@@ -23,6 +23,10 @@ gmx-shell.phone .slot-header { border-bottom: 1px solid var(--line-soft); }
 .phone-frame {
   flex: 0 0 auto; min-width: 0;
   background: var(--panel); border: 1px solid var(--line-soft); border-radius: 14px; overflow: hidden;
+  /* Clip, not hidden, where the browser has it: hidden made the frame a
+     scroll container of its own, so Take, sticky to the foot of the screen,
+     stuck to the foot of this frame instead and scrolled off with it. */
+  overflow: clip;
 }
 .phone-frame > * { display: block; }
 
@@ -30,7 +34,7 @@ gmx-shell.phone .slot-header { border-bottom: 1px solid var(--line-soft); }
 .phone-head { order: 0; display: flex; align-items: center; gap: 4px; min-height: 40px; margin: 2px 0 -2px; }
 .phone-head h1 { margin: 0; font-size: 24px; font-weight: 750; letter-spacing: -0.01em; }
 .phone-back {
-  display: grid; place-items: center; width: 40px; height: 40px; margin-left: -10px;
+  display: grid; place-items: center; width: 44px; height: 44px; margin-left: -12px;
   border: 0; border-radius: 12px; background: none; color: var(--accent);
 }
 .phone-back:active { background: var(--select-fill); }
@@ -253,9 +257,145 @@ body:has(> gmx-shell.phone) .pub-dock {
   right: 12px; bottom: calc(80px + env(safe-area-inset-bottom)); max-width: calc(100vw - 24px);
   max-height: calc(100dvh - 210px);
 }
+/* Opened, the card takes most of a phone's screen, so a dialog the operator
+   opens goes over it rather than under it: under it, the card covered the
+   buttons that finish the dialog. */
+body:has(> gmx-shell.phone):has(.slot-modal .scrim) > .pub-dock { z-index: 38; }
+/* Where it starts, the folded card sits over the foot of every screen: the
+   screens scroll far enough to bring their last line out from under it, and
+   Take, which floats at the foot of Live, floats above it. Moved, it is
+   wherever the operator put it, and neither is needed. */
+body:has(> gmx-shell.phone):has(> .pub-dock:not([style*="top:"])) .dock-workspace.phone-deck { padding-bottom: 96px; }
+body:has(> gmx-shell.phone):has(> .pub-dock.min:not([style*="top:"])) .phone-deck .scene-tabs > .btn { bottom: 78px; }
 
 /* Outputs carries the Channels panel on a phone, and its own Add Channel. */
 .phone-deck .out-add-channel { display: none; }
+
+/* --------------------------------------------- above the tab bar, and touch */
+
+/* How tall the tab bar is, for the things that float above it. */
+body:has(> gmx-shell.phone) { --phone-nav-h: calc(69px + env(safe-area-inset-bottom)); }
+
+/* The transition and effects sheets rise from the foot of the screen, which
+   on a phone is the tab bar: they stop above it, so the tabs stay in reach. */
+body:has(> gmx-shell.phone) .studio-sheet.bottom {
+  bottom: calc(var(--phone-nav-h) + 8px); max-height: calc(100dvh - var(--phone-nav-h) - 24px);
+}
+.phone-deck .tp-lengths .btn { min-width: 44px; min-height: 44px; }
+
+/* A message the width of the screen, just above the tab bar; with a dialog
+   open, across the top instead, clear of the buttons that finish it. At the
+   very foot it covered the tab bar and those buttons, and centred on half
+   the width it wrapped a sentence to five lines. */
+body:has(> gmx-shell.phone) .toasts {
+  left: 8px; right: 8px; top: auto; bottom: calc(var(--phone-nav-h) + 8px); transform: none; align-items: stretch;
+}
+body:has(> gmx-shell.phone):has(.slot-modal .scrim) .toasts { top: calc(8px + env(safe-area-inset-top)); bottom: auto; }
+body:has(> gmx-shell.phone) .toast { max-width: none; }
+
+/* Targets under a finger: 44 pixels, or a hit area grown to 44 round a
+   smaller mark where a bigger one would cover the picture it sits on. */
+gmx-shell.phone .header .menubar-all { width: 44px; height: 44px; }
+.phone-deck .scene-tabs .scene-tab > :is(button.scene-edit, button.scene-inputs)::before {
+  content: ""; position: absolute; inset: -6px;
+}
+body:has(> gmx-shell.phone) .chn-seg button { min-height: 44px; }
+body:has(> gmx-shell.phone) .chn-copy { display: inline-flex; align-items: center; min-height: 44px; padding: 0 8px; }
+/* The note under a new key: its button under the words, not cut off the side. */
+body:has(> gmx-shell.phone) .chn-once { flex-wrap: wrap; }
+body:has(> gmx-shell.phone) .chn-once > .btn { flex: 1 1 100%; }
+body:has(> gmx-shell.phone) :is(.chn-link, .chn-show) { display: inline-flex; align-items: center; min-height: 44px; }
+body:has(> gmx-shell.phone) .chn-qtile { min-height: 44px; }
+
+
+/* Keyboard shortcuts in a menu mean nothing to a thumb. */
+body:has(> gmx-shell.phone) .menu .key { display: none; }
+
+/* A tile's name being renamed in place: the grip, the dot and the gear step
+   aside so the whole bar is the field, and the text is not cut while it is
+   typed. Cut, the operator typed into a word they could not see the end of. */
+.phone-frame .tile:has(.name[contenteditable="true"]) :is(.drag-handle, .gear, .dot) { display: none; }
+.phone-frame .tile .name[contenteditable="true"] { text-overflow: clip; overflow-x: auto; min-height: 32px; line-height: 32px; padding: 0 6px; }
+
+/* The keyboard is up (index.html asks Android to shrink the page for it, so
+   a dialog's buttons stay above it): the tab bar steps out of the way rather
+   than ride on top of the keyboard and take a third of what is left. */
+gmx-shell.phone:has(.dock-workspace :is(input:not([type=checkbox]):not([type=radio]):not([type=range]), textarea, [contenteditable="true"]):focus) .phone-nav { display: none; }
+
+/* A destination's row: its name and state on one line, Edit, Reconnect and
+   Remove under them sharing the width. On one line Remove ran off the card
+   and Reconnect was cut to "Reconnec". */
+.phone-frame .output-row > .row:first-child { flex-wrap: wrap; row-gap: 8px; }
+.phone-frame .output-row > .row:first-child > .grow { order: 4; flex: 1 1 100%; height: 0; }
+.phone-frame .output-row > .row:first-child > .btn { order: 5; flex: 1 1 0; }
+
+/* A message with a button: the words and the × on the first line, the
+   button under them, so neither the words nor the button are cut. */
+body:has(> gmx-shell.phone) .toast { flex-wrap: wrap; }
+body:has(> gmx-shell.phone) .toast > .grow { flex: 1 1 calc(100% - 64px); }
+body:has(> gmx-shell.phone) .toast > .btn.icon:last-child { order: 1; }
+body:has(> gmx-shell.phone) .toast > .btn:not(.icon) { order: 2; flex: 1 1 auto; }
+
+/* The first header line never wraps: the destinations pill takes what the
+   name and the menu leave, less the room for who else is here, and cuts its
+   words short. Recording sits beside what is on air on the second line,
+   where it belongs. With both pills on the first line, a recording pushed
+   the ☰ down to a line of its own. The tally is sized from nothing so a long
+   scene name cannot push the level and the clock onto a third line. */
+gmx-shell.phone .header .hdr-dest { flex: 0 1 auto; min-width: 0; max-width: calc(100vw - 202px - env(safe-area-inset-left) - env(safe-area-inset-right)); white-space: nowrap; }
+gmx-shell.phone .header:has(.presence:not([hidden])) .hdr-dest { max-width: calc(100vw - 254px - env(safe-area-inset-left) - env(safe-area-inset-right)); }
+gmx-shell.phone .header .hdr-rec { order: 8; }
+gmx-shell.phone .header .tally { flex-basis: 0; }
+
+/* Existing sources in the scene chooser: the name on its own line and
+   Preview, Add and Remove sharing the one under it. Beside a name they ran
+   off the dialog, and a long name sent Remove to a line of its own. */
+body:has(> gmx-shell.phone) .source-choice { padding-right: 8px; }
+body:has(> gmx-shell.phone) .source-choice > .grow { flex: 1 1 100%; }
+body:has(> gmx-shell.phone) .source-choice > .btn { flex: 1 1 0; }
+
+/* A tile's name bar: the name gives way, never the grip or the gear. On a
+   360 pixel phone the gear was squeezed to 19 pixels, too narrow to hit. */
+.phone-frame .tile .bar > :is(.drag-handle, .dot, .gear) { flex: none; }
+.phone-frame .tile .bar > .gear { width: 44px; }
+.phone-frame .tile .bar > .name { min-width: 0; }
+/* The scene chips on Sources, the warning mark on a scene card and Copy on
+   a channel: each up to a finger's 44 pixels. */
+.src-scene { height: 44px; border-radius: 22px; }
+.phone-deck .scene-tabs .scene-tab > .scene-warn::before { content: ""; position: absolute; inset: 0 -13px; }
+.phone-deck .scene-tabs .scene-tab > .scene-warn { position: absolute; }
+body:has(> gmx-shell.phone) .chn-copy { min-width: 44px; justify-content: center; }
+
+/* The page draws under a notch and a home bar (viewport-fit=cover), so a
+   dialog keeps out of both: its title and × stayed under the status bar and
+   its buttons on the home bar's swipe. */
+body:has(> gmx-shell.phone) .scrim:not(:has(> .composer)) {
+  padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+}
+body:has(> gmx-shell.phone) .dialog {
+  max-height: calc(100dvh - max(8px, env(safe-area-inset-top)) - max(8px, env(safe-area-inset-bottom)));
+}
+
+/* No pull to refresh. A thumb dragging down from the header, or a drag that
+   started on the camera card or a fader and ran on, would otherwise reload
+   the page mid show, and with this browser's camera publishing a reload
+   stops it. The screens still scroll; they contain their own overscroll. */
+html:has(> body > gmx-shell.phone), body:has(> gmx-shell.phone) { overscroll-behavior-y: none; }
+
+/* What a row in the add source picker is, in up to three lines rather than
+   one cut short: on a phone it is the only place the words are, with no
+   pointer to hover for the rest. */
+body:has(> gmx-shell.phone) .picker-row .dim.ellipsis {
+  white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3;
+}
+
+/* Routing covers the screen to its foot: its last line scrolls clear of the
+   home bar. */
+body:has(> gmx-shell.phone) .rt-scroll { padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
+
+/* Who else is here: a small pill with a finger sized target round it. */
+gmx-shell.phone .header .presence { position: relative; }
+gmx-shell.phone .header .presence::before { content: ""; position: absolute; inset: -7px -4px; }
 
 /* ------------------------------------------------------------ sideways */
 
@@ -280,7 +420,7 @@ body:has(> gmx-shell.phone) .pub-dock {
   gmx-shell.phone .header .tally { order: 2; height: 36px; }
   gmx-shell.phone .header .hdr-meter { order: 3; }
   gmx-shell.phone .header .hdr-uptime { order: 4; }
-  gmx-shell.phone .header .menubar-all { width: 38px; height: 38px; }
+  gmx-shell.phone .header .menubar-all { width: 44px; height: 44px; }
   .dock-workspace.phone-deck { padding: 10px max(12px, env(safe-area-inset-right)) 12px 12px; gap: 10px; }
   gmx-shell.phone[data-phone-page="live"] .dock-workspace.phone-deck {
     display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); align-items: start;
@@ -293,4 +433,7 @@ body:has(> gmx-shell.phone) .pub-dock {
   .phone-head { min-height: 32px; }
   .phone-head h1 { font-size: 20px; }
   body:has(> gmx-shell.phone) .pub-dock { bottom: 12px; max-height: calc(100dvh - 24px); }
+  /* The tabs are a rail on the left here, so nothing floats over the foot. */
+  body:has(> gmx-shell.phone) { --phone-nav-h: env(safe-area-inset-bottom); }
+  body:has(> gmx-shell.phone) :is(.studio-sheet.bottom, .toasts) { left: calc(84px + env(safe-area-inset-left)); }
 }

@@ -612,7 +612,12 @@ class SourcesPanel extends HTMLElement {
     sel.removeAllRanges();
     sel.addRange(range);
 
+    // Once only. Enter ends the edit, and the blur that ending it causes
+    // would otherwise send the rename a second time and push a second undo.
+    let done = false;
     const finish = async (commit) => {
+      if (done) return;
+      done = true;
       tile.name.contentEditable = "false";
       const after = tile.name.textContent.trim();
       if (!commit || !after || after === before) {

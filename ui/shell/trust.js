@@ -28,6 +28,7 @@ export function trustNote(info, base) {
       "On the phone, open ", link(links.apple, links.apple), " on an iPhone or iPad, or ",
       link(links.android, links.android), " on Android, then follow ", link(TRUST_HELP, "these steps"), ".",
     ]),
-    el("p.sm.dim", { text: `Authority fingerprint, to compare with what the phone shows: ${print}` }),
+    // Wrapped anywhere: a fingerprint is one long word that pushed a phone's dialog sideways.
+    el("p.sm.dim", { style: { overflowWrap: "anywhere" }, text: `Authority fingerprint, to compare with what the phone shows: ${print}` }),
   ]);
 }
