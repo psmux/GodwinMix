@@ -19,6 +19,7 @@ const PATHS = {
   routing: '<circle cx="5.5" cy="6" r="2"/><circle cx="5.5" cy="18" r="2"/><circle cx="18.5" cy="12" r="2"/><path d="M7.5 6c5 0 4 6 9 6M7.5 18c5 0 4-6 9-6"/>',
   wall: '<rect x="3" y="4" width="8" height="7" rx="1.6"/><rect x="13" y="4" width="8" height="7" rx="1.6"/><rect x="3" y="13" width="8" height="7" rx="1.6"/><rect x="13" y="13" width="8" height="7" rx="1.6"/>',
   black: '<circle cx="12" cy="12" r="8.5"/><path d="M6 6l12 12"/>',
+  install: '<rect x="6" y="2.5" width="12" height="19" rx="2.6"/><path d="M12 7v7M9 11l3 3 3-3"/>',
   device: '<rect x="7" y="2.5" width="10" height="19" rx="2.6"/><path d="M11 18.5h2"/>',
 };
 

@@ -117,6 +117,17 @@ async fn one_port_answers_http_https_and_a_websocket_over_tls() {
     let urls = secure["tls"]["urls"].as_array().unwrap();
     assert!(urls.len() == 1 && urls[0].as_str().unwrap().starts_with("https://localhost:"), "{urls:?}");
 
+    // The file on disk is the authority, which signed the certificate the
+    // port serves, and the page offers it to a phone with no token.
+    assert_eq!(info.authority, Some(godwinmix_core::tls_cert::fingerprint(&cert).unwrap()));
+    assert_ne!(info.authority.as_ref(), Some(&info.fingerprint), "the port's certificate is not the authority");
+    let offered = reqwest::get(format!("http://127.0.0.1:{port}/ca.crt")).await.unwrap();
+    assert_eq!(offered.headers()["content-type"], "application/x-x509-ca-cert");
+    assert_eq!(offered.text().await.unwrap(), cert);
+    let download = reqwest::get(format!("http://127.0.0.1:{port}/ca.pem")).await.unwrap();
+    assert!(download.headers()["content-disposition"].to_str().unwrap().starts_with("attachment"));
+    assert_eq!(download.text().await.unwrap(), cert);
+
     // The WebSocket upgrade over TLS: a JSON-RPC call on /rpc.
     let connector = tokio_rustls::TlsConnector::from(Arc::new(trusting(&cert)));
     let tcp = tokio::net::TcpStream::connect(address).await.unwrap();
