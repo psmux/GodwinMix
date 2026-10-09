@@ -226,11 +226,17 @@ mod tests {
 
     #[test]
     fn this_process_has_private_memory_and_a_gone_one_has_none() {
+        // Four megabytes of our own, written to so every page is resident.
+        // A small test binary on Linux held 672 KiB of anonymous memory and
+        // nothing more, so a bare process says little; one that is known to
+        // hold this much must show at least this much.
+        let held = vec![1u8; 4 * 1024 * 1024];
         let Some(bytes) = private_bytes(std::process::id()) else {
             println!("skipping: this machine has no way to read a private size");
             return;
         };
-        assert!(bytes > 1024 * 1024, "{bytes} bytes is too small to be a real process");
+        assert!(bytes >= held.len() as u64, "{bytes} bytes, while this process holds {} of its own", held.len());
+        drop(std::hint::black_box(held));
         assert_eq!(private_bytes(u32::MAX), None);
     }
 
