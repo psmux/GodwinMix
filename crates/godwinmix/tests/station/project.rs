@@ -18,7 +18,12 @@ async fn a_project_from_one_show_opens_as_another() {
     assert!(project.is_object(), "{exported}");
     project.as_object_mut().unwrap().remove("trace_id");
 
-    let added = call(&mut ws, 4, "show.add", json!({"name": "Opened", "from": {"project": project}})).await;
+    // show.add starts the show and waits up to thirty seconds for it to take
+    // the project (`PROJECT_WAIT`). On the Windows runner, beside the test
+    // that makes two hundred shows, it took more than twenty, so the call is
+    // given the station's own wait and ten seconds more to answer.
+    let opened = json!({"name": "Opened", "from": {"project": project}});
+    let added = call_within(&mut ws, 4, "show.add", opened, Duration::from_secs(40)).await;
     assert_eq!(added["result"]["id"], "opened", "{added}");
     let running = |p: &Value| p["show"]["id"] == "opened" && p["show"]["state"] == "running";
     let _ = event(&mut ws, "show.changed", Duration::from_secs(5), running).await;
