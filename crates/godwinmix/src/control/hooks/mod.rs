@@ -15,9 +15,12 @@
 //! returns without allocating a payload when no hook wants it, which is the
 //! case on every core nobody has configured one on.
 
+mod channels;
 pub mod command;
 pub mod http;
 pub mod rpc;
+
+pub use channels::ForChannels;
 
 use godwinmix_core::hooks::{blocks, envelope, Blocked, Decision, Hook, Mode, Registry};
 use godwinmix_protocol::types::Event;
@@ -206,34 +209,6 @@ impl Hooks {
             plugin: blocked.plugin,
             reason: blocked.reason,
         });
-    }
-}
-
-/// The channels' hooks, `channel.stream.state` and
-/// `channel.destination.state`, fired through these. The channels raise them
-/// on a thread of their own, so the runtime a hook's task is spawned on is
-/// kept here.
-pub struct ForChannels {
-    hooks: Arc<Hooks>,
-    runtime: tokio::runtime::Handle,
-}
-
-impl ForChannels {
-    /// `None` outside a Tokio runtime, where no hook could run.
-    pub fn new(hooks: &Arc<Hooks>) -> Option<Arc<ForChannels>> {
-        let runtime = tokio::runtime::Handle::try_current().ok()?;
-        Some(Arc::new(ForChannels { hooks: hooks.clone(), runtime }))
-    }
-}
-
-impl crate::channels::hooks::Hook for ForChannels {
-    fn wants(&self, event: &str) -> bool {
-        self.hooks.any(event)
-    }
-
-    fn fire(&self, event: &'static str, payload: Value) {
-        let _inside = self.runtime.enter();
-        self.hooks.fire(event, || payload);
     }
 }
 
