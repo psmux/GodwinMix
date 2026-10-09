@@ -26,7 +26,7 @@ pub enum HealthState {
     Warning,
     /// Something a viewer notices, or nothing is going out: no input, a
     /// stall, black, a frozen picture, silence, a failed output, a rendition
-    /// the governor refused or shed.
+    /// the governor refused or shed, a show past its memory guard.
     Alarm,
     /// Not monitored: the show is stopped or has no input to watch.
     Off,
@@ -46,6 +46,8 @@ pub enum AlarmKind {
     OutputFailed,
     GovernorRefused,
     Shed,
+    // The show's own memory passed its guard's threshold. See `[memory]`.
+    Memory,
 }
 
 impl AlarmKind {
@@ -67,6 +69,7 @@ impl AlarmKind {
             AlarmKind::OutputFailed => "output-failed",
             AlarmKind::GovernorRefused => "governor-refused",
             AlarmKind::Shed => "shed",
+            AlarmKind::Memory => "memory",
         }
     }
 }

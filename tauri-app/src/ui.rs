@@ -67,8 +67,8 @@ fn on_navigation(app: &AppHandle, url: &Url) -> bool {
         return true;
     }
     match url.host_str().unwrap_or("") {
-        "quit" => crate::quit(app, false),
-        "quit-all" => crate::quit(app, true),
+        "quit" => crate::close::request(app, false),
+        "quit-all" => crate::close::request(app, true),
         "restart" => crate::restart::from_page(app),
         "save-project" => crate::page_menu::save_project(app, url),
         _ => {}
@@ -138,8 +138,10 @@ fn about_metadata() -> AboutMetadata<'static> {
     }
 }
 
-/// The tray icon: Show, Connect, Open in browser, Quit. It is what gets the window back after
-/// someone closes it, which on macOS leaves the app running.
+/// The tray icon: Show, Connect, Open in browser, Quit. `tray` adds what is
+/// running and Stop all streaming within seconds of launch, and it is what
+/// brings the window back after a person chose to keep running in the
+/// background.
 pub fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     let show = MenuItemBuilder::with_id("show", "Show GodwinMix").build(app)?;
     let connect = MenuItemBuilder::with_id("connect", "Connect to a mixer...").build(app)?;
@@ -173,14 +175,16 @@ pub fn on_menu(app: &AppHandle, id: &str) {
         "updates" => check_for_updates(app.clone()),
         "restart" => crate::restart::from_page(app),
         crate::lan::MENU_ID => crate::lan::toggle(app),
-        "quit" => crate::quit(app, false),
-        "quit-all" => crate::quit(app, true),
+        "quit" => crate::close::request(app, false),
+        "quit-all" => crate::close::request(app, true),
+        crate::tray::STOP_ALL_ID => crate::background::stop_all(app),
         _ => {}
     }
 }
 
 /// Bring the window back, or make it again if it was closed.
 pub fn show(app: &AppHandle) {
+    crate::background::leave(app);
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();
         let _ = window.unminimize();

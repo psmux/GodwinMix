@@ -12,6 +12,7 @@ use std::path::Path;
 pub mod first_run;
 pub mod edit;
 pub mod keys;
+pub mod memory;
 pub mod recordings;
 pub mod schema;
 pub mod settable;
@@ -56,6 +57,9 @@ pub struct Config {
     pub graphics: crate::graphics::BrandConfig,
     #[serde(default)]
     pub stall: StallConfig,
+    /// The show's memory guard. See `config::memory` and `mixer::memguard`.
+    #[serde(default)]
+    pub memory: memory::MemoryConfig,
     /// The resource governor. Nothing needs setting: it measures this
     /// machine and works out its own headroom. `reserve_cores` under
     /// Advanced keeps cores free for something else. See `render/`.
@@ -455,6 +459,10 @@ pub struct MultiviewConfig {
 
 fn yes() -> bool {
     true
+}
+
+fn is_true(b: &bool) -> bool {
+    *b
 }
 fn default_multiview_width() -> i32 {
     960
@@ -1378,6 +1386,12 @@ pub struct OutputConfig {
     /// as it has always been, at no extra cost. See `render/`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rendition: Option<godwinmix_protocol::rendition::RenditionChoice>,
+    /// False once a person has stopped it with `output.stop`: nothing is
+    /// built or sent, and the address and key wait here for `output.start`.
+    /// Written to the runtime store only when false, so a restart keeps a
+    /// stopped destination stopped.
+    #[serde(default = "yes", skip_serializing_if = "is_true")]
+    pub enabled: bool,
     /// Every key the core does not know, handed to the output's kind.
     #[serde(flatten, default)]
     pub extra: std::collections::BTreeMap<String, toml::Value>,
@@ -1404,6 +1418,7 @@ impl OutputConfig {
             queue_secs: default_queue_secs(),
             place: None,
             rendition: None,
+            enabled: true,
             extra: Default::default(),
         }
     }
@@ -2121,6 +2136,7 @@ sidecar = \"/opt/b\"\n").unwrap();
             safety: Default::default(),
             browser: Default::default(),
             stall: Default::default(),
+            memory: Default::default(),
             governor: Default::default(),
             sources: vec![],
             outputs: vec![],

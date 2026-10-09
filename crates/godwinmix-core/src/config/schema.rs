@@ -84,6 +84,7 @@ pub fn derived() -> Map<String, Value> {
         ("browser", schema_of::<super::BrowserConfig>()),
         ("graphics", schema_of::<crate::graphics::BrandConfig>()),
         ("stall", schema_of::<super::StallConfig>()),
+        ("memory", schema_of::<super::memory::MemoryConfig>()),
         ("nodes", schema_of::<super::NodesTable>()),
         ("plugins", schema_of::<super::PluginsTable>()),
     ];

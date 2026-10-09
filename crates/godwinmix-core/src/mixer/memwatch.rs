@@ -37,6 +37,8 @@ pub const WARN_GROWTH: u64 = 512 * 1024 * 1024;
 pub struct MemoryWatch {
     due: Option<Instant>,
     trend: Arc<Mutex<Trend>>,
+    /// The guard that acts on it. See `mixer::memguard`.
+    pub(super) guard: super::memguard::Guard,
 }
 
 /// The last few readings, oldest first.

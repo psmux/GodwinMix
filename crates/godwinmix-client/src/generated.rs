@@ -270,7 +270,7 @@ pub struct Alarm {
 /// What an alarm is about.
 pub type AlarmKind = String;
 /// The values api_level 1 knows for [`AlarmKind`].
-pub const ALARM_KIND_VALUES: &[&str] = &["no-input", "stall", "black", "freeze", "silence", "cc-errors", "loss", "output-failed", "governor-refused", "shed"];
+pub const ALARM_KIND_VALUES: &[&str] = &["no-input", "stall", "black", "freeze", "silence", "cc-errors", "loss", "output-failed", "governor-refused", "shed", "memory"];
 
 /// A show's alarms, as a person sets them from the page. Left out fields
 /// keep the measuring side's defaults; a duration of 0 switches that check
@@ -3581,7 +3581,7 @@ pub const OUTPUT_ERROR_REASON_VALUES: &[&str] = &["refused", "unreachable", "tim
 
 pub type OutputState = String;
 /// The values api_level 1 knows for [`OutputState`].
-pub const OUTPUT_STATE_VALUES: &[&str] = &["connecting", "live", "reconnecting", "failed"];
+pub const OUTPUT_STATE_VALUES: &[&str] = &["stopped", "connecting", "live", "reconnecting", "failed"];
 
 /// What one output is doing.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -6308,7 +6308,7 @@ pub struct MethodInfo {
     pub rest: Option<(&'static str, &'static str)>,
 }
 
-pub const METHODS: [MethodInfo; 217] = [
+pub const METHODS: [MethodInfo; 219] = [
     MethodInfo { name: "adbreak.end", summary: "Cut a running ad short, or disarm one that is scheduled.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/end")) },
     MethodInfo { name: "adbreak.start", summary: "Interrupt the programme with a clip, then rejoin live when it ends.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/start")) },
     MethodInfo { name: "agent.setup", summary: "Set an AI agent tool up to use this mixer: its MCP config gets one entry, godwinmix, that runs this mixer's own executable, and its skills folder gets the GodwinMix skills. Other entries are kept and a changed file is copied aside first. dry_run answers every file it would write. The answer says how to start the tool and a first thing to ask it.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/agent/setup")) },
@@ -6396,6 +6396,8 @@ pub const METHODS: [MethodInfo; 217] = [
     MethodInfo { name: "output.reconnect", summary: "Drop and re-establish one destination's connection now, without waiting for its reconnect policy.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/outputs/{id}/reconnect")) },
     MethodInfo { name: "output.remove", summary: "Stop sending to a destination and forget it. Other outputs are unaffected.", scope: "operate", mutating: true, destructive: true, rest: Some(("DELETE", "/api/v1/outputs/{id}")) },
     MethodInfo { name: "output.set", summary: "Change a destination in place: a new address with a new stream key, a new reconnect policy, a deeper outage buffer. The address is write only, so a client that only wants the buffer never has to hold the key.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/outputs/{id}/set")) },
+    MethodInfo { name: "output.start", summary: "Send to a stopped destination again, with the address and key it kept.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/outputs/{id}/start")) },
+    MethodInfo { name: "output.stop", summary: "Stop sending the programme to one destination and keep it, address, key and all, for output.start. Viewers on that platform see the stream end.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/outputs/{id}/stop")) },
     MethodInfo { name: "path.create", summary: "Make one new folder inside a folder path.list shows, and list it. A folder that is already there is listed rather than refused.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/path/create")) },
     MethodInfo { name: "path.list", summary: "The folders in one folder on the mixer, and whether each is writable, for a folder picker. Only the home folder and the mixer's own folders are shown; files never are.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/path/list")) },
     MethodInfo { name: "pipeline.clock", summary: "The clock every pipeline is running against, and how far each one has got.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/pipeline/clock")) },
@@ -7278,6 +7280,16 @@ impl Client {
     /// Change a destination in place: a new address with a new stream key, a new reconnect policy, a deeper outage buffer. The address is write only, so a client that only wants the buffer never has to hold the key.
     pub async fn output_set(&self, params: &SetOutputRequest) -> Result<OutputStatus> {
         self.call("output.set", params).await
+    }
+
+    /// Send to a stopped destination again, with the address and key it kept.
+    pub async fn output_start(&self, params: &IdRequest) -> Result<OutputStatus> {
+        self.call("output.start", params).await
+    }
+
+    /// Stop sending the programme to one destination and keep it, address, key and all, for output.start. Viewers on that platform see the stream end.
+    pub async fn output_stop(&self, params: &IdRequest) -> Result<OutputStatus> {
+        self.call("output.stop", params).await
     }
 
     /// Make one new folder inside a folder path.list shows, and list it. A folder that is already there is listed rather than refused.

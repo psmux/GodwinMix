@@ -415,7 +415,11 @@ async fn claim(
 fn rehearsal_refusal(app: &AppState, method: &str) -> Option<RpcError> {
     let sends = matches!(
         method,
-        "output.add" | "output.set" | "channel.destination.add" | "channel.destination.set"
+        "output.add"
+            | "output.set"
+            | "output.start"
+            | "channel.destination.add"
+            | "channel.destination.set"
     );
     if !app.rehearsal || !sends {
         return None;

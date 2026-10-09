@@ -48,6 +48,7 @@ mod deadline_tests;
 pub mod failure;
 mod flow;
 pub mod retire;
+mod since;
 mod teardown;
 
 const RELINK_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
@@ -115,6 +116,8 @@ pub struct OutputSlot {
     failure: failure::Failure,
     /// Since when it has been down. See `deadline`.
     deadline: deadline::Deadline,
+    /// Since when it has been live. See `since`.
+    since: since::LiveSince,
 }
 
 impl OutputSlot {
@@ -200,6 +203,7 @@ impl OutputSlot {
             flow: Default::default(),
             failure: Default::default(),
             deadline: Default::default(),
+            since: Default::default(),
         });
         // An address still carrying a preset's placeholder is not one anybody
         // can publish to, and dialling it anyway had the example config
@@ -489,6 +493,7 @@ impl OutputSlot {
             None => false,
         };
         self.deadline.live(now, std::time::Instant::now());
+        self.since.note(now, std::time::Instant::now());
         if now != self.connected.swap(now, Ordering::Relaxed) {
             if now {
                 self.failure.connected();
@@ -592,6 +597,9 @@ impl OutputSlot {
     fn extra(&self) -> godwinmix_protocol::types::Extra {
         let mut extra = self.kind.try_lock().map(|k| k.status()).unwrap_or_default();
         extra.insert("bytes_out".into(), self.flow.total().into());
+        if let Some(secs) = self.since.secs(std::time::Instant::now()) {
+            extra.insert("live_secs".into(), secs.into());
+        }
         extra
     }
 

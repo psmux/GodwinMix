@@ -13,7 +13,13 @@ import { failureOf } from "../outputs/failure.js";
  * @returns {{text: string, title: string, kind: "none"|"live"|"failed"|"connecting"|"key"}}
  */
 export function destinationsPill(outputs) {
-  const streams = (outputs || []).filter((o) => o.type !== "record/output");
+  const all = (outputs || []).filter((o) => o.type !== "record/output");
+  // A destination a person stopped is not connecting and is not failing.
+  const streams = all.filter((o) => o.state !== "stopped");
+  if (!streams.length && all.length) {
+    const n = all.length;
+    return { text: "Streaming stopped", title: `${n} destination${n === 1 ? " is" : "s are"} stopped, with the stream key kept. Start streaming on Outputs sends again.`, kind: "none" };
+  }
   if (!streams.length) {
     return { text: "No destinations", title: "Nothing is sending the programme anywhere. Add a destination under Outputs.", kind: "none" };
   }

@@ -87,6 +87,7 @@ async fn run(mixer: MixerHandle, tracker: Arc<Tracker>, shared: Arc<Shared>) {
                     judge.no_sound();
                 }
                 turn(&mixer, &tracker, &cfg, &mut judge).await;
+                judge.memory(mixer.memory_alarm().map(|p| (p.since_ms, p.detail)));
                 let health = judge.health(now_ms());
                 let moved = reported.as_ref().is_none_or(|r| health.changed_from(r));
                 if moved {
