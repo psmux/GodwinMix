@@ -1115,7 +1115,8 @@ mod tests {
             reachable.extend(closure_of(entry));
         }
         for (path, _) in ASSETS {
-            if path.ends_with(".css") || path.ends_with(".html") || path.ends_with(".json") {
+            // Data and pages: linked from a page, never imported.
+            if path.ends_with(".css") || path.ends_with(".html") || path.ends_with(".json") || path.ends_with(".webmanifest") {
                 continue;
             }
             assert!(reachable.contains(path), "{path} is served but nothing imports it");
