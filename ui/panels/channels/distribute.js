@@ -5,6 +5,10 @@
 // connects, green when live, amber turning when it is trying again, red when
 // it gave up, with the reason in the tile. The switch turns one on or off
 // without opening anything. Adding one is a tile, a pasted key and done.
+//
+// Record and Watch link sit on the same strip (`local.js`). A watch link
+// that is on has its card, with the link, a QR code and an embed code,
+// below the tiles; that code is loaded only once there is one.
 
 import { el } from "../../shell/dom.js";
 import { errorToast } from "../../shell/toast.js";
@@ -14,6 +18,7 @@ import { keyed, write } from "./keyed.js";
 import { tileState, ringState } from "./model.js";
 import { addDestination, editDestination } from "./destination-form.js";
 import { waitingNote } from "./to-programme.js";
+import { LOCAL, isLocal, local, addLocal, editLocal, localPlan } from "./local.js";
 
 /** The platforms offered straight on an empty strip. The rest are behind More. */
 export const QUICK = ["youtube", "facebook", "twitch", "kick"];
@@ -30,9 +35,12 @@ export function destinationStrip(view, first) {
   const lede = el("span.chn-dim");
   // What a channel is for, while it has somewhere to go and nothing to send.
   const waiting = waitingNote(view);
+  const watch = el("div.chn-watches", { hidden: true });
+  const watchRows = new Map();
   const node = el("section.chn-dist", {}, [
     el("div.chn-disthead", {}, [el("span.chn-kicker", { text: "Send on to" }), lede]),
     tiles,
+    watch,
     waiting.node,
     quick,
   ]);
@@ -47,7 +55,9 @@ export function destinationStrip(view, first) {
     add.hidden = !list.length;
     quick.hidden = list.length > 0;
     waiting.update(next);
-    if (!quick.firstChild) quick.append(...QUICK.map((id) => quickTile(view, () => channel, id)), moreTile(view, () => channel));
+    if (!quick.firstChild) quick.append(...QUICK.map((id) => quickTile(view, () => channel, id)), ...LOCAL.map((p) => localTile(view, () => channel, p)), moreTile(view, () => channel));
+    const links = list.some((d) => d.platform === "hls" && d.enabled);
+    if (links || watchRows.size) import("./watch.js").then((w) => w.watchCards(view, watch, watchRows, channel));
   }
 
   update(first);
@@ -58,6 +68,13 @@ function quickTile(view, getChannel, id) {
   const p = platform(id);
   return el("button.chn-qtile", { type: "button", title: `Send to ${p.title}`, onclick: () => addDestination(view, getChannel(), p) }, [
     brandMark(id, 28),
+    el("span", { text: p.title }),
+  ]);
+}
+
+function localTile(view, getChannel, p) {
+  return el("button.chn-qtile", { type: "button", title: p.hint, onclick: () => addLocal(view, getChannel(), p.id) }, [
+    brandMark(p.id, 28),
     el("span", { text: p.title }),
   ]);
 }
@@ -76,7 +93,8 @@ function destinationTile(view, getChannel) {
   const words = el("span.chn-tstate");
   const error = el("span.chn-terr");
   const plan = el("span.chn-tplan");
-  const main = el("button.chn-tmain", { type: "button", onclick: () => editDestination(view, getChannel(), dest) }, [ring, label, words]);
+  const open = () => (isLocal(dest.platform) ? editLocal : editDestination)(view, getChannel(), dest);
+  const main = el("button.chn-tmain", { type: "button", onclick: open }, [ring, label, words]);
   const box = el("input", { type: "checkbox" });
   const toggle = el("label.chn-switch", {}, [box, el("span.chn-knob")]);
   const node = el("div.chn-tile", {}, [main, toggle, plan, error]);
@@ -86,7 +104,7 @@ function destinationTile(view, getChannel) {
     node,
     update(d) {
       dest = d;
-      const p = platform(d.platform) || platform("custom");
+      const p = platform(d.platform) || local(d.platform) || platform("custom");
       if (!ring.firstChild) ring.appendChild(brandMark(d.platform, 34));
       node.dataset.state = ringState(d);
       write(label, "textContent", d.label || p.title);
@@ -94,8 +112,9 @@ function destinationTile(view, getChannel) {
       write(box, "checked", !!d.enabled);
       // What the planner made of it: "Copied", or the encoder, whole on hover.
       const id = getChannel().id;
-      write(plan, "textContent", view.plans ? view.plans.line(id, d.id, true) : "");
-      write(plan, "title", view.plans ? view.plans.line(id, d.id, false) : "");
+      const own = isLocal(d.platform) ? localPlan(d) : null;
+      write(plan, "textContent", own ? own.line : view.plans ? view.plans.line(id, d.id, true) : "");
+      write(plan, "title", own ? own.title : view.plans ? view.plans.line(id, d.id, false) : "");
       box.setAttribute("aria-label", `Send to ${d.label || p.title}`);
       const why = d.state === "failed" || d.state === "reconnecting" ? d.error || "" : "";
       // Trying again says why too: a person looking at an amber ring wants

@@ -7,6 +7,7 @@ mod direct;
 mod direct_live;
 mod direct_restart;
 mod health_main;
+mod hls_channel;
 mod hls_direct;
 #[cfg(unix)]
 mod hls_isolation;

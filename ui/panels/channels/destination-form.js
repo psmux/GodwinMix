@@ -17,12 +17,21 @@ import { field, keyField, streamChoice } from "./fields.js";
 import { formatStep, channelShape } from "../renditions/format-step.js";
 import { isRefusal, showRefusal } from "../renditions/refusal.js";
 import { waitingWords, sendProgramme } from "./to-programme.js";
+import { LOCAL, addLocal, localLine } from "./local.js";
 
 /** The tile grid, or straight to the form when the platform is known. */
 export function addDestination(view, channel, chosen) {
   if (chosen) return addForm(view, channel, chosen);
   const grid = el("div.chn-pgrid");
   const m = modal({ title: `Send ${channel.name} on to`, body: el("div", {}, [el("p.chn-dim", { text: "Pick where it goes. For most platforms all you need is the stream key.", style: { marginTop: "0" } }), grid]), wide: true });
+  // Record and Watch link first: they need nothing from any platform.
+  for (const p of LOCAL) {
+    grid.appendChild(el("button.chn-ptile", { type: "button", style: `--brand: ${p.colour}`, title: localLine(p.id, channel), onclick: () => { m.close(); addLocal(view, channel, p.id); } }, [
+      brandMark(p.id, 44),
+      el("span.chn-ptitle", { text: p.title }),
+      el("span.chn-phint", { text: p.hint }),
+    ]));
+  }
   for (const p of PLATFORMS) {
     grid.appendChild(el("button.chn-ptile", { type: "button", style: `--brand: ${p.colour}`, onclick: () => { m.close(); addForm(view, channel, p); } }, [
       brandMark(p.id, 44),
