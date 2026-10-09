@@ -62,9 +62,9 @@ impl Channels {
     fn default_key(&self) -> Result<(), String> {
         let sealed = self.secrets.get(&keys::scope(ID), KEY_ID).filter(|s| !s.is_empty());
         let Some(secret) = sealed else {
-            return self.make_key(ID, Some(KEY_LABEL.into())).map(|_| ()).map_err(|e| e.message);
+            return self.make_key(ID, Some(KEY_LABEL.into()), None).map(|_| ()).map_err(|e| e.message);
         };
-        let key = KeyRecord { id: KEY_ID.into(), label: KEY_LABEL.into(), created: keys::now(), hint: keys::hint(&secret) };
+        let key = KeyRecord { id: KEY_ID.into(), label: KEY_LABEL.into(), created: keys::now(), hint: keys::hint(&secret), imported: false };
         if let Some(record) = self.records.lock().iter_mut().find(|r| r.id == ID) {
             record.keys.push(key);
         }
@@ -100,4 +100,4 @@ fn record() -> Record {
 
 #[cfg(test)]
 #[path = "default_tests.rs"]
-mod tests;
+pub(super) mod tests;

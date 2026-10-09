@@ -75,7 +75,8 @@ pub struct AddDestinationRequest {
     /// What the list calls it. The platform's name when left out.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,
-    /// youtube, facebook, twitch, custom or srt.
+    /// youtube, facebook, twitch, custom or srt; or `file` to record the
+    /// stream on this machine, or `hls` to serve it as a watch link.
     pub platform: String,
     /// Convert the stream before sending it: `{"preset": "youtube-720p30"}`
     /// or a rendition request written out. Left out, or one the stream
@@ -83,7 +84,8 @@ pub struct AddDestinationRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rendition: Option<RenditionChoice>,
     /// The ingest address. Left out, the platform's own; custom and srt need
-    /// one.
+    /// one. For `file`, a folder on the mixer (the recordings folder when
+    /// left out); for `hls`, `hls://` with params such as `?segment_ms=2000`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub server: Option<String>,
     /// Which of the channel's streams to send. `*`, the default, is the first
@@ -268,7 +270,7 @@ pub struct Alarm {
 /// What an alarm is about.
 pub type AlarmKind = String;
 /// The values api_level 1 knows for [`AlarmKind`].
-pub const ALARM_KIND_VALUES: &[&str] = &["no-input", "stall", "black", "freeze", "silence", "cc-errors", "loss", "output-failed", "governor-refused", "shed"];
+pub const ALARM_KIND_VALUES: &[&str] = &["no-input", "stall", "black", "freeze", "silence", "cc-errors", "loss", "output-failed", "governor-refused", "shed", "memory"];
 
 /// A show's alarms, as a person sets them from the page. Left out fields
 /// keep the measuring side's defaults; a duration of 0 switches that check
@@ -773,7 +775,10 @@ pub struct Channel {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ChannelAddRequest {
-    /// Defaults to a slug of the name.
+    /// The application name encoders put after the port, as they already
+    /// type it: `Church`, or `Youth Hall`. Defaults to a slug of the name.
+    /// Matched without regard to case, so two channels cannot differ only in
+    /// case.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub app: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -784,6 +789,11 @@ pub struct ChannelAddRequest {
     /// Defaults to RTMP alone.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub protocols: Option<Vec<ChannelProtocol>>,
+    /// The first key's secret, when encoders already send one (the password
+    /// after `?psk=`): 6 to 128 letters, digits, `-`, `_`, `.`, `~` or single
+    /// spaces between them. Left out, the mixer makes one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub secret: Option<String>,
 }
 
 /// What `channel.add` answers: the channel and its first key.
@@ -803,6 +813,11 @@ pub struct ChannelKey {
     /// The last four characters, so a person can tell two keys apart.
     pub hint: String,
     pub id: String,
+    /// True when a person typed the secret (`secret` on `channel.add` or
+    /// `channel.key.add`), usually to keep a password their encoders already
+    /// send; false when the mixer made it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub imported: Option<bool>,
     pub label: String,
 }
 
@@ -813,6 +828,10 @@ pub struct ChannelKeyAddRequest {
     pub id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,
+    /// The secret to keep, when encoders already send one. The same rule as
+    /// `secret` on `channel.add`. Left out, the mixer makes one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub secret: Option<String>,
 }
 
 /// `channel.key.remove`.
@@ -924,10 +943,28 @@ pub struct ChannelStream {
     /// The mixer source it feeds, when it feeds one.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source: Option<String>,
+    /// Why the mixer would not make this stream a source, while it will not:
+    /// the stream is in, and nothing in a scene can show it. Gone once it does.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_error: Option<String>,
     /// `live`, or `idle` for one that left while a scene holds its source.
     pub state: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub video: Option<StreamVideo>,
+}
+
+/// `channel.thumbnail`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ChannelThumbnailRequest {
+    /// The channel.
+    pub id: String,
+    /// Which of its streams. The first live one when left out.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stream: Option<String>,
+    /// Pixels across, 16 to 640, made even. 320 when left out.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub width: Option<u32>,
 }
 
 /// One key this call changed, and when the change takes effect.
@@ -1212,6 +1249,9 @@ pub struct Destination {
     /// What went wrong last, in words a person can act on.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+    /// The file a recording destination is writing, or wrote last.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file: Option<RecordingFile>,
     pub has_key: bool,
     /// A slug, unique within its channel: `youtube`, `youtube-2`.
     pub id: String,
@@ -1221,7 +1261,8 @@ pub struct Destination {
     /// What the plan gave it, while its stream is live.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub plan: Option<DestinationPlan>,
-    /// A platform id from the table: youtube, facebook, twitch, custom, srt.
+    /// A platform id from the table: youtube, facebook, twitch, custom, srt,
+    /// or the two that stay on this machine, file and hls.
     pub platform: String,
     /// Where a player opens it, for an output this machine serves as HLS.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -3540,7 +3581,7 @@ pub const OUTPUT_ERROR_REASON_VALUES: &[&str] = &["refused", "unreachable", "tim
 
 pub type OutputState = String;
 /// The values api_level 1 knows for [`OutputState`].
-pub const OUTPUT_STATE_VALUES: &[&str] = &["connecting", "live", "reconnecting", "failed"];
+pub const OUTPUT_STATE_VALUES: &[&str] = &["stopped", "connecting", "live", "reconnecting", "failed"];
 
 /// What one output is doing.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -3814,7 +3855,8 @@ pub struct PlanView {
 }
 
 /// The links of an output served as HLS from the control port, each with
-/// the output's viewer key on it.
+/// the output's viewer key on it. A channel's watch link is one too:
+/// `/hls/channel/<channel>/<destination>/index.m3u8?key=...`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Playback {
@@ -4117,6 +4159,22 @@ pub struct Record {
     /// for a scene, which hangs off the document itself.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parent: Option<Id>,
+}
+
+/// The file a `file` destination writes: one per time the stream goes live.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct RecordingFile {
+    /// Bytes written so far.
+    pub bytes: u64,
+    /// How long it has been recording, or ran for once it has closed.
+    pub duration_ms: u64,
+    /// `sunday-service-main-20261009-103000.ts`.
+    pub name: String,
+    /// Whether it is still being written.
+    pub open: bool,
+    /// The whole path on the machine running the mixer.
+    pub path: String,
 }
 
 /// One file the import would not take.
@@ -5681,6 +5739,11 @@ pub struct ThumbnailRequest {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct TlsInfo {
+    /// SHA-256 of the machine's local certificate authority, which signed a
+    /// certificate this mixer made and is what a phone is told to trust. Its
+    /// certificate is served at `/ca.crt`. Absent for an operator's own.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub authority: Option<String>,
     /// SHA-256 of the certificate, upper case hex in colon separated pairs,
     /// the way a browser's certificate viewer shows it.
     pub fingerprint: String,
@@ -6245,7 +6308,7 @@ pub struct MethodInfo {
     pub rest: Option<(&'static str, &'static str)>,
 }
 
-pub const METHODS: [MethodInfo; 216] = [
+pub const METHODS: [MethodInfo; 219] = [
     MethodInfo { name: "adbreak.end", summary: "Cut a running ad short, or disarm one that is scheduled.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/end")) },
     MethodInfo { name: "adbreak.start", summary: "Interrupt the programme with a clip, then rejoin live when it ends.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/start")) },
     MethodInfo { name: "agent.setup", summary: "Set an AI agent tool up to use this mixer: its MCP config gets one entry, godwinmix, that runs this mixer's own executable, and its skills folder gets the GodwinMix skills. Other entries are kept and a changed file is copied aside first. dry_run answers every file it would write. The answer says how to start the tool and a first thing to ask it.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/agent/setup")) },
@@ -6264,6 +6327,7 @@ pub const METHODS: [MethodInfo; 216] = [
     MethodInfo { name: "channel.list", summary: "Every channel with its keys (as hints), the address to publish to over each protocol it has on, and what is live on it; and which ingest ports are open and for which channels.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/channels")) },
     MethodInfo { name: "channel.remove", summary: "Remove a channel and forget its keys. Sources it made that no scene holds go with it.", scope: "admin", mutating: true, destructive: true, rest: Some(("DELETE", "/api/v1/channels/{id}")) },
     MethodInfo { name: "channel.set", summary: "Rename a channel, switch it on or off, or change its application name, whether its streams become sources, how its key is given, which protocols it takes (rtmp, srt, whip) or RTMPS and its port. A port opens when the first channel needs it and closes when the last one stops. Only what is named moves.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/channels/{id}/set")) },
+    MethodInfo { name: "channel.thumbnail", summary: "A live channel stream's picture as a small JPEG in base64, {channel, stream, jpeg, width, height, at_ms}, or {pending: true, retry_after_ms} while the first keyframe is on its way. Keyframes only, about one a second, for ten seconds after an ask; nothing is decoded between asks. GET /api/v1/channels/{id}/streams/{stream}/thumbnail.jpg serves the JPEG itself.", scope: "read", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/channels/{id}/thumbnail")) },
     MethodInfo { name: "codec.list", summary: "Every codec and element in the catalogue, which of them this machine actually has, and what it would pick.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/codecs")) },
     MethodInfo { name: "config.get", summary: "The mixer's settings: each key's value in the config file, its default, when a change to it takes effect, and which keys are waiting for a restart. Secrets say only whether one is set.", scope: "admin", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/config")) },
     MethodInfo { name: "config.reset", summary: "Put settings back to their defaults by taking them out of the config file. Answers like config.set.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/config/reset")) },
@@ -6332,6 +6396,8 @@ pub const METHODS: [MethodInfo; 216] = [
     MethodInfo { name: "output.reconnect", summary: "Drop and re-establish one destination's connection now, without waiting for its reconnect policy.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/outputs/{id}/reconnect")) },
     MethodInfo { name: "output.remove", summary: "Stop sending to a destination and forget it. Other outputs are unaffected.", scope: "operate", mutating: true, destructive: true, rest: Some(("DELETE", "/api/v1/outputs/{id}")) },
     MethodInfo { name: "output.set", summary: "Change a destination in place: a new address with a new stream key, a new reconnect policy, a deeper outage buffer. The address is write only, so a client that only wants the buffer never has to hold the key.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/outputs/{id}/set")) },
+    MethodInfo { name: "output.start", summary: "Send to a stopped destination again, with the address and key it kept.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/outputs/{id}/start")) },
+    MethodInfo { name: "output.stop", summary: "Stop sending the programme to one destination and keep it, address, key and all, for output.start. Viewers on that platform see the stream end.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/outputs/{id}/stop")) },
     MethodInfo { name: "path.create", summary: "Make one new folder inside a folder path.list shows, and list it. A folder that is already there is listed rather than refused.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/path/create")) },
     MethodInfo { name: "path.list", summary: "The folders in one folder on the mixer, and whether each is writable, for a folder picker. Only the home folder and the mixer's own folders are shown; files never are.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/path/list")) },
     MethodInfo { name: "pipeline.clock", summary: "The clock every pipeline is running against, and how far each one has got.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/pipeline/clock")) },
@@ -6871,6 +6937,11 @@ impl Client {
         self.call("channel.set", params).await
     }
 
+    /// A live channel stream's picture as a small JPEG in base64, {channel, stream, jpeg, width, height, at_ms}, or {pending: true, retry_after_ms} while the first keyframe is on its way. Keyframes only, about one a second, for ten seconds after an ask; nothing is decoded between asks. GET /api/v1/channels/{id}/streams/{stream}/thumbnail.jpg serves the JPEG itself.
+    pub async fn channel_thumbnail(&self, params: &ChannelThumbnailRequest) -> Result<BTreeMap<String, Value>> {
+        self.call("channel.thumbnail", params).await
+    }
+
     /// Every codec and element in the catalogue, which of them this machine actually has, and what it would pick.
     pub async fn codec_list(&self) -> Result<BTreeMap<String, Value>> {
         self.call("codec.list", &serde_json::json!({})).await
@@ -7209,6 +7280,16 @@ impl Client {
     /// Change a destination in place: a new address with a new stream key, a new reconnect policy, a deeper outage buffer. The address is write only, so a client that only wants the buffer never has to hold the key.
     pub async fn output_set(&self, params: &SetOutputRequest) -> Result<OutputStatus> {
         self.call("output.set", params).await
+    }
+
+    /// Send to a stopped destination again, with the address and key it kept.
+    pub async fn output_start(&self, params: &IdRequest) -> Result<OutputStatus> {
+        self.call("output.start", params).await
+    }
+
+    /// Stop sending the programme to one destination and keep it, address, key and all, for output.start. Viewers on that platform see the stream end.
+    pub async fn output_stop(&self, params: &IdRequest) -> Result<OutputStatus> {
+        self.call("output.stop", params).await
     }
 
     /// Make one new folder inside a folder path.list shows, and list it. A folder that is already there is listed rather than refused.

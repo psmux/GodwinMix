@@ -49,6 +49,14 @@ const ASSETS: &[(&str, &str)] = &[
     ("client/transport-legacy.js", include_str!("../../../ui/client/transport-legacy.js")),
     ("client/transport-rpc.js", include_str!("../../../ui/client/transport-rpc.js")),
     ("index.html", include_str!("../../../ui/index.html")),
+    // Installing the page as an app: the manifest, the service worker, which
+    // is served with this build's id written into it, and the page the worker
+    // shows when the mixer cannot be reached.
+    ("manifest.webmanifest", include_str!("../../../ui/manifest.webmanifest")),
+    ("sw.js", include_str!("../../../ui/sw.js")),
+    ("offline.html", include_str!("../../../ui/offline.html")),
+    ("shell/install.js", include_str!("../../../ui/shell/install.js")),
+    ("shell/trust.js", include_str!("../../../ui/shell/trust.js")),
     // The publisher: a browser's camera and microphone over WHIP. Alone at
     // /join/, and inside the page when Sources opens this browser's camera.
     ("join/index.html", include_str!("../../../ui/join/index.html")),
@@ -87,6 +95,7 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/alerts/panel.js", include_str!("../../../ui/panels/alerts/panel.js")),
     ("panels/channels/art.js", include_str!("../../../ui/panels/channels/art.js")),
     ("panels/channels/brands.js", include_str!("../../../ui/panels/channels/brands.js")),
+    ("panels/channels/bulk.js", include_str!("../../../ui/panels/channels/bulk.js")),
     ("panels/channels/card.js", include_str!("../../../ui/panels/channels/card.js")),
     ("panels/channels/channels.css", include_str!("../../../ui/panels/channels/channels.css")),
     ("panels/channels/connect-key.js", include_str!("../../../ui/panels/channels/connect-key.js")),
@@ -98,17 +107,29 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/channels/edit.js", include_str!("../../../ui/panels/channels/edit.js")),
     ("panels/channels/entry.js", include_str!("../../../ui/panels/channels/entry.js")),
     ("panels/channels/fields.js", include_str!("../../../ui/panels/channels/fields.js")),
+    ("panels/channels/go.js", include_str!("../../../ui/panels/channels/go.js")),
     ("panels/channels/install.js", include_str!("../../../ui/panels/channels/install.js")),
     ("panels/channels/keyed.js", include_str!("../../../ui/panels/channels/keyed.js")),
     ("panels/channels/keys.js", include_str!("../../../ui/panels/channels/keys.js")),
+    ("panels/channels/livebox.js", include_str!("../../../ui/panels/channels/livebox.js")),
+    ("panels/channels/livebox-parse.js", include_str!("../../../ui/panels/channels/livebox-parse.js")),
+    ("panels/channels/layout.js", include_str!("../../../ui/panels/channels/layout.js")),
+    ("panels/channels/local.js", include_str!("../../../ui/panels/channels/local.js")),
     ("panels/channels/model.js", include_str!("../../../ui/panels/channels/model.js")),
+    ("panels/channels/paste.js", include_str!("../../../ui/panels/channels/paste.js")),
+    ("panels/channels/paste-labels.js", include_str!("../../../ui/panels/channels/paste-labels.js")),
     ("panels/channels/panel.js", include_str!("../../../ui/panels/channels/panel.js")),
+    ("panels/channels/picture.js", include_str!("../../../ui/panels/channels/picture.js")),
     ("panels/channels/plans.js", include_str!("../../../ui/panels/channels/plans.js")),
     ("panels/channels/protocols.js", include_str!("../../../ui/panels/channels/protocols.js")),
     ("panels/channels/qr-grid.js", include_str!("../../../ui/panels/channels/qr-grid.js")),
     ("panels/channels/qr.js", include_str!("../../../ui/panels/channels/qr.js")),
     ("panels/channels/reveal.js", include_str!("../../../ui/panels/channels/reveal.js")),
+    ("panels/channels/rows.css", include_str!("../../../ui/panels/channels/rows.css")),
+    ("panels/channels/rows.js", include_str!("../../../ui/panels/channels/rows.js")),
+    ("panels/channels/rows-model.js", include_str!("../../../ui/panels/channels/rows-model.js")),
     ("panels/channels/streams.js", include_str!("../../../ui/panels/channels/streams.js")),
+    ("panels/channels/watch.js", include_str!("../../../ui/panels/channels/watch.js")),
     ("panels/channels/ways.js", include_str!("../../../ui/panels/channels/ways.js")),
     ("panels/composer/canvas.js", include_str!("../../../ui/panels/composer/canvas.js")),
     ("panels/composer/catalogue.js", include_str!("../../../ui/panels/composer/catalogue.js")),
@@ -120,6 +141,7 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/composer/ops.js", include_str!("../../../ui/panels/composer/ops.js")),
     ("panels/composer/others.js", include_str!("../../../ui/panels/composer/others.js")),
     ("panels/composer/motion.js", include_str!("../../../ui/panels/composer/motion.js")),
+    ("panels/composer/tool-tabs.js", include_str!("../../../ui/panels/composer/tool-tabs.js")),
     // The Graphics gallery. Only entry.js loads with the page.
     ("panels/graphics/actions.js", include_str!("../../../ui/panels/graphics/actions.js")),
     ("panels/graphics/card.js", include_str!("../../../ui/panels/graphics/card.js")),
@@ -132,6 +154,11 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/graphics/prompts.js", include_str!("../../../ui/panels/graphics/prompts.js")),
     ("panels/header/panel.js", include_str!("../../../ui/panels/header/panel.js")),
     ("panels/header/destinations.js", include_str!("../../../ui/panels/header/destinations.js")),
+    ("panels/header/running-model.js", include_str!("../../../ui/panels/header/running-model.js")),
+    ("panels/header/running-watch.js", include_str!("../../../ui/panels/header/running-watch.js")),
+    ("panels/header/running.js", include_str!("../../../ui/panels/header/running.js")),
+    ("panels/header/stop.js", include_str!("../../../ui/panels/header/stop.js")),
+    ("panels/header/banner.js", include_str!("../../../ui/panels/header/banner.js")),
     ("panels/media/entry.js", include_str!("../../../ui/panels/media/entry.js")),
     ("panels/media/panel.js", include_str!("../../../ui/panels/media/panel.js")),
     ("panels/multiview/panel.js", include_str!("../../../ui/panels/multiview/panel.js")),
@@ -154,6 +181,7 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/outputs/recording.js", include_str!("../../../ui/panels/outputs/recording.js")),
     ("panels/outputs/record-start.js", include_str!("../../../ui/panels/outputs/record-start.js")),
     ("panels/outputs/record-stop.js", include_str!("../../../ui/panels/outputs/record-stop.js")),
+    ("panels/outputs/stream-toggle.js", include_str!("../../../ui/panels/outputs/stream-toggle.js")),
     ("panels/outputs/panel.js", include_str!("../../../ui/panels/outputs/panel.js")),
     ("panels/outputs/views.js", include_str!("../../../ui/panels/outputs/views.js")),
 ("panels/renditions/bars.js", include_str!("../../../ui/panels/renditions/bars.js")),
@@ -170,6 +198,9 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/wall/bulk-table.js", include_str!("../../../ui/panels/wall/bulk-table.js")),
     ("panels/wall/bulk.js", include_str!("../../../ui/panels/wall/bulk.js")),
     ("panels/wall/cells.js", include_str!("../../../ui/panels/wall/cells.js")),
+    ("panels/wall/channel-data.js", include_str!("../../../ui/panels/wall/channel-data.js")),
+    ("panels/wall/channel-model.js", include_str!("../../../ui/panels/wall/channel-model.js")),
+    ("panels/wall/channel-rows.js", include_str!("../../../ui/panels/wall/channel-rows.js")),
     ("panels/wall/data.js", include_str!("../../../ui/panels/wall/data.js")),
     ("panels/wall/detail-outputs.js", include_str!("../../../ui/panels/wall/detail-outputs.js")),
     ("panels/wall/detail.js", include_str!("../../../ui/panels/wall/detail.js")),
@@ -220,6 +251,7 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/sources/chooser-preview.js", include_str!("../../../ui/panels/sources/chooser-preview.js")),
     ("panels/sources/panel.js", include_str!("../../../ui/panels/sources/panel.js")),
     ("panels/sources/clip-end.js", include_str!("../../../ui/panels/sources/clip-end.js")),
+    ("panels/sources/scene-strip.js", include_str!("../../../ui/panels/sources/scene-strip.js")),
     ("panels/sources/setreq.js", include_str!("../../../ui/panels/sources/setreq.js")),
     ("panels/sources/tile.js", include_str!("../../../ui/panels/sources/tile.js")),
     ("panels/sources/tile-level.js", include_str!("../../../ui/panels/sources/tile-level.js")),
@@ -247,6 +279,7 @@ const ASSETS: &[(&str, &str)] = &[
     ("shell/focus.js", include_str!("../../../ui/shell/focus.js")),
     ("shell/fader.js", include_str!("../../../ui/shell/fader.js")),
     ("shell/firstrun.js", include_str!("../../../ui/shell/firstrun.js")),
+    ("shell/float-drag.js", include_str!("../../../ui/shell/float-drag.js")),
     ("shell/keymap.js", include_str!("../../../ui/shell/keymap.js")),
     ("shell/layout.js", include_str!("../../../ui/shell/layout.js")),
     ("panels/sources/workspace.js", include_str!("../../../ui/panels/sources/workspace.js")),
@@ -321,6 +354,35 @@ const ASSETS: &[(&str, &str)] = &[
     ("themes/system.css", include_str!("../../../ui/themes/system.css")),
 ];
 
+/// The pictures: the app icons the manifest and `index.html` name. Bytes, not
+/// text, so they have a table of their own.
+const IMAGES: &[(&str, &[u8])] = &[
+    ("icons/icon-192.png", include_bytes!("../../../ui/icons/icon-192.png")),
+    ("icons/icon-512.png", include_bytes!("../../../ui/icons/icon-512.png")),
+    ("icons/maskable-512.png", include_bytes!("../../../ui/icons/maskable-512.png")),
+    ("icons/apple-touch-icon.png", include_bytes!("../../../ui/icons/apple-touch-icon.png")),
+];
+
+/// What the service worker's `BUILD` is replaced with: the version and a hash
+/// of every file served, so any change to the page is a new worker, and a new
+/// worker drops the old build's cache.
+fn build_id() -> &'static str {
+    static ID: OnceLock<String> = OnceLock::new();
+    ID.get_or_init(|| {
+        use std::hash::{Hash, Hasher};
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        for (path, body) in ASSETS {
+            path.hash(&mut h);
+            body.hash(&mut h);
+        }
+        for (path, body) in IMAGES {
+            path.hash(&mut h);
+            body.hash(&mut h);
+        }
+        format!("{}-{:016x}", env!("CARGO_PKG_VERSION"), h.finish())
+    })
+}
+
 /// The page as it was before the split, kept at `/legacy` for one release so an
 /// operator mid show has something to fall back to.
 const LEGACY: &str = include_str!("../../../ui/legacy/index.html");
@@ -355,8 +417,13 @@ const DEV_ASSETS: &[(&str, &str)] = &[
     ("test/welcome.js", include_str!("../../../ui/test/welcome.js")),
     ("test/menubar.js", include_str!("../../../ui/test/menubar.js")),
     ("test/recording-stop.js", include_str!("../../../ui/test/recording-stop.js")),
+    ("test/running.js", include_str!("../../../ui/test/running.js")),
     ("test/touch.js", include_str!("../../../ui/test/touch.js")),
     ("test/phone.js", include_str!("../../../ui/test/phone.js")),
+    ("test/phone-reach.js", include_str!("../../../ui/test/phone-reach.js")),
+    ("test/phone-hands.js", include_str!("../../../ui/test/phone-hands.js")),
+    // Install app on More, and which requests the service worker answers.
+    ("test/install.js", include_str!("../../../ui/test/install.js")),
     ("test/presence.js", include_str!("../../../ui/test/presence.js")),
     ("test/touch-tray.js", include_str!("../../../ui/test/touch-tray.js")),
     ("test/tile-levels.js", include_str!("../../../ui/test/tile-levels.js")),
@@ -365,8 +432,11 @@ const DEV_ASSETS: &[(&str, &str)] = &[
     ("test/channels.js", include_str!("../../../ui/test/channels.js")),
     ("test/channels-stub.js", include_str!("../../../ui/test/channels-stub.js")),
     ("test/channels-ways.js", include_str!("../../../ui/test/channels-ways.js")),
+    ("test/channels-livebox.js", include_str!("../../../ui/test/channels-livebox.js")),
     ("test/channels-default.js", include_str!("../../../ui/test/channels-default.js")),
     ("test/channels-programme.js", include_str!("../../../ui/test/channels-programme.js")),
+    ("test/channels-rows.js", include_str!("../../../ui/test/channels-rows.js")),
+    ("test/channels-local.js", include_str!("../../../ui/test/channels-local.js")),
     ("test/channels-preview.js", include_str!("../../../ui/test/channels-preview.js")),
     ("test/channels.html", include_str!("../../../ui/test/channels.html")),
     // hls.js against an HLS output on this core, beside a clock to the
@@ -388,6 +458,7 @@ const DEV_ASSETS: &[(&str, &str)] = &[
     // The monitoring wall, bulk add and a show's detail against a stub of
     // the wave 4 contract: /test/wall.html?scene=rows.
     ("test/wall-act.js", include_str!("../../../ui/test/wall-act.js")),
+    ("test/wall-channels.js", include_str!("../../../ui/test/wall-channels.js")),
     ("test/wall-dialogs.js", include_str!("../../../ui/test/wall-dialogs.js")),
     ("test/wall-help.js", include_str!("../../../ui/test/wall-help.js")),
     ("test/wall-picture.js", include_str!("../../../ui/test/wall-picture.js")),
@@ -473,10 +544,18 @@ where
         .route("/plugins/{name}/ui/{*path}", get(plugin_file))
         // A preset's own theme, read out of the preset it was applied from, so
         // a theme travels with the preset and needs no rebuild.
-        .route("/presets/{name}/theme.css", get(preset_theme));
+        .route("/presets/{name}/theme.css", get(preset_theme))
+        // The machine's certificate authority, for a phone to trust. Public,
+        // so no token: `/ca.crt` for iOS and desktops, `/ca.pem` for Android.
+        .route("/ca.crt", get(|| async { authority(false) }))
+        .route("/ca.pem", get(|| async { authority(true) }));
     for (path, _) in ASSETS {
         let p = *path;
         router = router.route(&format!("/{p}"), get(move || async move { asset(p) }));
+    }
+    for (path, _) in IMAGES {
+        let p = *path;
+        router = router.route(&format!("/{p}"), get(move || async move { image(p) }));
     }
     if dev_pages() {
         // A directory URL is what a person types, so it answers rather than 404s.
@@ -548,6 +627,9 @@ async fn preset_theme(UrlPath(name): UrlPath<String>) -> Response {
 /// One embedded file, or the same file from `ui_dir` when one is configured.
 fn asset(path: &'static str) -> Response {
     let kind = content_type(path);
+    if path == "sw.js" {
+        return worker();
+    }
     if let Some(dir) = dirs().ui.as_ref() {
         if let Ok(body) = std::fs::read(dir.join(path)) {
             return with_headers(kind, Body::from(body), path);
@@ -561,6 +643,51 @@ fn asset(path: &'static str) -> Response {
     with_headers(kind, Body::from(body), path)
 }
 
+/// The service worker, with this build's id where it says `__GMX_BUILD__`.
+/// Read from `ui_dir` when one is set, like every other file.
+fn worker() -> Response {
+    let embedded = ASSETS.iter().find(|(p, _)| *p == "sw.js").map(|(_, b)| *b).unwrap_or("");
+    let source = dirs()
+        .ui
+        .as_ref()
+        .and_then(|dir| std::fs::read_to_string(dir.join("sw.js")).ok())
+        .unwrap_or_else(|| embedded.to_string());
+    let body = source.replace("__GMX_BUILD__", build_id());
+    with_headers(content_type("sw.js"), Body::from(body), "sw.js")
+}
+
+/// One of the icons, embedded, or from `ui_dir` when one is configured.
+fn image(path: &'static str) -> Response {
+    let from_disk = dirs().ui.as_ref().and_then(|dir| std::fs::read(dir.join(path)).ok());
+    let body = from_disk.unwrap_or_else(|| {
+        IMAGES.iter().find(|(p, _)| *p == path).map(|(_, b)| b.to_vec()).unwrap_or_default()
+    });
+    with_headers(content_type(path), Body::from(body), path)
+}
+
+/// The authority's certificate, PEM either way. As `application/x-x509-ca-cert`
+/// Safari on iOS opens it as a profile to install. Chrome on Android hands
+/// that type to the system, which refuses to install an authority from a
+/// browser, so `/ca.pem` is a plain download for Settings to pick up.
+fn authority(download: bool) -> Response {
+    let Some(pem) = crate::tls::authority::served() else {
+        return (
+            StatusCode::NOT_FOUND,
+            "This mixer has no certificate authority of its own to offer: HTTPS is off, or [control.tls] \
+             names your own certificate, whose authority is the one to trust.",
+        )
+            .into_response();
+    };
+    let (kind, disposition) = if download {
+        ("application/octet-stream", "attachment; filename=\"godwinmix-authority.crt\"")
+    } else {
+        ("application/x-x509-ca-cert", "inline; filename=\"godwinmix-authority.crt\"")
+    };
+    let mut answer = with_headers(kind, Body::from(pem), "ca.crt");
+    answer.headers_mut().insert(header::CONTENT_DISPOSITION, HeaderValue::from_static(disposition));
+    answer
+}
+
 fn html(body: &'static str) -> Response {
     with_headers("text/html; charset=utf-8", Body::from(body), "index.html")
 }
@@ -571,6 +698,7 @@ fn content_type(path: &str) -> &'static str {
         Some("js") | Some("mjs") => "text/javascript; charset=utf-8",
         Some("css") => "text/css; charset=utf-8",
         Some("json") => "application/json",
+        Some("webmanifest") => "application/manifest+json",
         Some("svg") => "image/svg+xml",
         Some("png") => "image/png",
         Some("jpg") | Some("jpeg") => "image/jpeg",
@@ -588,9 +716,13 @@ fn content_type(path: &str) -> &'static str {
 /// on elements they build, and a nonce cannot cover a style attribute. Scripts
 /// get no such exception: there is no inline script in the page at all, which
 /// is the half of the policy that stops an injected string from running.
+/// `worker-src` and `manifest-src` say outright what `default-src` already
+/// allowed: the service worker and the app manifest, from this origin only.
 const CSP: &str = concat!(
     "default-src 'self'; ",
     "script-src 'self'; ",
+    "worker-src 'self'; ",
+    "manifest-src 'self'; ",
     "style-src 'self' 'unsafe-inline'; ",
     "img-src 'self' data: blob:; ",
     "media-src 'self' blob:; ",
@@ -975,6 +1107,10 @@ mod tests {
         reachable.extend(closure_of("shell/devices.js"));
         reachable.extend(closure_of("panels/outputs/destination.js"));
         reachable.extend(closure_of("panels/channels/panel.js"));
+        // The palette's Open Channels, Channels as rows and Paste several push addresses.
+        reachable.extend(closure_of("panels/channels/go.js"));
+        // A channel's watch link card, once the channel has a link on.
+        reachable.extend(closure_of("panels/channels/watch.js"));
         reachable.extend(closure_of("shell/sandbox.js"));
         reachable.extend(closure_of("panels/welcome/tiles.js"));
         reachable.extend(closure_of("panels/welcome/after.js"));
@@ -1008,6 +1144,11 @@ mod tests {
         reachable.extend(closure_of("panels/outputs/record-start.js"));
         // The REC button in the header, or Outputs > Stop recording.
         reachable.extend(closure_of("panels/outputs/record-stop.js"));
+        // The header's pill: What is running, the banner, and Stop.
+        reachable.extend(closure_of("panels/header/running-watch.js"));
+        reachable.extend(closure_of("panels/header/running.js"));
+        reachable.extend(closure_of("panels/outputs/stream-toggle.js"));
+        reachable.extend(closure_of("panels/header/banner.js"));
         // Renditions: each is fetched by an `import()` the first time it is
         // wanted, from the destination form, the Outputs panel or its rows.
         for entry in [
@@ -1024,6 +1165,8 @@ mod tests {
         // Not imported by this page at all: it is what a sandboxed panel's own
         // HTML imports, inside the iframe, to talk the same protocol back.
         reachable.extend(closure_of("client/sandbox-client.js"));
+        // Not imported either: shell/install.js registers it by its URL.
+        reachable.extend(closure_of("sw.js"));
         // The publisher: /join/ loads page.js itself, and the Sources panel
         // and the picker fetch browser-device.js when this browser's camera
         // is asked for.
@@ -1038,7 +1181,8 @@ mod tests {
             reachable.extend(closure_of(entry));
         }
         for (path, _) in ASSETS {
-            if path.ends_with(".css") || path.ends_with(".html") || path.ends_with(".json") {
+            // Data and pages: linked from a page, never imported.
+            if path.ends_with(".css") || path.ends_with(".html") || path.ends_with(".json") || path.ends_with(".webmanifest") {
                 continue;
             }
             assert!(reachable.contains(path), "{path} is served but nothing imports it");
@@ -1112,6 +1256,9 @@ mod tests {
             ("panels/wall/data.js", "View > Monitoring wall"),
             ("panels/wall/task.js", "View > Monitoring wall"),
             ("panels/wall/rows.js", "View > Monitoring wall"),
+            ("panels/wall/channel-data.js", "View > Monitoring wall"),
+            ("panels/wall/channel-rows.js", "View > Monitoring wall"),
+            ("panels/channels/picture.js", "the Channels tab or the wall"),
             ("panels/wall/virtual.js", "View > Monitoring wall"),
             ("panels/wall/bulk.js", "Add shows, or File > New shows"),
             ("panels/wall/bulk-parse.js", "Add shows, or File > New shows"),
@@ -1121,6 +1268,11 @@ mod tests {
             ("shell/settings-dialog.js", "Settings for this page"),
             ("panels/outputs/record-start.js", "Record pressed"),
             ("panels/outputs/record-stop.js", "REC or Stop recording pressed"),
+            ("panels/header/running.js", "the header's pill pressed"),
+            ("panels/header/banner.js", "a page opened with something already running"),
+            ("panels/header/stop.js", "Stop pressed"),
+            ("panels/header/running-watch.js", "the header, once the page has drawn"),
+            ("panels/outputs/stream-toggle.js", "Stop streaming or Start streaming pressed"),
             ("panels/sources/browser-device.js", "this browser's camera opened"),
             ("panels/sources/phone-camera.js", "A phone's camera picked in Add source"),
             ("join/publisher.js", "this browser's camera opened, or /join/"),
@@ -1238,8 +1390,72 @@ mod tests {
             "connect-src 'self' ws: wss:",
             "frame-src 'self'",
             "object-src 'none'",
+            "worker-src 'self'",
+            "manifest-src 'self'",
         ] {
             assert!(CSP.contains(directive), "the policy is missing {directive}");
+        }
+    }
+
+    /// Width and height out of a PNG's header, or None if it is not a PNG.
+    fn png_size(bytes: &[u8]) -> Option<(u32, u32)> {
+        if bytes.len() < 24 || &bytes[..8] != b"\x89PNG\r\n\x1a\n" || &bytes[12..16] != b"IHDR" {
+            return None;
+        }
+        let word = |at: usize| u32::from_be_bytes([bytes[at], bytes[at + 1], bytes[at + 2], bytes[at + 3]]);
+        Some((word(16), word(20)))
+    }
+
+    #[test]
+    fn the_manifest_names_icons_that_are_served_at_the_sizes_it_says() {
+        let text = source_of("manifest.webmanifest").unwrap();
+        let manifest: serde_json::Value = serde_json::from_str(text).expect("the manifest is JSON");
+        assert_eq!(manifest["display"], "standalone");
+        assert_eq!(manifest["start_url"], "./", "relative, so a mixer behind a path prefix installs too");
+        let icons = manifest["icons"].as_array().unwrap();
+        for wanted in ["192x192", "512x512"] {
+            assert!(icons.iter().any(|i| i["sizes"] == wanted && i["purpose"] == "any"), "no {wanted} icon");
+        }
+        assert!(icons.iter().any(|i| i["purpose"] == "maskable"), "no maskable icon");
+        for icon in icons {
+            let src = icon["src"].as_str().unwrap();
+            let bytes = IMAGES.iter().find(|(p, _)| *p == src).map(|(_, b)| *b).unwrap_or_else(|| panic!("{src} is not served"));
+            let (w, h) = png_size(bytes).unwrap_or_else(|| panic!("{src} is not a PNG"));
+            assert_eq!(format!("{w}x{h}"), icon["sizes"].as_str().unwrap(), "{src} is not the size the manifest says");
+        }
+        assert_eq!(png_size(IMAGES.iter().find(|(p, _)| *p == "icons/apple-touch-icon.png").unwrap().1), Some((180, 180)));
+        assert_eq!(content_type("manifest.webmanifest"), "application/manifest+json");
+        assert_eq!(content_type("icons/icon-192.png"), "image/png");
+    }
+
+    #[test]
+    fn the_page_links_the_manifest_and_the_apple_icon() {
+        let page = source_of("index.html").unwrap();
+        assert!(page.contains(r#"<link rel="manifest" href="manifest.webmanifest">"#));
+        assert!(page.contains(r#"href="icons/apple-touch-icon.png""#));
+        assert!(page.contains(r#"name="theme-color""#));
+    }
+
+    #[test]
+    fn the_service_worker_carries_this_build_and_leaves_the_protocol_alone() {
+        let source = source_of("sw.js").unwrap();
+        assert!(source.contains("\"__GMX_BUILD__\""), "the placeholder the server fills in is gone");
+        assert!(build_id().starts_with(env!("CARGO_PKG_VERSION")));
+        assert!(!build_id().contains("__GMX_BUILD__"));
+        // The paths the worker must never answer for. The DOM tests check the
+        // function; this keeps the list from losing one quietly.
+        for path in ["/api", "/rpc", "/ws", "/mjpeg", "/pcm", "/opus", "/whep", "/whip", "/hls", "/metrics", "/plugins"] {
+            assert!(source.contains(&format!("\"{path}\"")), "the service worker's NEVER list has no {path}");
+        }
+    }
+
+    #[test]
+    fn no_icon_is_empty_or_listed_twice() {
+        let mut seen = std::collections::HashSet::new();
+        for (path, body) in IMAGES {
+            assert!(png_size(body).is_some(), "{path} is not a PNG");
+            assert!(seen.insert(*path), "{path} is in the table twice");
+            assert!(!ASSETS.iter().any(|(p, _)| p == path), "{path} is in both tables");
         }
     }
 

@@ -44,12 +44,19 @@ function clicked(view, e) {
     savePrefs(o);
     return view.draw();
   }
+  if (e.target.closest("[data-channel]")) return openChannels(view);
   const mix = e.target.closest("[data-act=mix]");
   if (mix) return compositing(view, mix.dataset.id);
   const at = e.target.closest("[data-id]");
   if (!at) return;
   view.cursor = at.dataset.id;
   openShow(view, at.dataset.id);
+}
+
+/** A channel stream opens the Channels panel, where its keys and destinations are. */
+async function openChannels(view) {
+  view.close();
+  (await import("../channels/panel.js")).bringForward();
 }
 
 /** Turn mixing on or off. The station refuses when it cannot, and says why. */

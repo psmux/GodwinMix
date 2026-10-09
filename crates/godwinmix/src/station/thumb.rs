@@ -58,6 +58,26 @@ pub async fn thumbnail(State(st): State<Arc<Station>>, Path(id): Path<String>, Q
     }
 }
 
+/// `GET /api/v1/channels/{id}/streams/{stream}/thumbnail.jpg?width=320`: a
+/// live channel stream's picture, from the station's own listener.
+pub async fn channel(State(st): State<Arc<Station>>, Path((id, stream)): Path<(String, String)>, Query(q): Query<HashMap<String, String>>, headers: HeaderMap, uri: Uri) -> Response {
+    let presented = crate::control::presented_token(&Method::GET, &headers, &uri);
+    match st.tokens.authenticate(presented.as_deref()) {
+        Ok(t) if t.has(Scope::Read) => {}
+        Ok(t) => return refusal(StatusCode::FORBIDDEN, RpcError::scope("channel.thumbnail", Scope::Read.as_str(), &t.scope_names())),
+        Err(f) => return refusal(StatusCode::UNAUTHORIZED, RpcError::new(godwinmix_protocol::ErrorCode::Scope, f.message().to_string())),
+    }
+    let Some(channels) = st.channels.get().cloned() else {
+        return refusal(StatusCode::CONFLICT, RpcError::not_in_state("the channels are not open yet; try again in a moment").with("retry_after_ms", 1000));
+    };
+    let width = q.get("width").and_then(|w| w.parse::<u32>().ok());
+    let req = godwinmix_protocol::channels::ChannelThumbnailRequest { id, stream: Some(stream), width };
+    match crate::channels::thumbnail_jpeg(channels, req).await {
+        Ok(bytes) => jpeg(bytes),
+        Err(e) => crate::control::rest::error_response(&e, &godwinmix_protocol::trace::new_id()),
+    }
+}
+
 async fn from_host(st: &Arc<Station>, id: &str, width: u32) -> Response {
     let Some(plugins) = st.direct.plugins().cloned().filter(|p| p.is_running(crate::channels::PLUGIN)) else {
         return not_yet(id, "the ingest plugin, which runs shows without compositing, is not running");

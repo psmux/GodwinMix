@@ -12,7 +12,7 @@ use godwinmix_protocol::error::RpcError;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-use super::keys;
+use super::{keys, local};
 use super::store::{DestinationRecord, Record};
 use super::Channels;
 use crate::control::methods::channel_destinations::{ChannelStore, Edit};
@@ -86,11 +86,12 @@ impl Channels {
                     .set(&scope, &d.id, &text)
                     .map_err(|e| RpcError::internal(format!("sealing a destination: {e:#}")))?;
             }
+            let shown = if d.platform == local::FILE { local::record_shown(&d.server) } else { uri_host(&d.server) };
             records.push(DestinationRecord {
                 id: d.id.clone(),
                 platform: d.platform.clone(),
                 label: d.label.clone(),
-                uri_host: uri_host(&d.server),
+                uri_host: shown,
                 has_key: d.has_key(),
                 stream: d.stream.clone(),
                 enabled: d.enabled,
@@ -107,9 +108,14 @@ impl Channels {
     pub(super) fn destination_table(&self, r: &Record) -> Vec<Value> {
         self.stored(r)
             .iter()
-            .filter(|d| d.enabled)
+            // A watch link is the station's packager's, not the listener's.
+            .filter(|d| d.enabled && d.platform != local::HLS)
             .filter_map(|d| {
-                let row = json!({"id": d.id, "platform": d.platform, "url": d.url(), "stream": d.stream});
+                let url = match d.platform.as_str() {
+                    local::FILE => local::record_url(&r.id, &d.server)?,
+                    _ => d.url(),
+                };
+                let row = json!({"id": d.id, "platform": d.platform, "url": url, "stream": d.stream});
                 self.transcode.row(&r.id, d, row)
             })
             .collect()
@@ -121,7 +127,10 @@ impl Channels {
         r.destinations
             .iter()
             .map(|d| {
-                let mut live = self.sending_view(&r.id, &d.id, d.enabled);
+                let (mut live, playback) = match d.platform.as_str() {
+                    local::HLS => self.watch_view(&r.id, d),
+                    _ => (self.sending_view(&r.id, &d.id, d.enabled), None),
+                };
                 let (plan, refused) = match (&d.rendition, d.enabled) {
                     (Some(_), true) => self.transcode.view(&r.id, &d.id),
                     _ => (None, None),
@@ -143,7 +152,7 @@ impl Channels {
                     rendition: d.rendition.clone(),
                     plan,
                     refused,
-                    playback: None,
+                    playback,
                 }
             })
             .collect()

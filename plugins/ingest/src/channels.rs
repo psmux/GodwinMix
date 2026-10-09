@@ -15,6 +15,7 @@
 
 use serde_json::Value;
 
+use crate::unescape;
 pub use crate::proto::{Protocol, Tls};
 
 /// The query parameters a key may arrive in, in the order they are looked for.
@@ -94,14 +95,15 @@ impl Table {
 
     /// Decide on one publisher arriving over `protocol`.
     pub fn admit_via(&self, protocol: Protocol, app_raw: &str, stream_raw: &str) -> Result<Admit, Refusal> {
-        let (app, app_query) = split_query(app_raw);
+        let (app_sent, app_query) = split_query(app_raw);
+        let app = &unescape::percent(app_sent);
         let (name, stream_query) = split_query(stream_raw);
         let refuse = |stream: &str, why: String| Refusal {
             channel: app.to_string(),
             stream: stream.to_string(),
             why,
         };
-        let Some(channel) = self.channels.iter().find(|c| c.app == app) else {
+        let Some(channel) = self.find_app(app) else {
             return Err(refuse(name, format!(
                 "there is no channel called '{app}' on this mixer. Check the server address \
                  in the encoder: it ends with the channel's name."
@@ -123,7 +125,7 @@ impl Table {
             return Err(refuse(shown, protocol.not_taken(app)));
         }
         let offered = if channel.key_in_name {
-            Some(name.to_string())
+            Some(unescape::percent(name))
         } else {
             key_param(stream_query).or_else(|| key_param(app_query))
         };
@@ -145,11 +147,22 @@ impl Table {
                  where main can be any name you like."
                 .to_string()));
         }
-        Ok(Admit { channel: channel.id.clone(), app: app.to_string(), stream, key: key.clone() })
+        // The channel's own spelling, whatever case the encoder used, so the
+        // hub, the core and a source all name the stream one way.
+        Ok(Admit { channel: channel.id.clone(), app: channel.app.clone(), stream, key: key.clone() })
     }
 }
 
 impl Table {
+    /// The channel an encoder means by `app`: escapes undone, and without
+    /// regard to case, so `Church`, `church` and `CHURCH` all arrive. The
+    /// core refuses two channels whose names differ only in case, so this
+    /// never has two to choose between.
+    pub fn find_app(&self, app: &str) -> Option<&Channel> {
+        let app = unescape::percent(app);
+        self.channels.iter().find(|c| c.app.eq_ignore_ascii_case(&app))
+    }
+
     /// Would a publisher on this channel, with this key, still be let in?
     /// Asked of everyone on air when the table changes.
     pub fn still_admits(&self, channel: &str, key: &str, protocol: Protocol) -> bool {
@@ -209,7 +222,7 @@ pub fn key_param(query: &str) -> Option<String> {
         query.split('&').filter_map(|p| p.split_once('=')).collect();
     KEY_PARAMS
         .iter()
-        .find_map(|want| pairs.iter().find(|(k, _)| k == want).map(|(_, v)| v.to_string()))
+        .find_map(|want| pairs.iter().find(|(k, _)| k == want).map(|(_, v)| unescape::query_value(v)))
 }
 
 /// Compare two keys in time that does not depend on where they differ.

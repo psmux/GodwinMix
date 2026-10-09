@@ -20,8 +20,9 @@ impl Vitals {
     pub(super) fn tick(&self, now: u64) {
         let shows: Vec<(Arc<Show>, bool)> = {
             let taps = lock(&self.taps);
-            taps.values().map(|t| (t.show.clone(), self.hub.is_live(&t.app, &t.stream))).collect()
+            taps.values().filter(|t| !t.peek).map(|t| (t.show.clone(), self.hub.is_live(&t.app, &t.stream))).collect()
         };
+        self.forget_peeks(now);
         for (show, live) in shows {
             let health = {
                 let mut judge = lock(&show.judge);

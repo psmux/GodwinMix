@@ -104,7 +104,7 @@ pub fn classify(message: &str, uri: &str) -> OutputError {
         OutputErrorReason::Unreachable
     } else if has(&["denied", "not authorized", "unauthorized", "rejected", "badname", "forbidden", "cmd failed"]) {
         OutputErrorReason::Rejected
-    } else if has(&["short read", "closed", "reset", "broken pipe", "end of file", "eof"]) {
+    } else if has(&["short read", "closed", "reset", "aborted", "broken pipe", "end of file", "eof"]) {
         OutputErrorReason::Closed
     } else {
         OutputErrorReason::Other

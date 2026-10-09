@@ -18,6 +18,20 @@ export const SWATCHES = [
 let openMenu = null;
 
 /**
+ * No rule first, last or twice in a row. A menu for empty space leaves out
+ * every item that needs a tile, and the rules between those items were left
+ * behind, so the menu a long press on empty space opens began with a line.
+ */
+export function tidyRules(menu) {
+  let previous = null;
+  for (const node of [...menu.children]) {
+    if (node.tagName === "HR" && (!previous || previous.tagName === "HR")) node.remove();
+    else previous = node;
+  }
+  if (previous && previous.tagName === "HR") previous.remove();
+}
+
+/**
  * @param {number} x
  * @param {number} y
  * @param {Array<{label, run, key?, disabled?, kind?: "separator"|"colours", onColour?}>} items
@@ -57,6 +71,7 @@ export function contextMenu(x, y, items) {
     );
   }
 
+  tidyRules(menu);
   document.body.appendChild(menu);
   // Placed after measuring, so a menu near the right edge folds back onto the
   // screen rather than off it.

@@ -1,12 +1,15 @@
 // One stream on a channel: what the encoder is sending, who it is, how long
 // for, and which mixer source it feeds. The bitrate is a sparkline of the
 // last forty readings, kept by the model, which the panel takes every two
-// seconds while the stream is live.
+// seconds while the stream is live. Its picture is asked for every few
+// seconds, only while the panel is on screen and the stream is live
+// (picture.js).
 
 import { el, svg } from "../../shell/dom.js";
 import { write, copy } from "./keyed.js";
 import { badges, resolution, fmtFps, fmtKbps, fmtUptime, keyLabel, startedAt, streamKbps } from "./model.js";
 import { NAMES } from "./ways.js";
+import { streamPicture } from "./picture.js";
 
 const CLOCK = "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 7v5l3 2";
 const NS = "http://www.w3.org/2000/svg";
@@ -31,7 +34,10 @@ export function streamRow(view, getChannel, urlOf) {
   const since = el("span");
   const clock = el("span.chn-uptime", { title: "Publishing for" }, [svg(CLOCK, 13), since]);
   const feeds = el("span.chn-feeds");
+  const pic = streamPicture(view.client, "chn-pic");
+  const frame = el("span.chn-frame", { title: "What the encoder is sending, a few seconds ago" }, [pic.node]);
   const node = el("div.chn-stream", {}, [
+    frame,
     dot,
     el("div.chn-sid", {}, [el("div.chn-snameline", {}, [name, copyUrl]), who]),
     el("div.chn-specs", {}, [res, fps, chips]),
@@ -43,9 +49,12 @@ export function streamRow(view, getChannel, urlOf) {
   let current = null;
 
   function update(s) {
+    const first = !current;
     current = s;
     const channel = getChannel();
     const live = s.state === "live";
+    if (!live) pic.blank();
+    else if (first || pic.node.dataset.empty === "1") picture();
     node.classList.toggle("idle", !live);
     write(dot, "className", "chn-sdot" + (live ? " live" : ""));
     write(name, "textContent", s.name);
@@ -78,7 +87,12 @@ export function streamRow(view, getChannel, urlOf) {
     clock.classList.toggle("none", !began);
   }
 
-  return { node, update, tick, get stream() { return current; } };
+  /** The next picture, while the stream is live. */
+  function picture() {
+    if (current && current.state === "live") pic.load(getChannel().id, current.name);
+  }
+
+  return { node, update, tick, picture, get stream() { return current; } };
 }
 
 /** A line and a soft fill under it, drawn from a list of numbers. */

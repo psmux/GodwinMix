@@ -31,6 +31,7 @@ import { shell } from "../../shell/shell.js";
 import { toast, errorToast } from "../../shell/toast.js";
 import { settings, onSettingsChanged } from "../../shell/settings.js";
 import { openSceneSources } from "../sources/chooser-loader.js";
+import { count } from "../sources/scene-strip.js";
 import { acquireScenes } from "../../shell/scene-session.js";
 import { sceneNotRunning } from "../../shell/scene-health.js";
 
@@ -260,7 +261,7 @@ class ScenesPanel extends HTMLElement {
    * runs on every change the document sends.
    */
   renderTabs(list) {
-    const signature = list.map((s) => `${s.id}/${s.name}/${s.items || 0}`).join("|");
+    const signature = list.map((s) => `${s.id}/${s.name}/${s.items || 0}/${(s.sources || []).join(",")}`).join("|");
     if (signature !== this.tabSignature) {
       this.tabSignature = signature;
       clear(this.strip);
@@ -275,6 +276,7 @@ class ScenesPanel extends HTMLElement {
             // In Studio mode a click also fills the preview, which is safe.
             onclick: () => this.choose(summary.id, false),
             ondblclick: () => this.open(summary.id),
+            oncontextmenu: (e) => this.tabMenu(summary.id, e),
           },
           [el("span.ellipsis", { text: summary.name }), el("span.num.dim", { text: String(summary.items || 0) })]
         );
@@ -283,7 +285,7 @@ class ScenesPanel extends HTMLElement {
         // it, because a button may not hold another button.
         const edit = this.editButton(summary);
         this.tabs.set(summary.id, tab);
-        this.strip.appendChild(el("span.scene-tab", {}, [tab, edit]));
+        this.strip.appendChild(el("span.scene-tab", {}, [tab, edit, inputsButton(summary)]));
       }
       this.strip.appendChild(this.take);
     }
@@ -524,7 +526,10 @@ class ScenesPanel extends HTMLElement {
   beginRename(id) {
     const tile = this.tiles.get(id);
     if (!tile) return false;
-    if (this.grid.hidden) this.setView("tiles");
+    // And back to the tabs once the name is in, the phone's only view of
+    // its scenes, where Take and the way into a scene's sources are.
+    const fromTabs = this.grid.hidden;
+    if (fromTabs) this.setView("tiles");
     const before = tile.name.textContent;
     tile.name.contentEditable = "true";
     tile.name.focus();
@@ -545,15 +550,16 @@ class ScenesPanel extends HTMLElement {
       const after = tile.name.textContent.trim();
       if (!commit || !after || after === before) {
         tile.name.textContent = before;
-        return;
+      } else {
+        try {
+          await this.scenes.rename(id, { name: after });
+          this.scenes.undo.record(`Renamed to ${after}`);
+        } catch (e) {
+          tile.name.textContent = before;
+          errorToast(e, "Rename");
+        }
       }
-      try {
-        await this.scenes.rename(id, { name: after });
-        this.scenes.undo.record(`Renamed to ${after}`);
-      } catch (e) {
-        tile.name.textContent = before;
-        errorToast(e, "Rename");
-      }
+      if (fromTabs) this.setView("tabs");
     };
 
     const off = on(tile.name, "keydown", (e) => {
@@ -770,6 +776,21 @@ class ScenesPanel extends HTMLElement {
     return import("./more.js");
   }
 
+  /**
+   * A right click or a long press on a scene's tab: the menu its tile has.
+   * The phone shows scenes only as tabs, so without this a scene could not be
+   * renamed, coloured, duplicated or removed there. Prevented at once, before
+   * the menu module arrives, so the finger lifting is not taken for a tap.
+   */
+  tabMenu(id, e) {
+    e.preventDefault();
+    if (!this.selection.has(id)) {
+      this.selection.click(id, [...this.tiles.keys()], {});
+      this.paintSelection();
+    }
+    this.more().then((m) => m.menu(this, id, e));
+  }
+
   commands() {
     const one = () => this.selected()[0] || null;
     return [
@@ -816,3 +837,24 @@ function nameOfItem(record) {
 customElements.define("gmx-scenes", ScenesPanel);
 window.godwinmixPanels.push(ScenesPanel);
 export default ScenesPanel;
+
+/**
+ * The way into a scene's inputs on a phone, where Sources is another screen:
+ * make it the scene in hand and go there. It never arms or takes. The desk
+ * hides it, since its Sources panel is already beside the scenes.
+ */
+function inputsButton(summary) {
+  const n = count(summary);
+  return el("button.scene-inputs", {
+    type: "button",
+    "data-nodrag": "",
+    "aria-label": `Sources in ${summary.name}`,
+    text: n ? `${n} source${n === 1 ? "" : "s"} ›` : "Add sources ›",
+    onclick: (event) => {
+      event.stopPropagation();
+      setFocusedScene(summary.id);
+      document.querySelector("gmx-shell")?.workspace?.show("core/sources");
+    },
+    ondblclick: (event) => event.stopPropagation(),
+  });
+}

@@ -25,6 +25,8 @@ pub struct Live {
     /// The frame rate the publisher's `onMetaData` states, exact where the
     /// measured `fps` is only near. A converting destination plans from it.
     pub declared_fps: Option<f64>,
+    /// Why the mixer refused to make this stream a source, until it takes it.
+    pub source_error: Option<String>,
 }
 
 fn text(v: &Value, key: &str) -> String {
@@ -59,6 +61,7 @@ impl Live {
             source: None,
             relay: text(v, "relay"),
             declared_fps: None,
+            source_error: None,
         };
         live.absorb(v);
         Some(live)
@@ -102,6 +105,7 @@ impl Live {
             source: self.source.clone(),
             dropped_gops: self.dropped_gops,
             relay: (!self.relay.is_empty()).then(|| self.relay.clone()),
+            source_error: self.source_error.clone(),
         }
     }
 }
@@ -160,5 +164,15 @@ mod tests {
         .unwrap();
         live.absorb(&json!({"app": "church", "stream": "main", "video": null}));
         assert_eq!(live.video.map(|v| v.width), Some(640));
+    }
+
+    #[test]
+    fn why_the_mixer_refused_a_stream_reaches_the_wire_and_is_absent_otherwise() {
+        let mut live = Live::from_plugin(&json!({"app": "browser", "stream": "phone"})).unwrap();
+        let quiet = serde_json::to_value(live.view()).unwrap();
+        assert!(quiet.get("source_error").is_none());
+        live.source_error = Some("could not listen for RTMP on 0.0.0.0:1935".into());
+        let told = serde_json::to_value(live.view()).unwrap();
+        assert_eq!(told["source_error"], "could not listen for RTMP on 0.0.0.0:1935");
     }
 }

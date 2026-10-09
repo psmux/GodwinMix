@@ -53,7 +53,10 @@ pub async fn until(ws: &mut Ws, show: &str, out: &str, state: &str, limit: Durat
         }
         if Instant::now() > until {
             let stats = call(ws, 99, "show.stats", json!({"ids": [show]})).await;
-            panic!("{out} never became {state}: {o}\n{stats}");
+            // What the governor saw, for a refusal: the machine's load, what
+            // other programs took at their peak, and every ticket held.
+            let governor = call(ws, 98, "governor.status", json!({})).await;
+            panic!("{out} never became {state}: {o}\n{stats}\n{governor}");
         }
         tokio::time::sleep(Duration::from_millis(500)).await;
     }

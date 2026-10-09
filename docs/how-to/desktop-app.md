@@ -130,7 +130,7 @@ directory:
 | `local-core.port` | the port the local mixer was given, so a shell that crashed finds its mixer again instead of starting a second one |
 | `lan.json` | whether other devices may connect, and the port kept for them once they may |
 | `godwinmix.devices.toml` | the device tokens made for phones and tablets, as digests, never the secrets |
-| `godwinmix.control.crt` | the certificate the mixer answers HTTPS with, for a phone that wants to trust it |
+| `godwinmix.control.crt` | the certificate authority behind the mixer's HTTPS certificate, for a phone that wants to trust it |
 | `gstreamer-registry.bin` | GStreamer's plugin cache, kept here because an installed app's own directory is read only |
 | `plugins/` | the camera, the screen and the microphone, copied out of the app, plus anything added from the window later |
 
@@ -182,9 +182,18 @@ remote mixer exactly as it found it. "Quit and stop the mixer" asks it to stop
 over the API and exits with status 2, which `dev/desktop.sh` reads as the cue
 to stop the rest of the local test rig.
 
-Closing the window does not quit: it hides. A mixer that went off air because
-somebody tidied their desktop would be the worst kind of bug. The tray icon
-brings the window back, and Quit is the way out.
+Closing the window quits when nothing is running, mixer and all. When the
+mixer is streaming, recording or receiving, the app asks first, names each
+thing, and offers **Stop everything and quit**, **Keep running in the
+background** and **Cancel**. It never hides into the tray without that
+answer, and never stops a live stream without it. Quit in the menu, Quit in
+the tray and Ctrl+Q ask the same way. Connected to a mixer on another machine,
+quitting leaves that mixer running, and the app says so first if it is
+streaming. [Stop streaming, and quit](stop-streaming-and-quit.md) has the
+whole of it, with what the tray shows while the app runs in the background.
+
+Before 0.3 closing the window hid it, and the mixer carried on with nothing on
+screen saying so.
 
 The status line is the title bar: it names the version the mixer reported and
 whether it is this computer or an address. The version comes from

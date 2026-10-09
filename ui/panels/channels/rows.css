@@ -1,0 +1,62 @@
+/* The Rows view, the Cards and Rows switch, and the bulk menu's pieces. Its
+   own file so channels.css stops growing; loaded with the panel by layout.js. */
+
+/* The switch and the buttons beside it keep their width; the title and
+   its lede are what give way, so a panel beside the programme does not
+   cut Rows down to "Ro". */
+.chn-viewas { align-self: center; }
+.chn-top > .chn-viewas, .chn-top > button { flex: none; }
+.chn-viewas button { font-family: inherit; font-weight: 600; }
+.chn-viewas[hidden] { display: none; }
+
+.chn-rows { display: flex; flex-direction: column; border: var(--border) solid var(--line); border-radius: 12px; overflow: hidden; background: var(--panel); }
+.chn-rows[hidden] { display: none; }
+.chn-row {
+  display: grid; grid-template-columns: auto minmax(9em, 1.4fr) minmax(0, 1.4fr) 5.5em minmax(0, 1.2fr);
+  align-items: center; gap: 12px; padding: 9px 14px; width: 100%; text-align: left;
+  background: transparent; border: 0; border-bottom: var(--border) solid var(--line-soft); color: var(--text); font: inherit; cursor: pointer;
+}
+.chn-row:last-child { border-bottom: 0; }
+.chn-row:hover { background: var(--raise); }
+.chn-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.chn-rid { display: flex; flex-direction: column; min-width: 0; }
+.chn-rname { font-size: 13px; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chn-rstatus { font-size: 11.5px; color: var(--dim); white-space: nowrap; }
+.chn-row[data-state="live"] .chn-rstatus { color: var(--ok); font-weight: 600; }
+.chn-rspec, .chn-rtime { font-family: var(--num); font-size: 11.5px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chn-rtime { text-align: right; color: var(--text); }
+.chn-rdest { display: flex; align-items: center; gap: 8px; justify-content: flex-end; min-width: 0; font-size: 11.5px; color: var(--dim); white-space: nowrap; }
+.chn-rrings:empty { display: none; }
+.chn-rrings { display: inline-flex; gap: 3px; flex-wrap: wrap; }
+.chn-rring { width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--line); box-sizing: border-box; }
+.chn-rring[data-state="waiting"] { border-style: dashed; border-color: var(--dim); }
+.chn-rring[data-state="connecting"], .chn-rring[data-state="reconnecting"] { border-color: var(--warn); }
+.chn-rring[data-state="live"] { border-color: var(--ok); background: color-mix(in srgb, var(--ok) 35%, transparent); }
+.chn-rring[data-state="failed"] { border-color: var(--bad); }
+.chn-rsend.bad { color: var(--bad); font-weight: 600; }
+
+/* A card a row was pressed for, lit for a moment. */
+.chn-card.chn-flash { box-shadow: 0 0 0 2px var(--accent); }
+
+/* Bulk actions and the Livebox words beside the Send on to heading. */
+.chn-aka { font-size: 11px; color: var(--faint); }
+.chn-bulk { margin-left: auto; align-self: center; }
+.chn-tile[data-state="live"] .chn-tstate { white-space: normal; text-align: center; line-height: 1.3; padding: 0 4px; }
+.chn-paste { width: 100%; min-height: 8em; font-size: 12px; resize: vertical; }
+.chn-pastefail { margin: 0; padding-left: 1.2em; color: var(--bad); font-size: 12px; }
+.chn-pastefail[hidden] { display: none; }
+
+/* A phone: two lines a row, the name and state, then the numbers. */
+@container (max-width: 520px) {
+  .chn-row {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas: "dot id time" "dot spec spec" "dot dest dest";
+    row-gap: 3px; padding: 10px 12px;
+  }
+  .chn-row > .chn-dot { grid-area: dot; align-self: start; margin-top: 4px; }
+  .chn-rid { grid-area: id; }
+  .chn-rspec { grid-area: spec; }
+  .chn-rtime { grid-area: time; align-self: start; }
+  .chn-rdest { grid-area: dest; justify-content: flex-start; }
+  .chn-rspec:empty { display: none; }
+}

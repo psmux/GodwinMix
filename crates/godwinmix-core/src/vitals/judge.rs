@@ -18,6 +18,8 @@ pub struct Judge {
     /// Outputs that are failed, or shed by the governor, with since and why.
     failed: BTreeMap<String, (u64, String)>,
     shed: BTreeMap<String, (u64, String)>,
+    /// The memory guard's alarm while it holds: since, and the sentence.
+    memory: Option<(u64, String)>,
 }
 
 impl Judge {
@@ -63,6 +65,11 @@ impl Judge {
         keep(&mut self.shed, shed.collect(), now);
     }
 
+    /// The show's memory guard, as `mixer::memguard::pressure` says now.
+    pub fn memory(&mut self, pressure: Option<(u64, String)>) {
+        self.memory = pressure;
+    }
+
     pub fn health(&self, now: u64) -> Health {
         let l = &self.limits;
         let mut alarms = Vec::new();
@@ -81,6 +88,9 @@ impl Judge {
         }
         for (id, (since, why)) in &self.shed {
             add(AlarmKind::Shed, *since, format!("Output {id} is shed: {why}"));
+        }
+        if let Some((since, detail)) = &self.memory {
+            add(AlarmKind::Memory, *since, detail.clone());
         }
         Health::from_alarms(alarms)
     }

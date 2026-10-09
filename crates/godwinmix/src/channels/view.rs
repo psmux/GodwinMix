@@ -5,7 +5,7 @@ use std::sync::atomic::Ordering;
 
 use godwinmix_protocol::channels::{Channel, ChannelKey, ChannelProtocol, ChannelPublish, KeyMode, PublishAddress};
 
-use super::{net, Channels, Live, Record};
+use super::{keys, net, Channels, Live, Record};
 
 impl Channels {
     pub(super) fn channel(&self, id: &str) -> Option<Channel> {
@@ -15,7 +15,7 @@ impl Channels {
 
     pub(super) fn view(&self, r: &Record) -> Channel {
         let addresses = self.addresses(r, &net::first_address());
-        let server = format!("rtmp://{}:{}/{}", net::first_address(), self.port.load(Ordering::Relaxed), r.app);
+        let server = format!("rtmp://{}:{}/{}", net::first_address(), self.port.load(Ordering::Relaxed), keys::in_url(&r.app));
         let example = match r.key_mode {
             KeyMode::Query => format!("{server}/main?psk=<key>"),
             KeyMode::Stream => format!("{server}/<key>"),
@@ -33,7 +33,13 @@ impl Channels {
             keys: r
                 .keys
                 .iter()
-                .map(|k| ChannelKey { id: k.id.clone(), label: k.label.clone(), created: k.created.clone(), hint: k.hint.clone() })
+                .map(|k| ChannelKey {
+                    id: k.id.clone(),
+                    label: k.label.clone(),
+                    created: k.created.clone(),
+                    hint: k.hint.clone(),
+                    imported: k.imported,
+                })
                 .collect(),
             publish: ChannelPublish { server, example, addresses },
             streams,
@@ -43,7 +49,7 @@ impl Channels {
 
     /// Where an encoder is pointed for each protocol the channel has on.
     fn addresses(&self, r: &Record, host: &str) -> Vec<PublishAddress> {
-        let (app, rtmp) = (&r.app, self.port.load(Ordering::Relaxed));
+        let (app, rtmp) = (keys::in_url(&r.app), self.port.load(Ordering::Relaxed));
         let by_name = r.key_mode == KeyMode::Stream;
         let rtmp_like = |scheme: &str, port: u16| {
             let server = format!("{scheme}://{host}:{port}/{app}");

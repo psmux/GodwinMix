@@ -48,7 +48,7 @@ export function phoneTests(test, eq, ok) {
       const ids = deck.extras().map((p) => p.id);
       ok(ids.includes("test/phone-kept") && ids.includes("test/phone-plain"));
       ok(!ids.includes("test/phone-header"));
-      ok(!ids.some((id) => ["core/program", "core/scenes", "core/sources", "core/audio", "core/outputs"].includes(id)));
+      ok(!ids.some((id) => ["core/program", "core/scenes", "core/sources", "core/audio", "core/outputs", "core/channels"].includes(id)));
       deck.go("more");
       ok([...root.querySelectorAll(".phone-card")].some((c) => c.textContent.includes("Kept")));
     });

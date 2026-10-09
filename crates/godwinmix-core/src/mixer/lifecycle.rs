@@ -147,6 +147,19 @@ impl Mixer {
         }
     }
 
+    /// Take a removed output down. Out of the programme here and now, which
+    /// waits for nothing; then down to NULL on a thread of its own, because
+    /// that joins the feed's streaming thread and the output's pipeline
+    /// decides when it lets go. See `output::teardown`.
+    pub(super) fn detach_off_thread(&mut self, out: Arc<OutputSlot>) {
+        out.cut_off(&self.program);
+        let id = out.id().clone();
+        let worker = out.clone();
+        if !offload::run("detach", id.as_str(), move || worker.take_down()) {
+            warn!(output = %id, "no thread to take a removed output down on; its feed stays as it is, out of the programme");
+        }
+    }
+
     /// Rebuild an output's pipeline on a thread of its own. The old pipeline
     /// has to reach NULL before the new one is built, and its sink decides how
     /// long that takes.

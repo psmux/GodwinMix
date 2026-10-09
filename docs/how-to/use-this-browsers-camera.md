@@ -50,8 +50,8 @@ another size the mixer's camera source holds still, and its log says why.
 
 A browser's camera belongs to the tab that opened it, so a slim bar stays at
 the bottom right of the page while it is sending, with the state after its
-name: `This browser's camera: live`. Press **_** on it to open it out. Open,
-it has:
+name: `This browser's camera: live`. On a phone it sits just above the tabs.
+Tap its name to open it out. Open, it has:
 
 * the picture, mirrored, the way a selfie camera shows you
 * a level bar for the microphone
@@ -65,6 +65,20 @@ it has:
 * **Stop**, and **Send to the mixer** to start again after a stop
 
 It opens out by itself when something goes wrong, so the reason is on screen.
+That includes the mixer taking the stream but refusing to make it a source,
+which is the one case where the bar says live and still nothing can go in a
+scene. The card then says why, for example that another program on the
+mixer's computer already holds the RTMP port.
+Fold it away and the same error, coming back on each retry, leaves it folded;
+a different error opens it again.
+
+Drag the bar by its name to put it anywhere else on the page. It stays there,
+inside the window, and comes back there next time. Folded, it sits under any
+dialog, so it never covers the button that finishes one. On a phone it goes
+under a dialog open as well, since open it fills most of the screen. Left
+where it starts on a phone, just above the tab bar, every screen scrolls far
+enough to bring its last line out from under it, and Take outside Studio
+mode floats above it.
 
 Under the picture, once a second while the bar is open, is what is going
 out: the bit rate, the picture size and frame rate, and the round trip to the
@@ -222,8 +236,8 @@ at `http://192.168.1.20:8080` from another laptop, the bar opens and says:
 > the mixer's page at http://localhost on the mixer's own machine, or over
 > https.
 
-Open the same address with `https://` in front instead, and accept the
-certificate warning once; [Serve the mixer over https](serve-https.md) says
+Under it, **Open this page over https** opens the same address with
+`https://` in front, on the same port. Accept the certificate warning once; [Serve the mixer over https](serve-https.md) says
 how to check it is the mixer's certificate.
 
 The other things the bar can say, and what to do:

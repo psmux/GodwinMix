@@ -130,7 +130,7 @@ impl Channels {
             records.push(record);
         }
         if needs_key {
-            let key = self.make_key(&id, Some("Key 1".into()))?;
+            let key = self.make_key(&id, Some("Key 1".into()), None)?;
             waiting.push(format!(
                 "channel {id} has a new key ({}) because the file carried none: give it to its encoders",
                 key.label

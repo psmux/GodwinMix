@@ -42,9 +42,14 @@ use tokio::sync::mpsc;
 use tracing::{debug, info, warn};
 
 mod boundary;
+mod deadline;
+#[cfg(test)]
+mod deadline_tests;
 pub mod failure;
 mod flow;
 pub mod retire;
+mod since;
+mod teardown;
 
 const RELINK_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 
@@ -109,6 +114,10 @@ pub struct OutputSlot {
     flow: flow::Flow,
     /// Why the last attempt failed, in words. See `failure`.
     failure: failure::Failure,
+    /// Since when it has been down. See `deadline`.
+    deadline: deadline::Deadline,
+    /// Since when it has been live. See `since`.
+    since: since::LiveSince,
 }
 
 impl OutputSlot {
@@ -193,6 +202,8 @@ impl OutputSlot {
             taps,
             flow: Default::default(),
             failure: Default::default(),
+            deadline: Default::default(),
+            since: Default::default(),
         });
         // An address still carrying a preset's placeholder is not one anybody
         // can publish to, and dialling it anyway had the example config
@@ -299,6 +310,7 @@ impl OutputSlot {
         pipeline.set_state(gst::State::Playing).context("starting output pipeline")?;
 
         *self.pipeline.lock() = Some(Live { pipeline, watch });
+        self.deadline.built(std::time::Instant::now());
 
         // Ask the encoder for a keyframe. Without it the freshly connected
         // server has nothing decodable until the next scheduled one, which at a
@@ -480,6 +492,8 @@ impl OutputSlot {
             }
             None => false,
         };
+        self.deadline.live(now, std::time::Instant::now());
+        self.since.note(now, std::time::Instant::now());
         if now != self.connected.swap(now, Ordering::Relaxed) {
             if now {
                 self.failure.connected();
@@ -520,6 +534,22 @@ impl OutputSlot {
             self.overfull_ticks.store(0, Ordering::Relaxed);
         }
         false
+    }
+
+    /// Down for `deadline::DOWN_FOR` with no reconnect armed or running and
+    /// nothing in the way of one: the mixer rebuilds it. See `deadline`.
+    pub fn stuck_down(&self, at: std::time::Instant) -> bool {
+        self.deadline.overdue(at)
+            && !self.reconnect_armed.load(Ordering::SeqCst)
+            && !self.turn.restarting()
+            && !self.turn.stopped()
+            && self.has_key()
+            && self.kind.try_lock().is_some_and(|k| k.redial_when_down())
+    }
+
+    /// How long it has been down, for the line that says it was rebuilt.
+    pub fn down_for(&self, at: std::time::Instant) -> Option<std::time::Duration> {
+        self.deadline.down_for(at)
     }
 
     pub fn state(&self) -> OutputState {
@@ -567,6 +597,9 @@ impl OutputSlot {
     fn extra(&self) -> godwinmix_protocol::types::Extra {
         let mut extra = self.kind.try_lock().map(|k| k.status()).unwrap_or_default();
         extra.insert("bytes_out".into(), self.flow.total().into());
+        if let Some(secs) = self.since.secs(std::time::Instant::now()) {
+            extra.insert("live_secs".into(), secs.into());
+        }
         extra
     }
 
@@ -592,41 +625,47 @@ impl OutputSlot {
         }
     }
 
-    /// Remove this output from the program pipeline entirely.
+    /// Remove this output from the program pipeline entirely, in two halves.
     ///
     /// Unlike `shutdown`, which only stops the sink, this also takes the feed
     /// queues and proxy sinks back out and releases the tee pads, so an output
-    /// removed at runtime leaves nothing behind.
+    /// removed at runtime leaves nothing behind. `cut_off` is the half that
+    /// never waits and runs on the mixer thread; `detach` is the half that
+    /// waits for streaming threads and runs on a thread of its own. See
+    /// `teardown`.
     pub fn detach(&self, program: &gst::Pipeline) {
-        // A reconnect that has not started yet will not; one that is running
-        // gets a moment to finish, and is overtaken if it does not.
+        self.cut_off(program);
+        self.take_down();
+    }
+
+    /// Out of the programme, without waiting on anything: no buffer reaches
+    /// this output after it, and its id is free for the next attach.
+    pub fn cut_off(&self, program: &gst::Pipeline) {
+        // A reconnect that has not started yet will not.
         self.turn.mark_stopped();
+        teardown::cut_off(program, &self.program_side());
+    }
+
+    /// The half of a removal that waits: the kind's own shutdown, then each
+    /// program side element to NULL. Each of those joins a streaming thread,
+    /// which is why it never runs on the mixer thread.
+    pub fn take_down(&self) {
+        // A reconnect that is running gets a moment to finish, and is
+        // overtaken if it does not.
         let _turn = self.turn.enter_within(&self.cfg.id, "detach", DETACH_WAIT);
         self.shutdown();
-        for (el, pad) in [
-            (&self.feed_video, "feed video"),
-            (&self.feed_audio, "feed audio"),
-        ]
-        .map(|(e, n)| (e.clone(), n))
-        {
-            // Locked first, so the programme's own state walk cannot put it
-            // back to PLAYING before the remove. See `Encoder::detach`.
-            el.set_locked_state(true);
-            let _ = el.set_state(gst::State::Null);
-            if let Err(e) = program.remove(&el) {
-                warn!(output = %self.cfg.id, part = pad, ?e, "could not remove feed element");
-            }
-        }
-        for proxy in [&self.vproxy, &self.aproxy] {
-            let el = proxy.lock().clone();
-            el.set_locked_state(true);
-            let _ = el.set_state(gst::State::Null);
-            let _ = program.remove(&el);
-        }
-        for (tee, pad) in &self.tee_pads {
-            tee.release_request_pad(pad);
-        }
+        teardown::to_null(&self.cfg.id, &self.program_side(), &self.tee_pads);
         info!(output = %self.cfg.id, "output detached");
+    }
+
+    /// The elements this output keeps in the program pipeline, feed first.
+    fn program_side(&self) -> [gst::Element; 4] {
+        [
+            self.feed_video.clone(),
+            self.feed_audio.clone(),
+            self.vproxy.lock().clone(),
+            self.aproxy.lock().clone(),
+        ]
     }
 }
 

@@ -193,7 +193,7 @@ export class ComposerCanvas {
   down(e) {
     if (e.button !== 0 || !e.isPrimary) return;
     const p = this.at(e);
-    const handle = hitTest(this.handles(), p.x, p.y, grabRadius(this.viewport));
+    const handle = hitTest(this.handles(), p.x, p.y, grabRadius(this.viewport, e.pointerType === "touch" || e.pointerType === "pen"));
     try {
       this.overlay.setPointerCapture(e.pointerId);
     } catch {

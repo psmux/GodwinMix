@@ -111,11 +111,14 @@ export function rank(cmds, query) {
   if (!q) return cmds.slice().sort(byGroupThenTitle);
   const scored = [];
   for (const cmd of cmds) {
-    const hay = (cmd.title + " " + (cmd.method || "") + " " + cmd.group).toLowerCase();
+    // Keywords are the other names a thing goes by ("push destination" for
+    // where a channel is sent on to), and count as much as the start of the title.
+    const words = (cmd.keywords || []).map((k) => k.toLowerCase());
+    const hay = (cmd.title + " " + (cmd.method || "") + " " + cmd.group + " " + words.join(" ")).toLowerCase();
     const title = cmd.title.toLowerCase();
     let score = -1;
     if (title.startsWith(q)) score = 0;
-    else if (hay.startsWith(q)) score = 1;
+    else if (hay.startsWith(q) || words.some((k) => k.startsWith(q))) score = 1;
     else if (title.includes(q)) score = 2;
     else if (hay.includes(q)) score = 3;
     else if (subsequence(hay, q)) score = 4;

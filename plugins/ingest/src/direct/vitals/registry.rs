@@ -60,9 +60,10 @@ impl Vitals {
         lock(&show.judge).limits = limits;
     }
 
-    /// Stop watching every show not in `ids`.
+    /// Stop watching every show not in `ids`. A channel stream somebody is
+    /// looking at is not a show, and stays until the asks stop.
     pub fn keep(&self, ids: &[&str]) {
-        lock(&self.taps).retain(|id, _| ids.contains(&id.as_str()));
+        lock(&self.taps).retain(|id, t| t.peek || ids.contains(&id.as_str()));
     }
 
     fn show(&self, id: &str) -> Option<Arc<Show>> {

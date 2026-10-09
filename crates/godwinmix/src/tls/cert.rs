@@ -1,30 +1,31 @@
 //! Where the control port's certificate comes from: the operator's own files,
 //! or one this mixer makes for itself and keeps.
 //!
-//! A made certificate is sealed in the secret store under `control.tls`, the
-//! way the channels seal the RTMPS one under `channels.tls`, so the private
-//! key never sits in a plain file. The certificate alone, which is public, is
-//! also written beside the runtime store, for a person who wants to trust it
-//! on their other machines instead of clicking through a warning.
+//! A made certificate is signed by the machine's own certificate authority
+//! (`authority.rs`), so a phone that trusts the authority once trusts every
+//! certificate made after it, for a new address or after a renewal. It is
+//! sealed in the secret store under `control.tls`, the way the channels seal
+//! the RTMPS one under `channels.tls`, so the private key never sits in a
+//! plain file. The authority's certificate, which is public, is written
+//! beside the runtime store for a person to trust on their other machines.
+//! A certificate kept from before the authority existed was self signed; it
+//! has no `issuer` and is replaced on the first start.
 
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Context, Result};
 use godwinmix_core::config::ControlTls;
 use godwinmix_core::secrets::Secrets;
-use godwinmix_core::tls_cert::{self, Pair, SERVER_DAYS};
-use tracing::info;
+use godwinmix_core::tls_cert::{self, Pair};
 
-/// Where a made certificate is sealed.
-const SCOPE: &str = "control.tls";
-
-/// Make a new certificate this many days before the old one runs out.
-const RENEW_DAYS: i64 = 30;
+use super::made::made;
 
 /// Where the certificate in use came from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Source {
-    /// Made by this mixer for the names it is reached by.
+    /// Made by this mixer for the names it is reached by, signed by its own
+    /// authority. Still `self_signed` on the wire, which is what it is to a
+    /// browser that has not been told to trust the authority.
     SelfSigned,
     /// The operator's own, from `[control.tls] cert` and `key`.
     Files,
@@ -50,6 +51,9 @@ pub struct Loaded {
     pub source: Source,
     /// The names a made certificate covers. Empty for the operator's own.
     pub names: Vec<String>,
+    /// The authority that signed a made certificate, as PEM. None for the
+    /// operator's own.
+    pub authority: Option<String>,
 }
 
 /// The certificate for `[control.tls]`.
@@ -72,6 +76,14 @@ pub fn obtain(tls: &ControlTls, base: &Path, store: &Secrets, public: &Path, nam
     }
 }
 
+/// Where the authority behind a made certificate is written for people to
+/// trust: beside the runtime store, `godwinmix.control.crt` for `godwinmix.toml`.
+pub fn public_path(config_path: &Path) -> std::path::PathBuf {
+    let mut name = config_path.file_stem().unwrap_or_default().to_os_string();
+    name.push(".control.crt");
+    config_path.with_file_name(name)
+}
+
 fn resolve(base: &Path, path: &str) -> PathBuf {
     let path = godwinmix_host::home::expand(path);
     if path.is_relative() { base.join(path) } else { path }
@@ -89,62 +101,7 @@ fn from_files(cert: &Path, key: &Path) -> Result<Loaded> {
     };
     let pair = Pair { cert: read(cert, "cert")?, key: read(key, "key")? };
     tls_cert::check(&pair).with_context(|| format!("[control.tls] cert {} and key {}", cert.display(), key.display()))?;
-    Ok(Loaded { pair, source: Source::Files, names: Vec::new() })
-}
-
-/// The kept certificate when it still covers `names` and is not about to run
-/// out, otherwise a new one, kept.
-fn made(store: &Secrets, public: &Path, names: &[String]) -> Result<Loaded> {
-    let today = days_now();
-    let kept = kept(store).filter(|(_, covered, made)| names.iter().all(|n| covered.contains(n)) && today - made < SERVER_DAYS - RENEW_DAYS);
-    let (pair, names) = match kept {
-        Some((pair, covered, _)) => (pair, covered),
-        None => (make(store, names, today)?, names.to_vec()),
-    };
-    if let Err(e) = write_public(public, &pair.cert) {
-        tracing::warn!(path = %public.display(), %e, "could not write the certificate for people to download");
-    }
-    Ok(Loaded { pair, source: Source::SelfSigned, names })
-}
-
-fn kept(store: &Secrets) -> Option<(Pair, Vec<String>, i64)> {
-    let pair = Pair { cert: store.get(SCOPE, "cert")?, key: store.get(SCOPE, "key")? };
-    let names = store.get(SCOPE, "names")?.split(',').map(String::from).collect();
-    let made = store.get(SCOPE, "made")?.parse().ok()?;
-    tls_cert::check(&pair).ok()?;
-    Some((pair, names, made))
-}
-
-fn make(store: &Secrets, names: &[String], today: i64) -> Result<Pair> {
-    let label = match super::names::hostname() {
-        Some(host) => format!("GodwinMix on {host}"),
-        None => "GodwinMix".to_string(),
-    };
-    let pair = tls_cert::for_server(names, &label)?;
-    let seal = |field: &str, value: &str| {
-        store.set(SCOPE, field, value).with_context(|| {
-            "sealing the control port's certificate in the secret store. Check that the \
-             secrets folder under GODWINMIX_HOME is writable, or set [control.tls] cert and key"
-        })
-    };
-    seal("cert", &pair.cert)?;
-    seal("key", &pair.key)?;
-    seal("names", &names.join(","))?;
-    seal("made", &today.to_string())?;
-    info!(names = %names.join(", "), "made a certificate for HTTPS on the control port");
-    Ok(pair)
-}
-
-fn write_public(path: &Path, cert: &str) -> std::io::Result<()> {
-    if std::fs::read_to_string(path).is_ok_and(|on_disk| on_disk == cert) {
-        return Ok(());
-    }
-    std::fs::write(path, cert)
-}
-
-fn days_now() -> i64 {
-    let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
-    (secs / 86_400) as i64
+    Ok(Loaded { pair, source: Source::Files, names: Vec::new(), authority: None })
 }
 
 #[cfg(test)]

@@ -294,6 +294,10 @@
           "title": "Stop recording"
         },
         {
+          "command": "output.running",
+          "title": "What is running…"
+        },
+        {
           "command": "output.resources",
           "title": "Resources"
         }

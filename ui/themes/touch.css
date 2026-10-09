@@ -62,7 +62,8 @@
   .panel-section > summary { padding: 13px 12px; }
   .dock-title { min-height: 44px; }
   .dock-title button, .dock-tab { min-height: 44px; min-width: 44px; }
-  .tile .gear { width: 40px; height: 40px; font-size: 18px; margin: -6px -4px -6px 0; }
+  /* flex: none, or a narrow tile squeezes the gear to half a finger. */
+  .tile .gear { flex: none; width: 44px; height: 40px; font-size: 18px; margin: -6px -4px -6px 0; }
   .tile .scene-edit { width: 44px; height: 44px; }
   .tile .scene-warn { width: 36px; height: 36px; }
   .rt-add, .rt-offer, .rt-fold, .rt-ladd { min-height: 44px; }

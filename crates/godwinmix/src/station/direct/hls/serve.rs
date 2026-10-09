@@ -8,7 +8,7 @@
 //! when it is left out, and is carried onto every URI a playlist hands out.
 
 use crate::control::hls::{auth, refuse, Door};
-use crate::station::packager::wire::{PEER_HEADER, SHOW_HEADER};
+use crate::station::packager::wire::{CHANNEL, PEER_HEADER, SHOW_HEADER};
 use crate::station::relay::{http, show_in};
 use crate::station::state::Station;
 use axum::extract::{ConnectInfo, Request, State};
@@ -23,7 +23,7 @@ use std::sync::Arc;
 
 /// The station as a door onto its direct shows' HLS outputs.
 #[derive(Clone)]
-pub struct StationDoor(Arc<Station>);
+pub struct StationDoor(pub(super) Arc<Station>);
 
 fn show_of(st: &Station, req: &Request) -> String {
     show_in(req.uri().query()).unwrap_or_else(|| st.first())
@@ -77,15 +77,22 @@ async fn any(State(st): State<Arc<Station>>, req: Request) -> Response {
     if let Err(r) = auth::admit(&door, &stream, &req) {
         return *r;
     }
-    let Some((addr, secret)) = st.direct.hls.packager() else { return not_up(&st, &show, &output) };
-    let url = format!("http://{addr}{}", req.uri().path_and_query().map(|p| p.as_str()).unwrap_or("/"));
+    let path = req.uri().path_and_query().map(|p| p.as_str().to_string()).unwrap_or_else(|| "/".into());
+    pass_on(&st, req, &show, &output, &path).await
+}
+
+/// Hand a request that was let in to the packager, at `path` on its port,
+/// for the output `output` of `show`.
+pub(super) async fn pass_on(st: &Arc<Station>, req: Request, show: &str, output: &str, path: &str) -> Response {
+    let Some((addr, secret)) = st.direct.hls.packager() else { return not_up(st, show, output) };
+    let url = format!("http://{addr}{path}");
     let (mut parts, body) = req.into_parts();
     // The player was let in here; the packager takes the station's word.
     parts.headers.remove(header::AUTHORIZATION);
     if let Ok(v) = HeaderValue::from_str(&format!("Bearer {secret}")) {
         parts.headers.insert(header::AUTHORIZATION, v);
     }
-    if let Ok(v) = HeaderValue::from_str(&show) {
+    if let Ok(v) = HeaderValue::from_str(show) {
         parts.headers.insert(SHOW_HEADER, v);
     }
     parts.headers.remove(PEER_HEADER);
@@ -95,14 +102,18 @@ async fn any(State(st): State<Arc<Station>>, req: Request) -> Response {
     }
     match http::pass(&st.http, &url, Request::from_parts(parts, body)).await {
         Ok(answer) => answer,
-        Err(_) => not_up(&st, &show, &output),
+        Err(_) => not_up(st, show, output),
     }
 }
 
 /// A 503 a player retries, while the packager is starting or starting again.
 fn not_up(st: &Station, show: &str, output: &str) -> Response {
     let why = st.direct.hls.view(show, output).and_then(|(l, _)| l.error).unwrap_or_else(|| "it is starting".into());
-    let message = format!("Show {show}'s HLS packager is not answering now: {why}. Try again in a few seconds; a player does by itself.");
+    let whose = match show.strip_prefix(CHANNEL) {
+        Some(channel) => format!("Channel {channel}'s watch link"),
+        None => format!("Show {show}'s HLS packager"),
+    };
+    let message = format!("{whose} is not answering now: {why}. Try again in a few seconds; a player does by itself.");
     let mut r = refuse(StatusCode::SERVICE_UNAVAILABLE, message, json!({ "show": show, "output": output, "retry_after_s": 2 }));
     r.headers_mut().insert(header::RETRY_AFTER, HeaderValue::from_static("2"));
     r

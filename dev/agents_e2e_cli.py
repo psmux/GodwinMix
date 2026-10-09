@@ -6,7 +6,20 @@ its shell. These are the same calls the MCP half makes, through that door.
 
 import json
 import os
+import re
 import subprocess
+import time
+
+
+def retry_after(p):
+    """The wait a retryable refusal asks for, in milliseconds, or None."""
+    if p.returncode == 0:
+        return None
+    out = p.stdout + p.stderr
+    if '"retryable":true' not in out:
+        return None
+    m = re.search(r'"retry_after_ms":(\d+)', out)
+    return int(m.group(1)) if m else None
 
 
 def cli_steps(step, gmx, url, token, run):
@@ -15,6 +28,14 @@ def cli_steps(step, gmx, url, token, run):
     def tool(name, args=None, ok=True):
         cmd = [gmx, "tool", name] + ([json.dumps(args)] if args is not None else [])
         p = subprocess.run(cmd, env=env, capture_output=True, text=True, encoding="utf-8", timeout=60)
+        wait = retry_after(p) if ok else None
+        if wait is not None:
+            # The flash guard refuses a take that lands within 360 ms of a cut
+            # that changed the brightness sharply, and the MCP half has just
+            # cut to the wide shot. The refusal says how long to wait; an agent
+            # that does what it says gets the take, so the run does the same.
+            time.sleep(wait / 1000 + 0.05)
+            p = subprocess.run(cmd, env=env, capture_output=True, text=True, encoding="utf-8", timeout=60)
         if (p.returncode == 0) != ok:
             raise AssertionError(f"gmx tool {name} exited {p.returncode}: {p.stdout[-400:]} {p.stderr[-400:]}")
         return p

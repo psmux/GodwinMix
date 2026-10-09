@@ -52,11 +52,11 @@ class AddDestinationRequest(TypedDict, total=False):
     label: Optional[str]
     # What the list calls it. The platform's name when left out.
     platform: str
-    # youtube, facebook, twitch, custom or srt.
+    # youtube, facebook, twitch, custom or srt; or `file` to record the stream on this machine, or `hls` to serve it as a watch link.
     rendition: Union[RenditionChoice, None]
     # Convert the stream before sending it: `{"preset": "youtube-720p30"}` or a rendition request written out. Left out, or one the stream already matches, the stream is sent as it arrives.
     server: Optional[str]
-    # The ingest address. Left out, the platform's own; custom and srt need one.
+    # The ingest address. Left out, the platform's own; custom and srt need one. For `file`, a folder on the mixer (the recordings folder when left out); for `hls`, `hls://` with params such as `?segment_ms=2000`.
     stream: Optional[str]
     # Which of the channel's streams to send. `*`, the default, is the first one live.
 
@@ -482,12 +482,14 @@ class ChannelAddRequest(TypedDict, total=False):
     """`channel.add`."""
 
     app: Optional[str]
-    # Defaults to a slug of the name.
+    # The application name encoders put after the port, as they already type it: `Church`, or `Youth Hall`. Defaults to a slug of the name. Matched without regard to case, so two channels cannot differ only in case.
     auto_source: Optional[bool]
     key_mode: Union[KeyMode, None]
     name: str
     protocols: Optional[List[ChannelProtocol]]
     # Defaults to RTMP alone.
+    secret: Optional[str]
+    # The first key's secret, when encoders already send one (the password after `?psk=`): 6 to 128 letters, digits, `-`, `_`, `.`, `~` or single spaces between them. Left out, the mixer makes one.
 
 class ChannelAdded(TypedDict, total=False):
     """What `channel.add` answers: the channel and its first key."""
@@ -503,6 +505,8 @@ class ChannelKey(TypedDict, total=False):
     hint: str
     # The last four characters, so a person can tell two keys apart.
     id: str
+    imported: bool
+    # True when a person typed the secret (`secret` on `channel.add` or `channel.key.add`), usually to keep a password their encoders already send; false when the mixer made it.
     label: str
 
 class ChannelKeyAddRequest(TypedDict, total=False):
@@ -510,6 +514,8 @@ class ChannelKeyAddRequest(TypedDict, total=False):
 
     id: str
     label: Optional[str]
+    secret: Optional[str]
+    # The secret to keep, when encoders already send one. The same rule as `secret` on `channel.add`. Left out, the mixer makes one.
 
 class ChannelKeyRemoveRequest(TypedDict, total=False):
     """`channel.key.remove`."""
@@ -574,9 +580,20 @@ ChannelStream = TypedDict("ChannelStream", {
     "relay": "Optional[str]",
     "since_ms": "int",
     "source": "Optional[str]",
+    "source_error": "Optional[str]",
     "state": "str",
     "video": "Union[StreamVideo, None]",
 }, total=False)
+
+class ChannelThumbnailRequest(TypedDict, total=False):
+    """`channel.thumbnail`."""
+
+    id: str
+    # The channel.
+    stream: Optional[str]
+    # Which of its streams. The first live one when left out.
+    width: Optional[int]
+    # Pixels across, 16 to 640, made even. 320 when left out.
 
 class ConfigChanged(TypedDict, total=False):
     """One key this call changed, and when the change takes effect."""
@@ -752,6 +769,8 @@ class Destination(TypedDict, total=False):
     enabled: bool
     error: Optional[str]
     # What went wrong last, in words a person can act on.
+    file: Union[RecordingFile, None]
+    # The file a recording destination is writing, or wrote last.
     has_key: bool
     id: str
     # A slug, unique within its channel: `youtube`, `youtube-2`.
@@ -761,7 +780,7 @@ class Destination(TypedDict, total=False):
     plan: Union[DestinationPlan, None]
     # What the plan gave it, while its stream is live.
     platform: str
-    # A platform id from the table: youtube, facebook, twitch, custom, srt.
+    # A platform id from the table: youtube, facebook, twitch, custom, srt, or the two that stay on this machine, file and hls.
     playback: Union[Playback, None]
     # Where a player opens it, for an output this machine serves as HLS.
     reconnects: int
@@ -2386,7 +2405,7 @@ class PlanView(TypedDict, total=False):
     totals: PlanTotals
 
 class Playback(TypedDict, total=False):
-    """The links of an output served as HLS from the control port, each with the output's viewer key on it."""
+    """The links of an output served as HLS from the control port, each with the output's viewer key on it. A channel's watch link is one too: `/hls/channel/<channel>/<destination>/index.m3u8?key=...`."""
 
     dash_url_path: str
     # The same segments as a DASH MPD.
@@ -2592,6 +2611,20 @@ class Record(TypedDict, total=False):
     # A fractional key. Siblings sort by it; see `order.rs`.
     parent: Union[Id, None]
     # The scene this item is in, or the group item it is a child of. Absent for a scene, which hangs off the document itself.
+
+class RecordingFile(TypedDict, total=False):
+    """The file a `file` destination writes: one per time the stream goes live."""
+
+    bytes: int
+    # Bytes written so far.
+    duration_ms: int
+    # How long it has been recording, or ran for once it has closed.
+    name: str
+    # `sunday-service-main-20261009-103000.ts`.
+    open: bool
+    # Whether it is still being written.
+    path: str
+    # The whole path on the machine running the mixer.
 
 class Refused(TypedDict, total=False):
     """One file the import would not take."""
@@ -3572,6 +3605,8 @@ class ThumbnailRequest(TypedDict, total=False):
 class TlsInfo(TypedDict, total=False):
     """`core.info.tls`: what the control port answers HTTPS with. Enough for a page to say "open this address, accept the certificate warning once, and check the fingerprint is this one"."""
 
+    authority: Optional[str]
+    # SHA-256 of the machine's local certificate authority, which signed a certificate this mixer made and is what a phone is told to trust. Its certificate is served at `/ca.crt`. Absent for an operator's own.
     fingerprint: str
     # SHA-256 of the certificate, upper case hex in colon separated pairs, the way a browser's certificate viewer shows it.
     names: List[str]
@@ -3922,7 +3957,7 @@ AgentExt = Union[bool, Dict[str, Any]]
 AgentTool = Union[Literal['claude', 'opencode', 'pi', 'codex', 'gemini', 'cursor', 'vscode'], Literal['other']]
 
 # What an alarm is about.
-AlarmKind = Literal['no-input', 'stall', 'black', 'freeze', 'silence', 'cc-errors', 'loss', 'output-failed', 'governor-refused', 'shed']
+AlarmKind = Literal['no-input', 'stall', 'black', 'freeze', 'silence', 'cc-errors', 'loss', 'output-failed', 'governor-refused', 'shed', 'memory']
 
 # The nine alignment keywords, used to place content inside its frame.
 Align = Literal['top-left', 'top-center', 'top-right', 'center-left', 'center', 'center-right', 'bottom-left', 'bottom-center', 'bottom-right']
@@ -4009,7 +4044,7 @@ Origin = Literal['shipped', 'agent', 'uploaded']
 # The kinds of failure a client may want to tell apart.
 OutputErrorReason = Literal['refused', 'unreachable', 'timed-out', 'not-found', 'rejected', 'closed', 'stalled', 'other']
 
-OutputState = Literal['connecting', 'live', 'reconnecting', 'failed']
+OutputState = Union[Literal['connecting', 'live', 'reconnecting', 'failed'], Literal['stopped']]
 
 # Where an instance runs: core, in-process, sidecar, or node:<name>.
 Place = str
@@ -4088,6 +4123,7 @@ METHODS = (
     {"name": "channel.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/channels"), "summary": 'Every channel with its keys (as hints), the address to publish to over each protocol it has on, and what is live on it; and which ingest ports are open and for which channels.'},
     {"name": "channel.remove", "scope": "admin", "mutating": True, "destructive": True, "rest": ("DELETE", "/api/v1/channels/{id}"), "summary": 'Remove a channel and forget its keys. Sources it made that no scene holds go with it.'},
     {"name": "channel.set", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/channels/{id}/set"), "summary": 'Rename a channel, switch it on or off, or change its application name, whether its streams become sources, how its key is given, which protocols it takes (rtmp, srt, whip) or RTMPS and its port. A port opens when the first channel needs it and closes when the last one stops. Only what is named moves.'},
+    {"name": "channel.thumbnail", "scope": "read", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/channels/{id}/thumbnail"), "summary": "A live channel stream's picture as a small JPEG in base64, {channel, stream, jpeg, width, height, at_ms}, or {pending: true, retry_after_ms} while the first keyframe is on its way. Keyframes only, about one a second, for ten seconds after an ask; nothing is decoded between asks. GET /api/v1/channels/{id}/streams/{stream}/thumbnail.jpg serves the JPEG itself."},
     {"name": "codec.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/codecs"), "summary": 'Every codec and element in the catalogue, which of them this machine actually has, and what it would pick.'},
     {"name": "config.get", "scope": "admin", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/config"), "summary": "The mixer's settings: each key's value in the config file, its default, when a change to it takes effect, and which keys are waiting for a restart. Secrets say only whether one is set."},
     {"name": "config.reset", "scope": "admin", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/config/reset"), "summary": 'Put settings back to their defaults by taking them out of the config file. Answers like config.set.'},
@@ -4156,6 +4192,8 @@ METHODS = (
     {"name": "output.reconnect", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/outputs/{id}/reconnect"), "summary": "Drop and re-establish one destination's connection now, without waiting for its reconnect policy."},
     {"name": "output.remove", "scope": "operate", "mutating": True, "destructive": True, "rest": ("DELETE", "/api/v1/outputs/{id}"), "summary": 'Stop sending to a destination and forget it. Other outputs are unaffected.'},
     {"name": "output.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/outputs/{id}/set"), "summary": 'Change a destination in place: a new address with a new stream key, a new reconnect policy, a deeper outage buffer. The address is write only, so a client that only wants the buffer never has to hold the key.'},
+    {"name": "output.start", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/outputs/{id}/start"), "summary": 'Send to a stopped destination again, with the address and key it kept.'},
+    {"name": "output.stop", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/outputs/{id}/stop"), "summary": 'Stop sending the programme to one destination and keep it, address, key and all, for output.start. Viewers on that platform see the stream end.'},
     {"name": "path.create", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/path/create"), "summary": 'Make one new folder inside a folder path.list shows, and list it. A folder that is already there is listed rather than refused.'},
     {"name": "path.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/path/list"), "summary": "The folders in one folder on the mixer, and whether each is writable, for a folder picker. Only the home folder and the mixer's own folders are shown; files never are."},
     {"name": "pipeline.clock", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/pipeline/clock"), "summary": 'The clock every pipeline is running against, and how far each one has got.'},
@@ -4421,6 +4459,7 @@ class GeneratedMethods:
         auto_source: Optional[bool] = None,
         key_mode: Optional[Union[KeyMode, None]] = None,
         protocols: Optional[List[ChannelProtocol]] = None,
+        secret: Optional[str] = None,
     ) -> ChannelAdded:
         """Make a channel and its first key, which is in this answer. channel.key.reveal reads it again later."""
         params: Dict[str, Any] = {}
@@ -4433,6 +4472,8 @@ class GeneratedMethods:
             params["key_mode"] = key_mode
         if protocols is not None:
             params["protocols"] = protocols
+        if secret is not None:
+            params["secret"] = secret
         return await self._call("channel.add", params)
 
     async def channel_certificate_generate(
@@ -4542,12 +4583,15 @@ class GeneratedMethods:
         id: str,
         *,
         label: Optional[str] = None,
+        secret: Optional[str] = None,
     ) -> KeyAdded:
         """Make another key for a channel, to give to one more person or encoder. The key is in this answer, and channel.key.reveal reads it again later."""
         params: Dict[str, Any] = {}
         params["id"] = id
         if label is not None:
             params["label"] = label
+        if secret is not None:
+            params["secret"] = secret
         return await self._call("channel.key.add", params)
 
     async def channel_key_remove(
@@ -4618,6 +4662,22 @@ class GeneratedMethods:
         if rtmps is not None:
             params["rtmps"] = rtmps
         return await self._call("channel.set", params)
+
+    async def channel_thumbnail(
+        self,
+        id: str,
+        *,
+        stream: Optional[str] = None,
+        width: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """A live channel stream's picture as a small JPEG in base64, {channel, stream, jpeg, width, height, at_ms}, or {pending: true, retry_after_ms} while the first keyframe is on its way. Keyframes only, about one a second, for ten seconds after an ask; nothing is decoded between asks. GET /api/v1/channels/{id}/streams/{stream}/thumbnail.jpg serves the JPEG itself."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        if stream is not None:
+            params["stream"] = stream
+        if width is not None:
+            params["width"] = width
+        return await self._call("channel.thumbnail", params)
 
     async def codec_list(
         self,
@@ -5592,6 +5652,24 @@ class GeneratedMethods:
             params["uri"] = uri
         params.update(extra)
         return await self._call("output.set", params)
+
+    async def output_start(
+        self,
+        id: str,
+    ) -> OutputStatus:
+        """Send to a stopped destination again, with the address and key it kept."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        return await self._call("output.start", params)
+
+    async def output_stop(
+        self,
+        id: str,
+    ) -> OutputStatus:
+        """Stop sending the programme to one destination and keep it, address, key and all, for output.start. Viewers on that platform see the stream end."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        return await self._call("output.stop", params)
 
     async def path_create(
         self,

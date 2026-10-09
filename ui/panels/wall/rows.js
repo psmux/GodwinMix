@@ -4,6 +4,7 @@
 import { el } from "../../shell/dom.js";
 import { alarms, inputCell, loadCell, mixSwitch, outputChip, rateCell } from "./cells.js";
 import { healthOf, mixed, pictured } from "./model.js";
+import { channelTile } from "./channel-rows.js";
 
 export const COLUMNS = [
   ["pic", ""], ["name", "Show"], ["input", "Input"], ["kbps", "Bitrate"],
@@ -81,17 +82,18 @@ export function tile(show, ctx) {
 /** One line of tiles: what the virtual list draws in tile view. */
 export function tileLine(item, ctx) {
   if (item.kind === "group") return band(item);
-  return el("div.wl-tiles", { role: "row", style: { gridTemplateColumns: `repeat(${ctx.cols}, minmax(0, 1fr))` } }, item.shows.map((s) => tile(s, ctx)));
+  return el("div.wl-tiles", { role: "row", style: { gridTemplateColumns: `repeat(${ctx.cols}, minmax(0, 1fr))` } }, item.shows.map((s) => (s.kind === "channel" ? channelTile(s, ctx) : tile(s, ctx))));
 }
 
-/** Rows into lines of `cols` tiles, a band on its own line. */
+/** Rows into lines of `cols` tiles, a band on its own line. A channel
+ * stream goes into a line as itself, since it is not a show. */
 export function lines(items, cols) {
   const out = [];
   let line = null;
   for (const it of items) {
     if (it.kind === "group") { out.push(it); line = null; continue; }
     if (!line || line.shows.length === cols) out.push((line = { kind: "line", shows: [] }));
-    line.shows.push(it.show);
+    line.shows.push(it.kind === "channel" ? it : it.show);
   }
   return out;
 }

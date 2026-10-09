@@ -157,6 +157,36 @@ fn read_all(_pids: &[u32]) -> HashMap<u32, Sample> {
     HashMap::new()
 }
 
+/// The memory a process holds for itself and nobody else, for a guard that
+/// has to tell growth from sharing.
+///
+/// Windows answers with the private commit, which a trimmed working set does
+/// not hide. Linux answers with the resident anonymous memory from
+/// `/proc/<pid>/status`, which is where buffers live. Elsewhere it is the
+/// resident size `ps` gives, the closest there is without a native call.
+/// `None` for a process that has gone or cannot be read.
+pub fn private_bytes(pid: u32) -> Option<u64> {
+    private_of(pid)
+}
+
+#[cfg(windows)]
+fn private_of(pid: u32) -> Option<u64> {
+    win::private_bytes(pid)
+}
+
+#[cfg(target_os = "linux")]
+fn private_of(pid: u32) -> Option<u64> {
+    let text = std::fs::read_to_string(format!("/proc/{pid}/status")).ok()?;
+    let line = text.lines().find(|l| l.starts_with("RssAnon:"))?;
+    let kb: u64 = line.split_whitespace().nth(1)?.parse().ok()?;
+    Some(kb * 1024)
+}
+
+#[cfg(not(any(windows, target_os = "linux")))]
+fn private_of(pid: u32) -> Option<u64> {
+    read_all(&[pid]).get(&pid).and_then(|s| s.rss_bytes)
+}
+
 /// How often the numbers are refreshed. 03 section 6: every second.
 pub const REFRESH: Duration = Duration::from_secs(1);
 
@@ -192,6 +222,22 @@ mod tests {
         }
         let cpu = sampler.sample(&[me])[&me].cpu_percent.expect("a cpu reading");
         assert!(cpu > 10.0, "{cpu}% after spinning ({spin})");
+    }
+
+    #[test]
+    fn this_process_has_private_memory_and_a_gone_one_has_none() {
+        // Four megabytes of our own, written to so every page is resident.
+        // A small test binary on Linux held 672 KiB of anonymous memory and
+        // nothing more, so a bare process says little; one that is known to
+        // hold this much must show at least this much.
+        let held = vec![1u8; 4 * 1024 * 1024];
+        let Some(bytes) = private_bytes(std::process::id()) else {
+            println!("skipping: this machine has no way to read a private size");
+            return;
+        };
+        assert!(bytes >= held.len() as u64, "{bytes} bytes, while this process holds {} of its own", held.len());
+        drop(std::hint::black_box(held));
+        assert_eq!(private_bytes(u32::MAX), None);
     }
 
     #[test]

@@ -122,6 +122,7 @@ function commands(client) {
     cmd("source.add-kind", "Add a source of one kind", "Sources", "", true),
     cmd("output.record", "Start recording", "Outputs"),
     cmd("output.stop-recording", "Stop recording", "Outputs"),
+    cmd("output.running", "What is running, and stop it", "Outputs"),
     cmd("output.resources", "Show resources", "Outputs"),
     cmd("help.devices", "Open on another device", "Help"),
     cmd("help.agents", "Connect an AI agent", "Help"),

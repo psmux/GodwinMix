@@ -64,12 +64,13 @@ export class ChannelStub {
     return c;
   }
 
-  newKey(c, label) {
+  newKey(c, label, typed) {
     this.n += 1;
     // Different every time, and the same on every run, so a test can say what it expects.
     const abc = "Xq7Lm2Pz9Rv4Tw8YbN3cK6hJ5dF";
-    const secret = "k" + this.n + [...Array(14)].map((_, i) => abc[(i * 7 + this.n * 5) % abc.length]).join("");
+    const secret = typed || "k" + this.n + [...Array(14)].map((_, i) => abc[(i * 7 + this.n * 5) % abc.length]).join("");
     const key = { id: `key-${this.n}`, label: label || `Key ${c.keys.length + 1}`, created: "2026-09-29T10:00:00Z", hint: secret.slice(-4) };
+    if (typed) key.imported = true;
     c.keys.push(key);
     this.secrets.set(key.id, secret);
     return { id: key.id, label: key.label, secret };
@@ -102,17 +103,22 @@ const METHODS = {
   "channel.get"({ id }) {
     return this.channel(id);
   },
-  "channel.add"({ name, app, auto_source, key_mode }) {
-    const id = app || slugify(name);
+  "channel.add"({ name, app, auto_source, key_mode, secret }) {
+    // The id is always a slug; the address keeps what was typed, as the core does.
+    const id = slugify(app || name);
+    const address = app || id;
+    const other = [...this.channels.values()].find((c) => c.app.toLowerCase() === address.toLowerCase());
+    if (other) throw Object.assign(new Error(`the address '${address}' is already the channel '${other.id}'. Two channels cannot share one.`), { code: -32602, data: { field: "app", channel: other.id } });
     if (this.channels.has(id)) throw Object.assign(new Error(`A channel called "${id}" is here already. Pick another name.`), { code: -32602, data: { id } });
+    if (secret !== undefined && secret.length < 6) throw Object.assign(new Error("that secret cannot be a key: it is too short."), { code: -32602, data: { field: "secret", min_len: 6 } });
     const c = {
-      id, name, app: id, enabled: true, auto_source: auto_source !== false, key_mode: key_mode || "query", keys: [],
+      id, name, app: address, enabled: true, auto_source: auto_source !== false, key_mode: key_mode || "query", keys: [],
       protocols: ["rtmp"], rtmps: { enabled: false, port: 443 },
-      publish: { server: `${this.urls[0]}/${id}`, example: `${this.urls[0]}/${id}/main?psk=<key>` },
+      publish: { server: `${this.urls[0]}/${address}`, example: `${this.urls[0]}/${address}/main?psk=<key>` },
       streams: [], destinations: [],
     };
     this.channels.set(id, c);
-    const key = this.newKey(c);
+    const key = this.newKey(c, undefined, secret);
     this.changed(id);
     return { channel: c, key };
   },
@@ -128,8 +134,11 @@ const METHODS = {
     this.emit("event", { name: "channel.removed", params: { id } });
     return { removed: id };
   },
-  "channel.key.add"({ id, label }) {
-    const key = this.newKey(this.channel(id), label);
+  "channel.key.add"({ id, label, secret }) {
+    const c = this.channel(id);
+    const twin = c.keys.find((k) => this.secrets.get(k.id) === secret);
+    if (secret && twin) throw Object.assign(new Error(`the channel '${id}' already has that secret, as its key '${twin.id}'.`), { code: -32602, data: { field: "secret", channel: id, key: twin.id } });
+    const key = this.newKey(c, label, secret);
     this.changed(id);
     return { key };
   },
@@ -153,7 +162,7 @@ const METHODS = {
     c.destinations.push({
       id: n === 1 ? base : `${base}-${n}`, platform: p.platform, label: p.label || "", uri_host: (p.server || "").replace(/^(\w+:\/\/[^/?]+).*$/, "$1"),
       // A whole address pasted into a custom server carries its own key.
-      has_key: !!p.key || p.platform === "srt" || (p.platform === "custom" && /^\w+:\/\/[^/]+\/[^/]+\/./.test(p.server || "")), stream: p.stream || "*", enabled: p.enabled !== false, state: p.enabled === false ? "off" : "waiting",
+      has_key: !!p.key || p.platform === "srt" || p.platform === "file" || p.platform === "hls" || (p.platform === "custom" && /^\w+:\/\/[^/]+\/[^/]+\/./.test(p.server || "")), stream: p.stream || "*", enabled: p.enabled !== false, state: p.enabled === false ? "off" : "waiting",
       since_ms: 0, kbps: 0, reconnects: 0, error: null,
       ...(p.rendition ? { rendition: p.rendition } : {}),
     });

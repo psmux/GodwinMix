@@ -9,10 +9,13 @@
 //! packager on loopback (`serve.rs`).
 //!
 //! The packager runs only while at least one HLS output of a direct show is
-//! on (`keep.rs`), and is started again when it dies. Meanwhile its outputs
-//! report `reconnecting`, or `failed` once it keeps dying, with why.
+//! on, or a channel's watch link (`channel.rs`), and is started again when it
+//! dies (`keep.rs`). Meanwhile its outputs report `reconnecting`, or `failed`
+//! once it keeps dying, with why.
 
 mod book;
+pub mod channel;
+mod channel_serve;
 mod child;
 pub mod edit;
 mod keep;
@@ -22,6 +25,7 @@ mod wants;
 
 pub use edit::check_sound;
 pub use serve::router;
+pub use channel_serve::router as channel_router;
 
 use crate::station::packager::wire::{Report, Want};
 use crate::station::state::Station;
@@ -40,6 +44,9 @@ type Key = (String, String);
 #[derive(Default)]
 pub struct Packagers {
     book: Mutex<Book>,
+    /// One apply at a time: the direct table's thread and the channels both
+    /// call it, and the later must not be overwritten by the earlier.
+    applying: Mutex<()>,
     wake: tokio::sync::Notify,
     runtime: OnceLock<tokio::runtime::Handle>,
 }
@@ -80,7 +87,9 @@ impl Packagers {
     /// is something for it to do. Called on the table's thread after every
     /// table, never on a handler. Never waits on the packager.
     pub fn apply(&self, st: &Arc<Station>) {
-        let wanted = wants::wants(st);
+        let _one = self.applying.lock();
+        let mut wanted = wants::wants(st);
+        wanted.extend(channel::wants(st));
         let mut book = self.book.lock();
         let before: Vec<Want> = book.cards.values().map(|c| c.want.clone()).collect();
         let mut cards = BTreeMap::new();

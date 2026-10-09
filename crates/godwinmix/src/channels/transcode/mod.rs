@@ -48,6 +48,7 @@ use parking_lot::Mutex;
 use serde_json::{json, Value};
 
 pub use machine::Machine;
+pub use shed::RETRY;
 pub use price::assumed_input;
 use outcome::Outcome;
 use state::State;

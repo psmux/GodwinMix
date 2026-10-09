@@ -3,7 +3,7 @@
 
 import { el, svg } from "../../shell/dom.js";
 import { errorToast } from "../../shell/toast.js";
-import { isLive, liveCount, bases } from "./model.js";
+import { isLive, liveCount, bases, inUrl } from "./model.js";
 import { keyed, write, copy } from "./keyed.js";
 import { streamRow } from "./streams.js";
 import { destinationStrip } from "./distribute.js";
@@ -90,13 +90,17 @@ export function channelCard(view, first) {
     node,
     update,
     connect: (want) => fold(want, false),
-    tick: () => { for (const row of rows.values()) row.tick?.(); },
+    tick: () => {
+      for (const row of rows.values()) row.tick?.();
+      strip.tick();
+    },
+    picture: () => { for (const row of rows.values()) row.picture?.(); },
   };
 }
 
 function serverOf(view, channel) {
   const base = bases(view.model, channel)[0];
-  return base ? `${base}/${channel.app}` : (channel.publish && channel.publish.server) || "";
+  return base ? `${base}/${inUrl(channel.app)}` : (channel.publish && channel.publish.server) || "";
 }
 
 function waitingLine(view, channel, openConnect) {

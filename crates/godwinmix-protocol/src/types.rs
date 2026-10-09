@@ -48,6 +48,9 @@ pub enum OutputState {
     Live,
     Reconnecting,
     Failed,
+    /// A person stopped it with `output.stop`. Nothing is sent, and the
+    /// address and key are kept for `output.start`.
+    Stopped,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -567,6 +570,11 @@ pub struct TlsInfo {
     pub names: Vec<String>,
     /// `https://` addresses this mixer can be opened at, the LAN one first.
     pub urls: Vec<String>,
+    /// SHA-256 of the machine's local certificate authority, which signed a
+    /// certificate this mixer made and is what a phone is told to trust. Its
+    /// certificate is served at `/ca.crt`. Absent for an operator's own.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub authority: Option<String>,
 }
 
 /// How a core that exits gets started again.

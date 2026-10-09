@@ -89,9 +89,10 @@ HTTPS on the control port, on the same port as HTTP. See
 | `cert` | unset | a PEM certificate file, full chain, to use instead of the one the mixer makes. Relative paths are read from the config file's folder. Needs `key` |
 | `key` | unset | the PEM private key that goes with `cert` |
 
-With neither `cert` nor `key` the mixer makes a self signed certificate on the
-first start, seals its key in the secret store and writes the certificate
-beside the config as `<config name>.control.crt`. All three keys take effect
+With neither `cert` nor `key` the mixer makes a certificate authority for the
+machine and a certificate signed by it on the first start, seals both keys in
+the secret store and writes the authority's certificate beside the config as
+`<config name>.control.crt`, which it also serves at `/ca.crt` and `/ca.pem`. All three keys take effect
 on the next start. `core.info` reports what is in force under `tls`.
 
 ## `[hardware]`
@@ -237,6 +238,27 @@ cleared once the source has stayed live for a minute after its last restart,
 not at its first frame: on 2026-10-05 a page that came back for two seconds
 between stalls was rebuilt 43 times in an hour because its first frame cleared
 it every time.
+
+## `[memory]`
+
+The show's memory guard. Every five seconds the show reads its own private
+memory (the commit size on Windows, the resident anonymous memory on Linux,
+the resident size on macOS) and compares it with this.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `guard_mb` | unset | megabytes past which the show raises a `memory` alarm, names its five fullest queues in the log and restarts the source whose queue holds the most. Unset is a quarter of the machine's memory or 4096, whichever is lower. 0 switches the guard off. Takes effect at the next check, without a restart |
+
+The guard restarts a source only when one of its queues holds at least
+64 MB, and then waits 30 seconds before it restarts anything else. The
+programme, the encoder and the outputs are never restarted by it: their
+queues are named in the log and left alone. The alarm clears when the show
+falls under nine tenths of the threshold. [Show health](show-health.md#memory)
+says how it reaches the wall.
+
+It is the second line, not the first. Every queue the mixer builds already
+has a byte and a buffer limit behind its time limit, so a source whose
+timestamps stop counting is held where it is rather than queued without end.
 
 ## `[vitals]`
 

@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#2d2d2d">
+<!-- Tries the mixer again every ten seconds. The service worker answers this
+     page in place of the one asked for, so a reload asks for that one again. -->
+<meta http-equiv="refresh" content="10">
+<title>GodwinMix: the mixer is not answering</title>
+<style>
+  body { margin: 0; padding: max(24px, env(safe-area-inset-top)) 20px 24px; background: #232323; color: #e6e6e6;
+         font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 34em; margin: 0 auto; }
+  h1 { font-size: 22px; margin: 8px 0 12px; }
+  p, li { color: #a6a6a6; }
+  li { margin-bottom: 8px; }
+  strong { color: #e6e6e6; }
+  a { display: inline-block; margin-top: 8px; padding: 12px 20px; border-radius: 10px; background: #5590ff;
+      color: #101010; font-weight: 600; text-decoration: none; }
+</style>
+</head>
+<body>
+<main>
+  <h1>The mixer is not answering</h1>
+  <p>This app is the control surface of a GodwinMix mixer, and it could not reach the mixer just now.
+     If the mixer is running, whatever it is sending keeps going. Only this screen has lost it.</p>
+  <ul>
+    <li><strong>Is the mixer running?</strong> Check the machine it runs on, or the desktop app there.</li>
+    <li><strong>Is this device on the same network?</strong> A phone that dropped off the Wi-Fi onto mobile data cannot see the mixer. A VPN on either end can hide it too.</li>
+    <li><strong>Is the address still right?</strong> The app opens the address it was installed from. If the mixer's machine now has a different address on the network, open the new one in the browser and install the app again from there.</li>
+  </ul>
+  <p>This screen tries again every ten seconds.</p>
+  <a href="">Try again now</a>
+</main>
+</body>
+</html>

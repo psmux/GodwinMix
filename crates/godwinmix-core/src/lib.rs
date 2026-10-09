@@ -76,6 +76,7 @@ pub mod whep;
 pub mod state;
 pub mod tasks;
 pub mod vitals;
+pub mod tls_authority;
 pub mod tls_cert;
 pub mod zip;
 

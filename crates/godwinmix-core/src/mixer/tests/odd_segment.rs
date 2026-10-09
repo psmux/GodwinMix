@@ -67,7 +67,12 @@ async fn a_source_sending_a_byte_segment_is_restarted_and_the_programme_runs_on(
     let state = mix.sources.iter().find(|s| s.input.id == id).map(|s| s.input.observed_state());
     mix.shutdown();
 
-    assert!(p1 > p0 + 200, "the programme stopped: {p0} then {p1} frames over eight seconds");
+    // Eight seconds at 30 fps is 240 frames. A stopped programme makes none;
+    // the Windows runner, with the suite beside it, made 192, which is a
+    // programme that ran slowly and never stopped. So the 200 is divided by
+    // the slack a slow runner declares.
+    let floor = (200.0 / crate::plugin::harness::timing_slack()) as u64;
+    assert!(p1 > p0 + floor, "the programme stopped: {p0} then {p1} frames over eight seconds");
     assert!(restarted, "the source was not restarted");
     assert_eq!(state, Some(SourceState::Live), "the source did not come back");
     assert!(s2 > s1, "the source's picture did not come back: {s0}, {s1}, {s2}");

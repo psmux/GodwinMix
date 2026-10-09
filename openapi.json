@@ -210,7 +210,7 @@
             ]
           },
           "platform": {
-            "description": "youtube, facebook, twitch, custom or srt.",
+            "description": "youtube, facebook, twitch, custom or srt; or `file` to record the\nstream on this machine, or `hls` to serve it as a watch link.",
             "type": "string"
           },
           "rendition": {
@@ -225,7 +225,7 @@
             "description": "Convert the stream before sending it: `{\"preset\": \"youtube-720p30\"}`\nor a rendition request written out. Left out, or one the stream\nalready matches, the stream is sent as it arrives."
           },
           "server": {
-            "description": "The ingest address. Left out, the platform's own; custom and srt need\none.",
+            "description": "The ingest address. Left out, the platform's own; custom and srt need\none. For `file`, a folder on the mixer (the recordings folder when\nleft out); for `hls`, `hls://` with params such as `?segment_ms=2000`.",
             "type": [
               "string",
               "null"
@@ -538,7 +538,8 @@
           "loss",
           "output-failed",
           "governor-refused",
-          "shed"
+          "shed",
+          "memory"
         ],
         "type": "string"
       },
@@ -1732,7 +1733,7 @@
         "description": "`channel.add`.",
         "properties": {
           "app": {
-            "description": "Defaults to a slug of the name.",
+            "description": "The application name encoders put after the port, as they already\ntype it: `Church`, or `Youth Hall`. Defaults to a slug of the name.\nMatched without regard to case, so two channels cannot differ only in\ncase.",
             "type": [
               "string",
               "null"
@@ -1764,6 +1765,13 @@
             },
             "type": [
               "array",
+              "null"
+            ]
+          },
+          "secret": {
+            "description": "The first key's secret, when encoders already send one (the password\nafter `?psk=`): 6 to 128 letters, digits, `-`, `_`, `.`, `~` or single\nspaces between them. Left out, the mixer makes one.",
+            "type": [
+              "string",
               "null"
             ]
           }
@@ -1803,6 +1811,10 @@
           "id": {
             "type": "string"
           },
+          "imported": {
+            "description": "True when a person typed the secret (`secret` on `channel.add` or\n`channel.key.add`), usually to keep a password their encoders already\nsend; false when the mixer made it.",
+            "type": "boolean"
+          },
           "label": {
             "type": "string"
           }
@@ -1822,6 +1834,13 @@
             "type": "string"
           },
           "label": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "secret": {
+            "description": "The secret to keep, when encoders already send one. The same rule as\n`secret` on `channel.add`. Left out, the mixer makes one.",
             "type": [
               "string",
               "null"
@@ -2097,6 +2116,13 @@
               "null"
             ]
           },
+          "source_error": {
+            "description": "Why the mixer would not make this stream a source, while it will not:\nthe stream is in, and nothing in a scene can show it. Gone once it does.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "state": {
             "description": "`live`, or `idle` for one that left while a scene holds its source.",
             "type": "string"
@@ -2117,6 +2143,35 @@
           "state",
           "since_ms",
           "from"
+        ],
+        "type": "object"
+      },
+      "ChannelThumbnailRequest": {
+        "description": "`channel.thumbnail`.",
+        "properties": {
+          "id": {
+            "description": "The channel.",
+            "type": "string"
+          },
+          "stream": {
+            "description": "Which of its streams. The first live one when left out.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "width": {
+            "description": "Pixels across, 16 to 640, made even. 320 when left out.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id"
         ],
         "type": "object"
       },
@@ -2726,6 +2781,17 @@
               "null"
             ]
           },
+          "file": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RecordingFile"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The file a recording destination is writing, or wrote last."
+          },
           "has_key": {
             "type": "boolean"
           },
@@ -2754,7 +2820,7 @@
             "description": "What the plan gave it, while its stream is live."
           },
           "platform": {
-            "description": "A platform id from the table: youtube, facebook, twitch, custom, srt.",
+            "description": "A platform id from the table: youtube, facebook, twitch, custom, srt,\nor the two that stay on this machine, file and hls.",
             "type": "string"
           },
           "playback": {
@@ -5961,7 +6027,7 @@
           },
           {
             "const": "alarm",
-            "description": "Something a viewer notices, or nothing is going out: no input, a\nstall, black, a frozen picture, silence, a failed output, a rendition\nthe governor refused or shed.",
+            "description": "Something a viewer notices, or nothing is going out: no input, a\nstall, black, a frozen picture, silence, a failed output, a rendition\nthe governor refused or shed, a show past its memory guard.",
             "type": "string"
           },
           {
@@ -7926,13 +7992,22 @@
         ]
       },
       "OutputState": {
-        "enum": [
-          "connecting",
-          "live",
-          "reconnecting",
-          "failed"
-        ],
-        "type": "string"
+        "oneOf": [
+          {
+            "enum": [
+              "connecting",
+              "live",
+              "reconnecting",
+              "failed"
+            ],
+            "type": "string"
+          },
+          {
+            "const": "stopped",
+            "description": "A person stopped it with `output.stop`. Nothing is sent, and the\naddress and key are kept for `output.start`.",
+            "type": "string"
+          }
+        ]
       },
       "OutputStats": {
         "description": "What one output is doing.",
@@ -8487,7 +8562,7 @@
         "type": "object"
       },
       "Playback": {
-        "description": "The links of an output served as HLS from the control port, each with\nthe output's viewer key on it.",
+        "description": "The links of an output served as HLS from the control port, each with\nthe output's viewer key on it. A channel's watch link is one too:\n`/hls/channel/<channel>/<destination>/index.m3u8?key=...`.",
         "properties": {
           "dash_url_path": {
             "description": "The same segments as a DASH MPD.",
@@ -9139,6 +9214,43 @@
         "required": [
           "id",
           "order"
+        ],
+        "type": "object"
+      },
+      "RecordingFile": {
+        "description": "The file a `file` destination writes: one per time the stream goes live.",
+        "properties": {
+          "bytes": {
+            "description": "Bytes written so far.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "duration_ms": {
+            "description": "How long it has been recording, or ran for once it has closed.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "name": {
+            "description": "`sunday-service-main-20261009-103000.ts`.",
+            "type": "string"
+          },
+          "open": {
+            "description": "Whether it is still being written.",
+            "type": "boolean"
+          },
+          "path": {
+            "description": "The whole path on the machine running the mixer.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "path",
+          "bytes",
+          "duration_ms",
+          "open"
         ],
         "type": "object"
       },
@@ -12359,6 +12471,13 @@
       "TlsInfo": {
         "description": "`core.info.tls`: what the control port answers HTTPS with.\n\nEnough for a page to say \"open this address, accept the certificate\nwarning once, and check the fingerprint is this one\".",
         "properties": {
+          "authority": {
+            "description": "SHA-256 of the machine's local certificate authority, which signed a\ncertificate this mixer made and is what a phone is told to trust. Its\ncertificate is served at `/ca.crt`. Absent for an operator's own.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "fingerprint": {
             "description": "SHA-256 of the certificate, upper case hex in colon separated pairs,\nthe way a browser's certificate viewer shows it.",
             "type": "string"
@@ -13902,6 +14021,55 @@
         "x-destructive": false,
         "x-idempotent": true,
         "x-scope": "admin"
+      }
+    },
+    "/api/v1/channels/{id}/thumbnail": {
+      "post": {
+        "description": "JSON-RPC method `channel.thumbnail`. Needs the `read` scope.",
+        "operationId": "channel.thumbnail",
+        "parameters": [
+          {
+            "description": "The id, as listed by the matching list call.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChannelThumbnailRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "A live channel stream's picture as a small JPEG in base64, {channel, stream, jpeg, width, height, at_ms}, or {pending: true, retry_after_ms} while the first keyframe is on its way. Keyframes only, about one a second, for ten seconds after an ask; nothing is decoded between asks. GET /api/v1/channels/{id}/streams/{stream}/thumbnail.jpg serves the JPEG itself.",
+        "tags": [
+          "channel"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
       }
     },
     "/api/v1/codecs": {
@@ -16375,6 +16543,104 @@
           }
         },
         "summary": "Change a destination in place: a new address with a new stream key, a new reconnect policy, a deeper outage buffer. The address is write only, so a client that only wants the buffer never has to hold the key.",
+        "tags": [
+          "output"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/outputs/{id}/start": {
+      "post": {
+        "description": "JSON-RPC method `output.start`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "output.start",
+        "parameters": [
+          {
+            "description": "The id, as listed by the matching list call.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IdRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OutputStatus"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Send to a stopped destination again, with the address and key it kept.",
+        "tags": [
+          "output"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/outputs/{id}/stop": {
+      "post": {
+        "description": "JSON-RPC method `output.stop`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "output.stop",
+        "parameters": [
+          {
+            "description": "The id, as listed by the matching list call.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IdRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OutputStatus"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Stop sending the programme to one destination and keep it, address, key and all, for output.start. Viewers on that platform see the stream end.",
         "tags": [
           "output"
         ],

@@ -10,6 +10,10 @@ Where a feature does not exist yet, the page says so in a sentence and names
 the command that will do it. Nothing here shows output from a command that
 cannot be run today.
 
+Engineers and operators who want everything on one page, the install paths,
+what has been verified, the pipeline and the platforms, start at
+[Technical details](technical-details.md).
+
 ## Tutorials
 
 Start here if you have never run it.
@@ -102,6 +106,7 @@ Start here if you have never run it.
 * [Change a setting](how-to/change-a-setting.md)
 * [Debug a show](how-to/debug-a-show.md)
 * [The desktop app](how-to/desktop-app.md)
+* [Stop streaming, and quit without leaving anything running](how-to/stop-streaming-and-quit.md)
 * [Run a show from phones](how-to/run-a-show-from-phones.md): let the network in, scan a code, take shots from a phone
 * [Import your scenes from OBS](how-to/import-from-obs.md)
 * [Make a graphic](how-to/make-a-graphic.md)
@@ -118,11 +123,14 @@ Start here if you have never run it.
 * [Add shows in bulk](how-to/add-shows-in-bulk.md)
 * [Benchmark GodwinMix at headend scale](how-to/benchmark-at-scale.md)
 * [Take streams from several encoders into one channel](how-to/channels.md)
+* [Move your channels from Livebox](how-to/move-from-livebox.md): keep the address and password your encoders already send
 * [Customize the workspace](how-to/customize-the-workspace.md)
 * [Run the mixer from a phone or a tablet](how-to/use-a-phone-or-tablet.md): long press for the item menu, double tap to open, drag by the grip
+* [Install the control page as an app](how-to/install-as-an-app.md): on a phone or a desktop, and the certificate a phone needs for it
 * [Take headend feeds into direct shows](how-to/headend-feeds.md)
 * [Watch many shows at once](how-to/monitor-many-shows.md)
 * [Send a channel on to YouTube, Facebook or Twitch](how-to/restream-a-channel.md)
+* [Record a channel and share a watch link](how-to/record-a-channel.md)
 * [Save and open a project](how-to/save-and-open-a-project.md)
 * [Send in several formats](how-to/send-in-several-formats.md)
 * [Receive and send MPEG-TS over UDP and multicast](how-to/udp-and-multicast.md)
@@ -142,6 +150,7 @@ Start here if you have never run it.
 * [Configuration, every key](reference/configuration.md)
 * [The config methods: config.get, config.set, config.reset, config.schema](reference/config-methods.md)
 * [Device tokens: token.create, token.list, token.revoke](reference/device-tokens.md)
+* [Letting other devices reach the mixer: network.share](reference/network-share.md)
 * [Presets, every manifest key and the merge rules](reference/presets.md)
 * [Scene commands, every method with an example](reference/scene-commands.md)
 * [Transitions: the built in types, the plugin contract, the accuracy](reference/transitions.md)

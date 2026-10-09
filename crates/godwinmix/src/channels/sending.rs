@@ -66,27 +66,33 @@ impl Channels {
                     if s.live.state != live.state {
                         s.since = since;
                     }
-                    s.live = live;
+                    s.live = live.clone();
                     moved
                 }
                 None => {
-                    sending.push(Sending { channel: channel.clone(), id, live, since });
+                    sending.push(Sending { channel: channel.clone(), id: id.clone(), live: live.clone(), since });
                     true
                 }
             }
         };
         if moved {
+            self.hook_destination(&channel, &id, &live);
             self.announce(&channel);
         }
     }
 
-    /// Bit rates from a `streams` answer's `destinations` rows.
+    /// Bit rates, and a recording's file, from a `streams` answer's
+    /// `destinations` rows.
     pub(super) fn destination_rates(&self, rows: &[Value]) {
         let mut sending = self.sending.lock();
         for row in rows {
             let (channel, id) = (row["channel"].as_str().unwrap_or(""), row["destination"].as_str().unwrap_or(""));
             if let Some(s) = sending.iter_mut().find(|s| s.is(channel, id)) {
                 s.live.kbps = row["kbps"].as_u64().unwrap_or(0) as u32;
+                // A recording's size and length move with every read.
+                if let Some(file) = row.get("file").and_then(|f| serde_json::from_value(f.clone()).ok()) {
+                    s.live.file = Some(file);
+                }
             }
         }
     }

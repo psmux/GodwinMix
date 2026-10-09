@@ -17,12 +17,20 @@ use crate::station::state::Station;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tracing::warn;
+use tracing::{debug, warn};
 
 const FIRST_WAIT: Duration = Duration::from_secs(1);
 const LONGEST_WAIT: Duration = Duration::from_secs(30);
 /// A packager that ran this long before it stopped was not crash looping.
 const STEADY: Duration = Duration::from_secs(30);
+/// Asks in a row it may leave unanswered before it counts as hung. Each ask
+/// waits five seconds, so this is about fifteen seconds of silence. One miss
+/// used to be enough, and on a loaded machine (a soak test with every core
+/// busy) a packager that was slow for five seconds was killed twice in
+/// fifteen minutes, which took the watch link off for longer than the
+/// stall itself would have: a new packager starts its segments from nothing.
+/// A packager that exits is still seen at once, on `wait`.
+const MISSES: u32 = 3;
 
 pub async fn keep(st: Arc<Station>) {
     let hls = &st.direct.hls;
@@ -60,6 +68,7 @@ pub async fn keep(st: Arc<Station>) {
 async fn serve(st: &Station, proc: &mut Proc) -> Option<String> {
     let hls = &st.direct.hls;
     let mut sent = None;
+    let mut misses = 0u32;
     loop {
         if hls.book.lock().cards.is_empty() || st.stopping.load(Ordering::SeqCst) {
             proc.stop().await;
@@ -74,10 +83,17 @@ async fn serve(st: &Station, proc: &mut Proc) -> Option<String> {
             sent = Some(gen);
         }
         match proc.reports(&st.http).await {
-            Ok(r) => hls.reported(r),
+            Ok(r) => {
+                hls.reported(r);
+                misses = 0;
+            }
             Err(e) => {
-                proc.stop().await;
-                return Some(format!("it stopped answering ({e:#})"));
+                misses += 1;
+                if misses >= MISSES {
+                    proc.stop().await;
+                    return Some(format!("it stopped answering, {misses} asks in a row ({e:#})"));
+                }
+                debug!(misses, error = %format!("{e:#}"), "the HLS packager did not answer; asking again before calling it hung");
             }
         }
         tokio::select! {

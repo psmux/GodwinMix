@@ -67,6 +67,8 @@ serves several events.
 | `source.removed` | a source was removed | `source`, `uri` |
 | `source.state` | a source connected, went live, stalled or failed | `source`, `state` |
 | `output.state` | a destination connected, dropped or is retrying | `output`, `state`, `reconnects` |
+| `channel.stream.state` | an encoder started publishing to a channel, or stopped | `channel`, `stream`, `state`, `from`, `protocol` |
+| `channel.destination.state` | a channel's destination started sending, is retrying, or failed | `channel`, `destination`, `state`, `reconnects`, `error` |
 | `alert.raised` | anything the operator should see | `severity`, `message` |
 | `session.start` | the daemon came up | `version`, `bind`, `log` |
 | `session.end` | it is going down | `version` |
@@ -74,8 +76,23 @@ serves several events.
 | `plugin.failed` | one would not load | `plugin`, `reason` |
 | `plugin.state` | either of those, as one event | `plugin`, `state` |
 
-Only `take.before` can delay anything. The other eleven are told after the
+Only `take.before` can delay anything. The other thirteen are told after the
 fact and nothing waits for them.
+
+To hear when a platform stops taking a channel's stream, the way a Livebox
+alert would tell you:
+
+```toml
+[[hooks]]
+event = "channel.destination.state"
+http = "https://alerts.example/godwinmix"
+```
+
+The body says which channel and destination, its state (`reconnecting` while
+it retries, `failed` when retrying will not help, `live` once it is sending
+again) and in `error` why. On a station the channels are the station's, so
+put the block in the station's config. A recording fires it like any other
+destination; a watch link does not fire it yet.
 
 ## The three ways to be called
 

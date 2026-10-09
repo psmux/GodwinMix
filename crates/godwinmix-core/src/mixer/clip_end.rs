@@ -80,6 +80,11 @@ pub struct ClipEnd {
     ended: AtomicU8,
     /// Whether the mixer has been told about this pass's end.
     told: AtomicBool,
+    /// Whether the mixer has acted on this pass's end. It can be told twice:
+    /// a seek to the last frame flushes each branch more than once, and the
+    /// sound can play its few milliseconds to EOS between two of those
+    /// flushes, so one pass sends two notices.
+    acted: AtomicBool,
     /// A flush has come through: the next segment starts a new pass. A seek
     /// or a restart flushes both branches before either sends a segment, and
     /// the flush is the only way to tell the start of a pass from the other
@@ -109,6 +114,7 @@ impl ClipEnd {
             started: AtomicU8::new(0),
             ended: AtomicU8::new(0),
             told: AtomicBool::new(false),
+            acted: AtomicBool::new(false),
             fresh: AtomicBool::new(false),
             held: AtomicBool::new(false),
             quiet: AtomicBool::new(false),
@@ -152,6 +158,7 @@ impl ClipEnd {
                     self.started.store(0, Ordering::Release);
                     self.ended.store(0, Ordering::Release);
                     self.told.store(false, Ordering::Release);
+                    self.acted.store(false, Ordering::Release);
                     self.held.store(false, Ordering::Release);
                 }
                 if self.started.fetch_or(bit, Ordering::AcqRel) == 0 {
@@ -218,6 +225,12 @@ impl ClipEnd {
     /// short finds nothing to do.
     pub fn at_end(&self) -> bool {
         self.told.load(Ordering::Acquire)
+    }
+
+    /// True the first time the mixer asks about this pass's end, false for
+    /// any notice after: the end is acted on, and said, once a pass.
+    pub fn act_once(&self) -> bool {
+        !self.acted.swap(true, Ordering::AcqRel)
     }
 
     pub fn hold(&self) {

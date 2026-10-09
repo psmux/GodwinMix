@@ -27,6 +27,7 @@ import { repeatRequest } from "./clip-end.js";
 import { setLocal, nameOf } from "./local.js";
 import { addSourceTile, openSceneSources } from "./chooser-loader.js";
 import { focusedScene, onFocusChanged } from "../../shell/focus.js";
+import { SceneStrip } from "./scene-strip.js";
 import { acquireScenes } from "../../shell/scene-session.js";
 import { setWorkspaceActive } from "./workspace.js";
 
@@ -75,7 +76,8 @@ class SourcesPanel extends HTMLElement {
     ]);
 
     this.grid = el("div.gallery", { role: "listbox", "aria-label": "Sources" });
-    this.append(this.bar, this.grid);
+    this.strip = new SceneStrip();
+    this.append(this.strip.node, this.bar, this.grid);
 
     this.drag = new DragSelect({
       container: this.grid,
@@ -240,6 +242,8 @@ class SourcesPanel extends HTMLElement {
   paintScope() {
     const scene = this.focusedSummary();
     this.sceneLabel.textContent = scene ? scene.name : "Sources";
+    const scenes = this.sceneClient();
+    this.strip.paint(scenes ? scenes.scenes() : [], scene ? scene.id : null);
     this.addTile.setAttribute("aria-label", scene ? `Add sources to ${scene.name}` : "Add source");
   }
 
@@ -414,6 +418,8 @@ class SourcesPanel extends HTMLElement {
     const id = status && status.id;
     const target = scene || this.untouchedScene();
     if (!scenes || !id || !target) return;
+    // A second add queued for this scene before the source existed: it is there already.
+    if ((scenes.summary(target.id)?.sources || []).includes(id)) return;
     try {
       // A text or a ticker made from a preset says where it goes.
       await scenes.itemAdd(target.id, { source: id }, status.placement ? { transform: status.placement } : undefined);
@@ -606,7 +612,12 @@ class SourcesPanel extends HTMLElement {
     sel.removeAllRanges();
     sel.addRange(range);
 
+    // Once only. Enter ends the edit, and the blur that ending it causes
+    // would otherwise send the rename a second time and push a second undo.
+    let done = false;
     const finish = async (commit) => {
+      if (done) return;
+      done = true;
       tile.name.contentEditable = "false";
       const after = tile.name.textContent.trim();
       if (!commit || !after || after === before) {

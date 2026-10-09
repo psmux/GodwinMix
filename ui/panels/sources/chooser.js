@@ -14,8 +14,12 @@ export async function openSceneSources(client, scenes, scene) {
   const added = new Set(scene.sources || []);
   const pending = new Set();
   let signature = '', closed = false;
+  // The scene as it is now, not as it was when this picker opened: another
+  // picker on the same scene may have put the source there since.
+  const holds = id => (scenes.summary?.(scene.id)?.sources || []).includes(id);
   const add = async source => {
-    if (pending.has(source.id) || added.has(source.id)) return;
+    if (holds(source.id)) added.add(source.id);
+    if (pending.has(source.id) || added.has(source.id)) return render(true);
     pending.add(source.id);
     render(true);
     try {

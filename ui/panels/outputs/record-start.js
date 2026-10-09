@@ -1,6 +1,6 @@
 // Record: the dialog that asks where the file goes, then starts it through
 // output.add like any other destination.
-import { el } from "../../shell/dom.js";
+import { el, coarse } from "../../shell/dom.js";
 import { modal } from "../../shell/modal.js";
 import { toast } from "../../shell/toast.js";
 
@@ -40,5 +40,5 @@ export function startRecording(client) {
       start.disabled = false;
     }
   };
-  folder.focus();
+  if (!coarse()) folder.focus();
 }

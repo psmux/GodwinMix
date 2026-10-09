@@ -133,6 +133,10 @@ fn load_plugins(cfg: &Config, tokens: &Arc<godwinmix_protocol::scope::Tokens>, r
 fn open_channels(st: &Arc<Station>, cfg: &Config, config: &std::path::Path, events: MixerHandle) -> Arc<plugin::supervisor::Supervisor> {
     let supervisor = plugin::supervisor::Supervisor::new(godwinmix_core::caps::CanvasCaps::new(&cfg.canvas), cfg.plugins.settings.clone());
     let target = Arc::new(programme::FirstShow { station: Arc::downgrade(st), runtime: tokio::runtime::Handle::current() });
+    // The channels are the station's, so their hooks are too: the same
+    // `[[hooks]]` blocks a show reads, of which only the channel ones fire here.
+    let bus = events.clone();
+    let hooks = crate::control::hooks::Hooks::new(&cfg.hooks(), Arc::new(move |event| bus.emit(event)));
     let channels = crate::channels::Channels::open(
         Some(Config::runtime_store_path(config)),
         crate::channels::Ports::from_config(cfg),
@@ -141,9 +145,13 @@ fn open_channels(st: &Arc<Station>, cfg: &Config, config: &std::path::Path, even
         target,
         crate::control::methods::plugins::secrets(),
     );
+    if let Some(sink) = crate::control::hooks::ForChannels::new(&hooks) {
+        channels.set_hooks(sink);
+    }
     channels.use_governor(st.render.governor().clone());
     let _ = st.channels.set(channels);
     super::direct::Direct::attach(st, supervisor.clone());
+    super::direct::hls::channel::Links::attach(st);
     let (starting, station) = (supervisor.clone(), st.clone());
     std::thread::spawn(move || {
         if plugin::loader::get(crate::channels::PLUGIN).is_none() {

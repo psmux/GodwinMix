@@ -77,6 +77,9 @@ export function cores(m) {
   return `${n} CPU core${n === 1 ? "" : "s"}`;
 }
 
+/** What a session count with no limit comes as: u32::MAX. */
+const NO_LIMIT = 0xffffffff;
+
 function sessions(n) {
   return n === 1 ? "one GPU encoder session" : `${n} GPU encoder sessions`;
 }
@@ -113,7 +116,8 @@ export function refusalWords(data) {
   const room = [];
   if (need.cpu_millicores) room.push(have.cpu_millicores ? cores(have.cpu_millicores) : "no CPU to spare");
   if (need.device_millis) room.push(have.device_millis ? `${Math.round(have.device_millis / 10)}% of the GPU` : "no GPU time");
-  if (need.device_sessions) room.push(have.device_sessions ? sessions(have.device_sessions) : "no GPU sessions");
+  // An encoder with no limit of its own reports the largest number there is.
+  if (need.device_sessions && (have.device_sessions || 0) < NO_LIMIT) room.push(have.device_sessions ? sessions(have.device_sessions) : "no GPU sessions");
   if (need.egress_kbps) room.push(`${upload(have.egress_kbps || 0)} of upload`);
   return {
     need: needs.length ? `This format needs about ${list(needs)}.` : "This format needs more than the machine has left.",
