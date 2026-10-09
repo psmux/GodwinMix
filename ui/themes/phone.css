@@ -376,6 +376,19 @@ body:has(> gmx-shell.phone) .dialog {
   max-height: calc(100dvh - max(8px, env(safe-area-inset-top)) - max(8px, env(safe-area-inset-bottom)));
 }
 
+/* No pull to refresh. A thumb dragging down from the header, or a drag that
+   started on the camera card or a fader and ran on, would otherwise reload
+   the page mid show, and with this browser's camera publishing a reload
+   stops it. The screens still scroll; they contain their own overscroll. */
+html:has(> body > gmx-shell.phone), body:has(> gmx-shell.phone) { overscroll-behavior-y: none; }
+
+/* What a row in the add source picker is, in up to three lines rather than
+   one cut short: on a phone it is the only place the words are, with no
+   pointer to hover for the rest. */
+body:has(> gmx-shell.phone) .picker-row .dim.ellipsis {
+  white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3;
+}
+
 /* Routing covers the screen to its foot: its last line scrolls clear of the
    home bar. */
 body:has(> gmx-shell.phone) .rt-scroll { padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
