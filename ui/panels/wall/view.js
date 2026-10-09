@@ -1,7 +1,9 @@
 // The monitoring wall: every show on this station, as rows or tiles, over
 // the page and under the top bar. Opened from View, the palette and the
 // show tabs; fetches nothing until then. Only the rows on screen are drawn,
-// read with show.stats and asked for pictures (data.js, thumbs.js).
+// read with show.stats and asked for pictures (data.js, thumbs.js). Under
+// the shows, a Channels group has every channel stream with its picture
+// (channel-data.js, channel-rows.js).
 
 import { el } from "../../shell/dom.js";
 import { sheet } from "./sheet.js";
@@ -12,6 +14,10 @@ import { header, row, band, tileLine, lines } from "./rows.js";
 import { pictured, rows, summary } from "./model.js";
 import { topBar } from "./top.js";
 import { keyed, press, prefs, savePrefs } from "./act.js";
+import { ChannelWatch } from "./channel-data.js";
+import { channelGroup, channelPictured } from "./channel-model.js";
+import { channelRow } from "./channel-rows.js";
+import { channelThumbUrl } from "../channels/picture.js";
 
 let open = null;
 
@@ -47,15 +53,19 @@ export function openWall(client) {
   const later = () => { cancelAnimationFrame(frame); frame = requestAnimationFrame(() => view.draw()); };
   const data = new WallData(client, later);
   const thumbs = new Thumbs(client);
-  const ctx = () => ({ data, thumbs, acked: view.acked, now: Date.now(), cursor: view.cursor, cols: view.cols });
+  const chans = new ChannelWatch(client, later);
+  const split = (key) => [key.slice(0, key.indexOf("/")), key.slice(key.indexOf("/") + 1)];
+  const chanThumbs = new Thumbs(client, 160, (key, width, t) => channelThumbUrl(client, ...split(key), Math.max(width, 320), t));
+  const ctx = () => ({ data, thumbs, chanThumbs, acked: view.acked, now: Date.now(), cursor: view.cursor, cols: view.cols });
   const list = new Virtual(scroll, body, (it) => {
     const c = ctx();
     if (it.kind === "group") return band(it);
+    if (it.kind === "channel") return channelRow(it, c);
     return opts.mode === "tiles" ? tileLine(it, c) : row(it.show, c);
   });
 
   Object.assign(view, {
-    root, scroll, data, thumbs, list, top,
+    root, scroll, data, thumbs, chans, chanThumbs, list, top,
     narrow: () => scroll.clientWidth < 760,
     draw() {
       if (!view.styled) return;
@@ -65,7 +75,7 @@ export function openWall(client) {
       root.classList.toggle("tiles", tiles);
       top.sync(opts);
       top.counts(summary(data.shows, data.stats, data.gov));
-      view.items = rows(data.shows, data.stats, opts);
+      view.items = [...rows(data.shows, data.stats, opts), ...channelGroup(chans.items, opts)];
       view.cols = tiles ? Math.max(1, Math.floor((scroll.clientWidth - 24) / (narrow ? 170 : 236))) : 1;
       head.replaceChildren(tiles || narrow ? "" : header(opts.sort, opts.dir));
       const tileH = Math.round(((scroll.clientWidth - 24) / view.cols - 12) * 9 / 16) + (narrow ? 150 : 168);
@@ -79,12 +89,17 @@ export function openWall(client) {
       if (!view.styled) return;
       const [a, b] = list.inView();
       const shown = [];
+      const streams = [];
       for (let i = a; i <= b; i++) {
         const it = list.items[i];
         if (!it) continue;
         if (it.kind === "show") shown.push(it.show);
-        if (it.kind === "line") shown.push(...it.shows);
+        if (it.kind === "channel") streams.push(it);
+        if (it.kind === "line") for (const s of it.shows) (s.kind === "channel" ? streams : shown).push(s);
       }
+      // A channel stream's picture is asked for only while it is live and on screen.
+      chanThumbs.blank(streams.filter((s) => !channelPictured(s)).map((s) => s.key));
+      chanThumbs.visible(streams.filter(channelPictured).map((s) => s.key));
       data.visible(shown.map((s) => s.id));
       thumbs.width = opts.mode === "tiles" ? 320 : 160;
       // A show that is not running has no picture to ask for, and an old one
@@ -97,6 +112,8 @@ export function openWall(client) {
     close() {
       data.stop();
       thumbs.stop();
+      chans.stop();
+      chanThumbs.stop();
       resize.disconnect();
       window.removeEventListener("keydown", onKey, true);
       document.removeEventListener("visibilitychange", wake);
@@ -116,6 +133,7 @@ export function openWall(client) {
   const resize = new ResizeObserver(() => later());
   resize.observe(scroll);
   data.start();
+  chans.start();
   styled.then(() => { view.styled = true; later(); });
   if (window.innerWidth >= 760) scroll.focus();
   return view;
@@ -123,7 +141,9 @@ export function openWall(client) {
 
 function say(view, empty) {
   const d = view.data;
-  const text = !d.loaded ? "Reading the shows on this station" : d.missing ? "This station keeps one show and has no list of shows to watch." : !d.shows.length ? "No shows yet. Add shows puts in one feed or a few hundred." : !view.items.length ? "Nothing matches that filter." : "";
+  // Channels on screen are enough to say nothing about shows.
+  const channels = view.items.some((it) => it.kind === "channel");
+  const text = channels ? "" : !d.loaded ? "Reading the shows on this station" : d.missing ? "This station keeps one show and has no list of shows to watch." : !d.shows.length ? "No shows yet. Add shows puts in one feed or a few hundred." : !view.items.length ? "Nothing matches that filter." : "";
   empty.hidden = !text;
   empty.textContent = text;
 }
