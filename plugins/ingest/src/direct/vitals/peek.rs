@@ -37,6 +37,9 @@ impl Vitals {
             if !self.hub.is_live(app, stream) {
                 return Err(format!("nothing is publishing to {app}/{stream}"));
             }
+            // A plugin with no direct show has never needed GStreamer, and a
+            // keyframe handed to a decoder without it panics the tap thread.
+            gmx_netkit::init().map_err(|e| format!("GStreamer would not start in the ingest plugin: {e}"))?;
             let show = Arc::new(Show::new(&id, Thresholds::default(), now));
             show.set_checks(false, &Thresholds::default());
             let mut tap = Tap::new(show, app, stream);

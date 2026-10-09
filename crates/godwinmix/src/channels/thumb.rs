@@ -54,10 +54,10 @@ impl Channels {
         if let Some(l) = found {
             return Ok(l.name.clone());
         }
-        let what = asked.map_or_else(|| "no stream".to_string(), |s| format!("no stream called {s}"));
+        let what = asked.map_or_else(|| format!("channel {id}"), |s| format!("{s} on channel {id}"));
         let live_names: Vec<String> = on.iter().map(|l| l.name.clone()).collect();
         Err(RpcError::not_in_state(format!(
-            "channel {id} has {what} live, so there is no picture. The picture comes once an encoder publishes to it; channel.get {id} has the address and the key."
+            "nothing is publishing to {what}, so there is no picture. The picture comes once an encoder publishes to it; channel.get {id} has the address and the key."
         ))
         .with("channel", id)
         .with("state", "idle")
