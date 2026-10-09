@@ -21,18 +21,19 @@ A certificate warning you clicked through does not count. The browser shows
 the page, but it will neither offer to install it nor run the page's service
 worker. Chrome's DevTools give the installability error as
 `not-from-secure-origin`, and the page's console says the worker failed with
-"An SSL certificate error occurred when fetching the script." This is the
-case on a phone opening the mixer's own self signed certificate, so for a
-phone, start with a certificate it trusts (below).
+"An SSL certificate error occurred when fetching the script." A phone that
+opens the mixer's `https://` address meets exactly that until it has been
+told to trust the mixer, which takes a minute and is done once
+([trust this mixer on a phone](#trust-this-mixer-on-a-phone), below).
 
 | Where | Address | Install offered | Offline page |
 |---|---|---|---|
 | Chrome or Edge on the mixer's machine | `http://localhost:8080` | yes | yes |
 | Chrome or Edge, another machine | `http://192.168.1.20:8080` | no | no |
 | Chrome or Edge, another machine | `https://` with the warning clicked through | no | no |
-| Chrome or Edge, another machine | `https://` with a trusted certificate | yes | yes |
+| Chrome or Edge, another machine | `https://` with the mixer trusted | yes | yes |
 | Chrome on Android | the same as Chrome above | the same | the same |
-| Safari on iPhone or iPad | any of them | Add to Home Screen | only with a trusted certificate |
+| Safari on iPhone or iPad | any of them | Add to Home Screen | only with the mixer trusted |
 | the desktop app | | it is an app already | not used |
 
 Port 8080 is the default. Use the one your mixer printed when it started.
@@ -45,85 +46,107 @@ same thing: Chrome keeps it under Cast, save and share, and Edge under Apps.
 
 **Chrome on Android.** Open the address and go to More, the last tab along
 the bottom. Under This mixer is Install app, which brings up Chrome's own
-install dialog. If there is no such row, Chrome has not offered to install
-the page, which almost always means the certificate is not trusted yet. The
-browser's menu still has Add to Home screen, but without a secure page that
-makes a shortcut which opens in an ordinary Chrome tab.
+install dialog. Until the phone trusts the mixer the row reads Trust this
+mixer on your phone first, and opens the steps below. The browser's menu
+still has Add to Home screen, but without a secure page that makes a
+shortcut which opens in an ordinary Chrome tab.
 
 **Safari on iPhone or iPad.** Open the address and tap Share, then Add to
 Home Screen. More shows a line saying so. Safari does this for any page,
 http included, and the icon opens the mixer full screen. Two catches. Over
-`https://` with a certificate you only clicked through, the app from the home
-screen has no way to show the warning again and may refuse to load the page
-at all, so either use `http://` or trust the certificate first. And with no
-trusted certificate there is no offline page: when the mixer is away the app
+`https://` with a certificate warning you only clicked through, the app from
+the home screen has no way to show the warning again and may refuse to load
+the page at all, so either use `http://` or trust the mixer first. And until
+the mixer is trusted there is no offline page: when the mixer is away the app
 shows Safari's own error.
 
 The Install app row is not shown when the page is already open as an
-installed app, inside the desktop app, or where the browser has not offered
-to install and is not on iOS. There is never a button that does nothing.
+installed app, inside the desktop app, on the mixer's own machine where the
+browser has not offered, or where the mixer has no authority of its own to
+trust. There is never a button that does nothing.
 
-## Make a phone trust the mixer's certificate
+## Trust this mixer on a phone
 
-The mixer writes its certificate beside its config file as
-`<config name>.control.crt` ([serve the control page over https](serve-https.md)).
-It is self signed and made for one server, and it is not a certificate
-authority. Phones only let a person trust a certificate authority:
+The mixer makes a small certificate authority of its own the first time it
+starts, once per machine, and signs the certificate on its https port with
+it. Install the authority on a phone once and the phone trusts the mixer:
+no warning, and Chrome on Android can offer to install the page. When the
+mixer later makes a new certificate, because the machine got a new address
+or the old certificate is a month from running out, the authority stays the
+same and the phone goes on trusting it. The authority itself lasts ten years.
 
-* iOS lists a certificate under Settings, General, About, Certificate Trust
-  Settings only when it is a certificate authority, so the mixer's own
-  certificate can be installed as a profile but never switched on there.
-* Android installs a certificate as a trusted one under Settings, Security,
-  Encryption and credentials, Install a certificate, CA certificate, and that
-  wants a certificate authority too.
+The mixer says where to get it when it starts, under the https line. From a
+run on port 18650:
 
-`openssl` shows whether a certificate is one. A certificate authority has a
-Basic Constraints line saying `CA:TRUE`. For the mixer's own certificate this
-prints nothing, because it has no Basic Constraints at all:
-
-```sh
-openssl x509 -in godwinmix.control.crt -noout -text | grep -A1 "Basic Constraints"
+```text
+HTTPS is on the same port: https://192.168.77.173:18650/ (certificate fingerprint 45:BC:C5:5D:18:0A:0F:59:40:89:1F:B0:A5:70:17:CE:5C:6E:22:0B:77:6F:21:85:82:F7:81:BE:08:32:FE:71).
+To trust it on a phone, install its authority from https://192.168.77.173:18650/ca.crt (fingerprint 2E:62:B7:DC:1D:A5:1C:D1:34:7F:7E:D2:6C:C0:D5:01:BF:15:C7:5F:F3:AE:6C:F0:F2:FB:94:5D:78:CF:6D:1D).
 ```
 
-So for an installable app on a phone, give the mixer a certificate from a
-certificate authority the phone trusts. Two ways that work:
+The same addresses and the authority's fingerprint are in Help, Open on
+another device, under Trust this mixer on your phone. The authority's
+certificate is public, so downloading it needs no token. Its private key
+stays sealed in the mixer's secret store and never leaves the machine.
 
-1. **A small authority of your own, with mkcert.** On any computer:
+**iPhone or iPad.** In Safari, open the mixer's address followed by
+`ca.crt`, for example `https://192.168.77.173:18650/ca.crt`, and accept the
+certificate warning for that one page (`http://` works for the download too).
+Safari asks whether to allow a configuration profile; allow it. Then:
 
-   ```sh
-   mkcert -install
-   mkcert 192.168.1.20 mixer.local localhost 127.0.0.1
-   ```
+1. Settings, Profile Downloaded, Install, and enter the passcode.
+2. Settings, General, About, Certificate Trust Settings, and switch on
+   GodwinMix local authority on the mixer's machine name.
 
-   That makes `192.168.1.20+3.pem` and `192.168.1.20+3-key.pem`. Point the
-   mixer at them:
+**Android.** In Chrome, open the mixer's address followed by `ca.pem`, for
+example `https://192.168.77.173:18650/ca.pem`. It downloads as
+`godwinmix-authority.crt`. Android will not install an authority straight
+from a browser, which is why this one is a plain download. Then:
 
-   ```toml
-   [control.tls]
-   cert = "192.168.1.20+3.pem"
-   key = "192.168.1.20+3-key.pem"
-   ```
+1. Settings, Security, Encryption and credentials, Install a certificate,
+   CA certificate.
+2. Accept the warning and pick `godwinmix-authority.crt` from Downloads.
 
-   and restart it. Then put mkcert's authority on the phone. `mkcert -CAROOT`
-   prints the folder; the file is `rootCA.pem`. Send it to the phone (mail,
-   AirDrop, a USB cable), then
+Phone makers move these settings about a little; if the path is not there,
+search Settings for "certificate".
 
-   * on iOS, open it, install the profile under Settings, General, VPN and
-     Device Management, and switch it on under Settings, General, About,
-     Certificate Trust Settings;
-   * on Android, Settings, Security, Encryption and credentials, Install a
-     certificate, CA certificate, and pick the file. Chrome trusts
-     authorities a person installed this way.
+Then open the mixer's `https://` address again. There should be no warning,
+and on Android, More should have Install app.
 
-   Keep `rootCA-key.pem` to yourself: anyone with it can make certificates
-   every device that trusts it accepts.
+Compare the fingerprint the phone shows for the authority with the one the
+mixer printed before you switch it on.
 
-2. **A real name with a real certificate**, from a
-   [reverse proxy](reverse-proxy.md) such as Caddy, which gets one from
-   Let's Encrypt. Nothing has to be installed on the phones at all.
+### What has been checked, and what has not
 
-Use the address the certificate names. A certificate for `192.168.1.20` is
-no use to a phone that opens `mixer.local`.
+The phone steps above are Apple's and Google's own settings paths. They have
+not been run on a phone for this page. What was checked, on Windows, against
+a running mixer:
+
+* `openssl x509 -in godwinmix.control.crt -noout -ext basicConstraints,keyUsage`
+  prints `CA:TRUE, pathlen:0` and `Digital Signature, Certificate Sign, CRL Sign`.
+* The certificate the port serves says `CA:FALSE`, names the authority as its
+  issuer, covers `localhost`, `127.0.0.1`, `::1`, the machine's name and its
+  LAN address, and `openssl verify -CAfile godwinmix.control.crt` passes for it.
+* `/ca.crt` is the same file as `godwinmix.control.crt`, served as
+  `application/x-x509-ca-cert`; `/ca.pem` is the same again as a download.
+* Headless Edge, told to trust only the authority's key
+  (`--ignore-certificate-errors-spki-list`), opened the `https://` LAN
+  address with no certificate error, registered the service worker, reported
+  no installability errors, and fired the install offer, so More showed
+  Install app.
+
+To stop trusting the mixer, remove the profile on iOS (Settings, General,
+VPN and Device Management) or the certificate on Android (Settings, Security,
+Encryption and credentials, User credentials).
+
+### Or bring your own certificate
+
+A mixer with a real name can have a real certificate from a
+[reverse proxy](reverse-proxy.md) such as Caddy, which gets one from Let's
+Encrypt, and then nothing has to be installed on any phone. A certificate
+from an authority you already run works too: set `[control.tls] cert` and
+`key` ([serve the control port over HTTPS](serve-https.md)) and install your
+authority on the phones the same way. The mixer then has no authority of its
+own to offer, and `/ca.crt` answers 404 saying so.
 
 ## What the app keeps, and what it does not
 
