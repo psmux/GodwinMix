@@ -96,17 +96,23 @@ async fn a_refused_destination_says_why_and_the_programme_carries_on() {
     let wire = serde_json::to_string(&status.outputs).unwrap();
     assert!(!wire.contains("secret-key"), "the key reached the status: {wire}");
 
-    // The hung up one: its reason is its own, not the other's.
+    // The hung up one: its reason is its own, not the other's. A dying
+    // connection posts the sink's error and "Internal data stream error" from
+    // upstream, in either order across a bus, and a specific reason replaces
+    // a generic one when it lands (`Failure::note`), so a generic reason is
+    // not yet the answer.
     let deadline = Instant::now() + within;
-    let reason = loop {
+    let error = loop {
         let s = handle.status().await.expect("status answers");
-        let r = s.outputs.iter().find(|o| o.id == "hung-out").and_then(|o| o.error.as_ref()).map(|e| e.reason);
-        if r.is_some() || Instant::now() > deadline {
-            break r;
+        let e = s.outputs.iter().find(|o| o.id == "hung-out").and_then(|o| o.error.clone());
+        let settled = e.as_ref().is_some_and(|e| e.reason != OutputErrorReason::Other);
+        if settled || Instant::now() > deadline {
+            break e;
         }
         tokio::time::sleep(Duration::from_millis(200)).await;
     };
-    assert_eq!(reason, Some(OutputErrorReason::Closed));
+    let error = error.expect("the hung up output carries a reason");
+    assert_eq!(error.reason, OutputErrorReason::Closed, "read from {:?}", error.detail);
 
     // Told once: the retries that follow do not raise it again.
     let again = alert_about(&mut events, "refused-out", Duration::from_secs(4)).await;
