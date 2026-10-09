@@ -20,7 +20,7 @@ mixer cannot find that out by itself, so it is told with `--supervised` or
 * the systemd unit in `deploy/systemd/`, which also has `Restart=always`;
 * the compose file in `deploy/docker/`, beside `restart: unless-stopped`;
 * the desktop app, which starts its own mixer again when it exits asking to be
-  restarted.
+  restarted, and when it dies on its own.
 
 A mixer you started yourself in a terminal has none of them, and answers
 `"possible": false, "how": "none"`.
@@ -57,6 +57,15 @@ The menu has Restart the mixer. The page, or anything else talking to the
 mixer, can call `core.restart` as above: the app sees its mixer exit with
 status 75 and starts it again on the same port, so the page reconnects without
 being sent anywhere.
+
+The app does the same when its mixer dies on its own: a crash, an abort, or an
+end in Task Manager. Every exit with a status other than 0, 75, 76 or 77 that
+the app did not cause itself is answered with a restart on the same port, and
+the mixer log gets a line `--- mixer exited with Some(<status>) ---` first. A
+mixer that dies again within a minute of that restart is left stopped, with a
+dialog saying so, because one that falls over as soon as it is up would only
+loop. Restart it from the menu once the cause is fixed. A clean exit, status 0
+from `core.shutdown`, is left alone.
 
 ## In the page
 
