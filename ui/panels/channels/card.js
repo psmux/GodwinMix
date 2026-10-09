@@ -90,7 +90,10 @@ export function channelCard(view, first) {
     node,
     update,
     connect: (want) => fold(want, false),
-    tick: () => { for (const row of rows.values()) row.tick?.(); },
+    tick: () => {
+      for (const row of rows.values()) row.tick?.();
+      strip.tick();
+    },
   };
 }
 

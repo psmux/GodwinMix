@@ -20,7 +20,8 @@ function changed() {
 }
 
 /**
- * @param {{id: string, title: string, group?: string, key?: string,
+ * `keywords` are other names the palette finds it by, as another product calls it.
+ * @param {{id: string, title: string, group?: string, key?: string, keywords?: string[],
  *          run: (arg?: any) => any, enabled?: () => boolean, hidden?: boolean}} cmd
  * @returns {() => void} removal
  */
