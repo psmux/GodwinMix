@@ -173,6 +173,11 @@ export function bases(model, channel) {
 export function tileState(d) {
   if (!d.enabled || d.state === "off") return "Off";
   if (d.has_key === false && d.platform !== "srt" && d.platform !== "custom") return "Needs a key";
+  if (d.state === "live" && d.platform === "file") return d.file ? `Recording, ${fmtBytes(d.file.bytes)}, ${fmtUptime(d.file.duration_ms)}` : "Recording";
+  if (d.state === "live" && d.platform === "hls") {
+    const n = (d.playback && d.playback.viewers) || 0;
+    return n ? `Live, ${n} watching` : "Live";
+  }
   switch (d.state) {
     case "waiting": return "Waits for the stream";
     case "connecting": return "Connecting";
@@ -188,4 +193,46 @@ export function ringState(d) {
   if (!d.enabled) return "off";
   if (d.has_key === false && d.platform !== "srt" && d.platform !== "custom") return "failed";
   return d.state || "off";
+}
+
+/** 12.3 MB, the way a person reads a file's size. */
+export function fmtBytes(bytes) {
+  const n = Number(bytes) || 0;
+  if (n >= 1e9) return (n / 1e9).toFixed(n >= 1e10 ? 0 : 1) + " GB";
+  if (n >= 1e6) return (n / 1e6).toFixed(n >= 1e8 ? 0 : 1) + " MB";
+  if (n >= 1e3) return Math.round(n / 1e3) + " kB";
+  return n + " B";
+}
+
+/** The local time as a recording's name carries it: 20261009-103000. */
+export function stamp(date = new Date()) {
+  const p = (v) => String(v).padStart(2, "0");
+  return `${date.getFullYear()}${p(date.getMonth() + 1)}${p(date.getDate())}-${p(date.getHours())}${p(date.getMinutes())}${p(date.getSeconds())}`;
+}
+
+/**
+ * The file a recording of this channel would start now: the channel, the
+ * stream it records (the live one, or main), and the time.
+ */
+export function recordName(channel, date = new Date()) {
+  const live = (channel.streams || []).find((s) => s.state === "live");
+  return `${channel.id}-${live ? live.name : "main"}-${stamp(date)}.ts`;
+}
+
+/**
+ * A small page that plays a watch link: a <video>, and hls.js from a CDN for
+ * the browsers that do not play HLS by themselves. Safari and phones play it
+ * without the script.
+ */
+export function embedCode(url) {
+  const src = JSON.stringify(String(url));
+  return [
+    '<video id="gmx-watch" controls muted autoplay playsinline style="width:100%;max-width:960px;background:#000"></video>',
+    '<script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>',
+    "<script>",
+    `  const video = document.getElementById("gmx-watch"), src = ${src};`,
+    '  if (video.canPlayType("application/vnd.apple.mpegurl")) video.src = src;',
+    "  else if (window.Hls && Hls.isSupported()) { const hls = new Hls(); hls.loadSource(src); hls.attachMedia(video); }",
+    "</script>",
+  ].join("\n");
 }

@@ -18,6 +18,10 @@ const MARKS = {
   x: `${R} fill="#000"/><rect x=".5" y=".5" width="23" height="23" rx="5" fill="none" stroke="#fff" stroke-opacity=".18"/><path d="M5.6 5.5h4l3.2 4.5 3.9-4.5h1.5l-4.7 5.4 5 7.6h-4l-3.4-4.8-4.2 4.8H5.4l5.2-5.9zm2 1 7.9 11h1.6l-7.8-11z" fill="#fff"/>`,
   tiktok: `${R} fill="#000"/><rect x=".5" y=".5" width="23" height="23" rx="5" fill="none" stroke="#fff" stroke-opacity=".18"/><g transform="translate(-.7 -.5)"><path d="${note()}" fill="#25f4ee"/></g><g transform="translate(.7 .5)"><path d="${note()}" fill="#fe2c55"/></g><path d="${note()}" fill="#fff"/>`,
   custom: `${R} fill="#5b6b8c"/><g fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round"><path d="M12 13v6.5M9.4 19.5h5.2"/><circle cx="12" cy="11" r="1.6" fill="#fff" stroke="none"/><path d="M8.6 7.6a4.8 4.8 0 0 0 0 6.8M15.4 7.6a4.8 4.8 0 0 1 0 6.8M6.2 5.2a8.2 8.2 0 0 0 0 11.6M17.8 5.2a8.2 8.2 0 0 1 0 11.6"/></g>`,
+  // The two that stay on this machine: a record button, and a play button
+  // with the waves of something being shared.
+  file: `${R} fill="#3a3f4b"/><circle cx="12" cy="12" r="6.6" fill="none" stroke="#fff" stroke-width="1.6"/><circle cx="12" cy="12" r="4.2" fill="#ff4d4d"/>`,
+  hls: `${R} fill="#2f6fde"/><path d="M8.6 7.4v9.2l7.4-4.6z" fill="#fff"/><path d="M5.6 7.8a6.4 6.4 0 0 0 0 8.4M18.4 7.8a6.4 6.4 0 0 1 0 8.4" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/>`,
   srt: `${R} fill="#14a38b"/><path d="M4.5 9h11.5l-2.4-2.4M19.5 15H8l2.4 2.4" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><circle cx="19" cy="9" r="1.4" fill="#fff"/><circle cx="5" cy="15" r="1.4" fill="#fff"/>`,
 };
 

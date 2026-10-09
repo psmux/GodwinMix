@@ -36,7 +36,7 @@ export function playsHls() {
  * means nothing to a phone, so the machine's own network address is asked
  * for and put in its place when the core knows one.
  */
-async function reachableBase(client) {
+export async function reachableBase(client) {
   const base = (client.transport && client.transport.base) || location.origin;
   const u = new URL(base);
   if (!LOOPBACK.test(u.hostname)) return u.href;

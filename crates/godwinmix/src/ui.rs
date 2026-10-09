@@ -101,6 +101,7 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/channels/install.js", include_str!("../../../ui/panels/channels/install.js")),
     ("panels/channels/keyed.js", include_str!("../../../ui/panels/channels/keyed.js")),
     ("panels/channels/keys.js", include_str!("../../../ui/panels/channels/keys.js")),
+    ("panels/channels/local.js", include_str!("../../../ui/panels/channels/local.js")),
     ("panels/channels/model.js", include_str!("../../../ui/panels/channels/model.js")),
     ("panels/channels/panel.js", include_str!("../../../ui/panels/channels/panel.js")),
     ("panels/channels/plans.js", include_str!("../../../ui/panels/channels/plans.js")),
@@ -109,6 +110,7 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/channels/qr.js", include_str!("../../../ui/panels/channels/qr.js")),
     ("panels/channels/reveal.js", include_str!("../../../ui/panels/channels/reveal.js")),
     ("panels/channels/streams.js", include_str!("../../../ui/panels/channels/streams.js")),
+    ("panels/channels/watch.js", include_str!("../../../ui/panels/channels/watch.js")),
     ("panels/channels/ways.js", include_str!("../../../ui/panels/channels/ways.js")),
     ("panels/composer/canvas.js", include_str!("../../../ui/panels/composer/canvas.js")),
     ("panels/composer/catalogue.js", include_str!("../../../ui/panels/composer/catalogue.js")),
@@ -367,6 +369,7 @@ const DEV_ASSETS: &[(&str, &str)] = &[
     ("test/channels-ways.js", include_str!("../../../ui/test/channels-ways.js")),
     ("test/channels-default.js", include_str!("../../../ui/test/channels-default.js")),
     ("test/channels-programme.js", include_str!("../../../ui/test/channels-programme.js")),
+    ("test/channels-local.js", include_str!("../../../ui/test/channels-local.js")),
     ("test/channels-preview.js", include_str!("../../../ui/test/channels-preview.js")),
     ("test/channels.html", include_str!("../../../ui/test/channels.html")),
     // hls.js against an HLS output on this core, beside a clock to the
