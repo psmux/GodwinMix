@@ -96,7 +96,13 @@ const HTTPS_HELP = "https://github.com/psmux/GodwinMix/blob/main/docs/how-to/ser
 export function blocked(r, text) {
   r.error.textContent = text;
   if (window.isSecureContext === false) {
-    r.error.append(" ", el("a", { href: HTTPS_HELP, target: "_blank", rel: "noopener", text: "How to open the mixer over https." }));
+    // The mixer answers https on the port this page came from, so the way out
+    // is one press. The browser warns once about the mixer's own certificate.
+    const secure = "https://" + location.host + location.pathname + location.search + location.hash;
+    r.error.append(
+      el("div", {}, [el("a.btn.primary", { href: secure, text: "Open this page over https" })]),
+      el("a", { href: HTTPS_HELP, target: "_blank", rel: "noopener", text: "Why, and the certificate warning" })
+    );
   }
   for (const b of [r.go, r.cameraMute, r.micMute, r.flip, r.camera, r.mic, r.processing]) b.disabled = true;
   return { state: () => "blocked", active: () => false, stop() {}, setVisible() {}, use() {}, destroy: () => r.root.remove() };

@@ -33,7 +33,6 @@ export class BrowserDock {
     });
     this.node = el("section.pub-dock.min", { role: "dialog", "aria-label": "This browser's camera and microphone" }, [head, this.body]);
     document.body.appendChild(this.node);
-    // It floats over whatever is under it, so it goes wherever it is dragged.
     this.unmove = movable(this.node, head, "gmx.pubdock.at");
     const where = `Publishing to ${channel.app || channel.id}/${this.stream}, which becomes the source ${this.source}.`;
     this.pub = mountPublisher(this.body, {
@@ -46,6 +45,7 @@ export class BrowserDock {
       onState: (s) => this.stateChanged(s),
     });
     this.offs = [
+      client.listen ? client.listen("channel.*") : () => {}, // its own; the Channels panel's goes with it
       client.on("event", ({ name, params }) => {
         if (name === "channel.changed" && params.channel && params.channel.id === this.channel.id) {
           this.channel = params.channel;
@@ -99,14 +99,14 @@ export class BrowserDock {
   paint() {
     const s = streamOf(this.channel, this.stream);
     const source = (this.client.state.sources || []).find((x) => x.id === this.source);
-    const inMixer = !!source;
     if (source && this.pub.active()) this.arrived(source);
-    this.refusal = !inMixer && s && s.source_error ? s.source_error : null;
+    this.refusal = !source && s && s.source_error ? s.source_error : null;
     this.attend();
-    this.note.textContent = dockNote(this.pub.active(), inMixer, s, this.source);
+    this.note.textContent = dockNote(this.pub.active(), !!source, s, this.source);
+    this.note.classList.toggle("pub-error", !!this.refusal);
     const state = this.pub.state();
     const word = { live: "live", connecting: "connecting", reconnecting: "reconnecting", stopped: "stopped" }[state];
-    this.title.textContent = word ? `${this.label}: ${word}` : this.label;
+    this.title.textContent = this.refusal ? `${this.label}: not in the mixer` : word ? `${this.label}: ${word}` : this.label;
   }
 
   show() {

@@ -232,8 +232,8 @@ at `http://192.168.1.20:8080` from another laptop, the bar opens and says:
 > the mixer's page at http://localhost on the mixer's own machine, or over
 > https.
 
-Open the same address with `https://` in front instead, and accept the
-certificate warning once; [Serve the mixer over https](serve-https.md) says
+Under it, **Open this page over https** opens the same address with
+`https://` in front, on the same port. Accept the certificate warning once; [Serve the mixer over https](serve-https.md) says
 how to check it is the mixer's certificate.
 
 The other things the bar can say, and what to do:

@@ -4,6 +4,7 @@
 .pub { gap: var(--gap); min-width: 0; }
 .pub-error:empty { display: none; }
 .pub-error { color: var(--bad); }
+.pub-error .btn { display: inline-flex; align-items: center; margin: 8px 0 4px; text-decoration: none; }
 .pub-picture { position: relative; aspect-ratio: 16 / 9; background: #000; border-radius: var(--radius-sm); overflow: hidden; }
 .pub-preview { width: 100%; height: 100%; object-fit: contain; display: block; transform: scaleX(-1); }
 .pub-preview.back { transform: none; }
