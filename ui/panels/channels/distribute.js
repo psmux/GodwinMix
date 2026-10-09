@@ -1,14 +1,10 @@
 // Where a channel is sent on to, as a strip of platform tiles.
 //
-// Each tile is the platform's mark inside a ring that says how the link is:
-// grey when off, dashed while it waits for the encoder, turning while it
-// connects, green when live, amber turning when it is trying again, red when
-// it gave up, with the reason in the tile. The switch turns one on or off
-// without opening anything. Adding one is a tile, a pasted key and done.
-//
-// Record and Watch link sit on the same strip (`local.js`). A watch link
-// that is on has its card, with the link, a QR code and an embed code,
-// below the tiles; that code is loaded only once there is one.
+// Each tile is the platform's mark in a ring that says how the link is: grey
+// off, dashed waiting for the encoder, turning while it connects, green live,
+// amber trying again, red gave up, with the reason in the tile. Record and
+// Watch link sit on the same strip (`local.js`); a watch link that is on has
+// its card below the tiles, loaded only once there is one.
 
 import { el } from "../../shell/dom.js";
 import { errorToast } from "../../shell/toast.js";
