@@ -29,6 +29,7 @@ mod srt;
 mod tagger;
 mod transcode;
 mod whip;
+mod unescape;
 // The restreamer (src/restream/) reads the hub through `subscribe`, so parts
 // of it are public API this binary does not call itself.
 #[allow(dead_code)]

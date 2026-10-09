@@ -68,6 +68,15 @@ pub struct ChannelKey {
     pub created: String,
     /// The last four characters, so a person can tell two keys apart.
     pub hint: String,
+    /// True when a person typed the secret (`secret` on `channel.add` or
+    /// `channel.key.add`), usually to keep a password their encoders already
+    /// send; false when the mixer made it.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub imported: bool,
+}
+
+fn is_false(b: &bool) -> bool {
+    !*b
 }
 
 /// A key as it is made, with its secret. Afterwards only an admin gets the
@@ -174,7 +183,10 @@ pub struct RtmpInfo {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct ChannelAddRequest {
     pub name: String,
-    /// Defaults to a slug of the name.
+    /// The application name encoders put after the port, as they already
+    /// type it: `Church`, or `Youth Hall`. Defaults to a slug of the name.
+    /// Matched without regard to case, so two channels cannot differ only in
+    /// case.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub app: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -184,6 +196,11 @@ pub struct ChannelAddRequest {
     /// Defaults to RTMP alone.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub protocols: Option<Vec<ChannelProtocol>>,
+    /// The first key's secret, when encoders already send one (the password
+    /// after `?psk=`): 6 to 128 letters, digits, `-`, `_`, `.`, `~` or single
+    /// spaces between them. Left out, the mixer makes one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub secret: Option<String>,
 }
 
 /// What `channel.add` answers: the channel and its first key.
@@ -221,6 +238,10 @@ pub struct ChannelKeyAddRequest {
     pub id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,
+    /// The secret to keep, when encoders already send one. The same rule as
+    /// `secret` on `channel.add`. Left out, the mixer makes one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub secret: Option<String>,
 }
 
 /// What `channel.key.add` answers.
