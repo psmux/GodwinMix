@@ -17,13 +17,19 @@ use tracing::warn;
 
 pub fn start(st: Weak<Station>, wake: Receiver<()>) {
     let spawned = std::thread::Builder::new().name("direct-table".into()).spawn(move || {
-        while woken(&st, &wake) {
+        // The table last handed over. A retry whose plan came out the same
+        // leaves the host alone; an ask always hands its table over.
+        let mut last: Option<Value> = None;
+        while let Some(ask) = woken(&st, &wake) {
             while wake.try_recv().is_ok() {}
             let Some(st) = st.upgrade() else { return };
             let asked = st.direct.asked();
             let table = st.direct.table(&st);
-            st.direct.send(table);
-            st.direct.hls.apply(&st);
+            if ask || last.as_ref() != Some(&table) {
+                last = Some(table.clone());
+                st.direct.send(table);
+                st.direct.hls.apply(&st);
+            }
             st.direct.done(asked);
         }
     });
@@ -32,20 +38,24 @@ pub fn start(st: Weak<Station>, wake: Receiver<()>) {
     }
 }
 
-/// Wait for an ask, and answer whether to build a table: true for an ask,
-/// and true every [`RETRY`] while the governor has turned a rendition away,
-/// so it is asked again once there is room. Before, a direct show's refused
+/// Wait for an ask, `Some(true)`, or, while the governor has turned a
+/// rendition away, for [`RETRY`] to pass, `Some(false)`, so the rendition is
+/// asked about again once there is room. Before, a direct show's refused
 /// rendition was asked about again only when something else changed, and a
 /// show whose input had settled waited for ever on a machine that had long
 /// since freed up: four minutes on the Windows runner, with the governor
 /// showing two and a half cores free. The channels ask again on the same
-/// clock (`channels::transcode::shed`). False once the station has gone.
-fn woken(st: &Weak<Station>, wake: &Receiver<()>) -> bool {
+/// clock (`channels::transcode::shed`). `None` once the station has gone.
+fn woken(st: &Weak<Station>, wake: &Receiver<()>) -> Option<bool> {
     let refused = st.upgrade().is_some_and(|st| st.direct.transcode.refused());
     if !refused {
-        return wake.recv().is_ok();
+        return wake.recv().ok().map(|()| true);
     }
-    !matches!(wake.recv_timeout(RETRY), Err(RecvTimeoutError::Disconnected))
+    match wake.recv_timeout(RETRY) {
+        Ok(()) => Some(true),
+        Err(RecvTimeoutError::Timeout) => Some(false),
+        Err(RecvTimeoutError::Disconnected) => None,
+    }
 }
 
 impl Direct {
