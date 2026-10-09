@@ -166,7 +166,8 @@ anything. Off, it stops sending and keeps its key.
 
 **Bulk actions** on the Send on to heading has **Start all** and **Stop all**,
 the Turn ON all and Turn OFF all of Livebox. They flip each destination's
-switch in turn and leave alone the ones already that way. Stop all asks once
+switch in turn and leave alone the ones already that way. They act on push
+destinations only: a recording and a watch link carry on. Stop all asks once
 first when any destination is live, saying how many. One that could not be
 switched is named in a message, and the rest are still done.
 

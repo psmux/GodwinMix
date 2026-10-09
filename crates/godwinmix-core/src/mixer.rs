@@ -2019,8 +2019,10 @@ impl Mixer {
         }
 
         // Start on the first source if there is one, so a fresh boot is
-        // already showing something rather than black.
-        let first = self.sources.first().map(|s| s.input.id.clone());
+        // already showing something rather than black. Never on a channel's
+        // stream: whatever an encoder is sending when the mixer starts is not
+        // for air until someone takes it.
+        let first = self.sources.iter().find(|s| !fed_by_channel(&s.input.current_config())).map(|s| s.input.id.clone());
         if first.is_some() {
             self.take(first, None)?;
         } else {
@@ -5620,8 +5622,22 @@ pub fn spawn(
         .expect("spawning mixer thread")
 }
 
+/// A source a channel made from an encoder's stream: it reads the stream off
+/// the channel listener's loopback relay (`channels::auto` sets `relay`).
+fn fed_by_channel(cfg: &SourceConfig) -> bool {
+    cfg.params.contains_key("relay")
+}
+
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn a_channel_stream_is_never_the_source_a_boot_starts_on() {
+        let mut cfg = SourceConfig::bare("church-main", "");
+        assert!(!super::fed_by_channel(&cfg), "a source an operator added");
+        cfg.params.insert("relay".into(), toml::Value::String("127.0.0.1:1935".into()));
+        assert!(super::fed_by_channel(&cfg), "a channel's stream");
+    }
     mod clip_end;
     mod endurance;
     mod flush_window;

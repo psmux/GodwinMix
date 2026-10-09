@@ -161,6 +161,13 @@ export async function channelRowsTests(test, eq, ok) {
     eq(bulkItems(bulk, { destinations: [] }).filter((i) => i.label).map((i) => !!i.disabled), [true, true, false]);
   });
 
+  const kept = stubView(() => null);
+  const recording = { id: "main", destinations: [dest("yt", "live"), { ...dest("rec", "live"), platform: "file" }, { ...dest("link", "live"), platform: "hls" }] };
+  await setAll(kept, recording, false);
+  test("Stop all stops the push destinations and leaves a recording and a watch link running", () => {
+    eq(kept.calls.map(([, p]) => p.destination), ["yt"]);
+  });
+
   test("the palette finds Channels by the words Livebox and encoders use", () => {
     const top = (q) => rank(all(), q)[0]?.id;
     for (const q of ["push destination", "push", "restream", "stream key", "stream url", "channel dashboard"]) eq(top(q), "channel.open", q);

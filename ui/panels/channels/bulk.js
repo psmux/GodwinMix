@@ -8,6 +8,11 @@ import { contextMenu } from "../../shell/menu.js";
 import { confirmModal } from "../../shell/modal.js";
 import { toast } from "../../shell/toast.js";
 import { pasteAddresses } from "./paste.js";
+import { isLocal } from "./local.js";
+
+// Push destinations only, as Livebox's Turn ON all and Turn OFF all were: a
+// recording or a watch link is not stopped by a Stop all meant for platforms.
+const pushes = (channel) => (channel.destinations || []).filter((d) => !isLocal(d.platform));
 
 export function bulkButton(view, getChannel) {
   const button = el("button.btn.sm.chn-bulk", { type: "button", text: "Bulk actions", title: "Start all, stop all, or paste several addresses", "aria-haspopup": "menu" });
@@ -20,7 +25,7 @@ export function bulkButton(view, getChannel) {
 
 /** The menu's entries for one channel, with the ones that would do nothing greyed. */
 export function bulkItems(view, channel) {
-  const list = channel.destinations || [];
+  const list = pushes(channel);
   return [
     { label: "Start all", disabled: !list.some((d) => !d.enabled), run: () => setAll(view, channel, true) },
     { label: "Stop all", disabled: !list.some((d) => d.enabled), run: () => stopAll(view, channel) },
@@ -30,11 +35,11 @@ export function bulkItems(view, channel) {
 }
 
 async function stopAll(view, channel) {
-  const live = (channel.destinations || []).filter((d) => d.enabled && d.state === "live").length;
+  const live = pushes(channel).filter((d) => d.enabled && d.state === "live").length;
   if (live) {
     const name = channel.name || channel.id;
     const words = live === 1 ? "1 push destination is live" : `${live} push destinations are live`;
-    if (!(await confirmModal(`${words} on ${name}. Stop sending to every destination of this channel?`, "Stop all"))) return;
+    if (!(await confirmModal(`${words} on ${name}. Stop sending to every push destination of this channel? Recording and the watch link carry on.`, "Stop all"))) return;
   }
   return setAll(view, channel, false);
 }
@@ -44,7 +49,7 @@ async function stopAll(view, channel) {
  * already that way are left alone. Failures are counted and named in one toast.
  */
 export async function setAll(view, channel, enabled) {
-  const todo = (channel.destinations || []).filter((d) => !!d.enabled !== enabled);
+  const todo = pushes(channel).filter((d) => !!d.enabled !== enabled);
   const failed = [];
   for (const d of todo) {
     try {
