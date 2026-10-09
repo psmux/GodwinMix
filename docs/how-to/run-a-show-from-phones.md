@@ -98,21 +98,23 @@ Tap **Show Details**, then **visit this website**, and confirm. Safari
 remembers it for that address.
 
 If Safari will not let you past, or you want the warning gone for good,
-install the certificate on the iPhone:
+trust the mixer's certificate authority on the iPhone, once:
 
-1. Find the certificate file on the computer. It is beside the mixer's
-   config, named after it: `godwinmix.control.crt` for `godwinmix.toml`. In
-   the desktop app, **Open config folder** in the GodwinMix menu goes there.
-2. Send it to the iPhone by AirDrop or as an email attachment, and open it.
-   iOS says *Profile Downloaded*.
-3. Open **Settings > General > VPN & Device Management**, tap the profile and
+1. On the iPhone, open the mixer's address followed by `ca.crt`, for example
+   `https://192.168.1.20:8080/ca.crt`. The same file is beside the mixer's
+   config as `godwinmix.control.crt` for `godwinmix.toml`, if you would
+   rather send it by AirDrop or email; in the desktop app, **Open config
+   folder** in the GodwinMix menu goes there. iOS says *Profile Downloaded*.
+2. Open **Settings > General > VPN & Device Management**, tap the profile and
    **Install**.
-4. Open **Settings > General > About > Certificate Trust Settings** and turn
-   on full trust for the GodwinMix certificate.
+3. Open **Settings > General > About > Certificate Trust Settings** and turn
+   on full trust for GodwinMix local authority.
 
 The mixer makes a new certificate when the computer's LAN address changes and
-a month before the old one runs out. The fingerprint then changes and each
-phone asks again; an installed certificate has to be installed again.
+a month before the old one runs out. A phone that only accepted the warning
+asks again then. A phone that trusts the authority does not, because the new
+certificate is signed by the same authority. Android has its own steps:
+[trust this mixer on a phone](install-as-an-app.md#trust-this-mixer-on-a-phone).
 
 ## Firewalls
 

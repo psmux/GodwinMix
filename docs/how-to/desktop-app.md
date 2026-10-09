@@ -130,7 +130,7 @@ directory:
 | `local-core.port` | the port the local mixer was given, so a shell that crashed finds its mixer again instead of starting a second one |
 | `lan.json` | whether other devices may connect, and the port kept for them once they may |
 | `godwinmix.devices.toml` | the device tokens made for phones and tablets, as digests, never the secrets |
-| `godwinmix.control.crt` | the certificate the mixer answers HTTPS with, for a phone that wants to trust it |
+| `godwinmix.control.crt` | the certificate authority behind the mixer's HTTPS certificate, for a phone that wants to trust it |
 | `gstreamer-registry.bin` | GStreamer's plugin cache, kept here because an installed app's own directory is read only |
 | `plugins/` | the camera, the screen and the microphone, copied out of the app, plus anything added from the window later |
 
