@@ -52,6 +52,15 @@ pub trait Output: Send {
     /// answered.
     fn connected(&self) -> bool;
 
+    /// Whether this kind dials a far end that should answer within seconds,
+    /// so that being down for `output::deadline::DOWN_FOR` with nothing armed
+    /// means it is stuck and is rebuilt. False for a kind that waits for
+    /// somebody else, an SRT listener or a WHEP viewer, which can be
+    /// rightly not live for hours.
+    fn redial_when_down(&self) -> bool {
+        false
+    }
+
     /// Additional public status fields, without secrets or blocking I/O.
     fn status(&self) -> godwinmix_protocol::types::Extra { Default::default() }
 
