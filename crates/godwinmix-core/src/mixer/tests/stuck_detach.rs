@@ -26,8 +26,11 @@ fn park_once(pad: &gst::Pad) -> std::sync::mpsc::Receiver<()> {
 /// answers, not yet running, and its bus kept open.
 fn with_an_output(id: &str) -> (Mixer, MixerHandle, mpsc::Receiver<Command>, mpsc::Receiver<BusEvent>) {
     let _ = gst::init();
-    let (mut mix, handle, cmd_rx, bus) =
-        Mixer::build(programme_config(crate::config::Accel::Software)).expect("mixer builds");
+    // On demand, as a mixer ships: the last consumer leaving stops the
+    // encoder, which is half of what is tested here.
+    let mut cfg = programme_config(crate::config::Accel::Software);
+    cfg.program.encoder = "on-demand".into();
+    let (mut mix, handle, cmd_rx, bus) = Mixer::build(cfg).expect("mixer builds");
     mix.start().expect("the programme starts");
     let cfg: SourceConfig = toml::from_str("id = \"bars\"\nuri = \"test://smpte\"\n").unwrap();
     mix.add_source(&cfg, None).unwrap();
@@ -41,6 +44,7 @@ async fn timed_remove(handle: &MixerHandle, id: &str) -> Duration {
     let asked = Instant::now();
     handle.request(|ack| Command::RemoveOutput(id.into(), Some(ack))).await.expect("the removal answers");
     let took = asked.elapsed();
+    eprintln!("output.remove answered in {took:?}");
     let asked = Instant::now();
     handle.status().await.expect("status answers after the removal");
     assert!(asked.elapsed() < ANSWERED, "status took {:?} after the removal", asked.elapsed());
