@@ -5,8 +5,9 @@
 // Loaded the first time its tab is shown (entry.js is the part the page
 // loads). While it is on screen it asks the core for `channel.*` events, and
 // while something is live it reads `channel.list` every two seconds for the
-// bit rates, which no event carries. The moment it is hidden it stops both,
-// so a mixer with nobody looking at channels measures nothing for anybody.
+// bit rates, which no event carries, and every three seconds each live
+// stream's picture. The moment it is hidden it stops all three, so a mixer
+// with nobody looking at channels measures and decodes nothing for anybody.
 
 import { el, clear } from "../../shell/dom.js";
 import { toast } from "../../shell/toast.js";
@@ -26,6 +27,8 @@ export { addChannel };
 const CSS_ID = "gmx-channels-css";
 /** Seconds between two readings of the bit rates while something is live. */
 const RATE_TICKS = 2;
+/** Seconds between two pictures of each live stream. */
+const PICTURE_TICKS = 3;
 
 /** The view on screen now, so a channel made from elsewhere lands in it. */
 export let current = null;
@@ -178,6 +181,7 @@ export class ChannelsView {
     for (const card of this.cards.values()) card.tick?.();
     this.ticks = (this.ticks || 0) + 1;
     if (this.ticks % RATE_TICKS === 0) this.poll();
+    if (this.ticks % PICTURE_TICKS === 0 && !document.hidden) for (const card of this.cards.values()) card.picture?.();
   }
 
   /** Read the numbers again, quietly: a failure here waits for the next one. */
