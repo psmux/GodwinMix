@@ -1,5 +1,6 @@
 //! Portable recording behind the same output contract as network destinations.
 mod files;
+pub use files::default_folder;
 mod finalize;
 pub use finalize::wait as wait_for_recordings;
 mod pipeline;

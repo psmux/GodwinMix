@@ -26,7 +26,9 @@ pub fn router(st: Arc<Station>) -> Router {
         .with_state(st.clone())
         // A show without compositing has its HLS served here; every other
         // show's goes on to it.
-        .merge(super::direct::hls::router(st));
+        .merge(super::direct::hls::router(st.clone()))
+        // A channel's watch link, packaged by the same process.
+        .merge(super::direct::hls::channel_router(st));
     if let Some(whip) = whip {
         router = router.merge(whip);
     }

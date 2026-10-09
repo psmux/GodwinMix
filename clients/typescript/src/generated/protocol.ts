@@ -673,6 +673,7 @@ export interface Crop {
 export interface Destination {
   enabled: boolean;
   error?: string | null;
+  file?: RecordingFile | null;
   has_key: boolean;
   id: string;
   kbps: number;
@@ -2128,7 +2129,8 @@ export interface PlanView {
 
 /**
  * The links of an output served as HLS from the control port, each with
- * the output's viewer key on it.
+ * the output's viewer key on it. A channel's watch link is one too:
+ * `/hls/channel/<channel>/<destination>/index.m3u8?key=...`.
  */
 export interface Playback {
   dash_url_path: string;
@@ -2305,6 +2307,15 @@ export interface ProtocolRecord {
   parent?: Id | null;
 }
 export type { ProtocolRecord as Record };
+
+/** The file a `file` destination writes: one per time the stream goes live. */
+export interface RecordingFile {
+  bytes: number;
+  duration_ms: number;
+  name: string;
+  open: boolean;
+  path: string;
+}
 
 /** One file the import would not take. */
 export interface Refused {

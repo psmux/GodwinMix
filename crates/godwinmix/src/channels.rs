@@ -35,6 +35,7 @@ pub mod hooks;
 pub(crate) mod keys;
 mod live;
 mod newkey;
+pub mod local;
 pub(crate) mod net;
 mod ports;
 pub mod project;
@@ -63,6 +64,7 @@ use serde_json::Value;
 use tracing::error;
 
 pub use live::Live;
+pub use local::{WatchLinks, WatchWant};
 pub use ports::Ports;
 pub use whip::Whip;
 pub use store::Record;
@@ -112,6 +114,8 @@ pub struct Channels {
     /// Where a live stream becomes a source. See `target.rs`.
     target: Arc<dyn target::Programme>,
     secrets: &'static Secrets,
+    /// The station's watch links, under a station. See `local.rs`.
+    watch: OnceLock<Arc<dyn local::WatchLinks>>,
 }
 
 impl Channels {
@@ -162,6 +166,7 @@ impl Channels {
             mixer,
             target,
             secrets,
+            watch: OnceLock::new(),
         });
         let _ = channels.me.set(Arc::downgrade(&channels));
         // A show under a station has no channels of its own: it neither makes
@@ -197,6 +202,7 @@ impl Channels {
 
     /// `event/channel.changed` for one channel.
     fn announce(&self, id: &str) {
+        self.watch_moved();
         if let Some(channel) = self.channel(id) {
             self.mixer.emit(Event::ChannelChanged { channel: Box::new(channel) });
         }
