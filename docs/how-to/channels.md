@@ -245,8 +245,21 @@ source is called `sunday-service-main` and is in Sources, ready to put in a
 scene or take. A second encoder on `cam2`, by SRT say, appears beside it as
 `sunday-service-cam2`, and the card says Live, 2 streams.
 
+The row starts with the stream's picture, a small frame of what the encoder
+is sending, whether or not it feeds a source. It is renewed every three
+seconds. The picture is made from keyframes alone, so it can be a GOP behind
+the stream, two seconds for most encoders.
+
 The numbers are read every two seconds while the tab is on screen and
-something is live, and not at all otherwise.
+something is live, and not at all otherwise. The pictures likewise: the
+mixer decodes nothing for a picture until the tab asks, and stops ten seconds
+after it last did. A script can ask for the same picture with
+`channel.thumbnail`, or `GET /api/v1/channels/<id>/streams/<name>/thumbnail.jpg`
+for the JPEG itself ([the reference](../reference/channels.md#channelthumbnail)).
+
+Every channel stream is on the monitoring wall too, under Channels, with
+how many of its destinations are sending: see
+[watch many shows at once](monitor-many-shows.md#channels-on-the-wall).
 
 ## When the encoder stops
 
