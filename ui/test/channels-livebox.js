@@ -90,4 +90,14 @@ export async function liveboxTests(test, eq, ok) {
   test("a channel name with a space is said the way an encoder has to send it", () => {
     ok(hall.textContent.includes("…/Youth%20Hall/cam"), hall.textContent);
   });
+
+  const { addChannel } = await import("../panels/channels/create.js");
+  addChannel(stub);
+  const typed = top().querySelector("input[placeholder='Church']");
+  typed.value = "Choir Loft";
+  typed.dispatchEvent(new Event("input", { bubbles: true }));
+  test("Add Channel's preview writes a space in the address as %20, as the card after it does", () => {
+    ok(top().querySelector(".chn-preview code").textContent.endsWith("/Choir%20Loft"), top().querySelector(".chn-preview code").textContent);
+  });
+  closeAll();
 }
