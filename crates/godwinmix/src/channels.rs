@@ -30,6 +30,7 @@ mod default;
 mod destinations;
 mod edit;
 mod events;
+mod guard;
 mod handover;
 pub mod hooks;
 pub(crate) mod keys;
@@ -59,6 +60,7 @@ use godwinmix_core::secrets::Secrets;
 use godwinmix_protocol::channels::{CertificateInfo, Channel, ChannelList, RtmpInfo};
 use godwinmix_protocol::error::RpcError;
 use godwinmix_protocol::types::Event;
+use guard::Lock;
 use parking_lot::Mutex;
 use serde_json::Value;
 use tracing::error;
@@ -80,16 +82,16 @@ pub struct Channels {
     /// `None` for a core with no config file, and for one whose channels
     /// file would not parse: then nothing is written over it.
     store: Option<PathBuf>,
-    records: Mutex<Vec<Record>>,
+    records: Lock<Vec<Record>>,
     /// What RTMPS answers with; the certificate and key are sealed.
-    certificate: Mutex<Option<CertificateInfo>>,
+    certificate: Lock<Option<CertificateInfo>>,
     /// What the listener last said about its ports.
-    listeners: Mutex<Vec<Value>>,
+    listeners: Lock<Vec<Value>>,
     /// The ports from the settings, for addresses of listeners not open yet.
     ports: Ports,
-    live: Mutex<Vec<Live>>,
+    live: Lock<Vec<Live>>,
     /// What the listener last said about each destination.
-    sending: Mutex<Vec<sending::Sending>>,
+    sending: Lock<Vec<sending::Sending>>,
     /// Destination edits, one at a time, so two cannot seal over each other.
     edits: Mutex<()>,
     port: AtomicU16,
@@ -97,7 +99,7 @@ pub struct Channels {
     transcode: transcode::Transcode,
     /// The table the listener was last handed, so a replan that changes
     /// nothing does not call it.
-    handed: Mutex<Option<Value>>,
+    handed: Lock<Option<Value>>,
     /// The renditions' watch thread is running.
     watching: AtomicBool,
     /// The default channel was made once, or never will be: this mixer had
@@ -148,15 +150,15 @@ impl Channels {
         let made = stored.default_made || !stored.channels.is_empty();
         let channels = Arc::new(Channels {
             store,
-            records: Mutex::new(stored.channels),
-            certificate: Mutex::new(stored.certificate),
-            listeners: Mutex::new(Vec::new()),
-            live: Mutex::new(Vec::new()),
-            sending: Mutex::new(Vec::new()),
+            records: Lock::new("records", stored.channels),
+            certificate: Lock::new("certificate", stored.certificate),
+            listeners: Lock::new("listeners", Vec::new()),
+            live: Lock::new("live", Vec::new()),
+            sending: Lock::new("sending", Vec::new()),
             edits: Mutex::new(()),
             port: AtomicU16::new(ports.rtmp),
             transcode: transcode::Transcode::new(data_dir),
-            handed: Mutex::new(None),
+            handed: Lock::new("handed", None),
             watching: AtomicBool::new(false),
             default_made: AtomicBool::new(made),
             hooks: OnceLock::new(),
@@ -178,6 +180,19 @@ impl Channels {
         channels.hand_over(false);
         events::start(&channels);
         channels
+    }
+
+    /// The mixer, for a call that waits on its queue. Never under a lock.
+    fn target(&self) -> &dyn target::Programme {
+        guard::assert_free("the mixer");
+        &*self.target
+    }
+
+    /// The listener plugin, for a call that waits up to five seconds on it.
+    /// Never under a lock.
+    fn plugins(&self) -> &Supervisor {
+        guard::assert_free("the listener plugin");
+        &self.plugins
     }
 
     /// Persist, hand the listener the new table, and say what changed.
@@ -241,7 +256,7 @@ impl Channels {
     /// The RTMP port, and whether it is open.
     fn rtmp(&self) -> RtmpInfo {
         let port = self.port.load(Ordering::Relaxed);
-        let running = self.plugins.is_running(PLUGIN);
+        let running = self.plugins().is_running(PLUGIN);
         let listening = running && self.rtmp_open();
         // Closed because no channel has RTMP on is not a problem; closed
         // because the plugin is not there, or the port would not bind, is.

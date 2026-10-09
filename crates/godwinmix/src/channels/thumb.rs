@@ -28,14 +28,17 @@ impl Channels {
     /// first keyframe is on its way. Blocks on the listener; call it on the
     /// blocking pool.
     pub fn thumbnail(&self, req: &ChannelThumbnailRequest) -> Result<Value, RpcError> {
-        let record = self.records.lock().iter().find(|r| r.id == req.id).cloned().ok_or_else(|| self.not_found(&req.id))?;
+        // Two statements: the guard lives to the end of the one that took
+        // it, and `not_found` takes `records` again. See `guard`.
+        let found = self.records.lock().iter().find(|r| r.id == req.id).cloned();
+        let record = found.ok_or_else(|| self.not_found(&req.id))?;
         let stream = self.live_stream(&record.id, req.stream.as_deref())?;
-        if !self.plugins.is_running(PLUGIN) {
+        if !self.plugins().is_running(PLUGIN) {
             return Err(RpcError::not_in_state(format!("channel {} has no picture: {}", record.id, net::why_not_listening(PLUGIN)))
                 .with("channel", record.id.as_str()));
         }
         let args = json!({"name": "channel.thumbnail", "arguments": {"app": record.app, "stream": stream, "width": req.width.unwrap_or(320)}});
-        let answer = self.plugins.call_provide(PLUGIN, "discover", "tool.call", args).map_err(|e| {
+        let answer = self.plugins().call_provide(PLUGIN, "discover", "tool.call", args).map_err(|e| {
             RpcError::not_in_state(format!("channel {} has no picture yet: the listener said {e:#}. Ask again in a second.", record.id))
                 .with("channel", record.id.as_str())
                 .with("retry_after_ms", 1000)

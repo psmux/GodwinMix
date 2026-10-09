@@ -24,11 +24,11 @@ impl Channels {
     /// Hand a publisher's offer to the listener. Blocks for up to the
     /// protocol's five seconds while WebRTC gathers its candidates.
     pub fn whip_offer(&self, app: &str, stream: &str, key: &str, sdp: &str, peer: &str) -> Whip {
-        if !self.plugins.is_running(PLUGIN) {
+        if !self.plugins().is_running(PLUGIN) {
             return Whip::Refused { status: 503, why: net::why_not_listening(PLUGIN) };
         }
         let params = json!({"app": app, "stream": stream, "key": key, "sdp": sdp, "peer": peer});
-        match self.plugins.call_provide(PLUGIN, PROVIDE, "tool.call", json!({"name": "whip.offer", "arguments": params})) {
+        match self.plugins().call_provide(PLUGIN, PROVIDE, "tool.call", json!({"name": "whip.offer", "arguments": params})) {
             Ok(answer) => read(&answer),
             Err(e) => Whip::Refused { status: 502, why: format!("{e:#}") },
         }
@@ -37,7 +37,7 @@ impl Channels {
     /// The publisher is done (`DELETE` on its session).
     pub fn whip_end(&self, session: &str) -> bool {
         let arguments = json!({"session": session});
-        let answer = self.plugins.call_provide(PLUGIN, PROVIDE, "tool.call", json!({"name": "whip.end", "arguments": arguments}));
+        let answer = self.plugins().call_provide(PLUGIN, PROVIDE, "tool.call", json!({"name": "whip.end", "arguments": arguments}));
         answer.map(|a| a["ended"] == true).unwrap_or(false)
     }
 }

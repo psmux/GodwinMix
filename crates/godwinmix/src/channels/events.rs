@@ -142,10 +142,10 @@ impl Channels {
     /// dropped GOPs. Asked of the listener when a client asks for a channel,
     /// and never on a timer.
     pub(super) fn refresh(&self) {
-        if !self.plugins.is_running(PLUGIN) {
+        if !self.plugins().is_running(PLUGIN) {
             return;
         }
-        let answer = match self.plugins.tool_call(&format!("{PROVIDE}/streams"), json!({})) {
+        let answer = match self.plugins().tool_call(&format!("{PROVIDE}/streams"), json!({})) {
             Ok(answer) => answer,
             Err(e) => {
                 debug!(error = %format!("{e:#}"), "the RTMP listener did not answer streams");
