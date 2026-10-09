@@ -23,8 +23,10 @@
 //! one made here and kept (`cert.rs`). ACME is the third source, still to
 //! come; the seam is `cert::Source`.
 
+pub mod authority;
 pub mod cert;
 pub mod listen;
+mod made;
 pub mod names;
 
 use std::path::Path;
@@ -34,6 +36,7 @@ use anyhow::Result;
 use godwinmix_core::config::Config;
 use godwinmix_core::tls_cert;
 use godwinmix_protocol::types::TlsInfo;
+pub use cert::public_path;
 pub use listen::Sniffing;
 use tokio_rustls::TlsAcceptor;
 
@@ -112,17 +115,9 @@ pub fn serving(loaded: &cert::Loaded, bind: &str) -> Result<Serving> {
         fingerprint: tls_cert::fingerprint(&loaded.pair.cert)?,
         names: loaded.names.clone(),
         urls: names::urls(bind, &url_names),
+        authority: loaded.authority.as_deref().map(tls_cert::fingerprint).transpose()?,
     };
     Ok(Serving { acceptor: TlsAcceptor::from(Arc::new(config)), info })
-}
-
-/// Where a made certificate's public half is written: beside the runtime
-/// store, named after the config, `godwinmix.control.crt` for
-/// `godwinmix.toml`.
-pub fn public_path(config_path: &Path) -> std::path::PathBuf {
-    let mut name = config_path.file_stem().unwrap_or_default().to_os_string();
-    name.push(".control.crt");
-    config_path.with_file_name(name)
 }
 
 /// [`prepare`] at startup, with what goes wrong told to the operator as an
@@ -145,4 +140,7 @@ pub fn start(cfg: &Config, bind: &str, config_path: &Path, mixer: &godwinmix_cor
 pub fn announce(info: &TlsInfo) {
     let Some(first) = info.urls.first() else { return };
     eprintln!("HTTPS is on the same port: {first} (certificate fingerprint {}).", info.fingerprint);
+    if let Some(print) = &info.authority {
+        authority::announce(print, first);
+    }
 }

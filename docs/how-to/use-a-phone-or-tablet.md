@@ -27,7 +27,7 @@ with a bar of five tabs along the bottom:
 | Sources | the tray of the scene you are working on, two tiles to a row, with a fader and a mute on each. A row of scene names across the top switches scene |
 | Audio | the programme level and a fader and mute for every source |
 | Outputs | destinations, recording and resources, then the channels, where an RTMP, SRT or WHIP feed comes in |
-| More | every other panel (Graphics, Media, Alerts and any plugin panel), a switch for Studio mode, Cut to black, Routing, the monitoring wall, both settings dialogs and Open on another device |
+| More | every other panel (Graphics, Media, Alerts and any plugin panel), a switch for Studio mode, Cut to black, Routing, the monitoring wall, both settings dialogs, Open on another device and, where the phone can install the page, Install app |
 
 Live is where a show is run from, so everything a take needs is on it
 together and nothing has to be scrolled to between choosing a shot and
@@ -62,8 +62,14 @@ buttons are under the picture, one row each, and swipe sideways. The
 inspector for the selected item is under those, and Apply stays at the
 bottom.
 
-To open the page like an app, use the browser's Add to Home Screen. It then
-starts full screen without the browser's address bar.
+To open the page like an app, install it. On Android, More has Install app
+under This mixer once Chrome has offered to install the page; on an iPhone
+or iPad, tap Share, then Add to Home Screen. It then starts full screen
+without the browser's address bar. Chrome only offers to install a page over
+`https://` with a certificate the phone trusts, and the mixer's own self
+signed one cannot be made trusted on a phone as it is:
+[install the control page as an app](install-as-an-app.md) says what works on
+which phone and how to get a certificate a phone will trust.
 
 Anything the keyboard does has a button or a menu item:
 

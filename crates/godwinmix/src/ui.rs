@@ -49,6 +49,14 @@ const ASSETS: &[(&str, &str)] = &[
     ("client/transport-legacy.js", include_str!("../../../ui/client/transport-legacy.js")),
     ("client/transport-rpc.js", include_str!("../../../ui/client/transport-rpc.js")),
     ("index.html", include_str!("../../../ui/index.html")),
+    // Installing the page as an app: the manifest, the service worker, which
+    // is served with this build's id written into it, and the page the worker
+    // shows when the mixer cannot be reached.
+    ("manifest.webmanifest", include_str!("../../../ui/manifest.webmanifest")),
+    ("sw.js", include_str!("../../../ui/sw.js")),
+    ("offline.html", include_str!("../../../ui/offline.html")),
+    ("shell/install.js", include_str!("../../../ui/shell/install.js")),
+    ("shell/trust.js", include_str!("../../../ui/shell/trust.js")),
     // The publisher: a browser's camera and microphone over WHIP. Alone at
     // /join/, and inside the page when Sources opens this browser's camera.
     ("join/index.html", include_str!("../../../ui/join/index.html")),
@@ -329,6 +337,35 @@ const ASSETS: &[(&str, &str)] = &[
     ("themes/system.css", include_str!("../../../ui/themes/system.css")),
 ];
 
+/// The pictures: the app icons the manifest and `index.html` name. Bytes, not
+/// text, so they have a table of their own.
+const IMAGES: &[(&str, &[u8])] = &[
+    ("icons/icon-192.png", include_bytes!("../../../ui/icons/icon-192.png")),
+    ("icons/icon-512.png", include_bytes!("../../../ui/icons/icon-512.png")),
+    ("icons/maskable-512.png", include_bytes!("../../../ui/icons/maskable-512.png")),
+    ("icons/apple-touch-icon.png", include_bytes!("../../../ui/icons/apple-touch-icon.png")),
+];
+
+/// What the service worker's `BUILD` is replaced with: the version and a hash
+/// of every file served, so any change to the page is a new worker, and a new
+/// worker drops the old build's cache.
+fn build_id() -> &'static str {
+    static ID: OnceLock<String> = OnceLock::new();
+    ID.get_or_init(|| {
+        use std::hash::{Hash, Hasher};
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        for (path, body) in ASSETS {
+            path.hash(&mut h);
+            body.hash(&mut h);
+        }
+        for (path, body) in IMAGES {
+            path.hash(&mut h);
+            body.hash(&mut h);
+        }
+        format!("{}-{:016x}", env!("CARGO_PKG_VERSION"), h.finish())
+    })
+}
+
 /// The page as it was before the split, kept at `/legacy` for one release so an
 /// operator mid show has something to fall back to.
 const LEGACY: &str = include_str!("../../../ui/legacy/index.html");
@@ -366,6 +403,8 @@ const DEV_ASSETS: &[(&str, &str)] = &[
     ("test/touch.js", include_str!("../../../ui/test/touch.js")),
     ("test/phone.js", include_str!("../../../ui/test/phone.js")),
     ("test/phone-reach.js", include_str!("../../../ui/test/phone-reach.js")),
+    // Install app on More, and which requests the service worker answers.
+    ("test/install.js", include_str!("../../../ui/test/install.js")),
     ("test/presence.js", include_str!("../../../ui/test/presence.js")),
     ("test/touch-tray.js", include_str!("../../../ui/test/touch-tray.js")),
     ("test/tile-levels.js", include_str!("../../../ui/test/tile-levels.js")),
@@ -484,10 +523,18 @@ where
         .route("/plugins/{name}/ui/{*path}", get(plugin_file))
         // A preset's own theme, read out of the preset it was applied from, so
         // a theme travels with the preset and needs no rebuild.
-        .route("/presets/{name}/theme.css", get(preset_theme));
+        .route("/presets/{name}/theme.css", get(preset_theme))
+        // The machine's certificate authority, for a phone to trust. Public,
+        // so no token: `/ca.crt` for iOS and desktops, `/ca.pem` for Android.
+        .route("/ca.crt", get(|| async { authority(false) }))
+        .route("/ca.pem", get(|| async { authority(true) }));
     for (path, _) in ASSETS {
         let p = *path;
         router = router.route(&format!("/{p}"), get(move || async move { asset(p) }));
+    }
+    for (path, _) in IMAGES {
+        let p = *path;
+        router = router.route(&format!("/{p}"), get(move || async move { image(p) }));
     }
     if dev_pages() {
         // A directory URL is what a person types, so it answers rather than 404s.
@@ -559,6 +606,9 @@ async fn preset_theme(UrlPath(name): UrlPath<String>) -> Response {
 /// One embedded file, or the same file from `ui_dir` when one is configured.
 fn asset(path: &'static str) -> Response {
     let kind = content_type(path);
+    if path == "sw.js" {
+        return worker();
+    }
     if let Some(dir) = dirs().ui.as_ref() {
         if let Ok(body) = std::fs::read(dir.join(path)) {
             return with_headers(kind, Body::from(body), path);
@@ -572,6 +622,51 @@ fn asset(path: &'static str) -> Response {
     with_headers(kind, Body::from(body), path)
 }
 
+/// The service worker, with this build's id where it says `__GMX_BUILD__`.
+/// Read from `ui_dir` when one is set, like every other file.
+fn worker() -> Response {
+    let embedded = ASSETS.iter().find(|(p, _)| *p == "sw.js").map(|(_, b)| *b).unwrap_or("");
+    let source = dirs()
+        .ui
+        .as_ref()
+        .and_then(|dir| std::fs::read_to_string(dir.join("sw.js")).ok())
+        .unwrap_or_else(|| embedded.to_string());
+    let body = source.replace("__GMX_BUILD__", build_id());
+    with_headers(content_type("sw.js"), Body::from(body), "sw.js")
+}
+
+/// One of the icons, embedded, or from `ui_dir` when one is configured.
+fn image(path: &'static str) -> Response {
+    let from_disk = dirs().ui.as_ref().and_then(|dir| std::fs::read(dir.join(path)).ok());
+    let body = from_disk.unwrap_or_else(|| {
+        IMAGES.iter().find(|(p, _)| *p == path).map(|(_, b)| b.to_vec()).unwrap_or_default()
+    });
+    with_headers(content_type(path), Body::from(body), path)
+}
+
+/// The authority's certificate, PEM either way. As `application/x-x509-ca-cert`
+/// Safari on iOS opens it as a profile to install. Chrome on Android hands
+/// that type to the system, which refuses to install an authority from a
+/// browser, so `/ca.pem` is a plain download for Settings to pick up.
+fn authority(download: bool) -> Response {
+    let Some(pem) = crate::tls::authority::served() else {
+        return (
+            StatusCode::NOT_FOUND,
+            "This mixer has no certificate authority of its own to offer: HTTPS is off, or [control.tls] \
+             names your own certificate, whose authority is the one to trust.",
+        )
+            .into_response();
+    };
+    let (kind, disposition) = if download {
+        ("application/octet-stream", "attachment; filename=\"godwinmix-authority.crt\"")
+    } else {
+        ("application/x-x509-ca-cert", "inline; filename=\"godwinmix-authority.crt\"")
+    };
+    let mut answer = with_headers(kind, Body::from(pem), "ca.crt");
+    answer.headers_mut().insert(header::CONTENT_DISPOSITION, HeaderValue::from_static(disposition));
+    answer
+}
+
 fn html(body: &'static str) -> Response {
     with_headers("text/html; charset=utf-8", Body::from(body), "index.html")
 }
@@ -582,6 +677,7 @@ fn content_type(path: &str) -> &'static str {
         Some("js") | Some("mjs") => "text/javascript; charset=utf-8",
         Some("css") => "text/css; charset=utf-8",
         Some("json") => "application/json",
+        Some("webmanifest") => "application/manifest+json",
         Some("svg") => "image/svg+xml",
         Some("png") => "image/png",
         Some("jpg") | Some("jpeg") => "image/jpeg",
@@ -599,9 +695,13 @@ fn content_type(path: &str) -> &'static str {
 /// on elements they build, and a nonce cannot cover a style attribute. Scripts
 /// get no such exception: there is no inline script in the page at all, which
 /// is the half of the policy that stops an injected string from running.
+/// `worker-src` and `manifest-src` say outright what `default-src` already
+/// allowed: the service worker and the app manifest, from this origin only.
 const CSP: &str = concat!(
     "default-src 'self'; ",
     "script-src 'self'; ",
+    "worker-src 'self'; ",
+    "manifest-src 'self'; ",
     "style-src 'self' 'unsafe-inline'; ",
     "img-src 'self' data: blob:; ",
     "media-src 'self' blob:; ",
@@ -1035,6 +1135,8 @@ mod tests {
         // Not imported by this page at all: it is what a sandboxed panel's own
         // HTML imports, inside the iframe, to talk the same protocol back.
         reachable.extend(closure_of("client/sandbox-client.js"));
+        // Not imported either: shell/install.js registers it by its URL.
+        reachable.extend(closure_of("sw.js"));
         // The publisher: /join/ loads page.js itself, and the Sources panel
         // and the picker fetch browser-device.js when this browser's camera
         // is asked for.
@@ -1049,7 +1151,8 @@ mod tests {
             reachable.extend(closure_of(entry));
         }
         for (path, _) in ASSETS {
-            if path.ends_with(".css") || path.ends_with(".html") || path.ends_with(".json") {
+            // Data and pages: linked from a page, never imported.
+            if path.ends_with(".css") || path.ends_with(".html") || path.ends_with(".json") || path.ends_with(".webmanifest") {
                 continue;
             }
             assert!(reachable.contains(path), "{path} is served but nothing imports it");
@@ -1252,8 +1355,72 @@ mod tests {
             "connect-src 'self' ws: wss:",
             "frame-src 'self'",
             "object-src 'none'",
+            "worker-src 'self'",
+            "manifest-src 'self'",
         ] {
             assert!(CSP.contains(directive), "the policy is missing {directive}");
+        }
+    }
+
+    /// Width and height out of a PNG's header, or None if it is not a PNG.
+    fn png_size(bytes: &[u8]) -> Option<(u32, u32)> {
+        if bytes.len() < 24 || &bytes[..8] != b"\x89PNG\r\n\x1a\n" || &bytes[12..16] != b"IHDR" {
+            return None;
+        }
+        let word = |at: usize| u32::from_be_bytes([bytes[at], bytes[at + 1], bytes[at + 2], bytes[at + 3]]);
+        Some((word(16), word(20)))
+    }
+
+    #[test]
+    fn the_manifest_names_icons_that_are_served_at_the_sizes_it_says() {
+        let text = source_of("manifest.webmanifest").unwrap();
+        let manifest: serde_json::Value = serde_json::from_str(text).expect("the manifest is JSON");
+        assert_eq!(manifest["display"], "standalone");
+        assert_eq!(manifest["start_url"], "./", "relative, so a mixer behind a path prefix installs too");
+        let icons = manifest["icons"].as_array().unwrap();
+        for wanted in ["192x192", "512x512"] {
+            assert!(icons.iter().any(|i| i["sizes"] == wanted && i["purpose"] == "any"), "no {wanted} icon");
+        }
+        assert!(icons.iter().any(|i| i["purpose"] == "maskable"), "no maskable icon");
+        for icon in icons {
+            let src = icon["src"].as_str().unwrap();
+            let bytes = IMAGES.iter().find(|(p, _)| *p == src).map(|(_, b)| *b).unwrap_or_else(|| panic!("{src} is not served"));
+            let (w, h) = png_size(bytes).unwrap_or_else(|| panic!("{src} is not a PNG"));
+            assert_eq!(format!("{w}x{h}"), icon["sizes"].as_str().unwrap(), "{src} is not the size the manifest says");
+        }
+        assert_eq!(png_size(IMAGES.iter().find(|(p, _)| *p == "icons/apple-touch-icon.png").unwrap().1), Some((180, 180)));
+        assert_eq!(content_type("manifest.webmanifest"), "application/manifest+json");
+        assert_eq!(content_type("icons/icon-192.png"), "image/png");
+    }
+
+    #[test]
+    fn the_page_links_the_manifest_and_the_apple_icon() {
+        let page = source_of("index.html").unwrap();
+        assert!(page.contains(r#"<link rel="manifest" href="manifest.webmanifest">"#));
+        assert!(page.contains(r#"href="icons/apple-touch-icon.png""#));
+        assert!(page.contains(r#"name="theme-color""#));
+    }
+
+    #[test]
+    fn the_service_worker_carries_this_build_and_leaves_the_protocol_alone() {
+        let source = source_of("sw.js").unwrap();
+        assert!(source.contains("\"__GMX_BUILD__\""), "the placeholder the server fills in is gone");
+        assert!(build_id().starts_with(env!("CARGO_PKG_VERSION")));
+        assert!(!build_id().contains("__GMX_BUILD__"));
+        // The paths the worker must never answer for. The DOM tests check the
+        // function; this keeps the list from losing one quietly.
+        for path in ["/api", "/rpc", "/ws", "/mjpeg", "/pcm", "/opus", "/whep", "/whip", "/hls", "/metrics", "/plugins"] {
+            assert!(source.contains(&format!("\"{path}\"")), "the service worker's NEVER list has no {path}");
+        }
+    }
+
+    #[test]
+    fn no_icon_is_empty_or_listed_twice() {
+        let mut seen = std::collections::HashSet::new();
+        for (path, body) in IMAGES {
+            assert!(png_size(body).is_some(), "{path} is not a PNG");
+            assert!(seen.insert(*path), "{path} is in the table twice");
+            assert!(!ASSETS.iter().any(|(p, _)| p == path), "{path} is in both tables");
         }
     }
 

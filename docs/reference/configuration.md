@@ -89,9 +89,10 @@ HTTPS on the control port, on the same port as HTTP. See
 | `cert` | unset | a PEM certificate file, full chain, to use instead of the one the mixer makes. Relative paths are read from the config file's folder. Needs `key` |
 | `key` | unset | the PEM private key that goes with `cert` |
 
-With neither `cert` nor `key` the mixer makes a self signed certificate on the
-first start, seals its key in the secret store and writes the certificate
-beside the config as `<config name>.control.crt`. All three keys take effect
+With neither `cert` nor `key` the mixer makes a certificate authority for the
+machine and a certificate signed by it on the first start, seals both keys in
+the secret store and writes the authority's certificate beside the config as
+`<config name>.control.crt`, which it also serves at `/ca.crt` and `/ca.pem`. All three keys take effect
 on the next start. `core.info` reports what is in force under `tls`.
 
 ## `[hardware]`

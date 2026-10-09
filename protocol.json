@@ -12838,6 +12838,13 @@
     "TlsInfo": {
       "description": "`core.info.tls`: what the control port answers HTTPS with.\n\nEnough for a page to say \"open this address, accept the certificate\nwarning once, and check the fingerprint is this one\".",
       "properties": {
+        "authority": {
+          "description": "SHA-256 of the machine's local certificate authority, which signed a\ncertificate this mixer made and is what a phone is told to trust. Its\ncertificate is served at `/ca.crt`. Absent for an operator's own.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "fingerprint": {
           "description": "SHA-256 of the certificate, upper case hex in colon separated pairs,\nthe way a browser's certificate viewer shows it.",
           "type": "string"
