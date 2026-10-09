@@ -46,7 +46,7 @@ impl Packagers {
         let report = book.reports.get(&key);
         let live = match (&book.down, report) {
             (Some((state, why, at)), _) => {
-                DestinationLive { state: *state, since_ms: at.elapsed().as_millis() as u64, reconnects: book.restarts, error: Some(why.clone()), kbps: 0 }
+                DestinationLive { state: *state, since_ms: at.elapsed().as_millis() as u64, reconnects: book.restarts, error: Some(why.clone()), kbps: 0, file: None }
             }
             (None, Some(r)) => DestinationLive { reconnects: r.live.reconnects + book.restarts, ..r.live.clone() },
             (None, None) => {

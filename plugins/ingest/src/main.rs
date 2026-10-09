@@ -29,6 +29,7 @@ mod srt;
 mod tagger;
 mod transcode;
 mod whip;
+mod unescape;
 // The restreamer (src/restream/) reads the hub through `subscribe`, so parts
 // of it are public API this binary does not call itself.
 #[allow(dead_code)]
@@ -287,14 +288,15 @@ impl Device for Publishers {
         if let Some(answer) = self.whip_call(name, &arguments) {
             return answer;
         }
-        if name.starts_with("direct.") {
+        if name.starts_with("direct.") || name == "channel.thumbnail" {
             // The station's to call, like whip.offer: direct.stats for
-            // show.stats, direct.thumbnail for the wall's pictures.
+            // show.stats, direct.thumbnail for the wall's pictures, and
+            // channel.thumbnail for a channel stream's.
             let running = self.running.as_ref().ok_or_else(|| {
                 RpcError::new(codes::WRONG_STATE, "the channel server is not running, so no direct show is either")
             })?;
             return running.direct.call(name, &arguments).ok_or_else(|| {
-                RpcError::new(codes::METHOD_NOT_FOUND, format!("the direct host has no call '{name}'. It answers direct.stats and direct.thumbnail."))
+                RpcError::new(codes::METHOD_NOT_FOUND, format!("the direct host has no call '{name}'. It answers direct.stats, direct.thumbnail and channel.thumbnail."))
             });
         }
         let short = name.rsplit('/').next().unwrap_or(name);

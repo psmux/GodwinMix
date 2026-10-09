@@ -22,10 +22,10 @@ which channels, and why one a channel wants is not.
 |---|---|---|---|---|
 | `channel.list` | `GET /api/v1/channels` | read | no | Every channel, and the port they share |
 | `channel.get {id}` | `GET /api/v1/channels/{id}` | read | no | One channel |
-| `channel.add {name, app?, auto_source?, key_mode?, protocols?}` | `POST /api/v1/channels` | admin | no | A channel and its first key |
+| `channel.add {name, app?, auto_source?, key_mode?, protocols?, secret?}` | `POST /api/v1/channels` | admin | no | A channel and its first key |
 | `channel.set {id, name?, app?, enabled?, auto_source?, key_mode?, protocols?, rtmps?}` | `POST /api/v1/channels/{id}/set` | admin | no | Change what is named, leave the rest |
 | `channel.remove {id}` | `DELETE /api/v1/channels/{id}` | admin | yes | The channel, its keys, and the sources it made that no scene holds |
-| `channel.key.add {id, label?}` | `POST /api/v1/channels/{id}/key/add` | admin | no | One more key |
+| `channel.key.add {id, label?, secret?}` | `POST /api/v1/channels/{id}/key/add` | admin | no | One more key |
 | `channel.key.remove {id, key}` | `POST /api/v1/channels/{id}/key/remove` | admin | yes | Take one key back |
 | `channel.key.reveal {id, key}` | `POST /api/v1/channels/{id}/key/reveal` | admin | no | Read one key back, to give it out again |
 | `channel.certificate.set {cert, key}` | `POST /api/v1/channels/certificate/set` | admin | no | Give RTMPS a certificate and its private key, as PEM |
@@ -41,7 +41,10 @@ Every refusal says what state things are in and what to do, with `data` a
 client can act on (`docs/reference/errors.md`). An unknown channel or key
 answers `-32004` with the ids that would have worked in `data.valid`. A bad
 application name or one already taken answers `-32602` with `data.field` set
-to `app`, and `data.channel` naming the channel that has it.
+to `app`, and `data.channel` and `data.app` naming the channel that has it
+and its spelling. A `secret` that cannot be a key answers `-32602` with
+`data.field` set to `secret` and the rule in `data.min_len`, `data.max_len`
+and `data.allowed`.
 
 ## The Channel record
 
@@ -85,14 +88,14 @@ to `app`, and `data.channel` naming the channel that has it.
 | Field | What it is |
 |---|---|
 | `id` | A slug made from the name when the channel is made. It never changes |
-| `app` | The RTMP application name, the path segment after the port. Letters, digits, dashes and underscores, up to 64. Defaults to the id |
+| `app` | The RTMP application name, the path segment after the port, kept as it was typed: `Church` stays `Church`. Letters, digits, dashes, underscores and single spaces between words, up to 64, starting with a letter or digit. Defaults to the id. Matched without regard to case, so two channels cannot differ only in case. See [Case and spaces in an application name](#case-and-spaces-in-an-application-name) |
 | `enabled` | Off turns every publisher away with a sentence saying the channel is switched off, and cuts off the ones already live |
 | `auto_source` | A stream that goes live becomes a mixer source by itself. On by default |
 | `key_mode` | `query`: the key rides on the stream name as `?psk=`, `?key=`, `?token=` or `?Token=`, or is the SRT passphrase, or the WHIP bearer token. `stream`: the whole stream name is the key, over every protocol |
 | `protocols` | Which of `rtmp`, `srt` and `whip` it takes publishers over. At least one, unless RTMPS is on. A channel made before protocols existed is `["rtmp"]` |
 | `rtmps` | `{enabled, port}`. RTMPS on a port of its own, 443 offered first. It needs the mixer's certificate |
-| `keys` | Hints only. `hint` is the last four characters. The key itself is in the answer that made it, and after that only `channel.key.reveal` sends it |
-| `publish.server` | What an RTMP encoder's server box takes. The address is this machine's address on its network |
+| `keys` | Hints only. `hint` is the last four characters. The key itself is in the answer that made it, and after that only `channel.key.reveal` sends it. `imported: true` marks a key whose secret a person typed (`secret` on `channel.add` or `channel.key.add`); a key the mixer made leaves it out |
+| `publish.server` | What an RTMP encoder's server box takes. The address is this machine's address on its network. A space in `app` is written `%20` here and in every address, because that is how an encoder has to send it |
 | `publish.addresses` | The same for every protocol it has on, RTMP first: `{protocol, server, example}` with `<key>` where the key goes |
 | `streams` | Every live stream, and any stream that left while a scene still holds its source (`state: "idle"`) |
 | `streams[].key` | The id of the key that let it in |
@@ -101,6 +104,7 @@ to `app`, and `data.channel` naming the channel that has it.
 | `streams[].source` | The mixer source it feeds, `<app>-<stream>` |
 | `streams[].dropped_gops` | Whole GOPs readers of this stream lost by falling behind, this session. A reader that falls behind loses from the front of its queue and starts again at the next keyframe; the publisher is never slowed |
 | `streams[].relay` | Where a mixer on this machine reads the stream: the listener's own port on loopback, `127.0.0.1:<rtmp port>`. Any show under a station adds the stream as a source with `source.add {type: "ingest/rtmp", relay, stream: "<app>/<name>"}`, and every show that does reads the one stream the station received. Absent while nothing is live |
+| `streams[].source_error` | Why the mixer would not make the stream a source, for a channel with `auto_source` on, for instance that the plugin could not listen on its RTMP port because another program holds it. The stream is in but no scene can show it. Absent once the source is made, and whenever nothing was refused |
 
 In `stream` key mode the stream is named after the key's id, so a key never
 becomes part of a source id or a log line.
@@ -159,10 +163,65 @@ The secret is 24 lower case letters and digits, with 0, o, 1 and l left out
 so it reads back over a phone. No list or event carries it. An admin reads it
 again with `channel.key.reveal`.
 
+`secret` keeps a password encoders already send instead, the one after
+`?psk=` in the address they publish to:
+
+```json
+{ "jsonrpc": "2.0", "id": 1, "method": "channel.add",
+  "params": { "name": "Church", "app": "Church", "secret": "Sunday-2024" } }
+```
+
+The channel's id is still a slug, `church`; its `app` is `Church`, and its
+first key carries `imported: true`. A typed secret is sealed in the secret
+store exactly as a made one is, and never written to the channels file or a
+log. The rule for one:
+
+| Rule | Value |
+|---|---|
+| Length | 6 to 128 characters, after spaces at either end are trimmed |
+| Characters | `A` to `Z`, `a` to `z`, `0` to `9`, `-`, `_`, `.`, `~`, and spaces |
+
+Those are the characters a URL query carries without escaping, plus the
+space, which Livebox allowed in a password. An encoder may send a space as it
+is, as `%20` or as `+`; the listener reads all three as a space, which is why
+`+` itself is refused. A refusal never repeats the secret:
+
+```json
+{ "code": -32602,
+  "message": "that secret cannot be a key: it is 3 characters long, and a key needs at least 6. Use 6 to 128 letters, digits, dashes, underscores, dots, tildes or spaces, or leave it out and the mixer makes one.",
+  "data": { "field": "secret", "min_len": 6, "max_len": 128, "allowed": "A-Z a-z 0-9 - _ . ~ space", "retryable": false } }
+```
+
+A refused secret makes nothing: the channel is not made without its key.
+
+### Case and spaces in an application name
+
+The listener finds a channel by its `app` without regard to case, so an
+encoder sending `church`, `Church` or `CHURCH` reaches the channel whose
+`app` is `Church`. Encoders are set up by hand, and a capital typed one way
+on one encoder and another way on the next is a common reason a stream does not
+arrive. The stream is then named with the channel's own spelling everywhere
+after the listener (the hub, the source `<app>/<stream>` a show reads, the
+events), so one stream never has two names. Because of that, `channel.add`
+and `channel.set` refuse an `app` that differs from another channel's only in
+case, and the refusal says so.
+
+A space is allowed between words because Livebox allowed one in a channel
+name. OBS and ffmpeg both end an RTMP address at a raw space and read what
+follows as options: ffmpeg given `rtmp://host/Youth Hall/main` asks for the
+application `Youth`. So the space has to travel as `%20`
+(`rtmp://host/Youth%20Hall/main`), every address the mixer shows is written
+that way, and the listener decodes `%XX` in the application name and the key
+before it compares. An encoder that does send a raw space is still let in.
+
 ## `channel.key.add` and `channel.key.remove`
 
-`channel.key.add {id, label?}` answers `{key: {id, label, secret}}`. The id is
-a slug of the label, `Key 2` when there is no label. `channel.key.remove {id,
+`channel.key.add {id, label?, secret?}` answers `{key: {id, label, secret}}`. The id is
+a slug of the label, `Key 2` when there is no label. `secret` follows the
+rule under [`channel.add`](#channeladd) and marks the key `imported`. A secret
+the channel already has as another key is refused with `data.field` set to
+`secret` and `data.key` naming that key, since encoders sending it are let in
+already. `channel.key.remove {id,
 key}` answers with the channel. A publisher live on the key taken back is cut
 off at once; publishers on the other keys are not touched.
 
@@ -309,6 +368,60 @@ on changes, never on a timer. The Channels page calls `channel.list` every two
 seconds while it is on screen and something is live, which is where its bit
 rates come from.
 
+## `channel.thumbnail`
+
+Read scope. A live stream's picture as a small JPEG, for the Channels page and
+the monitoring wall.
+
+```json
+{"id": "sunday-service", "stream": "main", "width": 320}
+```
+
+`stream` is the first live one when left out. `width` is 16 to 640, made even,
+320 when left out; the height follows the picture's shape. The answer:
+
+```json
+{"channel": "sunday-service", "stream": "main", "jpeg": "/9j/4AAQ...", "width": 320, "height": 180, "at_ms": 1791043200000}
+```
+
+`jpeg` is base64 and `at_ms` is when the keyframe it was decoded from arrived.
+While the first keyframe is on its way the answer is
+`{"channel", "stream", "pending": true, "retry_after_ms": 1000}`.
+
+The ingest plugin makes the picture from the stream it already holds. The
+first ask puts a tap on the stream that decodes keyframes and nothing else,
+about one a second, scales each to the width asked for and keeps the newest
+JPEG. Every ask keeps the tap for ten seconds more; ten seconds after the
+last ask it goes, with its decoder. A channel nobody is looking at is never
+decoded.
+
+| Code | When |
+|---|---|
+| `-32004` | No channel by that id. `data.valid` lists the ids |
+| `-32001` | Nothing is live on it, or not under that stream name. `data.state` is `idle` and `data.live` lists the streams that are; the picture comes once an encoder publishes |
+| `-32001` | The ingest plugin is not running, with why and what to do, or it did not answer: `data.retry_after_ms` |
+
+### `GET /api/v1/channels/{id}/streams/{stream}/thumbnail.jpg?width=320`
+
+The same picture as the JPEG itself, for an `<img>`. Read, with the token as a
+header or `?token=`. `200` with `image/jpeg`; `409` with the error body above
+and `data.retry_after_ms` while the first keyframe is on its way or the
+listener did not answer in three seconds, `409` with `data.state: "idle"` when
+nothing is publishing to that stream, `404` for a channel that is not there.
+A station serves it for its own channels on its control port.
+
+```sh
+curl -s -o main.jpg -H "Authorization: Bearer $TOKEN" \
+  "http://127.0.0.1:8080/api/v1/channels/sunday-service/streams/main/thumbnail.jpg?width=320"
+```
+
+## Hooks
+
+Two hook events follow a channel, configured like any other in
+[hooks](hooks.md): `channel.stream.state` when a stream goes live or leaves,
+and `channel.destination.state` when a destination's state, error or
+reconnect count moves. Neither is built unless a hook asks for it.
+
 ## What a refused publisher is told
 
 | Why | The sentence |
@@ -394,8 +507,10 @@ stream.
 ## Destinations
 
 A channel's destinations are where its stream is sent on to as it arrives:
-YouTube, Facebook, Twitch, any RTMP or RTMPS server, or an SRT receiver. The
-publisher's own bytes are remuxed and sent. Nothing is decoded or encoded, so
+YouTube, Facebook, Twitch, any RTMP or RTMPS server, or an SRT receiver; or
+kept on this machine, as a recording (`file`) or a watch link (`hls`), see
+[Record and Watch link](#record-and-watch-link). The publisher's own bytes are
+remuxed and sent. Nothing is decoded or encoded, so
 a destination costs a socket and a little memory, not a CPU core, unless it
 asks for a rendition of its own (see below).
 
@@ -411,9 +526,9 @@ its `destinations` list as below. A core started with `--rehearsal` refuses
 | Param | | |
 |---|---|---|
 | `id` | required | the channel |
-| `platform` | required | `youtube`, `facebook`, `twitch`, `instagram`, `kick`, `linkedin`, `x`, `tiktok`, `custom` or `srt` |
+| `platform` | required | `youtube`, `facebook`, `twitch`, `instagram`, `kick`, `linkedin`, `x`, `tiktok`, `custom` or `srt`; or `file` or `hls` |
 | `label` | optional | what the list calls it. The platform's name when left out |
-| `server` | optional | the ingest address. Left out, the platform's own. `custom` and `srt` need one |
+| `server` | optional | the ingest address. Left out, the platform's own. `custom` and `srt` need one. For `file` a folder, for `hls` the link's params |
 | `key` | optional | the stream key. Write only |
 | `stream` | optional | which of the channel's streams to send. `*`, the default, is the one live longest, and when it leaves, the next one still live |
 | `enabled` | optional | `true` unless given |
@@ -547,6 +662,8 @@ touched. It is destructive, so `dry_run: true` answers what it would stop.
 | `rendition` | what it asked to be converted to; absent for a plain copy |
 | `plan` | what the plan gave it, while its stream is live; absent for a plain copy |
 | `refused` | why it is not sending what it asked for, and what would fit; absent otherwise |
+| `file` | a recording's file: `name`, `path`, `bytes`, `duration_ms`, and `open` while it is written. The last file stays after the stream stops. Absent on every other platform |
+| `playback` | a watch link's `master_url_path`, `dash_url_path` and `viewers`. Absent on every other platform |
 
 The states:
 
@@ -566,6 +683,45 @@ first, then nothing until a keyframe, so a platform never sees a picture it
 cannot decode. A destination that falls behind loses whole GOPs from the
 front of its own queue and starts again at the next keyframe; the publisher
 and the other destinations do not wait for it.
+
+### Record and Watch link
+
+Two platforms keep the stream on this machine. Neither has a key or a far
+end, and neither converts anything: a `rendition` on either is refused with
+`data.field: "rendition"`.
+
+| Platform | Title | `server` | What it does |
+|---|---|---|---|
+| `file` | Record | a folder on the mixer, as `D:/Recordings` or `file:///srv/recordings`. Left out, `Videos/GodwinMix` in the home folder of the user the mixer runs as, the folder `record/output` uses | writes the stream as MPEG-TS, copied, to `<channel>-<stream>-<yyyymmdd-hhmmss>.ts` in that folder, with the local time the file opened |
+| `hls` | Watch link | `hls://` with params, as `hls://?segment_ms=2000&window=6&low_latency=true`, or left out for the defaults. The params are an `hls/output`'s, see [hls-output.md](hls-output.md) | packages the stream as HLS, copied, and serves it from the control port |
+
+A recording starts a new file every time its stream goes live, and closes
+the file when the stream stops or the destination is switched off. MPEG-TS
+needs no index, so a file cut short by a power cut still plays. Its `uri_host`
+is the folder. `state` is `live` while it writes; `file.bytes` and
+`file.duration_ms` move with every `channel.get`.
+
+A watch link is packaged by the station's HLS packager, the process a show
+without compositing uses for its `hls://` output, and it runs only while a
+watch link or such an output is switched on. It reads the stream from the
+listener's loopback relay, so nothing is decoded. Its link is
+
+```
+/hls/channel/<channel>/<destination>/index.m3u8?key=<viewer key>
+```
+
+with `manifest.mpd` beside `index.m3u8` for DASH. The viewer key opens this
+one link and nothing else on the mixer, so the link needs no control token;
+it is made from the channel and the destination's id with this machine's
+secret key, so it is the same after a restart. `playback.viewers` counts the
+players that fetched something in the last two windows. A request with a
+wrong key is answered 401; one for a link the channel does not have, 404
+with the links it has.
+
+HLS carries H.264 or HEVC and AAC. A stream with other sound or picture is
+`failed` with an `error` that names the codec and says to change the encoder,
+since the link converts nothing. Under a single process core with no station,
+a watch link is `failed` with a sentence saying it needs the station.
 
 The platform servers are in `godwinmix_protocol::destination::PLATFORMS`.
 The web page's form keeps its own copy in `ui/client/destinations.js`, and a

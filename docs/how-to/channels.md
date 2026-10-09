@@ -124,7 +124,7 @@ given for the chosen protocol, each with **Copy**:
 
 | Protocol | Fields |
 |---|---|
-| RTMP, RTMPS | Server, Stream key, Full URL |
+| RTMP, RTMPS | Server (what Livebox and most encoders call the Stream URL), Stream key, Full URL |
 | SRT | Server, Stream ID, Passphrase, Full URL |
 | WHIP | WHIP URL, Bearer token |
 
@@ -245,8 +245,51 @@ source is called `sunday-service-main` and is in Sources, ready to put in a
 scene or take. A second encoder on `cam2`, by SRT say, appears beside it as
 `sunday-service-cam2`, and the card says Live, 2 streams.
 
+The row starts with the stream's picture, a small frame of what the encoder
+is sending, whether or not it feeds a source. It is renewed every three
+seconds. The picture is made from keyframes alone, so it can be a GOP behind
+the stream, two seconds for most encoders.
+
 The numbers are read every two seconds while the tab is on screen and
-something is live, and not at all otherwise.
+something is live, and not at all otherwise. The pictures likewise: the
+mixer decodes nothing for a picture until the tab asks, and stops ten seconds
+after it last did. A script can ask for the same picture with
+`channel.thumbnail`, or `GET /api/v1/channels/<id>/streams/<name>/thumbnail.jpg`
+for the JPEG itself ([the reference](../reference/channels.md#channelthumbnail)).
+
+Every channel stream is on the monitoring wall too, under Channels, with
+how many of its destinations are sending: see
+[watch many shows at once](monitor-many-shows.md#channels-on-the-wall).
+
+## See every channel on one line
+
+With more than two or three channels the cards get long. **Rows**, beside
+**Cards** at the top of the Channels tab, puts each channel on one line
+instead. Someone coming from Livebox will know it as the bulk channel
+settings table. A line says:
+
+* the dot, green when live, hollow when the channel is switched off;
+* the name, and Live (Live, 2 streams with more than one), Waiting for an
+  encoder, or Switched off;
+* the first live stream's picture size, frame rate and bit rate, as
+  `1920×1080 30 fps 4.1 Mb/s`;
+* how long it has been publishing, counting up each second;
+* how many of its push destinations are sending, as `3 of 4 sending`, with a
+  small ring for each one in the colours the tiles use. Record and Watch link
+  count among them. The count turns red while one is retrying or has
+  stopped; hover it to see which one and why.
+
+Press a line to go back to the cards with that channel's card in view.
+
+The choice between Cards and Rows is kept in this browser, so a laptop can
+show rows while a phone shows cards. Rows reads the same numbers the cards do,
+on the same two second reading, so it costs the mixer nothing extra. On a
+phone the Channels tab is under **Outputs**, and each line folds onto two or
+three lines to fit.
+
+The palette (Ctrl+K) finds the tab as **Open Channels**, and also when you
+type the words other products use: push destination, restream, stream key,
+stream URL, channel dashboard. **Channels as rows** comes up for bulk.
 
 ## When the encoder stops
 
@@ -297,6 +340,7 @@ See [the reference](../reference/channels.md#a-publisher-that-went-away-without-
 ## Where to go next
 
 * [Send a channel on to YouTube, Facebook or Twitch](restream-a-channel.md)
+* [Record a channel and share a watch link](record-a-channel.md)
 * [The channel reference](../reference/channels.md), every method and field
 * [Receive a phone or an OBS stream](receive-a-phone-or-obs-stream.md), for one encoder on a port of its own
 * [Install a plugin](install-a-plugin.md)

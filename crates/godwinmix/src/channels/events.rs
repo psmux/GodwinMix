@@ -45,7 +45,7 @@ impl Channels {
     fn record_for(&self, v: &Value) -> Option<super::Record> {
         let id = v["channel"].as_str().unwrap_or_default();
         let app = v["app"].as_str().unwrap_or_default();
-        self.records.lock().iter().find(|r| r.id == id || (!app.is_empty() && r.app == app)).cloned()
+        self.records.lock().iter().find(|r| r.id == id || (!app.is_empty() && super::keys::same_app(&r.app, app))).cloned()
     }
 
     fn note_port(&self, relay: &str) {
@@ -54,7 +54,7 @@ impl Channels {
         }
     }
 
-    fn went_live(&self, v: &Value) {
+    pub(super) fn went_live(&self, v: &Value) {
         let Some(record) = self.record_for(v) else { return };
         let Some(mut incoming) = Live::from_plugin(v) else { return };
         incoming.channel = record.id.clone();
@@ -75,6 +75,7 @@ impl Channels {
         };
         if fresh {
             info!(channel = %record.id, stream = %incoming.name, from = %incoming.from, "a stream went live");
+            self.hook_stream(&record.id, &incoming.name, "live", Some(&incoming));
             if record.auto_source && record.enabled {
                 self.adopt(&record, &incoming.name, &incoming.relay);
             }
@@ -87,7 +88,7 @@ impl Channels {
         self.announce(&record.id);
     }
 
-    fn went_idle(&self, v: &Value) {
+    pub(super) fn went_idle(&self, v: &Value) {
         let Some(record) = self.record_for(v) else { return };
         let name = v["stream"].as_str().unwrap_or_default().to_string();
         let source = {
@@ -100,6 +101,7 @@ impl Channels {
             source
         };
         info!(channel = %record.id, stream = %name, "a stream left");
+        self.hook_stream(&record.id, &name, "idle", None);
         if let Some(source) = source {
             let gone = self.let_go(&source);
             let mut live = self.live.lock();
@@ -125,7 +127,7 @@ impl Channels {
             .records
             .lock()
             .iter()
-            .find(|r| r.id == asked || r.app == asked)
+            .find(|r| r.id == asked || super::keys::same_app(&r.app, &asked))
             .map(|r| r.id.clone())
             .unwrap_or(asked);
         self.mixer.emit(Event::ChannelRefused {
@@ -140,10 +142,10 @@ impl Channels {
     /// dropped GOPs. Asked of the listener when a client asks for a channel,
     /// and never on a timer.
     pub(super) fn refresh(&self) {
-        if !self.plugins.is_running(PLUGIN) {
+        if !self.plugins().is_running(PLUGIN) {
             return;
         }
-        let answer = match self.plugins.tool_call(&format!("{PROVIDE}/streams"), json!({})) {
+        let answer = match self.plugins().tool_call(&format!("{PROVIDE}/streams"), json!({})) {
             Ok(answer) => answer,
             Err(e) => {
                 debug!(error = %format!("{e:#}"), "the RTMP listener did not answer streams");

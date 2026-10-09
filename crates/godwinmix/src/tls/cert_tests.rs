@@ -1,4 +1,5 @@
 use super::*;
+use godwinmix_core::tls_cert::days_since_epoch;
 
 fn scratch(tag: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("gmx-control-tls-{tag}-{}", std::process::id()));
@@ -20,7 +21,9 @@ fn a_made_certificate_is_kept_sealed_and_used_again_on_the_next_start() {
     let first = obtain(&ControlTls::default(), &dir, &store, &public, &wanted).unwrap();
     assert_eq!(first.source, Source::SelfSigned);
     assert_eq!(first.names, wanted);
-    assert_eq!(std::fs::read_to_string(&public).unwrap(), first.pair.cert, "the public half is on disk");
+    let ca = first.authority.clone().expect("a made certificate has an authority");
+    assert_eq!(std::fs::read_to_string(&public).unwrap(), ca, "the authority is on disk for people to trust");
+    assert!(first.pair.cert.ends_with(&ca), "the port serves its certificate, then the authority");
     let sealed = std::fs::read_to_string(dir.join("secrets").join("store.json")).unwrap();
     assert!(!sealed.contains("PRIVATE KEY"), "the key is sealed, not written out");
 
@@ -39,6 +42,8 @@ fn a_new_address_makes_a_new_certificate_that_covers_it() {
     let moved = obtain(&ControlTls::default(), &dir, &store, &public, &names(&["localhost", "10.0.0.9"])).unwrap();
     assert_ne!(moved.pair, first.pair);
     assert_eq!(moved.names, names(&["localhost", "10.0.0.9"]));
+    assert_eq!(moved.authority, first.authority, "a phone that trusted the mixer still does");
+    assert_eq!(std::fs::read_to_string(&public).unwrap(), first.authority.unwrap());
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -84,5 +89,38 @@ fn a_key_that_does_not_match_the_certificate_is_refused_naming_both_files() {
     let tls = ControlTls { enabled: true, cert: Some("a.crt".into()), key: Some("b.key".into()) };
     let why = format!("{:#}", obtain(&tls, &dir, &store, &dir.join("c.crt"), &[]).unwrap_err());
     assert!(why.contains("a.crt") && why.contains("b.key") && why.contains("do not go together"), "{why}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_certificate_kept_from_before_the_authority_is_replaced_by_one_it_signs() {
+    let dir = scratch("migrate");
+    let store = Secrets::open(&dir.join("secrets")).unwrap();
+    let wanted = names(&["localhost", "192.168.1.20"]);
+    // What 0.2.3 sealed: a self signed certificate, no issuer, no authority.
+    let old = tls_cert::for_server(&wanted, "GodwinMix on old").unwrap();
+    for (field, value) in [("cert", old.cert.as_str()), ("key", &old.key), ("names", &wanted.join(",")), ("made", &days_since_epoch().to_string())] {
+        store.set("control.tls", field, value).unwrap();
+    }
+    let public = dir.join("godwinmix.control.crt");
+    std::fs::write(&public, &old.cert).unwrap();
+    let moved = obtain(&ControlTls::default(), &dir, &store, &public, &wanted).unwrap();
+    assert_ne!(moved.pair, old, "the self signed one is not used again");
+    let ca = moved.authority.expect("an authority now");
+    assert_eq!(std::fs::read_to_string(&public).unwrap(), ca, "the file beside the config is the authority now");
+    let again = obtain(&ControlTls::default(), &dir, &store, &public, &wanted).unwrap();
+    assert_eq!(again.pair, moved.pair, "and the new one is kept from then on");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn the_operators_own_certificate_has_no_authority_to_offer() {
+    let dir = scratch("own-ca");
+    let store = Secrets::open(&dir.join("secrets")).unwrap();
+    let pair = tls_cert::for_server(&names(&["mixer.example.com"]), "test").unwrap();
+    std::fs::write(dir.join("m.crt"), &pair.cert).unwrap();
+    std::fs::write(dir.join("m.key"), &pair.key).unwrap();
+    let tls = ControlTls { enabled: true, cert: Some("m.crt".into()), key: Some("m.key".into()) };
+    assert_eq!(obtain(&tls, &dir, &store, &dir.join("c.crt"), &[]).unwrap().authority, None);
     let _ = std::fs::remove_dir_all(&dir);
 }

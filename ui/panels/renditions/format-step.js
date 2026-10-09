@@ -15,7 +15,7 @@ import { customForm } from "./custom.js";
 /**
  * @param {object} client
  * @param {{platform?: string, platformTitle?: string, shape?: object|null,
- *          current?: object, id?: () => string}} opts
+ *          current?: object, id?: () => string, copyFirst?: boolean}} opts
  * @returns {{node: HTMLElement, ready: Promise<void>, value: () => object|undefined|null, changed: () => boolean}}
  */
 export function formatStep(client, opts = {}) {
@@ -45,7 +45,9 @@ export function formatStep(client, opts = {}) {
       return;
     }
     const offered = singles(presets);
-    const start = initialChoice(presets, opts.platform, shape, opts.current);
+    // A channel's destination copies what the encoder sends until asked to
+    // do otherwise: a new one opens on Same as the source, never on an encode.
+    const start = opts.copyFirst && !opts.current ? COPY : initialChoice(presets, opts.platform, shape, opts.current);
     const suggested = initialChoice(presets, opts.platform, null);
     cards.append(copyCard(shape, offered.find((p) => p.id === suggested), pick));
     for (const p of offered) cards.appendChild(presetCard(p, room, p.id === suggested && opts.platformTitle, pick));

@@ -25,8 +25,11 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
-/// How long one read waits before the stop flag is looked at.
-const READ: Duration = Duration::from_secs(1);
+/// How long one read waits before the stop flag is looked at. Longer than
+/// the gap to an encoder's next keyframe, which the relay waits for after
+/// the headers: two seconds is common from OBS and hardware encoders, and a
+/// one second wait here dropped and dialled such a stream again forever.
+const READ: Duration = Duration::from_secs(5);
 
 pub struct Packager {
     pub stream: Arc<Stream>,
@@ -45,7 +48,7 @@ pub enum End {
 
 impl Packager {
     /// Start one. With no source yet it runs nothing, waits, and says why.
-    pub fn start(stream: Arc<Stream>, source: Option<Source>, why_not: Option<String>, sound: impl Fn(&str) -> String + Send + 'static) -> Packager {
+    pub fn start(stream: Arc<Stream>, source: Option<Source>, why_not: Option<String>, sound: impl Fn(bool, &str) -> String + Send + 'static) -> Packager {
         let (stop, board) = (Arc::new(AtomicBool::new(false)), Arc::new(Board::default()));
         let Some(src) = source else {
             board.set(S::Waiting, why_not);
@@ -71,7 +74,7 @@ impl Drop for Packager {
     }
 }
 
-fn run(src: &Source, stream: &Arc<Stream>, board: &Board, stop: &AtomicBool, sound: &dyn Fn(&str) -> String) {
+fn run(src: &Source, stream: &Arc<Stream>, board: &Board, stop: &AtomicBool, sound: &dyn Fn(bool, &str) -> String) {
     let mut ever = false;
     while !stop.load(Ordering::Relaxed) {
         if board.state() != S::Failed {

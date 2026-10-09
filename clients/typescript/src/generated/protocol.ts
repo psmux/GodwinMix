@@ -131,7 +131,7 @@ export interface Alarm {
 }
 
 /** What an alarm is about. */
-export type AlarmKind = "no-input" | "stall" | "black" | "freeze" | "silence" | "cc-errors" | "loss" | "output-failed" | "governor-refused" | "shed";
+export type AlarmKind = "no-input" | "stall" | "black" | "freeze" | "silence" | "cc-errors" | "loss" | "output-failed" | "governor-refused" | "shed" | "memory";
 
 /**
  * A show's alarms, as a person sets them from the page. Left out fields
@@ -431,6 +431,7 @@ export interface ChannelAddRequest {
   key_mode?: KeyMode | null;
   name: string;
   protocols?: ChannelProtocol[] | null;
+  secret?: string | null;
 }
 
 /** What `channel.add` answers: the channel and its first key. */
@@ -444,6 +445,7 @@ export interface ChannelKey {
   created: string;
   hint: string;
   id: string;
+  imported?: boolean;
   label: string;
 }
 
@@ -451,6 +453,7 @@ export interface ChannelKey {
 export interface ChannelKeyAddRequest {
   id: string;
   label?: string | null;
+  secret?: string | null;
 }
 
 /** `channel.key.remove`. */
@@ -515,8 +518,16 @@ export interface ChannelStream {
   relay?: string | null;
   since_ms: number;
   source?: string | null;
+  source_error?: string | null;
   state: string;
   video?: StreamVideo | null;
+}
+
+/** `channel.thumbnail`. */
+export interface ChannelThumbnailRequest {
+  id: string;
+  stream?: string | null;
+  width?: number | null;
 }
 
 /** One key this call changed, and when the change takes effect. */
@@ -662,6 +673,7 @@ export interface Crop {
 export interface Destination {
   enabled: boolean;
   error?: string | null;
+  file?: RecordingFile | null;
   has_key: boolean;
   id: string;
   kbps: number;
@@ -1963,7 +1975,7 @@ export interface OutputError {
 /** The kinds of failure a client may want to tell apart. */
 export type OutputErrorReason = "refused" | "unreachable" | "timed-out" | "not-found" | "rejected" | "closed" | "stalled" | "other";
 
-export type OutputState = "connecting" | "live" | "reconnecting" | "failed";
+export type OutputState = "connecting" | "live" | "reconnecting" | "failed" | "stopped";
 
 /** What one output is doing. */
 export interface OutputStats {
@@ -2117,7 +2129,8 @@ export interface PlanView {
 
 /**
  * The links of an output served as HLS from the control port, each with
- * the output's viewer key on it.
+ * the output's viewer key on it. A channel's watch link is one too:
+ * `/hls/channel/<channel>/<destination>/index.m3u8?key=...`.
  */
 export interface Playback {
   dash_url_path: string;
@@ -2294,6 +2307,15 @@ export interface ProtocolRecord {
   parent?: Id | null;
 }
 export type { ProtocolRecord as Record };
+
+/** The file a `file` destination writes: one per time the stream goes live. */
+export interface RecordingFile {
+  bytes: number;
+  duration_ms: number;
+  name: string;
+  open: boolean;
+  path: string;
+}
 
 /** One file the import would not take. */
 export interface Refused {
@@ -3169,6 +3191,7 @@ export interface ThumbnailRequest {
  * warning once, and check the fingerprint is this one".
  */
 export interface TlsInfo {
+  authority?: string | null;
   fingerprint: string;
   names?: string[];
   source: string;
@@ -3501,6 +3524,7 @@ export interface MethodParams {
   "channel.list": Record<string, never>;
   "channel.remove": IdRequest;
   "channel.set": ChannelSetRequest;
+  "channel.thumbnail": ChannelThumbnailRequest;
   "codec.list": Record<string, never>;
   "config.get": ConfigGetRequest;
   "config.reset": ConfigResetRequest;
@@ -3569,6 +3593,8 @@ export interface MethodParams {
   "output.reconnect": IdRequest;
   "output.remove": IdRequest;
   "output.set": SetOutputRequest;
+  "output.start": IdRequest;
+  "output.stop": IdRequest;
   "path.create": PathCreateRequest;
   "path.list": PathListRequest;
   "pipeline.clock": Record<string, never>;
@@ -3721,6 +3747,7 @@ export interface MethodResults {
   "channel.list": ChannelList;
   "channel.remove": ChannelRemoved;
   "channel.set": Channel;
+  "channel.thumbnail": Record<string, unknown>;
   "codec.list": Record<string, unknown>;
   "config.get": ConfigGetResult;
   "config.reset": ConfigSetResult;
@@ -3789,6 +3816,8 @@ export interface MethodResults {
   "output.reconnect": OutputStatus;
   "output.remove": Record<string, unknown>;
   "output.set": OutputStatus;
+  "output.start": OutputStatus;
+  "output.stop": OutputStatus;
   "path.create": PathListing;
   "path.list": PathListing;
   "pipeline.clock": Record<string, unknown>;
@@ -3993,6 +4022,7 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "channel.list", summary: "Every channel with its keys (as hints), the address to publish to over each protocol it has on, and what is live on it; and which ingest ports are open and for which channels.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/channels" } },
   { name: "channel.remove", summary: "Remove a channel and forget its keys. Sources it made that no scene holds go with it.", scope: "admin", mutating: true, destructive: true, rest: { method: "DELETE", path: "/api/v1/channels/{id}" } },
   { name: "channel.set", summary: "Rename a channel, switch it on or off, or change its application name, whether its streams become sources, how its key is given, which protocols it takes (rtmp, srt, whip) or RTMPS and its port. A port opens when the first channel needs it and closes when the last one stops. Only what is named moves.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/channels/{id}/set" } },
+  { name: "channel.thumbnail", summary: "A live channel stream's picture as a small JPEG in base64, {channel, stream, jpeg, width, height, at_ms}, or {pending: true, retry_after_ms} while the first keyframe is on its way. Keyframes only, about one a second, for ten seconds after an ask; nothing is decoded between asks. GET /api/v1/channels/{id}/streams/{stream}/thumbnail.jpg serves the JPEG itself.", scope: "read", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/channels/{id}/thumbnail" } },
   { name: "codec.list", summary: "Every codec and element in the catalogue, which of them this machine actually has, and what it would pick.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/codecs" } },
   { name: "config.get", summary: "The mixer's settings: each key's value in the config file, its default, when a change to it takes effect, and which keys are waiting for a restart. Secrets say only whether one is set.", scope: "admin", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/config" } },
   { name: "config.reset", summary: "Put settings back to their defaults by taking them out of the config file. Answers like config.set.", scope: "admin", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/config/reset" } },
@@ -4061,6 +4091,8 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "output.reconnect", summary: "Drop and re-establish one destination's connection now, without waiting for its reconnect policy.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/outputs/{id}/reconnect" } },
   { name: "output.remove", summary: "Stop sending to a destination and forget it. Other outputs are unaffected.", scope: "operate", mutating: true, destructive: true, rest: { method: "DELETE", path: "/api/v1/outputs/{id}" } },
   { name: "output.set", summary: "Change a destination in place: a new address with a new stream key, a new reconnect policy, a deeper outage buffer. The address is write only, so a client that only wants the buffer never has to hold the key.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/outputs/{id}/set" } },
+  { name: "output.start", summary: "Send to a stopped destination again, with the address and key it kept.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/outputs/{id}/start" } },
+  { name: "output.stop", summary: "Stop sending the programme to one destination and keep it, address, key and all, for output.start. Viewers on that platform see the stream end.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/outputs/{id}/stop" } },
   { name: "path.create", summary: "Make one new folder inside a folder path.list shows, and list it. A folder that is already there is listed rather than refused.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/path/create" } },
   { name: "path.list", summary: "The folders in one folder on the mixer, and whether each is writable, for a folder picker. Only the home folder and the mixer's own folders are shown; files never are.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/path/list" } },
   { name: "pipeline.clock", summary: "The clock every pipeline is running against, and how far each one has got.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/pipeline/clock" } },
@@ -4344,6 +4376,11 @@ export class GeneratedMethods {
   /** Rename a channel, switch it on or off, or change its application name, whether its streams become sources, how its key is given, which protocols it takes (rtmp, srt, whip) or RTMPS and its port. A port opens when the first channel needs it and closes when the last one stops. Only what is named moves. */
   channelSet(params: ChannelSetRequest): Promise<Channel> {
     return this._call("channel.set", params as unknown as Record<string, unknown>) as Promise<Channel>;
+  }
+
+  /** A live channel stream's picture as a small JPEG in base64, {channel, stream, jpeg, width, height, at_ms}, or {pending: true, retry_after_ms} while the first keyframe is on its way. Keyframes only, about one a second, for ten seconds after an ask; nothing is decoded between asks. GET /api/v1/channels/{id}/streams/{stream}/thumbnail.jpg serves the JPEG itself. */
+  channelThumbnail(params: ChannelThumbnailRequest): Promise<Record<string, unknown>> {
+    return this._call("channel.thumbnail", params as unknown as Record<string, unknown>) as Promise<Record<string, unknown>>;
   }
 
   /** Every codec and element in the catalogue, which of them this machine actually has, and what it would pick. */
@@ -4684,6 +4721,16 @@ export class GeneratedMethods {
   /** Change a destination in place: a new address with a new stream key, a new reconnect policy, a deeper outage buffer. The address is write only, so a client that only wants the buffer never has to hold the key. */
   outputSet(params: SetOutputRequest): Promise<OutputStatus> {
     return this._call("output.set", params as unknown as Record<string, unknown>) as Promise<OutputStatus>;
+  }
+
+  /** Send to a stopped destination again, with the address and key it kept. */
+  outputStart(params: IdRequest): Promise<OutputStatus> {
+    return this._call("output.start", params as unknown as Record<string, unknown>) as Promise<OutputStatus>;
+  }
+
+  /** Stop sending the programme to one destination and keep it, address, key and all, for output.start. Viewers on that platform see the stream end. */
+  outputStop(params: IdRequest): Promise<OutputStatus> {
+    return this._call("output.stop", params as unknown as Record<string, unknown>) as Promise<OutputStatus>;
   }
 
   /** Make one new folder inside a folder path.list shows, and list it. A folder that is already there is listed rather than refused. */

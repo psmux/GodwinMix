@@ -64,6 +64,9 @@ pub struct KeyRecord {
     pub label: String,
     pub created: String,
     pub hint: String,
+    /// A person typed the secret rather than the mixer making it.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub imported: bool,
 }
 
 /// A destination without its address or key.
@@ -175,6 +178,7 @@ mod tests {
                 label: "OBS".into(),
                 created: "2026-09-29T10:00:00Z".into(),
                 hint: "x7kq".into(),
+                imported: true,
             }],
             auto_sources: vec![],
             destinations: vec![DestinationRecord {

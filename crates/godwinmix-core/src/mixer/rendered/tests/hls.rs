@@ -55,6 +55,12 @@ async fn an_hls_ladder_is_packaged_from_the_planners_encoders() {
     assert_eq!((info.height, info.declared_kbps), (144, 400));
 
     mix.remove_output(&"ladder-in-mixer".to_string()).unwrap();
+    // The output is taken down on a thread of its own, and the stream is
+    // withdrawn when that is done: soon, never on the mixer's time.
+    let asked = Instant::now();
+    while stream::get("ladder-in-mixer").is_some() && asked.elapsed() < Duration::from_secs(5) {
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
     assert!(stream::get("ladder-in-mixer").is_none(), "the stream goes with the output");
     assert_eq!(encoders(&mix).len(), 1, "the 144p stays for steady, the 180p goes: {:?}", encoders(&mix));
     mix.shutdown();

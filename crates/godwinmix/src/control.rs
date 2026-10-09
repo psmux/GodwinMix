@@ -206,6 +206,9 @@ impl AppState {
             let bus = mixer.clone();
             hooks::Hooks::new(&cfg.hooks(), Arc::new(move |event| bus.emit(event)))
         };
+        if let Some(sink) = hooks::ForChannels::new(&hooks) {
+            channels.set_hooks(sink);
+        }
         Self {
             mixer,
             multiview,

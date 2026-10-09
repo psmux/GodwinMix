@@ -154,9 +154,15 @@ pub async fn rpc(r: &Running, query: &str) -> Ws {
 
 /// One call, skipping notifications, answered within twenty seconds.
 pub async fn call(ws: &mut Ws, id: u64, method: &str, params: Value) -> Value {
+    call_within(ws, id, method, params, Duration::from_secs(20)).await
+}
+
+/// [`call`], for a method that may take longer than twenty seconds by
+/// design: one that waits on a show starting, say.
+pub async fn call_within(ws: &mut Ws, id: u64, method: &str, params: Value, wait: Duration) -> Value {
     let frame = json!({"jsonrpc": "2.0", "id": id, "method": method, "params": params});
     ws.send(Message::Text(frame.to_string().into())).await.unwrap();
-    let answer = tokio::time::timeout(Duration::from_secs(20), async {
+    let answer = tokio::time::timeout(wait, async {
         while let Some(Ok(m)) = ws.next().await {
             let Message::Text(t) = m else { continue };
             let v: Value = serde_json::from_str(t.as_str()).unwrap();
@@ -166,7 +172,7 @@ pub async fn call(ws: &mut Ws, id: u64, method: &str, params: Value) -> Value {
         }
         Value::Null
     });
-    answer.await.unwrap_or_else(|_| panic!("{method} did not answer within 20 s"))
+    answer.await.unwrap_or_else(|_| panic!("{method} did not answer within {} s", wait.as_secs()))
 }
 
 /// The next `event/<name>` whose params pass `test`, within `wait`.

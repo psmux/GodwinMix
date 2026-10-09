@@ -5,8 +5,9 @@
 // Loaded the first time its tab is shown (entry.js is the part the page
 // loads). While it is on screen it asks the core for `channel.*` events, and
 // while something is live it reads `channel.list` every two seconds for the
-// bit rates, which no event carries. The moment it is hidden it stops both,
-// so a mixer with nobody looking at channels measures nothing for anybody.
+// bit rates, which no event carries, and every three seconds each live
+// stream's picture. The moment it is hidden it stops all three, so a mixer
+// with nobody looking at channels measures and decodes nothing for anybody.
 
 import { el, clear } from "../../shell/dom.js";
 import { toast } from "../../shell/toast.js";
@@ -14,18 +15,23 @@ import { leaves } from "../../shell/dock-model.js";
 import { Channels, isLive } from "./model.js";
 import { keyed, write } from "./keyed.js";
 import { channelCard } from "./card.js";
-import { emptyArt } from "./art.js";
+import { emptyArt, failed } from "./art.js";
 import { installCard } from "./install.js";
 import { openPorts, portProblems } from "./ways.js";
 import { ChannelPlans } from "./plans.js";
+import { channelLayout } from "./layout.js";
 
 import { addChannel } from "./create.js";
+import { importLivebox } from "./livebox.js";
+import { contextMenu } from "../../shell/menu.js";
 
-export { addChannel };
+export { addChannel, importLivebox };
 
 const CSS_ID = "gmx-channels-css";
 /** Seconds between two readings of the bit rates while something is live. */
 const RATE_TICKS = 2;
+/** Seconds between two pictures of each live stream. */
+const PICTURE_TICKS = 3;
 
 /** The view on screen now, so a channel made from elsewhere lands in it. */
 export let current = null;
@@ -49,8 +55,14 @@ export class ChannelsView {
     this.plans = new ChannelPlans(client, () => this.render());
     this.cards = new Map();
     this.list = el("div.chn-list");
+    this.layout = channelLayout(this.list, () => this.cards);
     this.count = el("span.chn-count");
     const add = (this.addButton = el("button.btn.primary.chn-add", { text: "Add Channel", onclick: () => this.add() }));
+    const more = el("button.btn.chn-topmore", { type: "button", text: "⋯", title: "More ways to add channels", "aria-label": "More ways to add channels" });
+    more.onclick = () => {
+      const r = more.getBoundingClientRect();
+      contextMenu(r.left, r.bottom + 4, [{ label: "Bring channels from Livebox", run: () => importLivebox(this.client) }]);
+    };
     // What is open, in the text's own colour; a port a channel wants that
     // would not open is the only part said in amber.
     this.portsOpen = el("span");
@@ -62,9 +74,11 @@ export class ChannelsView {
         el("p.chn-lede", { text: "Encoders publish to the mixer by RTMP, SRT or WHIP. Each channel can go on air and on to the platforms." }),
         this.ports,
       ]),
+      more,
+      this.layout.switch,
       add,
     ]);
-    this.root = el("div.chn", {}, [this.head, this.list]);
+    this.root = el("div.chn", {}, [this.head, this.list, this.layout.rows]);
     host.appendChild(this.root);
   }
 
@@ -93,6 +107,7 @@ export class ChannelsView {
     for (const off of this.offs) off();
     this.plans.stop();
     this.clock(false);
+    clearTimeout(this.portsTimer);
   }
 
   async load() {
@@ -112,6 +127,7 @@ export class ChannelsView {
     else if (name === "channel.removed") {
       this.model.remove(params.id);
       this.render();
+      this.portsLater();
     } else if (name === "channel.refused") {
       const who = params.from ? ` from ${params.from}` : "";
       toast({ kind: "warning", text: `A publisher${who} was turned away from ${params.id}: ${params.why}` });
@@ -122,6 +138,19 @@ export class ChannelsView {
   accept(channel) {
     this.model.put(channel);
     this.render();
+    this.portsLater();
+  }
+
+  /**
+   * Which ports are open comes only with `channel.list`, and the listener
+   * opens or closes one a moment after a channel is made, changed or
+   * removed. Read the list once more when that moment has passed, so the
+   * line under Channels does not say no port is open on a mixer that just
+   * opened one.
+   */
+  portsLater(ms = 1500) {
+    clearTimeout(this.portsTimer);
+    this.portsTimer = setTimeout(() => this.poll(), ms);
   }
 
   render() {
@@ -138,6 +167,7 @@ export class ChannelsView {
       this.head.hidden = !this.missing && !this.failure;
       // Without the plugin there is nothing to add a channel to.
       this.addButton.hidden = this.missing;
+      this.layout.update([]);
       this.clock(false);
       return;
     }
@@ -148,6 +178,7 @@ export class ChannelsView {
     write(this.portsBad, "textContent", problems.join(" "));
     if (!this.cards.size) clear(this.list);
     keyed(this.list, this.cards, channels, (c) => c.id, (c) => channelCard(this, c), (c) => (c.enabled ? "on" : "off"));
+    this.layout.update(channels);
     if (first) this.openOnDefault(channels);
     if (this.running) this.plans.sync(channels);
     this.clock(channels.some(isLive));
@@ -176,8 +207,10 @@ export class ChannelsView {
 
   tick() {
     for (const card of this.cards.values()) card.tick?.();
+    this.layout.tick();
     this.ticks = (this.ticks || 0) + 1;
     if (this.ticks % RATE_TICKS === 0) this.poll();
+    if (this.ticks % PICTURE_TICKS === 0 && !document.hidden) for (const card of this.cards.values()) card.picture?.();
   }
 
   /** Read the numbers again, quietly: a failure here waits for the next one. */
@@ -193,13 +226,6 @@ export class ChannelsView {
       this.polling = false;
     }
   }
-}
-
-function failed(message, retry) {
-  return el("div.chn-note", {}, [
-    el("p", { text: `The channels could not be read: ${message}` }),
-    el("button.btn", { text: "Try again", onclick: retry }),
-  ]);
 }
 
 /** Make the Channels tab the one on show, wherever it has been docked. */

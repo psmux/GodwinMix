@@ -14,6 +14,7 @@ import { errorToast } from "../../shell/toast.js";
 import { rectToTransform } from "../../kits/canvas/geometry.js";
 import { itemProps, filters, filterTypes, BLENDS, AUDIO, FITS, undrawnBlend } from "./ops.js";
 import { motionSection } from "./motion.js";
+import { byPointer } from "../../shell/pointer.js";
 
 export class Inspector {
   /**
@@ -42,7 +43,7 @@ export class Inspector {
         el("div.dim.sm.pad", {
           text: records && records.length
             ? `${records.length} items selected. The arrange buttons work on all of them.`
-            : "Nothing selected. Click an item on the canvas, or sweep over several.",
+            : byPointer("Nothing selected. Click an item on the canvas, or sweep over several.", "Nothing selected. Tap an item on the picture, or sweep a finger over several."),
         })
       );
       return;

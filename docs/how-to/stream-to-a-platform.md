@@ -164,6 +164,11 @@ A destination pointed at something that is not answering comes straight back as
 `reconnecting` rather than waiting on the connection. The mixer is never held
 by one: `/api/status` keeps answering throughout.
 
+An RTMP destination that has been down for 20 seconds with no error and no
+retry on the way is rebuilt anyway, and the log says `the output has been down
+with no error and no reconnect on the way; rebuilding it`. It is asked again
+once every 20 seconds after that, never more often.
+
 ## A rehearsal core will not do it
 
 A core started with `--rehearsal` refuses `output.set` as it refuses

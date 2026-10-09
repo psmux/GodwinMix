@@ -7,7 +7,7 @@
 // the page's own port, with the key as the bearer token. On a channel whose
 // key is the stream name, the key takes the stream name's place in all four.
 
-import { obsFields } from "./model.js";
+import { obsFields, inUrl } from "./model.js";
 
 export const NAMES = { rtmp: "RTMP", rtmps: "RTMPS", srt: "SRT", whip: "WHIP", webrtc: "WebRTC media", relay: "RTMP" };
 
@@ -49,14 +49,14 @@ export function waysFields(protocol, channel, secret, base, stream = "main") {
     return { rows: [["Server", f.server, false], ["Stream key", f.key, true], ["Full URL", f.url, true]], url: f.url };
   }
   if (protocol === "srt") {
-    const id = `${channel.app}/${byName ? secret : stream}`;
-    const url = byName ? `${base}?streamid=${id}` : `${base}?streamid=${id}&passphrase=${secret}`;
+    const id = `${inUrl(channel.app)}/${byName ? inUrl(secret) : stream}`;
+    const url = byName ? `${base}?streamid=${id}` : `${base}?streamid=${id}&passphrase=${inUrl(secret)}`;
     const rows = [["Server", base, false], ["Stream ID", id, byName]];
     if (!byName) rows.push(["Passphrase", secret, true]);
     rows.push(["Full URL", url, true]);
     return { rows, url };
   }
-  const url = `${base}/whip/${channel.app}/${byName ? secret : stream}`;
+  const url = `${base}/whip/${inUrl(channel.app)}/${byName ? inUrl(secret) : stream}`;
   const rows = [["WHIP URL", url, byName]];
   if (!byName) rows.push(["Bearer token", secret, true]);
   return { rows, url };

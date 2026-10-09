@@ -6,7 +6,7 @@
 // box with a Show button, is trimmed, and is never read back: an edit that
 // leaves it alone sends none.
 
-import { el, on } from "../../shell/dom.js";
+import { el, on, coarse } from "../../shell/dom.js";
 import { modal, confirmModal } from "../../shell/modal.js";
 import { toast, errorToast } from "../../shell/toast.js";
 import { PLATFORMS, platform } from "../../client/destinations.js";
@@ -17,12 +17,21 @@ import { field, keyField, streamChoice } from "./fields.js";
 import { formatStep, channelShape } from "../renditions/format-step.js";
 import { isRefusal, showRefusal } from "../renditions/refusal.js";
 import { waitingWords, sendProgramme } from "./to-programme.js";
+import { LOCAL, addLocal, localLine } from "./local.js";
 
 /** The tile grid, or straight to the form when the platform is known. */
 export function addDestination(view, channel, chosen) {
   if (chosen) return addForm(view, channel, chosen);
   const grid = el("div.chn-pgrid");
   const m = modal({ title: `Send ${channel.name} on to`, body: el("div", {}, [el("p.chn-dim", { text: "Pick where it goes. For most platforms all you need is the stream key.", style: { marginTop: "0" } }), grid]), wide: true });
+  // Record and Watch link first: they need nothing from any platform.
+  for (const p of LOCAL) {
+    grid.appendChild(el("button.chn-ptile", { type: "button", style: `--brand: ${p.colour}`, title: localLine(p.id, channel), onclick: () => { m.close(); addLocal(view, channel, p.id); } }, [
+      brandMark(p.id, 44),
+      el("span.chn-ptitle", { text: p.title }),
+      el("span.chn-phint", { text: p.hint }),
+    ]));
+  }
   for (const p of PLATFORMS) {
     grid.appendChild(el("button.chn-ptile", { type: "button", style: `--brand: ${p.colour}`, onclick: () => { m.close(); addForm(view, channel, p); } }, [
       brandMark(p.id, 44),
@@ -56,7 +65,7 @@ function addForm(view, channel, p) {
   const start = el("button.btn.primary", { text: "Start sending" });
   const more = el("details.chn-more-opts", {}, [el("summary", { text: "More options" }), label.node, stream && stream.node]);
   // Copy first, as the strip promises; a platform's own format one press away.
-  const format = formatStep(view.client, { platform: p.id, platformTitle: p.title, shape: channelShape(channel), id: () => p.id });
+  const format = formatStep(view.client, { platform: p.id, platformTitle: p.title, shape: channelShape(channel), id: () => p.id, copyFirst: true });
   const refused = el("div", { hidden: true });
   // Said before the key is pasted, not after: this is where a person who
   // wanted the programme on YouTube finds out a channel is something else.
@@ -107,7 +116,7 @@ function addForm(view, channel, p) {
     toast({ text: isLive(channel) ? `${p.title} added. It goes live with ${channel.name}.` : `${p.title} added. It waits for an encoder to send to ${channel.name}; nothing reaches ${p.title} until one does.` });
     return true;
   }
-  (key || server).focus();
+  if (!coarse()) (key || server).focus();
   return m;
 }
 

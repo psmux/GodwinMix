@@ -42,6 +42,13 @@ impl Transcode {
             })
     }
 
+    /// Whether the governor has turned a destination away, which is worth
+    /// asking about again now and then.
+    pub fn refused(&self) -> bool {
+        let state = self.state.lock();
+        state.channels.values().any(|c| c.outcomes.values().any(|o| matches!(o, Outcome::Refused(no) if no.code == "governor")))
+    }
+
     /// One look: shed what the governor says to, lift marks that have
     /// waited long enough, and ask again about refusals now and then.
     pub fn tick(&self) -> Tick {

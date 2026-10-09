@@ -2,7 +2,7 @@
 //! match what the station last handed over.
 
 use super::output::Packager;
-use super::wire::{Report, Want};
+use super::wire::{Report, Want, CHANNEL};
 use godwinmix_core::hls::Stream;
 use parking_lot::Mutex;
 use std::collections::BTreeMap;
@@ -66,15 +66,25 @@ impl Outputs {
     }
 }
 
-/// The sentence for sound fragmented MP4 does not carry, naming the call
-/// that fixes it.
-fn refusal(show: &str, output: &str) -> impl Fn(&str) -> String + Send + 'static {
+/// The sentence for what fragmented MP4 does not carry, sound (`true`) or
+/// picture, naming what fixes it: a rendition for a show's output, the
+/// encoder's settings for a channel's watch link, which converts nothing.
+fn refusal(show: &str, output: &str) -> impl Fn(bool, &str) -> String + Send + 'static {
     let (show, output) = (show.to_string(), output.to_string());
-    move |codec| {
-        format!(
+    move |sound, codec| match (show.strip_prefix(CHANNEL), sound) {
+        (Some(channel), true) => format!(
+            "the channel's sound is {codec}, and HLS carries AAC, so the watch link cannot copy it. Set the encoder \
+             publishing to {channel} to send AAC sound; the link copies the stream and converts nothing."
+        ),
+        (Some(channel), false) => format!(
+            "the channel's picture is {codec}, and the watch link carries H.264 or HEVC. Set the encoder publishing \
+             to {channel} to send H.264; the link copies the stream and converts nothing."
+        ),
+        (None, true) => format!(
             "the input's sound is {codec}, and HLS carries AAC: copying it would make segments no player can play. \
              Give the output a rendition with AAC sound, show.output.set {{id: \"{show}\", output: \"{output}\", \
              rendition: {{\"audio\": {{\"codec\": \"aac\"}}}}}}, and the picture is still copied."
-        )
+        ),
+        (None, false) => format!("the input's picture is {codec}, which HLS here does not carry. Ask the output for a rendition in H.264."),
     }
 }

@@ -73,3 +73,15 @@ fn failed_and_shed_outputs_are_named_and_keep_their_start() {
     j.outputs(&[output("yt", OutputState::Live, None)], 3_000);
     assert!(j.health(3_000).alarms.is_empty());
 }
+
+#[test]
+fn the_memory_guard_is_an_alarm_until_it_clears() {
+    let mut j = Judge::new(Thresholds::default());
+    j.memory(Some((4_000, "The show holds 4200 MB, past its 4096 MB guard.".into())));
+    let h = j.health(5_000);
+    assert_eq!(kinds(&h), vec![AlarmKind::Memory]);
+    assert_eq!(h.state, HealthState::Alarm);
+    assert_eq!(h.alarms[0].since_ms, 4_000);
+    j.memory(None);
+    assert!(j.health(6_000).alarms.is_empty());
+}

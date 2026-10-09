@@ -22,6 +22,21 @@ fn each_failure_gets_its_own_reason() {
     }
 }
 
+/// A server that takes the connection and drops it at once. Windows reports
+/// that as a reset (WSAECONNRESET) or, when the drop lands while the client
+/// is still sending its handshake, as an abort (WSAECONNABORTED). These are
+/// the operating system's own words for both, as a client on Windows 11 read
+/// them; either way the far end hung up.
+#[test]
+fn a_hang_up_on_windows_reads_as_closed_however_windows_words_it() {
+    for message in [
+        "An existing connection was forcibly closed by the remote host.",
+        "An established connection was aborted by the software in your host machine.",
+    ] {
+        assert_eq!(classify(message, URI).reason, OutputErrorReason::Closed, "{message}");
+    }
+}
+
 #[test]
 fn the_sentence_names_the_server_and_the_next_step() {
     let e = classify("Connection refused: Could not connect to 127.0.0.1", URI);

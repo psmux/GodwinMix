@@ -135,6 +135,9 @@ pub struct Tracker {
     /// How many times the follower has been started. A metric, and what the
     /// tests assert on to prove it is not running when nobody is asking.
     starts: AtomicU64,
+    /// `latest` was drawn with every tile in it, and so is every frame after
+    /// it until a tile is added. Set after `latest` is written.
+    settled: AtomicBool,
 }
 
 impl Tracker {
@@ -154,6 +157,7 @@ impl Tracker {
             until: Mutex::new(Instant::now()),
             last_served: Mutex::new(HashMap::new()),
             starts: AtomicU64::new(0),
+            settled: AtomicBool::new(false),
         })
     }
 
@@ -253,6 +257,9 @@ impl Tracker {
             // stopped following. Wanting something for ten seconds is wanting
             // it at the end of the ten seconds.
             self.want();
+            // Read before `latest`, which is written before it is set: a
+            // settled flag seen here covers whatever `latest` is read next.
+            let settled = self.settled.load(Ordering::Acquire);
             if let Some(l) = self.latest() {
                 // The mosaic's compositor draws whole frames before any tile
                 // has delivered, so the first frame after a cold start is a
@@ -260,7 +267,10 @@ impl Tracker {
                 // for one with every tile in it; at the deadline, serve what
                 // there is, because a dead camera's cell is black on the
                 // operator's screen as well and a still should say so.
-                if self.mv.warm() || Instant::now() >= deadline {
+                // Every tile having delivered is not enough on its own: the
+                // frames already on their way out then are black too, and
+                // `latest` can be one of them. See `multiview::drawn`.
+                if (settled && self.mv.warm()) || Instant::now() >= deadline {
                     return Some(l);
                 }
             } else if Instant::now() >= deadline || !self.enabled() {
@@ -316,6 +326,8 @@ impl Tracker {
         info!("snapshot tracker following the mosaic");
         // Luma of the previous frame, kept only for the difference.
         let mut prev: Option<GrayImage> = None;
+        // Whether the frames received now have every tile drawn in them.
+        let mut settled = false;
         loop {
             let left = {
                 let until = self.until.lock();
@@ -330,7 +342,7 @@ impl Tracker {
                 }
                 self.running.store(false, Ordering::SeqCst);
                 drop(until);
-                *self.latest.write() = None;
+                self.clear();
                 info!("snapshot tracker idle, letting the mosaic go");
                 return;
             }
@@ -346,6 +358,16 @@ impl Tracker {
                 }
                 Ok(Err(broadcast::error::RecvError::Closed)) => break,
             };
+            // This frame was drawn whole if a drawn frame had gone out and
+            // nothing is waiting behind this one, read in that order: the
+            // drawn frame is then this one or one before it. Every frame
+            // after a drawn one is drawn too, until a tile is added.
+            let drawn = if !self.mv.warm() {
+                false
+            } else {
+                settled || (self.mv.drawn() && sub.pending() == 0)
+            };
+            settled = drawn;
             let cells = match mixer.status().await {
                 Ok(s) => s.multiview.cells,
                 Err(e) => {
@@ -372,16 +394,17 @@ impl Tracker {
             match scored {
                 Ok(Ok((cur, cells, motion))) => {
                     prev = Some(cur);
-                    *self.latest.write() = Some(Latest { jpeg, cells, motion });
+                    self.store(Latest { jpeg, cells, motion }, drawn);
                 }
                 Ok(Err(e)) => {
                     // A frame that does not decode is skipped. The raw bytes
                     // are still the newest picture, so keep serving them and
                     // wait for the next frame to score against.
                     warn!(?e, "mosaic frame did not decode");
-                    if let Some(l) = self.latest.write().as_mut() {
+                    if let Some(mut l) = self.latest() {
                         l.jpeg = jpeg;
                         l.motion = None;
+                        self.store(l, drawn);
                     }
                 }
                 Err(e) => warn!(?e, "snapshot decode task failed"),
@@ -390,6 +413,24 @@ impl Tracker {
         // Only the error paths get here. Give the flag back so the next ask
         // starts a fresh follower rather than waiting on a dead one.
         self.running.store(false, Ordering::SeqCst);
+        self.clear();
+    }
+
+    /// Keep `latest`, and whether it was drawn whole. A drawn frame is
+    /// flagged after it is written and an undrawn one before, so the flag
+    /// never vouches for a frame it was not set for.
+    fn store(&self, latest: Latest, drawn: bool) {
+        if !drawn {
+            self.settled.store(false, Ordering::Release);
+        }
+        *self.latest.write() = Some(latest);
+        if drawn {
+            self.settled.store(true, Ordering::Release);
+        }
+    }
+
+    fn clear(&self) {
+        self.settled.store(false, Ordering::Release);
         *self.latest.write() = None;
     }
 }

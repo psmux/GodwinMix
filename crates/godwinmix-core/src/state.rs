@@ -107,7 +107,15 @@ impl SourceHealth {
     pub fn rearm(&self) {
         let now = self.now_ms();
         for last in [&self.last_video_ms, &self.last_audio_ms] {
-            let _ = last.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |t| (t != NEVER).then_some(now));
+            // A compare and swap rather than fetch_update, which newer Rust
+            // deprecates for try_update, which 1.82 does not have.
+            let mut seen = last.load(Ordering::Relaxed);
+            while seen != NEVER {
+                match last.compare_exchange_weak(seen, now, Ordering::Relaxed, Ordering::Relaxed) {
+                    Ok(_) => break,
+                    Err(actual) => seen = actual,
+                }
+            }
         }
     }
 

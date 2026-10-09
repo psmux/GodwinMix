@@ -2,15 +2,16 @@
 
 use godwinmix_protocol::channels::{
     Channel, ChannelAddRequest, ChannelAdded, ChannelKeyAddRequest, ChannelKeyRemoveRequest,
-    ChannelRemoved, ChannelSetRequest, KeyAdded, NewKey,
+    ChannelRemoved, ChannelSetRequest, KeyAdded,
 };
 use godwinmix_protocol::error::RpcError;
 use godwinmix_protocol::types::Event;
 
 use godwinmix_protocol::channel_ingest::{rtmp_only, ChannelProtocol, Rtmps};
 
-use super::keys::{self, check_app, free, slug};
-use super::store::{KeyRecord, Record};
+use super::keys::{self, check_app, free, same_app, slug};
+use super::newkey::check_secret;
+use super::store::Record;
 use super::Channels;
 
 impl Channels {
@@ -26,11 +27,12 @@ impl Channels {
         }
         let app = req.app.map(|a| a.trim().to_string()).unwrap_or_else(|| base.clone());
         check_app(&app)?;
+        let typed = req.secret.as_deref().map(check_secret).transpose()?;
         let protocols = self.check_protocols(req.protocols.unwrap_or_else(rtmp_only), Rtmps::default())?;
         let record = {
             let mut records = self.records.lock();
-            if let Some(other) = records.iter().find(|r| r.app == app) {
-                return Err(taken(&app, &other.id));
+            if let Some(other) = records.iter().find(|r| same_app(&r.app, &app)) {
+                return Err(taken(&app, other));
             }
             let id = free(&base, |id| records.iter().any(|r| r.id == id));
             let record = Record {
@@ -50,7 +52,7 @@ impl Channels {
             records.push(record.clone());
             record
         };
-        let key = self.make_key(&record.id, None)?;
+        let key = self.make_key(&record.id, None, typed)?;
         self.commit(Some(&record.id))?;
         Ok(ChannelAdded { channel: self.channel(&record.id).expect("just made"), key })
     }
@@ -71,8 +73,8 @@ impl Channels {
         {
             let mut records = self.records.lock();
             if let Some(app) = &req.app {
-                if let Some(other) = records.iter().find(|r| r.app == app.trim() && r.id != req.id) {
-                    return Err(taken(app.trim(), &other.id));
+                if let Some(other) = records.iter().find(|r| same_app(&r.app, app.trim()) && r.id != req.id) {
+                    return Err(taken(app.trim(), other));
                 }
             }
             let ids: Vec<String> = records.iter().map(|r| r.id.clone()).collect();
@@ -148,7 +150,8 @@ impl Channels {
         if !self.records.lock().iter().any(|r| r.id == req.id) {
             return Err(self.not_found(&req.id));
         }
-        let key = self.make_key(&req.id, req.label)?;
+        let typed = req.secret.as_deref().map(check_secret).transpose()?;
+        let key = self.make_key(&req.id, req.label, typed)?;
         self.commit(Some(&req.id))?;
         Ok(KeyAdded { key })
     }
@@ -172,33 +175,6 @@ impl Channels {
         let _ = self.secrets.set(&keys::scope(&req.id), &req.key, "");
         self.commit(Some(&req.id))?;
         self.get(&req.id)
-    }
-
-    /// Make a key, seal it, and add its record. Answers with the secret, which
-    /// `channel.key.reveal` can read back later from the store.
-    pub(super) fn make_key(&self, channel: &str, label: Option<String>) -> Result<NewKey, RpcError> {
-        let secret = godwinmix_core::secrets::random_key(keys::KEY_LEN)
-            .map_err(|e| RpcError::internal(format!("making a key: {e:#}")))?;
-        let mut records = self.records.lock();
-        let ids: Vec<String> = records.iter().map(|r| r.id.clone()).collect();
-        let record = records
-            .iter_mut()
-            .find(|r| r.id == channel)
-            .ok_or_else(|| RpcError::not_found("channel", channel, &ids))?;
-        let label = label
-            .map(|l| l.trim().to_string())
-            .filter(|l| !l.is_empty())
-            .unwrap_or_else(|| format!("Key {}", record.keys.len() + 1));
-        let base = match slug(&label) {
-            s if s.is_empty() => "key".to_string(),
-            s => s,
-        };
-        let id = free(&base, |id| record.keys.iter().any(|k| k.id == id));
-        self.secrets
-            .set(&keys::scope(channel), &id, &secret)
-            .map_err(|e| RpcError::internal(format!("sealing the key: {e:#}")))?;
-        record.keys.push(KeyRecord { id: id.clone(), label: label.clone(), created: keys::now(), hint: keys::hint(&secret) });
-        Ok(NewKey { id, label, secret })
     }
 }
 
@@ -227,11 +203,19 @@ impl Channels {
     }
 }
 
-fn taken(app: &str, by: &str) -> RpcError {
+fn taken(app: &str, other: &Record) -> RpcError {
+    let by = &other.id;
+    let case = if other.app == app {
+        String::new()
+    } else {
+        format!(" (as '{}': encoders reach a channel whatever case they type, so two cannot differ only in case)", other.app)
+    };
     RpcError::invalid_params(format!(
-        "the application name '{app}' is already the channel '{by}'. Two channels cannot \
-         share one: give this one another name, or change '{by}' first."
+        "the address '{app}' is already the channel '{by}'{case}. Two channels cannot \
+         share one: give this one another name, or change '{by}' first. To let more encoders \
+         into '{by}', add a key to it."
     ))
     .with("field", "app")
-    .with("channel", by)
+    .with("channel", by.as_str())
+    .with("app", other.app.as_str())
 }
