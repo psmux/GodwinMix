@@ -3,9 +3,11 @@
 // and what a filter keeps. The shape read is channel.list's
 // (docs/reference/channels.md).
 
-/** A destination is sending, or failing: retrying counts as failing. */
+/** A destination is sending, or failing: retrying counts as failing, and so
+ * does one still dialling for the first time that has been told why not. */
 const SENDING = new Set(["live"]);
 const FAILING = new Set(["failed", "reconnecting"]);
+const failing = (d) => FAILING.has(d.state) || (d.state === "connecting" && !!d.error);
 
 /** Whether destination `d` sends `stream`, `first` being the first live stream. */
 const sends = (d, stream, first) => d.stream === stream || (d.stream === "*" && stream === first);
@@ -16,12 +18,12 @@ function destinationsOf(channel, stream, first) {
 }
 
 function counts(dests) {
-  const failing = dests.filter((d) => FAILING.has(d.state));
+  const bad = dests.filter(failing);
   return {
     total: dests.length,
     sending: dests.filter((d) => SENDING.has(d.state)).length,
-    failing: failing.length,
-    problems: failing.map((d) => `${d.label || d.id}: ${d.error || (d.state === "reconnecting" ? "retrying" : d.state)}`),
+    failing: bad.length,
+    problems: bad.map((d) => `${d.label || d.id}: ${d.error || (d.state === "reconnecting" ? "retrying" : d.state)}`),
   };
 }
 

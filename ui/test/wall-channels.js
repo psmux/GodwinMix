@@ -45,6 +45,15 @@ export async function wallChannelTests(test, eq, ok) {
     eq(items.map(m.channelHealth), ["warning", "warning", "alarm", "off"]);
     eq(items.map(m.channelPictured), [false, false, true, false], "only a live stream has a picture to ask for");
   });
+  test("a destination still dialling that has been told why not counts as failing; one only dialling does not", () => {
+    const gym = { channels: [{ id: "gym", name: "Gym", enabled: true, streams: [{ name: "main", state: "live" }], destinations: [
+      { id: "cdn", label: "Backup CDN", stream: "*", enabled: true, state: "connecting", error: "nothing answered at rtmp://127.0.0.1:19999" },
+      { id: "yt", label: "YouTube", stream: "*", enabled: true, state: "connecting", error: null },
+    ] }] };
+    const [it] = m.channelItems(gym);
+    eq([it.sending, it.total, it.failing], [0, 2, 1]);
+    eq(it.problems, ["Backup CDN: nothing answered at rtmp://127.0.0.1:19999"]);
+  });
   test("the Channels group has its band and obeys the wall's filter and alarm choice", () => {
     const all = m.channelGroup(items, {});
     eq([all[0].kind, all[0].label, all[0].count], ["group", "Channels", 4]);

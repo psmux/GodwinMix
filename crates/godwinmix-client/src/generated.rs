@@ -930,6 +930,20 @@ pub struct ChannelStream {
     pub video: Option<StreamVideo>,
 }
 
+/// `channel.thumbnail`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ChannelThumbnailRequest {
+    /// The channel.
+    pub id: String,
+    /// Which of its streams. The first live one when left out.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stream: Option<String>,
+    /// Pixels across, 16 to 640, made even. 320 when left out.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub width: Option<u32>,
+}
+
 /// One key this call changed, and when the change takes effect.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -6245,7 +6259,7 @@ pub struct MethodInfo {
     pub rest: Option<(&'static str, &'static str)>,
 }
 
-pub const METHODS: [MethodInfo; 216] = [
+pub const METHODS: [MethodInfo; 217] = [
     MethodInfo { name: "adbreak.end", summary: "Cut a running ad short, or disarm one that is scheduled.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/end")) },
     MethodInfo { name: "adbreak.start", summary: "Interrupt the programme with a clip, then rejoin live when it ends.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/start")) },
     MethodInfo { name: "agent.setup", summary: "Set an AI agent tool up to use this mixer: its MCP config gets one entry, godwinmix, that runs this mixer's own executable, and its skills folder gets the GodwinMix skills. Other entries are kept and a changed file is copied aside first. dry_run answers every file it would write. The answer says how to start the tool and a first thing to ask it.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/agent/setup")) },
@@ -6264,6 +6278,7 @@ pub const METHODS: [MethodInfo; 216] = [
     MethodInfo { name: "channel.list", summary: "Every channel with its keys (as hints), the address to publish to over each protocol it has on, and what is live on it; and which ingest ports are open and for which channels.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/channels")) },
     MethodInfo { name: "channel.remove", summary: "Remove a channel and forget its keys. Sources it made that no scene holds go with it.", scope: "admin", mutating: true, destructive: true, rest: Some(("DELETE", "/api/v1/channels/{id}")) },
     MethodInfo { name: "channel.set", summary: "Rename a channel, switch it on or off, or change its application name, whether its streams become sources, how its key is given, which protocols it takes (rtmp, srt, whip) or RTMPS and its port. A port opens when the first channel needs it and closes when the last one stops. Only what is named moves.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/channels/{id}/set")) },
+    MethodInfo { name: "channel.thumbnail", summary: "A live channel stream's picture as a small JPEG in base64, {channel, stream, jpeg, width, height, at_ms}, or {pending: true, retry_after_ms} while the first keyframe is on its way. Keyframes only, about one a second, for ten seconds after an ask; nothing is decoded between asks. GET /api/v1/channels/{id}/streams/{stream}/thumbnail.jpg serves the JPEG itself.", scope: "read", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/channels/{id}/thumbnail")) },
     MethodInfo { name: "codec.list", summary: "Every codec and element in the catalogue, which of them this machine actually has, and what it would pick.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/codecs")) },
     MethodInfo { name: "config.get", summary: "The mixer's settings: each key's value in the config file, its default, when a change to it takes effect, and which keys are waiting for a restart. Secrets say only whether one is set.", scope: "admin", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/config")) },
     MethodInfo { name: "config.reset", summary: "Put settings back to their defaults by taking them out of the config file. Answers like config.set.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/config/reset")) },
@@ -6869,6 +6884,11 @@ impl Client {
     /// Rename a channel, switch it on or off, or change its application name, whether its streams become sources, how its key is given, which protocols it takes (rtmp, srt, whip) or RTMPS and its port. A port opens when the first channel needs it and closes when the last one stops. Only what is named moves.
     pub async fn channel_set(&self, params: &ChannelSetRequest) -> Result<Channel> {
         self.call("channel.set", params).await
+    }
+
+    /// A live channel stream's picture as a small JPEG in base64, {channel, stream, jpeg, width, height, at_ms}, or {pending: true, retry_after_ms} while the first keyframe is on its way. Keyframes only, about one a second, for ten seconds after an ask; nothing is decoded between asks. GET /api/v1/channels/{id}/streams/{stream}/thumbnail.jpg serves the JPEG itself.
+    pub async fn channel_thumbnail(&self, params: &ChannelThumbnailRequest) -> Result<BTreeMap<String, Value>> {
+        self.call("channel.thumbnail", params).await
     }
 
     /// Every codec and element in the catalogue, which of them this machine actually has, and what it would pick.

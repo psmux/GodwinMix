@@ -52,6 +52,7 @@ Keys accepted on every method, handled before a method runs.
 | `channel.list` | `GET /api/v1/channels` | read |  | 1 | Every channel with its keys (as hints), the address to publish to over each protocol it has on, and what is live on it; and which ingest ports are open and for which channels. |
 | `channel.remove` | `DELETE /api/v1/channels/{id}` | admin | yes | 1 | Remove a channel and forget its keys. Sources it made that no scene holds go with it. |
 | `channel.set` | `POST /api/v1/channels/{id}/set` | admin |  | 1 | Rename a channel, switch it on or off, or change its application name, whether its streams become sources, how its key is given, which protocols it takes (rtmp, srt, whip) or RTMPS and its port. A port opens when the first channel needs it and closes when the last one stops. Only what is named moves. |
+| `channel.thumbnail` | `POST /api/v1/channels/{id}/thumbnail` | read |  | 1 | A live channel stream's picture as a small JPEG in base64, {channel, stream, jpeg, width, height, at_ms}, or {pending: true, retry_after_ms} while the first keyframe is on its way. Keyframes only, about one a second, for ten seconds after an ask; nothing is decoded between asks. GET /api/v1/channels/{id}/streams/{stream}/thumbnail.jpg serves the JPEG itself. |
 | `codec.list` | `GET /api/v1/codecs` | read |  | 1 | Every codec and element in the catalogue, which of them this machine actually has, and what it would pick. |
 | `config.get` | `GET /api/v1/config` | admin |  | 1 | The mixer's settings: each key's value in the config file, its default, when a change to it takes effect, and which keys are waiting for a restart. Secrets say only whether one is set. |
 | `config.reset` | `POST /api/v1/config/reset` | admin | yes | 1 | Put settings back to their defaults by taking them out of the config file. Answers like config.set. |
@@ -550,6 +551,21 @@ MCP tool `set_channel` in the `search` profile: readOnlyHint false, destructiveH
   },
   "result": {
     "$ref": "#/$defs/Channel"
+  }
+}
+```
+
+#### `channel.thumbnail`
+
+A live channel stream's picture as a small JPEG in base64, {channel, stream, jpeg, width, height, at_ms}, or {pending: true, retry_after_ms} while the first keyframe is on its way. Keyframes only, about one a second, for ten seconds after an ask; nothing is decoded between asks. GET /api/v1/channels/{id}/streams/{stream}/thumbnail.jpg serves the JPEG itself.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ChannelThumbnailRequest"
+  },
+  "result": {
+    "type": "object"
   }
 }
 ```
@@ -3916,6 +3932,7 @@ The paths below still answer, for one release, with a `Deprecation: true` header
 | `POST /api/v1/fx/upload` | ?name=pack.zip with the file as the body: kept under the fx library and imported, answering what fx.import answers |
 | `GET /api/v1/gallery/{id}/preview.jpg` | a gallery item's picture as a JPEG, for an <img>: ?width= (64 to 1920) and ?background= (checker, black, white, #rrggbb), as gallery.preview draws it |
 | `GET /api/v1/gallery/{id}/files/{*path}` | one of a gallery item's own files: an HTML graphic's page for the browser source, a clip for a moving preview. Open to a process on the mixer's machine; a token with read from anywhere else |
+| `GET /api/v1/channels/{id}/streams/{stream}/thumbnail.jpg` | a live channel stream's picture as a JPEG, for an <img>: ?width= (16 to 640, 320 when left out), as channel.thumbnail makes it; the token may be ?token=. 409 with data.retry_after_ms while the first keyframe is on its way, 409 with data.state idle when nothing is publishing |
 | `GET /api/v1/gallery/exports/{file}` | a zip gallery.export wrote, to download |
 | `POST /api/v1/gallery/upload` | ?name=<file name>, the body a file: checked and taken into the gallery as gallery.import does, answered with what was added and what was refused and why |
 | `POST /whip/{channel}/{stream}` | WHIP ingest for a channel that has WHIP on. The body is the SDP offer, the channel's key is the bearer token, and the answer is 201 with the SDP answer and the session's Location. |
