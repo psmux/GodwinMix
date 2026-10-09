@@ -83,17 +83,19 @@ pub fn admit(door: &impl Door, stream: &Stream, req: &Request) -> Result<Viewer,
 
 fn check_token(door: &impl Door, stream: &Stream, req: &Request, had_key: bool) -> Result<(), Box<Response>> {
     let presented = presented_token(req.method(), req.headers(), req.uri());
-    let link = stream.master_url_path();
     let token = door.tokens().authenticate(presented.as_deref()).map_err(|reason| {
+        // Never the right key in the answer: a wrong one must not earn it.
         let message = if had_key {
             format!(
-                "That viewer key is not this output's. Open the link the output shows ({link} with its key), \
-                 which changes when the output is added again."
+                "That viewer key is not this output's. Open the link it shows, its `playback.master_url_path` \
+                 in output.list, show.list or, for a channel's watch link, channel.get, with the key on it. \
+                 `{}` has a key of its own.",
+                stream.id
             )
         } else {
             format!(
                 "{}. A player opens this with the output's viewer key, the `playback.master_url_path` \
-                 that output.list shows for `{}`.",
+                 that output.list, show.list or channel.get shows for `{}`.",
                 reason.message(),
                 stream.id
             )
