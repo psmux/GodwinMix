@@ -46,14 +46,14 @@ pub fn for_server(names: &[String], label: &str) -> Result<Pair> {
     Ok(Pair { cert: cert.pem(), key: key.serialize_pem() })
 }
 
-fn days_since_epoch() -> i64 {
+pub(crate) fn days_since_epoch() -> i64 {
     let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
     (secs / 86_400) as i64
 }
 
 /// The calendar date `days` after 1970-01-01, by Howard Hinnant's
 /// `civil_from_days`, so this needs no date crate.
-fn civil(days: i64) -> (i32, u8, u8) {
+pub(crate) fn civil(days: i64) -> (i32, u8, u8) {
     let z = days + 719_468;
     let era = z.div_euclid(146_097);
     let doe = z - era * 146_097;
