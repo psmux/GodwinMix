@@ -13,6 +13,8 @@ use std::time::Duration;
 /// The largest tag taken, so a stray stream cannot make this allocate
 /// without end. A keyframe of 4K HEVC is well under it.
 const MAX_TAG: usize = 16 * 1024 * 1024;
+/// How long the relay has to answer a reader with the FLV header.
+const HELLO_WAIT: Duration = Duration::from_secs(8);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Kind {
@@ -39,7 +41,10 @@ impl Reader {
     /// at its stop flag.
     pub fn open(relay: SocketAddr, path: &str, wait: Duration) -> std::io::Result<Reader> {
         let mut sock = TcpStream::connect_timeout(&relay, wait)?;
-        sock.set_read_timeout(Some(wait))?;
+        // The relay's first answer can take a couple of seconds on a busy
+        // machine (seen at 2.3 s with several mixers running), so the header
+        // gets longer than a read between tags does.
+        sock.set_read_timeout(Some(wait.max(HELLO_WAIT)))?;
         sock.set_nodelay(true)?;
         sock.write_all(format!("GMXHUB {path}\n").as_bytes())?;
         let mut io = BufReader::with_capacity(256 * 1024, sock);
@@ -48,6 +53,7 @@ impl Reader {
         if &header[..3] != b"FLV" {
             return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, "the relay did not answer with FLV"));
         }
+        io.get_ref().set_read_timeout(Some(wait))?;
         Ok(Reader { io })
     }
 

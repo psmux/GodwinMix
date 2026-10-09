@@ -141,7 +141,8 @@ fn check(p: &Platform, d: &StoredDestination) -> Result<(), RpcError> {
 fn local(p: &Platform, d: &StoredDestination) -> Result<(), (RpcError, &'static str)> {
     if d.rendition.is_some() {
         let msg = format!(
-            "{} copies the stream as the encoder sends it and converts nothing. Leave `rendition` out;              to change the format, change it in the encoder.",
+            "{} copies the stream as the encoder sends it and converts nothing. Leave `rendition` out; \
+             to change the format, change it in the encoder.",
             p.title
         );
         return Err((RpcError::invalid_params(msg), "rendition"));
