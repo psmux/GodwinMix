@@ -19,9 +19,11 @@ to install one. A page is secure when it is
 
 A certificate warning you clicked through does not count. The browser shows
 the page, but it will neither offer to install it nor run the page's service
-worker, and it says why in DevTools: the page "is not served from a secure
-origin". This is the case on a phone opening the mixer's own self signed
-certificate, so the steps below for a phone start with making it trusted.
+worker. Chrome's DevTools give the installability error as
+`not-from-secure-origin`, and the page's console says the worker failed with
+"An SSL certificate error occurred when fetching the script." This is the
+case on a phone opening the mixer's own self signed certificate, so for a
+phone, start with a certificate it trusts (below).
 
 | Where | Address | Install offered | Offline page |
 |---|---|---|---|
@@ -75,8 +77,9 @@ authority. Phones only let a person trust a certificate authority:
   Encryption and credentials, Install a certificate, CA certificate, and that
   wants a certificate authority too.
 
-`openssl` shows whether a certificate is one. The mixer's own has no line
-saying `CA:TRUE`:
+`openssl` shows whether a certificate is one. A certificate authority has a
+Basic Constraints line saying `CA:TRUE`. For the mixer's own certificate this
+prints nothing, because it has no Basic Constraints at all:
 
 ```sh
 openssl x509 -in godwinmix.control.crt -noout -text | grep -A1 "Basic Constraints"
@@ -132,8 +135,9 @@ and uses the copy only when the mixer cannot be reached at all.
 It never answers for, and never keeps, anything else: `/api/`, `/rpc`, the
 WebSocket, `/mjpeg/`, `/pcm/`, `/opus/`, `/whep/`, `/whip/`, `/hls/`,
 `/metrics`, `/mcp`, `/plugins/` and `/presets/` go straight to the mixer as
-though the worker were not there. Chrome 123 and later skip the worker for
-those before it even starts.
+though the worker were not there. Where the browser has static routes
+(Chrome 123 and later), the worker also asks it to send those paths straight
+to the network without waking the worker at all.
 
 When the app opens and the mixer is not answering, it shows a page that says
 so and lists what to check: that the mixer is running, that the device is on
