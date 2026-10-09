@@ -33,7 +33,8 @@ Press a platform, paste its stream key, press **Start sending**.
 | Facebook | The Live producer page, Streaming software |
 | Twitch | The Creator Dashboard, Settings, Stream. The primary stream key |
 
-For YouTube, Facebook and Twitch the server is filled in and not even shown.
+For YouTube, Facebook and Twitch the server is filled in for you and shown
+above the key box, with nothing to type.
 Kick and X start with their published server in the box, which you can paste
 over if your dashboard gives a different one. Instagram, LinkedIn and TikTok
 hand out a new server address with every stream, so their form asks for both
@@ -79,7 +80,10 @@ the good ones twice.
 
 Every line is added as Custom RTMP (or SRT), named after its server: YouTube,
 Facebook and the other platforms by their own names, anything else by its host,
-such as `10.0.0.9`. The tile shows the custom mark rather than the platform's.
+such as `10.0.0.9`. Two lines to the same server are told apart by the first
+part of the path, `10.0.0.9/live` and `10.0.0.9/backup`, and a name the
+channel already has gets a number after it, `YouTube 2`. The tile shows the
+custom mark rather than the platform's.
 Press a tile to rename it. The palette offers the same
 dialog as **Paste several push addresses**, and asks which channel when there
 is more than one.
@@ -95,7 +99,8 @@ Each destination is a tile with the platform's mark in a ring, and a switch.
 | Connecting | amber, turning | dialling the platform |
 | Live, 2.6 Mb/s, 1:02:13 | green | sending, at that rate, for that long |
 | Trying again | amber, turning slowly | the platform went away and is being dialled again |
-| Stopped | red | the platform refused the key three times and it has stopped asking |
+| Trying again | amber, turning | the first dial failed, for instance nothing answered at that address, and it is being dialled again |
+| Stopped | red | the platform refused the key. It asks twice more, half a minute apart, and then stops asking |
 | Needs a key | red | a platform that needs a key has none |
 
 A tile that is trying again or has stopped says why under its state: "nothing

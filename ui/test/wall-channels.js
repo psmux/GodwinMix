@@ -97,4 +97,13 @@ export async function wallChannelTests(test, eq, ok) {
     eq(u.pathname, "/api/v1/channels/church/streams/main/thumbnail.jpg");
     eq([u.searchParams.get("width"), u.searchParams.get("token"), u.searchParams.get("t")], ["320", "tok", "7"]);
   });
+  const { topBar } = await import("../panels/wall/top.js");
+  const bar = topBar({}, () => {});
+  bar.counts({ shows: 1, live: 1, alarm: 0, inK: 0, outK: 0, channelAlarms: 1 });
+  test("the counts at the top name a channel in alarm, not only shows", () => {
+    const line = bar.node.querySelector(".wl-summary").textContent;
+    ok(line.includes("0 in alarm") && line.includes("1 channel in alarm"), line);
+    bar.counts({ shows: 1, live: 1, alarm: 0, inK: 0, outK: 0, channelAlarms: 0 });
+    ok(!bar.node.querySelector(".wl-summary").textContent.includes("channel"), "and says nothing of channels when none fails");
+  });
 }

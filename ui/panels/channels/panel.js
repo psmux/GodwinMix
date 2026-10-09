@@ -107,6 +107,7 @@ export class ChannelsView {
     for (const off of this.offs) off();
     this.plans.stop();
     this.clock(false);
+    clearTimeout(this.portsTimer);
   }
 
   async load() {
@@ -126,6 +127,7 @@ export class ChannelsView {
     else if (name === "channel.removed") {
       this.model.remove(params.id);
       this.render();
+      this.portsLater();
     } else if (name === "channel.refused") {
       const who = params.from ? ` from ${params.from}` : "";
       toast({ kind: "warning", text: `A publisher${who} was turned away from ${params.id}: ${params.why}` });
@@ -136,6 +138,19 @@ export class ChannelsView {
   accept(channel) {
     this.model.put(channel);
     this.render();
+    this.portsLater();
+  }
+
+  /**
+   * Which ports are open comes only with `channel.list`, and the listener
+   * opens or closes one a moment after a channel is made, changed or
+   * removed. Read the list once more when that moment has passed, so the
+   * line under Channels does not say no port is open on a mixer that just
+   * opened one.
+   */
+  portsLater(ms = 1500) {
+    clearTimeout(this.portsTimer);
+    this.portsTimer = setTimeout(() => this.poll(), ms);
   }
 
   render() {

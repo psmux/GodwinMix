@@ -11,6 +11,7 @@ import { el } from "../../shell/dom.js";
 import { modal } from "../../shell/modal.js";
 import { parseLivebox } from "./livebox-parse.js";
 import { current, stylesheet } from "./panel.js";
+import { inUrl } from "./model.js";
 
 const EXAMPLE = "rtmp://192.168.1.10:1935/Church/main?psk=password\nrtmp://192.168.1.10:1935/Youth/main?psk=password";
 
@@ -49,7 +50,7 @@ export async function bring(client, entry) {
   try {
     const answer = await client.call("channel.add", { name: entry.app, app: entry.app, secret: entry.secret });
     current?.accept(answer.channel);
-    return el("li.made", { text: `${where}: made ${answer.channel.name}. Encoders publishing to …/${answer.channel.app}/${entry.stream} with their password are let in.` });
+    return el("li.made", { text: `${where}: made ${answer.channel.name}. Encoders publishing to …/${inUrl(answer.channel.app)}/${entry.stream} with their password are let in.` });
   } catch (e) {
     const other = e && e.data && e.data.field === "app" && e.data.channel;
     if (!other) return el("li.bad", { text: `${where}: ${(e && e.message) || e}` });

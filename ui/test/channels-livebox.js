@@ -84,4 +84,21 @@ export async function liveboxTests(test, eq, ok) {
     ok(top().querySelector(".chn-results li:nth-child(2)").textContent.includes("added the password to church"));
   });
   closeAll();
+
+  const { bring } = await import("../panels/channels/livebox.js");
+  const hall = await bring(stub, { line: 1, app: "Youth Hall", stream: "cam", secret: "youth-pass-1" });
+  test("a channel name with a space is said the way an encoder has to send it", () => {
+    ok(hall.textContent.includes("…/Youth%20Hall/cam"), hall.textContent);
+  });
+
+  const { addChannel } = await import("../panels/channels/create.js");
+  addChannel(stub);
+  const typed = top().querySelector("input[placeholder='Church']");
+  typed.value = "Choir Loft";
+  typed.dispatchEvent(new Event("input", { bubbles: true }));
+  test("Add Channel's preview writes a space in the address as %20, as the card after it does", () => {
+    const shown = top().querySelector(".chn-preview code").textContent;
+    ok(shown.endsWith("Choir%20Loft") && !shown.includes(" "), shown);
+  });
+  closeAll();
 }

@@ -49,7 +49,8 @@ From left to right:
 
 The line at the top counts every show on the station, not only the ones on
 screen: how many, how many are live, how many are in alarm, the total in and
-out, and the CPU and GPU the governor sees. The CPU counts the station's
+out, and the CPU and GPU the governor sees. While a channel has a destination
+failing it adds how many channels are in alarm, `1 channel in alarm`. The CPU counts the station's
 own process, every show process and the ingest plugin, which runs every
 direct show; it is read when the wall asks, every three seconds. On
 Windows another process's CPU cannot be read, so there the figure is the
