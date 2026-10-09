@@ -224,7 +224,8 @@ Its CPU is counted with the station's other children in `governor.status`.
 
 The output's `state` is `waiting` until the input is live, `connecting`
 until every rung has a whole segment, then `live`; `kbps` is what is packaged.
-When the packager stops (it crashed, or stopped answering for 5 s), every
+When the packager stops (it crashed, or left three asks in a row unanswered,
+about 15 s, since one slow answer on a busy machine is not a hang), every
 such output is `reconnecting`, with an `error` that says so and when the
 station starts it again: after 1 s, doubling to 30 s while it keeps
 stopping. After five stops in a row the outputs say `failed` instead, and
