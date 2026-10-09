@@ -62,9 +62,10 @@ async fn a_show_killed_is_started_again_the_other_runs_on_and_its_share_goes_bac
     // saved in the runtime store (`config::recordings`), so a show started
     // again rightly comes back without one, and with a recorder here the
     // restarted show held 17 millicores against 808: the test was waiting for
-    // an output the show had been told to forget. UDP to the discard port
-    // needs nothing listening and is priced like any 720p30 rendition.
-    let output = json!({"id": "archive", "uri": "udp://127.0.0.1:9", "rendition": {"preset": "youtube-720p30"}});
+    // an output the show had been told to forget. An HLS output is served by
+    // the show itself, needs nothing listening anywhere, and is priced like
+    // any 720p30 rendition.
+    let output = json!({"id": "archive", "uri": "hls://archive", "rendition": {"preset": "youtube-720p30"}});
     let mut second = rpc(&st, "?show=second").await;
     // A shared runner is running the other station tests beside this one,
     // and the governor sees their encoders as other programs: it can say no
