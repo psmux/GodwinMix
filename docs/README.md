@@ -118,6 +118,7 @@ Start here if you have never run it.
 * [Add shows in bulk](how-to/add-shows-in-bulk.md)
 * [Benchmark GodwinMix at headend scale](how-to/benchmark-at-scale.md)
 * [Take streams from several encoders into one channel](how-to/channels.md)
+* [Move your channels from Livebox](how-to/move-from-livebox.md): keep the address and password your encoders already send
 * [Customize the workspace](how-to/customize-the-workspace.md)
 * [Run the mixer from a phone or a tablet](how-to/use-a-phone-or-tablet.md): long press for the item menu, double tap to open, drag by the grip
 * [Take headend feeds into direct shows](how-to/headend-feeds.md)
