@@ -1732,7 +1732,7 @@
         "description": "`channel.add`.",
         "properties": {
           "app": {
-            "description": "Defaults to a slug of the name.",
+            "description": "The application name encoders put after the port, as they already\ntype it: `Church`, or `Youth Hall`. Defaults to a slug of the name.\nMatched without regard to case, so two channels cannot differ only in\ncase.",
             "type": [
               "string",
               "null"
@@ -1764,6 +1764,13 @@
             },
             "type": [
               "array",
+              "null"
+            ]
+          },
+          "secret": {
+            "description": "The first key's secret, when encoders already send one (the password\nafter `?psk=`): 6 to 128 letters, digits, `-`, `_`, `.`, `~` or single\nspaces between them. Left out, the mixer makes one.",
+            "type": [
+              "string",
               "null"
             ]
           }
@@ -1803,6 +1810,10 @@
           "id": {
             "type": "string"
           },
+          "imported": {
+            "description": "True when a person typed the secret (`secret` on `channel.add` or\n`channel.key.add`), usually to keep a password their encoders already\nsend; false when the mixer made it.",
+            "type": "boolean"
+          },
           "label": {
             "type": "string"
           }
@@ -1822,6 +1833,13 @@
             "type": "string"
           },
           "label": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "secret": {
+            "description": "The secret to keep, when encoders already send one. The same rule as\n`secret` on `channel.add`. Left out, the mixer makes one.",
             "type": [
               "string",
               "null"
