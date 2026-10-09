@@ -157,6 +157,7 @@ pub const KEYS: &[Key] = &[
     Key::new("stall.rebuild_backoff_secs", "First backoff", Live).range(0, 3600).unit("s"),
     Key::new("stall.rebuild_backoff_max_secs", "Longest backoff", Live).range(0, 86_400).unit("s"),
     Key::new("stall.hold_last_frame", "Hold the last frame while rebuilding", Live),
+    Key::new("memory.guard_mb", "Memory guard threshold", Live).range(0, 1_048_576).unit("MB"),
     Key::new("nodes.listen", "Node bridge address", Restart),
     Key::new("nodes.clock_port", "Clock port", Restart).range(1, 65535),
     Key::new("nodes.clock", "Clock", Restart).choices(&["net", "ptp"]),

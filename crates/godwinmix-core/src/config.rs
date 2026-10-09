@@ -12,6 +12,7 @@ use std::path::Path;
 pub mod first_run;
 pub mod edit;
 pub mod keys;
+pub mod memory;
 pub mod recordings;
 pub mod schema;
 pub mod settable;
@@ -56,6 +57,9 @@ pub struct Config {
     pub graphics: crate::graphics::BrandConfig,
     #[serde(default)]
     pub stall: StallConfig,
+    /// The show's memory guard. See `config::memory` and `mixer::memguard`.
+    #[serde(default)]
+    pub memory: memory::MemoryConfig,
     /// The resource governor. Nothing needs setting: it measures this
     /// machine and works out its own headroom. `reserve_cores` under
     /// Advanced keeps cores free for something else. See `render/`.
@@ -2121,6 +2125,7 @@ sidecar = \"/opt/b\"\n").unwrap();
             safety: Default::default(),
             browser: Default::default(),
             stall: Default::default(),
+            memory: Default::default(),
             governor: Default::default(),
             sources: vec![],
             outputs: vec![],

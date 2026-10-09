@@ -421,6 +421,7 @@ mod fx_take;
 mod generation;
 mod keyed;
 mod lifecycle;
+pub mod memguard;
 mod memwatch;
 mod motion;
 mod on_time;
@@ -639,6 +640,8 @@ pub struct MixerHandle {
     running: Arc<Running>,
     /// Set while a live source with sound is heard on programme.
     heard: Arc<AtomicBool>,
+    /// The memory guard's alarm while it holds. See `mixer::memguard`.
+    memory: Arc<parking_lot::Mutex<Option<memguard::Pressure>>>,
 }
 
 impl MixerHandle {
@@ -654,6 +657,7 @@ impl MixerHandle {
             coalesced: Arc::new(Coalesced::default()),
             running: Arc::new(Running::default()),
             heard: Arc::default(),
+            memory: Arc::default(),
         };
         (handle, rx)
     }
@@ -664,6 +668,11 @@ impl MixerHandle {
     /// to fall silent.
     pub fn programme_heard(&self) -> bool {
         self.heard.load(Ordering::Relaxed)
+    }
+
+    /// The memory guard's alarm, while the show is past its threshold.
+    pub fn memory_alarm(&self) -> Option<memguard::Pressure> {
+        self.memory.lock().clone()
     }
 
     /// Queue a command. Never blocks: this is called from GStreamer clock
@@ -1595,6 +1604,7 @@ impl Mixer {
             coalesced: Arc::new(Coalesced::default()),
             running: Arc::new(Running::default()),
             heard: Arc::default(),
+            memory: Arc::default(),
         };
 
         let program = gst::Pipeline::with_name("program");
@@ -4376,8 +4386,10 @@ impl Mixer {
         // when the stall timer gives up on it. See `mixer::exited`.
         self.restart_the_exited();
 
-        // A line in the log every five minutes with the mixer's own size.
+        // A line in the log every five minutes with the mixer's own size, and
+        // every five seconds a look at whether it is past its guard.
         self.watch_memory();
+        self.guard_memory();
 
         // Held frames that have run out of time. Before the liveness sweep, so
         // a source that has come back releases its own held frame there rather
@@ -5898,6 +5910,7 @@ mod tests {
             safety: Default::default(),
             browser: Default::default(),
             stall: Default::default(),
+            memory: Default::default(),
             governor: Default::default(),
             sources: vec![],
             outputs: vec![],
@@ -5938,6 +5951,7 @@ mod tests {
             safety: Default::default(),
             browser: Default::default(),
             stall: Default::default(),
+            memory: Default::default(),
             governor: Default::default(),
             sources: vec![],
             outputs: vec![],
@@ -7331,6 +7345,7 @@ mod tests {
             coalesced: Arc::new(Coalesced::default()),
             running: Arc::new(Running::default()),
             heard: Arc::default(),
+            memory: Arc::default(),
         };
         (handle, rx)
     }

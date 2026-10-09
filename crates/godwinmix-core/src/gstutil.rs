@@ -12,6 +12,8 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tracing::{error, warn};
 
+pub mod backstop;
+
 pub fn make(factory: &str, name: &str) -> Result<gst::Element> {
     gst::ElementFactory::make(factory)
         .name(name)
@@ -173,17 +175,29 @@ pub fn capsfilter(name: &str, caps: &gst::Caps) -> Result<gst::Element> {
     Ok(el)
 }
 
-/// A queue sized in time rather than buffers.
+/// A queue sized in time, with a byte and buffer backstop behind it.
 ///
 /// `leaky` matters a great deal on the output path. Every output hangs off a
 /// shared tee, so a queue that blocks when full would apply backpressure to the
 /// encoder and stall *every* output, not just the slow one. Leaking downstream
 /// keeps one bad destination from taking the others with it.
+///
+/// The time limit is the one that binds while timestamps are sane. The
+/// backstop binds when they stop counting, which a time limit alone cannot
+/// see, and that is what let a show reach 11.8 GB. See `gstutil::backstop`.
 pub fn queue_time(name: &str, seconds: f64, leaky: bool) -> Result<gst::Element> {
+    let el = timed_queue(name, seconds, leaky)?;
+    backstop::report(&el);
+    Ok(el)
+}
+
+/// The queue `queue_time` builds, without the log line when its backstop is
+/// reached. A preview queue is two buffers deep on purpose and reaches that
+/// limit all the time.
+fn timed_queue(name: &str, seconds: f64, leaky: bool) -> Result<gst::Element> {
     let el = make("queue", name)?;
-    el.set_property("max-size-buffers", 0u32);
-    el.set_property("max-size-bytes", 0u32);
     el.set_property("max-size-time", (seconds * 1e9) as u64);
+    backstop::fit(&el, seconds);
     el.set_property_from_str("leaky", if leaky { "downstream" } else { "no" });
     Ok(el)
 }
@@ -213,7 +227,7 @@ pub fn queue_thread(name: &str) -> Result<gst::Element> {
 /// rest go. This is the same reasoning as the output feed queues, applied to
 /// the other side of the mixer.
 pub fn queue_preview(name: &str) -> Result<gst::Element> {
-    let queue = queue_time(name, 1.0, true)?;
+    let queue = timed_queue(name, 1.0, true)?;
     // Full canvas frames reach this queue before the thumbnail scaler.
     // A second at 1080p can retain hundreds of MB for one hidden preview.
     // Two pending frames cover handoff jitter without retaining stale video.
@@ -1030,7 +1044,7 @@ mod tests {
         init();
         let q = queue_time("q", 5.0, true).unwrap();
         assert_eq!(q.property::<u64>("max-size-time"), 5_000_000_000);
-        assert_eq!(q.property::<u32>("max-size-buffers"), 0);
+        assert_eq!(q.property::<u32>("max-size-buffers"), backstop::buffers_for(5.0));
         assert_eq!(queue_level_secs(&q), 0.0);
     }
 

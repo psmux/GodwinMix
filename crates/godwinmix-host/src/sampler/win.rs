@@ -77,3 +77,21 @@ fn read_open(handle: isize) -> Option<(u64, u64)> {
     }
     Some((ticks(kernel) + ticks(user), counters.working_set_size as u64))
 }
+
+/// The bytes a process has committed for itself, which Task Manager calls its
+/// commit size and Performance Monitor its private bytes. Unlike the working
+/// set this does not shrink when Windows trims a process under pressure, so
+/// it is the number that says a process is growing.
+pub fn private_bytes(pid: u32) -> Option<u64> {
+    // SAFETY: a plain handle request; a zero answer is checked.
+    let handle = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_VM_READ, 0, pid) };
+    if handle == 0 {
+        return None;
+    }
+    let mut counters = MemoryCounters { cb: std::mem::size_of::<MemoryCounters>() as u32, ..Default::default() };
+    // SAFETY: an out pointer to a struct we own, with its size in `cb`.
+    let ok = unsafe { K32GetProcessMemoryInfo(handle, &mut counters, counters.cb) } != 0;
+    // SAFETY: the handle was opened above and is closed once.
+    unsafe { CloseHandle(handle) };
+    ok.then_some(counters.pagefile_usage as u64)
+}
