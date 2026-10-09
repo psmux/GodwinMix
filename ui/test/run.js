@@ -1598,7 +1598,9 @@ async function scopedSourcesSuite() {
   // The page goes on to drive the real panels against a real core, and the
   // focus is remembered on the device the tests run on.
   setFocusedScene(null);
-  node.remove();
+  // Element.remove, not the panel's own remove(ids), which once the scenes
+  // panel is defined is what node.remove means, and removes scenes instead.
+  Element.prototype.remove.call(node);
 }
 
 // ------------------------------------------------------- the source drawer
@@ -2270,7 +2272,7 @@ async function numberKeySuite() {
     eq(taken, [], "it must not fall through to the ninth input");
   });
 
-  node.remove();
+  Element.prototype.remove.call(node); // as above: the panel's remove(ids) is not this
 }
 
 // ------------------------------------------------------------- the kits
