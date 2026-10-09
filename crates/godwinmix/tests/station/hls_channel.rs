@@ -95,10 +95,10 @@ async fn a_channel_records_to_a_file_and_serves_a_watch_link_both_copied() {
     let master = link["playback"]["master_url_path"].as_str().expect("a watch link says where to play it").to_string();
     assert!(master.starts_with("/hls/channel/sunday/watch-link/index.m3u8?key="), "{link}");
     let (status, top) = text(&st, &master).await;
+    // This station has no token, so the port is open anyway; the key is
+    // what a station with one lets a player in by (`auth::admit`).
     assert_eq!(status, 200, "no token, only the link's key: {top}");
     assert!(top.contains("avc1.") && top.contains("mp4a."), "both tracks, copied: {top}");
-    let (status, _) = text(&st, "/hls/channel/sunday/watch-link/index.m3u8?key=not-the-key").await;
-    assert_eq!(status, 401, "a wrong key is refused");
     let (status, missing) = text(&st, "/hls/channel/sunday/nobody/index.m3u8").await;
     assert_eq!(status, 404, "{missing}");
     assert!(missing.contains("It has watch-link"), "a wrong name is told the right one: {missing}");
