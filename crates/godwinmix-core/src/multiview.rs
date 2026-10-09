@@ -49,6 +49,7 @@
 //! cannot disturb the program path.
 
 mod arrival;
+mod drawn;
 pub mod preview;
 mod transparent;
 
@@ -193,6 +194,9 @@ struct Shared {
     /// those is a black rectangle with a 200 response code. `warm` reads
     /// these so a caller can wait for a frame that has something in it.
     fed: Mutex<Vec<Arc<AtomicBool>>>,
+    /// Whether a frame drawn after every tile was fed has gone out, which a
+    /// fed flag alone does not say. See `multiview::drawn`.
+    drawn: drawn::Drawn,
     /// The mixer thread has no runtime of its own and a subscription may be
     /// dropped anywhere, so the linger is scheduled through a captured handle.
     rt: tokio::runtime::Handle,
@@ -362,6 +366,7 @@ impl MultiviewHandle {
                 generation: AtomicU64::new(0),
                 live: AtomicUsize::new(0),
                 fed: Mutex::new(Vec::new()),
+                drawn: drawn::Drawn::default(),
                 rt,
                 demand,
             }),
@@ -467,6 +472,13 @@ impl MultiviewHandle {
         self.is_built() && self.shared.fed.lock().iter().all(|f| f.load(Ordering::Acquire))
     }
 
+    /// Warm, and a frame composited since then has gone out to the
+    /// subscribers: the frames already between the compositor and the
+    /// appsink when the last tile arrived were black where it is.
+    pub fn drawn(&self) -> bool {
+        self.warm() && self.shared.drawn.published()
+    }
+
     pub fn live_pipelines(&self) -> usize {
         self.shared.live.load(Ordering::Relaxed)
     }
@@ -513,6 +525,7 @@ impl MultiviewHandle {
         *self.shared.shape.lock() = shape;
         self.shared.built.store(shape.is_some(), Ordering::Release);
         self.shared.frames_out.store(0, Ordering::Relaxed);
+        self.shared.drawn.reset();
         // The clock for the fps metric starts at the first frame out, not
         // here: the flag is set before the pipeline starts, and on a slow
         // machine the run up to the first frame read as half the rate.
@@ -596,6 +609,11 @@ impl MultiviewSubscription {
     /// is what a `select!` arm wants: no frames, no special case.
     pub async fn recv(&mut self) -> Result<Arc<[u8]>, broadcast::error::RecvError> {
         self.frames.recv().await
+    }
+
+    /// Frames published that this subscription has not received yet.
+    pub fn pending(&self) -> usize {
+        self.frames.len()
     }
 
     /// Whether this subscription can ever produce a frame.
@@ -717,6 +735,17 @@ impl Multiview {
         // frames, all encoded, all pushed at the websocket. Ten minutes in it
         // would have been five thousand.
         compositor.set_property_from_str("start-time-selection", "first");
+        {
+            let shared = handle.shared.clone();
+            let src = compositor.static_pad("src").context("the mosaic compositor has no src pad")?;
+            src.add_probe(gst::PadProbeType::BUFFER, move |_pad, info| {
+                if let Some(gst::PadProbeData::Buffer(buffer)) = &info.data {
+                    let fed = shared.fed.lock().iter().all(|f| f.load(Ordering::Acquire));
+                    shared.drawn.composited(fed, buffer.pts());
+                }
+                gst::PadProbeReturn::Ok
+            });
+        }
 
         let vcaps = gstutil::capsfilter(
             "mv-caps",
@@ -744,6 +773,9 @@ impl Multiview {
                         let buffer = sample.buffer().ok_or(gst::FlowError::Error)?;
                         let map = buffer.map_readable().map_err(|_| gst::FlowError::Error)?;
                         publisher.publish(Arc::from(map.as_slice()));
+                        // After the send, so a subscriber that sees the flag
+                        // and nothing waiting has the frame in hand.
+                        publisher.shared.drawn.published_at(buffer.pts());
                         Ok(gst::FlowSuccess::Ok)
                     })
                     .build(),
