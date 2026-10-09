@@ -3957,7 +3957,7 @@ AgentExt = Union[bool, Dict[str, Any]]
 AgentTool = Union[Literal['claude', 'opencode', 'pi', 'codex', 'gemini', 'cursor', 'vscode'], Literal['other']]
 
 # What an alarm is about.
-AlarmKind = Literal['no-input', 'stall', 'black', 'freeze', 'silence', 'cc-errors', 'loss', 'output-failed', 'governor-refused', 'shed']
+AlarmKind = Literal['no-input', 'stall', 'black', 'freeze', 'silence', 'cc-errors', 'loss', 'output-failed', 'governor-refused', 'shed', 'memory']
 
 # The nine alignment keywords, used to place content inside its frame.
 Align = Literal['top-left', 'top-center', 'top-right', 'center-left', 'center', 'center-right', 'bottom-left', 'bottom-center', 'bottom-right']
