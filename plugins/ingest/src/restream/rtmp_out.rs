@@ -120,7 +120,7 @@ impl RtmpLink {
     fn refused_key(&self, detail: &str) -> Failure {
         Failure::Refused(format!(
             "{} refused the key ({detail}). Copy the stream key again from the platform and \
-             paste it into this destination",
+             paste it into this destination.",
             self.name
         ))
     }

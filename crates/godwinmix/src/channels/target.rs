@@ -72,6 +72,27 @@ impl Programme for Local {
     }
 }
 
+/// How often, and how far apart, to look for a source a busy show added late.
+const LATE_TRIES: u32 = 4;
+const LATE_WAIT: std::time::Duration = std::time::Duration::from_secs(2);
+
+/// After `add_source` said no: is the source there after all? Looked for
+/// once for a refusal that says why, and a few times, a moment apart, for
+/// one that only says the show did not answer in time, because a show that
+/// was busy still adds it when it is free.
+pub fn arrived_late(target: &dyn Programme, id: &str, why: &str) -> bool {
+    let late = why.contains("did not answer") || why.contains("busy");
+    for attempt in 0..if late { LATE_TRIES } else { 1 } {
+        if attempt > 0 {
+            std::thread::sleep(LATE_WAIT);
+        }
+        if target.has_source(id) == Some(true) {
+            return true;
+        }
+    }
+    false
+}
+
 /// Is there a `{"source": id}` anywhere in the scene tree?
 pub fn places(tree: &Value, id: &str) -> bool {
     match tree {

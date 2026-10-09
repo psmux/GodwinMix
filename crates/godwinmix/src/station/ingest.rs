@@ -78,6 +78,12 @@ fn try_start(st: &Station, plugins: &Supervisor) -> bool {
     match start(st, plugins) {
         Ok(()) => {
             info!("the ingest plugin arrived and was started with the channel and direct tables");
+            // The channels are the station's, so the show that took the
+            // install has none to give a default to: a station with no
+            // channels gets Live here, as a core on its own does at install.
+            if let Some(channels) = st.channels.get() {
+                channels.ensure_default();
+            }
             true
         }
         Err(e) => {
