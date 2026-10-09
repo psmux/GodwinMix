@@ -46,7 +46,7 @@ pub fn fullest_queues() -> Vec<Held> {
             out.push(Held { pipeline: name.clone(), element: element.name().to_string(), bytes, source });
         }
     }
-    out.sort_by(|a, b| b.bytes.cmp(&a.bytes));
+    out.sort_by_key(|q| std::cmp::Reverse(q.bytes));
     out
 }
 
