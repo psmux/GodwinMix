@@ -269,10 +269,20 @@
    * desk, which would leave the composer 96 percent of a phone. */
   .composer {
     max-width: 100vw !important;
-    max-height: 100dvh;
+    max-height: 100dvh !important;
     height: 100dvh;
     border-radius: 0;
     border: 0;
+  }
+
+  /* The whole screen of a notched phone: the title below the status bar,
+   * Apply above the home bar. */
+  .composer > header {
+    padding-top: max(var(--pad), env(safe-area-inset-top));
+  }
+
+  .composer > footer {
+    padding-bottom: max(var(--pad), env(safe-area-inset-bottom));
   }
 }
 
