@@ -152,7 +152,7 @@
           ]
         },
         "platform": {
-          "description": "youtube, facebook, twitch, custom or srt.",
+          "description": "youtube, facebook, twitch, custom or srt; or `file` to record the\nstream on this machine, or `hls` to serve it as a watch link.",
           "type": "string"
         },
         "rendition": {
@@ -167,7 +167,7 @@
           "description": "Convert the stream before sending it: `{\"preset\": \"youtube-720p30\"}`\nor a rendition request written out. Left out, or one the stream\nalready matches, the stream is sent as it arrives."
         },
         "server": {
-          "description": "The ingest address. Left out, the platform's own; custom and srt need\none.",
+          "description": "The ingest address. Left out, the platform's own; custom and srt need\none. For `file`, a folder on the mixer (the recordings folder when\nleft out); for `hls`, `hls://` with params such as `?segment_ms=2000`.",
           "type": [
             "string",
             "null"
@@ -2720,6 +2720,17 @@
             "null"
           ]
         },
+        "file": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RecordingFile"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The file a recording destination is writing, or wrote last."
+        },
         "has_key": {
           "type": "boolean"
         },
@@ -2748,7 +2759,7 @@
           "description": "What the plan gave it, while its stream is live."
         },
         "platform": {
-          "description": "A platform id from the table: youtube, facebook, twitch, custom, srt.",
+          "description": "A platform id from the table: youtube, facebook, twitch, custom, srt,\nor the two that stay on this machine, file and hls.",
           "type": "string"
         },
         "playback": {
@@ -8660,7 +8671,7 @@
       "type": "object"
     },
     "Playback": {
-      "description": "The links of an output served as HLS from the control port, each with\nthe output's viewer key on it.",
+      "description": "The links of an output served as HLS from the control port, each with\nthe output's viewer key on it. A channel's watch link is one too:\n`/hls/channel/<channel>/<destination>/index.m3u8?key=...`.",
       "properties": {
         "dash_url_path": {
           "description": "The same segments as a DASH MPD.",
@@ -9349,6 +9360,43 @@
       "required": [
         "id",
         "order"
+      ],
+      "type": "object"
+    },
+    "RecordingFile": {
+      "description": "The file a `file` destination writes: one per time the stream goes live.",
+      "properties": {
+        "bytes": {
+          "description": "Bytes written so far.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "duration_ms": {
+          "description": "How long it has been recording, or ran for once it has closed.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "name": {
+          "description": "`sunday-service-main-20261009-103000.ts`.",
+          "type": "string"
+        },
+        "open": {
+          "description": "Whether it is still being written.",
+          "type": "boolean"
+        },
+        "path": {
+          "description": "The whole path on the machine running the mixer.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "path",
+        "bytes",
+        "duration_ms",
+        "open"
       ],
       "type": "object"
     },

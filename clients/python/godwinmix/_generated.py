@@ -52,11 +52,11 @@ class AddDestinationRequest(TypedDict, total=False):
     label: Optional[str]
     # What the list calls it. The platform's name when left out.
     platform: str
-    # youtube, facebook, twitch, custom or srt.
+    # youtube, facebook, twitch, custom or srt; or `file` to record the stream on this machine, or `hls` to serve it as a watch link.
     rendition: Union[RenditionChoice, None]
     # Convert the stream before sending it: `{"preset": "youtube-720p30"}` or a rendition request written out. Left out, or one the stream already matches, the stream is sent as it arrives.
     server: Optional[str]
-    # The ingest address. Left out, the platform's own; custom and srt need one.
+    # The ingest address. Left out, the platform's own; custom and srt need one. For `file`, a folder on the mixer (the recordings folder when left out); for `hls`, `hls://` with params such as `?segment_ms=2000`.
     stream: Optional[str]
     # Which of the channel's streams to send. `*`, the default, is the first one live.
 
@@ -752,6 +752,8 @@ class Destination(TypedDict, total=False):
     enabled: bool
     error: Optional[str]
     # What went wrong last, in words a person can act on.
+    file: Union[RecordingFile, None]
+    # The file a recording destination is writing, or wrote last.
     has_key: bool
     id: str
     # A slug, unique within its channel: `youtube`, `youtube-2`.
@@ -761,7 +763,7 @@ class Destination(TypedDict, total=False):
     plan: Union[DestinationPlan, None]
     # What the plan gave it, while its stream is live.
     platform: str
-    # A platform id from the table: youtube, facebook, twitch, custom, srt.
+    # A platform id from the table: youtube, facebook, twitch, custom, srt, or the two that stay on this machine, file and hls.
     playback: Union[Playback, None]
     # Where a player opens it, for an output this machine serves as HLS.
     reconnects: int
@@ -2386,7 +2388,7 @@ class PlanView(TypedDict, total=False):
     totals: PlanTotals
 
 class Playback(TypedDict, total=False):
-    """The links of an output served as HLS from the control port, each with the output's viewer key on it."""
+    """The links of an output served as HLS from the control port, each with the output's viewer key on it. A channel's watch link is one too: `/hls/channel/<channel>/<destination>/index.m3u8?key=...`."""
 
     dash_url_path: str
     # The same segments as a DASH MPD.
@@ -2592,6 +2594,20 @@ class Record(TypedDict, total=False):
     # A fractional key. Siblings sort by it; see `order.rs`.
     parent: Union[Id, None]
     # The scene this item is in, or the group item it is a child of. Absent for a scene, which hangs off the document itself.
+
+class RecordingFile(TypedDict, total=False):
+    """The file a `file` destination writes: one per time the stream goes live."""
+
+    bytes: int
+    # Bytes written so far.
+    duration_ms: int
+    # How long it has been recording, or ran for once it has closed.
+    name: str
+    # `sunday-service-main-20261009-103000.ts`.
+    open: bool
+    # Whether it is still being written.
+    path: str
+    # The whole path on the machine running the mixer.
 
 class Refused(TypedDict, total=False):
     """One file the import would not take."""
