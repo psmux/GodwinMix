@@ -66,7 +66,7 @@ impl Channels {
         let records = self.records.lock().clone();
         let takes = |p: ChannelProtocol| move |r: &Record| r.protocols.contains(&p);
         let whip = ids(&records, takes(ChannelProtocol::Whip));
-        let running = self.plugins.is_running(PLUGIN);
+        let running = self.plugins().is_running(PLUGIN);
         let mut rows: Vec<Listener> = if running {
             self.listeners.lock().iter().filter_map(|v| serde_json::from_value(v.clone()).ok()).collect()
         } else {

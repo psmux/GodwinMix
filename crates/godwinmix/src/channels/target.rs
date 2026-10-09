@@ -12,6 +12,9 @@ use godwinmix_core::mixer::{Command, MixerHandle};
 use godwinmix_core::scene::server::SceneServer;
 use serde_json::Value;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
+use tokio::sync::oneshot;
+use tracing::warn;
 
 pub trait Programme: Send + Sync {
     /// Whether a source by this id exists. None when that cannot be told.
@@ -30,19 +33,42 @@ pub struct Local {
     pub scenes: Arc<SceneServer>,
 }
 
+/// How long a call waits for the mixer to answer, as long as a station gives
+/// its show (`station::programme`). A mixer stuck inside one command costs
+/// this thread five seconds, not the rest of its life.
+const WAIT: Duration = Duration::from_secs(5);
+
+/// A reply off the mixer's queue, waited for `WAIT` at most. A tokio oneshot
+/// has no blocking wait with a deadline, so it is polled. The error says
+/// which of the two it was, in the words `arrived_late` reads.
+fn answer<T>(mut rx: oneshot::Receiver<T>, what: &str) -> Result<T, &'static str> {
+    let deadline = Instant::now() + WAIT;
+    loop {
+        match rx.try_recv() {
+            Ok(v) => return Ok(v),
+            Err(oneshot::error::TryRecvError::Closed) => return Err("the mixer is not running"),
+            Err(oneshot::error::TryRecvError::Empty) if Instant::now() >= deadline => {
+                warn!(what, waited_ms = WAIT.as_millis() as u64, "the mixer did not answer a channel's call in time; going on without the answer");
+                return Err("the mixer did not answer in time");
+            }
+            Err(oneshot::error::TryRecvError::Empty) => std::thread::sleep(Duration::from_millis(10)),
+        }
+    }
+}
+
 impl Local {
     fn on_programme(&self) -> Option<String> {
-        let (tx, rx) = tokio::sync::oneshot::channel();
+        let (tx, rx) = oneshot::channel();
         self.mixer.send(Command::Status(tx)).ok()?;
-        rx.blocking_recv().ok()?.program
+        answer(rx, "core.status").ok()?.program
     }
 }
 
 impl Programme for Local {
     fn has_source(&self, id: &str) -> Option<bool> {
-        let (tx, rx) = tokio::sync::oneshot::channel();
+        let (tx, rx) = oneshot::channel();
         self.mixer.send(Command::Configs(tx)).ok()?;
-        rx.blocking_recv().ok().map(|c| c.sources.iter().any(|s| s.id == id))
+        answer(rx, "source.list").ok().map(|c| c.sources.iter().any(|s| s.id == id))
     }
 
     fn holds(&self, id: &str) -> bool {
@@ -55,19 +81,23 @@ impl Programme for Local {
     }
 
     fn add_source(&self, cfg: SourceConfig) -> Result<(), String> {
-        let (ack, told) = tokio::sync::oneshot::channel();
-        let sent = self.mixer.send(Command::AddSource(Box::new(cfg), Some(ack)));
-        match sent.ok().and_then(|_| told.blocking_recv().ok()) {
-            Some(Ok(())) => Ok(()),
-            Some(Err(e)) => Err(format!("{e:#}")),
-            None => Err("the mixer is not running".into()),
+        let (ack, told) = oneshot::channel();
+        if let Err(e) = self.mixer.send(Command::AddSource(Box::new(cfg), Some(ack))) {
+            return Err(format!("{e:#}"));
+        }
+        match answer(told, "source.add") {
+            Ok(Ok(())) => Ok(()),
+            Ok(Err(e)) => Err(format!("{e:#}")),
+            // "did not answer" makes `arrived_late` look again: a busy mixer
+            // still adds it when it is free.
+            Err(why) => Err(why.into()),
         }
     }
 
     fn remove_source(&self, id: &str) {
-        let (ack, told) = tokio::sync::oneshot::channel();
+        let (ack, told) = oneshot::channel();
         if self.mixer.send(Command::RemoveSource(id.to_string(), Some(ack))).is_ok() {
-            let _ = told.blocking_recv();
+            let _ = answer(told, "source.remove");
         }
     }
 }

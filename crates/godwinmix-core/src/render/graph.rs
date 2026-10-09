@@ -16,7 +16,7 @@ use godwinmix_render::{Node, NodeKind, Plan};
 use gstreamer as gst;
 use gstreamer::prelude::*;
 use std::collections::HashMap;
-use tracing::{debug, warn};
+use tracing::debug;
 
 /// One running node.
 struct Running {
@@ -122,11 +122,7 @@ impl Graph {
         self.suspend(id);
         let Some(r) = self.nodes.remove(id) else { return };
         if r.owned {
-            r.outlet.set_locked_state(true);
-            let _ = r.outlet.set_state(gst::State::Null);
-            if let Err(e) = self.programme.pipeline.remove(&r.outlet) {
-                warn!(node = %id, ?e, "a rendition outlet would not come out");
-            }
+            wiring::retire(&self.programme.pipeline, vec![r.outlet], None);
         }
     }
 

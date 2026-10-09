@@ -48,6 +48,7 @@ mod deadline_tests;
 pub mod failure;
 mod flow;
 pub mod retire;
+mod teardown;
 
 const RELINK_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 
@@ -616,41 +617,47 @@ impl OutputSlot {
         }
     }
 
-    /// Remove this output from the program pipeline entirely.
+    /// Remove this output from the program pipeline entirely, in two halves.
     ///
     /// Unlike `shutdown`, which only stops the sink, this also takes the feed
     /// queues and proxy sinks back out and releases the tee pads, so an output
-    /// removed at runtime leaves nothing behind.
+    /// removed at runtime leaves nothing behind. `cut_off` is the half that
+    /// never waits and runs on the mixer thread; `detach` is the half that
+    /// waits for streaming threads and runs on a thread of its own. See
+    /// `teardown`.
     pub fn detach(&self, program: &gst::Pipeline) {
-        // A reconnect that has not started yet will not; one that is running
-        // gets a moment to finish, and is overtaken if it does not.
+        self.cut_off(program);
+        self.take_down();
+    }
+
+    /// Out of the programme, without waiting on anything: no buffer reaches
+    /// this output after it, and its id is free for the next attach.
+    pub fn cut_off(&self, program: &gst::Pipeline) {
+        // A reconnect that has not started yet will not.
         self.turn.mark_stopped();
+        teardown::cut_off(program, &self.program_side());
+    }
+
+    /// The half of a removal that waits: the kind's own shutdown, then each
+    /// program side element to NULL. Each of those joins a streaming thread,
+    /// which is why it never runs on the mixer thread.
+    pub fn take_down(&self) {
+        // A reconnect that is running gets a moment to finish, and is
+        // overtaken if it does not.
         let _turn = self.turn.enter_within(&self.cfg.id, "detach", DETACH_WAIT);
         self.shutdown();
-        for (el, pad) in [
-            (&self.feed_video, "feed video"),
-            (&self.feed_audio, "feed audio"),
-        ]
-        .map(|(e, n)| (e.clone(), n))
-        {
-            // Locked first, so the programme's own state walk cannot put it
-            // back to PLAYING before the remove. See `Encoder::detach`.
-            el.set_locked_state(true);
-            let _ = el.set_state(gst::State::Null);
-            if let Err(e) = program.remove(&el) {
-                warn!(output = %self.cfg.id, part = pad, ?e, "could not remove feed element");
-            }
-        }
-        for proxy in [&self.vproxy, &self.aproxy] {
-            let el = proxy.lock().clone();
-            el.set_locked_state(true);
-            let _ = el.set_state(gst::State::Null);
-            let _ = program.remove(&el);
-        }
-        for (tee, pad) in &self.tee_pads {
-            tee.release_request_pad(pad);
-        }
+        teardown::to_null(&self.cfg.id, &self.program_side(), &self.tee_pads);
         info!(output = %self.cfg.id, "output detached");
+    }
+
+    /// The elements this output keeps in the program pipeline, feed first.
+    fn program_side(&self) -> [gst::Element; 4] {
+        [
+            self.feed_video.clone(),
+            self.feed_audio.clone(),
+            self.vproxy.lock().clone(),
+            self.aproxy.lock().clone(),
+        ]
     }
 }
 
