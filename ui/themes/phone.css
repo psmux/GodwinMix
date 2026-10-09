@@ -326,3 +326,12 @@ gmx-shell.phone .header .menubar-all { width: 44px; height: 44px; }
   body:has(> gmx-shell.phone) { --phone-nav-h: env(safe-area-inset-bottom); }
   body:has(> gmx-shell.phone) .studio-sheet.bottom { left: calc(84px + env(safe-area-inset-left)); }
 }
+
+/* Keyboard shortcuts in a menu mean nothing to a thumb. */
+body:has(> gmx-shell.phone) .menu .key { display: none; }
+
+/* A tile's name being renamed in place: the grip, the dot and the gear step
+   aside so the whole bar is the field, and the text is not cut while it is
+   typed. Cut, the operator typed into a word they could not see the end of. */
+.phone-frame .tile:has(.name[contenteditable="true"]) :is(.drag-handle, .gear, .dot) { display: none; }
+.phone-frame .tile .name[contenteditable="true"] { text-overflow: clip; overflow-x: auto; min-height: 32px; line-height: 32px; padding: 0 6px; }

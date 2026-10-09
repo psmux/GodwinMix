@@ -201,7 +201,7 @@
   .composer-tool-tab {
     flex: 1 1 0;
     min-width: 0;
-    min-height: 40px;
+    min-height: 44px;
     padding: 0 6px;
     border: var(--border) solid var(--line);
     border-radius: 20px;
@@ -222,6 +222,14 @@
 
   .composer-bar > .composer-group > .faint:first-child {
     display: none;
+  }
+
+  /* A switch and its word on one line, the whole of it a target. */
+  .composer label.inline {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 44px;
   }
 
   /* The picture already has the whole width; there is no fuller screen. */
