@@ -1703,8 +1703,14 @@ mod tests {
             }
         }
         let rate = frames as f64 / started.elapsed().as_secs_f64();
+        // Fast is the bug this guards, and the upper bound stays where it
+        // was. Slow is a runner with no CPU to give: the Windows runner, with
+        // the rest of the suite beside it, drew 15 frames in over four
+        // seconds, waiting half a second at a time for the next. So the
+        // lower bound is divided by the slack a slow runner declares.
+        let floor = 6.0 / crate::plugin::harness::timing_slack();
         assert!(
-            (rate - 8.0).abs() < 2.0,
+            rate < 10.0 && rate > floor,
             "asked for 8 fps and got {rate:.1} ({frames} frames)"
         );
         let burst = 4.0 * crate::plugin::harness::timing_slack();
