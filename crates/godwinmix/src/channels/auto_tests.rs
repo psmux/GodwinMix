@@ -4,7 +4,6 @@
 //! show took more than five seconds over `source.add` and the stream said
 //! "Becoming a source" for as long as it was live.
 
-use std::path::Path;
 use std::sync::Arc;
 
 use godwinmix_core::caps::CanvasCaps;
