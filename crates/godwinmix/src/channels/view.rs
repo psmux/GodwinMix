@@ -33,7 +33,13 @@ impl Channels {
             keys: r
                 .keys
                 .iter()
-                .map(|k| ChannelKey { id: k.id.clone(), label: k.label.clone(), created: k.created.clone(), hint: k.hint.clone() })
+                .map(|k| ChannelKey {
+                    id: k.id.clone(),
+                    label: k.label.clone(),
+                    created: k.created.clone(),
+                    hint: k.hint.clone(),
+                    imported: k.imported,
+                })
                 .collect(),
             publish: ChannelPublish { server, example, addresses },
             streams,

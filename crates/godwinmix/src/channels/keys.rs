@@ -42,20 +42,35 @@ pub fn free(base: &str, taken: impl Fn(&str) -> bool) -> String {
 }
 
 /// An application name must be something every encoder accepts in a URL.
+///
+/// A single space between words is allowed, because Livebox allowed one and
+/// a channel moved from it keeps the address its encoders already have. OBS
+/// and ffmpeg send the space as typed; an encoder that escapes it sends
+/// `%20`, and the listener decodes that before it compares.
 pub fn check_app(app: &str) -> Result<(), RpcError> {
     let ok = !app.is_empty()
         && app.len() <= 64
-        && app.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
-        && app.chars().next().is_some_and(|c| c.is_ascii_alphanumeric());
+        && app.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == ' ')
+        && !app.contains("  ")
+        && app.chars().next().is_some_and(|c| c.is_ascii_alphanumeric())
+        && !app.ends_with(' ');
     if ok {
         return Ok(());
     }
     Err(RpcError::invalid_params(format!(
-        "'{app}' cannot be an RTMP application name. Use letters, digits, dashes and \
-         underscores, up to 64 of them, starting with a letter or digit: sunday-service, \
-         youth_2."
+        "'{app}' cannot be an RTMP application name. Use letters, digits, dashes, \
+         underscores and single spaces, up to 64 of them, starting with a letter or digit: \
+         Church, sunday-service, Youth Hall."
     ))
-    .with("field", "app"))
+    .with("field", "app")
+    .with("max_len", 64))
+}
+
+/// Two application names are one if they differ only in case. Encoders are
+/// set up by hand, and `Church` typed as `church` should still arrive; the
+/// listener matches the same way, so two channels may not differ only so.
+pub fn same_app(a: &str, b: &str) -> bool {
+    a.eq_ignore_ascii_case(b)
 }
 
 /// The last four characters, for a person to tell keys apart by.
@@ -91,9 +106,20 @@ mod tests {
     fn an_app_name_an_encoder_would_choke_on_is_refused_with_examples() {
         assert!(check_app("sunday-service").is_ok());
         assert!(check_app("youth_2").is_ok());
-        let err = check_app("a b").unwrap_err();
+        assert!(check_app("Church").is_ok(), "capitals are kept as the encoders type them");
+        assert!(check_app("Youth Hall").is_ok(), "one space, as Livebox allowed");
+        let err = check_app("a/b").unwrap_err();
         assert!(err.message.contains("sunday-service"), "{}", err.message);
         assert!(check_app("").is_err());
+        assert!(check_app("two  spaces").is_err());
+        assert!(check_app(" lead").is_err());
+    }
+
+    #[test]
+    fn application_names_that_differ_only_in_case_are_the_same() {
+        assert!(same_app("Church", "church"));
+        assert!(same_app("Youth Hall", "YOUTH HALL"));
+        assert!(!same_app("church", "church-2"));
     }
 
     #[test]

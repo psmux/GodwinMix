@@ -43,7 +43,7 @@ pub fn decide(table: &Table, hub: &Hub, route: &Route) -> Decision {
     if !route.publish {
         return super::play::decide(table, hub, route);
     }
-    let channel = table.channels.iter().find(|c| c.app == route.app);
+    let channel = table.find_app(&route.app);
     let by_query = route.has_key() || channel.is_some_and(|c| c.key_in_name);
     let decided = if by_query || channel.is_none() {
         table
@@ -67,7 +67,7 @@ pub fn decide(table: &Table, hub: &Hub, route: &Route) -> Decision {
 /// take this caller at all. The passphrase itself is checked by libsrt.
 pub(super) fn by_passphrase(table: &Table, route: &Route) -> Result<(Admit, Option<String>), (i32, String)> {
     let app = &route.app;
-    let channel = table.channels.iter().find(|c| &c.app == app).ok_or_else(|| (NOT_FOUND, String::new()))?;
+    let channel = table.find_app(app).ok_or_else(|| (NOT_FOUND, String::new()))?;
     if !channel.enabled {
         let why = format!("the channel '{app}' is switched off. Switch it on in the mixer's Channels page and publish again.");
         return Err((FORBIDDEN, why));
@@ -89,7 +89,7 @@ pub(super) fn by_passphrase(table: &Table, route: &Route) -> Result<(Admit, Opti
     if route.name().is_empty() {
         return Err((BAD_REQUEST, "the stream id has no stream name. Use <channel>/main.".into()));
     }
-    let admit = Admit { channel: channel.id.clone(), app: app.clone(), stream: route.name().to_string(), key: key.clone() };
+    let admit = Admit { channel: channel.id.clone(), app: channel.app.clone(), stream: route.name().to_string(), key: key.clone() };
     Ok((admit, Some(secret.clone())))
 }
 

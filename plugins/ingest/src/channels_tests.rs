@@ -67,3 +67,33 @@ fn keys_are_compared_whole() {
     assert!(!same("abc", "abd"));
     assert!(!same("abc", "abcd"));
 }
+
+fn moved_from_livebox() -> Table {
+    Table::from_params(&json!({"channels": [
+        {"id": "church", "app": "Church", "enabled": true, "key_mode": "query",
+         "keys": [{"id": "livebox", "secret": "Sunday-2024"}]},
+        {"id": "youth-hall", "app": "Youth Hall", "enabled": true, "key_mode": "query",
+         "keys": [{"id": "livebox", "secret": "my hall pw"}]},
+    ]}))
+}
+
+#[test]
+fn an_application_name_is_matched_whatever_its_case_and_named_the_channels_way() {
+    for sent in ["Church", "church", "CHURCH"] {
+        let admit = moved_from_livebox()
+            .admit(sent, "main?psk=Sunday-2024")
+            .unwrap_or_else(|r| panic!("{sent}: {}", r.why));
+        assert_eq!(admit.channel, "church");
+        assert_eq!(admit.app, "Church", "the hub and the core see one spelling");
+    }
+}
+
+#[test]
+fn a_space_arrives_as_typed_escaped_or_as_a_plus() {
+    let t = moved_from_livebox();
+    for (app, key) in [("Youth Hall", "my hall pw"), ("Youth%20Hall", "my%20hall%20pw"), ("youth hall", "my+hall+pw")] {
+        let admit = t.admit(app, &format!("main?psk={key}")).unwrap_or_else(|r| panic!("{app} {key}: {}", r.why));
+        assert_eq!((admit.channel.as_str(), admit.app.as_str()), ("youth-hall", "Youth Hall"));
+    }
+    assert!(t.admit("Youth Hall", "main?psk=my hall").is_err(), "a key is still compared whole");
+}
