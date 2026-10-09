@@ -34,6 +34,7 @@ mod lan_menu;
 mod page_menu;
 mod plugins;
 mod restart;
+mod revive;
 mod settings;
 mod shipped;
 mod sidecar;
