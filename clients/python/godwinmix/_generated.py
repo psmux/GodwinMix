@@ -3957,7 +3957,7 @@ AgentExt = Union[bool, Dict[str, Any]]
 AgentTool = Union[Literal['claude', 'opencode', 'pi', 'codex', 'gemini', 'cursor', 'vscode'], Literal['other']]
 
 # What an alarm is about.
-AlarmKind = Literal['no-input', 'stall', 'black', 'freeze', 'silence', 'cc-errors', 'loss', 'output-failed', 'governor-refused', 'shed']
+AlarmKind = Literal['no-input', 'stall', 'black', 'freeze', 'silence', 'cc-errors', 'loss', 'output-failed', 'governor-refused', 'shed', 'memory']
 
 # The nine alignment keywords, used to place content inside its frame.
 Align = Literal['top-left', 'top-center', 'top-right', 'center-left', 'center', 'center-right', 'bottom-left', 'bottom-center', 'bottom-right']
@@ -4044,7 +4044,7 @@ Origin = Literal['shipped', 'agent', 'uploaded']
 # The kinds of failure a client may want to tell apart.
 OutputErrorReason = Literal['refused', 'unreachable', 'timed-out', 'not-found', 'rejected', 'closed', 'stalled', 'other']
 
-OutputState = Literal['connecting', 'live', 'reconnecting', 'failed']
+OutputState = Union[Literal['connecting', 'live', 'reconnecting', 'failed'], Literal['stopped']]
 
 # Where an instance runs: core, in-process, sidecar, or node:<name>.
 Place = str
@@ -4192,6 +4192,8 @@ METHODS = (
     {"name": "output.reconnect", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/outputs/{id}/reconnect"), "summary": "Drop and re-establish one destination's connection now, without waiting for its reconnect policy."},
     {"name": "output.remove", "scope": "operate", "mutating": True, "destructive": True, "rest": ("DELETE", "/api/v1/outputs/{id}"), "summary": 'Stop sending to a destination and forget it. Other outputs are unaffected.'},
     {"name": "output.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/outputs/{id}/set"), "summary": 'Change a destination in place: a new address with a new stream key, a new reconnect policy, a deeper outage buffer. The address is write only, so a client that only wants the buffer never has to hold the key.'},
+    {"name": "output.start", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/outputs/{id}/start"), "summary": 'Send to a stopped destination again, with the address and key it kept.'},
+    {"name": "output.stop", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/outputs/{id}/stop"), "summary": 'Stop sending the programme to one destination and keep it, address, key and all, for output.start. Viewers on that platform see the stream end.'},
     {"name": "path.create", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/path/create"), "summary": 'Make one new folder inside a folder path.list shows, and list it. A folder that is already there is listed rather than refused.'},
     {"name": "path.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/path/list"), "summary": "The folders in one folder on the mixer, and whether each is writable, for a folder picker. Only the home folder and the mixer's own folders are shown; files never are."},
     {"name": "pipeline.clock", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/pipeline/clock"), "summary": 'The clock every pipeline is running against, and how far each one has got.'},
@@ -5650,6 +5652,24 @@ class GeneratedMethods:
             params["uri"] = uri
         params.update(extra)
         return await self._call("output.set", params)
+
+    async def output_start(
+        self,
+        id: str,
+    ) -> OutputStatus:
+        """Send to a stopped destination again, with the address and key it kept."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        return await self._call("output.start", params)
+
+    async def output_stop(
+        self,
+        id: str,
+    ) -> OutputStatus:
+        """Stop sending the programme to one destination and keep it, address, key and all, for output.start. Viewers on that platform see the stream end."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        return await self._call("output.stop", params)
 
     async def path_create(
         self,

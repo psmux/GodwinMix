@@ -171,6 +171,7 @@ fn output_style(state: OutputState) -> Style {
         OutputState::Live => LIVE,
         OutputState::Connecting | OutputState::Reconnecting => WAITING,
         OutputState::Failed => BROKEN,
+        OutputState::Stopped => Color::DarkGray,
     })
 }
 

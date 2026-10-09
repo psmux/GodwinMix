@@ -34,6 +34,7 @@ import { lanDeviceTests } from "./lan-devices.js";
 import { agentsTests } from "./agents.js";
 import { tileLevelTests } from "./tile-levels.js";
 import { recordingStopTests } from "./recording-stop.js";
+import { runningTests } from "./running.js";
 // The test runner: forty lines, no dependencies, no toolchain. Open the page,
 // read the console, or read the list. Everything testable without a mixer is
 // here, including the legacy adapter against a stubbed server.
@@ -883,7 +884,7 @@ test("an output's state is spelled out as the next thing to do about it", () => 
   eq(stateLabel({ state: "live", has_key: true }), "Live");
   eq(stateLabel({ state: "reconnecting", reconnects: 12, has_key: true }), "Reconnecting, attempt 12");
   eq(stateLabel({ state: "connecting", has_key: true }), "Connecting");
-  eq(stateLabel({ state: "failed", has_key: true }), "Stopped");
+  eq(stateLabel({ state: "failed", has_key: true }), "Not sending");
   // The placeholder a preset wrote, which is the whole reason this reads in
   // words: "Reconnecting, attempt 47" tells nobody to go and paste a key.
   eq(stateLabel({ state: "reconnecting", reconnects: 47, has_key: false }), "Needs a stream key");
@@ -2997,6 +2998,12 @@ tileLevelTests(test, eq, ok)
   .catch((e) => {
     failed += 1;
     line("fail", "the stop recording suite threw: " + e.message);
+    console.error(e);
+  })
+  .then(() => runningTests(test, eq, ok))
+  .catch((e) => {
+    failed += 1;
+    line("fail", "the what is running suite threw: " + e.message);
     console.error(e);
   })
   .then(outputNumbersSuite)

@@ -219,6 +219,13 @@ allow_exec_sources = false
 # and is released as soon as the replacement is on air.
 # hold_last_frame = true
 
+# The show's memory guard. Past this many megabytes of private memory the show
+# raises a `memory` alarm, names its fullest queues in the log and restarts the
+# source holding the most. Unset is a quarter of the machine or 4096, whichever
+# is lower; 0 switches it off.
+# [memory]
+# guard_mb = 4096
+
 [media]
 dir = "media"
 # Only `dir` is required; the rest have defaults.

@@ -421,6 +421,7 @@ mod fx_take;
 mod generation;
 mod keyed;
 mod lifecycle;
+pub mod memguard;
 mod memwatch;
 mod motion;
 mod on_time;
@@ -430,6 +431,7 @@ mod rendered;
 mod reported;
 pub mod slots;
 mod slot_guard;
+pub mod held;
 pub mod transition;
 pub mod unattached;
 pub mod unstarted;
@@ -506,6 +508,10 @@ pub enum Command {
     /// and the swap happens here so nothing can land between the two halves.
     SetOutput(Box<OutputConfig>, Option<Ack>),
     RemoveOutput(OutputId, Option<Ack>),
+    /// Stop sending to a destination and keep it, address and key. See `held`.
+    StopOutput(OutputId, Option<Ack>),
+    /// Start a stopped destination again under the same id.
+    StartOutput(OutputId, Option<Ack>),
     /// An output's reconnect has finished on its own thread, with the output
     /// it was started for and why it failed if it did. Applied only if that
     /// output is still in place. Never sent by the API.
@@ -639,6 +645,8 @@ pub struct MixerHandle {
     running: Arc<Running>,
     /// Set while a live source with sound is heard on programme.
     heard: Arc<AtomicBool>,
+    /// The memory guard's alarm while it holds. See `mixer::memguard`.
+    memory: Arc<parking_lot::Mutex<Option<memguard::Pressure>>>,
 }
 
 impl MixerHandle {
@@ -654,6 +662,7 @@ impl MixerHandle {
             coalesced: Arc::new(Coalesced::default()),
             running: Arc::new(Running::default()),
             heard: Arc::default(),
+            memory: Arc::default(),
         };
         (handle, rx)
     }
@@ -664,6 +673,11 @@ impl MixerHandle {
     /// to fall silent.
     pub fn programme_heard(&self) -> bool {
         self.heard.load(Ordering::Relaxed)
+    }
+
+    /// The memory guard's alarm, while the show is past its threshold.
+    pub fn memory_alarm(&self) -> Option<memguard::Pressure> {
+        self.memory.lock().clone()
     }
 
     /// Queue a command. Never blocks: this is called from GStreamer clock
@@ -1222,6 +1236,8 @@ pub struct Mixer {
     unstarted: unstarted::UnstartedList,
     /// Outputs that would not attach at start. See `unattached.rs`.
     unattached: unattached::UnattachedList,
+    /// Outputs a person stopped. See `held.rs`.
+    held: held::HeldList,
 
     handle: MixerHandle,
     events: EventBus,
@@ -1595,6 +1611,7 @@ impl Mixer {
             coalesced: Arc::new(Coalesced::default()),
             running: Arc::new(Running::default()),
             heard: Arc::default(),
+            memory: Arc::default(),
         };
 
         let program = gst::Pipeline::with_name("program");
@@ -1934,6 +1951,7 @@ impl Mixer {
             removed: Vec::new(),
             unstarted: Default::default(),
             unattached: Default::default(),
+            held: Default::default(),
             handle: handle.clone(),
             events,
             rt,
@@ -1981,6 +1999,10 @@ impl Mixer {
     /// again when the last one leaves. See `multiview.rs`.
     pub fn start(&mut self) -> Result<()> {
         for out in self.cfg.outputs.clone() {
+            if !out.enabled {
+                self.hold(&out);
+                continue;
+            }
             match self.attach_output(&out) {
                 Ok(slot) => self.outputs.push(slot),
                 // Kept and tried again from the tick: a show started again
@@ -2997,10 +3019,16 @@ impl Mixer {
         // config wins, and the caller hears how this attempt went.
         self.unattached.forget(&cfg.id);
         anyhow::ensure!(
-            !self.outputs.iter().any(|o| o.id() == &cfg.id),
+            !self.outputs.iter().any(|o| o.id() == &cfg.id) && !self.held.has(&cfg.id),
             "output {} already exists",
             cfg.id
         );
+        if !cfg.enabled {
+            self.hold(cfg);
+            self.persist_runtime();
+            self.broadcast_status();
+            return Ok(());
+        }
         let slot = self
             .attach_output(cfg)
             .with_context(|| format!("attaching output {}", cfg.id))?;
@@ -3026,6 +3054,14 @@ impl Mixer {
     /// air with nothing.
     pub fn set_output(&mut self, cfg: &OutputConfig) -> Result<()> {
         crate::plugin::output::check_uri(cfg)?;
+        if self.held.has(&cfg.id) {
+            // Stopped: the change is kept for the next start, and nothing
+            // is built for it now.
+            self.held.put(cfg);
+            self.persist_runtime();
+            self.broadcast_status();
+            return Ok(());
+        }
         if self.unattached.has(&cfg.id) {
             // Nothing attached to take down: try the new config now, and
             // keep it waiting if it will not attach either.
@@ -3081,6 +3117,15 @@ impl Mixer {
 
     /// Detach a destination. The programme and every other output carry on.
     pub fn remove_output(&mut self, id: &OutputId) -> Result<()> {
+        // Only a stopped one with nothing attached: `stop_output` keeps the
+        // config here before it detaches the running output.
+        let attached = self.outputs.iter().any(|o| o.id() == id) || self.unattached.has(id);
+        if !attached && self.held.take(id).is_some() {
+            info!(output = %id, "a stopped output removed");
+            self.persist_runtime();
+            self.broadcast_status();
+            return Ok(());
+        }
         if self.unattached.forget(id) {
             info!(output = %id, "output removed before it was attached");
             self.persist_runtime();
@@ -3129,7 +3174,12 @@ impl Mixer {
         }
         // One that would not attach this time is still wanted next time.
         let outputs: Vec<OutputConfig> =
-            self.outputs.iter().map(|o| o.cfg.clone()).chain(self.unattached.configs().cloned()).collect();
+            self.outputs
+                .iter()
+                .map(|o| o.cfg.clone())
+                .chain(self.unattached.configs().cloned())
+                .chain(self.held.configs().cloned())
+                .collect();
         RuntimeConfigs {
             sources,
             outputs,
@@ -4030,6 +4080,8 @@ impl Mixer {
             Command::AddOutput(..) => "output.add",
             Command::SetOutput(..) => "output.set",
             Command::RemoveOutput(..) => "output.remove",
+            Command::StopOutput(..) => "output.stop",
+            Command::StartOutput(..) => "output.start",
             Command::OutputReconnected(..) => "output.reconnected",
             Command::RetryOutput(_) => "output.retry",
             Command::RestartSource(_) => "source.restart",
@@ -4214,6 +4266,16 @@ impl Mixer {
                 reply(ack, &r);
                 r?;
             }
+            Command::StopOutput(id, ack) => {
+                let r = self.stop_output(&id);
+                reply(ack, &r);
+                r?;
+            }
+            Command::StartOutput(id, ack) => {
+                let r = self.start_output(&id);
+                reply(ack, &r);
+                r?;
+            }
             Command::AddFilter(cfg, ack) => {
                 let r = self.add_filter(&cfg);
                 reply(ack, &r);
@@ -4376,8 +4438,10 @@ impl Mixer {
         // when the stall timer gives up on it. See `mixer::exited`.
         self.restart_the_exited();
 
-        // A line in the log every five minutes with the mixer's own size.
+        // A line in the log every five minutes with the mixer's own size, and
+        // every five seconds a look at whether it is past its guard.
         self.watch_memory();
+        self.guard_memory();
 
         // Held frames that have run out of time. Before the liveness sweep, so
         // a source that has come back releases its own held frame there rather
@@ -4932,6 +4996,7 @@ impl Mixer {
                 .iter()
                 .map(|o| OutputStatus { shed: self.shed_reason(o.id()), ..o.status() })
                 .chain(self.unattached.statuses())
+                .chain(self.held.statuses())
                 .collect(),
             // With no mosaic running the configured shape is still what a
             // client would get if it asked, so `enabled` answers "may I have
@@ -5653,6 +5718,7 @@ mod tests {
         cfg.params.insert("relay".into(), toml::Value::String("127.0.0.1:1935".into()));
         assert!(super::fed_by_channel(&cfg), "a channel's stream");
     }
+    mod bounded;
     mod clip_end;
     mod endurance;
     mod flush_window;
@@ -5666,6 +5732,7 @@ mod tests {
     mod sound_only;
     mod stale_work;
     mod stall_storm;
+    mod stopped_output;
     mod refused_output;
     mod slow_output;
     mod stuck_detach;
@@ -5898,6 +5965,7 @@ mod tests {
             safety: Default::default(),
             browser: Default::default(),
             stall: Default::default(),
+            memory: Default::default(),
             governor: Default::default(),
             sources: vec![],
             outputs: vec![],
@@ -5938,6 +6006,7 @@ mod tests {
             safety: Default::default(),
             browser: Default::default(),
             stall: Default::default(),
+            memory: Default::default(),
             governor: Default::default(),
             sources: vec![],
             outputs: vec![],
@@ -7331,6 +7400,7 @@ mod tests {
             coalesced: Arc::new(Coalesced::default()),
             running: Arc::new(Running::default()),
             heard: Arc::default(),
+            memory: Arc::default(),
         };
         (handle, rx)
     }
