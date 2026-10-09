@@ -110,6 +110,8 @@ pub enum OutputState {
     Live,
     Reconnecting,
     Failed,
+    /// Stopped with `output.stop`: nothing sent, address and key kept.
+    Stopped,
 }
 
 impl OutputState {
@@ -119,6 +121,7 @@ impl OutputState {
             Self::Live => "live",
             Self::Reconnecting => "reconnecting",
             Self::Failed => "failed",
+            Self::Stopped => "stopped",
         }
     }
 }
