@@ -84,6 +84,7 @@ impl Output for Recording {
             ctx.pipeline,
             video,
             audio,
+            super::flv::parser_for(ctx),
             &path,
             &self.format,
             self.bytes.clone(),
