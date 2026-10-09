@@ -46,7 +46,8 @@ pub fn for_server(names: &[String], label: &str) -> Result<Pair> {
     Ok(Pair { cert: cert.pem(), key: key.serialize_pem() })
 }
 
-pub(crate) fn days_since_epoch() -> i64 {
+/// Days since 1970-01-01, today.
+pub fn days_since_epoch() -> i64 {
     let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
     (secs / 86_400) as i64
 }
