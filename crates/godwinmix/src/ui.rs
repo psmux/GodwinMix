@@ -56,6 +56,7 @@ const ASSETS: &[(&str, &str)] = &[
     ("sw.js", include_str!("../../../ui/sw.js")),
     ("offline.html", include_str!("../../../ui/offline.html")),
     ("shell/install.js", include_str!("../../../ui/shell/install.js")),
+    ("shell/trust.js", include_str!("../../../ui/shell/trust.js")),
     // The publisher: a browser's camera and microphone over WHIP. Alone at
     // /join/, and inside the page when Sources opens this browser's camera.
     ("join/index.html", include_str!("../../../ui/join/index.html")),
@@ -514,7 +515,11 @@ where
         .route("/plugins/{name}/ui/{*path}", get(plugin_file))
         // A preset's own theme, read out of the preset it was applied from, so
         // a theme travels with the preset and needs no rebuild.
-        .route("/presets/{name}/theme.css", get(preset_theme));
+        .route("/presets/{name}/theme.css", get(preset_theme))
+        // The machine's certificate authority, for a phone to trust. Public,
+        // so no token: `/ca.crt` for iOS and desktops, `/ca.pem` for Android.
+        .route("/ca.crt", get(|| async { authority(false) }))
+        .route("/ca.pem", get(|| async { authority(true) }));
     for (path, _) in ASSETS {
         let p = *path;
         router = router.route(&format!("/{p}"), get(move || async move { asset(p) }));
@@ -629,6 +634,29 @@ fn image(path: &'static str) -> Response {
         IMAGES.iter().find(|(p, _)| *p == path).map(|(_, b)| b.to_vec()).unwrap_or_default()
     });
     with_headers(content_type(path), Body::from(body), path)
+}
+
+/// The authority's certificate, PEM either way. As `application/x-x509-ca-cert`
+/// Safari on iOS opens it as a profile to install. Chrome on Android hands
+/// that type to the system, which refuses to install an authority from a
+/// browser, so `/ca.pem` is a plain download for Settings to pick up.
+fn authority(download: bool) -> Response {
+    let Some(pem) = crate::tls::authority::served() else {
+        return (
+            StatusCode::NOT_FOUND,
+            "This mixer has no certificate authority of its own to offer: HTTPS is off, or [control.tls] \
+             names your own certificate, whose authority is the one to trust.",
+        )
+            .into_response();
+    };
+    let (kind, disposition) = if download {
+        ("application/octet-stream", "attachment; filename=\"godwinmix-authority.crt\"")
+    } else {
+        ("application/x-x509-ca-cert", "inline; filename=\"godwinmix-authority.crt\"")
+    };
+    let mut answer = with_headers(kind, Body::from(pem), "ca.crt");
+    answer.headers_mut().insert(header::CONTENT_DISPOSITION, HeaderValue::from_static(disposition));
+    answer
 }
 
 fn html(body: &'static str) -> Response {

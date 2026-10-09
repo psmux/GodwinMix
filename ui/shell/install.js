@@ -10,6 +10,7 @@ const listeners = new Set();
 let offer = null;
 let installed = false;
 let listening = false;
+let authority = false;
 
 /** What decides whether this page can be installed, read from a window. */
 export function environment(win = window) {
@@ -22,19 +23,31 @@ export function environment(win = window) {
     offer: !!offer,
     secure: !!win.isSecureContext,
     worker: !!nav.serviceWorker,
+    loopback: /^(localhost|127\.[\d.]+|\[::1\])$/.test((win.location && win.location.hostname) || ""),
+    authority,
   };
 }
 
 /**
  * How this page can be installed, or null when it cannot or already is:
- * "prompt" when the browser has offered (Chrome, Edge, Samsung Internet), and
+ * "prompt" when the browser has offered (Chrome, Edge, Samsung Internet),
  * "ios" on an iPhone or iPad, where Share has Add to Home Screen and there is
- * no offer to wait for.
+ * no offer to wait for, and "trust" on any other device that opened the mixer
+ * by its network address, when the mixer has an authority to trust: the
+ * browser will not offer until the device trusts it.
  */
 export function installWay(env = environment()) {
   if (env.desktop || env.standalone) return null;
   if (env.offer) return "prompt";
-  return env.ios ? "ios" : null;
+  if (env.ios) return "ios";
+  return env.authority && !env.loopback ? "trust" : null;
+}
+
+/** Say whether the mixer has its own certificate authority to offer. */
+export function noteAuthority(present) {
+  if (authority === !!present) return;
+  authority = !!present;
+  changed();
 }
 
 /** Whether to register the service worker at all. */

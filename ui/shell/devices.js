@@ -13,6 +13,7 @@ import { toast } from "./toast.js";
 import { qrPath } from "../panels/channels/qr.js";
 import { deviceList } from "./devices-list.js";
 import { sharePrompt, stopSharing } from "./devices-share.js";
+import { trustNote } from "./trust.js";
 
 const HOW_TO = "https://github.com/psmux/GodwinMix/blob/main/docs/how-to/run-a-show-from-phones.md";
 const LOOPBACK = /^https?:\/\/(localhost|127\.[\d.]+|\[::1\])(:|\/|$)/i;
@@ -111,6 +112,7 @@ export async function openDevices(client) {
     node,
     el("div.row", {}, [make]),
     shown,
+    ...[trustNote(info, urls[0])].filter(Boolean),
     list.node,
     more,
   );

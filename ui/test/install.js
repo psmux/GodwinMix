@@ -6,8 +6,9 @@
 import { installWay, wantsWorker, environment, listenForOffer, promptInstall, onInstallChange } from "../shell/install.js";
 import { installRow } from "../shell/phone-more.js";
 import { route, NEVER } from "../sw.js";
+import { authorityLinks, trustNote, TRUST_HELP } from "../shell/trust.js";
 
-const ENV = { desktop: false, standalone: false, ios: false, offer: false, secure: true, worker: true };
+const ENV = { desktop: false, standalone: false, ios: false, offer: false, secure: true, worker: true, loopback: false, authority: false };
 const SCOPE = "http://mixer.test:8080/";
 
 function req(path, more = {}) {
@@ -31,6 +32,26 @@ export async function installTests(test, eq, ok) {
     eq(installWay({ ...ENV, offer: true, standalone: true }), null, "already opened as an app");
     eq(installWay({ ...ENV, ios: true, standalone: true }), null);
     eq(installWay({ ...ENV, offer: true, desktop: true }), null, "the desktop app is an app already");
+  });
+
+  test("a phone on the network address is pointed at trusting the mixer, once the mixer has an authority", () => {
+    eq(installWay({ ...ENV, authority: true }), "trust");
+    eq(installWay({ ...ENV, authority: true, loopback: true }), null, "on the mixer's own machine there is nothing to trust");
+    eq(installWay({ ...ENV, authority: false }), null, "HTTPS off, or the operator's own certificate");
+    eq(installWay({ ...ENV, authority: true, offer: true }), "prompt", "trusted already: the browser offered");
+    eq(installWay({ ...ENV, authority: true, ios: true }), "ios", "Add to Home Screen works without it");
+    eq(installWay({ ...ENV, authority: true, standalone: true }), null);
+  });
+
+  test("the authority is offered as /ca.crt for Apple and /ca.pem for Android, with its fingerprint", () => {
+    eq(authorityLinks("https://192.168.1.20:8080"), { apple: "https://192.168.1.20:8080/ca.crt", android: "https://192.168.1.20:8080/ca.pem" });
+    eq(authorityLinks("https://m.local:8080/#token=x").apple, "https://m.local:8080/ca.crt");
+    const note = trustNote({ tls: { authority: "AB:CD" } }, "https://192.168.1.20:8080/");
+    ok(note.textContent.includes("Trust this mixer on your phone"));
+    ok(note.textContent.includes("AB:CD"));
+    eq([...note.querySelectorAll("a")].map((a) => a.getAttribute("href")), ["https://192.168.1.20:8080/ca.crt", "https://192.168.1.20:8080/ca.pem", TRUST_HELP]);
+    eq(trustNote({ tls: { fingerprint: "x" } }, "https://a/"), null, "no authority, no note");
+    eq(trustNote({}, "https://a/"), null);
   });
 
   test("the service worker is registered only in a secure context, outside the desktop app", () => {
@@ -96,6 +117,9 @@ export async function installTests(test, eq, ok) {
     ok(note.textContent.includes("Share, then Add to Home Screen"));
     eq(note.querySelector("button"), null);
     eq(installRow(null, () => {}), null);
+    const trust = installRow("trust", () => {});
+    eq(trust.tagName, "A", "a link to the steps, not a button");
+    eq(trust.getAttribute("href"), TRUST_HELP);
   });
 
   // The browser's offer, faked: kept, shown once on the press, then gone.

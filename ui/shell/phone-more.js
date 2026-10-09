@@ -6,7 +6,8 @@ import { el } from "./dom.js";
 import { run } from "./commands.js";
 import { settings } from "./settings.js";
 import { icon } from "./phone-icons.js";
-import { installWay, promptInstall, onInstallChange } from "./install.js";
+import { installWay, promptInstall, onInstallChange, noteAuthority } from "./install.js";
+import { TRUST_HELP } from "./trust.js";
 
 /** What a panel is for, in a line, for the panels the core ships. */
 const ABOUT = {
@@ -22,9 +23,18 @@ onInstallChange(() => {
   if (shown && shown.page === "more" && shown.more.isConnected) shown.render();
 });
 
+/** Ask once whether the mixer has an authority a phone could trust. */
+let asked = false;
+function askAuthority(client) {
+  if (asked || !client || typeof client.call !== "function") return;
+  asked = true;
+  client.call("core.info", {}).then((info) => noteAuthority(!!(info && info.tls && info.tls.authority)), () => { asked = false; });
+}
+
 /** The screen's children, built again each time it is shown. */
 export function morePage(deck, extras) {
   shown = deck;
+  askAuthority(deck.client);
   const studio = !!settings().producer;
   const cards = extras.map((p) => {
     const [art, line] = ABOUT[p.id] || ["plugin", p.plugin ? "From the " + p.plugin + " plugin" : "A panel"];
@@ -55,10 +65,18 @@ export function morePage(deck, extras) {
 /**
  * Install app, in the form this browser allows: a button where the browser
  * has offered to install, a line saying where Add to Home Screen is on an
- * iPhone or iPad, and nothing at all where neither applies or it is done.
+ * iPhone or iPad, a link to how to trust the mixer where that comes first,
+ * and nothing at all where none applies or it is done.
  */
 export function installRow(way, onclick) {
   if (way === "prompt") return row("install", "Install app", "Open the mixer from the home screen, full screen", onclick);
+  if (way === "trust") {
+    return el("a.phone-row", { href: TRUST_HELP, target: "_blank", rel: "noopener" }, [
+      icon("install"),
+      el("span.phone-row-text", {}, [el("strong", { text: "Install app" }), el("span", { text: "Trust this mixer on your phone first: how" })]),
+      el("span.phone-chevron", { "aria-hidden": "true", text: "›" }),
+    ]);
+  }
   if (way !== "ios") return null;
   return el("div.phone-row.phone-row-note", {}, [
     icon("install"),
