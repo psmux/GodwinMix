@@ -20,8 +20,10 @@ with platforms and no encoder says so on its card and offers to move them.
 Every channel card on the Channels tab ends in a strip headed Send on to. On a
 channel with no destinations yet it offers YouTube, Facebook, Twitch and Kick,
 and **More** for the rest: Instagram Live, LinkedIn Live, X, TikTok LIVE,
-Custom RTMP and SRT. Once there is one, the strip shows the destinations as
-tiles and an **Add** tile opens the same choice.
+Custom RTMP and SRT. Beside them are **Record** and **Watch link**, which keep
+the stream on this machine: see [record a channel and share a watch
+link](record-a-channel.md). Once there is one, the strip shows the
+destinations as tiles and an **Add** tile opens the same choice.
 
 Press a platform, paste its stream key, press **Start sending**.
 
@@ -77,8 +79,8 @@ whole seconds of picture rather than slowing anything else down.
 Some destinations do not want the stream as the encoder sends it: a 1080p
 encoder and a church hall projector that only takes 720p, or a phone
 network that cannot carry 6 Mb/s. A destination can ask for a format of its
-own, and only that destination is converted. The page for this arrives with
-the renditions work; the steps below are what it shows.
+own, and only that destination is converted. The destination's form has a
+**Format** step for this.
 
 In the destination's form, under the stream key, **Format** starts on
 **Same as the source**, marked Free. Pick a preset instead, **YouTube 720p30**
