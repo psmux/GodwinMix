@@ -440,7 +440,7 @@ them. Until then, the honest answer to "will it run on my box" is to try it.
 
 ## Documentation
 
-[docs/]() is organised the way Diátaxis suggests, because "how do I" and
+[docs/](README.md) is organised the way Diátaxis suggests, because "how do I" and
 "why is it like this" are different questions and mixing them serves neither.
 
 | | |
