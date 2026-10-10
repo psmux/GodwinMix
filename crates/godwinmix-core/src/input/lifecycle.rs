@@ -19,7 +19,7 @@
 
 use parking_lot::{Mutex, MutexGuard};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tracing::warn;
 
 /// How long a restart or a stop waits for the other one to finish. Longer
@@ -32,22 +32,35 @@ pub struct Lifecycle {
     lock: Mutex<()>,
     restarting: AtomicBool,
     stopped: AtomicBool,
+    /// When the running restart was claimed, so the mixer can see one that
+    /// has hung and stop waiting for it (`mixer::supervise`).
+    claimed_at: Mutex<Option<Instant>>,
 }
 
 impl Lifecycle {
     /// Claim the one restart this source may have running. False when one
     /// is already running or the source has been stopped.
     pub fn claim_restart(&self) -> bool {
-        !self.stopped()
+        let claimed = !self.stopped()
             && self
                 .restarting
                 .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
-                .is_ok()
+                .is_ok();
+        if claimed {
+            *self.claimed_at.lock() = Some(Instant::now());
+        }
+        claimed
     }
 
     /// The restart is over, whichever way it went.
     pub fn end_restart(&self) {
+        *self.claimed_at.lock() = None;
         self.restarting.store(false, Ordering::SeqCst);
+    }
+
+    /// How long the running restart has been going, if one is.
+    pub fn restart_running_for(&self) -> Option<Duration> {
+        self.claimed_at.lock().map(|at| at.elapsed())
     }
 
     /// True while a restart is running.
@@ -101,7 +114,9 @@ mod tests {
         let l = Lifecycle::default();
         assert!(l.claim_restart());
         assert!(!l.claim_restart(), "a second restart was let in beside the first");
+        assert!(l.restart_running_for().is_some(), "a running restart has no start time");
         l.end_restart();
+        assert_eq!(l.restart_running_for(), None);
         assert!(l.claim_restart());
         l.end_restart();
         l.mark_stopped();

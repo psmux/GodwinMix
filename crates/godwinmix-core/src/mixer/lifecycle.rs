@@ -58,6 +58,41 @@ impl Mixer {
         }
     }
 
+    /// Ask an RTMP source to swap to its other client, on a thread of its
+    /// own. The swap takes the pipeline to NULL and starts it again, and the
+    /// librtmp client connects inside that start, which against a server that
+    /// takes the connection and never answers is a wait of up to its timeout.
+    /// It ran on this thread until 0.3.2. Claimed like a restart, so neither
+    /// a restart nor the connect deadline runs beside it.
+    pub(super) fn swap_client_off_thread(&mut self, id: &SourceId) {
+        let Some(slot) = self.sources.iter().find(|s| &s.input.id == id) else { return };
+        if !slot.input.claim_restart() {
+            return;
+        }
+        let input = slot.input.clone();
+        let events = self.events.clone();
+        let started = offload::run("client-swap", id.as_str(), move || {
+            match input.try_fallback_client() {
+                Ok(true) => {
+                    let _ = events.send(crate::state::Event::Alert {
+                        severity: crate::state::Severity::Warning,
+                        message: format!(
+                            "{} delivered no media; retrying with the other RTMP client",
+                            input.id
+                        ),
+                        action: None,
+                    });
+                }
+                Ok(false) => {}
+                Err(e) => warn!(source = %input.id, ?e, "client swap failed"),
+            }
+            input.restart_abandoned();
+        });
+        if !started {
+            slot.input.restart_abandoned();
+        }
+    }
+
     /// A restart has come back from its thread. Applied only to the instance
     /// it was started for: the source may have been removed and added again
     /// while it ran, and the new one has nothing to do with this result.
