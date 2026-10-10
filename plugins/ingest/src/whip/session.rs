@@ -32,6 +32,7 @@ use crate::tagger::{self, Shared, Zero};
 
 mod branch;
 mod vp8;
+mod watch;
 
 /// How long an answer waits for ICE to gather its candidates. Host
 /// candidates take milliseconds; this is for a slow interface.
@@ -45,7 +46,9 @@ pub struct Session {
 
 impl Session {
     /// Answer `offer` and start taking media. `ended` is called, from a
-    /// thread of the session's own, when the peer goes away without saying.
+    /// thread of the session's own, when the peer has gone for good. An
+    /// error carries the HTTP status: 409 for a name another publisher is
+    /// still sending on, which a publisher may try again, 400 otherwise.
     pub fn start(
         gate: &Arc<ChannelGate>,
         admit: Admit,
@@ -53,38 +56,45 @@ impl Session {
         peer: &str,
         ports: (u16, u16),
         ended: Box<dyn Fn() + Send>,
-    ) -> Result<(Session, String), String> {
-        gmx_netkit::init()?;
-        if !gmx_netkit::elements::exists("nicesrc") {
-            // webrtcbin carries its media over libnice's elements, and fails
-            // to start at all without them, with nothing in its error to say so.
-            return Err(format!(
-                "WHIP needs GStreamer's libnice elements (nicesrc), and this machine does not \
-                 have them. They come from {}; install that and publish again.",
-                gmx_netkit::elements::where_from("nicesrc")
-            ));
-        }
-        let sdp =gst_sdp::SDPMessage::parse_buffer(offer.as_bytes()).map_err(|_| "the offer is not SDP. Send the RTCPeerConnection's offer as the request body, with Content-Type application/sdp.".to_string())?;
-        let can_vp8 = vp8::available();
-        if !offer.contains("H264") && !(can_vp8 && offer.contains("VP8")) {
-            let also = if can_vp8 { " or VP8" } else { "" };
-            return Err(format!("the offer has no H.264{also} video, which is what a channel takes from WebRTC. Set the browser or encoder to H.264."));
-        }
-        // One video codec in the answer, so the stream that arrives is the one
-        // its branch was built for: H.264 whenever the offer has it.
-        let vp8 = !offer.contains("H264");
+    ) -> Result<(Session, String), (i32, String)> {
+        let bad = |e: String| (400, e);
+        let (sdp, vp8) = offered(offer).map_err(bad)?;
         let stop = Arc::new(AtomicBool::new(false));
         let halt = stop.clone();
         let kick: Kick = Arc::new(move || halt.store(true, Ordering::Relaxed));
         let name = format!("{}-{}", admit.app, admit.stream);
-        let inlet = gate.let_in(Protocol::Whip, admit, peer, kick)?;
+        let inlet = gate.let_in(Protocol::Whip, admit, peer, kick).map_err(|e| (409, e))?;
         let to = tagger::share(inlet);
-        let (pipe, bin) = build(&name, ports, &to, vp8)?;
+        let (pipe, bin) = build(&name, ports, &to, vp8).map_err(bad)?;
         let session = Session { pipe: Some(pipe), to, stop: stop.clone() };
-        let answer = negotiate(&bin, sdp)?;
-        watch(bin, stop, ended);
+        let answer = negotiate(&bin, sdp).map_err(bad)?;
+        watch::watch(bin, stop, ended);
         Ok((session, answer))
     }
+}
+
+/// The offer as SDP, and whether its video is VP8, once it is known to be
+/// something a channel can take.
+fn offered(offer: &str) -> Result<(gst_sdp::SDPMessage, bool), String> {
+    gmx_netkit::init()?;
+    if !gmx_netkit::elements::exists("nicesrc") {
+        // webrtcbin carries its media over libnice's elements, and fails
+        // to start at all without them, with nothing in its error to say so.
+        return Err(format!(
+            "WHIP needs GStreamer's libnice elements (nicesrc), and this machine does not \
+             have them. They come from {}; install that and publish again.",
+            gmx_netkit::elements::where_from("nicesrc")
+        ));
+    }
+    let sdp = gst_sdp::SDPMessage::parse_buffer(offer.as_bytes()).map_err(|_| "the offer is not SDP. Send the RTCPeerConnection's offer as the request body, with Content-Type application/sdp.".to_string())?;
+    let can_vp8 = vp8::available();
+    if !offer.contains("H264") && !(can_vp8 && offer.contains("VP8")) {
+        let also = if can_vp8 { " or VP8" } else { "" };
+        return Err(format!("the offer has no H.264{also} video, which is what a channel takes from WebRTC. Set the browser or encoder to H.264."));
+    }
+    // One video codec in the answer, so the stream that arrives is the one
+    // its branch was built for: H.264 whenever the offer has it.
+    Ok((sdp, !offer.contains("H264")))
 }
 
 impl Drop for Session {
@@ -155,26 +165,4 @@ fn negotiate(bin: &gst::Element, sdp: gst_sdp::SDPMessage) -> Result<String, Str
     }
     let local = bin.property::<Option<gst_webrtc::WebRTCSessionDescription>>("local-description").unwrap_or(answer);
     local.sdp().as_text().map_err(|e| format!("the answer would not print as SDP: {e}"))
-}
-
-/// A thread that watches the connection, once a second, and ends the session
-/// when the peer has gone or the gate has cut it off.
-fn watch(bin: gst::Element, stop: Arc<AtomicBool>, ended: Box<dyn Fn() + Send>) {
-    let _ = std::thread::Builder::new().name("gmx-whip-watch".into()).spawn(move || {
-        use gst_webrtc::WebRTCPeerConnectionState as State;
-        let started = Instant::now();
-        loop {
-            std::thread::sleep(Duration::from_secs(1));
-            if stop.load(Ordering::Relaxed) {
-                break;
-            }
-            let state = bin.property::<State>("connection-state");
-            let never = state != State::Connected && started.elapsed() > Duration::from_secs(20);
-            if matches!(state, State::Failed | State::Closed | State::Disconnected) || never {
-                break;
-            }
-        }
-        drop(bin);
-        ended();
-    });
 }
