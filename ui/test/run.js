@@ -2721,14 +2721,24 @@ async function liveSuite() {
 
   // --- on air --------------------------------------------------------------
 
+  // A tap takes in the plain layout. A new browser starts in Studio mode,
+  // where the same tap arms the scene for Take instead, so the take is asked
+  // for with Studio mode off and the choice put back after.
+  const { settings: tabSettings, setSetting: setTabSetting } = await import("../shell/settings.js");
+  const studioWas = tabSettings().producer;
+  setTabSetting("producer", false);
   const tookAt = performance.now();
   let took = null;
   const offTook = client.on("event", (e) => {
     if (e.name === "program.took") took = e.params;
   });
-  await panel.activate(scene.id);
-  await waitFor(() => took, 5000, "event/program.took");
-  offTook();
+  try {
+    await panel.activate(scene.id);
+    await waitFor(() => took, 5000, "event/program.took");
+  } finally {
+    offTook();
+    setTabSetting("producer", studioWas);
+  }
   test("tapping a scene tile puts it on air", () => {
     ok(took.scene === scene.id || took.scene === renamed, `the take names the scene: ${JSON.stringify(took)}`);
   });
