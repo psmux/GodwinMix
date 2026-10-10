@@ -227,10 +227,11 @@ What the supervisor does with a source that has stopped delivering.
 | Key | Default | Meaning |
 |---|---|---|
 | `restart_after_secs` | 10 | seconds a source may deliver nothing before its pipeline is rebuilt. Doubles with each restart that does not hold, to 16 times this at most, and counts a quarter while the programme itself is short of frames; see [sources](sources.md#when-a-source-stops-delivering) |
+| `connect_timeout_secs` | 15 | seconds a source that pulls its feed from a server may go from a start or restart without delivering anything before it is restarted. Zero turns it off. Listeners and plugin sources are never held to it; see [sources](sources.md#when-a-source-never-delivers) |
 | `rebuild_attempts` | 3 | attempts at full speed before the backoff starts |
 | `rebuild_backoff_secs` | 30 | first delay after those attempts |
 | `rebuild_backoff_max_secs` | 300 | ceiling the delay doubles up to |
-| `hold_last_frame` | true | keep the last frame of a source being rebuilt on programme instead of cutting to the slate |
+| `hold_last_frame` | true | keep the last frame of a source on programme for up to 45 seconds while it is stalled, restarting or being rebuilt, instead of cutting to the slate; see [sources](sources.md#what-the-programme-shows-meanwhile) |
 
 The backoff exists because of two specific nights: 485 rebuilds one night and
 1,174 the next, on a superimposed source that could not recover. The counter is

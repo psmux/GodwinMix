@@ -192,7 +192,8 @@ instances, one at a time:
 One at a time so that a plugin with a service and a device keeps the other one
 answering while the first is replaced. The picture is covered throughout: a
 singleton draws nothing, and a source belonging to the same plugin keeps its
-slot and its last frame under the mixer's own freeze frame.
+slot and its last frame under the mixer's own freeze frame, for up to 45
+seconds.
 
 `configure` answering `{applied: false, restart_required: true}` is the
 documented reason to call it; error `-32012` says so by name.
@@ -338,10 +339,20 @@ the operator asked for rather than only the core's view of it.
 
 ## Restarting
 
-Three restarts are free. After that the wait is 30 seconds, doubling to a
-ceiling of 300. The count is cleared on the first frame after a restart and when
-the instance is removed, so a source that comes back and works is not punished
-for having failed an hour ago.
+A restart waits half a second, then 1.8 times as long as the one before, up to
+ten seconds, where it stays. A source rebuilt from nothing (one without
+`restart-in-place`) takes that delay for its first three rebuilds
+(`stall.rebuild_attempts`) and then waits 30 seconds, doubling to 300
+(`stall.rebuild_backoff_secs` and `stall.rebuild_backoff_max_secs`). Both counts
+are cleared once the source is live again, and after a restart for a stall, or
+for a plugin that said it was failing, only once it has stayed live for 60
+seconds. Each such restart also doubles how long the source may stay stalled
+before the next, from `stall.restart_after_secs` up to sixteen times that. All
+of it is cleared when the instance is removed. See
+[sources](sources.md#when-a-source-stops-delivering) for the whole schedule.
+
+A plugin that declares `health` is asked every two seconds, and one that
+answers `failing` for `stall.restart_after_secs` is restarted.
 
 What a restart does depends on what the plugin declared:
 
@@ -350,9 +361,11 @@ What a restart does depends on what the plugin declared:
 * Without it, the whole source is rebuilt from nothing. Slower and always
   works.
 
-The freeze frame covers the gap either way. The programme's frame interval must
-never exceed 34 milliseconds while it happens, and the harness measures exactly
-that.
+The freeze frame covers the gap either way, for up to 45 seconds after the
+source was last live; after that the programme shows the slate until it is
+back. A source that never delivered a picture has no frame to hold. The
+programme's frame interval must never exceed 34 milliseconds while it happens,
+and the harness measures exactly that.
 
 ## Stopping
 
