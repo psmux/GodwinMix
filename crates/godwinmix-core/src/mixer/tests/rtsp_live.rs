@@ -121,3 +121,16 @@ async fn an_rtsp_camera_told_tcp_goes_live_and_stays_live() {
     let Some(_cam) = Camera::serve(20331) else { return };
     stays_live("rtsp://127.0.0.1:20331/cam", "params = { transport = \"tcp\" }").await;
 }
+
+/// Plain `rtsp://`, which tries UDP first. Only where `CI` is set: `rtspsrc`
+/// binds its client RTP ports on every interface, which on a desktop asks the
+/// firewall, and some VPN drivers drop loopback UDP altogether.
+#[tokio::test(flavor = "multi_thread")]
+async fn an_rtsp_camera_over_udp_goes_live_and_stays_live() {
+    if std::env::var_os("CI").is_none() {
+        println!("skipping: RTSP over UDP runs only where CI is set");
+        return;
+    }
+    let Some(_cam) = Camera::serve(20332) else { return };
+    stays_live("rtsp://127.0.0.1:20332/cam", "params = { transport = \"udp\" }").await;
+}
