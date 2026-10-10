@@ -104,9 +104,18 @@ second or so while the mixer's decoder starts again at the new size.
 
 The card says Reconnecting, with the reason, and publishes again by itself:
 after a second, then two, four, eight, and every fifteen after that, until it
-is back or you press **Stop**. The mixer side does the same thing it does for
-any channel: a source that a scene holds shows its last picture until the
-stream returns.
+is back or you press **Stop**. It never gives up on its own while the page is
+open, whatever the mixer answers, short of a wrong key. The mixer side does
+the same thing it does for any channel: a source that a scene holds shows its
+last picture until the stream returns, and nobody has to touch it.
+
+A short Wi-Fi blip often needs no new offer at all. The browser's connection
+reads disconnected for a few seconds and comes back by itself, and both ends
+wait for it: the page for five seconds, the mixer for fifteen.
+
+It does not wait out the timers when it has a reason to try now. The network
+coming back, a phone moving from Wi-Fi to cellular, and the page being shown
+again after it was in the background each make it publish again at once.
 
 A tab that was closed, a browser that was killed or a laptop that went to
 sleep sends the mixer nothing on its way out, so its stream stays on the
@@ -118,7 +127,9 @@ while the first is still live is refused, as before.
 
 A refusal that waiting will not cure stops at once with the mixer's own
 sentence: a key the channel does not have, a channel that is switched off or
-does not take WHIP, or a browser that can send neither H.264 nor VP8.
+does not take WHIP, or a browser that can send neither H.264 nor VP8. A
+channel the mixer says it cannot find is not one of these. A mixer that is
+restarting says that for a moment, so the page keeps trying.
 
 ## Stop
 

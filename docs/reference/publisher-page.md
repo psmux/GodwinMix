@@ -87,10 +87,35 @@ is put on the same sender with `replaceTrack`.
 | Not publishing | The page is open and Go live has not been pressed |
 | Connecting | The offer is on its way, or the connection is being made |
 | Live | The peer connection is `connected` |
-| Reconnecting | The connection failed, or stayed `disconnected` for five seconds, or the offer was refused with something waiting may cure (`409`, `5xx`, the network). It tries again after 1, 2, 4 and 8 seconds, then every 15 |
-| Stopped | Stop was pressed, or the offer was refused with `400`, `401`, `403`, `404` or `415`, or the browser can send neither H.264 nor VP8 |
+| Reconnecting | The connection failed, or stayed `disconnected` for five seconds, or the offer was refused with anything but the codes under Stopped (`400`, `404`, `409`, `5xx`, the network). It tries again after 1, 2, 4 and 8 seconds, then every 15, for as long as the page is open |
+| Stopped | Stop was pressed, or the offer was refused with `401`, `403` or `415`, or the browser can send neither H.264 nor VP8 |
 
 The sentence the endpoint answered with is shown as it came.
+
+A `404` is retried because a mixer or a station that is restarting answers it
+for a moment before its channels are back. A channel that really has gone
+shows its sentence under Reconnecting every fifteen seconds until somebody
+presses Stop.
+
+## Coming back after a lost network
+
+| Event | What the page does |
+|---|---|
+| `disconnected` | Waits five seconds for it to come back by itself, then offers again |
+| `failed` or `closed` | Offers again at once, and after the waits above if that fails |
+| `online` on `window` | Ends the current wait and offers again now |
+| `change` on `navigator.connection` (Wi-Fi to cellular, a new access point; Chrome on Android) | The same, and a connection that reads `disconnected` in the next fifteen seconds is not waited for, because its path went with the old network |
+| `visibilitychange` to visible | Ends the current wait and offers again now. A hidden page's timers run once a minute at most |
+
+A connection that is `connected`, or an offer already on its way, is left
+alone by all of these.
+
+There is no ICE restart: the endpoint answers `PATCH` with `405`. A new offer
+starts a new session, which takes over the old one at once, because by then
+the old has sent nothing for more than two seconds. The mixer keeps its end of
+a `disconnected` session for fifteen seconds, longer than the page waits, so
+it never ends a session the page still expects to come back; it ends one at
+once on `failed` or `closed`.
 
 ## What runs, and when
 

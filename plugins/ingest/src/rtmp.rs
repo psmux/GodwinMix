@@ -46,7 +46,7 @@ use crate::media_tag::MediaTag;
 mod conn;
 mod io;
 
-pub use io::server_config;
+pub use io::{server_config, IDLE};
 
 /// Where one publisher's tags go. Dropping it means the publisher has left.
 pub trait Inlet: Send {
@@ -314,5 +314,30 @@ mod tests {
         std::thread::sleep(std::time::Duration::from_millis(200));
         // Still listening: a second connection is accepted.
         assert!(TcpStream::connect(("127.0.0.1", server.port())).is_ok());
+    }
+
+    #[test]
+    fn a_connection_that_goes_silent_is_closed_after_idle_rather_than_held_for_ever() {
+        use std::io::{Read as _, Write as _};
+        use std::time::{Duration, Instant};
+        let server = Server::bind("127.0.0.1", 0, Arc::new(Closed)).expect("bind");
+        let mut client = TcpStream::connect(("127.0.0.1", server.port())).expect("the server accepts");
+        // The first byte of a handshake, and then nothing: what the server
+        // sees of a publisher whose cable was pulled. No FIN ever comes.
+        client.write_all(&[3]).expect("write");
+        client.set_read_timeout(Some(IDLE * 3)).expect("a timeout");
+        let started = Instant::now();
+        let mut rest = [0u8; 4096];
+        let closed = loop {
+            match client.read(&mut rest) {
+                Ok(0) => break true,
+                Ok(_) => continue,
+                Err(e) => break e.kind() != std::io::ErrorKind::WouldBlock && e.kind() != std::io::ErrorKind::TimedOut,
+            }
+        };
+        let took = started.elapsed();
+        assert!(closed, "the server never let go of the silent connection");
+        assert!(took >= IDLE - Duration::from_millis(500), "closed after {took:?}, before it was idle");
+        assert!(took < IDLE + Duration::from_secs(3), "closed after {took:?}");
     }
 }
