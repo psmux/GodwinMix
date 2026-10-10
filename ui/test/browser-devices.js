@@ -13,6 +13,7 @@ import { fillSelect, paintState, buildForm } from "../join/form.js";
 import { SHAPES, shapeOfCanvas, startShape, deviceTurn, screenTurn, correction, placement, holdHint } from "../join/shape.js";
 import { browserChannelTests } from "./browser-channel.js";
 import { phoneCameraTests } from "./phone-camera.js";
+import { publishRetryTests } from "./publish-retry.js";
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -62,9 +63,11 @@ export async function browserDeviceTests(test, eq, ok) {
     eq([0, 1, 2, 3, 4, 9].map(backoff), [1000, 2000, 4000, 8000, 15000, 15000]);
   });
 
-  test("a wrong key or no such channel stops; a name in use or a mixer restarting tries again", () => {
+  test("a wrong key stops; a name in use, a 404 or a mixer restarting tries again", () => {
     ok(isFinal(new WhipError(403, "no")), "403");
-    ok(isFinal(new WhipError(404, "no")), "404");
+    ok(isFinal(new WhipError(401, "no")), "401");
+    ok(!isFinal(new WhipError(404, "no")), "404: a relay restarting answers it for a moment");
+    ok(!isFinal(new WhipError(400, "no")), "400");
     ok(isFinal(new WhipError(0, "no H.264")), "a browser with no H.264");
     ok(!isFinal(new WhipError(409, "in use")), "409");
     ok(!isFinal(new WhipError(503, "plugin")), "503");
@@ -261,4 +264,5 @@ export async function browserDeviceTests(test, eq, ok) {
 
   await browserChannelTests(test, eq, ok);
   await phoneCameraTests(test, eq, ok);
+  await publishRetryTests(test, eq, ok);
 }

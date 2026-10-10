@@ -335,6 +335,11 @@ network dropped, or a browser that was closed without stopping, leaves its
 session behind; once that session has sent nothing for 2 seconds, the next
 publisher with a valid key takes the name over and the old session is cut off.
 One that arrives sooner waits out the 2 seconds rather than being turned away.
+An encoder whose cable was pulled and never comes back still frees its name:
+the connection is closed after 5 seconds of nothing. Set the encoder to
+reconnect (OBS does by default) and it is back on air as soon as its network
+is. The mixer source for the stream shows its last picture meanwhile and goes
+live again by itself.
 See [the reference](../reference/channels.md#a-publisher-that-went-away-without-hanging-up).
 
 ## Where to go next

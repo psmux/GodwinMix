@@ -5,9 +5,10 @@
 //! uses to reach Facebook, so RTMPS in costs no new dependency. Behind it the
 //! connection is the same RTMP session feeding the same hub.
 
-use std::io::{Read, Write};
+use std::io::{ErrorKind, Read, Write};
 use std::net::TcpStream;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
@@ -30,6 +31,58 @@ impl Io {
 
     pub fn is_plain(&self) -> bool {
         matches!(self, Io::Plain(_))
+    }
+}
+
+/// How long one read waits before it looks at the stop flag and the clock.
+pub const TICK: Duration = Duration::from_secs(1);
+
+/// How long a connection may send nothing before it is taken to be gone. A
+/// pulled cable or a phone that left the Wi-Fi sends no FIN, and a read
+/// with no timeout waits on it for as long as the operating system keeps
+/// the socket, which is minutes or hours. Every working publisher sends
+/// sound every 20 to 40 ms and a picture every frame, so five seconds of
+/// nothing is a network that has gone. Freeing the connection then is what
+/// lets the same encoder's reconnect in.
+pub const IDLE: Duration = Duration::from_secs(5);
+
+/// What one read found.
+pub enum Got {
+    Bytes(usize),
+    /// The peer closed the connection, or it was cut off.
+    Closed,
+    /// Nothing in the last [`TICK`], and not yet [`IDLE`].
+    Nothing,
+}
+
+impl Io {
+    /// Put the read and write timeouts on the socket under a connection.
+    pub fn time_out(socket: &TcpStream) {
+        let _ = socket.set_read_timeout(Some(TICK));
+        let _ = socket.set_write_timeout(Some(IDLE));
+    }
+
+    /// Read once. `last` is when bytes last came, and moves when they do.
+    /// An error, [`IDLE`] of silence among them, is the sentence to log.
+    pub fn read_some(&mut self, buf: &mut [u8], last: &mut Instant, idle: Duration) -> Result<Got, String> {
+        match self.read(buf) {
+            Ok(0) => Ok(Got::Closed),
+            Ok(n) => {
+                *last = Instant::now();
+                Ok(Got::Bytes(n))
+            }
+            Err(e) if matches!(e.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => {
+                if last.elapsed() < idle {
+                    return Ok(Got::Nothing);
+                }
+                Err(format!(
+                    "nothing came for {} s, so the network to the publisher has gone. The \
+                     connection is closed, and the same encoder reconnecting is let in.",
+                    idle.as_secs()
+                ))
+            }
+            Err(e) => Err(format!("reading from the publisher failed: {e}")),
+        }
     }
 }
 

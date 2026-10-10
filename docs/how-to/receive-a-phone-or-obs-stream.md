@@ -108,6 +108,16 @@ and give that person `rtmp://<address>:1936/live` and the key. Anyone
 publishing under a different key is refused with a message naming the one
 that was wanted. The key is stored encrypted and never read back.
 
+When the publisher's network drops, nobody has to do anything. A connection
+that has sent nothing for 5 seconds is closed, and one that has sent nothing
+for 2 seconds is cut off as soon as another publisher arrives. Either way the
+source ends its stream and the mixer starts it again on a clean one within a
+second, holding the last picture meanwhile, so the encoder's reconnect goes
+straight to air. A newcomer that arrives during that second is asked to
+publish again, which an encoder set to reconnect does by itself. The same is
+true of an `ingest/whip` source: a browser that publishes to it again gets a
+clean stream.
+
 `gmx ctl source add` carries an id, an address, a `--type` and a name, and has
 no flag for a plugin's own settings, so a source that needs them is added over
 the API. `uri` is required there: the type id goes in it when a source has no

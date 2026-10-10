@@ -92,3 +92,25 @@ fn an_rtmp_publisher_that_stopped_sending_gives_its_name_to_the_one_that_came_ba
     assert!(after < crate::hub::STALE + Duration::from_secs(4), "it took {after:?}");
     assert!(still_live);
 }
+
+#[test]
+fn a_publisher_whose_network_went_away_frees_its_name_within_the_idle_time() {
+    let settings = Settings::from_params(&json!({"bind": "127.0.0.1", "rtmp_port": 0}));
+    let device = Discover::start(&settings, table(), None).expect("the loopback has a free port");
+    let url = format!("rtmp://127.0.0.1:{}/church/main?psk=s3cret", device.port());
+    let Some(mut gone) = publish(&url) else {
+        eprintln!("skipping: no ffmpeg on PATH");
+        return;
+    };
+    assert!(wait_for(Duration::from_secs(8), || device.hub().is_live("church", "main")), "it went live");
+    // A pulled cable: the socket stays open, nothing more comes, no FIN.
+    signal(&gone, libc::SIGSTOP);
+    let pulled = Instant::now();
+    let freed = wait_for(crate::rtmp::IDLE + Duration::from_secs(4), || !device.hub().is_live("church", "main"));
+    let after = pulled.elapsed();
+    signal(&gone, libc::SIGCONT);
+    let _ = gone.kill();
+    let _ = gone.wait();
+    assert!(freed, "the name was still held {after:?} after the publisher went silent");
+    assert!(after >= crate::rtmp::IDLE - Duration::from_secs(1), "freed after {after:?}, sooner than the idle time");
+}

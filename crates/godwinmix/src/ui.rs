@@ -66,6 +66,7 @@ const ASSETS: &[(&str, &str)] = &[
     ("join/form.js", include_str!("../../../ui/join/form.js")),
     ("join/devices.js", include_str!("../../../ui/join/devices.js")),
     ("join/session.js", include_str!("../../../ui/join/session.js")),
+    ("join/retry.js", include_str!("../../../ui/join/retry.js")),
     ("join/tracks.js", include_str!("../../../ui/join/tracks.js")),
     ("join/whip.js", include_str!("../../../ui/join/whip.js")),
     ("join/meter.js", include_str!("../../../ui/join/meter.js")),
@@ -478,6 +479,7 @@ const DEV_ASSETS: &[(&str, &str)] = &[
     ("test/agents.js", include_str!("../../../ui/test/agents.js")),
     ("test/browser-channel.js", include_str!("../../../ui/test/browser-channel.js")),
     ("test/phone-camera.js", include_str!("../../../ui/test/phone-camera.js")),
+    ("test/publish-retry.js", include_str!("../../../ui/test/publish-retry.js")),
     // The designer kits' behaviour, as the reference implementation answered
     // it. The TypeScript and Python suites read the same file from the
     // repository; the browser reads it from here, because the page has no file
