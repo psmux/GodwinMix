@@ -14,7 +14,7 @@ from the URL, so there is nothing to configure beyond the address:
 | `rtmp://host/live/key`, `rtmps://…` | RTMP, demuxed explicitly so the client can be chosen |
 | `https://host/stream.m3u8` | HLS |
 | `https://host/manifest.mpd` | DASH |
-| `rtsp://…`, `srt://…`, `rist://…`, `udp://…`, `rtp://…` | continuous stream |
+| `rtsp://…`, `rtspt://…`, `srt://…`, `rist://…`, `udp://…`, `rtp://…` | continuous stream; RTSP is below |
 | `web+https://host/page`, `web://host/page` | the page rendered by a real Chromium, with its audio, see the browser sidecar |
 | `exec:<command line>` | whatever the process writes to stdout, including `tools/browser-source.sh` |
 | a path or URL ending `.png`, `.jpg`, `.jpeg`, `.bmp`, `.webp`, `.tif`, `.svg` | a still picture, held on screen (`image/source`); with transparency it is drawn over the scene |
@@ -112,6 +112,50 @@ and a second of sound, measured), and an eight second clip went round every
 cannot be seeked, so `repeat` on one still restarts it, after its tail has
 played. A clip with transparency is drawn by the overlay board without the
 timeline aligner the seek needs, and repeats the same way.
+
+### RTSP cameras
+
+Every scheme `rtspsrc` knows is a continuous stream (`hls/source`):
+
+| Address | Transport |
+|---|---|
+| `rtsp://host/path` | UDP first; TCP when nothing arrives over UDP within five seconds |
+| `rtspt://host/path` | TCP only, interleaved on the RTSP connection |
+| `rtspu://host/path` | UDP only |
+| `rtsph://host/path` | RTSP tunnelled over HTTP |
+| `rtsps://`, `rtspst://`, `rtspsu://`, `rtspsh://` | the same four over TLS |
+
+Two params, read only for an RTSP address:
+
+| Param | Default | What it does |
+|---|---|---|
+| `transport` | `auto` | `auto`, `tcp` or `udp`, for an `rtsp://` or `rtsps://` address. A scheme that names its transport (`rtspt://`) wins over it. Choose `tcp` for a camera across a firewall, a VPN or NAT |
+| `latency_ms` | `200` | The jitter buffer, 0 to 10000. Raise it for a camera on a jittery network |
+
+Anything else is refused when the source is added, with the choices in the
+message.
+
+The mixer sets `rtspsrc` up for a camera that has to come back by itself.
+`tcp-timeout` and `timeout` are five seconds, so a connection attempt to a
+camera that does not answer fails in five seconds rather than twenty, and the
+restart below tries again. `teardown-timeout` is 200 ms, so stopping a camera
+behind a pulled cable does not wait for an answer to TEARDOWN that will never
+come. Keep alives are on, and a frame later than the jitter buffer is dropped
+rather than queued.
+
+An RTSP camera's timeline is started at zero at its first frame, as an RTMP
+camera's and a clip's are. `rtspsrc` stamps each packet with when it arrived on
+the programme's clock, so without this a camera added to a programme that had
+been up for minutes had every frame placed minutes in the future. In 0.3.1 an
+`rtspt://` camera went live and was judged stalled about six seconds later,
+every time: the address also fell through to the clip kind. Both are fixed in
+0.3.2. The log says `an RTSP stream's timeline was started at zero` once per
+connection.
+
+A pulled cable on TCP looks like a camera that has gone quiet: nothing arrives
+and no error comes. The source goes stalled and then follows the restart rules
+below. While the cable stays out each try fails after five seconds; once it is
+back the next try connects.
 
 ### When a source stops delivering
 

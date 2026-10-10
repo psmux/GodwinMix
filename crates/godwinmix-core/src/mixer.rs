@@ -5742,6 +5742,7 @@ mod tests {
     mod odd_segment;
     mod recording_store;
     mod restart;
+    mod rtsp_live;
     mod preview_churn;
     mod slow_restart;
     mod sound_only;
