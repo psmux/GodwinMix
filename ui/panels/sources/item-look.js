@@ -1,5 +1,9 @@
-// Turn a source and choose how it fills its box, from its tile's menu.
+// What Sources does to a scene's items that the first page does not need:
+// turning a source and choosing how it fills its box, from its tile's menu,
+// and taking the scene when its lone on air source is removed from it.
+// Fetched on first use, because the first page has a byte budget.
 //
+// Turn and fit:
 // A phone held sideways, a camera mounted on its side, a portrait clip in a
 // wide show: each wants a quarter turn or a different fit, and both used to
 // live only in the composer's inspector, three clicks and a double click
@@ -7,7 +11,7 @@
 // change that scene's item, so the same camera can sit upright in one scene
 // and on its side in another, and they apply on air at once like any edit.
 
-import { errorToast } from "../../shell/toast.js";
+import { errorToast, toast } from "../../shell/toast.js";
 
 const quarter = (deg) => ((Math.round(deg / 90) * 90) % 360 + 360) % 360;
 
@@ -44,4 +48,22 @@ export function lookEntries(scenes, scene, id) {
       ? { label: "Show all of it", run: fit("contain", "Show all of it") }
       : { label: "Fill the box", run: fit("cover", "Fill the box") },
   ].filter(Boolean);
+}
+
+/**
+ * A source on air by itself, taken out of the scene a person is building,
+ * goes off air: the scene goes on in its place.
+ *
+ * A tester removed "Browser jaffer" from Default scene and the header went on
+ * saying Browser jaffer, because the programme was that source alone and not
+ * the scene. To them the two were the same thing. Studio mode too, where a
+ * take is otherwise the operator's alone: the source the person has just
+ * taken out is the one thing they asked to be rid of.
+ */
+export async function followScene(client, scenes, scene, ids) {
+  const state = client.state || {};
+  if (state.scene || !ids.includes(state.program)) return;
+  const name = client.store.source(state.program)?.name || state.program;
+  await scenes.take(scene.id);
+  toast({ text: `${name} was on air by itself, so ${scene.name} is on air now.` });
 }

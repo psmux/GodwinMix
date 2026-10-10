@@ -1178,6 +1178,9 @@ mod tests {
         reachable.extend(closure_of("panels/sources/browser-device.js"));
         // A phone's camera: the code and the link, when that row is pressed.
         reachable.extend(closure_of("panels/sources/phone-camera.js"));
+        // Turn and fit on a tile's menu, and following the scene after a
+        // remove, fetched by Sources when first used.
+        reachable.extend(closure_of("panels/sources/item-look.js"));
         // The Graphics gallery: entry.js imports the panel when its tab is
         // first shown, and the panel imports Edit and Make with an agent when
         // their buttons are pressed.
