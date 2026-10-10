@@ -21,6 +21,7 @@ use crate::media_tag::{MediaTag, TagKind};
 use crate::tsmux::Muxer;
 
 use super::link::{Failure, Link};
+use super::srt_heard::{acks, listens, Heard};
 use super::target::Target;
 
 /// What the pipeline may hold before the far end counts as slow. Past it a
@@ -34,6 +35,10 @@ pub struct SrtLink {
     /// Past the slack: dropping until the next keyframe.
     skipping: bool,
     muxer: Muxer,
+    sink: gst::Element,
+    listener: bool,
+    /// The receiver's acknowledgements, so a receiver that vanished is noticed.
+    heard: Heard,
 }
 
 impl SrtLink {
@@ -44,15 +49,17 @@ impl SrtLink {
         let uri = target.url.replace('"', "");
         let description = format!(
             "appsrc name=in is-live=true format=bytes caps=video/mpegts,systemstream=true,packetsize=188 \
-             ! srtsink uri=\"{uri}\" wait-for-connection=false sync=false"
+             ! srtsink name=out uri=\"{uri}\" wait-for-connection=false sync=false"
         );
         let mut pipe = Pipe::launch(&description).map_err(Failure::Refused)?;
         let src: AppSrc = pipe
             .by_name("in")
             .and_then(|e| e.downcast().ok())
             .ok_or_else(|| Failure::Refused("the SRT pipeline has no appsrc".into()))?;
+        let sink = pipe.by_name("out").ok_or_else(|| Failure::Refused("the SRT pipeline has no srtsink".into()))?;
         pipe.play(None).map_err(|e| Failure::Lost(format!("{name}: {e}")))?;
-        let link = SrtLink { pipe, src, name, skipping: false, muxer: Muxer::new() };
+        let heard = Heard::new(std::time::Instant::now());
+        let mut link = SrtLink { pipe, src, name, skipping: false, muxer: Muxer::new(), sink, listener: listens(&uri), heard };
         // A caller that cannot reach its listener fails on the bus within a
         // moment of starting. Waiting that moment is what lets "nothing
         // answered" be said now rather than after the first GOP is lost.
@@ -61,14 +68,21 @@ impl SrtLink {
         Ok(link)
     }
 
-    fn check(&self) -> Result<(), Failure> {
+    fn check(&mut self) -> Result<(), Failure> {
         match self.pipe.failure() {
             Some(e) if e.contains("onnect") || e.contains("resolve") => {
-                Err(Failure::Lost(format!("nothing answered at {} ({e})", self.name)))
+                return Err(Failure::Lost(format!("nothing answered at {} ({e})", self.name)))
             }
-            Some(e) => Err(Failure::Lost(format!("{} failed: {e}", self.name))),
-            None => Ok(()),
+            Some(e) => return Err(Failure::Lost(format!("{} failed: {e}", self.name))),
+            None => {}
         }
+        let (count, ever) = (acks(&self.sink, self.listener), self.heard.ever());
+        self.heard.check(count, std::time::Instant::now()).map_err(|quiet| {
+            Failure::Lost(match ever {
+                true => format!("{} stopped answering for {} s", self.name, quiet.as_secs()),
+                false => format!("nothing answered at {} in {} s", self.name, quiet.as_secs()),
+            })
+        })
     }
 
     fn push(&self, bytes: Vec<u8>) -> Result<usize, Failure> {
