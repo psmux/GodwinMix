@@ -135,6 +135,7 @@ fn watch(plan: &impl Plan, pipeline: &gst::Pipeline, out: &Shared, pads: &Pads, 
             None => (State::Connecting, (!notes.is_empty()).then(|| format!("{} carries {notes}", plan.address()))),
         };
         out.publish_with(stats, |s| loss.fill(s, totals));
+        eprintln!("DIAG stats fps={} kbps={} key={:?} quiet={:?} cc={} lost={} err={:?}", stats.fps, stats.kbps, stats.keyframe_ms, stats.last_frame_ms, stats.cc_errors, stats.packets_lost, stats.error);
         let silent = quiet.unwrap_or(started.elapsed().as_millis() as u64);
         if let Some(limit) = plan.stall_ms().filter(|&l| silent > l) {
             return Ended::Failed(format!("nothing arrived from {} for {} s", plan.address(), limit / 1000));

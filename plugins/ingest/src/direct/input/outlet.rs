@@ -50,6 +50,7 @@ impl Shared {
         let mut o = self.lock();
         let at = tag.timestamp_ms.wrapping_add(o.offset_ms);
         if o.end_ms > 0 && (at.saturating_add(BACK_MS) < o.end_ms || at > o.end_ms.saturating_add(AHEAD_MS)) {
+            eprintln!("DIAG outlet relaid {:?} at={at} end={} offset={}", tag.kind, o.end_ms, o.offset_ms);
             o.offset_ms = o.offset_ms.wrapping_add((o.end_ms + SESSION_GAP_MS).wrapping_sub(at));
         }
         tag.timestamp_ms = tag.timestamp_ms.wrapping_add(o.offset_ms);

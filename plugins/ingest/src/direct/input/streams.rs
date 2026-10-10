@@ -98,6 +98,7 @@ impl Streams {
         if all.iter().any(|s| s.slot == slot && s.gate.on.load(Ordering::Relaxed) && !quiet(&s.gate)) {
             return false;
         }
+        eprintln!("DIAG claim {slot:?}");
         for s in all.iter_mut().filter(|s| s.slot == slot) {
             let mine = Arc::ptr_eq(&s.gate, me);
             s.gate.on.store(mine, Ordering::Relaxed);
