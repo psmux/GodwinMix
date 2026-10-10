@@ -14,13 +14,13 @@ use gstreamer_rtsp_server::prelude::*;
 use gstreamer::glib;
 
 /// One RTSP mount, `/cam`, H.264 and AAC, on a main loop of its own.
-struct Camera {
+pub(super) struct Camera {
     main_loop: glib::MainLoop,
     thread: Option<std::thread::JoinHandle<()>>,
 }
 
 impl Camera {
-    fn serve(port: u16) -> Option<Camera> {
+    pub(super) fn serve(port: u16) -> Option<Camera> {
         let _ = gst::init();
         if !["x264enc", "avenc_aac", "rtph264pay", "rtpmp4gpay"].iter().all(|f| gst::ElementFactory::find(f).is_some()) {
             println!("skipping: this GStreamer cannot encode the test camera");

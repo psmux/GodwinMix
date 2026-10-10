@@ -49,6 +49,8 @@ pub(super) struct Watch {
     failing_since: Option<Instant>,
     /// What the operator was last told about the plugin's own view.
     told: Option<PluginState>,
+    /// A restart is armed because this run had delivered nothing.
+    armed_unconnected: bool,
 }
 
 impl Mixer {
@@ -122,7 +124,23 @@ impl Mixer {
         for id in due {
             // Refused while one is already armed, so asking on every tick past
             // the deadline schedules exactly one, after the usual backoff.
-            self.arm_source_restart(id, "it has delivered nothing since it was started");
+            if self.arm_source_restart(id.clone(), "it has delivered nothing since it was started") {
+                if let Some(slot) = self.sources.iter_mut().find(|s| s.input.id == id) {
+                    slot.watch.armed_unconnected = true;
+                }
+            }
         }
+    }
+
+    /// Whether the restart about to run was armed because `id` had delivered
+    /// nothing, and it has since come live. The backoff can outlast the
+    /// connect it was waiting on: after a cable pull on 2026-10-11 the pull
+    /// that had hung in the relay connected at the replug, read live, and was
+    /// taken down a second later by the restart armed while it hung.
+    pub(super) fn came_live_meanwhile(&mut self, id: &SourceId) -> bool {
+        let Some(slot) = self.sources.iter_mut().find(|s| &s.input.id == id) else { return false };
+        std::mem::take(&mut slot.watch.armed_unconnected)
+            && slot.input.health.waiting_ms().is_none()
+            && matches!(slot.input.observed_state(), SourceState::Live)
     }
 }
