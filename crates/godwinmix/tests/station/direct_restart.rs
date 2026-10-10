@@ -78,8 +78,9 @@ async fn a_direct_show_follows_a_sender_restarted_with_new_pids_or_the_same_layo
         eprintln!("skipping the rendition: the governor refused it on this machine as loaded now: {show}");
     }
     comes_back(&mut ws, "the first sender", 30, transcoded).await;
-    // Give the measured rate time to settle the plan, then keep it.
-    tokio::time::sleep(Duration::from_secs(4)).await;
+    // Give the measured rate time to settle the plan (five steady readings
+    // after three seconds live), then keep it.
+    tokio::time::sleep(Duration::from_secs(9)).await;
     let planned = health(&mut ws, 4).await["outputs"][1]["rendition_text"].clone();
 
     for (what, vpid, apid, program) in [("new PIDs and a new program", 300, 301, 7), ("the same layout again", 300, 301, 7)] {
