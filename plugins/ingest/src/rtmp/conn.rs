@@ -1,7 +1,7 @@
 //! One client's connection, from the handshake to the last tag.
 
 use std::collections::HashMap;
-use std::io::{Read, Write};
+use std::io::Write;
 use std::net::TcpStream;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -11,7 +11,7 @@ use rml_rtmp::sessions::{
     ServerSession, ServerSessionConfig, ServerSessionEvent, ServerSessionResult,
 };
 
-use super::io::Io;
+use super::io::{Got, Io, IDLE};
 use super::{Gate, Inlet};
 use crate::codec;
 use crate::media_tag::{MediaTag, TagKind};
@@ -26,6 +26,11 @@ pub fn serve(stream: TcpStream, tls: Option<Arc<rustls::ServerConfig>>, gate: Ar
         Ok(s) => s,
         Err(e) => return gate.note(format!("an RTMP connection could not be kept: {e}")),
     };
+    // A pulled cable sends no FIN. Without a timeout this thread, and the
+    // name it publishes under, would wait on the dead socket for hours.
+    // Set on the socket that is read, not on a clone: on Windows a clone is a
+    // duplicated handle, and the option set on one did not reach the other.
+    Io::time_out(&stream);
     let io = match Io::over(stream, tls.as_ref()) {
         Ok(io) => io,
         Err(e) => return gate.note(e),
@@ -62,23 +67,25 @@ impl Connection {
         let mut buffer = vec![0u8; 64 * 1024];
         let mut session: Option<ServerSession> = None;
         let mut first = true;
+        let mut last = std::time::Instant::now();
 
         loop {
             if stop.load(Ordering::Relaxed) {
                 return Ok(());
             }
-            let read = self
-                .io
-                .read(&mut buffer)
-                .map_err(|e| format!("reading from the publisher failed: {e}"))?;
-            if read == 0 {
-                return Ok(());
-            }
+            let read = match self.io.read_some(&mut buffer, &mut last, IDLE)? {
+                Got::Bytes(n) => n,
+                Got::Closed => return Ok(()),
+                Got::Nothing => continue,
+            };
             let bytes = &buffer[..read];
             if std::mem::take(&mut first) && bytes[0] != RTMP_VERSION && self.loopback && self.io.is_plain() {
                 // Not RTMP, from this machine: a reader asking the hub for a
                 // stream. It gets the socket and this thread becomes its writer.
+                // The relay keeps its own time: the publisher's timeouts are
+                // taken off the socket first.
                 let client = self.socket.try_clone().map_err(|e| e.to_string())?;
+                let _ = client.set_write_timeout(None);
                 self.gate.relay(client, bytes);
                 return Ok(());
             }
