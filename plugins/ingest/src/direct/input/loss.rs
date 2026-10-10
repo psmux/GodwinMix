@@ -54,6 +54,12 @@ impl Loss {
         self
     }
 
+    /// Times this connection's sender came back with other programs under
+    /// the PAT version it had before, which the demuxer may not follow.
+    pub fn relayouts(&self) -> u64 {
+        self.ts.as_ref().map_or(0, |(n, _)| n.relayouts.load(Relaxed))
+    }
+
     /// `(cc_errors, packets_lost)` this connection, so far.
     pub fn now(&self) -> (u64, u64) {
         let polled = self.poll.as_ref().map(|p| p());

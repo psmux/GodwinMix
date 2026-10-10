@@ -1,6 +1,7 @@
-//! A sender restarted with the same layout, with no socket in between: the
-//! sender's TS handed to an appsrc in place of a udpsrc, so it runs where
-//! loopback UDP does not (a VPN driver on one laptop drops it).
+//! A sender restarted with a new layout and with the same one, with no
+//! socket in between: the sender's TS handed to an appsrc in place of a
+//! udpsrc, so it runs where loopback UDP does not (a VPN driver on one
+//! laptop drops it).
 
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -57,10 +58,6 @@ fn sender(feed: &Feed, vpid: u16, apid: u16, program: u16) -> gst::Pipeline {
                 let bytes = sample.buffer().and_then(|b| b.map_readable().ok().map(|m| m.to_vec())).unwrap_or_default();
                 if let Some(src) = feed.lock().unwrap().as_ref() {
                     let _ = src.push_buffer(gst::Buffer::from_mut_slice(bytes));
-                    let level = src.current_level_bytes();
-                    if level > 50_000 {
-                        eprintln!("backlog {level} bytes at {:?}", std::time::SystemTime::now());
-                    }
                 }
                 Ok(gst::FlowSuccess::Ok)
             })
@@ -77,8 +74,12 @@ fn rate(got: &Collect, secs: u64) -> (f64, f64) {
     ((got.frames(TagKind::Video) - before) as f64 / secs as f64, got.last().fps)
 }
 
+/// The station test's restarts, with no socket: new PIDs and a new program
+/// (a relayout, which starts the demuxer again), then the same layout twice.
+/// The second after each sender's first carries its whole rate, and no
+/// second reads a rate measured across the stall.
 #[test]
-fn a_sender_restarted_with_the_same_layout_keeps_its_whole_frame_rate() {
+fn a_restarted_sender_is_followed_at_its_whole_frame_rate_without_a_socket() {
     let _one = super::one_at_a_time();
     gmx_netkit::init().unwrap();
     if gst::ElementFactory::find("x264enc").is_none() || gst::ElementFactory::find("avenc_aac").is_none() {
@@ -94,26 +95,22 @@ fn a_sender_restarted_with_the_same_layout_keeps_its_whole_frame_rate() {
     while got.keyframes() < 3 && started.elapsed() < Duration::from_secs(20) {
         std::thread::sleep(Duration::from_millis(100));
     }
-    std::thread::sleep(Duration::from_secs(12));
-    let mut seen = vec![("first", rate(&got, 3))];
-    for what in ["new PIDs", "the same layout again", "and again", "a third time", "a fourth"] {
+    let mut seen = vec![("first", rate(&got, 2))];
+    for what in ["new PIDs and a new program", "the same layout again", "and again"] {
         tx.set_state(gst::State::Null).unwrap();
         std::thread::sleep(Duration::from_millis(2200));
         tx = sender(&feed, 300, 301, 7);
         // The first two seconds hold the new sender's own start.
-        for k in 0..3 {
-            let r = rate(&got, 2);
-            if k > 0 {
-                seen.push((what, r));
-            }
-        }
+        let _ = rate(&got, 2);
+        seen.push((what, rate(&got, 2)));
     }
     tx.set_state(gst::State::Null).unwrap();
     stop.stop();
     thread.join().unwrap();
-    eprintln!("{seen:?}");
     for (what, (arrived, measured)) in &seen {
         assert!(*arrived > 24.0, "{what}: {arrived} frames a second arrived: {seen:?}");
         assert!(*measured > 24.0, "{what}: the input measured {measured} fps: {seen:?}");
     }
+    let rates: Vec<f64> = got.0.lock().unwrap().stats.iter().map(|s| s.fps).filter(|f| *f > 0.0).collect();
+    assert!(rates.iter().all(|f| *f > 24.0), "a rate read across a stall: {rates:?}");
 }

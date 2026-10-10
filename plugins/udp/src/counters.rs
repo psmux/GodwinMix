@@ -33,6 +33,10 @@ pub struct Counters {
     pub flagged: AtomicU64,
     /// Times the feed went quiet and came back.
     pub resumed: AtomicU64,
+    /// Times a PAT named other programs than the one before it under the
+    /// same version number: a sender restarted with a new layout, which a
+    /// demuxer holding the old PAT may take for the one it already read.
+    pub relayouts: AtomicU64,
     /// Milliseconds after `started` that the last datagram arrived, plus one,
     /// so zero means never.
     last_ms: AtomicU64,
@@ -52,6 +56,7 @@ impl Default for Counters {
             malformed: AtomicU64::new(0),
             flagged: AtomicU64::new(0),
             resumed: AtomicU64::new(0),
+            relayouts: AtomicU64::new(0),
             last_ms: AtomicU64::new(0),
         }
     }
