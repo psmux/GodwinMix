@@ -461,6 +461,13 @@ publish in between was refused. The two numbers:
   refused at once, so a second tab on a name that is working is told so
   without waiting.
 
+A session nobody takes over still ends by itself. An RTMP, RTMPS or SRT
+connection that has sent nothing for 5 seconds is closed, since a pulled
+cable sends no FIN and the socket would otherwise sit open for minutes. A
+WHIP session ends on `failed` or `closed`, or after 15 seconds of
+`disconnected`; a shorter `disconnected` is a blip, and the session rides it
+out.
+
 The log says `<app>/<stream>: <old address> had sent nothing for 2 s, so <new
 address> took the name over`. The core is not told the stream went idle, since
 it never did. The hub's own publishers (a transcode's output, a direct show's
