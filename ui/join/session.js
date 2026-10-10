@@ -2,25 +2,15 @@
 // publish again after a wait that grows, until somebody presses Stop.
 //
 // The states a person sees: connecting, live, reconnecting, stopped. A
-// refusal that waiting will not cure (a wrong key, no such channel, a browser
-// with no H.264) stops at once with the mixer's own sentence.
+// refusal that waiting will not cure (a wrong key, a browser with no codec
+// the mixer takes) stops at once with the mixer's own sentence; `retry.js`
+// has the list. The network coming back or changing, and the page being
+// shown again, try at once rather than at the end of the wait (`nudge`).
 
-import { publish, unpublish, WhipError } from "./whip.js";
+import { publish, unpublish } from "./whip.js";
+import { backoff, isFinal, GRACE_MS, MOVED_MS } from "./retry.js";
 
-/** Refusals that publishing again cannot fix. 409 (name in use) can. */
-const FINAL = new Set([0, 400, 401, 403, 404, 415]);
-
-/** 1, 2, 4, 8 seconds, then every 15. */
-export function backoff(failures) {
-  return Math.min(15000, 1000 * 2 ** Math.max(0, failures));
-}
-
-export function isFinal(error) {
-  return error instanceof WhipError && FINAL.has(error.status);
-}
-
-/** How long a "disconnected" connection is given to come back by itself. */
-const GRACE_MS = 5000;
+export { backoff, isFinal };
 
 export class Session {
   /**
@@ -40,6 +30,8 @@ export class Session {
     this.gen = 0;
     this.live = null;
     this.stopped = false;
+    this.pending = false;
+    this.moved = -Infinity;
   }
 
   start() {
@@ -69,15 +61,33 @@ export class Session {
     return this.state === "connecting" || this.state === "live" || this.state === "reconnecting";
   }
 
+  /**
+   * The network came back or changed, or the page was shown again. A wait
+   * for the next try ends now; a connection that has lost its path is
+   * replaced now; one that is up, or an offer already on its way, is left.
+   * `moved` says the network itself changed (Wi-Fi to cellular).
+   */
+  nudge(moved = false) {
+    if (moved) this.moved = Date.now();
+    if (this.stopped || !this.active || this.pending) return;
+    const s = this.live && this.live.pc.connectionState;
+    if (s === "connected" || s === "new" || s === "connecting") return;
+    this.clearTimers();
+    this.drop();
+    this.attempt();
+  }
+
   async attempt() {
     if (this.stopped) return;
     const gen = ++this.gen;
     this.retryIn = 0;
+    this.pending = true;
     this.set(this.failures ? "reconnecting" : "connecting");
     let live;
     try {
       live = await this.connect({ url: this.opts.url, key: this.opts.key, media: { ...this.tracks } });
     } catch (e) {
+      if (gen === this.gen) this.pending = false;
       return this.fail(e, gen);
     }
     if (this.stopped || gen !== this.gen) {
@@ -85,6 +95,7 @@ export class Session {
       this.end(live.location);
       return;
     }
+    this.pending = false;
     this.live = live;
     this.watch(live.pc, gen);
   }
@@ -101,7 +112,10 @@ export class Session {
       } else if (s === "failed" || s === "closed") {
         this.fail(new Error("The connection to the mixer was lost."), gen);
       } else if (s === "disconnected") {
-        this.grace = setTimeout(() => this.fail(new Error("The connection to the mixer dropped and did not come back."), gen), GRACE_MS);
+        // After a change of network the old path is gone for good: offer
+        // again now. Otherwise it is a blip, given a while to come back.
+        const wait = Date.now() - this.moved < MOVED_MS ? 0 : GRACE_MS;
+        this.grace = setTimeout(() => this.fail(new Error("The connection to the mixer dropped and did not come back."), gen), wait);
       }
     };
     pc.addEventListener("connectionstatechange", check);
