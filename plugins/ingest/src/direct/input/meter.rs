@@ -16,6 +16,12 @@ use crate::media_tag::{MediaTag, TagKind};
 /// seconds and read as 4 fps, the station took two copies of that reading
 /// for a rate, and a rendition planned at 30 fps was planned again at 4.
 const STALL_MS: u32 = 1_000;
+/// A shorter gap is a stall too when it is this many times the one before
+/// and over `JUMP_MS`: the half second an input started again leaves
+/// between a 30 fps feed's frames read as 9 fps. A feed at 2 fps keeps its
+/// even half second gaps, and its rate.
+const JUMP_TIMES: u32 = 4;
+const JUMP_MS: u32 = 150;
 
 #[derive(Debug)]
 pub struct Meter {
@@ -35,6 +41,8 @@ pub struct Meter {
     /// The last frame's timestamp, and whether a stall fell inside this
     /// window, which then has no rate.
     last_ts: Option<u32>,
+    /// The gap before the last frame, 0 before there was one.
+    last_gap: u32,
     stalled: bool,
     fps: f64,
     kbps: u32,
@@ -54,6 +62,7 @@ impl Default for Meter {
             keyframe_ms: None,
             span: None,
             last_ts: None,
+            last_gap: 0,
             stalled: false,
             fps: 0.0,
             kbps: 0,
@@ -100,7 +109,10 @@ impl Meter {
     /// has no rate and the keyframe interval starts again.
     fn stall(&mut self, ts: u32) {
         let Some(last) = self.last_ts.replace(ts) else { return };
-        if ts.saturating_sub(last) > STALL_MS {
+        let gap = ts.saturating_sub(last);
+        let before = std::mem::replace(&mut self.last_gap, gap);
+        let jumped = before > 0 && gap > JUMP_MS && gap > before * JUMP_TIMES;
+        if gap > STALL_MS || jumped {
             self.stalled |= self.span.is_some();
             self.last_key = None;
         }
