@@ -14,6 +14,7 @@
 * A phone or browser camera keeps publishing through a network loss. The mixer keeps the WebRTC session through a 15 second disconnection, the page retries a 404 and a 400 for as long as it is open, and it tries again at once when the network comes back, changes from Wi-Fi to cellular, or the page is shown again. See `docs/how-to/use-this-browsers-camera.md` and `docs/reference/publisher-page.md`.
 * `gmx ctl rpc` routes by the same method table as the server, so `gmx ctl rpc scene.take` works, and a name that is not a method is refused with the nearest ones.
 * A direct show follows a sender restarted with new PIDs or a new program, and a stall no longer reads as a low frame rate that replanned the rendition.
+* Known in this release: an RTMP pull whose cable comes back after a short outage (about 20 seconds) can read live, stall again for about 15 seconds and then come back by itself after its stall restart. The programme is not affected and nothing needs a person. A fix is in progress.
 * `dev/windows-firewall.ps1` lets this workspace's test builds take connections from the local network without a Windows Firewall prompt for each new binary. See `CONTRIBUTING.md`.
 
 ## 0.3.1 (2026-10-10)
