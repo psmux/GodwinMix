@@ -16,6 +16,8 @@
 # any and the inputs when it has none.
 #
 # Usage: dev/ui-tests.sh [--keep] [--show]
+#   GMX_UI_PORT and GMX_UI_DEBUG_PORT pin the core's and Chrome's ports,
+#   for a machine shared with other runs; each is a free one otherwise.
 #   --keep   leave the working directory and the core's log behind
 #   --show   run Chrome with a window, to watch it
 #
@@ -73,7 +75,7 @@ free_port() {
     python3 -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1]);s.close()'
 }
 
-PORT="$(free_port)"
+PORT="${GMX_UI_PORT:-$(free_port)}"
 BASE="http://127.0.0.1:$PORT"
 
 echo "building"
@@ -93,6 +95,13 @@ token = "$TOKEN"
 # shipped hold exists to refuse. The hold has its own tests.
 min_hold_ms = 0
 flash_guard = false
+
+[hardware]
+# The harness tests the page, not the GPU. A vendor encoder plugin that
+# misbehaves on one laptop (Quick Sync has corrupted the heap of the process
+# that loads it) has no place in a run about buttons.
+encode = "software"
+decode = "software"
 TOML
 
 echo "starting a core on $BASE"
@@ -118,7 +127,7 @@ fi
 # served it. `--dump-dom` prints the page before any of that has happened, and
 # `--virtual-time-budget` races the page's own waits past a socket that is
 # still connecting.
-DEBUG_PORT="$(free_port)"
+DEBUG_PORT="${GMX_UI_DEBUG_PORT:-$(free_port)}"
 echo "running the harness"
 "$CHROME" $HEADLESS \
     --disable-gpu \

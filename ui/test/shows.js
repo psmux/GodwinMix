@@ -237,8 +237,16 @@ async function viewTests(test, eq, ok) {
 
   const scroll = view.root.querySelector(".rt-scroll");
   // A group grows as its sources arrive and pushes the ones below it down,
-  // so the bottom is chased until the last show stays in view.
-  await until(() => { scroll.scrollTop = scroll.scrollHeight; return linked().includes("room-17"); }, 3000);
+  // so the bottom is chased until the last show stays in view: read, and
+  // the grid no taller for a quarter of a second. Stopping at the first read
+  // left the shows just above it still loading on a slower machine, and
+  // their rows pushed the last one out of view and let it go again.
+  let [height, since] = [-1, Date.now()];
+  await until(() => {
+    scroll.scrollTop = scroll.scrollHeight;
+    if (scroll.scrollHeight !== height) [height, since] = [scroll.scrollHeight, Date.now()];
+    return linked().includes("room-17") && Date.now() - since >= 250;
+  }, 6000);
   await wait(200);
   test("scrolling down reads what came into view and lets go of what left", () => {
     ok(linked().includes("room-17"), "the last show is read now");
