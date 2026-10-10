@@ -69,6 +69,7 @@ pub fn parse_into(pipeline: &gst::Pipeline, pad: &gst::Pad, pads: &Arc<Pads>) ->
     }
     let (weak, shared) = (pipeline.downgrade(), pads.clone());
     parse.connect_pad_removed(move |_, pad| {
+        eprintln!("DIAG pad removed {}", pad.name());
         if let Some(pipeline) = weak.upgrade() {
             take_out(&pipeline, shared.streams.removed(pad));
         }
@@ -98,6 +99,7 @@ fn attach(pipeline: &gst::Pipeline, pad: &gst::Pad, pads: &Pads) -> Result<(), S
     // MPEG-1 audio is layers I to III; anything else called audio/mpeg is AAC.
     let layered = s.as_ref().is_some_and(|s| s.get::<i32>("mpegversion").ok() == Some(1) || s.has_field("layer"));
     let slot = if name.starts_with("video/") { Slot::Video } else { Slot::Audio };
+    eprintln!("DIAG pad added {} {name}", pad.name());
     let (parser, sink) = match name.as_str() {
         "video/x-h264" => ("h264parse", tagger::video_sink(pads.to.clone(), pads.zero.clone())),
         "video/x-h265" => ("h265parse", tagger::hevc_sink(pads.to.clone(), pads.zero.clone())),

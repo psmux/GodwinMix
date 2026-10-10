@@ -57,6 +57,7 @@ async fn comes_back(ws: &mut Ws, what: &str, secs: u64, transcoded: bool) {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_direct_show_follows_a_sender_restarted_with_new_pids_or_the_same_layout() {
     let (dir, port) = folder("direct-restart");
+    let _dump = Dump(dir.join("log.jsonl"));
     let source = staged_ingest(&dir);
     let st = start(dir.clone(), port, &[]).await;
     let mut ws = rpc(&st, "").await;
@@ -109,6 +110,11 @@ async fn a_direct_show_follows_a_sender_restarted_with_new_pids_or_the_same_layo
             }
         }
         comes_back(&mut ws, what, 20, transcoded).await;
+        for n in 0..12 {
+            let s = health(&mut ws, 70 + n).await;
+            eprintln!("DIAG {what} +{:?}: input {} outputs {}", started.elapsed(), s["input"], s["outputs"]);
+            tokio::time::sleep(Duration::from_millis(500)).await;
+        }
         let show = health(&mut ws, 61).await;
         assert_eq!(show["outputs"][0]["state"], "live", "{what}: {show}");
         if transcoded {
@@ -117,4 +123,15 @@ async fn a_direct_show_follows_a_sender_restarted_with_new_pids_or_the_same_layo
         }
     }
     tx.set_state(gstreamer::State::Null).unwrap();
+}
+
+struct Dump(std::path::PathBuf);
+
+impl Drop for Dump {
+    fn drop(&mut self) {
+        let text = std::fs::read_to_string(&self.0).unwrap_or_default();
+        for line in text.lines().filter(|l| l.contains("DIAG")) {
+            eprintln!("{}", &line[..line.len().min(400)]);
+        }
+    }
 }

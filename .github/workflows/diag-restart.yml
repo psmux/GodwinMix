@@ -1,0 +1,55 @@
+name: diag-restart
+
+# Temporary: what a direct show's input does after a sender restarts with the
+# same layout, where loopback UDP works. Removed once read.
+
+on:
+  push:
+    branches: ["diag/**"]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  restart:
+    name: restart (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 80
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-26.04, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: GStreamer (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+            libgstreamer-plugins-bad1.0-dev libgstrtspserver-1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
+            gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav gstreamer1.0-tools xvfb libgl1-mesa-dri
+      - name: GStreamer (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./dev/install-gstreamer-windows.ps1
+      - name: Build
+        run: cargo build --profile ci --locked -p godwinmix --bins
+      - name: The station tests together
+        continue-on-error: true
+        shell: bash
+        env:
+          GODWINMIX_TIMING_SLACK: 3
+          GST_GL_DISABLED: 1
+        run: |
+          if [ "${{ runner.os }}" = "Windows" ]; then export RUST_TEST_THREADS=3; fi
+          cargo test --profile ci --locked -p godwinmix --test station 2>&1 | grep -E "DIAG|panicked|test result|direct_restart|left:|right:" | cut -c1-500
+      - name: The restart test alone
+        continue-on-error: true
+        shell: bash
+        env:
+          GODWINMIX_TIMING_SLACK: 3
+          GST_GL_DISABLED: 1
+        run: cargo test --profile ci --locked -p godwinmix --test station direct_restart -- --nocapture 2>&1 | grep -E "DIAG|panicked|test result|left:|right:|again" | cut -c1-500

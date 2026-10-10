@@ -53,10 +53,15 @@ pub struct Zero(Mutex<Option<gst::ClockTime>>);
 const RESTARTED: gst::ClockTime = gst::ClockTime::from_seconds(3);
 
 impl Zero {
+    pub fn peek(&self, at: gst::ClockTime) -> String {
+        format!("{:?}", self.0.lock().unwrap_or_else(|e| e.into_inner()).map(|b| at.nseconds() as i64 - b.nseconds() as i64))
+    }
+
     pub fn ms(&self, at: gst::ClockTime) -> u32 {
         let mut zero = self.0.lock().unwrap_or_else(|e| e.into_inner());
         let base = *zero.get_or_insert(at);
         if at + RESTARTED < base {
+            eprintln!("DIAG zero restarted at={at:?} base={base:?}");
             *zero = Some(at);
             return 0;
         }
@@ -123,7 +128,22 @@ fn tags(sample: &gst::Sample, kind: TagKind, cc: Option<&[u8; 4]>, header: &Mute
         None => prefix(kind, key, hdr, cts),
     };
     let Some(buffer) = sample.buffer() else { return Vec::new() };
-    let Some(at) = running_time(sample, buffer) else { return Vec::new() };
+    let Some(at) = running_time(sample, buffer) else {
+        static N: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let n = N.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        if n < 20 || n % 50 == 0 {
+            let seg = sample.segment().and_then(|s| s.downcast_ref::<gst::format::Time>().map(|s| format!("start={:?} base={:?} time={:?}", s.start(), s.base(), s.time())));
+            eprintln!("DIAG tagger {kind:?} no running time #{n} pts={:?} dts={:?} seg={seg:?}", buffer.pts(), buffer.dts());
+        }
+        return Vec::new();
+    };
+    if kind == TagKind::Video {
+        static V: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let n = V.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        if n % 30 == 0 {
+            eprintln!("DIAG tagger video #{n} at={at:?} pts={:?} dts={:?} ms={}", buffer.pts(), buffer.dts(), zero.peek(at));
+        }
+    }
     let ms = zero.ms(at);
     let mut out = Vec::with_capacity(2);
     if let Some(config) = codec_data(sample) {
