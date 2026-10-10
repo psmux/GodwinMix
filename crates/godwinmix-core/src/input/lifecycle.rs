@@ -63,6 +63,15 @@ impl Lifecycle {
         self.claimed_at.lock().map(|at| at.elapsed())
     }
 
+    /// Make the running restart look `by` older, for a test of what is done
+    /// about one that hangs.
+    #[cfg(test)]
+    pub fn backdate_restart(&self, by: Duration) {
+        if let Some(at) = self.claimed_at.lock().as_mut() {
+            *at = at.checked_sub(by).unwrap_or(*at);
+        }
+    }
+
     /// True while a restart is running.
     pub fn restarting(&self) -> bool {
         self.restarting.load(Ordering::SeqCst)

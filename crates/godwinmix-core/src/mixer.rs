@@ -5728,7 +5728,9 @@ mod tests {
         cfg.params.insert("relay".into(), toml::Value::String("127.0.0.1:1935".into()));
         assert!(super::fed_by_channel(&cfg), "a channel's stream");
     }
+    mod blackhole;
     mod bounded;
+    mod cable;
     mod clip_end;
     mod endurance;
     mod flush_window;
@@ -5740,6 +5742,7 @@ mod tests {
     mod preview_churn;
     mod slow_restart;
     mod sound_only;
+    mod supervision;
     mod stale_work;
     mod stall_storm;
     mod stopped_output;

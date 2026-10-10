@@ -1388,6 +1388,11 @@ impl InputPipeline {
         self.lifecycle.restart_running_for()
     }
 
+    #[cfg(test)]
+    pub fn backdate_restart(&self, by: Duration) {
+        self.lifecycle.backdate_restart(by)
+    }
+
     /// A claimed restart that never ran, because no thread could be started
     /// for it. Lets the next one in.
     pub fn restart_abandoned(&self) {
