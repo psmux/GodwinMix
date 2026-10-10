@@ -10,6 +10,10 @@
 //! connection. A mount that drops the connection, or a server that is not up
 //! yet, is dialled again with a backoff, and what arrives meanwhile is dropped:
 //! a listener hears a gap, the programme does not wait.
+//!
+//! A pulled cable sends no FIN and no RST, so the socket has timeouts on the
+//! connect and on every write: a write that cannot finish in `STALL` is a
+//! connection gone, and the mount is dialled again like any other drop.
 
 use std::io::Write;
 use std::net::TcpStream;
@@ -25,10 +29,11 @@ use crate::settings::{Format, Settings};
 
 #[path = "mount_http.rs"]
 mod http;
-use http::{read_answer, request};
+use http::dial;
 
-/// How long a server gets to answer the request before it is called down.
-const ANSWER_WITHIN: Duration = Duration::from_secs(10);
+/// How long one write may block before the connection counts as gone. The
+/// appsink in front drops what arrives meanwhile, so the encoder never waits.
+pub const STALL: Duration = Duration::from_secs(10);
 /// The backoff between dials, doubling to this.
 const MOST_BETWEEN_DIALS: Duration = Duration::from_secs(15);
 
@@ -93,8 +98,13 @@ fn run(s: &Settings, sink: &gst_app::AppSink, stop: &AtomicBool, state: &State) 
         let (Some(c), Some(buffer)) = (conn.as_mut(), sample.buffer()) else { continue };
         let Ok(map) = buffer.map_readable() else { continue };
         if let Err(e) = c.write_all(map.as_slice()) {
-            *state.last_error.lock().unwrap_or_else(|e| e.into_inner()) =
-                Some(format!("the server closed the connection: {e}."));
+            *state.last_error.lock().unwrap_or_else(|e| e.into_inner()) = Some(match e.kind() {
+                std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut => format!(
+                    "the server stopped taking the sound for {} s; dialling it again.",
+                    STALL.as_secs()
+                ),
+                _ => format!("the server closed the connection: {e}."),
+            });
             state.connected.store(false, Ordering::Relaxed);
             conn = None;
             next_dial = std::time::Instant::now() + wait;
@@ -108,23 +118,4 @@ fn run(s: &Settings, sink: &gst_app::AppSink, stop: &AtomicBool, state: &State) 
         let _ = c.shutdown(std::net::Shutdown::Write);
     }
     state.connected.store(false, Ordering::Relaxed);
-}
-
-/// Open the mount: the request, and the answer read up to the end of its
-/// headers. A refusal comes back as a sentence that says what to change.
-fn dial(s: &Settings) -> Result<TcpStream, String> {
-    let address = format!("{}:{}", s.host, s.port);
-    let mut stream = TcpStream::connect(&address)
-        .map_err(|e| format!("could not reach the Icecast server at {address}: {e}. Check the host and port, and that the server is running."))?;
-    let _ = stream.set_nodelay(true);
-    stream.write_all(request(s).as_bytes()).map_err(|e| format!("the Icecast server at {address} closed the connection: {e}"))?;
-    stream.set_read_timeout(Some(ANSWER_WITHIN)).map_err(|e| e.to_string())?;
-    let status = read_answer(&stream).map_err(|e| format!("the Icecast server at {address} did not answer the source login: {e}"))?;
-    stream.set_read_timeout(None).map_err(|e| e.to_string())?;
-    match status {
-        100 | 200 => Ok(stream),
-        401 | 403 => Err(format!("the Icecast server at {address} refused the source login (HTTP {status}). Check the user and password; the source password is in the server's icecast.xml.")),
-        400..=499 => Err(format!("the Icecast server at {address} refused the mount {} (HTTP {status}). It may be in use by another source, or not allowed by the server's settings.", s.mount)),
-        other => Err(format!("the Icecast server at {address} answered HTTP {other} to the source login.")),
-    }
 }
