@@ -19,7 +19,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest]
+        os: [ubuntu-26.04, windows-latest]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -43,4 +43,26 @@ jobs:
         env:
           GODWINMIX_TIMING_SLACK: 3
           GST_GL_DISABLED: 1
-        run: cargo test --profile ci --locked -p godwinmix --test station direct_restart -- --nocapture 2>&1 | grep -E -A3 "DIAG|panicked|test result|left:|right:|again" | cut -c1-1500
+        run: cargo test --profile ci --locked -p godwinmix --test station direct_restart -- --nocapture 2>&1 | grep -E -A3 "DIAG new|DIAG pad|DIAG claim|panicked|test result|left:|right:|again" | cut -c1-1500
+      - name: The restart test alone, again
+        continue-on-error: true
+        shell: bash
+        env:
+          GODWINMIX_TIMING_SLACK: 3
+          GST_GL_DISABLED: 1
+        run: cargo test --profile ci --locked -p godwinmix --test station direct_restart 2>&1 | grep -E -A3 "panicked|test result|left:|right:" | cut -c1-1500
+      - name: The station tests together
+        continue-on-error: true
+        shell: bash
+        env:
+          GODWINMIX_TIMING_SLACK: 3
+          GST_GL_DISABLED: 1
+        run: |
+          if [ "${{ runner.os }}" = "Windows" ]; then export RUST_TEST_THREADS=3; fi
+          cargo test --profile ci --locked -p godwinmix --test station 2>&1 | grep -E -A3 "panicked|test result|left:|right:" | cut -c1-1500
+      - name: The input's own restart tests
+        continue-on-error: true
+        shell: bash
+        env:
+          GODWINMIX_TIMING_SLACK: 3
+        run: cargo test --profile ci --locked -p gmx-ingest restart 2>&1 | grep -E -A3 "panicked|test result|^test " | cut -c1-1500
