@@ -55,6 +55,9 @@ impl Probe {
         };
         self.out.clear();
         let modified = self.filter.feed(packets, n, &mut self.out);
+        if std::mem::take(&mut self.filter.relayout) {
+            Counters::add(&n.relayouts, 1);
+        }
         self.publish();
         Counters::add(&n.bytes_out, self.out.len() as u64);
         if self.out.is_empty() {

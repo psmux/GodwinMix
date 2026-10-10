@@ -9,7 +9,7 @@ fn tag(kind: TagKind, ms: u32, keyframe: bool, body: &[u8]) -> MediaTag {
 fn frames_keyframes_and_ac3_channels_are_read_off_the_tags() {
     let mut m = Meter::default();
     m.record(&tag(TagKind::Video, 0, true, &[0x17, 1, 0, 0, 0]));
-    m.record(&tag(TagKind::Video, 40, false, &[0x27, 1, 0, 0, 0]));
+    m.record(&tag(TagKind::Video, 500, false, &[0x27, 1, 0, 0, 0]));
     m.record(&tag(TagKind::Video, 1000, true, &[0x17, 1, 0, 0, 0]));
     let mut ac3 = crate::exaudio::prefix(crate::exaudio::AC3).to_vec();
     ac3.extend_from_slice(&[0x0B, 0x77, 0x00, 0x00, 0x1C, 0x40, 0xE1, 0x7F, 0x00]);
@@ -49,4 +49,26 @@ fn a_window_with_a_stall_in_it_has_no_rate_and_no_keyframe_interval_across_it() 
     m.window -= std::time::Duration::from_secs(1);
     m.fill(&mut s);
     assert!((s.fps - 30.3).abs() < 0.5, "{}", s.fps);
+}
+
+/// An input started again leaves half a second between a 30 fps feed's
+/// frames, which read as 9 fps; a 2 fps feed's even half seconds do not.
+#[test]
+fn a_jump_many_times_the_frame_interval_is_a_stall_and_an_even_slow_rate_is_not() {
+    let inter = [0x27, 1, 0, 0, 0];
+    let mut m = Meter::default();
+    for ms in [0, 33, 66, 99, 600, 633, 666] {
+        m.record(&tag(TagKind::Video, ms, false, &inter));
+    }
+    let mut s = InputStats::default();
+    m.window -= std::time::Duration::from_secs(1);
+    m.fill(&mut s);
+    assert_eq!(s.fps, 0.0, "the half second jump");
+    let mut slow = Meter::default();
+    for ms in [0, 500, 1000, 1500] {
+        slow.record(&tag(TagKind::Video, ms, false, &inter));
+    }
+    slow.window -= std::time::Duration::from_secs(1);
+    slow.fill(&mut s);
+    assert_eq!(s.fps, 2.0);
 }
