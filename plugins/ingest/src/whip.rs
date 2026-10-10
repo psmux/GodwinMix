@@ -89,7 +89,7 @@ impl Sessions {
                 drop(gone);
             }
         };
-        let (session, answer) = session::Session::start(&self.gate, admit, sdp, peer, ports, Box::new(ended)).map_err(|e| (400, e))?;
+        let (session, answer) = session::Session::start(&self.gate, admit, sdp, peer, ports, Box::new(ended))?;
         self.lock().insert(id.clone(), Live { channel, _session: session });
         Ok(json!({"session": id, "sdp": answer}))
     }
