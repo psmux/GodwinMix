@@ -181,6 +181,23 @@ as well, and the longer of the two waits is the one judged, so a pulled cable
 reads `stalled` after `stall_timeout_secs` and is restarted on the schedule
 below whatever the catch up guard (further down) has decided about it.
 
+`livesync` paces against the programme's clock, which a source pipeline
+shares, so the picture is moved onto that clock on its way in and moved back
+by the same amount on its way out. The picture then leaves on the source's own
+timeline, beside its sound, and both are placed on the programme once. Until
+this was done a stream stamped from zero, which is every RTMP feed and every
+RTSP camera, was handed to `livesync` as if it were minutes late. It repeated
+frames until it had caught the clock, came out stamped on the clock, and the
+aligner added the programme's running time to that a second time. The sound
+was placed right and the picture as far ahead as the show was old. At a first
+start that was under a second of lip sync. After a cable pull on 2026-10-10 the
+restarted RTMP pull came back 35 seconds into the show, read live for three
+seconds and was judged stalled again for fifteen, its queues full of frames due
+half a minute later; an RTSP camera whose cable healed by itself had its
+repeated frames placed 3.2 seconds early, and the catch up guard gave up on it.
+The log says `moved this source's picture onto the clock for livesync and back
+after it`, with `shift_ms`, once per connection.
+
 ### When a source never delivers
 
 A source that pulls its feed from a server (an `rtmp://` or `rtmps://` address,
@@ -194,6 +211,12 @@ that waits to be sent to is never held to this: an SRT listener (`srt://:9000`
 or `mode=listener`), `udp://`, `rtp://`, `rist://`, and every plugin source,
 such as an ingest source waiting for a phone or an encoder to publish. Zero
 turns the deadline off.
+
+The restart armed for this waits out its delay, and the attempt it was armed
+against can connect in the meantime, which is what a pull hung in a dead relay
+does when the cable goes back in. A source that has delivered and reads `live`
+when that restart comes due is left alone, and the log says `the source came
+live while its restart waited; not restarting it`.
 
 ### What the programme shows meanwhile
 
@@ -224,8 +247,12 @@ it waited out librtmp's whole timeout.
 Measured on this laptop with mediamtx behind a relay whose cable was pulled, an
 RTMP pull with the defaults read `stalled` two seconds after the pull, was
 restarted ten seconds later and then about every fifteen seconds while the
-cable stayed out, and read `live` again 0.3 seconds after it went back in, for
-a 20 second outage and for a three minute one.
+cable stayed out, and read `live` again within a second of it going back in,
+for a 20 second outage and for a three minute one. An RTSP camera on the same
+relay read `live` again within three seconds. Both stayed live afterwards with
+their programme queues empty; before the `livesync` change above, the RTMP
+pull read live and then stalled again three seconds later, and both sources'
+`pgm-vq-<id>` sat full at a second of frames due in the future.
 
 ### When a plugin says it is failing
 
