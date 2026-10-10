@@ -243,6 +243,15 @@ impl<C> Registry<C> {
         // since, and only eight are shown.
         const PLAIN: &[&str] = &["list", "get", "add", "remove", "set"];
         near.sort_by_key(|m| (m.split('.').count() != 2 || !PLAIN.iter().any(|v| m.ends_with(&format!(".{v}"))), *m));
+        // A verb that is not one of the plain ones, said of the wrong noun,
+        // is most likely the method that does it: `scene.take` is
+        // `program.take`, which takes a scene. Those lead.
+        let verb = name.rsplit('.').next().filter(|v| name.contains('.') && !PLAIN.contains(v));
+        if let Some(verb) = verb {
+            let same: Vec<&'static str> =
+                self.methods.keys().copied().filter(|m| m.ends_with(&format!(".{verb}")) && !near.contains(m)).collect();
+            near.splice(0..0, same);
+        }
         near.truncate(8);
         near
     }
@@ -457,8 +466,14 @@ mod tests {
         assert_eq!(r.get("source.list").unwrap().summary, "second");
 
         // A misspelling is answered with the methods on the same noun.
-        r.register(MethodDef::new("source.add", Scope::Operate, "add", handler));
+        r.register(MethodDef::new("source.add", Scope::Operate, "add", handler.clone()));
         let near = r.nearest("source.destroy");
         assert!(near.contains(&"source.add") && near.contains(&"source.list"), "{near:?}");
+
+        // The same verb on another noun comes first: there is no
+        // `source.take`, and `program.take` is what takes something.
+        r.register(MethodDef::new("program.take", Scope::Operate, "take", handler));
+        assert_eq!(r.nearest("source.take").first(), Some(&"program.take"));
+        assert!(!r.nearest("source.list2").contains(&"program.take"));
     }
 }

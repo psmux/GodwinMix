@@ -8,6 +8,7 @@ mod cpu;
 mod files;
 mod pull;
 mod restart;
+mod restart_fed;
 mod tools;
 mod ts;
 
