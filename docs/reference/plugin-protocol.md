@@ -416,7 +416,7 @@ None of these want an answer, and none carries an id.
 | `log` | `{level, message}` where level is `trace`, `debug`, `info`, `warn` or `error` | any time. It lands in the core's log tagged with the instance, and in the last fifty lines of a crash report |
 | `event/<name>` | whatever the event carries | any time. The name after `event/` is what subscribers match on |
 | `media.report` | what the plugin is actually producing, for example `{"latency_ms":0}` | after `initialize`, and whenever the answer changes |
-| `health.changed` | the same shape as the `health` result | when health moves and the core should act rather than wait to be asked |
+| `health.changed` | the same shape as the `health` result | when health moves and the core should act rather than wait to be asked. For an output the core keeps the last state sent here, and the output reads live only while that is `ok` (or while the plugin has sent none). A plugin whose far end has gone says `degraded` here, and the output shows as reconnecting |
 
 **recorded**
 
