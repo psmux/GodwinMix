@@ -165,7 +165,16 @@ beside it, with an alert. The old pipeline is never started again if its
 thread does come back. The librtmp client (`rtmp_client = "librtmp"`, or the
 fallback `auto` swaps to) is given a ten second `timeout` rather than its own
 120, because it connects inside that state change. The swap to it now runs off
-the mixer thread too.
+the mixer thread too, and only for a source that has never shown a picture: one
+that worked and then lost its network keeps the client it worked with. On a
+cable pull on 2026-10-10 the swap happened mid outage and every restart after
+it waited out librtmp's whole timeout.
+
+Measured on this laptop with mediamtx behind a relay whose cable was pulled, an
+RTMP pull with the defaults read `stalled` two seconds after the pull, was
+restarted ten seconds later and then about every fifteen seconds while the
+cable stayed out, and read `live` again 0.3 seconds after it went back in, for
+a 20 second outage and for a three minute one.
 
 ### When a plugin says it is failing
 
