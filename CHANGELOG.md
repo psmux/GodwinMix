@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.1 (2026-10-10)
+
+* A source removed from a scene no longer stays in the header. The mixer used to start on the first source in its library, whatever the scenes said, so a source taken out of the only scene came back on air by itself at every start, and the header named it. Now the mixer writes down what is on air at every take (a scene, a source on its own, or black) in `<config>.onair.json` and puts that back at the next start; with nothing written yet it starts on the first scene that has something in it. Removing a source from a scene while that source is on air by itself puts the scene on air in its place, in Studio mode too, with a message saying so. See `docs/how-to/add-a-source.md` and `docs/how-to/first-run.md`.
+* A phone's camera has a shape. Before going live the phone picks Landscape (1280x720), Portrait (720x1280, for Shorts, Reels and TikTok) or Square, starting on the mixer's own shape, which the QR code now carries. The shape holds for the whole of the stream whatever the phone does: turned, rotation locked or flipped to the other camera, the mixer gets the same size. With auto rotate off the motion sensor turns the picture upright, Rotate adds a quarter turn by hand, and Fill or Fit chooses between cropping and bars; those three work while live. The preview is exactly what is sent. See `docs/how-to/use-this-browsers-camera.md`.
+* A source's tile menu has Rotate right, Rotate left, Upright again and Fill the box or Show all of it, for the scene the tray is showing. They were only in the composer's inspector before.
+
 ## 0.3.0 (2026-10-10)
 
 * Closing the desktop app no longer leaves it running without asking. With nothing live it quits completely: the window, the tray icon, the mixer and its plugins. With anything streaming, recording or receiving an encoder, a dialog lists what is running and offers Stop everything and quit, Keep running in the background, or Cancel. Quit in the menu, the tray and Ctrl+Q follow the same rule. In the background the tray icon has a red dot, its tooltip says what is running, and its menu has Show, Stop all streaming and Quit. See `docs/how-to/stop-streaming-and-quit.md`.
