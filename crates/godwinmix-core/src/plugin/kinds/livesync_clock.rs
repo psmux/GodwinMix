@@ -34,6 +34,7 @@
 
 use gstreamer as gst;
 use gstreamer::prelude::*;
+use parking_lot::Mutex;
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::Arc;
 use tracing::info;
@@ -46,10 +47,15 @@ const UNDECIDED: i64 = i64::MIN;
 pub fn wrap(entry: &gst::Pad, sync: &gst::Element, id: &str) {
     let Some(exit) = sync.static_pad("src") else { return };
     let shift = Arc::new(AtomicI64::new(UNDECIDED));
-    // A new stream starts its stamps wherever its source starts them.
-    let fresh = shift.clone();
+    // A new stream starts its stamps wherever its source starts them. Only a
+    // new one: setting the offset sends every sticky event again, the stream
+    // start among them, under the seqnum it already had.
+    let (fresh, last) = (shift.clone(), Mutex::new(None));
     entry.add_probe(gst::PadProbeType::EVENT_DOWNSTREAM, move |_, info| {
-        if matches!(info.event().map(|e| e.type_()), Some(gst::EventType::StreamStart)) {
+        let Some(event) = info.event().filter(|e| e.type_() == gst::EventType::StreamStart) else {
+            return gst::PadProbeReturn::Ok;
+        };
+        if last.lock().replace(event.seqnum()) != Some(event.seqnum()) {
             fresh.store(UNDECIDED, Ordering::SeqCst);
         }
         gst::PadProbeReturn::Ok
