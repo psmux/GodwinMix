@@ -20,8 +20,8 @@ pub enum Chaos {
     /// Kill a plugin's process, the way a segfault would.
     ///
     /// The supervisor should notice within one stall timeout, cover the gap
-    /// with the freeze frame, and rebuild. The programme's frame interval must
-    /// never exceed 34 ms while it does.
+    /// with the freeze frame (for up to 45 s), and rebuild. The programme's
+    /// frame interval must never exceed 34 ms while it does.
     Kill {
         /// The instance id, as `gmx plugin stats` prints it.
         instance: String,

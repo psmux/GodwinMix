@@ -813,6 +813,13 @@ pub struct StallConfig {
     /// Seconds a source may deliver nothing before its pipeline is rebuilt.
     #[serde(default = "default_restart_after_stall_secs")]
     pub restart_after_secs: u64,
+    /// Seconds a source that pulls its feed from a server (an RTMP or HLS
+    /// address, an RTSP session, an SRT caller) may go from a start or a
+    /// restart without delivering anything before it is restarted. Zero turns
+    /// the deadline off. A source that waits for something to send to it is
+    /// never held to it: an SRT or UDP listener, a plugin waiting for a phone.
+    #[serde(default = "default_connect_timeout_secs")]
+    pub connect_timeout_secs: u64,
     /// Consecutive rebuilds that did not bring the source back before the
     /// mixer stops trying at full speed. Three is enough to cover the things
     /// that really do heal on a retry (a browser that lost a race with its
@@ -837,6 +844,9 @@ pub struct StallConfig {
 fn default_restart_after_stall_secs() -> u64 {
     10
 }
+fn default_connect_timeout_secs() -> u64 {
+    15
+}
 fn default_rebuild_attempts() -> u32 {
     3
 }
@@ -854,6 +864,7 @@ impl Default for StallConfig {
     fn default() -> Self {
         Self {
             restart_after_secs: default_restart_after_stall_secs(),
+            connect_timeout_secs: default_connect_timeout_secs(),
             rebuild_attempts: default_rebuild_attempts(),
             rebuild_backoff_secs: default_rebuild_backoff_secs(),
             rebuild_backoff_max_secs: default_rebuild_backoff_max_secs(),

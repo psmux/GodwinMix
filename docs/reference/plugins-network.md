@@ -121,7 +121,9 @@ With `relay` and `stream` set it reads that stream from `ingest/discover` over
 loopback, waiting quietly while the stream is not live, and asking again once
 a second while the channel server itself is not up yet. When the publisher
 leaves, the process ends and the core starts it again in place behind the
-freeze frame, so the next publisher starts on a clean pipe.
+freeze frame, so the next publisher starts on a clean pipe. The frame is held
+for up to 45 seconds; a publisher gone longer than that leaves the slate until
+the next one starts.
 
 An RTMP audio or video message carries exactly the body of an FLV tag, so the
 listener writes FLV for nine bytes plus eleven per message and parses nothing.

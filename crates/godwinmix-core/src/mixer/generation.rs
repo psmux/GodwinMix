@@ -48,12 +48,19 @@ impl Mixer {
     /// A retry the supervisor armed for one generation of `id`. Goes ahead
     /// only if that generation is the one still there.
     pub(super) fn retry_source(&mut self, id: &SourceId, generation: u64) {
-        match self.sources.iter().find(|s| &s.input.id == id).map(|s| s.generation) {
-            Some(now) if now == generation => self.restart_source(id),
+        match self.sources.iter().find(|s| &s.input.id == id).map(|s| (s.generation, s.input.clone())) {
+            Some((now, input)) if now == generation => {
+                // Spent here, whatever the restart does next. A restart that
+                // is skipped because an earlier one still holds the turn, or
+                // that finds no thread to run on, would otherwise leave it
+                // claimed and refuse every retry after it.
+                input.disarm_restart();
+                self.restart_source(id)
+            }
             now => debug!(
                 source = %id,
                 armed_for = generation,
-                now = ?now,
+                now = ?now.map(|(g, _)| g),
                 "dropping a retry armed for a source that has since been removed or replaced"
             ),
         }
