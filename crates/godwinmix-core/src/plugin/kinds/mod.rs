@@ -20,6 +20,7 @@ pub mod image_probe;
 pub mod layer;
 pub mod layered;
 pub mod live;
+pub mod livesync_clock;
 pub mod rendered;
 pub mod normalise;
 #[cfg(test)]
