@@ -429,6 +429,7 @@ pub(crate) mod offload;
 mod patience;
 mod rendered;
 mod reported;
+mod supervise;
 pub mod slots;
 mod slot_guard;
 pub mod held;
@@ -895,6 +896,9 @@ struct SourceSlot {
     clip_end: Option<Arc<clip_end::ClipEnd>>,
     /// The state last said in `event/source.state`. See `mixer::reported`.
     reported: SourceState,
+    /// When it was last live, and what its plugin last said. See
+    /// `mixer::supervise`.
+    watch: supervise::Watch,
     /// Held here rather than in a shared list so that removing the source also
     /// silences its bus. A watcher outliving its pipeline keeps reporting a
     /// dead source's errors forever.
@@ -2313,6 +2317,7 @@ impl Mixer {
             aligner,
             clip_end,
             reported: SourceState::Connecting,
+            watch: supervise::Watch::default(),
             _watch: watch,
         });
 
@@ -3767,19 +3772,16 @@ impl Mixer {
     ///
     /// One function, whether the programme is a scene or the one item shorthand
     /// a bare source id means, so the watchdog and a take go through the same
-    /// arithmetic. A source that is not live contributes nothing, which is what
-    /// fades a stalled camera to the slate and brings it back on its own.
+    /// arithmetic. A source that is not live holds its last frame for up to
+    /// `FREEZE_HOLD` (see `Mixer::shows`) and then contributes nothing, which
+    /// is what fades a dead camera to the slate and brings it back on its own.
     fn current_placements(&self) -> Vec<Placement> {
         self.hold_entering(self.scene_placements())
     }
 
     /// What the programme scene draws, before anything a transition holds back.
     fn scene_placements(&self) -> Vec<Placement> {
-        let live = |id: &SourceId| {
-            self.sources
-                .iter()
-                .any(|s| &s.input.id == id && matches!(s.input.observed_state(), SourceState::Live))
-        };
+        let live = |id: &SourceId| self.sources.iter().any(|s| &s.input.id == id && self.shows(s));
         match &self.program_scene {
             Some(scene) => scene
                 .placements
@@ -4474,6 +4476,7 @@ impl Mixer {
         let loaded = self.programme_starved();
         let now = Instant::now();
         let mut forgiven = Vec::new();
+        let mut swaps = Vec::new();
         for slot in &mut self.sources {
             let patience = self.patience.entry(slot.input.id.clone()).or_default();
             // Whether this source can be scrubbed is asked here rather than
@@ -4521,25 +4524,14 @@ impl Mixer {
             if slot.input.never_connected() {
                 slot.silent_ticks += 1;
                 if slot.silent_ticks == fallback_ticks {
-                    match slot.input.try_fallback_client() {
-                        Ok(true) => {
-                            slot.silent_ticks = 0;
-                            let _ = self.events.send(Event::Alert {
-                                severity: Severity::Warning,
-                                message: format!(
-                                    "{} delivered no media; retrying with the other RTMP client",
-                                    slot.input.id
-                                ),
-                                action: None,
-                            });
-                        }
-                        Ok(false) => {}
-                        Err(e) => warn!(source = %slot.input.id, ?e, "client swap failed"),
-                    }
+                    swaps.push(slot.input.id.clone());
                 }
             } else {
                 slot.silent_ticks = 0;
             }
+        }
+        for id in swaps {
+            self.swap_client_off_thread(&id);
         }
         for id in first_picture {
             self.log_timeline(&id, "first picture", false);
@@ -4550,7 +4542,10 @@ impl Mixer {
         self.report_states();
         for id in restart {
             self.arm_stall_restart(id);
-        }        // A live source whose frames all wait before they are due is moved
+        }
+        // Deadlines the stall sweep cannot see. See `mixer::supervise`.
+        self.supervise(now);
+        // A live source whose frames all wait before they are due is moved
         // back to its newest frame. See `mixer::catch_up`.
         for slot in &self.sources {
             if let Some(aligner) = &slot.aligner {

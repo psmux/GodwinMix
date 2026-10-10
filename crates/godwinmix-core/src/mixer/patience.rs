@@ -110,7 +110,13 @@ impl super::Mixer {
     /// errors; both keep the backoff they always had, cleared by the next
     /// frame, so a ten second clip does not wait ten seconds between loops.
     pub(super) fn arm_stall_restart(&mut self, id: crate::state::SourceId) {
-        if !self.arm_source_restart(id.clone(), "it has delivered nothing for too long") {
+        self.arm_strike(id, "it has delivered nothing for too long");
+    }
+
+    /// Restart a source for a fault that counts against it, `why` being the
+    /// fault: a stall, or a plugin that says it is failing.
+    pub(super) fn arm_strike(&mut self, id: crate::state::SourceId, why: &'static str) {
+        if !self.arm_source_restart(id.clone(), why) {
             return;
         }
         let patience = self.patience.entry(id.clone()).or_default();
