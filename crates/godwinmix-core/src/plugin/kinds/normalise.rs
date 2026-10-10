@@ -106,6 +106,11 @@ impl Normaliser {
         // and discards it: an eight second ad lost its first 1.4 seconds. Media
         // sources are rebased on the mixer pad instead.
         let vsync = if livesync { optional_livesync(&format!("{id}-vsync"))? } else { None };
+        // It syncs to the programme's clock, which is minutes in while this
+        // stream starts at zero; see `livesync_clock`.
+        if let (Some(sync), Some(entry)) = (&vsync, vcaps.static_pad("src")) {
+            super::livesync_clock::wrap(&entry, sync, id.as_str());
+        }
         let vtee = make("tee", &format!("{id}-vtee"))?;
         vtee.set_property("allow-not-linked", true);
 
