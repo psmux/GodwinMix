@@ -6,11 +6,11 @@
 //! request) is in `output.rs` and none of it is repeated here. What is here is
 //! a muxer, a sink, and an honest answer to "are we connected".
 //!
-//! Liveness is read from `srtsink`'s own statistics. The field names differ
-//! between caller and listener mode and between GStreamer versions, so several
-//! are tried and the first one present wins; a build whose `srtsink` reports no
-//! statistics at all falls back to the element's state, which is the honest
-//! answer for a sink that cannot say more.
+//! Liveness is the receiver's acknowledgements, read from `srtsink`'s own
+//! statistics and judged on whether they are still coming; see `srt_live` and
+//! `progress`. A caller that has heard nothing back for a while is rebuilt by
+//! the mixer like any other output that is down (`redial_when_down`); a
+//! listener waits for its callers and is left alone.
 
 use crate::config::{OutputConfig, Params};
 use crate::gstutil::make;
@@ -25,6 +25,7 @@ use gstreamer as gst;
 use gstreamer::prelude::*;
 use parking_lot::Mutex;
 use serde_json::{json, Value};
+use super::progress::Progress;
 
 pub const MANIFEST: Manifest = Manifest {
     plugin: "srt",
@@ -49,22 +50,20 @@ pub const MANIFEST: Manifest = Manifest {
 
 pub const PROVIDE: OutputProvide = OutputProvide { manifest: MANIFEST, claims, make: new };
 
-/// Fields on `srtsink`'s stats structure that mean "somebody is there", tried
-/// in order.
-const LIVE_FIELDS: &[&str] = &["packets-sent", "bytes-sent", "bytes-sent-total", "packets-sent-total"];
-
 fn claims(uri: &str) -> Option<u16> {
     uri.trim().to_lowercase().starts_with("srt://").then_some(MANIFEST.rank)
 }
 
 fn new(cfg: &OutputConfig) -> Result<Box<dyn Output>> {
-    Ok(Box::new(SrtOutput { uri: cfg.uri.clone(), latency_ms: None, sink: Mutex::new(None) }))
+    Ok(Box::new(SrtOutput { uri: cfg.uri.clone(), latency_ms: None, sink: Mutex::new(None), heard: Progress::default() }))
 }
 
 pub struct SrtOutput {
     uri: String,
     latency_ms: Option<i64>,
     sink: Mutex<Option<gst::Element>>,
+    /// The receiver's acknowledgements, and when they last moved.
+    heard: Progress,
 }
 
 impl Output for SrtOutput {
@@ -116,33 +115,31 @@ impl Output for SrtOutput {
 
         ctx.pipeline.add_many([&mux, &sink]).context("adding the srt muxer and sink")?;
         // `mpegtsmux` names both its request pads `sink_%d`; older builds spell
-        // it `sink_%u`. Both are asked for.
-        link_to_mux(video, &mux, &["sink_%d", "sink_%u"])?;
-        link_to_mux(audio, &mux, &["sink_%d", "sink_%u"])?;
+        // it `sink_%u`. Both are asked for. The picture goes through a parser
+        // of its own; see `ts`.
+        super::ts::link_video(ctx, video, &mux)?;
+        link_to_mux(audio, &mux, super::ts::TS_PADS)?;
         mux.link(&sink).context("linking muxer to srt sink")?;
         *self.sink.lock() = Some(sink);
+        self.heard.reset();
         Ok(())
     }
 
     fn connected(&self) -> bool {
         let held = self.sink.lock();
         let Some(sink) = held.as_ref() else { return false };
-        let stats = sink.property::<Option<gst::Structure>>("stats");
-        if let Some(s) = stats {
-            // Caller mode puts the numbers at the top level; listener mode puts
-            // one structure per caller in `callers`.
-            if let Some(n) = first_number(&s) {
-                return n > 0;
-            }
-            if let Ok(callers) = s.get::<gst::List>("callers") {
-                return callers.iter().any(|v| {
-                    v.get::<gst::Structure>().ok().and_then(|c| first_number(&c)).unwrap_or(0) > 0
-                });
-            }
+        match sink.property::<Option<gst::Structure>>("stats").as_deref().and_then(super::srt_live::answered) {
+            Some(n) => self.heard.live(n, std::time::Instant::now()),
+            // No statistics on this build: the state is the most this sink
+            // can honestly say.
+            None => sink.current_state() == gst::State::Playing,
         }
-        // No statistics on this build: the state is the most this sink can
-        // honestly say.
-        sink.current_state() == gst::State::Playing
+    }
+
+    /// A caller that has heard nothing back for `DOWN_FOR` dials again, for
+    /// as long as it takes. A listener is waiting for its callers already.
+    fn redial_when_down(&self) -> bool {
+        !super::srt_live::is_listener(&self.uri)
     }
 
     fn configure(&mut self, params: &Params) -> Result<Configure> {
@@ -171,42 +168,4 @@ impl Output for SrtOutput {
     }
 }
 
-/// The first of `LIVE_FIELDS` this structure carries, whatever integer width
-/// the version chose for it.
-fn first_number(s: &gst::StructureRef) -> Option<i64> {
-    for field in LIVE_FIELDS.iter().copied() {
-        if let Ok(v) = s.get::<i64>(field) {
-            return Some(v);
-        }
-        if let Ok(v) = s.get::<u64>(field) {
-            return Some(v as i64);
-        }
-        if let Ok(v) = s.get::<i32>(field) {
-            return Some(v as i64);
-        }
-    }
-    None
-}
-
-pub fn validate(params: &Params) -> Result<()> {
-    for (key, value) in params {
-        match key.as_str() {
-            "uri" => {
-                let s = value.as_str().unwrap_or_default();
-                anyhow::ensure!(
-                    s.to_lowercase().starts_with("srt://"),
-                    "srt/output params.uri must be an srt:// address, not `{s}`"
-                );
-            }
-            "latency_ms" => {
-                let n = value.as_integer().unwrap_or(-1);
-                anyhow::ensure!(
-                    (0..=10_000).contains(&n),
-                    "srt/output params.latency_ms must be 0 to 10000, not `{value}`"
-                );
-            }
-            _ => {}
-        }
-    }
-    Ok(())
-}
+pub use super::srt_params::validate;
