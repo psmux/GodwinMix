@@ -24,8 +24,8 @@ Reusing a source adds a scene reference and does not open another camera or
 decoder. Removing it from the scene leaves it available to other scenes, and
 leaves it running. If that source was on air by itself rather than as part of
 the scene, the scene goes on air in its place and a toast says so, so the
-header stops naming a source the scene no longer has. Studio mode leaves the
-programme alone, as it does for every take. To close a camera or a capture, open the chooser on
+header stops naming a source the scene no longer has. This happens in Studio
+mode as well. To close a camera or a capture, open the chooser on
 **Existing sources** and press **Remove** on its row: that takes it out of the
 mixer and out of every scene, and the toast that follows has **Undo**. A scene
 that lacks a source the mixer has opens the chooser on that list. New
