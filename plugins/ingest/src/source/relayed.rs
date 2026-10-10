@@ -10,8 +10,9 @@
 //! That is on purpose. What went down stdout was one Matroska stream with one
 //! set of codec headers and one timeline, and the next publisher's would be a
 //! second one spliced onto the end of it, which no demuxer accepts. The core
-//! restarts a source that ends in place, behind its freeze frame, and the new
-//! process waits for the next publisher on a clean pipe.
+//! restarts a source that ends in place, behind its freeze frame (held for up
+//! to 45 s, then the slate), and the new process waits for the next publisher
+//! on a clean pipe.
 
 use std::io::{ErrorKind, Read};
 use std::net::TcpStream;

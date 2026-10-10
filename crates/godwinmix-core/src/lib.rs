@@ -42,6 +42,7 @@
 //! `examples/embed.rs` is the same thing with a source added and a take, and
 //! it is built and run in CI.
 
+pub mod armed;
 pub mod caps;
 pub mod catalogue;
 pub mod config;

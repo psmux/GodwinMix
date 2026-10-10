@@ -107,7 +107,8 @@ after a second, then two, four, eight, and every fifteen after that, until it
 is back or you press **Stop**. It never gives up on its own while the page is
 open, whatever the mixer answers, short of a wrong key. The mixer side does
 the same thing it does for any channel: a source that a scene holds shows its
-last picture until the stream returns, and nobody has to touch it.
+last picture for up to 45 seconds, then the slate, and the picture comes back
+by itself when the stream returns, with nobody touching it.
 
 A short Wi-Fi blip often needs no new offer at all. The browser's connection
 reads disconnected for a few seconds and comes back by itself, and both ends

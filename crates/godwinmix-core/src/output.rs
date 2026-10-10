@@ -96,8 +96,11 @@ pub struct OutputSlot {
     overfull_ticks: AtomicU32,
     /// Set while a reconnect is pending. A dying connection produces several
     /// bus errors in quick succession, and without this each one would arm its
-    /// own reconnect, producing a storm rather than a retry.
-    reconnect_armed: AtomicBool,
+    /// own reconnect, producing a storm rather than a retry. Taken over by
+    /// the next claim once it has outlived the longest reconnect delay, so a
+    /// path that never clears it cannot stop the output for good; see
+    /// `crate::armed`.
+    reconnect_armed: crate::armed::Armed,
     /// One reconnect at a time, off the mixer thread, and a detach wins over
     /// it. See `input::lifecycle`.
     turn: crate::input::lifecycle::Lifecycle,
@@ -194,7 +197,10 @@ impl OutputSlot {
             connected: AtomicBool::new(false),
             failed: AtomicBool::new(false),
             overfull_ticks: AtomicU32::new(0),
-            reconnect_armed: AtomicBool::new(false),
+            reconnect_armed: crate::armed::Armed::new(
+                std::time::Duration::from_millis(cfg.reconnect_policy().max_delay_ms)
+                    + std::time::Duration::from_secs(30),
+            ),
             turn: Default::default(),
             kind: Mutex::new(kind),
             manifest: ready.manifest,
@@ -365,9 +371,7 @@ impl OutputSlot {
     /// Returns false if one is already pending, so the several bus errors a
     /// dying connection emits collapse into a single retry.
     pub fn try_arm_reconnect(&self) -> bool {
-        self.reconnect_armed
-            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
-            .is_ok()
+        self.reconnect_armed.try_arm(self.cfg.id.as_str())
     }
 
     /// Claim the one reconnect this output may have running. The mixer runs
@@ -379,6 +383,7 @@ impl OutputSlot {
     /// A claimed reconnect that never ran. Lets the next one in.
     pub fn reconnect_abandoned(&self) {
         self.turn.end_restart();
+        self.reconnect_armed.disarm();
     }
 
     /// Rebuild the output pipeline. The program pipeline is untouched.
@@ -394,11 +399,11 @@ impl OutputSlot {
 
     fn reconnect_in_turn(&self) -> Result<()> {
         let Some(_turn) = self.turn.enter(&self.cfg.id, "reconnect") else {
-            self.reconnect_armed.store(false, Ordering::SeqCst);
+            self.reconnect_armed.disarm();
             anyhow::bail!("{} is still inside an earlier reconnect; this one was skipped", self.cfg.id);
         };
         if self.turn.stopped() || !self.has_key() {
-            self.reconnect_armed.store(false, Ordering::SeqCst);
+            self.reconnect_armed.disarm();
             return Ok(());
         }
         let n = self.reconnects.fetch_add(1, Ordering::SeqCst) + 1;
@@ -407,7 +412,7 @@ impl OutputSlot {
         let result = self.spin_up(true);
         // Released whether or not it worked: a failed spin-up re-arms through
         // the normal error path with the next backoff step.
-        self.reconnect_armed.store(false, Ordering::SeqCst);
+        self.reconnect_armed.disarm();
         if self.turn.stopped() {
             // Overtaken by a detach while it ran: what it built has nothing
             // to feed it and goes straight back down.
@@ -540,7 +545,7 @@ impl OutputSlot {
     /// nothing in the way of one: the mixer rebuilds it. See `deadline`.
     pub fn stuck_down(&self, at: std::time::Instant) -> bool {
         self.deadline.overdue(at)
-            && !self.reconnect_armed.load(Ordering::SeqCst)
+            && !self.reconnect_armed.is_armed()
             && !self.turn.restarting()
             && !self.turn.stopped()
             && self.has_key()

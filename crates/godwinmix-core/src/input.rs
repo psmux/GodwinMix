@@ -33,6 +33,7 @@ mod boundary;
 #[cfg(test)]
 mod boundary_tests;
 pub mod lifecycle;
+mod pull;
 pub use boundary::guard_timeline;
 #[cfg(all(test, not(unix)))]
 mod pipe_tests;
@@ -42,6 +43,10 @@ mod pipe_tests;
 /// adding or removing a source never rebuilds an input pipeline.
 pub const THUMB_WIDTH: i32 = 480;
 pub const THUMB_HEIGHT: i32 = 270;
+/// How long an armed restart may stand before the next one takes it over.
+/// Three times the longest restart delay (`mixer::backoff`), so a retry that
+/// is merely waiting is never mistaken for one that was lost.
+pub const RESTART_ARM_STALE: Duration = Duration::from_secs(30);
 
 /// Where a source's media comes from.
 ///
@@ -262,8 +267,9 @@ pub struct InputPipeline {
     /// emits a burst of bus errors, and without this each one arms its own
     /// restart. They then all fire together, tearing the pipeline down and
     /// rebuilding it dozens of times in a few milliseconds, which is enough to
-    /// take the whole process down.
-    restart_armed: AtomicBool,
+    /// take the whole process down. Taken over by the next claim once it is
+    /// older than any restart is ever scheduled after; see `crate::armed`.
+    restart_armed: crate::armed::Armed,
     /// What this source said about itself at `initialize`, and what the
     /// supervisor is allowed to assume from it.
     manifest: crate::plugin::Manifest,
@@ -885,7 +891,7 @@ impl InputPipeline {
             retrying: AtomicBool::new(false),
             ended: AtomicBool::new(false),
             seekable: Mutex::new(None),
-            restart_armed: AtomicBool::new(false),
+            restart_armed: crate::armed::Armed::new(RESTART_ARM_STALE),
             manifest: ready.manifest,
             capabilities: ready.capabilities,
             kind: Mutex::new(kind),
@@ -1314,6 +1320,12 @@ impl InputPipeline {
     /// every kind but one. Called only for a source that has produced no media
     /// at all, so nothing downstream has state to lose.
     pub fn try_fallback_client(&self) -> Result<bool> {
+        let Some(_turn) = self.lifecycle.enter(&self.id, "client swap") else {
+            return Ok(false);
+        };
+        if self.lifecycle.stopped() {
+            return Ok(false);
+        }
         let swapped = match self.kind.lock().call("client.fallback", serde_json::Value::Null) {
             Ok(v) => v.get("swapped").and_then(|b| b.as_bool()).unwrap_or(false),
             // A kind with no such method is not a failure, it is a kind with
@@ -1337,9 +1349,13 @@ impl InputPipeline {
     /// Returns false if one is already pending, so the burst of errors a dead
     /// server produces collapses into a single retry.
     pub fn try_arm_restart(&self) -> bool {
-        self.restart_armed
-            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
-            .is_ok()
+        self.restart_armed.try_arm(self.id.as_str())
+    }
+
+    /// The armed retry has been handed to the mixer, whatever it does with
+    /// it: the next failure may arm another.
+    pub fn disarm_restart(&self) {
+        self.restart_armed.disarm();
     }
 
     /// Tear the pipeline down and bring it back up. Used by the supervisor
@@ -1367,6 +1383,16 @@ impl InputPipeline {
         self.lifecycle.restarting()
     }
 
+    /// How long the restart on a worker thread has been running, if one is.
+    pub fn restart_running_for(&self) -> Option<Duration> {
+        self.lifecycle.restart_running_for()
+    }
+
+    #[cfg(test)]
+    pub fn backdate_restart(&self, by: Duration) {
+        self.lifecycle.backdate_restart(by)
+    }
+
     /// A claimed restart that never ran, because no thread could be started
     /// for it. Lets the next one in.
     pub fn restart_abandoned(&self) {
@@ -1392,7 +1418,7 @@ impl InputPipeline {
             return Ok(());
         }
         info!(source = %self.id, "restarting input pipeline");
-        self.restart_armed.store(false, Ordering::SeqCst);
+        self.restart_armed.disarm();
         self.wake_branches();
         self.pipeline.set_state(gst::State::Null).ok();
         for p in &self.placement {
@@ -1407,7 +1433,18 @@ impl InputPipeline {
         self.has_video.store(false, Ordering::Relaxed);
         self.has_audio.store(false, Ordering::Relaxed);
         self.retrying.store(self.failed.swap(false, Ordering::Relaxed), Ordering::Relaxed);
+        // A restart that hung long enough for the mixer to give up on it and
+        // build the source again (`mixer::supervise`) must not bring this
+        // pipeline back beside the new one, pulling the same feed twice.
+        if self.lifecycle.stopped() {
+            debug!(source = %self.id, "abandoned while restarting; leaving the old pipeline down");
+            return Ok(());
+        }
         self.start()?;
+        if self.lifecycle.stopped() {
+            let _ = self.pipeline.set_state(gst::State::Null);
+            return Ok(());
+        }
         // The source pads were reactivated by NULL to PLAYING, but the
         // programme and mosaic are separate pipelines and stayed running.
         // End the flush across those proxy boundaries as well.
@@ -2659,6 +2696,13 @@ pub fn make_rtmp_source(element: &str, id: &str, uri: &str) -> Result<gst::Eleme
     crate::probe::set_bool(&src, "async-connect", true);
     crate::probe::set_bool(&src, "no-eof-is-error", true);
     crate::probe::set_bool(&src, "do-timestamp", true);
+    // librtmp connects inside the state change, and waits 120 s by default
+    // for a server that took the connection and says nothing. A restart into
+    // a dead relay held its worker that long and every restart behind it.
+    // Ten seconds is longer than any handshake that is going to succeed.
+    if element == crate::config::RtmpClient::LIBRTMP_ELEMENT {
+        crate::probe::set_int(&src, "timeout", 10);
+    }
     Ok(src)
 }
 

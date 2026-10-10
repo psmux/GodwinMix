@@ -22,6 +22,8 @@ pub mod layered;
 pub mod live;
 pub mod rendered;
 pub mod normalise;
+#[cfg(test)]
+mod quiet_tests;
 pub mod rtmp;
 pub mod schema;
 pub mod template;
@@ -195,6 +197,15 @@ where
         let h = health.clone();
         move || h.mark_audio()
     })?;
+    // And ahead of livesync, which repeats the last frame through any gap:
+    // below it a pulled cable looks like a live picture. See
+    // `SourceHealth::last_ingest_ms`.
+    if let Some(sync) = &norm.vsync {
+        install_buffer_probe(sync, "sink", {
+            let h = health.clone();
+            move || h.mark_ingest()
+        })?;
+    }
     // On the same pads, and for the same reason they are the right pads: this
     // is the last place a buffer can be seen before it crosses to the
     // programme, so it is where its timing means what the compositor will make
