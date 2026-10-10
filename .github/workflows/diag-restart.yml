@@ -19,7 +19,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-26.04, windows-latest]
+        os: [windows-latest]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -37,19 +37,10 @@ jobs:
         run: ./dev/install-gstreamer-windows.ps1
       - name: Build
         run: cargo build --profile ci --locked -p godwinmix --bins
-      - name: The station tests together
-        continue-on-error: true
-        shell: bash
-        env:
-          GODWINMIX_TIMING_SLACK: 3
-          GST_GL_DISABLED: 1
-        run: |
-          if [ "${{ runner.os }}" = "Windows" ]; then export RUST_TEST_THREADS=3; fi
-          cargo test --profile ci --locked -p godwinmix --test station 2>&1 | grep -E "DIAG|panicked|test result|direct_restart|left:|right:" | cut -c1-500
       - name: The restart test alone
         continue-on-error: true
         shell: bash
         env:
           GODWINMIX_TIMING_SLACK: 3
           GST_GL_DISABLED: 1
-        run: cargo test --profile ci --locked -p godwinmix --test station direct_restart -- --nocapture 2>&1 | grep -E "DIAG|panicked|test result|left:|right:|again" | cut -c1-500
+        run: cargo test --profile ci --locked -p godwinmix --test station direct_restart -- --nocapture 2>&1 | grep -E -A3 "DIAG|panicked|test result|left:|right:|again" | cut -c1-1500

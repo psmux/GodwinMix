@@ -91,6 +91,7 @@ pub fn parse_into(pipeline: &gst::Pipeline, pad: &gst::Pad, pads: &Arc<Pads>) ->
 
 /// One elementary stream, to the sink for its kind, or to a fakesink.
 fn attach(pipeline: &gst::Pipeline, pad: &gst::Pad, pads: &Pads) -> Result<(), String> {
+    eprintln!("DIAG attach start {}", pad.name());
     // parsebin says what a pad carries in its stream object; the pad's own
     // caps may not be set yet when it is announced.
     let caps = pad.current_caps().or_else(|| pad.stream().and_then(|s| s.caps())).unwrap_or_else(|| pad.query_caps(None));
