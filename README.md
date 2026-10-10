@@ -25,12 +25,12 @@
   <a href="https://github.com/psmux/GodwinMix/releases/latest"><b>macOS</b></a> ·
   <a href="https://github.com/psmux/GodwinMix/releases/latest"><b>Linux</b></a> ·
   <a href="#run-it-on-a-server"><b>Docker</b></a> ·
-  <a href="#connect-your-agent"><b>Connect your AI agent</b></a> ·
+  <a href="#then-go-further-tell-it-what-you-want"><b>Run it with AI</b></a> ·
   <a href="https://godwinmix.ripeflow.com/"><b>Website</b></a>
 </p>
 
 <p align="center">
-  <a href="docs/media/readme/video/hero.mp4"><img src="docs/media/readme/hero.webp" alt="Claude Code puts a breaking news bar on air, a phone runs the show, and a camera dies while viewers keep watching" width="880"></a>
+  <a href="docs/media/readme/video/hero.mp4"><img src="docs/media/readme/hero.webp" alt="Studio mode takes, every destination at once, a phone running the show, a camera dying while viewers keep watching, then Claude Code running the show" width="880"></a>
   <br>
   <sub>Every frame is the real app and its real output. <a href="docs/media/readme/video/hero.mp4">Watch it in HD</a>.</sub>
 </p>
@@ -45,9 +45,49 @@
   <img src="docs/media/readme/presets.webp" alt="The welcome screen asks what you are streaming and offers church, classroom, game stream, empty and OBS import" width="720">
 </p>
 
-## Tell it what you want
+## Everything a live show needs
 
-GodwinMix has an MCP server built in, so Claude Code, Codex, Gemini CLI, Cursor or any MCP client can run your show. You ask for the outcome in plain words. The agent picks the graphic, fills it in, builds the scene, takes it to air and checks the programme picture before it answers.
+Studio mode, transitions, graphics, every destination at once, and a stream that survives a dead camera. These are real recordings of the app beside what viewers got.
+
+<p align="center">
+  <a href="docs/media/readme/video/studio.mp4"><img src="docs/media/readme/studio.webp" alt="Studio mode: the next shot in Preview, Take with a fade, a wipe and a dip, while viewers follow" width="880"></a>
+  <br>
+  <sub><b>Set up the next shot, press Take.</b> Preview on the left, what viewers see on the right, with fade, wipe, dip and more.</sub>
+</p>
+
+<table>
+<tr>
+<td width="50%" valign="top">
+<a href="docs/media/readme/video/camera-dies.mp4"><img src="docs/media/readme/camera-dies.webp" alt="A camera dies and the viewers' stream keeps running"></a>
+<b>A camera dies. Your stream stays up.</b><br>
+<sub>Viewers see the slate under your graphics, the match clock keeps running, the operator gets an alert, and the picture comes back by itself. Nothing restarts and YouTube never sees a reconnect.</sub>
+</td>
+<td width="50%" valign="top">
+<a href="docs/media/readme/video/phone.mp4"><img src="docs/media/readme/phone.webp" alt="The phone deck takes scenes while viewers watch"></a>
+<b>Run the whole show from your phone</b><br>
+<sub>Phones get their own layout of the same app: preview, programme, Take, Cut and every scene. A second operator can join from their own device.</sub>
+</td>
+</tr>
+<tr>
+<td valign="top">
+<a href="docs/media/readme/video/destinations.mp4"><img src="docs/media/readme/destinations.webp" alt="Twitch added while already live on YouTube and Facebook"></a>
+<b>Every destination at once, built in</b><br>
+<sub>Add Twitch while you are already live on YouTube and Facebook, with a watch link and QR code for your own site. No plugin, no relay service.</sub>
+</td>
+<td valign="top">
+<a href="docs/media/readme/video/wall.mp4"><img src="docs/media/readme/wall.webp" alt="A monitoring wall raises an alarm on one show"></a>
+<b>Watch every channel on one wall</b><br>
+<sub>Run several shows from one machine. When a feed stops, its row raises the alarm and the others carry on.</sub>
+</td>
+</tr>
+</table>
+
+More of the app, with narration: [the website tour](https://godwinmix.ripeflow.com/).
+
+
+## Then go further: tell it what you want
+
+Everything above is also something you can ask for. GodwinMix has an MCP server built in, so Claude Code, Codex, Gemini CLI, Cursor or any MCP client can run your show. You ask for the outcome in plain words. The agent picks the graphic, fills it in, builds the scene, takes it to air and checks the programme picture before it answers.
 
 Every clip below is a real session with the waits shortened and account details blanked: the prompt as it was typed, the agent's own reply, and what viewers saw at that moment. Loops play at 2x; click one for the full session in HD.
 
@@ -121,39 +161,6 @@ Every clip below is a real session with the waits shortened and account details 
 | 24x7 channels | `Watch for one minute; if the programme freezes, take the healthy backup.` |
 | Channel operators | `Dry run feeds.csv, then start the channels that fit this machine.` |
 | Developers | `Turn the Python colour bars example into a clock source and put it on air.` |
-
-## Or run it yourself
-
-Everything the agent does is a button you can press. These are real recordings of the app beside what viewers got.
-
-<table>
-<tr>
-<td width="50%" valign="top">
-<a href="docs/media/readme/video/camera-dies.mp4"><img src="docs/media/readme/camera-dies.webp" alt="A camera dies and the viewers' stream keeps running"></a>
-<b>A camera dies. Your stream stays up.</b><br>
-<sub>Viewers see the slate under your graphics, the match clock keeps running, the operator gets an alert, and the picture comes back by itself. Nothing restarts and YouTube never sees a reconnect.</sub>
-</td>
-<td width="50%" valign="top">
-<a href="docs/media/readme/video/phone.mp4"><img src="docs/media/readme/phone.webp" alt="The phone deck takes scenes while viewers watch"></a>
-<b>Run the whole show from your phone</b><br>
-<sub>Phones get their own layout of the same app: preview, programme, Take, Cut and every scene. A second operator can join from their own device.</sub>
-</td>
-</tr>
-<tr>
-<td valign="top">
-<a href="docs/media/readme/video/destinations.mp4"><img src="docs/media/readme/destinations.webp" alt="Twitch added while already live on YouTube and Facebook"></a>
-<b>Every destination at once, built in</b><br>
-<sub>Add Twitch while you are already live on YouTube and Facebook, with a watch link and QR code for your own site. No plugin, no relay service.</sub>
-</td>
-<td valign="top">
-<a href="docs/media/readme/video/wall.mp4"><img src="docs/media/readme/wall.webp" alt="A monitoring wall raises an alarm on one show"></a>
-<b>Watch every channel on one wall</b><br>
-<sub>Run several shows from one machine. When a feed stops, its row raises the alarm and the others carry on.</sub>
-</td>
-</tr>
-</table>
-
-More of the app, with narration: [the website tour](https://godwinmix.ripeflow.com/).
 
 ## Why people switch
 
