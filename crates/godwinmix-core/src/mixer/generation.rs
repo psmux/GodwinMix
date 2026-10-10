@@ -24,7 +24,7 @@ use super::Mixer;
 use crate::output::OutputSlot;
 use crate::state::SourceId;
 use std::sync::{Arc, Weak};
-use tracing::debug;
+use tracing::{debug, info};
 
 impl Mixer {
     /// The generation for a source about to be added.
@@ -55,6 +55,10 @@ impl Mixer {
                 // that finds no thread to run on, would otherwise leave it
                 // claimed and refuse every retry after it.
                 input.disarm_restart();
+                if self.came_live_meanwhile(id) {
+                    info!(source = %id, "the source came live while its restart waited; not restarting it");
+                    return;
+                }
                 self.restart_source(id)
             }
             now => debug!(

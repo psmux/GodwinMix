@@ -18,7 +18,7 @@ use std::sync::atomic::AtomicBool;
 
 /// An RTMP server for one player at a time, on `port`, for as long as the
 /// returned flag stays true.
-fn serve(port: u16) -> Option<Arc<AtomicBool>> {
+pub(super) fn serve(port: u16) -> Option<Arc<AtomicBool>> {
     let probe = Process::new("ffmpeg").arg("-version").stdout(Stdio::null()).stderr(Stdio::null()).status();
     if !probe.is_ok_and(|s| s.success()) {
         return None;

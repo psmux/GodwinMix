@@ -5752,6 +5752,7 @@ mod tests {
     mod stall_storm;
     mod stopped_output;
     mod refused_output;
+    mod replug;
     mod slow_output;
     mod stuck_detach;
     mod thumb;
