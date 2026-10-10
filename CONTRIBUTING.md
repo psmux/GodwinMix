@@ -60,6 +60,13 @@ runtime on some Arc GPUs corrupts the heap of the process that loads it, about
 one load in four (exit code `0xc0000374`), which can end a test binary after
 every test in it has passed.
 
+Windows Firewall asks once for every program that listens on all interfaces,
+and each cargo build of a new test binary is a new program to it. Loopback is
+never filtered, so the prompts do not break a test, but they pile up. From an
+elevated PowerShell, `pwsh -File dev/windows-firewall.ps1` allows this
+workspace's builds from the local subnet only, and `-Remove` takes the rules
+out again. Run it again after a build adds test binaries.
+
 ### The crates
 
 The repository is a Cargo workspace. `cargo build` at the root builds all of
