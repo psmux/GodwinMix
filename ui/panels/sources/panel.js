@@ -28,7 +28,6 @@ import { setLocal, nameOf } from "./local.js";
 import { addSourceTile, openSceneSources } from "./chooser-loader.js";
 import { focusedScene, onFocusChanged } from "../../shell/focus.js";
 import { SceneStrip } from "./scene-strip.js";
-import { lookEntries } from "./item-look.js";
 import { acquireScenes } from "../../shell/scene-session.js";
 import { setWorkspaceActive } from "./workspace.js";
 
@@ -566,16 +565,18 @@ class SourcesPanel extends HTMLElement {
     }
   }
 
-  menu(id, e) {
+  async menu(id, e) {
     const ids = this.selection.list(this.order());
     const many = ids.length > 1;
     const key = (cmd) => shell.keymap.keyFor(cmd);
+    // Turn and fit, fetched on first use: the first page has a budget.
+    const look = id && !many && this.scopedTo() ? (await import("./item-look.js")).lookEntries(this.sceneClient(), this.scopedTo(), id) : [];
     contextMenu(e.clientX, e.clientY, [
       id && { label: settings().producer ? "Arm" : "Put on air", key: this.scopedTo() ? null : "Click", run: () => this.putOnAir(id) },
       id && { label: "Rename", key: key("tray.rename") || "F2", disabled: many, run: () => this.beginRename(id) },
       id && { kind: "colours", onColour: (colour) => this.setColour(ids, colour) },
       id && { label: "Settings", run: () => this.openDrawer(id) },
-      ...(id && !many ? lookEntries(this.sceneClient(), this.scopedTo(), id) : []),
+      ...look,
       id && { kind: "separator" },
       // Here as well as on Ctrl+C and Ctrl+V, for a phone that has neither.
       id && { label: "Copy", key: key("tray.copy") || "Ctrl+C", run: () => this.copy(ids) },
@@ -685,7 +686,7 @@ class SourcesPanel extends HTMLElement {
         for (const item of items) await scenes.itemRemove(scene.id, item.id);
         scenes.undo.record(`Removed sources from ${scene.name}`, { offer: true });
         await scenes.reread([scene.id]);
-        await this.followScene(scene, ids);
+        await (await import("./item-look.js")).followScene(this.client, scenes, scene, ids);
       } catch (error) { errorToast(error, "Remove from scene"); }
       return;
     }
@@ -716,25 +717,6 @@ class SourcesPanel extends HTMLElement {
       },
       offer: true,
     });
-  }
-
-  /**
-   * A source on air by itself, taken out of the scene a person is building,
-   * goes off air: the scene goes on in its place.
-   *
-   * A tester removed "Browser jaffer" from Default scene and the header went
-   * on saying Browser jaffer, because the programme was that source alone and
-   * not the scene. To them the two were the same thing. Studio mode too,
-   * where a take is otherwise the operator's alone: the source the person has
-   * just taken out is the one thing they asked to be rid of.
-   */
-  async followScene(scene, ids) {
-    const state = this.client.state || {};
-    if (state.scene || !ids.includes(state.program)) return;
-    const name = this.client.store.source(state.program)?.name || state.program;
-    const scenes = this.sceneClient();
-    await scenes.take(scene.id);
-    toast({ text: `${name} was on air by itself, so ${scene.name} is on air now.` });
   }
 
   selectAll() {
