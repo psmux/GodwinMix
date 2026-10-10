@@ -29,6 +29,7 @@ pub(crate) mod queue;
 mod rtmp_out;
 pub(crate) mod run;
 mod srt_out;
+mod srt_heard;
 pub(crate) mod ts_video;
 mod target;
 
