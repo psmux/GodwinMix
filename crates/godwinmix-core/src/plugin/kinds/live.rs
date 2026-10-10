@@ -23,7 +23,10 @@ pub const MANIFEST: Manifest = Manifest {
     kind: ProvideKind::Source,
     api: API_LEVEL,
     description: "A continuous stream: HLS, DASH, RTSP, SRT, RIST, RTP or UDP",
-    uri_schemes: &["rtsp://", "rtsps://", "srt://", "udp://", "rtp://", "rist://"],
+    uri_schemes: &[
+        "rtsp://", "rtspt://", "rtspu://", "rtsph://", "rtsps://", "rtspst://", "rtspsu://", "rtspsh://",
+        "rtsp-sdp://", "srt://", "udp://", "rtp://", "rist://",
+    ],
     rank: 200,
     media: MediaDecl {
         video: StreamMode::Container,
@@ -42,10 +45,9 @@ pub const PROVIDE: Provide = Provide { manifest: MANIFEST, claims, make: new };
 
 fn claims(uri: &str) -> Option<u16> {
     let lower = uri.trim().to_lowercase();
-    if ["rtsp://", "rtsps://", "srt://", "udp://", "rtp://", "rist://"]
-        .iter()
-        .any(|p| lower.starts_with(p))
-    {
+    // Every RTSP scheme, `rtspt://` included: left to the fallback it was
+    // opened as a finite clip, never re-timed, and judged stalled in seconds.
+    if super::rtsp::is_rtsp(&lower) || ["srt://", "udp://", "rtp://", "rist://"].iter().any(|p| lower.starts_with(p)) {
         return Some(MANIFEST.rank);
     }
     // Playlist manifests are live regardless of being fetched over HTTP. The
@@ -111,5 +113,5 @@ pub fn validate(params: &Params) -> Result<()> {
     if let Some(v) = params.get("uri") {
         anyhow::ensure!(v.is_str(), "hls/source params.uri must be a string");
     }
-    Ok(())
+    super::rtsp::validate(params)
 }
