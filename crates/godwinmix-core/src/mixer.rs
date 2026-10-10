@@ -4521,7 +4521,11 @@ impl Mixer {
             // A source that connects but never delivers anything is the
             // signature of an RTMP client that cannot talk to this particular
             // server. It reports no error, so nothing else will catch it.
-            if slot.input.never_connected() {
+            // Only for a source that has never shown a picture: one that
+            // worked and then lost its network has the right client already.
+            // A cable pull on 2026-10-10 swapped it to librtmp, whose connect
+            // then held every restart for its whole timeout.
+            if slot.input.never_connected() && !slot.first_reported {
                 slot.silent_ticks += 1;
                 if slot.silent_ticks == fallback_ticks {
                     swaps.push(slot.input.id.clone());
