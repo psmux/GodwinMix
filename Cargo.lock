@@ -1540,6 +1540,7 @@ dependencies = [
  "gstreamer-controller",
  "gstreamer-net",
  "gstreamer-pbutils",
+ "gstreamer-rtsp-server",
  "gstreamer-sdp",
  "gstreamer-video",
  "gstreamer-webrtc",

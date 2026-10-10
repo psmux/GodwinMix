@@ -14672,9 +14672,47 @@
       {
         "description": "A continuous stream: HLS, DASH, RTSP, SRT, RIST, RTP or UDP",
         "id": "hls/source",
+        "params": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "properties": {
+            "latency_ms": {
+              "default": 200,
+              "description": "Milliseconds an RTSP camera's packets are held to be put back in order. Raise it for a camera on a jittery network. 0 to 10000. Other streams ignore it.",
+              "maximum": 10000,
+              "minimum": 0,
+              "title": "RTSP jitter buffer",
+              "type": "integer"
+            },
+            "transport": {
+              "default": "auto",
+              "description": "How an rtsp:// camera sends its media. Auto tries UDP and falls back to TCP after five seconds with nothing; TCP gets through a firewall, a VPN or NAT. An rtspt:// address is TCP whatever this says. Other streams ignore it.",
+              "enum": [
+                "auto",
+                "tcp",
+                "udp"
+              ],
+              "title": "RTSP transport",
+              "type": "string",
+              "x-gmx-labels": [
+                "Auto",
+                "TCP",
+                "UDP"
+              ]
+            }
+          },
+          "title": "hls/source params",
+          "type": "object"
+        },
         "schemes": [
           "rtsp://",
+          "rtspt://",
+          "rtspu://",
+          "rtsph://",
           "rtsps://",
+          "rtspst://",
+          "rtspsu://",
+          "rtspsh://",
+          "rtsp-sdp://",
           "srt://",
           "udp://",
           "rtp://",
