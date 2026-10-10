@@ -683,6 +683,7 @@ class SourcesPanel extends HTMLElement {
         for (const item of items) await scenes.itemRemove(scene.id, item.id);
         scenes.undo.record(`Removed sources from ${scene.name}`, { offer: true });
         await scenes.reread([scene.id]);
+        await this.followScene(scene, ids);
       } catch (error) { errorToast(error, "Remove from scene"); }
       return;
     }
@@ -713,6 +714,24 @@ class SourcesPanel extends HTMLElement {
       },
       offer: true,
     });
+  }
+
+  /**
+   * A source on air by itself, taken out of the scene a person is building,
+   * goes off air: the scene goes on in its place.
+   *
+   * A tester removed "Browser jaffer" from Default scene and the header went
+   * on saying Browser jaffer, because the programme was that source alone and
+   * not the scene. To them the two were the same thing. Producer mode is left
+   * alone, as everywhere: there a take is the operator's.
+   */
+  async followScene(scene, ids) {
+    const state = this.client.state || {};
+    if (settings().producer || state.scene || !ids.includes(state.program)) return;
+    const name = this.client.store.source(state.program)?.name || state.program;
+    const scenes = this.sceneClient();
+    await scenes.take(scene.id);
+    toast({ text: `${name} was on air by itself, so ${scene.name} is on air now.` });
   }
 
   selectAll() {

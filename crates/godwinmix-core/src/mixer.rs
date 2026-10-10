@@ -1256,6 +1256,9 @@ pub struct Mixer {
     watches: Vec<gstutil::BusWatch>,
     /// Where to persist runtime source changes, if anywhere.
     runtime_store: Option<std::path::PathBuf>,
+    /// Whether `start` puts the first source on air by itself. True for an
+    /// embedder; the daemon turns it off and puts back what was on air.
+    boot_on_first_source: bool,
     /// Sources whose page is still being probed, so not yet in `sources`.
     /// They are written to the runtime store with the rest: a shutdown that
     /// came while a superimposed source was still probing left it out of the
@@ -1958,6 +1961,7 @@ impl Mixer {
             bus_tx,
             watches: Vec::new(),
             runtime_store: None,
+            boot_on_first_source: true,
             pending: Vec::new(),
             rebuilding: std::collections::HashMap::new(),
             stopping: HashMap::new(),
@@ -1990,6 +1994,12 @@ impl Mixer {
     /// Persist runtime source and output changes to this path.
     pub fn persist_runtime_to(&mut self, path: std::path::PathBuf) {
         self.runtime_store = Some(path);
+    }
+
+    /// Start on the slate and leave the first take to the caller, which knows
+    /// the scenes and what was on air before. See `godwinmix::on_air`.
+    pub fn leave_boot_take_to_caller(&mut self) {
+        self.boot_on_first_source = false;
     }
 
     /// Bring up outputs, sources, then start rolling.
@@ -2044,7 +2054,12 @@ impl Mixer {
         // already showing something rather than black. Never on a channel's
         // stream: whatever an encoder is sending when the mixer starts is not
         // for air until someone takes it.
-        let first = self.sources.iter().find(|s| !fed_by_channel(&s.input.current_config())).map(|s| s.input.id.clone());
+        let first = self
+            .sources
+            .iter()
+            .filter(|_| self.boot_on_first_source)
+            .find(|s| !fed_by_channel(&s.input.current_config()))
+            .map(|s| s.input.id.clone());
         if first.is_some() {
             self.take(first, None)?;
         } else {
