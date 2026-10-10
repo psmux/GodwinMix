@@ -85,7 +85,7 @@ impl Drop for ToRemux {
         }
         if self.wrote {
             if let Some(r) = &g.reporter {
-                r.info("ending this source's stream so the next publisher starts on a clean one".to_string());
+                r.info("ending this source's stream so the next publisher starts on a clean one");
             }
             (g.end)(&g.remux);
             return;
