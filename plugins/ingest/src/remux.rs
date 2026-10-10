@@ -169,10 +169,11 @@ impl Remux {
     pub fn broken(&self) -> bool {
         self.broken.load(Ordering::Relaxed)
     }
-}
 
-impl Drop for Remux {
-    fn drop(&mut self) {
+    /// End the stream and wait for the muxer to write what it holds, without
+    /// letting go of the pipeline. For a source about to exit, whose remuxer
+    /// other threads still hold.
+    pub fn finish(&self) {
         // End of stream first, and then wait for it to reach the sink, so the
         // muxer writes the cluster it is holding. Going to NULL straight after
         // the end of stream raced it: `matroskamux` keeps the current cluster
@@ -185,6 +186,12 @@ impl Drop for Remux {
         while !self.ended.load(Ordering::Relaxed) && !self.broken.load(Ordering::Relaxed) && std::time::Instant::now() < until {
             std::thread::sleep(std::time::Duration::from_millis(10));
         }
+    }
+}
+
+impl Drop for Remux {
+    fn drop(&mut self) {
+        self.finish();
         let _ = self.pipeline.set_state(gst::State::Null);
         self.broken.store(true, Ordering::Relaxed);
         if let Some(thread) = self.watch.take() {

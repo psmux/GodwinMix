@@ -184,7 +184,7 @@ impl Ingest {
         let state = Arc::new(State::new());
         let stop = Arc::new(AtomicBool::new(false));
         if settings.relay.is_empty() {
-            let server = listen::start(settings, reporter, remux, state.clone())?;
+            let server = listen::start(settings, reporter, remux, state.clone(), ender(exit_at_end))?;
             return Ok(Ingest { state, _server: Some(server), stop, reader: None });
         }
         let reader = relayed::start(settings, reporter, remux, state.clone(), stop.clone(), exit_at_end)?;
@@ -228,6 +228,18 @@ impl Ingest {
             "bytes": self.state.bytes.load(Ordering::Relaxed),
         })
     }
+}
+
+/// What a listener does when its publisher's stream has ended: a real source
+/// finishes the Matroska and exits, so the core restarts it on a clean pipe
+/// (`listen.rs` says why). A test writing to a file carries on.
+fn ender(exit_at_end: bool) -> listen::End {
+    Arc::new(move |remux: &Remux| {
+        if exit_at_end {
+            remux.finish();
+            std::process::exit(0);
+        }
+    })
 }
 
 impl Drop for Ingest {
