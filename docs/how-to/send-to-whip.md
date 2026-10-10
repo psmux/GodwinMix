@@ -61,6 +61,7 @@ gmx ctl status
 | `ok`, detail `ice connected` | media is flowing |
 | `degraded`, `ice checking` | the offer is with the endpoint, the media path is not up yet |
 | `degraded`, "refused or dropped" | the endpoint said no or went away; it is being dialled again |
+| `degraded`, `ice disconnected` | the media path stopped, as a pulled cable does; dialled again if it lasts ten seconds |
 | `failing` | not connected at all, between attempts |
 
 A session that sits at `ice checking` and never reaches `connected` means there
@@ -77,6 +78,19 @@ When the endpoint drops, the output waits 500 ms and dials again, doubling to 15
 seconds. The ceiling is deliberately low: an output that is down holds the core's
 outage buffer open, and that buffer is finite, so waiting five minutes between
 attempts would trade a short outage for a long one.
+
+It dials again when any of these happens, and keeps going for as long as the
+output exists:
+
+* the pipeline posts an error, which is how a refusal or a hang up arrives;
+* ICE goes to `failed` or `closed`;
+* ICE stays `disconnected` for ten seconds. A pulled cable looks like this and
+  posts no error at all, which is why it is watched for;
+* an attempt has not come up in thirty seconds.
+
+The log line names which one it was, for instance `the WHIP endpoint is not
+taking the programme (ICE has been disconnected for 10 s)`. While the output is
+not `ok` the mixer shows it as reconnecting rather than live.
 
 ```json
 {"reconnect_first_ms": 500, "reconnect_max_ms": 15000}

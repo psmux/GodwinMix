@@ -164,10 +164,22 @@ A destination pointed at something that is not answering comes straight back as
 `reconnecting` rather than waiting on the connection. The mixer is never held
 by one: `/api/status` keeps answering throughout.
 
-An RTMP destination that has been down for 20 seconds with no error and no
-retry on the way is rebuilt anyway, and the log says `the output has been down
-with no error and no reconnect on the way; rebuilding it`. It is asked again
-once every 20 seconds after that, never more often.
+An RTMP, SRT or RIST destination that has been down for 20 seconds with no
+error and no retry on the way is rebuilt anyway, and the log says `the output
+has been down with no error and no reconnect on the way; rebuilding it`. It is
+asked again once every 20 seconds after that, never more often, for as long as
+it takes. An SRT listener is the exception: it waits for its callers and is
+left alone.
+
+A pulled cable sends no error, so "down" has to be measured. An RTMP
+destination is down once no bytes have reached its sink for three seconds,
+which happens within a few seconds of the cable going, when the socket's
+buffers are full. An SRT destination is down once its receiver has sent no
+acknowledgement for six seconds, and a RIST destination once its receiver has
+sent no report for six seconds. Pulling the cable between a mixer and a local
+RTMP server for 20 seconds and for three minutes, the output read
+`reconnecting` within about 8 seconds and was live again within about 2
+seconds of the cable going back in, with nobody touching it.
 
 ## A rehearsal core will not do it
 

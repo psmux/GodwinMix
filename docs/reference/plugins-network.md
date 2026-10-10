@@ -53,7 +53,11 @@ until then.
 
 ## `srt/source`
 
-Receive SRT. Sending is `srt/output`, built into the core.
+Receive SRT. Sending is `srt/output`, built into the core. A caller there is
+live while its receiver keeps acknowledging what it sends; six seconds with no
+acknowledgement is a receiver that has gone, and the output is rebuilt every
+20 seconds until it answers. A listener waits for its callers and is never
+rebuilt for having none.
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
@@ -285,6 +289,13 @@ before that health says which side it is waiting for: the programme from the
 core, or the encoder. `stats` answers `{address, bytes_sent, bytes_received}`,
 the last being programme read from the core.
 
+A dropped connection is dialled again from 500 ms, doubling to 15 s, for as
+long as the output runs. A connect that takes longer than 5 s, or a write that
+cannot finish in 10 s, counts as the connection gone, so a pulled cable is
+noticed once the socket's buffers fill, which at radio bitrates can take a
+minute. The output tells the core with `health.changed` when the mount comes
+and goes, and reads as reconnecting rather than live while it is gone.
+
 `icecast/source` plays an audio stream over HTTP or HTTPS (`uri`) as a live
 source: `souphttpsrc` in ICY mode, `icydemux`, `parsebin`, and the sound as it
 came (MP3, AAC, Vorbis, Opus) to the core in Matroska. Health carries the last
@@ -333,8 +344,11 @@ programme to MPEG-TS, seven packets a datagram, and hands it to `ristsink`.
 | `uri` | string | required | `rist://<receiver>:<port>`. The port must be even; RTCP uses the one above it |
 | `buffer_ms` | integer 50 to 30000 | `1000` | how much sent video is kept to answer retransmission requests; match the receiver's buffer |
 
-The output says it is connected once the receiver's RTCP has given a round
-trip time. `stats` answers `ristsink`'s own statistics. It opens no port on
+The output is live while the receiver's RTCP reports keep coming: the highest
+sequence number it has had and the last sender report it saw both move with
+every report, and six seconds with neither moving is a receiver that has gone.
+An output whose receiver has gone is rebuilt every 20 seconds until it answers
+again. `stats` answers `ristsink`'s own statistics. It opens no port on
 this machine: it sends, and the receiver listens.
 
 To receive RIST, add a source with the address to listen on,
