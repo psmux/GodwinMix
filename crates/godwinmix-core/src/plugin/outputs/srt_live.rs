@@ -5,7 +5,8 @@
 //! is gone. Caller mode has them at the top level; listener mode has one
 //! structure per caller in `callers`, a value array, and they are added up.
 //! A build whose statistics carry no acknowledgement count falls back to the
-//! packets sent, which a dead receiver stops too once SRT gives up on it.
+//! packets sent, which a dead receiver stops too once SRT gives up on it,
+//! and statistics with neither are a socket that has heard nothing yet.
 
 use gstreamer as gst;
 
@@ -26,14 +27,15 @@ fn count(s: &gst::StructureRef) -> Option<u64> {
     })
 }
 
-/// The receiver's count across the statistics, or `None` when the sink
-/// reported nothing it could be read from.
-pub fn answered(stats: &gst::StructureRef) -> Option<u64> {
+/// The receiver's count across the statistics. A socket still dialling may
+/// report none of the fields, and that is nothing heard yet, not a sink that
+/// cannot say: it used to read as connected for as long as the dial lasted.
+pub fn answered(stats: &gst::StructureRef) -> u64 {
     if let Ok(callers) = stats.get::<glib::ValueArray>("callers") {
         let each: Vec<gst::Structure> = callers.iter().filter_map(|v| v.get().ok()).collect();
-        return Some(of_callers(&each));
+        return of_callers(&each);
     }
-    count(stats)
+    count(stats).unwrap_or(0)
 }
 
 /// The listener's count: every caller's, added up.
@@ -63,16 +65,16 @@ mod tests {
     fn acknowledgements_are_read_first_and_callers_are_added_up() {
         let _ = gst::init();
         let caller = gst::Structure::builder("s").field("packet-ack-received", 7i32).field("packets-sent", 900i64).build();
-        assert_eq!(answered(&caller), Some(7));
+        assert_eq!(answered(&caller), 7);
         let old = gst::Structure::builder("s").field("packets-sent", 900i64).build();
-        assert_eq!(answered(&old), Some(900));
+        assert_eq!(answered(&old), 900);
         let callers = [3i32, 4].map(|n| gst::Structure::builder("c").field("packet-ack-received", n).build());
         assert_eq!(of_callers(&callers), 7);
-        // The listener's own running total never goes down, and is not read
-        // when there are callers to read instead.
+        // The listener's own running total never goes down, and is never
+        // what is read.
         let listener = gst::Structure::builder("s").field("bytes-sent-total", 5_000u64).build();
-        assert_eq!(answered(&listener), None);
-        assert_eq!(answered(&gst::Structure::new_empty("s")), None);
+        assert_eq!(answered(&listener), 0);
+        assert_eq!(answered(&gst::Structure::new_empty("s")), 0);
     }
 
     #[test]

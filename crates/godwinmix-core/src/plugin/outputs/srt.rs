@@ -16,10 +16,8 @@ use crate::config::{OutputConfig, Params};
 use crate::gstutil::make;
 use crate::plugin::output::{link_to_mux, Output, OutputCtx, OutputProvide};
 use crate::plugin::source::unknown_method;
-use crate::plugin::{
-    Capability, CapabilitySet, Configure, Health, Hello, Manifest, MediaDecl, PluginState,
-    ProvideKind, Ready, StreamMode, Tier, API_LEVEL,
-};
+use crate::plugin::{Capability, CapabilitySet, Configure, Health, Hello, Manifest, MediaDecl, PluginState};
+use crate::plugin::{ProvideKind, Ready, StreamMode, Tier, API_LEVEL};
 use anyhow::{Context, Result};
 use gstreamer as gst;
 use gstreamer::prelude::*;
@@ -35,12 +33,7 @@ pub const MANIFEST: Manifest = Manifest {
     description: "MPEG-TS over SRT, in caller or listener mode",
     uri_schemes: &["srt://"],
     rank: 240,
-    media: MediaDecl {
-        video: StreamMode::Container,
-        audio: StreamMode::Container,
-        alpha: false,
-        thumb: false,
-    },
+    media: MediaDecl { video: StreamMode::Container, audio: StreamMode::Container, alpha: false, thumb: false },
     capabilities: CapabilitySet::new().with(Capability::KeyframeRequest),
     // The default SRT receive buffer. Declared so a client asking what the
     // chain costs gets a number rather than a shrug.
@@ -86,18 +79,11 @@ impl Output for SrtOutput {
         Ok(Ready { manifest: MANIFEST, latency_ms, capabilities: MANIFEST.capabilities })
     }
 
-    fn build(
-        &mut self,
-        ctx: &OutputCtx<'_>,
-        video: &gst::Element,
-        audio: &gst::Element,
-    ) -> Result<()> {
+    fn build(&mut self, ctx: &OutputCtx<'_>, video: &gst::Element, audio: &gst::Element) -> Result<()> {
         let (id, gen) = (ctx.id, ctx.generation);
         let mux = make("mpegtsmux", &format!("out-{id}-mux-{gen}"))?;
-        // A PAT and PMT every 100 ms, so a receiver that joins mid stream can
-        // start without waiting for the next scheduled table. The programme's
-        // own keyframe interval is what decides when it can decode; this only
-        // stops the tables being the thing it waits for.
+        // A PAT and PMT every 100 ms, so a receiver joining mid stream waits
+        // for a keyframe and never for the tables.
         crate::probe::set_int(&mux, "si-interval", 9_000);
         crate::probe::set_bool(&mux, "alignment", false);
 
@@ -114,9 +100,7 @@ impl Output for SrtOutput {
         crate::probe::set_bool(&sink, "async", false);
 
         ctx.pipeline.add_many([&mux, &sink]).context("adding the srt muxer and sink")?;
-        // `mpegtsmux` names both its request pads `sink_%d`; older builds spell
-        // it `sink_%u`. Both are asked for. The picture goes through a parser
-        // of its own; see `ts`.
+        // The picture goes through a parser of its own; see `ts`.
         super::ts::link_video(ctx, video, &mux)?;
         link_to_mux(audio, &mux, super::ts::TS_PADS)?;
         mux.link(&sink).context("linking muxer to srt sink")?;
@@ -128,8 +112,8 @@ impl Output for SrtOutput {
     fn connected(&self) -> bool {
         let held = self.sink.lock();
         let Some(sink) = held.as_ref() else { return false };
-        match sink.property::<Option<gst::Structure>>("stats").as_deref().and_then(super::srt_live::answered) {
-            Some(n) => self.heard.live(n, std::time::Instant::now()),
+        match sink.property::<Option<gst::Structure>>("stats") {
+            Some(s) => self.heard.live(super::srt_live::answered(&s), std::time::Instant::now()),
             // No statistics on this build: the state is the most this sink
             // can honestly say.
             None => sink.current_state() == gst::State::Playing,
@@ -154,14 +138,9 @@ impl Output for SrtOutput {
     fn call(&mut self, method: &str, _params: Value) -> Result<Value> {
         match method {
             "stats" => {
-                let stats = self
-                    .sink
-                    .lock()
-                    .as_ref()
-                    .and_then(|s| s.property::<Option<gst::Structure>>("stats"))
-                    .map(|s| s.to_string())
-                    .unwrap_or_default();
-                Ok(json!({ "stats": stats }))
+                let held = self.sink.lock();
+                let stats = held.as_ref().and_then(|s| s.property::<Option<gst::Structure>>("stats"));
+                Ok(json!({ "stats": stats.map(|s| s.to_string()).unwrap_or_default() }))
             }
             other => Err(unknown_method(&MANIFEST, other, &["stats"])),
         }
