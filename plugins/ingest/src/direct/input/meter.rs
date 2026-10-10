@@ -10,6 +10,13 @@ use super::stats::InputStats;
 use crate::codec;
 use crate::media_tag::{MediaTag, TagKind};
 
+/// Two frames further apart than this on the stream's clock are either side
+/// of a stall or a restarted sender. A rate is not measured across one: the
+/// second a sender restarts in held a few frames either side of two quiet
+/// seconds and read as 4 fps, the station took two copies of that reading
+/// for a rate, and a rendition planned at 30 fps was planned again at 4.
+const STALL_MS: u32 = 1_000;
+
 #[derive(Debug)]
 pub struct Meter {
     window: Instant,
@@ -25,6 +32,10 @@ pub struct Meter {
     last_key: Option<u32>,
     keyframe_ms: Option<u64>,
     span: Option<(u32, u32)>,
+    /// The last frame's timestamp, and whether a stall fell inside this
+    /// window, which then has no rate.
+    last_ts: Option<u32>,
+    stalled: bool,
     fps: f64,
     kbps: u32,
 }
@@ -42,6 +53,8 @@ impl Default for Meter {
             last_key: None,
             keyframe_ms: None,
             span: None,
+            last_ts: None,
+            stalled: false,
             fps: 0.0,
             kbps: 0,
         }
@@ -58,6 +71,7 @@ impl Meter {
                 self.frames += 1;
                 self.last_video = Some(now);
                 let ts = tag.timestamp_ms;
+                self.stall(ts);
                 self.span = Some(self.span.map_or((ts, ts), |(first, _)| (first, ts)));
                 if tag.keyframe {
                     if let Some(prev) = self.last_key.replace(ts) {
@@ -82,6 +96,16 @@ impl Meter {
         }
     }
 
+    /// A frame at `ts`: if it comes a stall after the one before, the window
+    /// has no rate and the keyframe interval starts again.
+    fn stall(&mut self, ts: u32) {
+        let Some(last) = self.last_ts.replace(ts) else { return };
+        if ts.saturating_sub(last) > STALL_MS {
+            self.stalled |= self.span.is_some();
+            self.last_key = None;
+        }
+    }
+
     /// The video codec is known: a sequence header or a frame has come.
     pub fn has_video(&self) -> bool {
         self.video.is_some() || self.last_video.is_some()
@@ -103,8 +127,9 @@ impl Meter {
         let secs = self.window.elapsed().as_secs_f64();
         if secs >= 1.0 {
             self.kbps = (self.bytes as f64 * 8.0 / 1000.0 / secs).round() as u32;
+            let stalled = std::mem::take(&mut self.stalled);
             self.fps = match self.span.take() {
-                Some((first, last)) if last > first && self.frames > 1 => {
+                Some((first, last)) if last > first && self.frames > 1 && !stalled => {
                     (f64::from(self.frames - 1) * 1000.0 / f64::from(last - first) * 100.0).round() / 100.0
                 }
                 _ => 0.0,

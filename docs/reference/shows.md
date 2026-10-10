@@ -281,7 +281,11 @@ is left out, narrowed by `fields` to any of `health`, `input`, `outputs`:
 It reads what the station already holds (the direct host's last
 `direct.stats`, about once a second, and the plan), so it asks nothing of a
 show or of the host and is cheap to call every second for two hundred shows.
-A field the host has not counted yet is left out. A show that composites has
+A field the host has not counted yet is left out. `fps` is read off the
+stream's own clock over the last second, and reads 0 for a second in which
+the input stalled (two frames more than a second apart, as when a sender
+restarts); `keyframe_ms` keeps the interval from before the stall rather
+than measuring across it. A show that composites has
 its health and, when it has an input, the input's numbers; its outputs are
 read with `output.list` and `?show=<id>`.
 
