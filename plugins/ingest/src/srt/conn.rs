@@ -2,10 +2,11 @@
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::time::Instant;
 
 use crate::channels::{Admit, Protocol};
 use crate::gate::ChannelGate;
-use crate::rtmp::{Gate, Kick};
+use crate::rtmp::{Gate, Kick, IDLE};
 
 use super::ffi::{Lib, Socket, RCVTIMEO};
 use super::ts::Demux;
@@ -37,11 +38,20 @@ pub fn serve(lib: &'static Lib, sock: Socket, peer: String, admit: Admit, gate: 
         }
     };
     let mut buffer = [0u8; PACKET];
+    let mut last = Instant::now();
     let why = loop {
         match lib.recv(sock, &mut buffer) {
             Ok(0) if closed.load(Ordering::Relaxed) => break "cut off".to_string(),
+            // libsrt breaks a connection whose peer is silent for its own
+            // idle timeout, five seconds by default; this is the same
+            // promise kept here, whatever the caller set that option to, so
+            // a pulled cable frees the name for the encoder's reconnect.
+            Ok(0) if last.elapsed() >= IDLE => break format!("nothing came for {} s, so the network to the caller has gone", IDLE.as_secs()),
             Ok(0) => continue,
-            Ok(n) => demux.push(&buffer[..n]),
+            Ok(n) => {
+                last = Instant::now();
+                demux.push(&buffer[..n]);
+            }
             Err(e) => break e,
         }
         if let Some(failure) = demux.failure() {
