@@ -5,11 +5,8 @@
 //! answer back into an api type, so nothing here assembles a body by hand and
 //! the CLI cannot drift from the protocol the UI and an agent use.
 //!
-//! The paths are not written down either: `api::method::rest_transform` turns
-//! a method name into its route, which is the same function the server builds
-//! its router from.
-
-use godwinmix_protocol::method::rest_transform;
+//! The paths are not written down either: the method table gives a method
+//! name its route, which is the same table the server builds its router from.
 use godwinmix_protocol::types::{MixerStatus, OutputStatus, SourceStatus};
 use godwinmix_protocol::{
     AddOutputRequest, AddSourceRequest, AdBreakRequest, CoreInfo, GoLiveRequest, GoLiveResult,
@@ -719,10 +716,10 @@ impl Api {
 
     /// The route one method sits at, with the id filled in.
     ///
-    /// The same transform the server builds its router from, so a path is
+    /// The same method table the server builds its router from, so a path is
     /// never written twice.
     fn route(&self, method: &str, id: Option<&str>) -> Result<(reqwest::Method, String)> {
-        let rest = rest_transform(method)
+        let rest = ctl_rpc::rest_of(method)
             .with_context(|| format!("{method} has no REST route"))?;
         let path = match id {
             Some(id) => rest.path.replace("{id}", &urlencode(id)),
@@ -792,7 +789,7 @@ impl Api {
         // `gmx ctl scene remove` was refused as a duplicate field.
         let named = match id {
             Some(_) => None,
-            None if rest_transform(method).is_some_and(|r| r.path.contains("{id}")) => take_id(&mut body),
+            None if ctl_rpc::rest_of(method).is_some_and(|r| r.path.contains("{id}")) => take_id(&mut body),
             None => None,
         };
         let id = id.or(named.as_deref());
