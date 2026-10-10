@@ -10,6 +10,7 @@
 //! the handler from it.
 
 mod output;
+mod redial;
 mod settings;
 mod whep;
 
