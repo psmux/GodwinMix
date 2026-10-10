@@ -724,12 +724,13 @@ class SourcesPanel extends HTMLElement {
    *
    * A tester removed "Browser jaffer" from Default scene and the header went
    * on saying Browser jaffer, because the programme was that source alone and
-   * not the scene. To them the two were the same thing. Producer mode is left
-   * alone, as everywhere: there a take is the operator's.
+   * not the scene. To them the two were the same thing. Studio mode too,
+   * where a take is otherwise the operator's alone: the source the person has
+   * just taken out is the one thing they asked to be rid of.
    */
   async followScene(scene, ids) {
     const state = this.client.state || {};
-    if (settings().producer || state.scene || !ids.includes(state.program)) return;
+    if (state.scene || !ids.includes(state.program)) return;
     const name = this.client.store.source(state.program)?.name || state.program;
     const scenes = this.sceneClient();
     await scenes.take(scene.id);
