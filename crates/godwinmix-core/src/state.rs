@@ -76,16 +76,30 @@ pub struct SourceHealth {
     /// Milliseconds since `origin` at the last video buffer. `NEVER` if none.
     last_video_ms: AtomicU64,
     last_audio_ms: AtomicU64,
+    /// The last video buffer that came in from the network, ahead of the
+    /// `livesync` that fills gaps. `NEVER` for a source with no livesync.
+    ///
+    /// livesync repeats the last frame for as long as nothing arrives, so the
+    /// probe on the proxy sink below it kept counting frames through a pulled
+    /// cable. On 2026-10-10 an RTMP pull read `live` for the whole two minutes
+    /// its relay was unplugged and was never restarted. Idle is now the
+    /// longer of the two, so a repeat is not mistaken for a delivery.
+    last_ingest_ms: AtomicU64,
+    /// When the source was last started, for the connect deadline.
+    started_ms: AtomicU64,
 }
 
 const NEVER: u64 = u64::MAX;
 
 impl SourceHealth {
     pub fn new(origin: Instant) -> Arc<Self> {
+        let started = origin.elapsed().as_millis() as u64;
         Arc::new(Self {
             origin,
             last_video_ms: AtomicU64::new(NEVER),
             last_audio_ms: AtomicU64::new(NEVER),
+            last_ingest_ms: AtomicU64::new(NEVER),
+            started_ms: AtomicU64::new(started),
         })
     }
 
@@ -101,12 +115,17 @@ impl SourceHealth {
         self.last_audio_ms.store(self.now_ms(), Ordering::Relaxed);
     }
 
+    /// A video buffer arrived ahead of `livesync`. See the field.
+    pub fn mark_ingest(&self) {
+        self.last_ingest_ms.store(self.now_ms(), Ordering::Relaxed);
+    }
+
     /// Start the stall clock again for what has been seen, without claiming
     /// anything new arrived. For a seek: the stream starts over, and the
     /// time it spent at the end of a clip before it is not a stall.
     pub fn rearm(&self) {
         let now = self.now_ms();
-        for last in [&self.last_video_ms, &self.last_audio_ms] {
+        for last in [&self.last_video_ms, &self.last_audio_ms, &self.last_ingest_ms] {
             // A compare and swap rather than fetch_update, which newer Rust
             // deprecates for try_update, which 1.82 does not have.
             let mut seen = last.load(Ordering::Relaxed);
@@ -128,9 +147,23 @@ impl SourceHealth {
     }
 
     /// Milliseconds since the last video buffer, or None if none has arrived.
+    /// For a source behind `livesync`, since the last one that was not a
+    /// repeat: whichever of the two probes has waited longer.
     pub fn video_idle_ms(&self) -> Option<u64> {
         let last = self.last_video_ms.load(Ordering::Relaxed);
-        (last != NEVER).then(|| self.now_ms().saturating_sub(last))
+        if last == NEVER {
+            return None;
+        }
+        let ingest = self.last_ingest_ms.load(Ordering::Relaxed);
+        let fresh = if ingest == NEVER { last } else { last.min(ingest) };
+        Some(self.now_ms().saturating_sub(fresh))
+    }
+
+    /// Milliseconds since this source was last started, while it has not
+    /// delivered anything. None once it has.
+    pub fn waiting_ms(&self) -> Option<u64> {
+        (!self.saw_video() && !self.saw_audio())
+            .then(|| self.now_ms().saturating_sub(self.started_ms.load(Ordering::Relaxed)))
     }
 
     /// Milliseconds since the last audio buffer, or None if none has arrived.
@@ -156,9 +189,12 @@ impl SourceHealth {
         }
     }
 
+    /// Forget everything seen, and start the connect clock again.
     pub fn reset(&self) {
         self.last_video_ms.store(NEVER, Ordering::Relaxed);
         self.last_audio_ms.store(NEVER, Ordering::Relaxed);
+        self.last_ingest_ms.store(NEVER, Ordering::Relaxed);
+        self.started_ms.store(self.now_ms(), Ordering::Relaxed);
     }
 }
 
@@ -201,6 +237,32 @@ mod tests {
         h.rearm();
         assert!(!h.is_stalled(0.01), "the clock started again");
         assert!(!h.saw_audio(), "sound was never seen and still is not");
+    }
+
+    /// A source behind livesync keeps getting repeats on its proxy probe
+    /// after the network has gone quiet. The repeats must not count.
+    #[test]
+    fn repeats_below_livesync_do_not_hide_a_quiet_network() {
+        let h = SourceHealth::new(Instant::now());
+        h.mark_ingest();
+        h.mark_video();
+        std::thread::sleep(std::time::Duration::from_millis(40));
+        // livesync goes on pushing the last frame; nothing new came in.
+        h.mark_video();
+        assert!(h.is_stalled(0.02), "a repeated frame was taken for a delivery");
+        h.mark_ingest();
+        assert!(!h.is_stalled(0.02), "a real frame did not count");
+    }
+
+    #[test]
+    fn the_connect_clock_runs_until_something_arrives_and_restarts_with_a_reset() {
+        let h = SourceHealth::new(Instant::now());
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        assert!(h.waiting_ms().is_some_and(|ms| ms >= 15));
+        h.reset();
+        assert!(h.waiting_ms().is_some_and(|ms| ms < 15), "a reset is a new start");
+        h.mark_audio();
+        assert_eq!(h.waiting_ms(), None, "a source that delivered is not waiting");
     }
 
     #[test]
