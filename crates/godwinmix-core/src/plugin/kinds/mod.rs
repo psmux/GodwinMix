@@ -24,6 +24,7 @@ pub mod rendered;
 pub mod normalise;
 pub mod rtmp;
 pub mod rtsp;
+pub mod rtsp_origin;
 pub mod schema;
 pub mod template;
 pub mod testsrc;
@@ -141,6 +142,7 @@ pub fn uridecode(ctx: &BuildCtx, thumb: bool, livesync: bool) -> Result<MediaEnd
     crate::probe::set_bool(&el, "use-buffering", true);
     if rtsp::is_rtsp(&ctx.cfg.uri) {
         rtsp::tune(&el, &ctx.cfg.uri, &ctx.cfg.effective_params());
+        rtsp_origin::rebase(&el, &ctx.id);
     }
     assemble(
         ctx,
