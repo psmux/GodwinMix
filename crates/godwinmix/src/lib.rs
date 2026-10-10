@@ -881,12 +881,10 @@ pub async fn run() -> Result<()> {
     let build = core_observe::introspect::stage("mixer build");
     let (mut mix, handle, cmd_rx, mut bus_rx) = mixer::Mixer::build(cfg)?;
     mix.persist_runtime_to(Config::runtime_store_path(&config_path));
-    // A show under a station is told what to put on air; anywhere else the
-    // start puts back what was on air last time. See `on_air`.
-    let restores = !station::show::under_station();
-    if restores {
-        mix.leave_boot_take_to_caller();
-    }
+    // The start puts back what was on air last time, once the scenes are
+    // open. See `on_air`. A direct show's station takes its input over the
+    // control port after that, so the station still has the last word there.
+    mix.leave_boot_take_to_caller();
     // One governor for the machine: this machine's calibration if it has
     // one, the load sampled from now on, and the configured outputs that ask
     // for a rendition admitted by it when `start` attaches them.
@@ -1083,7 +1081,7 @@ pub async fn run() -> Result<()> {
             Ok(())
         }).context("creating the default scene")?;
     }
-    if restores {
+    {
         let path = on_air::path_for(&config_path);
         on_air::spawn_recorder(handle.clone(), path.clone());
         on_air::restore(&handle, &scenes, &path).await;
