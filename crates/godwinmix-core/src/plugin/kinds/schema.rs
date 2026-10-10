@@ -74,7 +74,9 @@ fn live() -> Value {
         "properties": {
             "transport": {
                 "title": "RTSP transport",
-                "description": "How an rtsp:// camera sends its media. Auto tries UDP and falls back to TCP after                                 five seconds with nothing; TCP gets through a firewall, a VPN or NAT. An rtspt://                                 address is TCP whatever this says. Other streams ignore it.",
+                "description": "How an rtsp:// camera sends its media. Auto tries UDP and falls back to TCP after \
+                                five seconds with nothing; TCP gets through a firewall, a VPN or NAT. An rtspt:// \
+                                address is TCP whatever this says. Other streams ignore it.",
                 "type": "string",
                 "enum": ["auto", "tcp", "udp"],
                 "x-gmx-labels": ["Auto", "TCP", "UDP"],
@@ -82,7 +84,8 @@ fn live() -> Value {
             },
             "latency_ms": {
                 "title": "RTSP jitter buffer",
-                "description": "Milliseconds an RTSP camera's packets are held to be put back in order. Raise it                                 for a camera on a jittery network. 0 to 10000. Other streams ignore it.",
+                "description": "Milliseconds an RTSP camera's packets are held to be put back in order. Raise it \
+                                for a camera on a jittery network. 0 to 10000. Other streams ignore it.",
                 "type": "integer", "minimum": 0, "maximum": 10000, "default": 200
             }
         }
