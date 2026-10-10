@@ -99,6 +99,9 @@ fn sink(caps: &str, kind: TagKind, cc: Option<&'static [u8; 4]>, to: Shared, zer
                 .new_sample(move |sink| {
                     let sample = sink.pull_sample().map_err(|_| gst::FlowError::Eos)?;
                     let tags = tags(&sample, kind, cc, &header, &zero);
+                    if tags.iter().any(|t| t.sequence_header) {
+                        eprintln!("DIAG tagger {kind:?} new codec data, caps {:?}", sample.caps().map(|c| c.to_string()));
+                    }
                     let wanted = {
                         let mut inlet = to.lock().unwrap_or_else(|e| e.into_inner());
                         let Some(inlet) = inlet.as_mut() else { return Err(gst::FlowError::Eos) };

@@ -55,8 +55,18 @@ impl Shared {
         }
         tag.timestamp_ms = tag.timestamp_ms.wrapping_add(o.offset_ms);
         o.end_ms = o.end_ms.max(tag.timestamp_ms.wrapping_add(1));
+        let head = tag.sequence_header;
+        if head {
+            eprintln!("DIAG header {:?} {} bytes at {}", tag.kind, tag.payload.len(), tag.timestamp_ms);
+        }
         o.meter.record(&tag);
+        if head {
+            eprintln!("DIAG header recorded");
+        }
         o.sink.tag(tag);
+        if head {
+            eprintln!("DIAG header handed on");
+        }
     }
 
     /// A new connection is about to start its timeline at zero.

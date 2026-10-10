@@ -127,8 +127,11 @@ fn watch(plan: &impl Plan, pipeline: &gst::Pipeline, out: &Shared, pads: &Pads, 
             continue;
         }
         tick = Instant::now();
+        eprintln!("DIAG watch tick");
         let quiet = out.quiet_ms();
+        eprintln!("DIAG watch quiet read");
         let notes = pads.notes();
+        eprintln!("DIAG watch notes read");
         (stats.state, stats.error) = match quiet {
             Some(q) if q < LIVE_MS => (State::Live, (!notes.is_empty()).then(|| format!("left out: {notes}"))),
             Some(q) => (State::Retrying, Some(format!("nothing from {} for {} s", plan.address(), q / 1000))),
