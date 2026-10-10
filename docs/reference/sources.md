@@ -121,6 +121,60 @@ nothing for `stall_timeout_secs` reads as stalled; one that stays stalled for
 superimposed source, which cannot be restarted in place, is built again from
 nothing: page probe, clip fetch, browser start, about ten seconds.
 
+For a network source (RTMP, HLS, RTSP, SRT, RIST, UDP) "produced" means a frame
+that arrived from the network. The `livesync` element in its chain repeats the
+last frame through any gap, and until 0.3.2 those repeats counted: an RTMP pull
+through a relay whose cable was pulled for two minutes read `live` the whole
+time and was never restarted. The frames going into `livesync` are now counted
+as well, and the longer of the two waits is the one judged, so a pulled cable
+reads `stalled` after `stall_timeout_secs` and is restarted on the schedule
+below whatever the catch up guard (further down) has decided about it.
+
+### When a source never delivers
+
+A source that pulls its feed from a server (an `rtmp://` or `rtmps://` address,
+an HLS or DASH playlist, an RTSP session, an SRT caller) and has delivered
+nothing `stall.connect_timeout_secs` (15) after it was started or restarted is
+restarted, on the restart delay (half a second growing to ten), and again
+after every further deadline, for as long as it takes. Nothing posts an error
+for a server that accepts the connection and never answers, so before 0.3.2
+such a source sat on `connecting` until somebody restarted it by hand. A source
+that waits to be sent to is never held to this: an SRT listener (`srt://:9000`
+or `mode=listener`), `udp://`, `rtp://`, `rist://`, and every plugin source,
+such as an ingest source waiting for a phone or an encoder to publish. Zero
+turns the deadline off.
+
+### What the programme shows meanwhile
+
+A source on programme that stops delivering keeps its last frame on air for up
+to 45 seconds after it was last live, through the stall, the restart and the
+reconnect, and the picture comes back on its own when frames do. A restart in
+place sends a flush across to the programme, and that flush is stopped at the
+branch's queue before the compositor, so the compositor's pad still has the
+frame and the hold costs nothing. Past 45 seconds the programme shows the
+slate under that item until the source is live again. A source that never
+delivered a picture has nothing to hold and shows the slate from the start.
+`stall.hold_last_frame = false` turns the hold off.
+
+### When a restart does not finish
+
+Restarts run on a thread of their own. One still running after 30 seconds (a
+teardown parked in a queue nobody reads, a client connecting inside its state
+change) is left to its thread, and the source is built again from nothing
+beside it, with an alert. The old pipeline is never started again if its
+thread does come back. The librtmp client (`rtmp_client = "librtmp"`, or the
+fallback `auto` swaps to) is given a ten second `timeout` rather than its own
+120, because it connects inside that state change. The swap to it now runs off
+the mixer thread too.
+
+### When a plugin says it is failing
+
+A plugin source that declares the `health` capability is asked `health` every
+two seconds, on a thread of its own, never while it is busy in another call.
+`degraded` and `failing` each raise an alert once when they start. A plugin
+that answers `failing` for `stall.restart_after_secs` is restarted, and that
+counts as a strike in the same way a stall does (below).
+
 Two things about that, both learned on air on 2026-09-11 and 2026-09-12, when a
 superimposed source started coming up dead and was rebuilt 485 times one night
 and 1174 the next.

@@ -105,8 +105,9 @@ second or so while the mixer's decoder starts again at the new size.
 The card says Reconnecting, with the reason, and publishes again by itself:
 after a second, then two, four, eight, and every fifteen after that, until it
 is back or you press **Stop**. The mixer side does the same thing it does for
-any channel: a source that a scene holds shows its last picture until the
-stream returns.
+any channel: a source that a scene holds shows its last picture for up to 45
+seconds, then the slate, and the picture comes back by itself when the stream
+returns.
 
 A tab that was closed, a browser that was killed or a laptop that went to
 sleep sends the mixer nothing on its way out, so its stream stays on the
