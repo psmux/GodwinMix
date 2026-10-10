@@ -6,6 +6,11 @@
 //!                              │                                  │
 //!                              └──key refused──► failed ◄─────────┘
 //! ```
+//!
+//! Nothing here stops for good. A network failure is retried with the
+//! destination's backoff for as long as it is switched on; a server that
+//! refuses the key is asked again after the longest wait, and after
+//! `SLOW_AFTER` refusals in a row once every `SLOW`.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -22,8 +27,12 @@ use super::target::Target;
 
 /// How often a quiet link reads what the server said.
 const POLL: Duration = Duration::from_millis(250);
-/// Refusals in a row before the sender stops asking.
-const GIVE_UP: u32 = 3;
+/// Refusals in a row before the sender asks only once every `SLOW`.
+const SLOW_AFTER: u32 = 3;
+/// How often a destination that keeps refusing the key is asked again. A
+/// key fixed on the platform's side, or a stream the platform had not set up
+/// yet, then comes back by itself.
+const SLOW: Duration = Duration::from_secs(60);
 
 pub struct Sender {
     pub target: Target,
@@ -109,16 +118,18 @@ impl Sender {
                 }
                 Err(f) => f,
             };
-            self.board.error(Some(failure.message().to_string()));
             let mut wait = retry.delay_for(attempt);
+            let mut said = failure.message().to_string();
             if let Failure::Refused(_) = failure {
                 self.board.state(S::Failed);
                 refusals += 1;
-                if refusals >= GIVE_UP {
-                    return self.queue.close();
-                }
                 wait = Duration::from_millis(retry.max_delay_ms);
+                if refusals >= SLOW_AFTER {
+                    wait = wait.max(SLOW);
+                    said = format!("{said} Refused {refusals} times in a row; asking again every {} s.", SLOW.as_secs());
+                }
             }
+            self.board.error(Some(said));
             attempt += 1;
             self.sleep(wait);
             self.queue.skip_to_latest_keyframe();

@@ -38,6 +38,8 @@ mod fanout;
 pub mod test_gate;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod cable_tests;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
