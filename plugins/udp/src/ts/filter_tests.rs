@@ -129,3 +129,30 @@ fn service_names_that_arrive_before_the_pat_still_name_the_programs() {
     assert_eq!(names, ["News", "Sport"]);
     assert_eq!(f.programs()[0].provider, "Test");
 }
+
+/// A muxer started again numbers its PAT from version 0 whatever it carries,
+/// so a sender restarted with a new program says so under the version the
+/// old one had. That is a relayout; the same PAT again, or one with a new
+/// version, is not.
+#[test]
+fn a_pat_naming_other_programs_under_the_same_version_is_a_relayout() {
+    let feed = |f: &mut Filter, section: &[u8]| {
+        let mut input = Vec::new();
+        packetize(0, section, &mut 0, &mut input);
+        f.feed(&input, &Counters::default(), &mut Vec::new());
+        std::mem::take(&mut f.relayout)
+    };
+    let mut f = Filter::new(Choice::default());
+    assert!(!feed(&mut f, &pat(&[(1, 0x1001)])), "the first PAT is not a relayout");
+    f.resumed();
+    assert!(!feed(&mut f, &pat(&[(1, 0x1001)])), "the same layout again");
+    f.resumed();
+    assert!(feed(&mut f, &pat(&[(7, 0x1010)])), "a new program under version 0 again");
+    let mut versioned = pat(&[(8, 0x1020)]);
+    versioned[5] = 0xC3;
+    let n = versioned.len() - 4;
+    let crc = crate::ts::crc32(&versioned[..n]);
+    versioned[n..].copy_from_slice(&crc.to_be_bytes());
+    f.resumed();
+    assert!(!feed(&mut f, &versioned), "a new version is followed by any demuxer");
+}

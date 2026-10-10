@@ -35,6 +35,10 @@ pub struct Filter {
     pmt_cc: u8,
     /// The tables or the plan moved, and the catalog wants republishing.
     pub changed: bool,
+    /// The last PAT's version number, and whether the latest PAT named other
+    /// programs than it under that same version (`Counters::relayouts`).
+    pat_version: Option<u8>,
+    pub relayout: bool,
 }
 
 impl Filter {
@@ -54,6 +58,8 @@ impl Filter {
             pat_cc: 0,
             pmt_cc: 0,
             changed: false,
+            pat_version: None,
+            relayout: false,
         }
     }
 
