@@ -14,7 +14,7 @@ repository = "https://github.com/psmux/godwinmix"
 # The shared half of the contract: the manifest, the handshake, SKILL.md and
 # the transcript format. Both sides read one description of the protocol, which
 # is the only way it cannot drift. It pulls in no media stack and no server.
-godwinmix-protocol = { path = "../godwinmix-protocol", version = "0.3.2" }
+godwinmix-protocol = { path = "../godwinmix-protocol", version = "0.3.3" }
 
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.3 (2026-10-11)
+
+* An RTMP pull or an RTSP camera back from a pulled cable stays live, with its picture beside its sound. `livesync` stamped the picture on the programme's clock and the aligner then placed it as far ahead as the show was old, so a pull restarted half a minute in read live, stalled again for about 15 seconds, and an RTSP camera that healed by itself was given up on by the catch up guard. A restart armed while a pull hung in a dead relay is also dropped once that pull connects. See `docs/reference/sources.md`.
+
 ## 0.3.2 (2026-10-11)
 
 * Every input and output comes back by itself after the network drops or a cable is pulled and put back, however long it was out, and the programme never stops while it does. Each case below was measured on a real mixer with the cable pulled for 20 seconds and for 3 minutes.
@@ -14,7 +18,7 @@
 * A phone or browser camera keeps publishing through a network loss. The mixer keeps the WebRTC session through a 15 second disconnection, the page retries a 404 and a 400 for as long as it is open, and it tries again at once when the network comes back, changes from Wi-Fi to cellular, or the page is shown again. See `docs/how-to/use-this-browsers-camera.md` and `docs/reference/publisher-page.md`.
 * `gmx ctl rpc` routes by the same method table as the server, so `gmx ctl rpc scene.take` works, and a name that is not a method is refused with the nearest ones.
 * A direct show follows a sender restarted with new PIDs or a new program, and a stall no longer reads as a low frame rate that replanned the rendition.
-* An RTMP pull or an RTSP camera back from a pulled cable stays live, with its picture beside its sound. `livesync` stamped the picture on the programme's clock and the aligner then placed it as far ahead as the show was old, so a pull restarted half a minute in read live, stalled again for about 15 seconds, and an RTSP camera that healed by itself was given up on by the catch up guard. A restart armed while a pull hung in a dead relay is also dropped once that pull connects. See `docs/reference/sources.md`.
+* Known in this release: an RTMP pull whose cable comes back after a short outage (about 20 seconds) can read live, stall again for about 15 seconds and then come back by itself after its stall restart. The programme is not affected and nothing needs a person. Fixed in 0.3.3.
 * `dev/windows-firewall.ps1` lets this workspace's test builds take connections from the local network without a Windows Firewall prompt for each new binary. See `CONTRIBUTING.md`.
 
 ## 0.3.1 (2026-10-10)
