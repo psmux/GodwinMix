@@ -180,10 +180,26 @@ On the phone:
   there on a phone, or a computer, with more than one camera. The front
   camera's picture is mirrored on the phone, as a selfie camera is, and sent
   the right way round.
-* Hold the phone the way you want the picture before you press **Go live**.
-  Upright, it sends 720x1280; on its side, 1280x720. Turning it while it is
-  live works, but the source holds its last picture for a second or so while
-  the mixer catches up, so lock the phone's rotation once it is set up.
+* Pick the **Shape** before you press **Go live**: **Landscape** sends
+  1280x720, **Portrait** 720x1280 for Shorts, Reels and TikTok, and
+  **Square** 720x720. The phone starts on the mixer's own shape, which the
+  code carries, or on the one you picked last time for a mixer of that shape.
+  The shape is held for as long as the phone is live: turn the phone, lock its
+  rotation or flip the camera, and the mixer still gets the same size. Stop to
+  change it.
+* **Keep the picture upright when the phone turns** is on to begin with. It
+  reads the phone's motion sensor, so a phone held on its side with auto
+  rotate off still sends an upright picture. iPhones ask for permission to
+  use motion the first time you press a button on the page; allow it. Turn
+  the box off and the picture is turned only by **Rotate**.
+* **Rotate** turns the picture a quarter turn clockwise each press, on top of
+  whatever the sensor does. Use it for a phone in a holder at an odd angle.
+* **Fill** crops the picture to fill the shape, so an upright phone sending
+  Landscape gives a close up of the middle; the line under the buttons says
+  so. **Fit** shows the whole picture with black bars. Both, and **Rotate**,
+  work while live.
+* The preview is exactly what is sent, mirrored for the front camera as a
+  selfie camera is.
 * The page keeps the screen on while it is live, where the browser allows it.
   A phone that locks or switches to another app stops its camera, and the
   source shows its last picture until the page is back in front. Keep the
@@ -191,6 +207,17 @@ On the phone:
   drain a battery much faster than a call does.
 * Firefox on Android has no way to keep the screen on. Set the phone's own
   screen timeout to its longest while it is a camera.
+
+### Turn it or change how it fills, on the mixer
+
+Right click a source's tile in **Sources** (press and hold on a touch
+screen) while a scene is chosen above the tiles. **Rotate right** and
+**Rotate left** turn it a quarter turn in that scene, **Upright again** puts it
+back, and **Fill the box** or **Show all of it** chooses between cropping and
+bars. They change that scene only, so the same camera can be upright in one
+scene and on its side in another, and they apply on air at once. The
+composer's inspector has the same and more, under **Fit** and the rotate
+buttons.
 
 ### When the code is not shown
 

@@ -16,7 +16,7 @@ export async function openKind(pub, kind, deviceId, exact) {
   const what = WHAT[kind];
   let track = null;
   try {
-    track = await openTrack(kind, deviceId, { exact, processing: pub.r.processing.checked });
+    track = await openTrack(kind, deviceId, { exact, processing: pub.r.processing.checked, loose: !!pub.shaper });
     pub.r.error.textContent = "";
   } catch (e) {
     pub.r.error.textContent = mediaErrorText(e, what);
@@ -35,7 +35,9 @@ export async function install(pub, kind, track) {
   if (old && old !== track) old.stop();
   pub.tracks[kind] = track;
   if (track) track.onended = () => (pub.r.error.textContent = `The ${WHAT[kind]} stopped. Pick it again, or another one.`);
-  if (pub.session) await pub.session.setTrack(kind, track).catch(() => {});
+  if (kind === "video" && pub.shaper) pub.shaper.setTrack(track);
+  const sent = pub.sendable ? pub.sendable(kind, track) : track;
+  if (pub.session) await pub.session.setTrack(kind, sent).catch(() => {});
   pub.paintTracks();
 }
 

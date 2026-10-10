@@ -10,6 +10,7 @@ import { levelOf } from "../join/meter.js";
 import { summarise, statsText } from "../join/stats.js";
 import { parseLink } from "../join/page.js";
 import { fillSelect, paintState, buildForm } from "../join/form.js";
+import { SHAPES, shapeOfCanvas, startShape, deviceTurn, screenTurn, correction, placement, holdHint } from "../join/shape.js";
 import { browserChannelTests } from "./browser-channel.js";
 import { phoneCameraTests } from "./phone-camera.js";
 
@@ -170,8 +171,64 @@ export async function browserDeviceTests(test, eq, ok) {
   });
 
   test("the /join/ link carries the address, the key and the title in its fragment", () => {
-    eq(parseLink("#whip=%2Fwhip%2Fbrowser%2Fcam&key=abc&title=Pulpit"), { url: "/whip/browser/cam", key: "abc", title: "Pulpit", channel: "" });
-    eq(parseLink(""), { url: "", key: "", title: "", channel: "" });
+    eq(parseLink("#whip=%2Fwhip%2Fbrowser%2Fcam&key=abc&title=Pulpit"), { url: "/whip/browser/cam", key: "abc", title: "Pulpit", channel: "", shape: "" });
+    eq(parseLink(""), { url: "", key: "", title: "", channel: "", shape: "" });
+  });
+
+  test("a phone starts on its own pick against the same mixer, else the mixer's shape", () => {
+    eq(shapeOfCanvas(1920, 1080), "landscape");
+    eq(shapeOfCanvas(1080, 1920), "portrait");
+    eq(shapeOfCanvas(1080, 1080), "square");
+    eq(shapeOfCanvas(0, 0), "");
+    eq(startShape({}, ""), "landscape");
+    eq(startShape({}, "portrait"), "portrait");
+    eq(startShape({ shape: "square", link: "portrait" }, "portrait"), "square");
+    eq(startShape({ shape: "square", link: "landscape" }, "portrait"), "portrait");
+    eq(startShape({ shape: "portrait", link: "" }, ""), "portrait");
+    eq(startShape({ shape: "nonsense" }, "nonsense"), "landscape");
+  });
+
+  test("the motion sensor says which way the phone is turned, and nothing when it lies flat", () => {
+    eq(deviceTurn(90, 0), 0, "upright");
+    eq(deviceTurn(0, 90), 90, "right edge down");
+    eq(deviceTurn(-90, 0), 180, "upside down");
+    eq(deviceTurn(0, -90), 270, "left edge down");
+    eq(deviceTurn(5, 5), null, "flat on a table, never seen turned");
+    eq(deviceTurn(5, 5, 90), 90, "flat keeps the last");
+    eq(deviceTurn(50, 40, 0), 0, "halfway holds the last");
+    eq(deviceTurn(20, 70, 0), 90, "well past halfway moves on");
+    eq(deviceTurn(undefined, 0), null);
+  });
+
+  test("the picture is turned by what the screen did not follow, the other way for a front camera", () => {
+    eq(screenTurn(0), 0);
+    eq(screenTurn(90), 270, "landscape-primary is the top to the left");
+    eq(screenTurn(-90), 90, "iOS's window.orientation");
+    eq(screenTurn(270), 90);
+    eq(correction({ device: 90, screen: 90 }), 0, "auto rotate on: the browser turned it");
+    eq(correction({ device: 90, screen: 0 }), 90, "auto rotate off, back camera");
+    eq(correction({ device: 90, screen: 0, facing: "user" }), 270, "auto rotate off, front camera");
+    eq(correction({ device: 90, screen: 0, auto: false }), 0, "switched off");
+    eq(correction({ device: null, screen: 0, manual: 90 }), 90, "no sensor, Rotate pressed");
+    eq(correction({ device: 270, screen: 0, manual: 90 }), 0);
+  });
+
+  test("fill covers the shape and fit shows the whole picture", () => {
+    eq(placement(1280, 720, 0, 1280, 720, "fill"), { w: 1280, h: 720 });
+    eq(placement(720, 1280, 0, 1280, 720, "fill"), { w: 1280, h: 1280 * 1280 / 720 });
+    eq(placement(720, 1280, 0, 1280, 720, "fit"), { w: 405, h: 720 });
+    eq(placement(720, 1280, 90, 1280, 720, "fill"), { w: 720, h: 1280 }, "turned on its side it fits exactly");
+    eq(placement(0, 0, 0, 1280, 720), null);
+    eq(holdHint("landscape", 0), "Turn the phone on its side to get the whole wide picture.");
+    eq(holdHint("landscape", 90), "");
+    eq(holdHint("portrait", 270), "Hold the phone upright to get the whole tall picture.");
+    eq(holdHint("square", 0), "");
+    eq(holdHint("landscape", null), "");
+  });
+
+  test("the /join/ link carries the mixer's shape", () => {
+    eq(parseLink("#channel=browser&key=k&shape=portrait").shape, "portrait");
+    eq(SHAPES.portrait.w * SHAPES.portrait.h, SHAPES.landscape.w * SHAPES.landscape.h, "the same pixels either way, so the bitrate holds");
   });
 
   test("the device lists keep the choice, and No camera is a choice", () => {

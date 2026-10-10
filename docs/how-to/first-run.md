@@ -19,6 +19,11 @@ starts on it:
 GodwinMix is running. Open http://127.0.0.1:8080/ in a browser.
 ```
 
+Each time the mixer starts it puts back what was on air when it stopped: the
+scene, a source on its own, or black. It keeps that in
+`godwinmix.onair.json` beside the config. With nothing kept yet, it starts on
+the first scene that has something in it, and on black when none has.
+
 Open that address. The page asks what you are streaming, with a tile for a
 church service, a classroom, a streamer, starting empty, and importing from
 OBS. Pick one.

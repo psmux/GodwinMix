@@ -18,6 +18,7 @@ import { errorToast, toast } from "../../shell/toast.js";
 import { qrPath } from "../channels/qr.js";
 import { copy } from "../channels/keyed.js";
 import { ensureBrowserChannel, ensureIngest, sourceIdFor } from "./browser-channel.js";
+import { shapeOfCanvas } from "../../join/shape.js";
 
 const LOOPBACK = new Set(["localhost", "127.0.0.1", "[::1]", "::1"]);
 const HTTPS_HELP = "https://github.com/psmux/GodwinMix/blob/main/docs/how-to/serve-https.md";
@@ -34,10 +35,13 @@ export function lanAddress(info) {
   }) || "";
 }
 
-/** The link a phone opens: /join/ with the channel and its key in the fragment. */
-export function phoneLink(base, app, key) {
+/**
+ * The link a phone opens: /join/ with the channel and its key in the
+ * fragment, and the mixer's shape, which the phone offers first.
+ */
+export function phoneLink(base, app, key, shape = "") {
   const url = new URL("join/", base);
-  url.hash = new URLSearchParams({ channel: app, key }).toString();
+  url.hash = new URLSearchParams(shape ? { channel: app, key, shape } : { channel: app, key }).toString();
   return url.href;
 }
 
@@ -60,7 +64,8 @@ export async function openPhoneCamera(client) {
     const why = unreachable(info);
     if (why) return showProblem(why);
     const { channel, key } = await ensureBrowserChannel(client);
-    return showCode(client, channel, phoneLink(lanAddress(info), channel.app || channel.id, key), info.tls.fingerprint);
+    const shape = shapeOfCanvas(info.canvas?.width, info.canvas?.height);
+    return showCode(client, channel, phoneLink(lanAddress(info), channel.app || channel.id, key, shape), info.tls.fingerprint);
   } catch (e) {
     errorToast(e, "A phone's camera");
     return null;
