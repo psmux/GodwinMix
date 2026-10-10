@@ -99,3 +99,6 @@ matte = ["dep:ort", "dep:libloading"]
 # Paused time, so the multiview linger tests assert on two seconds without
 # waiting two seconds. Test only: the shipped binary does not carry it.
 tokio = { workspace = true, features = ["test-util", "macros", "rt-multi-thread"] }
+# An RTSP camera on loopback for `mixer::tests::rtsp_live`. Already built for
+# plugins/rtsp and plugins/ingest, so nothing new is compiled or installed.
+gstreamer-rtsp-server = "0.24"

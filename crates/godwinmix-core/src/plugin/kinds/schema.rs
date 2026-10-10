@@ -12,6 +12,7 @@ pub fn params(type_id: &str) -> Option<Value> {
         "html/graphic" => Some(super::html::schema()),
         "image/source" => Some(image()),
         "file/source" => Some(file()),
+        "hls/source" => Some(live()),
         _ => None,
     }
 }
@@ -59,6 +60,33 @@ fn file() -> Value {
                 "enum": ["repeat", "hold", "leave"],
                 "x-gmx-labels": ["Repeat", "Hold the last frame", "Leave the scene"],
                 "default": "hold"
+            }
+        }
+    })
+}
+
+/// Two settings, both read only for an RTSP address; see `kinds::rtsp`.
+fn live() -> Value {
+    json!({
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "hls/source params",
+        "type": "object",
+        "properties": {
+            "transport": {
+                "title": "RTSP transport",
+                "description": "How an rtsp:// camera sends its media. Auto tries UDP and falls back to TCP after \
+                                five seconds with nothing; TCP gets through a firewall, a VPN or NAT. An rtspt:// \
+                                address is TCP whatever this says. Other streams ignore it.",
+                "type": "string",
+                "enum": ["auto", "tcp", "udp"],
+                "x-gmx-labels": ["Auto", "TCP", "UDP"],
+                "default": "auto"
+            },
+            "latency_ms": {
+                "title": "RTSP jitter buffer",
+                "description": "Milliseconds an RTSP camera's packets are held to be put back in order. Raise it \
+                                for a camera on a jittery network. 0 to 10000. Other streams ignore it.",
+                "type": "integer", "minimum": 0, "maximum": 10000, "default": 200
             }
         }
     })
