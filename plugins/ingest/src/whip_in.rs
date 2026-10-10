@@ -10,6 +10,9 @@
 //!   whipserversrc ──► matroskamux ──► fdsink fd=1
 //! ```
 //!
+//! One publisher's media per stream: a publisher that comes back gets a
+//! fresh one, by way of a restart of this process (`whip_in/fresh.rs`).
+//!
 //! It arrived in the GStreamer 1.28 rs webrtc set. A build without it is
 //! refused with a message naming the package and what to use instead, rather
 //! than a missing element error.
@@ -23,6 +26,8 @@ use godwinmix_sdk::wire::Health;
 use gstreamer as gst;
 use gstreamer::prelude::*;
 use serde_json::Value;
+
+mod fresh;
 
 /// What this provide needs from GStreamer besides the base set.
 pub const NEEDED: &[&str] = &["whipserversrc", "matroskamux"];
@@ -181,10 +186,18 @@ impl Endpoint {
         gst::Element::link(&mux, &sink)
             .map_err(|e| format!("could not link the muxer to the pipe: {e}"))?;
 
+        // One publisher per stream; `fresh` says what happens at the next.
+        let fresh = fresh::Fresh::new(file.is_none(), reporter.clone());
+        fresh.watch(&mux);
+        let gone = Arc::clone(&fresh);
+        src.connect_pad_removed(move |_, _| gone.pad_removed());
         let weak = pipeline.downgrade();
         let for_pads = reporter.clone();
         src.connect_pad_added(move |_, pad| {
             let Some(pipeline) = weak.upgrade() else { return };
+            if !fresh.pad_added() {
+                return;
+            }
             if let Err(e) = attach(&pipeline, pad) {
                 if let Some(r) = &for_pads {
                     r.error(format!("a published WHIP stream could not be muxed: {e}"));

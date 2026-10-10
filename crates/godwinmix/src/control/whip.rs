@@ -10,7 +10,15 @@
 //! |---|---|
 //! | `POST /whip/{channel}/{stream}` | `201` with the SDP answer and the session's `Location` |
 //! | `DELETE /whip/{channel}/{stream}/{session}` | `200`, the session ends |
-//! | `PATCH /whip/{channel}/{stream}/{session}` | `405`: candidates are all in the answer, no trickle |
+//! | `PATCH /whip/{channel}/{stream}/{session}` | `405`: candidates are all in the answer, no trickle, no ICE restart |
+//!
+//! A publisher that loses its network recovers with a new `POST`, not an
+//! ICE restart. `webrtcbin` cannot take a restarted offer on a session that
+//! is already answered, so the new offer starts a new session, and that one
+//! takes over the old at once: the old has sent nothing for longer than the
+//! hub's two seconds by the time a page offers again (`hub::takeover` in the
+//! ingest plugin). The publisher page does this by itself for as long as it
+//! is open.
 //!
 //! The work is the ingest plugin's (`plugins/ingest/src/whip.rs`); this is
 //! the HTTP and nothing else.
@@ -90,7 +98,7 @@ async fn end(State(channels): State<Arc<Channels>>, Path((_, _, session)): Path<
 }
 
 async fn no_trickle() -> Response {
-    let why = "this WHIP endpoint puts every candidate in its answer and takes none later. Send the offer once gathering is complete.";
+    let why = "this WHIP endpoint puts every candidate in its answer and takes none later, and does no ICE restart. Send the offer once gathering is complete; after a lost network, POST a new offer, which takes over the old session.";
     (StatusCode::METHOD_NOT_ALLOWED, [(header::ALLOW, "DELETE")], why).into_response()
 }
 
