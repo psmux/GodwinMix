@@ -51,12 +51,6 @@ const POP: gst::ClockTime = gst::ClockTime::from_mseconds(250);
 enum Ended {
     Stopped,
     Again,
-    /// The sender came back with other programs under the PAT version it
-    /// had, which `tsdemux` may never follow: on a Windows runner it read
-    /// nothing from a sender restarted with new PIDs and a new program for
-    /// 30 s while every packet of it arrived. A new demuxer reads the PAT
-    /// afresh.
-    Relayout,
     Failed(String),
 }
 
@@ -70,7 +64,6 @@ pub fn run(mut plan: impl Plan, sink: Sink, stop: StopSignal) {
         let started = Instant::now();
         let why = match session(&mut plan, &out, &mut stats, &mut totals, &stop) {
             Ended::Stopped => break,
-            Ended::Relayout => continue,
             Ended::Again if started.elapsed() > Duration::from_secs(1) => continue,
             Ended::Again => format!(
                 "{} ended within a second of starting, so there is nothing to loop. Check that it plays in a media player.",
@@ -129,9 +122,6 @@ fn watch(plan: &impl Plan, pipeline: &gst::Pipeline, out: &Shared, pads: &Pads, 
                 gst::MessageView::Error(e) => Ended::Failed(format!("{}: {}", plan.address(), e.error())),
                 _ => continue,
             };
-        }
-        if loss.relayouts() > 0 {
-            return Ended::Relayout;
         }
         if tick.elapsed() < Duration::from_secs(1) {
             continue;
