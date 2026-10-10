@@ -23,6 +23,7 @@ pub mod live;
 pub mod rendered;
 pub mod normalise;
 pub mod rtmp;
+pub mod rtsp;
 pub mod schema;
 pub mod template;
 pub mod testsrc;
@@ -138,6 +139,9 @@ pub fn uridecode(ctx: &BuildCtx, thumb: bool, livesync: bool) -> Result<MediaEnd
     let el = crate::gstutil::make("uridecodebin", &format!("{}-src-uri", ctx.id))?;
     el.set_property("uri", crate::input::to_uri(&ctx.cfg.uri));
     crate::probe::set_bool(&el, "use-buffering", true);
+    if rtsp::is_rtsp(&ctx.cfg.uri) {
+        rtsp::tune(&el, &ctx.cfg.uri, &ctx.cfg.effective_params());
+    }
     assemble(
         ctx,
         thumb,
