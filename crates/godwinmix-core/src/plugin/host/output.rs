@@ -225,9 +225,16 @@ impl Output for SidecarOutput {
 
     fn connected(&self) -> bool {
         // What the plugin says, not what the pipe says: a sink that accepts
-        // buffers says nothing about whether the far end answered.
+        // buffers says nothing about whether the far end answered. A running
+        // process used to be the whole answer, so a WHIP output whose ICE had
+        // failed, or an Icecast mount behind a pulled cable, read live for as
+        // long as the plugin kept reading. What it last announced with
+        // `health.changed` counts too; a plugin that never announces is
+        // judged on its process, as before.
+        let told = self.child.as_ref().and_then(|c| c.told_health());
         self.started
             && matches!(self.instance_state(), InstanceState::Running | InstanceState::Ready)
+            && !matches!(told.as_deref(), Some("degraded" | "failing"))
     }
 
     fn configure(&mut self, params: &Params) -> Result<Configure> {

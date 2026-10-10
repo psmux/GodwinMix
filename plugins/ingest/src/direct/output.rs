@@ -78,7 +78,7 @@ fn run(w: &Wanted, hub: &Hub, stop: &Arc<AtomicBool>, board: &Arc<Board>) {
             std::thread::sleep(LOOK);
             continue;
         }
-        let tags = Arc::new(Feed { reader: hub.subscribe(&w.app, &key), closed: AtomicBool::new(false) });
+        let tags = Arc::new(Feed { reader: hub.subscribe(&w.app, &key) });
         let sender = Sender {
             target: Target::new(&w.id, &w.platform, &w.url),
             queue: tags,
@@ -103,23 +103,15 @@ fn run(w: &Wanted, hub: &Hub, stop: &Arc<AtomicBool>, board: &Arc<Board>) {
 /// A hub reader as the sender's queue.
 struct Feed {
     reader: Reader,
-    closed: AtomicBool,
 }
 
 impl Tags for Feed {
     fn pop(&self, wait: Duration) -> Pop {
-        if self.closed.load(Ordering::Relaxed) {
-            return Pop::Closed;
-        }
         match self.reader.recv_timeout(wait) {
             Recv::Tag(t) => Pop::Tag(t),
             Recv::Ended => Pop::Closed,
             Recv::Timeout => Pop::Empty,
         }
-    }
-
-    fn close(&self) {
-        self.closed.store(true, Ordering::Relaxed);
     }
 
     fn skip_to_latest_keyframe(&self) {

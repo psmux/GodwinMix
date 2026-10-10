@@ -7,8 +7,10 @@
 //! keeps `buffer_ms` of it to answer those requests. It needs no port of its
 //! own here: it sends, and the receiver listens.
 //!
-//! Liveness is the receiver's RTCP: a round trip time is only measured once
-//! the far end has answered a sender report.
+//! Liveness is the receiver's RTCP reports, and only while they keep coming;
+//! see `rist_live`. An output whose receiver has gone quiet is rebuilt by the
+//! mixer like any other output that is down (`redial_when_down`), for as long
+//! as it takes.
 
 use crate::config::{OutputConfig, Params};
 use crate::gstutil::make;
@@ -18,6 +20,7 @@ use crate::plugin::{
     Capability, CapabilitySet, Configure, Health, Hello, Manifest, MediaDecl, PluginState, ProvideKind, Ready,
     StreamMode, Tier, API_LEVEL,
 };
+use super::progress::Progress;
 use anyhow::{Context, Result};
 use gstreamer as gst;
 use gstreamer::prelude::*;
@@ -45,33 +48,18 @@ fn claims(uri: &str) -> Option<u16> {
 }
 
 fn new(cfg: &OutputConfig) -> Result<Box<dyn Output>> {
-    Ok(Box::new(RistOutput { uri: cfg.uri.clone(), buffer_ms: 1000, sink: Mutex::new(None) }))
+    Ok(Box::new(RistOutput { uri: cfg.uri.clone(), buffer_ms: 1000, sink: Mutex::new(None), heard: Progress::default() }))
 }
 
 pub struct RistOutput {
     uri: String,
     buffer_ms: u32,
     sink: Mutex<Option<gst::Element>>,
+    /// The receiver's reports, and when they last moved.
+    heard: Progress,
 }
 
-/// `rist://host:port`, with the port RTP goes to. RIST puts RTCP on the next
-/// port up, so the RTP port has to be even.
-pub fn address(uri: &str) -> Result<(String, u16)> {
-    let rest = uri.trim().strip_prefix("rist://").or_else(|| uri.trim().strip_prefix("RIST://"));
-    let hostport = rest.map(|r| r.split(['?', '/']).next().unwrap_or(r)).unwrap_or("");
-    let (host, port) = hostport
-        .rsplit_once(':')
-        .and_then(|(h, p)| Some((h.trim_matches(['[', ']']).to_string(), p.parse::<u16>().ok()?)))
-        .filter(|(h, _)| !h.is_empty())
-        .with_context(|| format!("rist/output needs an address such as rist://192.168.1.50:5004, not `{uri}`"))?;
-    anyhow::ensure!(
-        port % 2 == 0,
-        "rist/output port {port} is odd. RIST sends RTP to an even port and RTCP to the one above it; use {} or {}",
-        port - 1,
-        port + 1
-    );
-    Ok((host, port))
-}
+pub use super::rist_live::address;
 
 impl Output for RistOutput {
     fn manifest(&self) -> &Manifest {
@@ -107,18 +95,25 @@ impl Output for RistOutput {
         sink.set_property("port", u32::from(port));
         crate::probe::set_int(&sink, "sender-buffer", i64::from(self.buffer_ms));
         ctx.pipeline.add_many([&mux, &pay, &sink]).context("adding the rist muxer and sink")?;
-        link_to_mux(video, &mux, &["sink_%d", "sink_%u"])?;
-        link_to_mux(audio, &mux, &["sink_%d", "sink_%u"])?;
+        super::ts::link_video(ctx, video, &mux)?;
+        link_to_mux(audio, &mux, super::ts::TS_PADS)?;
         gst::Element::link_many([&mux, &pay, &sink]).context("linking muxer to rist sink")?;
         *self.sink.lock() = Some(sink);
+        self.heard.reset();
         Ok(())
     }
 
     fn connected(&self) -> bool {
         let held = self.sink.lock();
-        let Some(stats) = held.as_ref().and_then(|s| s.property::<Option<gst::Structure>>("stats")) else { return false };
-        let Ok(sessions) = stats.get::<glib::ValueArray>("session-stats") else { return false };
-        sessions.iter().filter_map(|v| v.get::<gst::Structure>().ok()).any(|s| s.get::<u64>("round-trip-time").unwrap_or(0) > 0)
+        let Some(sink) = held.as_ref() else { return false };
+        let n = super::rist_live::answered(sink).unwrap_or_else(|| super::rist_live::round_trip(sink));
+        self.heard.live(n, std::time::Instant::now())
+    }
+
+    /// The receiver listens and this sends, so a receiver gone quiet is
+    /// asked again every `DOWN_FOR` until it answers.
+    fn redial_when_down(&self) -> bool {
+        true
     }
 
     fn configure(&mut self, params: &Params) -> Result<Configure> {

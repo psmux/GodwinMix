@@ -18,14 +18,18 @@
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 
-use gmx_netkit::backoff::Backoff;
 use gmx_netkit::pipe::Pipe;
 use godwinmix_sdk::plugin::Reporter;
-use godwinmix_sdk::wire::{Health, HealthState};
+use godwinmix_sdk::wire::Health;
+#[cfg(test)]
+use godwinmix_sdk::wire::HealthState;
 use gstreamer as gst;
 use gstreamer::prelude::*;
 
 use crate::settings::Settings;
+
+#[path = "supervise.rs"]
+mod supervise;
 
 /// What the plugin needs from GStreamer to send at all.
 pub const NEEDED: &[&str] = &["whipclientsink", "matroskademux", "h264parse"];
@@ -90,7 +94,7 @@ impl Sender {
         *shared.pipe.lock().unwrap_or_else(|e| e.into_inner()) = Some(first);
 
         let stop = Arc::new(AtomicBool::new(false));
-        let thread = spawn_supervisor(Arc::clone(&shared), Arc::clone(&stop));
+        let thread = supervise::spawn(Arc::clone(&shared), Arc::clone(&stop));
         Ok(Sender { shared, stop, thread })
     }
 
@@ -318,93 +322,6 @@ fn configured_h264parse() -> Result<gst::Element, String> {
         parse.set_property("config-interval", -1i32);
     }
     Ok(parse)
-}
-
-/// Watch the pipeline, and dial again with a backoff when it fails.
-fn spawn_supervisor(
-    shared: Arc<Shared>,
-    stop: Arc<AtomicBool>,
-) -> Option<std::thread::JoinHandle<()>> {
-    std::thread::Builder::new()
-        .name("gmx-whip-supervise".into())
-        .spawn(move || {
-            let mut backoff =
-                Backoff::with(shared.settings.reconnect_first_ms, shared.settings.reconnect_max_ms);
-            let mut last_state = HealthState::Degraded;
-            while !stop.load(Ordering::Relaxed) {
-                std::thread::sleep(std::time::Duration::from_millis(TICK_MS));
-                let health = shared.health();
-                if health.state != last_state {
-                    last_state = health.state;
-                    if let Some(r) = &shared.reporter {
-                        r.health_changed(health.clone());
-                    }
-                } else if let Some(r) = &shared.reporter {
-                    r.set_health(health.clone());
-                }
-                if health.state == HealthState::Ok {
-                    backoff.reset();
-                    continue;
-                }
-                let broken = shared
-                    .pipe
-                    .lock()
-                    .unwrap_or_else(|e| e.into_inner())
-                    .as_ref()
-                    .map(|p| p.failure().is_some())
-                    .unwrap_or(true);
-                if !broken {
-                    continue;
-                }
-                let wait = backoff.take();
-                if let Some(r) = &shared.reporter {
-                    r.warn(format!(
-                        "the WHIP endpoint is not taking the programme. Dialling again in \
-                         {} ms (attempt {}).",
-                        wait.as_millis(),
-                        backoff.attempts()
-                    ));
-                }
-                if sleep_unless_stopped(&stop, wait) {
-                    return;
-                }
-                reconnect(&shared);
-            }
-        })
-        .ok()
-}
-
-/// Sleep in small pieces so `stop` is honoured inside a long backoff.
-fn sleep_unless_stopped(stop: &Arc<AtomicBool>, wait: std::time::Duration) -> bool {
-    let mut left = wait;
-    let slice = std::time::Duration::from_millis(TICK_MS);
-    while !left.is_zero() {
-        if stop.load(Ordering::Relaxed) {
-            return true;
-        }
-        let step = left.min(slice);
-        std::thread::sleep(step);
-        left -= step;
-    }
-    stop.load(Ordering::Relaxed)
-}
-
-/// Tear the pipeline down and build a fresh one.
-fn reconnect(shared: &Arc<Shared>) {
-    if let Some(mut old) = shared.pipe.lock().unwrap_or_else(|e| e.into_inner()).take() {
-        old.stop();
-    }
-    shared.reconnects.fetch_add(1, Ordering::Relaxed);
-    match build(shared) {
-        Ok(fresh) => {
-            *shared.pipe.lock().unwrap_or_else(|e| e.into_inner()) = Some(fresh);
-        }
-        Err(e) => {
-            if let Some(r) = &shared.reporter {
-                r.error(format!("the WHIP pipeline would not rebuild: {e}"));
-            }
-        }
-    }
 }
 
 fn make(factory: &str, name: &str) -> Result<gst::Element, String> {

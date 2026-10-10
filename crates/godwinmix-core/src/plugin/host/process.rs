@@ -64,6 +64,9 @@ struct Shared {
     hello: Mutex<Option<Initialize>>,
     hello_signal: Mutex<Option<mpsc::Sender<()>>>,
     repeats: Mutex<super::repeats::Repeats>,
+    /// The state of the last `health.changed`, `ok`, `degraded` or
+    /// `failing`, kept so it can be read without asking the plugin.
+    told: Mutex<Option<String>>,
 }
 
 /// One call on a running plugin, detached from whatever owns the process.
@@ -151,6 +154,7 @@ impl Sidecar {
             hello: Mutex::new(None),
             hello_signal: Mutex::new(None),
             repeats: Mutex::new(Default::default()),
+            told: Mutex::new(None),
         });
         let reader = stderr.map(|err| {
             let shared = shared.clone();
@@ -182,6 +186,12 @@ impl Sidecar {
 
     pub fn state(&self) -> InstanceState {
         self.life.state()
+    }
+
+    /// The state the plugin last announced with `health.changed`, without
+    /// asking it: `None` until it has said anything.
+    pub fn told_health(&self) -> Option<String> {
+        self.shared.told.lock().clone()
     }
 
     pub fn lifecycle(&self) -> &Lifecycle {
@@ -567,6 +577,7 @@ fn notice(shared: &Arc<Shared>, method: &str, params: Value) {
                 .unwrap_or("ok")
                 .to_string();
             let detail = params.get("detail").and_then(Value::as_str).map(str::to_string);
+            *shared.told.lock() = Some(state.clone());
             push(shared, Notice::HealthChanged { state, detail });
         }
         other => {
@@ -610,6 +621,7 @@ mod tests {
             hello: Mutex::new(None),
             hello_signal: Mutex::new(None),
             repeats: Mutex::new(Default::default()),
+            told: Mutex::new(None),
         })
     }
 
@@ -634,5 +646,16 @@ mod tests {
         assert_eq!(events[0].1["app"], "church");
         assert_eq!(events[1].0, "source.appeared");
         assert_eq!(events[1].1["id"], "cam");
+    }
+
+    /// What an output plugin last announced is kept, so the core can read
+    /// whether its far end is up without a call that might wait.
+    #[test]
+    fn the_last_health_announced_is_kept() {
+        let shared = shared();
+        assert_eq!(*shared.told.lock(), None);
+        notice(&shared, "health.changed", json!({"state": "ok"}));
+        notice(&shared, "health.changed", json!({"state": "degraded", "detail": "ICE failed"}));
+        assert_eq!(shared.told.lock().as_deref(), Some("degraded"));
     }
 }

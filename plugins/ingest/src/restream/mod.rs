@@ -29,6 +29,7 @@ pub(crate) mod queue;
 mod rtmp_out;
 pub(crate) mod run;
 mod srt_out;
+mod srt_heard;
 pub(crate) mod ts_video;
 mod target;
 
@@ -38,6 +39,8 @@ mod fanout;
 pub mod test_gate;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod cable_tests;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;

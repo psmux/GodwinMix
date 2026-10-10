@@ -5754,6 +5754,7 @@ mod tests {
     mod slow_output;
     mod stuck_detach;
     mod thumb;
+    mod ts_beside_flv;
     use crate::plugin::branch::meter_name;
     use super::*;
 

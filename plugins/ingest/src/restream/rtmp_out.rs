@@ -21,6 +21,17 @@ use super::io::{timed_out, Io};
 use super::link::{Failure, Link};
 use super::target::{RtmpUrl, Target};
 
+/// How a connection ended before the server said yes or no.
+enum Gone {
+    /// Nothing came back within the read timeout: a pulled cable, a far end
+    /// that froze.
+    Quiet,
+    /// The far end closed the connection.
+    HungUp,
+    /// The socket failed some other way.
+    Broke(String),
+}
+
 /// How long the whole connect, handshake and publish dance may take.
 const DANCE: Duration = Duration::from_secs(10);
 
@@ -62,9 +73,7 @@ impl RtmpLink {
             if pending.is_empty() {
                 pending = self.read_some().map_err(|e| self.refusal(asked, url, e))?;
             }
-            let results = self.session.handle_input(&pending).map_err(|e| {
-                if asked { self.refused_key(&format!("{e:?}")) } else { self.lost(e) }
-            })?;
+            let results = self.session.handle_input(&pending).map_err(|e| self.lost(e))?;
             pending.clear();
             for result in results {
                 match result {
@@ -99,22 +108,33 @@ impl RtmpLink {
         }
     }
 
-    fn read_some(&mut self) -> Result<Vec<u8>, String> {
+    fn read_some(&mut self) -> Result<Vec<u8>, Gone> {
         match self.io.read(&mut self.buf) {
-            Ok(0) => Err("closed the connection".into()),
+            Ok(0) => Err(Gone::HungUp),
             Ok(n) => Ok(self.buf[..n].to_vec()),
-            Err(e) => Err(e.to_string()),
+            Err(e) if timed_out(&e) => Err(Gone::Quiet),
+            Err(e) => Err(Gone::Broke(e.to_string())),
         }
     }
 
-    /// A connection that ends while a publish is being asked for is how
-    /// YouTube and Twitch say no to a key: they hang up without a word.
-    fn refusal(&self, asked: bool, url: &RtmpUrl, e: String) -> Failure {
-        if asked {
-            self.refused_key(&e)
-        } else {
-            Failure::Lost(format!("{} at {} {e}", self.name, url.tc_url()))
-        }
+    /// A connection that ends during the publish is never a refusal on its
+    /// own. A pulled cable, a dropped Wi-Fi link and a server restarting look
+    /// the same from here, and they used to count towards giving up for
+    /// good. YouTube and Twitch do hang up on a key they do not know, so the
+    /// words say to check the key when it keeps happening, but the retries
+    /// go on with the backoff. Only a server that answers no is a refusal.
+    fn refusal(&self, asked: bool, url: &RtmpUrl, gone: Gone) -> Failure {
+        let at = url.tc_url();
+        Failure::Lost(match (gone, asked) {
+            (Gone::Quiet, _) => format!("{} at {at} stopped answering for ten seconds", self.name),
+            (Gone::HungUp, true) => format!(
+                "{} hung up when asked to publish. Some platforms do that to a stream key they do not \
+                 know, so check the key if this keeps happening",
+                self.name
+            ),
+            (Gone::HungUp, false) => format!("{} at {at} closed the connection", self.name),
+            (Gone::Broke(e), _) => format!("{} at {at} {e}", self.name),
+        })
     }
 
     fn refused_key(&self, detail: &str) -> Failure {
