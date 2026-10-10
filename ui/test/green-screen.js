@@ -38,11 +38,13 @@ export async function greenScreenTests(test, eq, ok) {
   let made = null;
   let refreshed = false;
   const dialog = await vs.openGreenScreen({ client, scenes: { refresh: async () => { refreshed = true; } }, onMade: (a) => { made = a; } });
-  const selects = [...dialog.el.querySelectorAll("select")];
-  selects[0].value = "newsroom.png";
-  selects[1].value = "cam";
-  selects[2].value = "desk.png";
-  // selects[3] is what is behind the presenter, left at a green screen.
+  // By name, not by place: "Behind the presenter" moved to the top of the
+  // dialog, and picking by place then put the camera in the background.
+  const pick = (label, value) => { dialog.el.querySelector(`select[aria-label="${label}"]`).value = value; };
+  pick("Background", "newsroom.png");
+  pick("Presenter", "cam");
+  pick("Foreground", "desk.png");
+  // What is behind the presenter is left at a green screen.
   dialog.el.querySelector("footer .btn.primary").click();
   await tick();
   test("Make the scene makes one scene.create_from call with what was picked", () => {

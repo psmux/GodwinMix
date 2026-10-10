@@ -27,7 +27,12 @@ impl Filter {
     fn on_pat(&mut self, s: &[u8]) {
         self.ts_id = u16::from_be_bytes([s[3], s[4]]);
         let old = std::mem::take(&mut self.programs);
-        for (number, pmt_pid) in tables::parse_pat(s) {
+        let version = (s[5] >> 1) & 0x1F;
+        let named = tables::parse_pat(s);
+        let moved = !old.is_empty() && !old.iter().map(|p| (p.number, p.pmt_pid)).eq(named.iter().copied());
+        self.relayout |= moved && self.pat_version == Some(version);
+        self.pat_version = Some(version);
+        for (number, pmt_pid) in named {
             let kept = old.iter().find(|p| p.number == number && p.pmt_pid == pmt_pid);
             self.programs.push(kept.cloned().unwrap_or(Program { number, pmt_pid, ..Default::default() }));
             self.assemblers.entry(pmt_pid).or_default();

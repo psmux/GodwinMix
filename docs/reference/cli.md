@@ -184,6 +184,19 @@ gmx ctl rpc scene.item.add @item.json          # any method, params as JSON or @
 `--param` takes a dotted name, so `fields.title` changes that one field and
 leaves the rest. See [graphic templates](graphic-templates.md).
 
+`gmx ctl rpc` sends a method to the route the mixer's own method table gives
+it. What the method acts on can be named the way its params name it, so
+`{"scene": "wide"}` works for a `scene.*` method as well as `{"id": "wide"}`.
+A name that is not a method is refused before anything is sent, with the
+methods nearest to it, the same verb on another noun first. The first line of
+that refusal is below; the same list follows it as JSON.
+
+```
+$ gmx ctl rpc scene.take '{"id": "wide"}'
+Error: there is no method 'scene.take'. Nearest: program.take, scene.add, scene.get, scene.list, scene.remove, scene.apply_graphic, scene.apply_layout, scene.create_from. Call core.api for the whole list.
+$ gmx ctl rpc program.take '{"scene": "wide"}'
+```
+
 Requests answer with the mixer's own reason for refusing rather than a bare
 status code:
 
