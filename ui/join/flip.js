@@ -47,7 +47,7 @@ export async function flipCamera(pub, md = navigator.mediaDevices) {
   const enabled = old.enabled;
   old.stop();
   for (const step of plan) {
-    const track = await openTrack("video", step.deviceId, { exact: true, facing: step.facing }, md).catch(() => null);
+    const track = await openTrack("video", step.deviceId, { exact: true, facing: step.facing, loose: !!pub.shaper }, md).catch(() => null);
     if (track && track.getSettings().deviceId !== current) {
       track.enabled = enabled;
       remember("camera", track.getSettings().deviceId);
@@ -58,7 +58,7 @@ export async function flipCamera(pub, md = navigator.mediaDevices) {
     if (track) track.stop();
   }
   // Nothing else would open: the camera that was there comes back.
-  const back = await openTrack("video", current, { exact: true }, md).catch(() => null);
+  const back = await openTrack("video", current, { exact: true, loose: !!pub.shaper }, md).catch(() => null);
   if (back) back.enabled = enabled;
   await install(pub, "video", back);
   pub.r.error.textContent = "The other camera would not open. This one stays.";

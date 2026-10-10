@@ -9,6 +9,19 @@
 .pub-preview { width: 100%; height: 100%; object-fit: contain; display: block; transform: scaleX(-1); }
 .pub-preview.back { transform: none; }
 .pub-flip[hidden] { display: none; }
+/* The canvas stage on /join/: the canvas is the preview, mirrored for the
+   front camera as every phone shows it; the camera's own video is drawn from
+   and never seen. */
+.pub-canvas { width: 100%; height: 100%; display: block; transform: scaleX(-1); }
+.pub-canvas.back { transform: none; }
+.pub-source { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.pub-shape { gap: 8px; }
+.pub-choices { gap: 0; flex: 1; min-width: 0; }
+.pub-choices .btn { flex: 1; border-radius: 0; }
+.pub-choices .btn:first-child { border-radius: var(--radius-sm) 0 0 var(--radius-sm); }
+.pub-choices .btn:last-child { border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
+.pub-choices .btn[aria-checked="true"] { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+.pub-hint:empty { display: none; }
 .pub-nopicture { position: absolute; inset: 0; display: grid; place-items: center; }
 .pub-nopicture[hidden] { display: none; }
 .pub-meter { height: 6px; background: var(--panel2); border-radius: 3px; overflow: hidden; }
@@ -29,7 +42,7 @@ body.join-page { overflow: auto; }
 .join-page .pub .btn, .join-page .pub select, .join-page .pub-name { min-height: 48px; font-size: 16px; }
 .join-page .pub .btn { padding: 0 16px; }
 .join-page .pub-picture { max-height: 45vh; margin: 0 auto; width: 100%; }
-.join-page .pub-field input[type="checkbox"] { width: 24px; height: 24px; }
+.join-page .pub-field input[type="checkbox"], .join-page .pub-shape input[type="checkbox"] { width: 24px; height: 24px; }
 .pub-namebox { gap: 4px; }
 .pub-name { flex: 1; min-width: 0; }
 @media (max-width: 480px) {

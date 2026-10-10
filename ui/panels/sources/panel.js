@@ -28,6 +28,7 @@ import { setLocal, nameOf } from "./local.js";
 import { addSourceTile, openSceneSources } from "./chooser-loader.js";
 import { focusedScene, onFocusChanged } from "../../shell/focus.js";
 import { SceneStrip } from "./scene-strip.js";
+import { lookEntries } from "./item-look.js";
 import { acquireScenes } from "../../shell/scene-session.js";
 import { setWorkspaceActive } from "./workspace.js";
 
@@ -574,6 +575,7 @@ class SourcesPanel extends HTMLElement {
       id && { label: "Rename", key: key("tray.rename") || "F2", disabled: many, run: () => this.beginRename(id) },
       id && { kind: "colours", onColour: (colour) => this.setColour(ids, colour) },
       id && { label: "Settings", run: () => this.openDrawer(id) },
+      ...(id && !many ? lookEntries(this.sceneClient(), this.scopedTo(), id) : []),
       id && { kind: "separator" },
       // Here as well as on Ctrl+C and Ctrl+V, for a phone that has neither.
       id && { label: "Copy", key: key("tray.copy") || "Ctrl+C", run: () => this.copy(ids) },

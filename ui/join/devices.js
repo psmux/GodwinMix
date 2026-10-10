@@ -107,8 +107,10 @@ export function audioConstraints(deviceId, exact, processing) {
 export async function openTrack(kind, deviceId, opts = {}, md = navigator.mediaDevices) {
   if (deviceId === "off") return null;
   if (kind === "video") {
-    const stream = await md.getUserMedia({ video: videoConstraints(deviceId, opts.exact, false, opts.facing) }).catch((e) => {
-      if (e && e.name !== "OverconstrainedError") throw e;
+    // A canvas stage (`opts.loose`) shapes the picture itself, so the camera
+    // is asked for its size rather than made to crop to one.
+    const stream = await md.getUserMedia({ video: videoConstraints(deviceId, opts.exact, !!opts.loose, opts.facing) }).catch((e) => {
+      if (opts.loose || (e && e.name !== "OverconstrainedError")) throw e;
       return md.getUserMedia({ video: videoConstraints(deviceId, opts.exact, true, opts.facing) });
     });
     return stream.getVideoTracks()[0] || null;

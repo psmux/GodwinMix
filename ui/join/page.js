@@ -16,10 +16,10 @@
 import { mountPublisher } from "./publisher.js";
 import { nameField } from "./name-field.js";
 
-/** The link's fragment as `{url, key, title, channel}`. Missing parts are "". */
+/** The link's fragment as `{url, key, title, channel, shape}`. Missing parts are "". */
 export function parseLink(hash) {
   const q = new URLSearchParams(String(hash || "").replace(/^#/, ""));
-  return { url: q.get("whip") || "", key: q.get("key") || "", title: q.get("title") || "", channel: q.get("channel") || "" };
+  return { url: q.get("whip") || "", key: q.get("key") || "", title: q.get("title") || "", channel: q.get("channel") || "", shape: q.get("shape") || "" };
 }
 
 /** The WHIP address for a stream on a channel. */
@@ -48,7 +48,7 @@ function start(root, link) {
     where = "";
     onState = (s) => field.lock(s.state === "connecting" || s.state === "live" || s.state === "reconnecting");
   }
-  const pub = mountPublisher(root, { url, key: link.key, keepAwake: true, onState, labels: { where } });
+  const pub = mountPublisher(root, { url, key: link.key, keepAwake: true, onState, labels: { where }, shape: { link: link.shape } });
   addEventListener("beforeunload", (e) => {
     if (pub.active()) e.preventDefault();
   });
