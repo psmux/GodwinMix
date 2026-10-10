@@ -21,6 +21,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use godwinmix_sdk::plugin::Reporter;
 use gstreamer as gst;
 use gstreamer::prelude::*;
 use gstreamer_app as gst_app;
@@ -30,6 +31,10 @@ use crate::settings::{Format, Settings};
 #[path = "mount_http.rs"]
 mod http;
 use http::dial;
+
+#[path = "mount_told.rs"]
+mod told;
+use told::Announced;
 
 /// How long one write may block before the connection counts as gone. The
 /// appsink in front drops what arrives meanwhile, so the encoder never waits.
@@ -54,15 +59,18 @@ pub fn content_type(format: Format) -> &'static str {
 
 /// Start draining `sink` into the mount. Ends when `stop` is set or the sink
 /// reaches its end.
-pub fn spawn(s: &Settings, sink: gst_app::AppSink, stop: Arc<AtomicBool>, state: Arc<State>) -> std::thread::JoinHandle<()> {
+pub fn spawn(s: &Settings, sink: gst_app::AppSink, stop: Arc<AtomicBool>, state: Arc<State>, told: Option<Reporter>) -> std::thread::JoinHandle<()> {
     let s = s.clone();
     std::thread::Builder::new()
         .name("gmx-icecast-send".into())
-        .spawn(move || run(&s, &sink, &stop, &state))
+        .spawn(move || {
+            let state = Announced { state: &state, told };
+            run(&s, &sink, &stop, &state)
+        })
         .expect("could not start the Icecast sender")
 }
 
-fn run(s: &Settings, sink: &gst_app::AppSink, stop: &AtomicBool, state: &State) {
+fn run(s: &Settings, sink: &gst_app::AppSink, stop: &AtomicBool, state: &Announced) {
     let mut conn: Option<TcpStream> = None;
     let mut wait = Duration::from_millis(500);
     let mut next_dial = std::time::Instant::now();
@@ -85,11 +93,10 @@ fn run(s: &Settings, sink: &gst_app::AppSink, stop: &AtomicBool, state: &State) 
                 Ok(c) => {
                     conn = Some(c);
                     wait = Duration::from_millis(500);
-                    state.connected.store(true, Ordering::Relaxed);
-                    *state.last_error.lock().unwrap_or_else(|e| e.into_inner()) = None;
+                    state.up();
                 }
                 Err(e) => {
-                    *state.last_error.lock().unwrap_or_else(|e| e.into_inner()) = Some(e);
+                    state.down(e);
                     next_dial = std::time::Instant::now() + wait;
                     wait = (wait * 2).min(MOST_BETWEEN_DIALS);
                 }
@@ -98,14 +105,13 @@ fn run(s: &Settings, sink: &gst_app::AppSink, stop: &AtomicBool, state: &State) 
         let (Some(c), Some(buffer)) = (conn.as_mut(), sample.buffer()) else { continue };
         let Ok(map) = buffer.map_readable() else { continue };
         if let Err(e) = c.write_all(map.as_slice()) {
-            *state.last_error.lock().unwrap_or_else(|e| e.into_inner()) = Some(match e.kind() {
+            state.down(match e.kind() {
                 std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut => format!(
                     "the server stopped taking the sound for {} s; dialling it again.",
                     STALL.as_secs()
                 ),
                 _ => format!("the server closed the connection: {e}."),
             });
-            state.connected.store(false, Ordering::Relaxed);
             conn = None;
             next_dial = std::time::Instant::now() + wait;
             continue;
