@@ -99,9 +99,9 @@ impl Sender {
         route(&demux, &pipeline, audio);
         let (state, stop) = (Arc::new(State::default()), Arc::new(AtomicBool::new(false)));
         let mut pipe = Pipe::wrap(pipeline);
-        pipe.play(reporter)?;
+        pipe.play(reporter.clone())?;
         // Only once playing: an appsink not yet started says it is at its end.
-        let sending = mount::spawn(s, sink, stop.clone(), state.clone());
+        let sending = mount::spawn(s, sink, stop.clone(), state.clone(), reporter);
         Ok(Sender { pipe, pump: Some(Pump::start(fifo, src)), state, stop, sending: Some(sending) })
     }
 

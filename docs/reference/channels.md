@@ -680,10 +680,16 @@ The states:
 * `live`: sending.
 * `reconnecting`: the far end went away and is being dialled again. A server
   you run is retried from 100 ms up to every 2 s; YouTube, Facebook and
-  Twitch from 1 s up to every 30 s, the same two policies as outputs.
-* `failed`: the far end refused the key, as in `YouTube refused the key
-  (...)`. It is asked again after the longest wait, and after three refusals
-  in a row it stops until the destination is changed.
+  Twitch from 1 s up to every 30 s, the same two policies as outputs. This
+  goes on for as long as the destination is switched on. A connection that
+  stops taking the stream for ten seconds, which is how a pulled cable or a
+  dead link looks, counts as gone, and so does a server that hangs up or
+  stops answering during the publish; none of those is a refusal.
+* `failed`: the server answered no, as in `YouTube refused the key (...)`.
+  It is asked again after the longest wait. After three refusals in a row it
+  is asked once a minute, and `error` ends with `Refused 3 times in a row;
+  asking again every 60 s.` so a key fixed on the platform's side is picked
+  up without touching the destination.
 
 On every connection the far end gets the stream's metadata and codec headers
 first, then nothing until a keyframe, so a platform never sees a picture it
