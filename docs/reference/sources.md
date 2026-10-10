@@ -153,9 +153,16 @@ every time: the address also fell through to the clip kind. Both are fixed in
 connection.
 
 A pulled cable on TCP looks like a camera that has gone quiet: nothing arrives
-and no error comes. The source goes stalled and then follows the restart rules
-below. While the cable stays out each try fails after five seconds; once it is
-back the next try connects.
+and, for a while, no error comes. Measured on loopback through a relay that
+stops forwarding without closing anything, against MediaMTX 1.9.3:
+
+* A cable out for 20 seconds: the connection survives, and the picture comes
+  back on it when the cable goes back in, with no restart.
+* A cable out for three minutes: the stream ended about 30 seconds in and the
+  pipeline was restarted, in half a second, without waiting on the camera.
+  Each try after that failed in five seconds and the next came at most ten
+  seconds later, by the restart delay below. The camera was live again about
+  six seconds after the cable went back in.
 
 ### When a source stops delivering
 
