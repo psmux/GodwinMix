@@ -206,5 +206,6 @@ impl Station {
 
 mod apart;
 mod measure;
+mod reap;
 
 pub use apart::{Apart, CALIBRATE_FLAG};

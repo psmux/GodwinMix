@@ -74,10 +74,32 @@ fn init_of(playlist: &str) -> String {
     line.split("URI=\"").nth(1).and_then(|r| r.split('"').next()).unwrap().to_string()
 }
 
-/// What gst-discoverer-1.0 says of a file, with `-v` for the codecs.
+/// What gst-discoverer-1.0 says of a file, with `-v` for the codecs. Given a
+/// minute, times the runner's slack: on a macOS runner whose VideoToolbox had
+/// hung, the discoverer's decoder never returned and the test waited on it
+/// until the job was cancelled two hours later.
 pub fn discover(file: &Path) -> String {
-    let out = Command::new(format!("gst-discoverer-1.0{}", std::env::consts::EXE_SUFFIX)).arg("-v").arg(file).output().expect("gst-discoverer-1.0 is installed with GStreamer");
-    format!("{}{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr))
+    let dir = std::env::temp_dir().join(format!("gmx-discover-{}-{}", std::process::id(), file.file_name().unwrap_or_default().to_string_lossy()));
+    let (out, err) = (dir.with_extension("out"), dir.with_extension("err"));
+    let mut child = Command::new(format!("gst-discoverer-1.0{}", std::env::consts::EXE_SUFFIX))
+        .arg("-v")
+        .arg(file)
+        .stdout(std::fs::File::create(&out).unwrap())
+        .stderr(std::fs::File::create(&err).unwrap())
+        .spawn()
+        .expect("gst-discoverer-1.0 is installed with GStreamer");
+    let limit = Duration::from_secs(60).mul_f64(godwinmix_core::plugin::harness::timing_slack());
+    let started = Instant::now();
+    while child.try_wait().ok().flatten().is_none() {
+        if started.elapsed() > limit {
+            let _ = child.kill();
+            return format!("gst-discoverer-1.0 gave no answer in {limit:?}; its decoder is stuck");
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    let said = format!("{}{}", std::fs::read_to_string(&out).unwrap_or_default(), std::fs::read_to_string(&err).unwrap_or_default());
+    let _ = (std::fs::remove_file(&out), std::fs::remove_file(&err));
+    said
 }
 
 /// The newest whole segment of one rung, with its init segment in front,

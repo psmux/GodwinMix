@@ -49,12 +49,14 @@ impl Station {
 
     /// Kill a calibration that is running and start no more. Called when the
     /// station stops: Windows does not end a child with its parent, so a
-    /// calibration left behind would hold the GPU for seconds after.
+    /// calibration left behind would hold the GPU for seconds after. Never
+    /// waits long for it to go; see `reap`.
     pub fn stop_calibrating(&self) {
         self.inner.halted.store(true, Ordering::SeqCst);
-        if let Some(mut child) = self.inner.child.lock().take() {
+        let running = self.inner.child.lock().take();
+        if let Some(mut child) = running {
             let _ = child.kill();
-            let _ = child.wait();
+            super::reap::collect_within(child, super::reap::REAP_WAIT);
         }
     }
 
