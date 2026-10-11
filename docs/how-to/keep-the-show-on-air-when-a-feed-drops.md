@@ -28,15 +28,16 @@ when it has one.
    instead. Every other source is in the list by name.
 3. Leave **after 3 seconds** unless you want the last frame held longer.
 4. Pick the transition: Dissolve is the default, Cut is a hard switch, and
-   Wipe, Dip to black, Slide, Push, Zoom and Box are there too. It runs for
-   its usual 300 ms; `duration_ms` in the config or over the API changes
-   that.
+   Wipe, Dip to black, Slide, Push, Zoom and Box are there too. Beside it,
+   **taking 0.3 seconds** is how long it runs. Leave the box empty for the
+   usual 0.3 seconds, or type a longer one, up to 10. A cut has no length, so
+   the box goes away for Cut.
 5. Leave **Switch back by itself when it returns** ticked, with **once it has
    been steady for 5 seconds**, or untick it to choose the moment yourself.
 
 Each change is saved as you make it, and the line under the boxes says what
-will happen: "Saved. If Cam main goes down, Cam wide goes on after 3 s. It
-switches back by itself." If the backup you picked has no picture right now,
+will happen: "Saved. If Cam main goes down, Cam wide goes on after 3 s, with
+a 0.3 s dissolve. It switches back by itself." If the backup you picked has no picture right now,
 a red line says so. **Nothing (hold the last frame, then black)** takes the
 backup away.
 
@@ -92,7 +93,7 @@ backup of `clip-loop`, and its feed drops.
   clock running. The tally light of `clip-loop` comes on. If the backup is
   down too, the line says "and its backup is down too", in red.
 * `cam-main` comes back. The line says "Cam main is back, returning in 5 s",
-  with **Return now** and **Stay on backup**. Five seconds of steady picture
+  with **Return now** and **Stay on Clip loop**. Five seconds of steady picture
   later it dissolves back in. If it drops again inside those five seconds the
   clock starts over, so a feed that flickers does not flap the programme.
 
@@ -104,12 +105,33 @@ If you take something else while the backup is on, that is what goes on air.
 The backup only ever stands in for `cam-main`; it never makes a take of its
 own, so when `cam-main` returns nothing moves unless `cam-main` is on air.
 
+A page reloaded in the middle of all this shows the same line with the same
+clock, because the clock comes from the mixer and not from the page.
+
+## A camera that has not connected yet
+
+A camera that is still not up when the show starts is treated as down too,
+once it has had a fair chance to connect. That chance is the connect timeout
+in the mixer's settings (`stall.connect_timeout_secs`, 15 seconds), so a
+camera that takes a second or two to start is left alone. Past it, the line
+says "Cam main has not connected yet, showing Cam wide", and Cam wide stands
+in until Cam main delivers its first picture and has been steady for the
+usual 5 seconds. If `after_secs` is longer than the connect timeout, the
+backup waits for `after_secs` instead, counted from when the camera was
+added. Until the backup goes on, the programme shows the slate where the
+camera is placed, because a camera that never connected has no last frame to
+hold.
+
+A source a channel makes for an encoder goes away when the encoder stops, if
+no scene holds it. Its backup is kept with the channel and comes back with
+the source the next time the encoder publishes.
+
 ## Take it back by hand
 
 With **Switch back by itself when it returns** unticked (`return = "manual"`),
 the backup stays on after the camera is back. The line says "Cam main is back,
 Clip loop is still on", with a **Back to Cam main** button. Press it when you
-are ready; **Stay on backup** does the same for one outage when the source
+are ready; **Stay on Clip loop** does the same for one outage when the source
 would otherwise go back by itself. The buttons never take anything to
 programme. From a shell:
 

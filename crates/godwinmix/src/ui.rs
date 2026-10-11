@@ -1012,6 +1012,11 @@ mod tests {
         // below, and `the_designer_is_not_in_the_eager_set` keeps the line
         // between them where it is.
         //
+        // Down to 379 kB with the backup source in, by taking a tile's icon,
+        // colour and kind out of client/kinds.js (client/kind-look.js), so
+        // the add source table behind them loads when the picker opens, and
+        // by dropping an import the Sources panel no longer used.
+        //
         // Raised to 396 kB for what testers of 0.2.2 could not find: a level on
         // every input, a REC button that stops, why a destination is not
         // sending, and a clip's Repeat toggle. Measured at 382 kB.

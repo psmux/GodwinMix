@@ -240,12 +240,17 @@ kind: RTMP, SRT, RIST, WHIP, RTSP, NDI, a device, a file, a plugin.
 * **When it counts as down.** The source reads `stalled` or `failed`, or
   `connecting` again after it had a picture, or it is not in the mixer at all
   (being rebuilt, or it would not start). A source on its first connection is
-  not down: a camera slow to start at the top of the show is left to start.
-  One that never connects reads `failed` once its retries begin, and that
-  counts.
+  given `stall.connect_timeout_secs` (15) before it counts, so a camera a
+  second or two slow at the top of the show is not swapped out and back. Past
+  that it counts as down from the moment it was added, whatever it reads: a
+  pull into a server that never answers reads `connecting` for good, and a
+  listener waits for a sender that may never come. With the timeout set to
+  zero, `after_secs` alone decides.
 * **When the backup goes on.** `after_secs` (3) after it went down. Its last
   frame is held meanwhile, as above, for longer than 45 seconds if
-  `after_secs` asks for that.
+  `after_secs` asks for that. For a source that has never connected that is
+  the connect timeout or `after_secs` after it was added, whichever is later,
+  and the slate is what it shows until then.
 * **Where.** Wherever the source is drawn: the programme on its own, an item
   in a scene, a picture in picture at the inset's size and place, a child of a
   group, and the armed scene in the preview. The swap is made where a scene
@@ -282,7 +287,14 @@ kind: RTMP, SRT, RIST, WHIP, RTSP, NDI, a device, a file, a plugin.
 `backup` on the source's status says where it stands: `phase` is `ready`,
 `lost` (with `switch_in_ms`), `on_backup` (with `showing` and `lost_ms`),
 `returning` (with `return_in_ms`) or `main_back`, and `warning` is a sentence
-when something is wrong. A snapshot goes out each time the phase moves.
+when something is wrong. `never_live` is true while the outage is a first
+connection that has not come, and the page then says "has not connected yet"
+rather than "lost". A snapshot goes out each time the phase moves.
+
+A source a channel made for an encoder goes when the encoder stops, unless a
+scene holds it. Its backup rule is kept with the channel and given back to it
+when the encoder publishes again, as long as the backup it names is still a
+source.
 `event/source.backup.on` and `event/source.backup.off` are sent as the backup
 goes on and comes off, and are hooks of the same names.
 
