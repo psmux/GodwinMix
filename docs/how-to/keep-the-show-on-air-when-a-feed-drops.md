@@ -23,17 +23,25 @@ when it has one.
 
 ## Set it up in the page
 
-1. Open the camera's settings (the gear on its tile).
-2. Under **If this source goes down**, choose what to show instead.
+1. Open the camera's settings from its tile.
+2. In **Backup**, under **If this source goes down, show**, pick what to show
+   instead. Every other source is in the list by name.
 3. Leave **after 3 seconds** unless you want the last frame held longer.
-4. Pick the transition. Dissolve is the default; Cut is there for a hard
-   switch.
-5. Leave **Switch back automatically when it returns** on, or turn it off if
-   you want to choose the moment yourself.
-6. Save.
+4. Pick the transition: Dissolve is the default, Cut is a hard switch, and
+   Wipe, Dip to black, Slide, Push, Zoom and Box are there too. It runs for
+   its usual 300 ms; `duration_ms` in the config or over the API changes
+   that.
+5. Leave **Switch back by itself when it returns** ticked, with **once it has
+   been steady for 5 seconds**, or untick it to choose the moment yourself.
 
-A tile whose source goes down with no backup set says so, and its button
-opens this section directly.
+Each change is saved as you make it, and the line under the boxes says what
+will happen: "Saved. If Cam main goes down, Cam wide goes on after 3 s. It
+switches back by itself." If the backup you picked has no picture right now,
+a red line says so. **Nothing (hold the last frame, then black)** takes the
+backup away.
+
+A camera that goes down with no backup set says **No backup set** on its tile,
+with a **Set a backup** button that opens these settings at the right place.
 
 ## Set it up in the config
 
@@ -73,18 +81,20 @@ backup of `clip-loop`, and its feed drops.
 
 * For the first two seconds nothing looks different: frames have just
   stopped, and the last one is still on screen.
-* After about two seconds the source reads stalled, and its tile says
-  **lost**, with a countdown to the backup.
+* After about two seconds the source reads stalled, and its tile and the
+  list under the programme monitor say "Cam main lost, backup in 3 s",
+  counting down.
 * `after_secs` (3 by default) after it read lost, so about five seconds after
   the last frame, `clip-loop` dissolves in where `cam-main` was,
   in the inset, at the inset's size. Every scene that has `cam-main` in it
   shows `clip-loop` instead, the preview of an armed scene too. The tile and
-  the programme area say how long `cam-main` has been gone and what is
-  showing in its place. The tally light of `clip-loop` comes on.
-* `cam-main` comes back. Its tile says **back, returning in 5 s**, with
-  **Return now** and **Stay on backup**. Five seconds of steady picture later
-  it dissolves back in. If it drops again inside those five seconds the clock
-  starts over, so a feed that flickers does not flap the programme.
+  the programme area say "Cam main lost 0:12, showing Clip loop", with the
+  clock running. The tally light of `clip-loop` comes on. If the backup is
+  down too, the line says "and its backup is down too", in red.
+* `cam-main` comes back. The line says "Cam main is back, returning in 5 s",
+  with **Return now** and **Stay on backup**. Five seconds of steady picture
+  later it dissolves back in. If it drops again inside those five seconds the
+  clock starts over, so a feed that flickers does not flap the programme.
 
 The programme never stops through any of it: the swap is the same transition
 a take uses, run on the compositor's own clock, and the encoder cannot tell it
@@ -96,9 +106,12 @@ own, so when `cam-main` returns nothing moves unless `cam-main` is on air.
 
 ## Take it back by hand
 
-With **Switch back automatically** off (`return = "manual"`), the backup stays
-on after the camera is back, and the tile and programme area show **Back to
-cam-main**. Press it when you are ready. From a shell:
+With **Switch back by itself when it returns** unticked (`return = "manual"`),
+the backup stays on after the camera is back. The line says "Cam main is back,
+Clip loop is still on", with a **Back to Cam main** button. Press it when you
+are ready; **Stay on backup** does the same for one outage when the source
+would otherwise go back by itself. The buttons never take anything to
+programme. From a shell:
 
 ```sh
 gmx ctl source backup return cam-main
