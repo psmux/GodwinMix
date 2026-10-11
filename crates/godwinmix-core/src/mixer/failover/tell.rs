@@ -61,7 +61,7 @@ impl Mixer {
 
     /// The backup went on and none of the chain has a picture: say so, once.
     pub(super) fn warn_if_uncovered(&self, id: &str, now: Instant) {
-        let seen = Seen(&self.sources, &self.pending);
+        let seen = Seen(&self.sources, &self.pending, &self.unstarted);
         if self.backups.chain(id).iter().any(|b| seen.live(b)) {
             return;
         }

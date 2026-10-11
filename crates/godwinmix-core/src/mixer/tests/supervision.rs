@@ -9,6 +9,9 @@ pub(super) struct Rig {
     pub mix: Mixer,
     rx: mpsc::Receiver<Command>,
     next_tick: Instant,
+    /// The pipelines' bus messages, handled as the mixer thread does, for a
+    /// test that needs an error posted by an element to count.
+    bus: Option<mpsc::Receiver<BusEvent>>,
 }
 
 impl Rig {
@@ -16,7 +19,15 @@ impl Rig {
         let _ = gst::init();
         let (mut mix, _handle, rx, _bus) = Mixer::build(cfg).expect("mixer builds");
         mix.start().expect("the programme starts");
-        Self { mix, rx, next_tick: Instant::now() }
+        Self { mix, rx, next_tick: Instant::now(), bus: None }
+    }
+
+    /// The same, with the bus handled too.
+    pub fn with_bus(cfg: crate::config::Config) -> Self {
+        let _ = gst::init();
+        let (mut mix, _handle, rx, bus) = Mixer::build(cfg).expect("mixer builds");
+        mix.start().expect("the programme starts");
+        Self { mix, rx, next_tick: Instant::now(), bus: Some(bus) }
     }
 
     pub fn add(&mut self, toml_src: &str) {
@@ -29,6 +40,9 @@ impl Rig {
         while Instant::now() < until {
             while let Ok(cmd) = self.rx.try_recv() {
                 let _ = self.mix.handle(cmd);
+            }
+            while let Some(ev) = self.bus.as_mut().and_then(|b| b.try_recv().ok()) {
+                let _ = self.mix.handle(Command::Bus(ev));
             }
             if Instant::now() >= self.next_tick {
                 self.mix.tick();

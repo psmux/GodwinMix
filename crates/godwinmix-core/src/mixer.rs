@@ -3239,6 +3239,9 @@ impl Mixer {
             let waits = crate::setup::waits_on(e).is_some();
             if (unheard || waits) && cfg.id != AD_ID {
                 self.unstarted.note(cfg, e);
+                // Its backup counts while it waits, even if the build failed
+                // before the source was ever added.
+                self.backups.adopt(&cfg.id, cfg.on_loss.as_ref());
                 // Written now, or a restart before the next add or remove
                 // would read a list without it and forget it for good.
                 self.persist_runtime();
@@ -4253,6 +4256,7 @@ impl Mixer {
                 };
                 if r.is_ok() {
                     self.backups.forget(&id);
+                    self.unstarted.started(&id);
                 }
                 reply(ack, &r);
                 r?;
@@ -4606,6 +4610,7 @@ impl Mixer {
                 self.source_attempts.insert(id.clone(), 0);
                 self.rebuild_failures.remove(id);
                 self.rebuild_not_before.remove(id);
+                self.unstarted.started(id);
             }
         }
 
@@ -5038,6 +5043,16 @@ impl Mixer {
         for p in &self.pending {
             if !sources.iter().any(|s: &SourceStatus| s.id == p.id) {
                 sources.push(pending_status(p));
+            }
+        }
+        // One that would not start and is being tried again is listed as
+        // failed, with its backup, so the operator sees the camera that is
+        // not there rather than no camera at all.
+        for c in self.unstarted.configs() {
+            if !sources.iter().any(|s: &SourceStatus| s.id == c.id) {
+                let mut status = SourceStatus { state: SourceState::Failed, ..pending_status(c) };
+                self.backup_status(&mut status, now);
+                sources.push(status);
             }
         }
 

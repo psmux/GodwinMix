@@ -37,7 +37,7 @@ impl Mixer {
         match cmd {
             BackupCommand::Set(id, rule) => self.set_on_loss(&id, rule),
             BackupCommand::Return(id) => {
-                if self.backups.engaged(&id) && !Seen(&self.sources, &self.pending).live(&id) {
+                if self.backups.engaged(&id) && !Seen(&self.sources, &self.pending, &self.unstarted).live(&id) {
                     bail!(
                         "{id} has no picture yet, so going back to it now would put its last frame or \
                          the slate on air. Its backup stays on; return once {id} reads live."
@@ -89,6 +89,6 @@ impl Mixer {
     /// `on_loss` and `backup` on a source's status.
     pub(in crate::mixer) fn backup_status(&self, status: &mut SourceStatus, now: Instant) {
         status.on_loss = self.backups.rule(&status.id).cloned();
-        status.backup = self.backups.state(&status.id, now, &Seen(&self.sources, &self.pending));
+        status.backup = self.backups.state(&status.id, now, &Seen(&self.sources, &self.pending, &self.unstarted));
     }
 }

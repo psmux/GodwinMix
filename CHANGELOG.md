@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+* A camera whose server refuses the connection when the show starts gets its backup too. It used to vanish from the source list while it was tried again, its backup never went on, and the wait between tries stayed at half a second; now it is listed as failed, its backup goes on after the connect timeout as for any camera that has not connected, and the wait grows to ten seconds until it has been live.
+
 ## 0.3.4 (2026-10-11)
 
 * A source can have a backup that takes over when it goes down. `on_loss = { backup = "cam-wide" }` on a source, or **If this source goes down** in its settings, draws cam-wide wherever the source appears (the programme, any scene, the inset of a picture in picture, the armed scene in the preview) 3 seconds after it reads stalled or failed, over a fade, and puts the source back once it has been live for 5 seconds without a break. Every part can be changed: `after_secs`, `transition` (any a take can name, or cut), `duration_ms`, `return` (`auto`, or `manual` to wait for the operator) and `return_after_secs`. A backup that is down too hands on to its own backup. A camera that has not connected by the time the show starts counts as down once `stall.connect_timeout_secs` (15) has passed since it was added, or `after_secs` if that is longer, and its backup goes on with "Cam main has not connected yet, showing Cam wide". A source a channel made for an encoder keeps its backup rule with the channel when the encoder stops, and has it again when the encoder comes back. The rule never makes a take, so a scene the operator takes meanwhile is what goes out, and the programme does not stop or stall at any point. An unknown backup or a loop of backups is refused at start and over the API, with the ids there are or the loop spelled out. It works for every kind of source, and a source without it costs nothing. See `docs/how-to/keep-the-show-on-air-when-a-feed-drops.md`.

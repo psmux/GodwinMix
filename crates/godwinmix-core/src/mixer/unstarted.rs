@@ -22,6 +22,8 @@ use super::{backoff, Command, Mixer};
 use crate::config::SourceConfig;
 use crate::state::{Event, SourceId, SourceState};
 use godwinmix_protocol::ErrorAction;
+use std::collections::HashMap;
+use std::time::Instant;
 use tracing::{debug, info};
 
 /// One source that could not be started, as it was asked for.
@@ -34,11 +36,41 @@ pub struct Unstarted {
     pub action: Option<ErrorAction>,
 }
 
-/// The list, one entry an id, the newest failure winning.
+/// The list, one entry an id, the newest failure winning, and for each id
+/// that is being tried again how many tries have failed since the first and
+/// when that was.
+///
+/// The count is kept here rather than in the rebuild count, because every
+/// failed try is added and removed again, and the removal clears everything
+/// the mixer keeps under the id: the wait between tries stayed at half a
+/// second for good.
 #[derive(Debug, Clone, Default)]
-pub struct UnstartedList(Vec<Unstarted>);
+pub struct UnstartedList(Vec<Unstarted>, HashMap<String, (u32, Instant)>);
 
 impl UnstartedList {
+    /// One more failed try of `id`: how many failed before this one.
+    pub fn tried(&mut self, id: &str) -> u32 {
+        let (count, _) = self.1.entry(id.to_string()).or_insert((0, Instant::now()));
+        *count += 1;
+        *count - 1
+    }
+
+    /// When `id` was first tried, from its first failure until it has been
+    /// live.
+    pub fn first_tried(&self, id: &str) -> Option<Instant> {
+        self.1.get(id).map(|t| t.1)
+    }
+
+    /// How many tries of `id` have failed since it was last live.
+    pub fn failures(&self, id: &str) -> u32 {
+        self.1.get(id).map_or(0, |t| t.0)
+    }
+
+    /// It has been live, or was taken away: the next failure starts over.
+    pub fn started(&mut self, id: &str) {
+        self.1.remove(id);
+    }
+
     /// Remember a failure, replacing any earlier one for the same id.
     pub fn note(&mut self, config: &SourceConfig, error: &anyhow::Error) {
         self.forget(&config.id);
@@ -67,9 +99,9 @@ impl UnstartedList {
 
 impl Mixer {
     /// Ask for an unstarted source again after the backoff, counting the
-    /// failure. The count is the rebuild one, which the supervisor clears
-    /// once the source has been live, so a source that came up and later
-    /// failed again starts from the short waits.
+    /// failure. The supervisor clears the count once the source has been
+    /// live, so a source that came up and later failed again starts from the
+    /// short waits.
     pub(super) fn retry_unstarted_later(&mut self, id: &SourceId) {
         // It was said to be connecting before the build began, and it is
         // not: a page following the stream should not wait on it.
@@ -77,10 +109,9 @@ impl Mixer {
             source: id.clone(),
             state: SourceState::Failed,
         });
-        let failures = self.rebuild_failures.entry(id.clone()).or_insert(0);
-        let delay = backoff::unstarted_delay(&self.cfg.stall, *failures);
-        *failures += 1;
-        info!(source = %id, failures = *failures, ?delay, "the source did not start; trying it again later");
+        let before = self.unstarted.tried(id);
+        let delay = backoff::unstarted_delay(&self.cfg.stall, before);
+        info!(source = %id, failures = before + 1, ?delay, "the source did not start; trying it again later");
         let handle = self.handle.clone();
         let again = id.clone();
         self.rt.spawn(async move {
@@ -127,5 +158,25 @@ mod tests {
         assert_eq!(list.configs().count(), 1);
         list.forget("slides");
         assert!(list.entries().is_empty());
+    }
+
+    /// Each failed try is noted and forgotten again as the source is added
+    /// and removed, and the count of tries outlives that, so the wait grows
+    /// from half a second to ten as it does for a restart.
+    #[test]
+    fn the_wait_between_tries_grows_until_the_source_has_been_live() {
+        let stall = crate::config::StallConfig::default();
+        let mut list = UnstartedList::default();
+        let mut waits = Vec::new();
+        for _ in 0..6 {
+            list.note(&source("cam"), &anyhow::anyhow!("Could not open resource for reading"));
+            waits.push(backoff::unstarted_delay(&stall, list.tried("cam")));
+            list.forget("cam");
+        }
+        assert_eq!(waits[0], std::time::Duration::from_millis(500));
+        assert!(waits.windows(2).all(|w| w[1] >= w[0]) && waits[5] > waits[0], "{waits:?}");
+        assert!(list.first_tried("cam").is_some());
+        list.started("cam");
+        assert_eq!((list.failures("cam"), list.first_tried("cam")), (0, None));
     }
 }

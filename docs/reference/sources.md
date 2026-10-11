@@ -244,8 +244,12 @@ kind: RTMP, SRT, RIST, WHIP, RTSP, NDI, a device, a file, a plugin.
   second or two slow at the top of the show is not swapped out and back. Past
   that it counts as down from the moment it was added, whatever it reads: a
   pull into a server that never answers reads `connecting` for good, and a
-  listener waits for a sender that may never come. With the timeout set to
-  zero, `after_secs` alone decides.
+  listener waits for a sender that may never come. A source that will not
+  start at all, such as a pull whose server refuses the connection, is the
+  same: while it waits to be tried again it is listed as `failed`, its
+  backup goes on as for any first connection, and the wait between tries
+  grows from half a second to ten until it has been live. With the timeout
+  set to zero, `after_secs` alone decides.
 * **When the backup goes on.** `after_secs` (3) after it went down. Its last
   frame is held meanwhile, as above, for longer than 45 seconds if
   `after_secs` asks for that. For a source that has never connected that is

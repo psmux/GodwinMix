@@ -27,9 +27,11 @@ mod tell;
 
 pub use commands::BackupCommand;
 
-/// The mixer's sources, as the board asks about them: the running ones, and
-/// the ones still having their page probed, which are not down.
-pub(super) struct Seen<'a>(pub &'a [SourceSlot], pub &'a [SourceConfig]);
+/// The mixer's sources, as the board asks about them: the running ones, the
+/// ones still having their page probed, which are not down, and the ones
+/// that would not start and are being tried again, which are on a first
+/// connection that has not come.
+pub(super) struct Seen<'a>(pub &'a [SourceSlot], pub &'a [SourceConfig], pub &'a super::unstarted::UnstartedList);
 
 impl Seen<'_> {
     fn slot(&self, id: &str) -> Option<&SourceSlot> {
@@ -51,8 +53,10 @@ impl Liveness for Seen<'_> {
                 // connection is not.
                 SourceState::Connecting => s.watch.live_at.is_some(),
             },
-            // Being rebuilt, or would not start: down. Being probed: not yet.
-            None => !self.1.iter().any(|c| c.id == id),
+            // Being rebuilt: down. Being probed, or being tried again after
+            // it would not start: a first connection, given the connect
+            // timeout by `unconnected_for`.
+            None => !self.1.iter().any(|c| c.id == id) && self.2.first_tried(id).is_none(),
         }
     }
 
@@ -60,9 +64,17 @@ impl Liveness for Seen<'_> {
         self.live(id) || self.slot(id).is_some_and(|s| s.watch.live_at.is_some_and(|at| at.elapsed() < within))
     }
 
+    /// From its first try, for one that would not start and is tried again,
+    /// since each try is a new slot.
     fn unconnected_for(&self, id: &str) -> Option<Duration> {
-        let slot = self.slot(id).filter(|s| s.watch.live_at.is_none())?;
-        slot.watch.added_at.map(|at| at.elapsed())
+        let slot = self.slot(id);
+        if slot.is_some_and(|s| s.watch.live_at.is_some()) {
+            return None;
+        }
+        if let Some(at) = self.2.first_tried(id) {
+            return Some(at.elapsed());
+        }
+        slot?.watch.added_at.map(|at| at.elapsed())
     }
 }
 
@@ -75,7 +87,7 @@ impl Mixer {
         }
         self.backups.connect_wait = Duration::from_secs(self.cfg.stall.connect_timeout_secs);
         let before = self.backups.phases();
-        let steps = self.backups.step(now, &Seen(&self.sources, &self.pending));
+        let steps = self.backups.step(now, &Seen(&self.sources, &self.pending, &self.unstarted));
         if self.backups.phases() != before {
             // Lost, back, returning: a client draws its countdown from the
             // snapshot, so it hears of each move as it happens.
@@ -92,7 +104,7 @@ impl Mixer {
     /// Draw every stand in the board asks for, over a transition when one of
     /// them is on air.
     pub(super) fn swap_stand_ins(&mut self) {
-        let changes = self.backups.changes(&Seen(&self.sources, &self.pending));
+        let changes = self.backups.changes(&Seen(&self.sources, &self.pending, &self.unstarted));
         if changes.is_empty() || self.running_transition.is_some() || self.pending_fx.is_some() {
             return;
         }
