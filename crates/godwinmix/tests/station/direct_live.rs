@@ -145,12 +145,25 @@ async fn governor_status_counts_the_direct_host_the_station_started() {
         assert!(Instant::now() < limit, "still calibrating: {g}");
         tokio::time::sleep(Duration::from_secs(1)).await;
     }
-    let (pid, host) = ingest_process(st.pid()).expect("the station runs gmx-ingest as its child");
-    let g = call(&mut ws, 4, "governor.status", json!({})).await;
-    let used = g["result"]["cpu"]["measured_millicores"].as_u64().unwrap_or(0);
-    eprintln!("gmx-ingest {pid} at {host} millicores, governor.status measured {used}");
-    assert!(host >= 20, "sixteen outputs should cost the host something; ps read {host} millicores");
-    assert!(used >= host * 3 / 4, "governor.status measures {used} millicores, under the direct host's {host}: {g}\nthe station's children:\n{}", children_of(st.pid()));
+    // Six readings of each, side by side, summed. The host costs a few
+    // hundredths of a core, and one `ps` read of it against one reading of
+    // the station, which may be a second old, was a comparison of two
+    // instants of a load that comes in bursts: on a macOS runner, ten runs
+    // read the host at 6 to 61 millicores and the station mostly above it,
+    // and twice under it (17 against 27) or the host under the floor.
+    let (mut host, mut used, mut pid, mut g) = (0, 0, 0, Value::Null);
+    for id in 0..6 {
+        let (p, h) = ingest_process(st.pid()).expect("the station runs gmx-ingest as its child");
+        g = call(&mut ws, 10 + id, "governor.status", json!({})).await;
+        let u = g["result"]["cpu"]["measured_millicores"].as_u64().unwrap_or(0);
+        eprintln!("gmx-ingest {p} at {h} millicores, governor.status measured {u}");
+        (pid, host, used) = (p, host + h, used + u);
+        // Past the station's one second cache, so each reading is a new one.
+        tokio::time::sleep(Duration::from_millis(1100)).await;
+    }
+    eprintln!("gmx-ingest {pid}: {host} millicores over six readings, governor.status {used}");
+    assert!(host >= 30, "sixteen outputs should cost the host something; six ps reads came to {host} millicores");
+    assert!(used >= host * 3 / 4, "governor.status measures {used} millicores over six readings, under the direct host's {host}: {g}\nthe station's children:\n{}", children_of(st.pid()));
     pipeline.set_state(gstreamer::State::Null).unwrap();
 }
 
