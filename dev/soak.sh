@@ -5,8 +5,9 @@
 # Every five seconds it adds a source and removes one, takes between two scenes
 # with a transition, opens and closes an MJPEG stream and a PCM stream, and
 # installs and removes a plugin. After each round it reads four numbers off the
-# running core and writes them down: the programme stall gauge, the core's
-# resident memory, its open descriptors and its threads. It also times each of
+# running core and writes them down: the programme stall gauge, and the
+# resident memory, open descriptors and threads of the show process that does
+# the mixing (not the station in front of it). It also times each of
 # the four parts of the round, because "the round got slower" and "the source
 # removal got slower" are different bug reports.
 #
@@ -286,6 +287,27 @@ else
     exit 1
 fi
 
+# The process that mixes. Since the station landed (a37e81a7) the binary
+# started above mixes nothing itself: it runs this config as show `main` in a
+# child process and relays the API to it. Every soak from then until this line
+# was written sampled the station, about 31 MB and 12 threads whatever the
+# mixer did, so a leak in the mixer could not have failed it.
+step "the show that mixes"
+show_pid() { pgrep -P "$CORE_PID" -f "show main" 2>/dev/null | head -1; }
+SHOW_PID=""
+for _ in $(seq 1 50); do
+    SHOW_PID="$(show_pid)"
+    [[ -n "$SHOW_PID" ]] && break
+    sleep 0.2
+done
+if [[ -n "$SHOW_PID" ]]; then
+    ok
+else
+    bad "the station started no show main under pid $CORE_PID; see $LOG"
+    KEEP=1
+    exit 1
+fi
+
 export GODWINMIX_URL="$BASE" GODWINMIX_TOKEN="$TOKEN"
 
 # --- what each round works on ----------------------------------------------
@@ -494,10 +516,10 @@ sample() {
     local elapsed="$1"
     local stall rss fds threads
     stall="$(stall_ms)"
-    rss="$(rss_kb "$CORE_PID")"
+    rss="$(rss_kb "$SHOW_PID")"
     [[ -z "$rss" || "$rss" == "0" ]] && return 1
-    fds="$(fd_count "$CORE_PID")"
-    threads="$(thread_count "$CORE_PID")"
+    fds="$(fd_count "$SHOW_PID")"
+    threads="$(thread_count "$SHOW_PID")"
     printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
         "$ROUND" "$elapsed" "${stall:--1}" "$rss" "${fds:-0}" "${threads:-0}" \
         "$ROUND_MS" "$SOURCES_MS" "$TAKE_MS" "$STREAMS_MS" "$PLUGIN_MS" \
@@ -539,6 +561,16 @@ while :; do
     if ! kill -0 "$CORE_PID" 2>/dev/null; then
         echo
         bad "the core died at round $ROUND, $ELAPSED s in. The last of its log:"
+        tail -20 "$LOG" >&2
+        KEEP=1
+        break
+    fi
+    # A show the station had to start again is a show that went off air, and
+    # its replacement starts its memory and its threads from nothing, so the
+    # run stops there rather than comparing two processes.
+    if [[ "$(show_pid)" != "$SHOW_PID" ]]; then
+        echo
+        bad "show main was started again at round $ROUND, $ELAPSED s in. The last of the log:"
         tail -20 "$LOG" >&2
         KEEP=1
         break
