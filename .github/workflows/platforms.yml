@@ -141,9 +141,11 @@ jobs:
           GODWINMIX_TIMING_SLACK: 3
         run: |
           # One test fewer than the runner has cores on macOS and Windows,
-          # as build.yml says why.
+          # as build.yml says why. On macOS, no VideoToolbox: build.yml says
+          # why.
           if [ "${{ runner.os }}" = "macOS" ]; then
             export RUST_TEST_THREADS=2
+            export GMX_CODEC_DISABLE=h264-videotoolbox,h265-videotoolbox,h264-videotoolbox-any
           elif [ "${{ runner.os }}" = "Windows" ]; then
             export RUST_TEST_THREADS=3
           fi

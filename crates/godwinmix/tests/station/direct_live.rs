@@ -103,6 +103,14 @@ fn ingest_process(station: u32) -> Option<(u32, u64)> {
     Some((pid, (pcpu * 10.0).round() as u64))
 }
 
+/// Every child of the station as `ps` reads it, for a failure message.
+#[cfg(unix)]
+fn children_of(station: u32) -> String {
+    let out = Command::new("ps").args(["-axo", "pid=,ppid=,pcpu=,etime=,command="]).output().map(|o| o.stdout).unwrap_or_default();
+    let mine = |l: &&str| l.split_whitespace().nth(1).and_then(|p| p.parse::<u32>().ok()) == Some(station);
+    String::from_utf8_lossy(&out).lines().filter(mine).map(|l| l.chars().take(160).collect::<String>()).collect::<Vec<_>>().join("\n")
+}
+
 /// The wall's header CPU counts the direct host. Before, `governor.status`
 /// saw the station's own process and the reports of shows holding a ticket,
 /// and the ingest plugin, where every direct show runs, holds none: 200
@@ -142,7 +150,7 @@ async fn governor_status_counts_the_direct_host_the_station_started() {
     let used = g["result"]["cpu"]["measured_millicores"].as_u64().unwrap_or(0);
     eprintln!("gmx-ingest {pid} at {host} millicores, governor.status measured {used}");
     assert!(host >= 20, "sixteen outputs should cost the host something; ps read {host} millicores");
-    assert!(used >= host * 3 / 4, "governor.status measures {used} millicores, under the direct host's {host}: {g}");
+    assert!(used >= host * 3 / 4, "governor.status measures {used} millicores, under the direct host's {host}: {g}\nthe station's children:\n{}", children_of(st.pid()));
     pipeline.set_state(gstreamer::State::Null).unwrap();
 }
 
