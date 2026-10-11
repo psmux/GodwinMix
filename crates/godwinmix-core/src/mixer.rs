@@ -2669,7 +2669,9 @@ impl Mixer {
         // then this source still holds the programme. The rebuilt source comes
         // back on programme when it works (see `finish_rebuild`), so this is a
         // loan and not a decision the operator has to undo.
-        let handed_over = if was_program && !has_picture {
+        // A source with a backup has its own answer to that, and taking some
+        // other source would fight it.
+        let handed_over = if was_program && !has_picture && self.backups.rule(id).is_none() {
             self.hand_programme_to_another_source(id)
         } else {
             None
@@ -7444,6 +7446,8 @@ mod tests {
             Command::RemoveSource("cam1".into(), None),
             Command::RenameSource("cam1".into(), "Pulpit".into(), None),
             Command::RemoveFilter("key".into(), None),
+            Command::Backup(BackupCommand::Return("cam1".into()), None),
+            Command::Backup(BackupCommand::Set("cam1".into(), None), None),
         ] {
             let label = Mixer::label(&cmd);
             assert!(!label.is_empty() && !label.contains("cam1"), "{label}");
