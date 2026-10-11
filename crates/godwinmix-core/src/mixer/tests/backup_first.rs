@@ -50,7 +50,9 @@ async fn a_source_that_will_not_start_is_listed_and_drawn_as_its_backup() {
     let refused = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
     let mut cfg = programme_config(crate::config::Accel::Software);
     cfg.stall.restart_after_secs = 600;
-    cfg.stall.connect_timeout_secs = 2;
+    // Five seconds, so a loaded runner's slow second does not put the
+    // early look past it.
+    cfg.stall.connect_timeout_secs = 5;
     let mut rig = Rig::with_bus(cfg);
     add(&mut rig, "wide", "smpte", "");
     live_all(&mut rig, &["wide"]).await;

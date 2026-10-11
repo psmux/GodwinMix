@@ -5055,7 +5055,9 @@ impl Mixer {
         // One that would not start and is being tried again is listed as
         // failed, with its backup, so the operator sees the camera that is
         // not there rather than no camera at all.
-        for c in self.unstarted.configs() {
+        // One waiting on a piece being set up is not on that clock and is
+        // answered as setting up by the binary, so it is left out here.
+        for c in self.unstarted.configs().filter(|c| self.unstarted.first_tried(&c.id).is_some()) {
             if !sources.iter().any(|s: &SourceStatus| s.id == c.id) {
                 let mut status = SourceStatus { state: SourceState::Failed, ..pending_status(c) };
                 self.backup_status(&mut status, now);

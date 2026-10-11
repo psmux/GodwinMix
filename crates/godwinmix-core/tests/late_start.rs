@@ -129,7 +129,13 @@ async fn a_plugin_that_answers_start_late_at_boot_is_tried_again_and_goes_live()
     let booted = Instant::now();
     mix.start()
         .expect("the programme starts even though the source did not");
-    let failed_at_boot = !mix.status().sources.iter().any(|s| s.id.as_str() == "late");
+    // It is listed as failed while it waits to be tried again; what matters
+    // is that it was not live.
+    let failed_at_boot = !mix
+        .status()
+        .sources
+        .iter()
+        .any(|s| s.id.as_str() == "late" && s.state == SourceState::Live);
     let thread = mixer::spawn(mix, cmd_rx, handle.clone());
 
     let live = |s: &MixerStatus| {
