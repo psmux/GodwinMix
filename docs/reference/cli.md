@@ -35,6 +35,8 @@ godwinmix ctl source add hls1 https://host/stream.m3u8 --name "Roof camera"
 godwinmix ctl source add strap "text:Ada Lovelace" --param size=44
 godwinmix ctl source set strap --param text="Grace Hopper"   # on air, no rebuild
 godwinmix ctl source remove hls1
+godwinmix ctl source backup set cam1 wide --after 3 --transition fade   # wide stands in when cam1 drops
+godwinmix ctl source backup return cam1                                 # cam1 back on air now
 godwinmix ctl output add youtube rtmp://a.rtmp.youtube.com/live2/KEY --policy cdn
 godwinmix ctl output list
 godwinmix ctl ad /srv/ads/spot.mp4 --return-to cam1

@@ -95,6 +95,7 @@ Start here if you have never run it.
 * [Put a presenter on a green screen into a designed studio](how-to/green-screen-presenter.md)
 * [Replace the background behind a person, with or without a green screen](how-to/replace-the-background.md)
 * [Add an IP camera](how-to/add-an-ip-camera.md)
+* [Keep the show on air when a feed drops](how-to/keep-the-show-on-air-when-a-feed-drops.md): a backup source that takes over by itself and hands back when the feed is steady
 * [Internet radio: send the sound out, or play a station in](how-to/radio.md)
 * [Capture SDI or HDMI from a DeckLink card](how-to/capture-sdi.md)
 * [Capture SDI or HDMI from a DeckLink card](how-to/capture-sdi.md)

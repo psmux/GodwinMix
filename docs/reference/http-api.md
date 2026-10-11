@@ -45,6 +45,10 @@ same thing without a mixer. The ones the how to pages reach for:
 | `POST /api/v1/sources` | the whole of `source.add`: `{"id","uri","name","type","place","latency_ms","params"}`. `uri` is required, and the type id goes in it when a source has no address of its own |
 | `POST /api/v1/sources/{id}/duplicate` | `source.duplicate`: `{"name","new_id"}`, both optional. Another source with the same address and settings, which `source.add` cannot do from the shortened address a client is shown |
 | `POST /api/v1/sources/{id}/restore` | `source.restore`: puts back one of the last sixteen sources `source.remove` took away, with its id, fader and mute |
+| `POST /api/v1/sources/{id}/on_loss` | `source.on_loss.set`: `{"backup","after_secs","transition","duration_ms","return","return_after_secs"}`, naming only what moves; `backup` is needed the first time. See [keep the show on air when a feed drops](../how-to/keep-the-show-on-air-when-a-feed-drops.md) |
+| `POST /api/v1/sources/{id}/on_loss/clear` | `source.on_loss.clear`: no body. The source has no backup now; one on air comes off at once |
+| `POST /api/v1/sources/{id}/backup/return` | `source.backup.return`: no body. The source goes back on air in place of its backup now. Refused while it has no picture |
+| `POST /api/v1/sources/{id}/backup/stay` | `source.backup.stay`: no body. The backup stays on after the source is back, until `source.backup.return` |
 | `POST /api/v1/outputs` | `output.add`: `{"id","uri","policy"}` |
 | `POST /api/v1/outputs/{id}/set` | `output.set`: `{"uri","policy","queue_secs"}`, naming only what moves. `uri` is write only and an absent one keeps the address in force, which is how a stream key is replaced without anything ever reading it back. See [stream to a platform](../how-to/stream-to-a-platform.md) |
 | `POST /api/v1/outputs/{id}/stop` | `output.stop`: no body. Stops sending to one destination and keeps it, address, key and all; its state reads `stopped` until `output.start`. See [stop streaming and quit](../how-to/stop-streaming-and-quit.md) |
