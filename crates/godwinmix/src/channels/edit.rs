@@ -46,6 +46,7 @@ impl Channels {
                 rtmps: Rtmps::default(),
                 keys: Vec::new(),
                 auto_sources: Vec::new(),
+                auto_rules: Default::default(),
                 destinations: Vec::new(),
                 extra: Default::default(),
             };

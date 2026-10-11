@@ -26,6 +26,7 @@ fn channel(id: &str) -> Channel {
         rtmps: Rtmps::default(),
         keys: Vec::new(),
         auto_sources: Vec::new(),
+        auto_rules: BTreeMap::new(),
         destinations: Vec::new(),
         extra: BTreeMap::new(),
     }
