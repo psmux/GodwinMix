@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+* Stopping the mixer or a station no longer waits for ever on the encoder calibration. A calibration is killed when the mixer stops, and the stop then waited for it to be gone. On a Mac whose VideoToolbox encoder service had hung, the killed calibration never finished exiting, so the station never got as far as stopping its shows and had to be killed itself. The stop now waits two seconds and leaves the rest to a thread.
+
 ## 0.3.3 (2026-10-11)
 
 * An RTMP pull or an RTSP camera back from a pulled cable stays live, with its picture beside its sound. `livesync` stamped the picture on the programme's clock and the aligner then placed it as far ahead as the show was old, so a pull restarted half a minute in read live, stalled again for about 15 seconds, and an RTSP camera that healed by itself was given up on by the catch up guard. A restart armed while a pull hung in a dead relay is also dropped once that pull connects. See `docs/reference/sources.md`.

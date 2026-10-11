@@ -98,8 +98,22 @@ jobs:
           # encoders, starved one another: RIST, SRT and HEVC tests that pass
           # alone there decoded a frame or two. One test fewer than cores
           # leaves a core for the pipelines the tests start.
+          #
+          # And no VideoToolbox there. The runner's encoder is Apple's
+          # paravirtualized one ("ParavirtualizedVideoEncoder" in its log),
+          # which hands the work to the host. On 2026-10-11 a calibration
+          # that opened and closed its sessions left VTEncoderXPCService stuck
+          # in the kernel on its way out, for good, and every process that
+          # touched VideoToolbox after it hung the same way: a clip that never
+          # left connecting, a test binary that could not exit, a
+          # gst-discoverer that never answered. The job then sat until its
+          # two hour limit. The catalogue's own switch turns the entries off,
+          # so the mixer, the shows and the calibration all encode with x264
+          # as they do on Linux; the VideoToolbox entries are still covered
+          # by the catalogue tests, against a registry that has them.
           if [ "${{ runner.os }}" = "macOS" ]; then
             export RUST_TEST_THREADS=2
+            export GMX_CODEC_DISABLE=h264-videotoolbox,h265-videotoolbox,h264-videotoolbox-any
           elif [ "${{ runner.os }}" = "Windows" ]; then
             export RUST_TEST_THREADS=3
           fi
