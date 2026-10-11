@@ -3,6 +3,7 @@
 //! back, with real ffmpeg publishers on the real listener. See `hub::takeover`.
 
 use super::*;
+use std::os::unix::process::CommandExt;
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
@@ -19,12 +20,22 @@ fn which(program: &str) -> Option<std::path::PathBuf> {
 }
 
 /// Thirty seconds of a small test picture, published to `url` in real time.
+///
+/// In a process group of its own, because these tests stop it with SIGSTOP.
+/// A stopped process left in the test's own group is a stopped process in
+/// the CI runner's group, and on macOS that group has no parent in its
+/// session (launchd starts the runner as a session leader), so the kernel
+/// counts it as orphaned. When anything else in an orphaned group exits while
+/// one member is stopped, every member gets SIGHUP. On 2026-10-11 that ended
+/// the runner, its worker, cargo and the test binary together, and GitHub
+/// reported "the hosted runner lost communication with the server".
 fn publish(url: &str) -> Option<Child> {
     Command::new(which("ffmpeg")?)
         .args(["-loglevel", "error", "-re", "-f", "lavfi", "-i", "testsrc2=size=320x240:rate=30", "-t", "30"])
         .args(["-c:v", "libx264", "-g", "15", "-preset", "ultrafast", "-f", "flv", url])
         .stdout(Stdio::null())
         .stderr(Stdio::null())
+        .process_group(0)
         .spawn()
         .ok()
 }
@@ -41,8 +52,32 @@ fn wait_for(limit: Duration, mut what: impl FnMut() -> bool) -> bool {
 }
 
 fn signal(child: &Child, sig: i32) {
+    if sig == libc::SIGSTOP {
+        assert_ne!(
+            unsafe { libc::getpgid(child.id() as i32) },
+            unsafe { libc::getpgrp() },
+            "a publisher about to be stopped shares this test's process group; see `publish`"
+        );
+    }
     // SAFETY: a signal to a process this test started.
     unsafe { libc::kill(child.id() as i32, sig) };
+}
+
+/// The thing that took the macOS runner down, checked on its own: the
+/// publisher these tests stop leads its own group and is not in ours.
+#[test]
+fn a_publisher_these_tests_stop_leads_a_process_group_of_its_own() {
+    let Some(mut child) = publish("rtmp://127.0.0.1:9/nobody/here") else {
+        eprintln!("skipping: no ffmpeg on PATH");
+        return;
+    };
+    let pid = child.id() as i32;
+    let group = unsafe { libc::getpgid(pid) };
+    let ours = unsafe { libc::getpgrp() };
+    let _ = child.kill();
+    let _ = child.wait();
+    assert_eq!(group, pid, "the publisher leads a group of its own");
+    assert_ne!(group, ours, "the publisher is in the test's group, and so in the runner's");
 }
 
 fn from(device: &Discover) -> String {
