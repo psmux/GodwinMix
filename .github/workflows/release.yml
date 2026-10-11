@@ -138,35 +138,26 @@ jobs:
         shell: pwsh
         run: ./.github/windows-signing/logout.ps1
 
-  # A Raspberry Pi and any arm64 server. Built in an arm64 container under
-  # QEMU rather than cross compiled, because getting the arm64 GStreamer
-  # development packages onto an x86 runner through multiarch is the more
-  # fragile of the two. It takes about twenty minutes and it is the reason a
-  # Pi user can install from a release instead of compiling on the board.
+  # A Raspberry Pi and any arm64 server, built on GitHub's arm64 runner. It
+  # was built in an arm64 container under QEMU on an x86 runner, which took
+  # 1 h 51 min for 0.3.1 against a two hour limit and held every release back
+  # by over an hour; natively it is a build like the x86 one. It is the
+  # reason a Pi user can install from a release instead of compiling on the
+  # board.
   core-aarch64:
     name: core (aarch64-unknown-linux-gnu)
-    runs-on: ubuntu-latest
-    timeout-minutes: 120
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
-
-      - uses: docker/setup-qemu-action@v3
-        with:
-          platforms: arm64
+      - uses: dtolnay/rust-toolchain@stable
 
       - name: Build
         run: |
-          docker run --rm --platform linux/arm64 \
-            -v "$PWD:/src" -w /src -e CARGO_TERM_COLOR=always \
-            rust:1-trixie \
-            bash -eux -c '
-              apt-get update
-              apt-get install -y --no-install-recommends \
-                libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
-                libgstreamer-plugins-bad1.0-dev libgstrtspserver-1.0-dev pkg-config
-              cargo build --release --locked --bins
-              strip target/release/godwinmix target/release/gmx
-            '
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libgstreamer-plugins-bad1.0-dev libgstrtspserver-1.0-dev pkg-config
+          cargo build --release --locked --bins
+          strip target/release/godwinmix target/release/gmx
 
       - name: Package
         run: |
