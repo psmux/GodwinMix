@@ -306,7 +306,7 @@ on_loss = { backup = "cam-wide", after_secs = 3, transition = "dissolve", durati
 | Key | Default | Meaning |
 |---|---|---|
 | `backup` | required | the id of the source to show instead. Any source this mixer has. When it is down too, its own `on_loss` backup is used, and so on down the chain |
-| `after_secs` | 3 | seconds from the source reading stalled or failed to the backup going on. 0 switches at once. The last frame is held meanwhile, for longer than the usual 45 seconds if this asks for longer |
+| `after_secs` | 3 | seconds from the source reading stalled or failed to the backup going on. 0 switches at once. The last frame is held meanwhile, for longer than the usual 45 seconds if this asks for longer. A source that has never connected goes on to its backup at `stall.connect_timeout_secs` (15) after it was added, or at this, whichever is later |
 | `transition` | `"fade"` | the transition both ways, any a take can name: `cut`, `fade` (also written `dissolve`), `wipe`, `slide`, `push`, `zoom`, `zoom-out`, `box`, `dip`, or a transition plugin's name. Not `stinger`, which needs a clip of its own |
 | `duration_ms` | the transition's own, 300 | how long the transition runs, up to 10000 |
 | `return` | `"auto"` | `auto` goes back once the source has been live for `return_after_secs`; `manual` stays on the backup until `source.backup.return` |

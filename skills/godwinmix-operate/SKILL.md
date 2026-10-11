@@ -144,8 +144,10 @@ backup that is live: a wide shot, a looping clip, a still. `after_secs`,
 
 `list_sources` shows each source's `backup`: `phase` is `ready`, `lost`,
 `on_backup`, `returning` or `main_back`, `showing` is what stands in, and
-`warning` says when the backup has no picture either. While one is on, leave
-it to come back; do not take the dead source to "fix" it, the backup stands
+`warning` says when the backup has no picture either. `never_live` is true
+when the source has not connected since it was added; such a source goes on
+to its backup once `stall.connect_timeout_secs` (15) has passed. While a
+backup is on, leave it to come back; do not take the dead source to "fix" it, the backup stands
 in for it there too. With `return` set to `manual`, call `return_from_backup
 {"id": "cam-main"}` once cam-main reads live; it is refused before then.
 
