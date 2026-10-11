@@ -120,6 +120,10 @@ export async function sourceBackupTests(test, eq, ok) {
     ok(wantsBackupHint({ ...bare, state: "failed" }));
     ok(!wantsBackupHint({ ...MAIN, state: "stalled" }), "a source with a rule was offered another");
     ok(!wantsBackupHint({ ...bare, state: "stalled", type: "text/source" }));
+    // A camera that failed before its first frame has no video yet, and is
+    // the camera that most needs one; a microphone has no picture to lose.
+    ok(wantsBackupHint({ ...bare, state: "failed", has_video: false, has_audio: false }), "a camera that never connected was not offered one");
+    ok(!wantsBackupHint({ ...bare, state: "stalled", has_video: false, has_audio: true }), "a microphone was offered a backup");
     ok(!down.backup.part.node.hidden);
     ok(down.backup.node.textContent.startsWith("No backup set"));
     down.backup.node.querySelector("button").click();

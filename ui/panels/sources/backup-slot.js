@@ -1,14 +1,14 @@
-// Where a source's backup line goes, on a tile and under the programme. The
-// line loads when a source first has something to say, so a show with no
-// backups never fetches it.
+// Where a source's backup line goes, on a tile and under the programme. It
+// loads when a source first has something to say, so a show with no backups
+// never fetches it.
 
 import { el } from "../../shell/dom.js";
 
 const down = (b) => !!(b && b.phase && b.phase !== "ready");
 
-/** Gone down with no backup set. Text and graphics never go down. */
+/** Down with no backup. Sound only, text and graphics have no picture to lose. */
 export function wantsBackupHint(s) {
-  if (!s || s.on_loss || s.has_video === false || /^(text|ticker|template)\//.test(s.type || "")) return false;
+  if (!s || s.on_loss || (s.has_video === false && s.has_audio) || /^(text|ticker|template)\//.test(s.type || "")) return false;
   return s.state === "stalled" || s.state === "failed";
 }
 
