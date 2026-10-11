@@ -147,9 +147,10 @@ backup that is live: a wide shot, a looping clip, a still. `after_secs`,
 `warning` says when the backup has no picture either. `never_live` is true
 when the source has not connected since it was added; such a source goes on
 to its backup once `stall.connect_timeout_secs` (15) has passed. While a
-backup is on, leave it to come back; do not take the dead source to "fix" it, the backup stands
-in for it there too. With `return` set to `manual`, call `return_from_backup
-{"id": "cam-main"}` once cam-main reads live; it is refused before then.
+backup is on, leave it to come back; do not take the dead source to "fix"
+it, the backup stands in for it there too. With `return` set to `manual`,
+call `return_from_backup {"id": "cam-main"}` once cam-main reads live; it is
+refused before then.
 
 ## Transitions and effects from packs
 
