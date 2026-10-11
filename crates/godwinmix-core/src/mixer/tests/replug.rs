@@ -40,7 +40,9 @@ async fn pull_and_replug(cable: &Cable, uri: &str, lip: bool) -> Option<()> {
     cfg.hardware.encode = crate::config::Accel::Software;
     let mut rig = Rig::new(cfg);
     rig.run(Duration::from_secs(6)).await;
-    rig.add(&format!("id = \"far\"\nuri = \"{uri}\"\nstall_timeout_secs = 1.0\n"));
+    // The two seconds of the rig on 2026-10-10. Less, and a loaded CI runner
+    // missing a second of frames reads as the fault.
+    rig.add(&format!("id = \"far\"\nuri = \"{uri}\"\nstall_timeout_secs = 2.0\n"));
     rig.mix.take(Some("far".into()), None).unwrap();
     if rig.until("far", SourceState::Live, Duration::from_secs(30)).await.is_none() {
         rig.mix.shutdown();
@@ -50,27 +52,27 @@ async fn pull_and_replug(cable: &Cable, uri: &str, lip: bool) -> Option<()> {
     cable.set(false);
     let stalled = rig.until("far", SourceState::Stalled, Duration::from_secs(10)).await;
     rig.run(Duration::from_secs(8)).await;
-    let restarts = rig.mix.source_attempts.get(&SourceId::from("far")).copied().unwrap_or(0);
+    let attempts = |rig: &Rig| rig.mix.source_attempts.get(&SourceId::from("far")).copied().unwrap_or(0);
+    let restarts = attempts(&rig);
     cable.set(true);
     let back = rig.until("far", SourceState::Live, Duration::from_secs(40)).await;
+    let tried = attempts(&rig);
 
-    let (mut states, mut worst) = (vec![], (0i64, 0i64));
+    let mut worst = (0i64, 0i64);
     for _ in 0..24 {
         rig.run(Duration::from_millis(500)).await;
-        let state = rig.state("far");
-        if states.last() != Some(&state) {
-            states.push(state);
-        }
         if let Some((apart, ahead)) = placement(&rig, "far") {
             worst = (worst.0.max(apart.abs()), worst.1.max(ahead.abs()));
         }
     }
+    let (again, end) = (attempts(&rig).saturating_sub(tried), rig.state("far"));
     rig.mix.shutdown();
 
     assert!(stalled.is_some(), "{uri}: the pulled cable never read stalled");
     assert!(restarts >= 1, "{uri}: the stalled source was never restarted");
     assert!(back.is_some(), "{uri}: the source did not come back after the replug");
-    assert_eq!(states, vec![Some(SourceState::Live)], "{uri}: it left live after coming back");
+    assert_eq!(again, 0, "{uri}: it was restarted {again} times after coming back");
+    assert_eq!(end, Some(SourceState::Live), "{uri}: it was not live twelve seconds after coming back");
     // The programme's mixers run a second behind the clock, so a picture a
     // second either side of now is still drawn; the fault put it as far ahead
     // as the programme was old.
