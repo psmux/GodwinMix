@@ -3815,7 +3815,7 @@ impl Mixer {
                     false => {
                         let children: Vec<Placement> =
                             p.group.iter().filter(|c| live(&c.source)).cloned().collect();
-                        (!children.is_empty()).then(|| Placement { group: children, ..p })
+                        (!children.is_empty()).then_some(Placement { group: children, ..p })
                     }
                 })
                 .collect(),
