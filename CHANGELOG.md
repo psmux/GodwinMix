@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+* An idle core holds about 32 MB less at 720p (three times that at 1080p). The black slate under every scene was made a whole second before the compositor used it, so a second of canvas frames always sat on its pad, whether or not anything was on air. It now arrives a tenth of a second ahead.
+* Only hardware codec plugins are loaded at start up. Loading the software ones too brought all of gst-libav into a core that had not asked for it, and on Linux with a distribution FFmpeg that included speech synthesis, SVG and x265 libraries.
+* The release binaries are smaller: symbols are stripped and everything except the engine is built for size, which took a Linux x86_64 build from 38.7 MB to 28.7 MB. The engine's per frame code is built for speed as before.
+* `gmx bench`: the cold start row pins the encoder on, so it measures a start instead of the thirty second wait for a consumer that the on-demand encoder never got. A child that gives up is reported as not measured.
+* `dev/soak.sh` measures the show process that mixes, not the station in front of it. Every soak since the station landed was sampling a process that mixes nothing.
+
 ## 0.3.3 (2026-10-11)
 
 * An RTMP pull or an RTSP camera back from a pulled cable stays live, with its picture beside its sound. `livesync` stamped the picture on the programme's clock and the aligner then placed it as far ahead as the show was old, so a pull restarted half a minute in read live, stalled again for about 15 seconds, and an RTSP camera that healed by itself was given up on by the catch up guard. A restart armed while a pull hung in a dead relay is also dropped once that pull connects. See `docs/reference/sources.md`.

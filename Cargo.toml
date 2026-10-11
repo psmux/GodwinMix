@@ -128,10 +128,28 @@ rcgen = { version = "0.13", default-features = false, features = ["ring", "pem"]
 # compilation, and the alternative was inventing a cipher.
 ring = "0.17"
 
+# Size first for the control plane, speed for the engine. The binary budget
+# is 30 MB on linux-aarch64 (docs/explanation/footprint-budgets.md), and the
+# station, the channels and the matte filter took the unstripped x86_64 build
+# from 23.2 MB on 2026-10-01 to 38.7 MB by 2026-10-11. Measured on ci-linux
+# that day: symbols stripped 34.6 MB; opt-level "s" on the two binary crates
+# only, 30.0 MB; "s" everywhere but the engine, 28.7 MB; "s" everywhere,
+# 25.5 MB. The engine and the frame bus stay at 3 because they carry the
+# per frame Rust code (the overlay blend, telemetry, the frame bus copies);
+# everything else is serde, HTTP and control plane, which no frame waits on.
+# Symbols are stripped because the shipped aarch64 build was already stripped
+# by hand in release.yml; panics still name the file and line.
 [profile.release]
-opt-level = 3
+opt-level = "s"
 lto = "fat"
 codegen-units = 1
+strip = "symbols"
+
+[profile.release.package.godwinmix-core]
+opt-level = 3
+
+[profile.release.package.godwinmix-framebus]
+opt-level = 3
 
 # Optimized tests without repeating the shipping binary's whole-program link.
 [profile.ci]
