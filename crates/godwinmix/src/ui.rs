@@ -167,6 +167,7 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/media/panel.js", include_str!("../../../ui/panels/media/panel.js")),
     ("panels/multiview/panel.js", include_str!("../../../ui/panels/multiview/panel.js")),
     ("panels/multiview/wanted.js", include_str!("../../../ui/panels/multiview/wanted.js")),
+    ("panels/multiview/backup-banner.js", include_str!("../../../ui/panels/multiview/backup-banner.js")),
     ("panels/multiview/studio.js", include_str!("../../../ui/panels/multiview/studio.js")),
     ("panels/multiview/transition-picker.js", include_str!("../../../ui/panels/multiview/transition-picker.js")),
     ("panels/multiview/fx-gallery.js", include_str!("../../../ui/panels/multiview/fx-gallery.js")),
@@ -260,6 +261,15 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/sources/setreq.js", include_str!("../../../ui/panels/sources/setreq.js")),
     ("panels/sources/tile.js", include_str!("../../../ui/panels/sources/tile.js")),
     ("panels/sources/tile-level.js", include_str!("../../../ui/panels/sources/tile-level.js")),
+    // A source's backup: its line on the tile and the programme, which loads
+    // when a source first has something to say, and the section in its
+    // settings, which loads with the drawer.
+    ("panels/sources/backup-slot.js", include_str!("../../../ui/panels/sources/backup-slot.js")),
+    ("panels/sources/backup.css", include_str!("../../../ui/panels/sources/backup.css")),
+    ("panels/sources/backup-status.js", include_str!("../../../ui/panels/sources/backup-status.js")),
+    ("panels/sources/backup-line.js", include_str!("../../../ui/panels/sources/backup-line.js")),
+    ("panels/sources/backup-rule.js", include_str!("../../../ui/panels/sources/backup-rule.js")),
+    ("panels/sources/backup-form.js", include_str!("../../../ui/panels/sources/backup-form.js")),
     ("panels/sources/text-presets.js", include_str!("../../../ui/panels/sources/text-presets.js")),
     ("panels/sources/text-fields.js", include_str!("../../../ui/panels/sources/text-fields.js")),
     ("panels/sources/text-editor.js", include_str!("../../../ui/panels/sources/text-editor.js")),
@@ -432,6 +442,8 @@ const DEV_ASSETS: &[(&str, &str)] = &[
     ("test/presence.js", include_str!("../../../ui/test/presence.js")),
     ("test/touch-tray.js", include_str!("../../../ui/test/touch-tray.js")),
     ("test/tile-levels.js", include_str!("../../../ui/test/tile-levels.js")),
+    ("test/source-backup.js", include_str!("../../../ui/test/source-backup.js")),
+    ("test/source-backup-form.js", include_str!("../../../ui/test/source-backup-form.js")),
     // The Channels panel against a stub of the channel contract, as tests and
     // as a page to look at: /test/channels.html?scene=cards&theme=light.
     ("test/channels.js", include_str!("../../../ui/test/channels.js")),
@@ -1183,6 +1195,10 @@ mod tests {
         // Turn and fit on a tile's menu, and following the scene after a
         // remove, fetched by Sources when first used.
         reachable.extend(closure_of("panels/sources/item-look.js"));
+        // A source's backup line and the programme's list of them, fetched by
+        // backup-slot.js when a source first goes down or gets a backup.
+        reachable.extend(closure_of("panels/sources/backup-line.js"));
+        reachable.extend(closure_of("panels/multiview/backup-banner.js"));
         // The Graphics gallery: entry.js imports the panel when its tab is
         // first shown, and the panel imports Edit and Make with an agent when
         // their buttons are pressed.
@@ -1284,6 +1300,9 @@ mod tests {
             ("panels/outputs/stream-toggle.js", "Stop streaming or Start streaming pressed"),
             ("panels/sources/browser-device.js", "this browser's camera opened"),
             ("panels/sources/phone-camera.js", "A phone's camera picked in Add source"),
+            ("panels/sources/backup-line.js", "a source that goes down or has a backup"),
+            ("panels/multiview/backup-banner.js", "a source on its backup"),
+            ("panels/sources/backup-form.js", "the settings drawer"),
             ("join/publisher.js", "this browser's camera opened, or /join/"),
         ] {
             assert!(known(path).is_some(), "{path} is not served at all");

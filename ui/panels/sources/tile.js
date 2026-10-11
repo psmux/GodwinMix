@@ -12,10 +12,11 @@ import { UNITY, gainToPos, gainLabel, fmtPosition } from "../../shell/fader.js";
 import { nameOf, colourOf, isLocal } from "./local.js";
 import { dragHandle } from "../../shell/pointer.js";
 import { repeatButton, syncRepeat, playbackText } from "./clip-end.js";
+import { lazyLine } from "./backup-slot.js";
 
 /**
  * @param {object} source   a SourceStatus
- * @param {object} deps     {audio, scrub, onTake, onRename, onGear, onMute, onRepeat, meters}
+ * @param {object} deps     {audio, scrub, onTake, onRename, onGear, onMute, onRepeat, onBackup, meters}
  */
 export function buildTile(source, deps) {
   const kind = kindOfSource(source);
@@ -37,7 +38,9 @@ export function buildTile(source, deps) {
   const level = levelParts(source, kind, deps.meters);
   node.classList.toggle("sound", level.sound);
   node.classList.toggle("metered", !!level.meter);
-  node.append(pic, still, kindbox, ...[level.face, level.meter].filter(Boolean), slot, strip, bar, playback);
+  // What its backup is doing, or the offer of one when it went down with none.
+  const backup = lazyLine({ call: deps.onBackup, openBackup: (id) => deps.onGear(id, "backup"), hint: true });
+  node.append(pic, still, kindbox, ...[level.face, level.meter].filter(Boolean), slot, strip, bar, playback, backup.node);
 
   // ----------------------------------------------------------- the strip
 
@@ -107,6 +110,7 @@ export function buildTile(source, deps) {
     kind,
     playback,
     repeat,
+    backup,
   };
 }
 
@@ -151,6 +155,7 @@ export function syncTile(tile, source, view) {
   const playing = playbackText(source);
   if (tile.playback.textContent !== playing) tile.playback.textContent = playing;
   if (tile.repeat) syncRepeat(tile.repeat, source);
+  tile.backup.sync(source, view.names || ((id) => id));
 
   if (tile.lane) {
     const p = view.position || { pos: 0, dur: null };

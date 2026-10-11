@@ -1,0 +1,11 @@
+/* A source's backup: down, on its backup, or back. Amber while it waits,
+   green once something is standing in, red when nothing could, and the
+   clock in figures of one width so it does not jitter as it ticks. */
+.backup-line { padding: 3px 6px; font-size: var(--fs-sm); border-left: 3px solid var(--warn); font-variant-numeric: tabular-nums; }
+.backup-line .row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.backup-line .btn { padding: 1px 6px; font-size: var(--fs-sm); }
+.backup-line.on_backup, .backup-line.returning, .backup-line.main_back { border-left-color: var(--ok); }
+.backup-line.hint { border-left-color: var(--line); color: var(--dim); }
+.backup-warn { color: var(--bad); font-size: var(--fs-sm); }
+.backup-banner { display: flex; flex-direction: column; gap: 2px; padding: 0 8px 6px; }
+.backup-banner .backup-line { font-size: var(--fs); padding: 5px 8px; background: var(--panel2); }
