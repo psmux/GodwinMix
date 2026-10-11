@@ -228,12 +228,16 @@ Keys accepted on every method, handled before a method runs.
 | `snapshot.get` | `GET /api/v1/snapshot/{id}` | read |  | 1 | One JPEG: the whole contact sheet, the programme, or one source cut out of the mosaic. |
 | `source.add` | `POST /api/v1/sources` | operate |  | 1 | Add a source while the mixer runs. Answers with the id it got and the whole source record. |
 | `source.audio.set` | `POST /api/v1/sources/{id}/audio` | operate |  | 1 | Move a source's audio: the fader, the mute, and for a superimposed page the balance between its own sound and the videos under it. |
+| `source.backup.return` | `POST /api/v1/sources/{id}/backup/return` | operate |  | 1 | Go back from the backup to the source now, over the rule's transition. Refused while the source has no picture. |
+| `source.backup.stay` | `POST /api/v1/sources/{id}/backup/stay` | operate |  | 1 | Keep the backup on even once the source is back, until source.backup.return. |
 | `source.duplicate` | `POST /api/v1/sources/{id}/duplicate` | operate |  | 1 | Add another source like one the mixer has: the same address and settings under a new id. A client cannot do this with source.add, because the address it is shown has everything after the host cut off. |
 | `source.get` | `GET /api/v1/sources/{id}` | read |  | 1 | One source. Refused with the ids that exist when there is no such source. |
 | `source.group` | `POST /api/v1/sources/{id}/group` | operate |  | 1 | Put sources in a tray folder. A tag for finding things, not a group on the canvas. |
 | `source.key_color` | `POST /api/v1/sources/{id}/key_color` | read |  | 1 | The colour to key a source on: the colour at a point of its picture, or with no point the green or blue screen it stands in front of. |
 | `source.list` | `GET /api/v1/sources` | read |  | 1 | Every source, with its state, whether it has video and audio, and its fader. |
 | `source.missing` | `POST /api/v1/sources/{id}/missing` | read |  | 1 | Sources that are not running, and why: failed, could not be started (with the error and the action that fixes it), removed, or unknown. Pass the ids a scene draws, or none for every one the mixer knows about. |
+| `source.on_loss.clear` | `POST /api/v1/sources/{id}/on_loss/clear` | operate |  | 1 | Take a source's backup away. If the backup is on now, the source is drawn as itself again at once. |
+| `source.on_loss.set` | `POST /api/v1/sources/{id}/on_loss` | operate |  | 1 | Give a source a backup: another source drawn in its place, wherever it appears, once it has had no picture for after_secs, and taken off again when it is back. Only the fields named change; a source with no backup yet needs `backup`. |
 | `source.remove` | `DELETE /api/v1/sources/{id}` | operate | yes | 1 | Remove a source. If it is on programme the mixer cuts to the slate first. |
 | `source.restart` | `POST /api/v1/sources/{id}/restart` | operate |  | 1 | Build a source's pipeline again now, rather than waiting for its next retry. For a source that could not be started or was removed, use source.restore. |
 | `source.restore` | `POST /api/v1/sources/{id}/restore` | operate |  | 1 | Put back a source that source.remove took away, as it was: same id, address, settings, fader and mute. The mixer remembers the last sixteen it removed, until it restarts. |
@@ -3470,6 +3474,38 @@ MCP tool `set_source_audio` in the `search` profile: readOnlyHint false, destruc
 }
 ```
 
+#### `source.backup.return`
+
+Go back from the backup to the source now, over the rule's transition. Refused while the source has no picture.
+
+MCP tool `return_from_backup` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/BackupRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/SourceStatus"
+  }
+}
+```
+
+#### `source.backup.stay`
+
+Keep the backup on even once the source is back, until source.backup.return.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/BackupRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/SourceStatus"
+  }
+}
+```
+
 #### `source.duplicate`
 
 Add another source like one the mixer has: the same address and settings under a new id. A client cannot do this with source.add, because the address it is shown has everything after the host cut off.
@@ -3568,6 +3604,38 @@ Sources that are not running, and why: failed, could not be started (with the er
       "$ref": "#/$defs/MissingSource"
     },
     "type": "array"
+  }
+}
+```
+
+#### `source.on_loss.clear`
+
+Take a source's backup away. If the backup is on now, the source is drawn as itself again at once.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/IdRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/SourceStatus"
+  }
+}
+```
+
+#### `source.on_loss.set`
+
+Give a source a backup: another source drawn in its place, wherever it appears, once it has had no picture for after_secs, and taken off again when it is back. Only the fields named change; a source with no backup yet needs `backup`.
+
+MCP tool `set_source_backup` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/SetOnLossRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/SourceStatus"
   }
 }
 ```
@@ -3900,6 +3968,8 @@ Subscribe with `core.subscribe`. Patterns match the part after `event/`, so `pro
 | `event/preview.changed` |  |  | A scene was armed, or the arming was cleared. The armed scene is the preview, and program.take with no argument takes it. |
 | `event/source.state` |  | `source_state_changed` | A source moved between connecting, live, stalled and failed. |
 | `event/source.ended` |  | `source_ended` | A clip's last frame has gone out to the programme. at_end says what it does now: repeat plays it again from the start, hold keeps the last frame up, and leave holds it while the programme moves to the armed scene or the one on air before the clip. |
+| `event/source.backup.on` |  | `source_backup_on` | A source with on_loss went down for its after_secs and its backup is now                       drawn in its place, everywhere it appears. Sent again with the next                       backup when the first is down too and the chain moves on. |
+| `event/source.backup.off` |  | `source_backup_off` | The backup is no longer drawn in the source's place. reason is returned                       (the source came back and stayed steady), operator (source.backup.return),                       cleared (the rule was taken off) or backup_down (the backup went down too                       and nothing else could stand in). |
 | `event/source.position` | `positions` | `source_position` | How far through a seekable source has got, a few times a second. Never sent for a camera, which has no position to report. |
 | `event/output.state` |  | `output_state_changed` | A destination connected, dropped or is retrying. |
 | `event/adbreak.changed` |  | `ad_break_changed` | An ad break was armed, went on air, or ended. |
