@@ -21,7 +21,7 @@
 //! It also keeps the time each source was last live, which is what the
 //! freeze frame in `Mixer::shows` is measured from.
 
-use super::{Mixer, SourceSlot, FREEZE_HOLD};
+use super::{Mixer, SourceSlot};
 use crate::plugin::{Health, PluginState};
 use crate::state::{Event, Severity, SourceId, SourceState};
 use parking_lot::Mutex;
@@ -79,7 +79,7 @@ impl Mixer {
         }
         self.cfg.stall.hold_last_frame
             && slot.input.last_video.seen() > 0
-            && slot.watch.live_at.is_some_and(|at| at.elapsed() < FREEZE_HOLD)
+            && slot.watch.live_at.is_some_and(|at| at.elapsed() < self.hold_for(&slot.input.id))
     }
 
     /// Build again from nothing any source whose restart has hung.

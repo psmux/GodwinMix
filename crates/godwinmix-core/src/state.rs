@@ -327,6 +327,8 @@ mod tests {
                 seekable: false,
                 position_ms: None,
                 duration_ms: None,
+                on_loss: None,
+                backup: None,
         };
         // Written as extras, and still the same two top level keys on the wire.
         page.put_extra("superimposed", true);
@@ -503,6 +505,8 @@ mod tests {
             seekable: false,
             position_ms: None,
             duration_ms: None,
+            on_loss: None,
+            backup: None,
         };
         let v = serde_json::to_value(&camera).unwrap();
         // Written even when false: the UI branches on it, and `undefined`
@@ -515,6 +519,8 @@ mod tests {
             seekable: true,
             position_ms: Some(12_345),
             duration_ms: Some(154_000),
+            on_loss: None,
+            backup: None,
             ..camera
         };
         let v = serde_json::to_value(&clip).unwrap();
@@ -592,6 +598,8 @@ mod tests {
             seekable: false,
             position_ms: None,
             duration_ms: None,
+            on_loss: None,
+            backup: None,
         };
         let v = serde_json::to_value(&camera).unwrap();
         assert!(v.get("audio").is_none(), "a camera must not carry a balance");

@@ -48,6 +48,7 @@ pub mod catalogue;
 pub mod config;
 pub mod convert;
 pub mod encoder;
+pub mod failover;
 pub mod fx;
 pub mod gallery;
 pub mod graphics;

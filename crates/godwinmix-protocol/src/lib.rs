@@ -16,6 +16,7 @@
 //!   requests.rs     request and result bodies
 //!   error.rs        the code table, one error shape
 //!   action.rs       the button a refusal offers, in data.action
+//!   backup.rs       a source's backup: on_loss, its state, its checks
 //!   method.rs       the method table and the REST transform
 //!   protocol.rs     protocol.json, protocol.md, core.api
 //!   openapi.rs      openapi.json for the REST layer
@@ -40,6 +41,7 @@
 //! See `README.md` beside this file for how another module adds a method.
 
 pub mod action;
+pub mod backup;
 pub mod destination;
 pub mod devices;
 pub mod rendition;

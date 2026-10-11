@@ -191,6 +191,41 @@ fn state_events() -> Vec<EventDef> {
             },
         },
         EventDef {
+            name: "source.backup.on",
+            since: "1",
+            summary: "A source with on_loss went down for its after_secs and its backup is now                       drawn in its place, everywhere it appears. Sent again with the next                       backup when the first is down too and the chain moves on.",
+            ext: None,
+            legacy: Some("source_backup_on"),
+            payload: |_| {
+                inline(json!({
+                    "type": "object",
+                    "properties": {
+                        "source": { "type": "string", "description": "The source that went down." },
+                        "backup": { "type": "string", "description": "The source drawn in its place." },
+                        "transition": { "type": "string" },
+                        "lost_ms": { "type": "integer", "description": "How long it had been without a picture." }
+                    }
+                }))
+            },
+        },
+        EventDef {
+            name: "source.backup.off",
+            since: "1",
+            summary: "The backup is no longer drawn in the source's place. reason is returned                       (the source came back and stayed steady), operator (source.backup.return),                       cleared (the rule was taken off) or backup_down (the backup went down too                       and nothing else could stand in).",
+            ext: None,
+            legacy: Some("source_backup_off"),
+            payload: |_| {
+                inline(json!({
+                    "type": "object",
+                    "properties": {
+                        "source": { "type": "string" },
+                        "backup": { "type": "string" },
+                        "reason": { "type": "string", "enum": ["returned", "operator", "cleared", "backup_down"] }
+                    }
+                }))
+            },
+        },
+        EventDef {
             name: "source.position",
             since: "1",
             summary: "How far through a seekable source has got, a few times a second. \

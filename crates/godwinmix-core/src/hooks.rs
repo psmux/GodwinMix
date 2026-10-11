@@ -43,6 +43,8 @@ pub mod name {
     pub const SOURCE_ADDED: &str = "source.added";
     pub const SOURCE_REMOVED: &str = "source.removed";
     pub const SOURCE_STATE: &str = "source.state";
+    pub const SOURCE_BACKUP_ON: &str = "source.backup.on";
+    pub const SOURCE_BACKUP_OFF: &str = "source.backup.off";
     pub const OUTPUT_STATE: &str = "output.state";
     pub const ALERT_RAISED: &str = "alert.raised";
     pub const SESSION_START: &str = "session.start";
