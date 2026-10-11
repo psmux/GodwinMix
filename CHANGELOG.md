@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+* A direct show's UDP, RTP, SRT or RIST input follows a sender that is started again with new PIDs and a new program number. The demuxer could go on waiting for the old program while the new one kept arriving, and the input read "nothing from" its address for good. Now an input that was read before, whose sender is still sending, and that has given nothing readable for 5 seconds is read again from the start; its outputs carry on, and the input's error says what happened. A feed that never carried anything readable is left alone, so it is not rebuilt over and over.
 * Stopping the mixer or a station no longer waits for ever on the encoder calibration. A calibration is killed when the mixer stops, and the stop then waited for it to be gone. On a Mac whose VideoToolbox encoder service had hung, the killed calibration never finished exiting, so the station never got as far as stopping its shows and had to be killed itself. The stop now waits two seconds and leaves the rest to a thread.
 
 ## 0.3.3 (2026-10-11)

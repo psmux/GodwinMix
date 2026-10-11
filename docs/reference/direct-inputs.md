@@ -114,7 +114,12 @@ and 10 s at most, and starts again at 1 s once a connection has held for 10
 s. A pull (SRT caller, RTSP, HLS, DASH, RTMP) that sends no frame for 10 s
 is closed and opened again. A UDP, RTP or RIST socket, and an SRT listener,
 stay open through any silence, because whoever sends may start again at any
-time. A file starts again from the top at its end with no wait. Each new
+time. The one exception is a TS feed that was read before and keeps
+arriving with nothing readable in it for 5 s, which is what a sender started
+again with new PIDs and a new program number looks like: it is read again
+from the start, and `error` says "is sending, but nothing in it could be
+read". A feed that never carried anything readable is not rebuilt for it.
+A file starts again from the top at its end with no wait. Each new
 connection's timeline is laid after the last tag of the one before.
 
 ## Cost
