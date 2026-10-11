@@ -84,41 +84,6 @@ const AD_PREROLL: Duration = Duration::from_millis(1200);
 /// extra half second is delay a viewer never notices on HLS and margin that
 /// the aggregators need.
 const MIN_UPSTREAM_LATENCY_NS: i64 = 1_000_000_000;
-/// How far ahead of its moment the slate's frame reaches the compositor.
-///
-/// The slate is a live test source on the programme clock, so each frame is
-/// made at the moment it is stamped for. The compositor takes that moment
-/// `MIN_UPSTREAM_LATENCY_NS` later, and until then the frame waits on its pad.
-/// Left there, a full second of canvas sized frames sat in the compositor at
-/// all times, on a core doing nothing: 24 to 30 frames, 32 MB at 720p and
-/// three times that at 1080p, on the 2026-10-11 bench. Sources are brought
-/// to a lead of 40 ms by `mixer::catch_up`; the slate is moved once, here, to
-/// a tenth of a second. A slate frame that still came late would change
-/// nothing anybody sees: the compositor's background is the same black.
-const SLATE_LEAD_NS: i64 = 100_000_000;
-
-/// Move the slate to `SLATE_LEAD_NS` ahead of the compositor.
-///
-/// A negative pad offset, and the frames stamped before it would fall below
-/// running time zero are dropped here: `videoaggregator` asserts on a buffer
-/// with no running time rather than clipping it, and the process goes with it.
-/// Those are the slate's first nine tenths of a second, which the compositor
-/// would not have shown before its latency had passed anyway.
-fn lead_slate(src: &gst::Pad) {
-    let shift = MIN_UPSTREAM_LATENCY_NS - SLATE_LEAD_NS;
-    src.set_offset(-shift);
-    src.add_probe(gst::PadProbeType::BUFFER, move |_, info| {
-        let early = info
-            .buffer()
-            .and_then(|b| b.pts())
-            .is_some_and(|pts| (pts.nseconds() as i64) < shift);
-        if early {
-            gst::PadProbeReturn::Drop
-        } else {
-            gst::PadProbeReturn::Ok
-        }
-    });
-}
 /// Lead-in between rolling an ad and cutting to it.
 ///
 /// The ad's first frame has to be *due* slightly in the future, not right now.
@@ -1846,14 +1811,12 @@ impl Mixer {
         let slate_pad = vmix.request_pad_simple("sink_%u").context("compositor refused slate pad")?;
         set_pad_u32(&slate_pad, "zorder", 0);
         slate_pad.set_property("alpha", 1.0f64);
-        let slate_src = slate_chain
+        slate_chain
             .last()
             .and_then(|e| e.static_pad("src"))
-            .context("the slate chain has no source pad")?;
-        // Due shortly before the compositor wants it, not a whole latency
-        // ahead. See `SLATE_LEAD_NS`.
-        lead_slate(&slate_src);
-        slate_src.link(&slate_pad).context("linking slate into the mixer")?;
+            .context("the slate chain has no source pad")?
+            .link(&slate_pad)
+            .context("linking slate into the mixer")?;
 
         let silence_pad = amix.request_pad_simple("sink_%u").context("mixer refused silence pad")?;
         silence_pad.set_property("volume", 1.0f64);
