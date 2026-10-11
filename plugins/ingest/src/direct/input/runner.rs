@@ -139,6 +139,9 @@ fn watch(plan: &impl Plan, pipeline: &gst::Pipeline, out: &Shared, pads: &Pads, 
         if let Some(limit) = plan.stall_ms().filter(|&l| silent > l) {
             return Ended::Failed(format!("nothing arrived from {} for {} s", plan.address(), limit / 1000));
         }
+        if let Some(why) = loss.unread(quiet, started.elapsed(), &plan.address()) {
+            return Ended::Failed(why);
+        }
     }
 }
 

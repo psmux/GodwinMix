@@ -7,7 +7,7 @@
 
 use std::sync::atomic::Ordering::Relaxed;
 use std::sync::{Arc, Mutex};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use gmx_udp::counters::{Counters, SharedCatalog};
 use gmx_udp::recv::probe::Probe;
@@ -16,6 +16,12 @@ use gmx_udp::ts::plan::Choice;
 use gstreamer as gst;
 
 use super::stats::{InputStats, ProgramInfo};
+
+/// A datagram within this long, and the sender is still sending.
+const SENDING_MS: u64 = 1_000;
+/// How long a session may take datagrams it reads nothing from, after the
+/// feed has been read before, until it is built again. See `Loss::unread`.
+pub const UNREAD_MS: u64 = 5_000;
 
 pub struct Loss {
     ts: Option<(Arc<Counters>, SharedCatalog)>,
@@ -88,6 +94,27 @@ impl Loss {
         }
     }
 
+    /// Why this session should be built again, if it should: frames came out
+    /// of it before, the sender is still sending, and for [`UNREAD_MS`] of
+    /// this session nothing readable has come out. `quiet` is the time since
+    /// the last frame on any session, `session` how long this one has run.
+    ///
+    /// A UDP socket is never reconnected for silence, since it stays open
+    /// whether anyone sends or not. But a sender started again with new PIDs
+    /// and a new program number kept arriving at it while the demuxer went
+    /// on waiting for the old program: on a macOS runner the input read
+    /// "nothing for 35 s" with 2.4 Mbit/s coming in. A fresh demuxer reads
+    /// the new tables at once. Only a feed that was read before is judged,
+    /// so one that never carried anything readable is not rebuilt for ever.
+    pub fn unread(&self, quiet: Option<u64>, session: Duration, address: &str) -> Option<String> {
+        let (n, _) = self.ts.as_ref()?;
+        let unread = quiet?.min(session.as_millis() as u64);
+        let sending = n.silent_ms().is_some_and(|s| s < SENDING_MS);
+        (sending && unread > UNREAD_MS).then(|| {
+            format!("{address} is sending, but nothing in it could be read for {} s; reading it again from the start", unread / 1000)
+        })
+    }
+
     /// The rate of what the probe passed on since the last call: the chosen
     /// program, stuffing left out.
     fn kbps(&self, n: &Counters) -> Option<u32> {
@@ -99,5 +126,34 @@ impl Loss {
         let kbps = (bytes.saturating_sub(last.0) as f64 * 8.0 / 1000.0 / secs).round() as u32;
         *last = (bytes, Instant::now());
         Some(kbps)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A session whose sender sent a datagram just now.
+    fn sending() -> Loss {
+        let n = Arc::new(Counters::default());
+        n.arrived(188);
+        Loss { ts: Some((n, SharedCatalog::default())), ..Loss::default() }
+    }
+
+    #[test]
+    fn a_feed_read_before_and_still_sending_is_read_again_after_five_seconds() {
+        let l = sending();
+        let why = l.unread(Some(6_000), Duration::from_secs(10), "udp://127.0.0.1:20201");
+        assert!(why.is_some_and(|w| w.contains("is sending") && w.contains("udp://127.0.0.1:20201")));
+        assert!(l.unread(Some(6_000), Duration::from_secs(3), "u").is_none(), "a new session gets its own five seconds");
+        assert!(l.unread(Some(2_000), Duration::from_secs(10), "u").is_none(), "frames came two seconds ago");
+        assert!(l.unread(None, Duration::from_secs(60), "u").is_none(), "a feed never read is never rebuilt for it");
+        assert!(Loss::none().unread(Some(60_000), Duration::from_secs(60), "u").is_none(), "no probe, nothing to judge");
+    }
+
+    #[test]
+    fn a_sender_that_stopped_is_waited_for_not_rebuilt() {
+        let l = Loss { ts: Some((Arc::new(Counters::default()), SharedCatalog::default())), ..Loss::default() };
+        assert!(l.unread(Some(60_000), Duration::from_secs(60), "u").is_none(), "nothing is arriving");
     }
 }
