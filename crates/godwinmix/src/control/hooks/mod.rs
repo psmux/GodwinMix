@@ -227,13 +227,20 @@ pub fn is_blocking(event: &str) -> bool {
 
 /// Turn the events the core already publishes into hooks.
 ///
-/// `source.state`, `output.state`, `alert.raised` and `plugin.state` are all
-/// things the event stream carries, so one subscriber fires them all rather
-/// than four call sites scattered through the engine. The task exits at once
+/// `source.state`, the two `source.backup` hooks, `output.state`,
+/// `alert.raised` and `plugin.state` are all things the event stream
+/// carries, so one subscriber fires them all rather than six call sites
+/// scattered through the engine. The task exits at once
 /// on a core with no hooks configured for any of them.
 pub fn spawn_watch(hooks: Arc<Hooks>, mut events: tokio::sync::broadcast::Receiver<godwinmix_core::state::Envelope>) {
-    const WATCHED: &[&str] =
-        &[name::SOURCE_STATE, name::OUTPUT_STATE, name::ALERT_RAISED, name::PLUGIN_STATE];
+    const WATCHED: &[&str] = &[
+        name::SOURCE_STATE,
+        name::SOURCE_BACKUP_ON,
+        name::SOURCE_BACKUP_OFF,
+        name::OUTPUT_STATE,
+        name::ALERT_RAISED,
+        name::PLUGIN_STATE,
+    ];
     if !WATCHED.iter().any(|e| hooks.any(e)) {
         return;
     }
@@ -248,6 +255,19 @@ pub fn spawn_watch(hooks: Arc<Hooks>, mut events: tokio::sync::broadcast::Receiv
                 Event::SourceStateChanged { source, state } => {
                     hooks.fire(name::SOURCE_STATE, || {
                         serde_json::json!({ "source": source, "state": state })
+                    });
+                }
+                Event::SourceBackupOn { source, backup, transition, lost_ms } => {
+                    hooks.fire(name::SOURCE_BACKUP_ON, || {
+                        serde_json::json!({
+                            "source": source, "backup": backup, "transition": transition,
+                            "lost_ms": lost_ms
+                        })
+                    });
+                }
+                Event::SourceBackupOff { source, backup, reason } => {
+                    hooks.fire(name::SOURCE_BACKUP_OFF, || {
+                        serde_json::json!({ "source": source, "backup": backup, "reason": reason })
                     });
                 }
                 Event::OutputStateChanged { output, state, reconnects, error } => {

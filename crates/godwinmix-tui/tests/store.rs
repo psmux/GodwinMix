@@ -99,3 +99,17 @@ fn an_unknown_event_changes_nothing() {
     assert_eq!(store.apply("event/scene.patch", &json!({"scene": "wide"})), Outcome::Ignored);
     assert_eq!(store.view().status.sources.len(), 2);
 }
+
+/// A source on its backup says so on its row, in words an operator reads.
+#[test]
+fn a_source_on_its_backup_says_what_is_showing() {
+    let mut status = example_status();
+    status["sources"][0]["backup"] =
+        json!({"phase": "on_backup", "showing": "cam-wide", "lost_ms": 12_400});
+    let mut store = Store::new();
+    store.apply("event/snapshot", &json!({"seq": 2, "state": status}));
+    store.apply("event/flush", &json!({"seq": 2}));
+    let note = store.view().status.sources[0].backup.as_ref().and_then(|b| b.note());
+    assert_eq!(note.as_deref(), Some("lost 0:12, showing cam-wide"));
+    assert!(store.view().status.sources[1].backup.is_none(), "a source with no backup grew one");
+}

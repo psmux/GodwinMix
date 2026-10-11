@@ -49,6 +49,8 @@ up. A typo in a webhook URL is not a reason a church cannot stream.
 | `source.added` | after `source.add` | no | `source`, `uri`, `state` |
 | `source.removed` | after `source.remove` | no | `source`, `uri` |
 | `source.state` | a source moved between connecting, live, stalled and failed | no | `source`, `state` |
+| `source.backup.on` | a source with `on_loss` went down and its backup is drawn in its place, or the chain moved on to the next backup | no | `source`, `backup`, `transition`, `lost_ms` |
+| `source.backup.off` | the backup is no longer drawn in the source's place | no | `source`, `backup`, `reason` (`returned`, `operator`, `cleared` or `backup_down`) |
 | `output.state` | a destination connected, dropped or is retrying | no | `output`, `state`, `reconnects`, `error` (why it is not connected, or null; see [when it does not connect](../how-to/stream-to-a-platform.md#when-it-does-not-connect)) |
 | `channel.stream.state` | a stream on a channel went live, or left | no | `channel`, `stream`, `state` (`live` or `idle`), `from` (the publisher's address, or null when it left), `protocol` (`rtmp`, `rtmps`, `srt`, `whip`, or null when it left) |
 | `channel.destination.state` | a channel's destination changed state, error or reconnect count | no | `channel`, `destination`, `state` (`waiting`, `connecting`, `live`, `reconnecting`, `failed`), `reconnects`, `error` (why it is not sending, or null) |

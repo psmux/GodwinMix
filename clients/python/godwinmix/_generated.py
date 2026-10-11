@@ -279,6 +279,29 @@ class BackupInput(TypedDict, total=False):
     program: Optional[int]
     uri: str
 
+class BackupRequest(TypedDict, total=False):
+    """`source.backup.return` and `source.backup.stay`: the source by id."""
+
+    id: str
+    # The source that went down, not its backup.
+
+class BackupState(TypedDict, total=False):
+    """`backup` on a source's status, present when it has `on_loss`."""
+
+    lost_ms: Optional[int]
+    # How long this source has had no picture, while it has none.
+    never_live: bool
+    # True while the outage is the source's first connection: it has not been live since it was added, and has gone past `stall.connect_timeout_secs` or failed. "Has not connected yet" rather than "lost".
+    phase: BackupPhase
+    return_in_ms: Optional[int]
+    # In `returning`, how long until the source goes back on.
+    showing: Optional[str]
+    # The source drawn in this one's place, while one is.
+    switch_in_ms: Optional[int]
+    # In `lost`, how long until the backup goes on.
+    warning: Optional[str]
+    # Something the operator should know, such as the backup being down too, in a sentence that says what happens because of it.
+
 class BindRequest(TypedDict, total=False):
     """`scene.item.bind`."""
 
@@ -2226,6 +2249,15 @@ class Ograf(TypedDict, total=False):
     supportsRealTime: bool
     version: Optional[str]
 
+OnLoss = TypedDict("OnLoss", {
+    "after_secs": "float",
+    "backup": "str",
+    "duration_ms": "Optional[int]",
+    "return": "ReturnMode",
+    "return_after_secs": "float",
+    "transition": "str",
+}, total=False)
+
 class OutputError(TypedDict, total=False):
     """What went wrong the last time this destination tried."""
 
@@ -2916,6 +2948,16 @@ class SetItemRequest(TypedDict, total=False):
     seq: Optional[int]
     # A client's own sequence number, echoed on the patch so a drag can discard the echoes of moves it has already drawn past.
 
+SetOnLossRequest = TypedDict("SetOnLossRequest", {
+    "after_secs": "Optional[float]",
+    "backup": "Optional[str]",
+    "duration_ms": "Optional[int]",
+    "id": "str",
+    "return": "Union[ReturnMode, None]",
+    "return_after_secs": "Optional[float]",
+    "transition": "Optional[str]",
+}, total=False)
+
 class SetOutputRequest(TypedDict, total=False):
     """`output.set`. Change one destination in place, naming only what moves. The id picks the output and is never changed by this; renaming one is a remove and an add, because the id is what alerts, hooks and the runtime store call it."""
 
@@ -3333,6 +3375,8 @@ class SourceReport(TypedDict, total=False):
 class SourceStatus(TypedDict, total=False):
     audio_idle_ms: Optional[int]
     # Same for audio. `None` here while `has_audio` is true means the source advertised an audio track that never produced a decoded sample.
+    backup: Union[BackupState, None]
+    # Where it stands with that backup: ready, lost, on the backup, or back and returning. Present whenever `on_loss` is.
     cell: Optional[int]
     # Index into the multiview grid, or None while the source has no cell.
     duration_ms: Optional[int]
@@ -3344,6 +3388,8 @@ class SourceStatus(TypedDict, total=False):
     muted: bool
     # Muted by the operator. Held apart from the fader so that unmuting returns the source to where it was rather than to unity.
     name: str
+    on_loss: Union[OnLoss, None]
+    # What to show when this source goes down, when it has a backup.
     position_ms: Optional[int]
     # Where this source has got to, and how long it runs, in milliseconds. `None` on anything not seekable, and on a seekable source whose duration the demuxer has not worked out yet.
     seekable: bool
@@ -3864,6 +3910,20 @@ class SourceEndedEvent(TypedDict, total=False):
     at_end: Literal['repeat', 'hold', 'leave']
     source: str
 
+class SourceBackupOnEvent(TypedDict, total=False):
+    backup: str
+    # The source drawn in its place.
+    lost_ms: int
+    # How long it had been without a picture.
+    source: str
+    # The source that went down.
+    transition: str
+
+class SourceBackupOffEvent(TypedDict, total=False):
+    backup: str
+    reason: Literal['returned', 'operator', 'cleared', 'backup_down']
+    source: str
+
 class SourcePositionEvent(TypedDict, total=False):
     duration_ms: Optional[int]
     position_ms: int
@@ -3970,6 +4030,9 @@ Audio = Literal['follow', 'always', 'never']
 
 AudioCodec = Literal['aac', 'opus', 'mp3', 'ac3', 'pcm', 'other']
 
+# Where a source with a backup stands.
+BackupPhase = Literal['ready', 'lost', 'on_backup', 'returning', 'main_back']
+
 # Where a binding writes. One of three shapes.
 BindingTarget = Dict[str, Any]
 
@@ -4059,6 +4122,9 @@ ResponseFormat = Literal['concise', 'detailed']
 
 # How a core that exits gets started again.
 RestartHow = Literal['supervised', 'none']
+
+# How the programme goes back to a source that came back.
+ReturnMode = Literal['auto', 'manual']
 
 # What a token may reach. Ordered: `admin` implies `operate` implies `read`. `Plugin` is the exception and sits below the ladder on purpose. It is what a plugin's own per instance token carries, and it grants exactly one thing: calling that plugin's own tools. It implies no reading and no operating, so a plugin that tries `program.take` is refused with -32002, which is what 04 section 8 asks for. Which plugin a token belongs to is `Token::plugin`, beside the scope rather than inside it, so `Scope` stays `Copy` and the method table stays a table of constants.
 Scope = Literal['plugin', 'read', 'operate', 'admin']
@@ -4299,12 +4365,16 @@ METHODS = (
     {"name": "snapshot.get", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/snapshot/{id}"), "summary": 'One JPEG: the whole contact sheet, the programme, or one source cut out of the mosaic.'},
     {"name": "source.add", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/sources"), "summary": 'Add a source while the mixer runs. Answers with the id it got and the whole source record.'},
     {"name": "source.audio.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/sources/{id}/audio"), "summary": "Move a source's audio: the fader, the mute, and for a superimposed page the balance between its own sound and the videos under it."},
+    {"name": "source.backup.return", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/sources/{id}/backup/return"), "summary": "Go back from the backup to the source now, over the rule's transition. Refused while the source has no picture."},
+    {"name": "source.backup.stay", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/sources/{id}/backup/stay"), "summary": 'Keep the backup on even once the source is back, until source.backup.return.'},
     {"name": "source.duplicate", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/sources/{id}/duplicate"), "summary": 'Add another source like one the mixer has: the same address and settings under a new id. A client cannot do this with source.add, because the address it is shown has everything after the host cut off.'},
     {"name": "source.get", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/sources/{id}"), "summary": 'One source. Refused with the ids that exist when there is no such source.'},
     {"name": "source.group", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/sources/{id}/group"), "summary": 'Put sources in a tray folder. A tag for finding things, not a group on the canvas.'},
     {"name": "source.key_color", "scope": "read", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/sources/{id}/key_color"), "summary": 'The colour to key a source on: the colour at a point of its picture, or with no point the green or blue screen it stands in front of.'},
     {"name": "source.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/sources"), "summary": 'Every source, with its state, whether it has video and audio, and its fader.'},
     {"name": "source.missing", "scope": "read", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/sources/{id}/missing"), "summary": 'Sources that are not running, and why: failed, could not be started (with the error and the action that fixes it), removed, or unknown. Pass the ids a scene draws, or none for every one the mixer knows about.'},
+    {"name": "source.on_loss.clear", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/sources/{id}/on_loss/clear"), "summary": "Take a source's backup away. If the backup is on now, the source is drawn as itself again at once."},
+    {"name": "source.on_loss.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/sources/{id}/on_loss"), "summary": 'Give a source a backup: another source drawn in its place, wherever it appears, once it has had no picture for after_secs, and taken off again when it is back. Only the fields named change; a source with no backup yet needs `backup`.'},
     {"name": "source.remove", "scope": "operate", "mutating": True, "destructive": True, "rest": ("DELETE", "/api/v1/sources/{id}"), "summary": 'Remove a source. If it is on programme the mixer cuts to the slate first.'},
     {"name": "source.restart", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/sources/{id}/restart"), "summary": "Build a source's pipeline again now, rather than waiting for its next retry. For a source that could not be started or was removed, use source.restore."},
     {"name": "source.restore", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/sources/{id}/restore"), "summary": 'Put back a source that source.remove took away, as it was: same id, address, settings, fader and mute. The mixer remembers the last sixteen it removed, until it restarts.'},
@@ -4333,6 +4403,8 @@ EVENT_NAMES = (
     "preview.changed",
     "source.state",
     "source.ended",
+    "source.backup.on",
+    "source.backup.off",
     "source.position",
     "output.state",
     "adbreak.changed",
@@ -7231,6 +7303,24 @@ class GeneratedMethods:
             params["page"] = page
         return await self._call("source.audio.set", params)
 
+    async def source_backup_return(
+        self,
+        id: str,
+    ) -> SourceStatus:
+        """Go back from the backup to the source now, over the rule's transition. Refused while the source has no picture."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        return await self._call("source.backup.return", params)
+
+    async def source_backup_stay(
+        self,
+        id: str,
+    ) -> SourceStatus:
+        """Keep the backup on even once the source is back, until source.backup.return."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        return await self._call("source.backup.stay", params)
+
     async def source_duplicate(
         self,
         id: str,
@@ -7305,6 +7395,43 @@ class GeneratedMethods:
         if ids is not None:
             params["ids"] = ids
         return await self._call("source.missing", params)
+
+    async def source_on_loss_clear(
+        self,
+        id: str,
+    ) -> SourceStatus:
+        """Take a source's backup away. If the backup is on now, the source is drawn as itself again at once."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        return await self._call("source.on_loss.clear", params)
+
+    async def source_on_loss_set(
+        self,
+        id: str,
+        *,
+        after_secs: Optional[float] = None,
+        backup: Optional[str] = None,
+        duration_ms: Optional[int] = None,
+        return_: Optional[Union[ReturnMode, None]] = None,
+        return_after_secs: Optional[float] = None,
+        transition: Optional[str] = None,
+    ) -> SourceStatus:
+        """Give a source a backup: another source drawn in its place, wherever it appears, once it has had no picture for after_secs, and taken off again when it is back. Only the fields named change; a source with no backup yet needs `backup`."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        if after_secs is not None:
+            params["after_secs"] = after_secs
+        if backup is not None:
+            params["backup"] = backup
+        if duration_ms is not None:
+            params["duration_ms"] = duration_ms
+        if return_ is not None:
+            params["return"] = return_
+        if return_after_secs is not None:
+            params["return_after_secs"] = return_after_secs
+        if transition is not None:
+            params["transition"] = transition
+        return await self._call("source.on_loss.set", params)
 
     async def source_remove(
         self,

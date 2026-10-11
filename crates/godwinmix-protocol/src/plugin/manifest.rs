@@ -322,6 +322,8 @@ pub const HOOKS: &[&str] = &[
     "source.added",
     "source.removed",
     "source.state",
+    "source.backup.on",
+    "source.backup.off",
     "output.state",
     "alert.raised",
     "session.start",

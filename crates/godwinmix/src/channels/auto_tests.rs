@@ -4,7 +4,10 @@
 //! show took more than five seconds over `source.add` and the stream said
 //! "Becoming a source" for as long as it was live.
 
+use std::collections::BTreeMap;
 use std::sync::Arc;
+
+use godwinmix_protocol::backup::OnLoss;
 
 use godwinmix_core::caps::CanvasCaps;
 use godwinmix_core::config::{Config, SourceConfig};
@@ -23,6 +26,8 @@ const FILE: &str = "[canvas]\nwidth = 320\nheight = 180\nfps = 30\n\n[multiview]
 /// nothing at all when `adds` is false.
 struct Show {
     sources: Mutex<Vec<String>>,
+    /// Each source's backup rule, as the show has it.
+    rules: Mutex<BTreeMap<String, OnLoss>>,
     adds: bool,
     answer: &'static str,
 }
@@ -37,11 +42,18 @@ impl Programme for Show {
     fn add_source(&self, cfg: SourceConfig) -> Result<(), String> {
         if self.adds {
             self.sources.lock().push(cfg.id.clone());
+            if let Some(rule) = cfg.on_loss {
+                self.rules.lock().insert(cfg.id.clone(), rule);
+            }
         }
         Err(self.answer.to_string())
     }
     fn remove_source(&self, id: &str) {
         self.sources.lock().retain(|s| s != id);
+        self.rules.lock().remove(id);
+    }
+    fn rule_of(&self, id: &str) -> Option<OnLoss> {
+        self.rules.lock().get(id).cloned()
     }
 }
 
@@ -73,7 +85,7 @@ fn live() -> serde_json::Value {
 
 #[tokio::test]
 async fn a_source_the_show_added_after_its_deadline_is_the_streams_and_goes_with_it() {
-    let show = Arc::new(Show { sources: Mutex::default(), adds: true, answer: "show main did not answer source.add within 5 seconds" });
+    let show = Arc::new(Show { sources: Mutex::default(), rules: Mutex::default(), adds: true, answer: "show main did not answer source.add within 5 seconds" });
     let channels = open("late", show.clone());
     channels.went_live(&live());
     assert_eq!(stream_source(&channels), (Some("church-main".into()), None));
@@ -81,9 +93,36 @@ async fn a_source_the_show_added_after_its_deadline_is_the_streams_and_goes_with
     assert!(show.sources.lock().is_empty(), "the source went with its encoder");
 }
 
+/// The operator gave the encoder's source a backup. The encoder stops, the
+/// source goes, and when the encoder comes back its source has the backup
+/// again; once the backup itself is gone, the rule is not sent.
+#[tokio::test]
+async fn a_backup_rule_outlives_the_encoder_stopping() {
+    let show = Arc::new(Show {
+        sources: Mutex::new(vec!["cam-wide".into()]),
+        rules: Mutex::default(),
+        adds: true,
+        answer: "show main did not answer source.add within 5 seconds",
+    });
+    let channels = open("rule", show.clone());
+    let idle = json!({"channel": "church", "app": "Church", "stream": "main", "state": "idle"});
+    channels.went_live(&live());
+    show.rules.lock().insert("church-main".into(), OnLoss::to("cam-wide"));
+    channels.went_idle(&idle);
+    assert!(!show.sources.lock().iter().any(|s| s == "church-main"), "the source stayed");
+    channels.went_live(&live());
+    let back = show.rules.lock().get("church-main").map(|r| r.backup.clone());
+    channels.went_idle(&idle);
+    show.sources.lock().retain(|s| s != "cam-wide");
+    channels.went_live(&live());
+    let orphan = show.rules.lock().get("church-main").cloned();
+    assert_eq!(back.as_deref(), Some("cam-wide"), "the rule went with the source");
+    assert!(orphan.is_none(), "a rule naming a backup that has gone was sent");
+}
+
 #[tokio::test]
 async fn a_show_that_refused_with_a_reason_is_not_waited_on() {
-    let show = Arc::new(Show { sources: Mutex::default(), adds: false, answer: "there is no source type ingest/rtmp" });
+    let show = Arc::new(Show { sources: Mutex::default(), rules: Mutex::default(), adds: false, answer: "there is no source type ingest/rtmp" });
     let channels = open("refused", show);
     let started = std::time::Instant::now();
     channels.went_live(&live());

@@ -217,6 +217,16 @@ pub fn event_name_and_payload(event: &Event) -> Option<(&'static str, Value)> {
         Event::SourceEnded { source, at_end } => {
             ("source.ended", payload(json!({ "source": source, "at_end": at_end })))
         }
+        Event::SourceBackupOn { source, backup, transition, lost_ms } => (
+            "source.backup.on",
+            payload(json!({
+                "source": source, "backup": backup, "transition": transition, "lost_ms": lost_ms
+            })),
+        ),
+        Event::SourceBackupOff { source, backup, reason } => (
+            "source.backup.off",
+            payload(json!({ "source": source, "backup": backup, "reason": reason })),
+        ),
         Event::OutputStateChanged { output, state, reconnects, error } => (
             "output.state",
             payload(json!({ "output": output, "state": state, "reconnects": reconnects, "error": error })),

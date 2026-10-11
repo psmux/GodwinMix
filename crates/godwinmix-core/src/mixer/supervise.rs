@@ -21,7 +21,7 @@
 //! It also keeps the time each source was last live, which is what the
 //! freeze frame in `Mixer::shows` is measured from.
 
-use super::{Mixer, SourceSlot, FREEZE_HOLD};
+use super::{Mixer, SourceSlot};
 use crate::plugin::{Health, PluginState};
 use crate::state::{Event, Severity, SourceId, SourceState};
 use parking_lot::Mutex;
@@ -43,6 +43,9 @@ pub const RESTART_ABANDON: Duration = Duration::from_secs(30);
 pub(super) struct Watch {
     /// When the source was last seen live.
     pub live_at: Option<Instant>,
+    /// When the first tick saw this slot: how long a source that has never
+    /// been live has been trying, for its backup.
+    pub added_at: Option<Instant>,
     asked_at: Option<Instant>,
     asking: Arc<AtomicBool>,
     answer: Arc<Mutex<Option<Health>>>,
@@ -57,6 +60,7 @@ impl Mixer {
     /// The part of the tick that is this module's.
     pub(super) fn supervise(&mut self, now: Instant) {
         for slot in &mut self.sources {
+            slot.watch.added_at.get_or_insert(now);
             if matches!(slot.input.observed_state(), SourceState::Live) {
                 slot.watch.live_at = Some(now);
             }
@@ -79,7 +83,7 @@ impl Mixer {
         }
         self.cfg.stall.hold_last_frame
             && slot.input.last_video.seen() > 0
-            && slot.watch.live_at.is_some_and(|at| at.elapsed() < FREEZE_HOLD)
+            && slot.watch.live_at.is_some_and(|at| at.elapsed() < self.hold_for(&slot.input.id))
     }
 
     /// Build again from nothing any source whose restart has hung.

@@ -1041,6 +1041,10 @@ pub struct SourceConfig {
     /// cameras in lip sync. Absent takes the transport's default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub latency_ms: Option<u32>,
+    /// What to show in this source's place when it goes down: another
+    /// source, after a hold, over a transition. See `godwinmix_protocol::backup`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub on_loss: Option<godwinmix_protocol::backup::OnLoss>,
     /// Every key the core does not know. They reach the source's kind through
     /// `effective_params` rather than being dropped on the floor.
     #[serde(flatten, default)]
@@ -1228,6 +1232,7 @@ impl SourceConfig {
             place: None,
             transport: None,
             latency_ms: None,
+            on_loss: None,
             extra: Default::default(),
         }
     }
@@ -1700,6 +1705,27 @@ impl Config {
         Ok(cfg)
     }
 
+    /// Every source's `on_loss` against the sources there are: a backup that
+    /// does not exist or a loop of backups stops the config loading, with a
+    /// sentence saying which and what to do. A transition this build does not
+    /// have is let through with a warning, because a transition plugin may
+    /// bring it; if none does, the switch is a cut.
+    fn check_backups(&self) -> Result<()> {
+        let ids: Vec<&str> = self.sources.iter().map(|s| s.id.as_str()).collect();
+        let rules: Vec<(&str, &godwinmix_protocol::backup::OnLoss)> =
+            self.sources.iter().filter_map(|s| Some((s.id.as_str(), s.on_loss.as_ref()?))).collect();
+        for (id, rule) in &rules {
+            if !godwinmix_protocol::backup::known_transition(&rule.transition) {
+                tracing::warn!(
+                    source = %id,
+                    transition = %rule.transition,
+                    "on_loss names a transition this build does not have; unless a transition plugin brings it, the switch will be a cut"
+                );
+            }
+        }
+        godwinmix_protocol::backup::check(&rules, &ids).map_err(|p| anyhow::anyhow!("{p}"))
+    }
+
     fn validate(&self) -> Result<()> {
         anyhow::ensure!(self.canvas.width > 0 && self.canvas.height > 0, "canvas dimensions must be positive");
         anyhow::ensure!(self.canvas.width % 2 == 0 && self.canvas.height % 2 == 0, "canvas dimensions must be even for 4:2:0 chroma");
@@ -1776,6 +1802,7 @@ impl Config {
         for s in &self.sources {
             anyhow::ensure!(seen.insert(&s.id), "duplicate source id {:?}", s.id);
         }
+        self.check_backups()?;
         let mut seen = std::collections::HashSet::new();
         for o in &self.outputs {
             anyhow::ensure!(seen.insert(&o.id), "duplicate output id {:?}", o.id);

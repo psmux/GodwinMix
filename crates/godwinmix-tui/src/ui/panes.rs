@@ -61,6 +61,9 @@ fn source_row<'a>(app: &App, index: usize, source: &'a SourceStatus, width: usiz
     if source.seekable {
         spans.push(Span::raw(format!(" {}", position(source))));
     }
+    if let Some(note) = source.backup.as_ref().and_then(|b| b.note()) {
+        spans.push(Span::styled(format!("  {note}"), Style::default().fg(WAITING)));
+    }
     Line::from(spans)
 }
 

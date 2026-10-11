@@ -89,6 +89,13 @@ pub struct SourceStatus {
     pub position_ms: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub duration_ms: Option<u64>,
+    /// What to show when this source goes down, when it has a backup.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub on_loss: Option<crate::backup::OnLoss>,
+    /// Where it stands with that backup: ready, lost, on the backup, or back
+    /// and returning. Present whenever `on_loss` is.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub backup: Option<crate::backup::BackupState>,
     /// Whatever only this kind of source has: a camera's resolution, a file's
     /// codec, a page's `superimposed` flag, a remote node's name.
     ///
@@ -340,6 +347,21 @@ pub enum Event {
     /// A clip's last frame has gone out to the programme. `at_end` is what
     /// it does now, from its `params.at_end`: `repeat`, `hold` or `leave`.
     SourceEnded { source: SourceId, at_end: String },
+    /// A source went down and its backup is now drawn in its place, or the
+    /// chain moved on to the next backup because the first one is down too.
+    SourceBackupOn {
+        source: SourceId,
+        backup: SourceId,
+        /// The transition it went over with: `fade`, `cut` and so on.
+        transition: String,
+        /// How long the source had been without a picture.
+        lost_ms: u64,
+    },
+    /// The backup is no longer drawn in the source's place. `reason` is
+    /// `returned` (it came back and stayed steady), `operator` (somebody
+    /// returned it), `cleared` (the rule was taken off) or `backup_down`
+    /// (the backup went down too and nothing else could stand in).
+    SourceBackupOff { source: SourceId, backup: SourceId, reason: String },
     OutputStateChanged {
         output: OutputId,
         state: OutputState,
@@ -713,6 +735,8 @@ mod tests {
             seekable: false,
             position_ms: None,
             duration_ms: None,
+            on_loss: None,
+            backup: None,
             extra: Extra::new(),
         };
         let v = serde_json::to_value(&s).unwrap();

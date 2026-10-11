@@ -15,6 +15,7 @@ import { programLabel } from "../../client/store.js";
 import { settings, setSetting, onSettingsChanged } from "../../shell/settings.js";
 import { errorToast } from "../../shell/toast.js";
 import { mosaicWanted } from "./wanted.js";
+import { lazyBanner } from "../sources/backup-slot.js";
 
 class ProgramPanel extends HTMLElement {
   static get panel() {
@@ -51,7 +52,9 @@ class ProgramPanel extends HTMLElement {
       this.studioButton,
     ]);
 
-    this.append(this.row, this.bar);
+    // A source that is down or on its backup, said where the operator looks.
+    this.backups = lazyBanner(this.client);
+    this.append(this.row, this.backups.node, this.bar);
 
     this.offs = [
       this.client.onRender((s) => this.render(s)),
@@ -226,6 +229,7 @@ class ProgramPanel extends HTMLElement {
     this.programName.textContent = named || "Black";
     this.bar.firstChild.textContent = named ? `Audience sees ${named}` : "Audience sees black";
     if (this.studio) this.studio.render(this, s);
+    this.backups.sync(s);
     this.retune();
   }
 }

@@ -35,6 +35,7 @@ impl Channels {
             cfg.name = Some(format!("{} {stream}", record.name));
             cfg.params.insert("relay".into(), toml::Value::String(relay.to_string()));
             cfg.params.insert("stream".into(), toml::Value::String(format!("{}/{stream}", record.app)));
+            cfg.on_loss = self.kept_rule(&record.id, &id);
             match self.target().add_source(cfg) {
                 Ok(()) => info!(source = %id, "a channel's stream became a source"),
                 // A busy show answers late but still adds it. Unclaimed, the
@@ -88,8 +89,10 @@ impl Channels {
         if !ours || self.held(id) {
             return false;
         }
+        let rule = self.target().rule_of(id);
         self.target().remove_source(id);
-        info!(source = %id, "a channel's stream left and its source went with it");
+        info!(source = %id, kept_rule = rule.is_some(), "a channel's stream left and its source went with it");
+        self.keep_rule(id, rule);
         for r in self.records.lock().iter_mut() {
             r.auto_sources.retain(|s| s != id);
         }

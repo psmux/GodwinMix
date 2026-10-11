@@ -1,6 +1,6 @@
 ---
 name: godwinmix-operate
-description: Run live shows on a GodwinMix mixer. Use when asked to switch cameras, put something on air, watch a stream for faults, start or stop an output, roll an ad break, check what is live, add and watch many channels at once (a headend's channel list, one show per feed, copied or transcoded), or keep a ticker, a score or a strap current from a live data feed (RSS, JSON, CSV, websocket). Covers the agent surface: agent_state, take, revert, add_shows, show_stats, telemetry, snapshots, test_feed and bind_feed, and the safety rules that will refuse you.
+description: Run live shows on a GodwinMix mixer. Use when asked to switch cameras, put something on air, watch a stream for faults, start or stop an output, give a feed that may drop a backup source, roll an ad break, check what is live, add and watch many channels at once (a headend's channel list, one show per feed, copied or transcoded), or keep a ticker, a score or a strap current from a live data feed (RSS, JSON, CSV, websocket). Covers the agent surface: agent_state, take, revert, add_shows, show_stats, telemetry, snapshots, test_feed and bind_feed, and the safety rules that will refuse you.
 ---
 
 # Operating a GodwinMix mixer
@@ -128,6 +128,29 @@ means sending the same call again would be safe, not that it failed.
 
 `revert` undoes the last take and puts the shot before back. Use it the moment
 a take turns out wrong rather than working out by hand what was on.
+
+## A backup for a feed that may drop
+
+```
+call_tool {"name": "set_source_backup", "arguments": {"id": "cam-main", "backup": "cam-wide"}}
+```
+
+From then on, when cam-main goes down, cam-wide is drawn wherever cam-main
+appears (the programme, any scene, an inset) after 3 seconds, over a fade,
+and cam-main goes back by itself once it has been live for 5 seconds. Pick a
+backup that is live: a wide shot, a looping clip, a still. `after_secs`,
+`transition`, `duration_ms`, `return` (`auto` or `manual`) and
+`return_after_secs` change the rest.
+
+`list_sources` shows each source's `backup`: `phase` is `ready`, `lost`,
+`on_backup`, `returning` or `main_back`, `showing` is what stands in, and
+`warning` says when the backup has no picture either. `never_live` is true
+when the source has not connected since it was added; such a source goes on
+to its backup once `stall.connect_timeout_secs` (15) has passed. While a
+backup is on, leave it to come back; do not take the dead source to "fix"
+it, the backup stands in for it there too. With `return` set to `manual`,
+call `return_from_backup {"id": "cam-main"}` once cam-main reads live; it is
+refused before then.
 
 ## Transitions and effects from packs
 
@@ -302,7 +325,8 @@ work twice, for twenty four hours.
 
 1. `agent_state {"response_format": "detailed"}`.
 2. If a source is not `live`, it is reconnecting on its own. Take a source
-   that is live rather than waiting.
+   that is live rather than waiting, unless its `backup.phase` is
+   `on_backup`: then its backup is already on air in its place.
 3. If the programme is black or frozen, take another source, then look.
 4. `program_history` says what has been on air and who put it there.
 5. Never stop the programme to investigate. A wrong shot on air is better than

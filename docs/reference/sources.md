@@ -228,7 +228,75 @@ branch's queue before the compositor, so the compositor's pad still has the
 frame and the hold costs nothing. Past 45 seconds the programme shows the
 slate under that item until the source is live again. A source that never
 delivered a picture has nothing to hold and shows the slate from the start.
-`stall.hold_last_frame = false` turns the hold off.
+`stall.hold_last_frame = false` turns the hold off. A source with a backup
+shows that instead, after its own wait; see the next section.
+
+### A backup that takes over
+
+A source can name another to stand in for it when it goes down, with
+`on_loss` in its config or `source.on_loss.set`. It works the same for every
+kind: RTMP, SRT, RIST, WHIP, RTSP, NDI, a device, a file, a plugin.
+
+* **When it counts as down.** The source reads `stalled` or `failed`, or
+  `connecting` again after it had a picture, or it is not in the mixer at all
+  (being rebuilt, or it would not start). A source on its first connection is
+  given `stall.connect_timeout_secs` (15) before it counts, so a camera a
+  second or two slow at the top of the show is not swapped out and back. Past
+  that it counts as down from the moment it was added, whatever it reads: a
+  pull into a server that never answers reads `connecting` for good, and a
+  listener waits for a sender that may never come. With the timeout set to
+  zero, `after_secs` alone decides.
+* **When the backup goes on.** `after_secs` (3) after it went down. Its last
+  frame is held meanwhile, as above, for longer than 45 seconds if
+  `after_secs` asks for that. For a source that has never connected that is
+  the connect timeout or `after_secs` after it was added, whichever is later,
+  and the slate is what it shows until then.
+* **Where.** Wherever the source is drawn: the programme on its own, an item
+  in a scene, a picture in picture at the inset's size and place, a child of a
+  group, and the armed scene in the preview. The swap is made where a scene
+  becomes compositor placements, so no layout needs to know about it. The
+  source's own multiview tile still shows its own feed, frozen, because that
+  is the truth about the feed. Tally lights the backup as on air.
+* **How.** Over the rule's transition, the same machinery a take uses, run on
+  the compositor's clock, when the source is on air. Off air the swap is
+  instant and unseen. A transition the operator started is left to finish and
+  the swap follows it, half a second later at most. The backup's sound comes
+  with its picture, by the same rule as any item.
+* **A chain.** When the backup is down too, its own backup is used, and so on.
+  A backup on screen stays while it is live, or quiet for under two seconds,
+  rather than swapping back up the chain as soon as an earlier backup
+  recovers. With nothing in the chain live, the source's last frame and then
+  the slate are on air, an error alert says so, and the status carries a
+  warning. The warning is there before it matters too: a source whose backup
+  has no picture says so while the source is still fine.
+* **Coming back.** With `return = "auto"` the source goes back once it has
+  been live for `return_after_secs` (5) without a break; a drop inside that
+  starts the count again. With `"manual"`, or after `source.backup.stay`, the
+  backup stays until `source.backup.return`, which is refused while the source
+  has no picture.
+* **The operator.** The rule never makes a take. A scene taken while the
+  backup is on is the scene that goes out, with the stand in applied inside it
+  if the source is in it, and the source coming back moves nothing unless it
+  is on air.
+* **What it costs.** Nothing for a source without `on_loss`: the board the
+  mixer keeps is empty and the tick asks it one question. A backup is an
+  ordinary source and runs whether or not it is standing in, as every source
+  in GodwinMix does, which is what makes the switch instant. A backup that is
+  not live cannot help, and the status says so.
+
+`backup` on the source's status says where it stands: `phase` is `ready`,
+`lost` (with `switch_in_ms`), `on_backup` (with `showing` and `lost_ms`),
+`returning` (with `return_in_ms`) or `main_back`, and `warning` is a sentence
+when something is wrong. `never_live` is true while the outage is a first
+connection that has not come, and the page then says "has not connected yet"
+rather than "lost". A snapshot goes out each time the phase moves.
+
+A source a channel made for an encoder goes when the encoder stops, unless a
+scene holds it. Its backup rule is kept with the channel and given back to it
+when the encoder publishes again, as long as the backup it names is still a
+source.
+`event/source.backup.on` and `event/source.backup.off` are sent as the backup
+goes on and comes off, and are hooks of the same names.
 
 ### When a restart does not finish
 

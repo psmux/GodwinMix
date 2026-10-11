@@ -22,6 +22,8 @@ mod params;
 mod ctl_rpc;
 #[path = "ctl_template.rs"]
 mod ctl_template;
+#[path = "ctl_backup.rs"]
+mod ctl_backup;
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -196,6 +198,9 @@ pub enum SourceCmd {
         #[arg(long)]
         dry_run: bool,
     },
+    /// What to show when a source goes down: set, clear, return, stay.
+    #[command(subcommand)]
+    Backup(ctl_backup::BackupCmd),
 }
 
 /// `gmx ctl scene ...`: the scene server from a command line.
@@ -598,6 +603,7 @@ async fn source(api: &Api, cmd: SourceCmd) -> Result<()> {
                 println!("removed source {id}");
             }
         }
+        SourceCmd::Backup(cmd) => ctl_backup::run(api, cmd).await?,
     }
     Ok(())
 }
@@ -671,11 +677,12 @@ fn on_air(state: &ProgramState) -> String {
 /// difference is about a core of CPU.
 fn source_line(s: &SourceStatus) -> String {
     format!(
-        "{:<10} {:<10} {}{}",
+        "{:<10} {:<10} {}{}{}",
         s.id,
         format!("{:?}", s.state).to_lowercase(),
         s.uri,
-        if s.superimposed() { "  (superimposed)" } else { "" }
+        if s.superimposed() { "  (superimposed)" } else { "" },
+        ctl_backup::note(s).map(|n| format!("  ({n})")).unwrap_or_default()
     )
 }
 

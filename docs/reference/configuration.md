@@ -291,6 +291,32 @@ config.
 | `superimpose` | `"off"` | `off`, `auto` or `on`. Web pages only. `auto` hands the page's video to the mixer's own decoder where it can |
 | `gain` | 1.0 | the operator's fader, 0.0 silent through 1.0 unity to a ceiling of 10.0, saved so a restart brings the desk back where it was left |
 | `muted` | false | muted by the operator, saved separately from the fader so unmuting returns to the level it had |
+| `on_loss` | unset | what to show in this source's place when it goes down; see below |
+
+### `on_loss`
+
+A backup for the source: another source drawn wherever this one appears once
+it has gone down, and taken off again when it is back. How to use it is
+[keep the show on air when a feed drops](../how-to/keep-the-show-on-air-when-a-feed-drops.md).
+
+```toml
+on_loss = { backup = "cam-wide", after_secs = 3, transition = "dissolve", duration_ms = 500, return = "auto" }
+```
+
+| Key | Default | Meaning |
+|---|---|---|
+| `backup` | required | the id of the source to show instead. Any source this mixer has. When it is down too, its own `on_loss` backup is used, and so on down the chain |
+| `after_secs` | 3 | seconds from the source reading stalled or failed to the backup going on. 0 switches at once. The last frame is held meanwhile, for longer than the usual 45 seconds if this asks for longer. A source that has never connected goes on to its backup at `stall.connect_timeout_secs` (15) after it was added, or at this, whichever is later |
+| `transition` | `"fade"` | the transition both ways, any a take can name: `cut`, `fade` (also written `dissolve`), `wipe`, `slide`, `push`, `zoom`, `zoom-out`, `box`, `dip`, or a transition plugin's name. Not `stinger`, which needs a clip of its own |
+| `duration_ms` | the transition's own, 300 | how long the transition runs, up to 10000 |
+| `return` | `"auto"` | `auto` goes back once the source has been live for `return_after_secs`; `manual` stays on the backup until `source.backup.return` |
+| `return_after_secs` | 5 | with `return = "auto"`, how long the source has to stay live before it goes back. A drop inside it starts the count again |
+
+A backup that is not a source here, a source that is its own backup, and a loop
+of backups (`a` falls back to `b` and `b` to `a`) stop the config loading, with
+the loop spelled out. A transition this build does not have is let through
+with a warning, since a transition plugin may bring it; if none does, the
+switch is a cut. Values are read in seconds and may be fractions.
 
 ## `[[outputs]]`
 

@@ -417,6 +417,7 @@ mod clip_frame;
 mod backoff;
 mod cue;
 mod exited;
+pub mod failover;
 mod fx_take;
 mod generation;
 mod keyed;
@@ -438,6 +439,7 @@ pub mod unattached;
 pub mod unstarted;
 #[cfg(test)]
 mod transition_tests;
+pub use failover::BackupCommand;
 pub use slots::{Placement, SlotPool};
 
 pub enum Command {
@@ -503,6 +505,9 @@ pub enum Command {
     /// used to remove and add the source, which put a gap in the programme
     /// when it was on air.
     RenameSource(SourceId, String, Option<Ack>),
+    /// Set or clear a source's backup, return to it, or stay on the backup.
+    /// See `mixer::failover`.
+    Backup(BackupCommand, Option<Ack>),
     ReconnectOutput(OutputId, Option<Ack>),
     AddOutput(Box<OutputConfig>, Option<Ack>),
     /// Change a destination in place. The config carries the id it replaces,
@@ -1313,6 +1318,10 @@ pub struct Mixer {
     /// The armed scene, in canvas pixels, as the control plane last said. The
     /// preview compositor draws these when one exists.
     preview_cells: Vec<crate::multiview::preview::Cell>,
+    /// Which sources have a backup, and which backup is drawn in whose place
+    /// now. Empty, and asked nothing, on a mixer with no `on_loss`. See
+    /// `crate::failover` and `mixer::failover`.
+    backups: crate::failover::Board,
 }
 
 /// A scene as the compositor has it: a name to report and the placements that
@@ -1409,6 +1418,8 @@ fn pending_status(cfg: &SourceConfig) -> SourceStatus {
         seekable: false,
         position_ms: None,
         duration_ms: None,
+        on_loss: cfg.on_loss.clone(),
+        backup: None,
     }
 }
 
@@ -1981,6 +1992,7 @@ impl Mixer {
             program_scene: None,
             ramp: None,
             preview_cells: Vec::new(),
+            backups: Default::default(),
         };
         Ok((mixer, handle, rx, bus_rx))
     }
@@ -2144,6 +2156,9 @@ impl Mixer {
     pub fn add_source(&mut self, cfg: &SourceConfig, overlay: Option<MediaReport>) -> Result<()> {
         anyhow::ensure!(cfg.id != AD_ID, "{AD_ID} is reserved for ad breaks");
         anyhow::ensure!(!cfg.id.trim().is_empty(), "a source needs an id");
+        // Its backup, if it has one. A source the board knows already (one
+        // being rebuilt) keeps the rule the operator last set.
+        self.backups.adopt(&cfg.id, cfg.on_loss.as_ref());
         // A bare URI is still the ordinary way to write a source, but it is no
         // longer the only one: a source written as `type` plus `params` may
         // have no address at all (a capture card, a test pattern, an NDI name).
@@ -2654,7 +2669,9 @@ impl Mixer {
         // then this source still holds the programme. The rebuilt source comes
         // back on programme when it works (see `finish_rebuild`), so this is a
         // loan and not a decision the operator has to undo.
-        let handed_over = if was_program && !has_picture {
+        // A source with a backup has its own answer to that, and taking some
+        // other source would fight it.
+        let handed_over = if was_program && !has_picture && self.backups.rule(id).is_none() {
             self.hand_programme_to_another_source(id)
         } else {
             None
@@ -3184,6 +3201,8 @@ impl Mixer {
                 // come back after a restart.
                 cfg.gain = s.gain();
                 cfg.muted = s.muted();
+                // The rule as the operator last set it, not as it was built.
+                cfg.on_loss = self.backups.rule(&cfg.id).cloned();
                 cfg
             })
             .collect();
@@ -3259,6 +3278,7 @@ impl Mixer {
         let mut cfg = slot.input.config.clone();
         cfg.gain = slot.gain();
         cfg.muted = slot.muted();
+        cfg.on_loss = self.backups.rule(id).cloned();
         self.removed.retain(|c| c.id != cfg.id);
         self.removed.push(cfg);
         if self.removed.len() > REMOVED_KEPT {
@@ -3786,25 +3806,27 @@ impl Mixer {
             Some(scene) => scene
                 .placements
                 .iter()
+                // A source that is down is drawn as its backup, wherever it is.
+                .map(|p| self.stood_in(p))
                 .filter_map(|p| match p.group.is_empty() {
                     // An ordinary item is drawn while its source is live.
-                    true => live(&p.source).then(|| p.clone()),
+                    true => live(&p.source).then_some(p),
                     // A group composited on its own is drawn while any child
                     // is: the children that are not live simply do not appear
                     // in it, exactly as they would not appear on the canvas.
                     false => {
                         let children: Vec<Placement> =
                             p.group.iter().filter(|c| live(&c.source)).cloned().collect();
-                        (!children.is_empty())
-                            .then(|| Placement { group: children, ..p.clone() })
+                        (!children.is_empty()).then_some(Placement { group: children, ..p })
                     }
                 })
                 .collect(),
             None => self
                 .program_source
                 .iter()
+                .map(|id| self.stand_in_for(id))
                 .filter(|id| live(id))
-                .map(|id| Placement::full_canvas(id.clone(), &self.canvas))
+                .map(|id| Placement::full_canvas(id, &self.canvas))
                 .collect(),
         }
     }
@@ -4093,6 +4115,7 @@ impl Mixer {
             Command::AddSource(..) | Command::AddSourceProbed(..) => "source.add",
             Command::RemoveSource(..) => "source.remove",
             Command::RenameSource(..) => "source.set",
+            Command::Backup(cmd, _) => cmd.label(),
             Command::ReconnectOutput(..) => "output.reconnect",
             Command::AddOutput(..) => "output.add",
             Command::SetOutput(..) => "output.set",
@@ -4216,6 +4239,11 @@ impl Mixer {
                 reply(ack, &r);
                 r?;
             }
+            Command::Backup(cmd, ack) => {
+                let r = self.backup_command(cmd);
+                reply(ack, &r);
+                r?;
+            }
             Command::RemoveSource(id, ack) => {
                 let r = if self.forget_unstarted(&id) {
                     Ok(())
@@ -4223,6 +4251,9 @@ impl Mixer {
                     self.remember_removed(&id);
                     self.remove_source(&id)
                 };
+                if r.is_ok() {
+                    self.backups.forget(&id);
+                }
                 reply(ack, &r);
                 r?;
             }
@@ -4439,6 +4470,10 @@ impl Mixer {
     }
 
     fn tick(&mut self) {
+        // A source that has been down long enough is drawn as its backup,
+        // and one that is steady again as itself. Before the apply below, so
+        // that apply draws what this decided.
+        self.failover(Instant::now());
         // Reassert visibility so a stall fades to slate and a recovery fades
         // back, without either needing its own event.
         self.apply_visibility(true);
@@ -4922,6 +4957,7 @@ impl Mixer {
             })
             .unwrap_or_default();
 
+        let now = Instant::now();
         let sources: Vec<SourceStatus> = self
             .sources
             .iter()
@@ -4951,7 +4987,11 @@ impl Mixer {
                     seekable: s.seekable(),
                     position_ms: at.as_ref().map(|at| at.position_ms),
                     duration_ms: at.and_then(|at| at.duration_ms),
+                    on_loss: None,
+                    backup: None,
                 };
+                // The backup it has, and where it stands with it.
+                self.backup_status(&mut status, now);
                 // What only this kind has. The keys are the same ones the JSON
                 // always carried, written from the extras rather than from
                 // fields on the universal shape.
@@ -5273,6 +5313,7 @@ impl Mixer {
     /// verb decided somewhere else a moment ago.
     fn preview_demand_now(&mut self) -> Result<()> {
         let wanted = self.mv.preview_wanted(&self.canvas);
+        let cells = self.preview_cells_now();
         let Some(mv) = self.multiview.as_mut() else {
             // No mosaic, so there is nowhere for a preview to live. The demand
             // that built the mosaic is behind this one and will come back here.
@@ -5284,7 +5325,6 @@ impl Mixer {
                 mv.preview_on(shape, self.mv.preview_publisher())
                     .context("building the preview compositor")?;
                 self.mv.mark_preview_built(Some(shape));
-                let cells = self.preview_cells.clone();
                 mv.apply_preview(&self.canvas, &cells).context("drawing the armed scene")?;
                 info!(?shape, items = cells.len(), "preview composited for a subscriber");
                 self.show_held_clips_again();
@@ -5305,7 +5345,9 @@ impl Mixer {
     /// `Vec` and nothing else.
     pub fn set_preview_cells(&mut self, cells: Vec<crate::multiview::preview::Cell>) {
         self.preview_cells = cells;
-        let cells = self.preview_cells.clone();
+        // Drawn as the programme would draw it: a source that is down shows
+        // its backup here too.
+        let cells = self.preview_cells_now();
         if let Some(mv) = self.multiview.as_mut() {
             if let Err(e) = mv.apply_preview(&self.canvas, &cells) {
                 warn!(?e, "the armed scene could not be drawn in the preview");
@@ -5732,6 +5774,7 @@ mod tests {
         cfg.params.insert("relay".into(), toml::Value::String("127.0.0.1:1935".into()));
         assert!(super::fed_by_channel(&cfg), "a channel's stream");
     }
+    mod backup;
     mod blackhole;
     mod bounded;
     mod cable;
@@ -7403,6 +7446,8 @@ mod tests {
             Command::RemoveSource("cam1".into(), None),
             Command::RenameSource("cam1".into(), "Pulpit".into(), None),
             Command::RemoveFilter("key".into(), None),
+            Command::Backup(BackupCommand::Return("cam1".into()), None),
+            Command::Backup(BackupCommand::Set("cam1".into(), None), None),
         ] {
             let label = Mixer::label(&cmd);
             assert!(!label.is_empty() && !label.contains("cam1"), "{label}");

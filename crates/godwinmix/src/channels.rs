@@ -34,6 +34,7 @@ mod guard;
 mod handover;
 pub mod hooks;
 pub(crate) mod keys;
+mod kept_rules;
 mod live;
 mod newkey;
 pub mod local;

@@ -73,6 +73,9 @@ struct Connection {
     /// the programme is a single source, so tally needs both.
     program_scene: Option<String>,
     sources: Vec<String>,
+    /// Each source that is down and the backup drawn in its place, so the
+    /// backup's tally lights while it is on air for the source.
+    stand_ins: Vec<(String, String)>,
     /// The layout id this client was last told about. Every mosaic frame
     /// carries one, so a grid that changes under a client has to be announced
     /// or the frames stop matching anything it knows.
@@ -123,6 +126,7 @@ pub async fn serve_rpc(socket: WebSocket, ctx: Ctx, token: Token, who: Who) {
         program: None,
         program_scene: None,
         sources: Vec::new(),
+        stand_ins: Vec::new(),
         layout: 0,
         told_preview: None,
         clock: RunningTime::default(),
@@ -589,7 +593,7 @@ impl Connection {
         // A take or an armed scene moves the tally whether or not this client
         // asked for the take event itself. A Stream Deck that subscribes to
         // `tally` alone must still see its lamps change.
-        let moves_tally = name == "program.took" || name == "preview.changed";
+        let moves_tally = matches!(name, "program.took" | "preview.changed" | "source.backup.on" | "source.backup.off");
         if sub.wants(name) {
             if let Some(map) = payload.as_object_mut() {
                 map.insert("seq".into(), json!(envelope.seq));
@@ -662,7 +666,17 @@ impl Connection {
                 self.program = status.program.clone();
                 self.program_scene = status.scene.clone();
                 self.sources = status.sources.iter().map(|s| s.id.clone()).collect();
+                self.stand_ins = status
+                    .sources
+                    .iter()
+                    .filter_map(|s| Some((s.id.clone(), s.backup.as_ref()?.showing.clone()?)))
+                    .collect();
             }
+            Event::SourceBackupOn { source, backup, .. } => {
+                self.stand_ins.retain(|(s, _)| s != source);
+                self.stand_ins.push((source.clone(), backup.clone()));
+            }
+            Event::SourceBackupOff { source, .. } => self.stand_ins.retain(|(s, _)| s != source),
             Event::Took { source, scene, .. } => {
                 self.program = source.clone();
                 self.program_scene = scene.clone();
@@ -685,7 +699,12 @@ impl Connection {
         // `off`; a client that needs to tell "nothing armed" from "armed and
         // empty" reads `preview_empty` on `event/multiview.layout`.
         let previewing = self.preview_sources();
-        let on_air = self.program_sources();
+        let mut on_air = self.program_sources();
+        on_air.extend(self.program.iter().cloned());
+        // A backup drawn in place of a source on air is on air itself.
+        let standing: Vec<String> =
+            self.stand_ins.iter().filter(|(s, _)| on_air.contains(s)).map(|(_, b)| b.clone()).collect();
+        on_air.extend(standing);
         let mut sources = Map::new();
         for id in &self.sources {
             let state = if Some(id) == self.program.as_ref() || on_air.iter().any(|p| p == id) {

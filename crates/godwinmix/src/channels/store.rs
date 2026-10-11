@@ -39,6 +39,10 @@ pub struct Record {
     /// take away again.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub auto_sources: Vec<String>,
+    /// The backup rule each of those sources had when its encoder stopped
+    /// and the source went, given back to it when the encoder returns.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub auto_rules: BTreeMap<String, godwinmix_protocol::backup::OnLoss>,
     /// Where its streams are sent on to. The address and key of each are
     /// sealed in the secret store; only what a list shows is here.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -181,6 +185,7 @@ mod tests {
                 imported: true,
             }],
             auto_sources: vec![],
+            auto_rules: Default::default(),
             destinations: vec![DestinationRecord {
                 id: "youtube".into(),
                 platform: "youtube".into(),

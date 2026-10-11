@@ -252,6 +252,25 @@ export interface BackupInput {
   uri: string;
 }
 
+/** Where a source with a backup stands. */
+export type BackupPhase = "ready" | "lost" | "on_backup" | "returning" | "main_back";
+
+/** `source.backup.return` and `source.backup.stay`: the source by id. */
+export interface BackupRequest {
+  id: string;
+}
+
+/** `backup` on a source's status, present when it has `on_loss`. */
+export interface BackupState {
+  lost_ms?: number | null;
+  never_live?: boolean;
+  phase: BackupPhase;
+  return_in_ms?: number | null;
+  showing?: string | null;
+  switch_in_ms?: number | null;
+  warning?: string | null;
+}
+
 /** `scene.item.bind`. */
 export interface BindRequest {
   draft?: string | null;
@@ -1962,6 +1981,16 @@ export interface Ograf {
   version?: string | null;
 }
 
+/** `on_loss` on a source: what to show when it goes down. */
+export interface OnLoss {
+  after_secs?: number;
+  backup: string;
+  duration_ms?: number | null;
+  return?: ReturnMode;
+  return_after_secs?: number;
+  transition?: string;
+}
+
 /** Where an item came from. */
 export type Origin = "shipped" | "agent" | "uploaded";
 
@@ -2442,6 +2471,9 @@ export interface Resync {
   from_seq: number;
 }
 
+/** How the programme goes back to a source that came back. */
+export type ReturnMode = "auto" | "manual";
+
 /** The RTMP port every channel shares. */
 export interface RtmpInfo {
   listening: boolean;
@@ -2570,6 +2602,20 @@ export interface SetItemRequest {
   props: Record<string, unknown>;
   scene: string;
   seq?: number | null;
+}
+
+/**
+ * `source.on_loss.set`: only what is named changes. A source with no rule
+ * yet needs `backup`; every other field has a default.
+ */
+export interface SetOnLossRequest {
+  after_secs?: number | null;
+  backup?: string | null;
+  duration_ms?: number | null;
+  id: string;
+  return?: ReturnMode | null;
+  return_after_secs?: number | null;
+  transition?: string | null;
 }
 
 /**
@@ -2959,6 +3005,7 @@ export type SourceState = "connecting" | "live" | "stalled" | "failed";
 
 export interface SourceStatus {
   audio_idle_ms?: number | null;
+  backup?: BackupState | null;
   cell?: number | null;
   duration_ms?: number | null;
   gain?: number;
@@ -2967,6 +3014,7 @@ export interface SourceStatus {
   id: string;
   muted?: boolean;
   name: string;
+  on_loss?: OnLoss | null;
   position_ms?: number | null;
   seekable?: boolean;
   state: SourceState;
@@ -3424,6 +3472,19 @@ export interface SourceEndedEvent {
   source?: string;
 }
 
+export interface SourceBackupOnEvent {
+  backup?: string;
+  lost_ms?: number;
+  source?: string;
+  transition?: string;
+}
+
+export interface SourceBackupOffEvent {
+  backup?: string;
+  reason?: "returned" | "operator" | "cleared" | "backup_down";
+  source?: string;
+}
+
 export interface SourcePositionEvent {
   duration_ms?: number | null;
   position_ms?: number;
@@ -3700,12 +3761,16 @@ export interface MethodParams {
   "snapshot.get": SnapshotRequest;
   "source.add": AddSourceRequest;
   "source.audio.set": AudioSetParams;
+  "source.backup.return": BackupRequest;
+  "source.backup.stay": BackupRequest;
   "source.duplicate": DuplicateSourceRequest;
   "source.get": IdRequest;
   "source.group": GroupSourcesRequest;
   "source.key_color": KeyColorRequest;
   "source.list": Record<string, never>;
   "source.missing": MissingRequest;
+  "source.on_loss.clear": IdRequest;
+  "source.on_loss.set": SetOnLossRequest;
   "source.remove": IdRequest;
   "source.restart": IdRequest;
   "source.restore": IdRequest;
@@ -3923,12 +3988,16 @@ export interface MethodResults {
   "snapshot.get": Record<string, unknown>;
   "source.add": SourceStatus;
   "source.audio.set": SourceAudioState;
+  "source.backup.return": SourceStatus;
+  "source.backup.stay": SourceStatus;
   "source.duplicate": SourceStatus;
   "source.get": SourceStatus;
   "source.group": Record<string, unknown>;
   "source.key_color": KeyColor;
   "source.list": SourceStatus[];
   "source.missing": MissingSource[];
+  "source.on_loss.clear": SourceStatus;
+  "source.on_loss.set": SourceStatus;
   "source.remove": Record<string, unknown>;
   "source.restart": SourceStatus;
   "source.restore": SourceStatus;
@@ -3960,6 +4029,8 @@ export interface EventPayloads {
   "preview.changed": PreviewChangedEvent;
   "source.state": SourceStateEvent;
   "source.ended": SourceEndedEvent;
+  "source.backup.on": SourceBackupOnEvent;
+  "source.backup.off": SourceBackupOffEvent;
   "source.position": SourcePositionEvent;
   "output.state": OutputStateEvent;
   "adbreak.changed": AdbreakChangedEvent;
@@ -4198,12 +4269,16 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "snapshot.get", summary: "One JPEG: the whole contact sheet, the programme, or one source cut out of the mosaic.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/snapshot/{id}" } },
   { name: "source.add", summary: "Add a source while the mixer runs. Answers with the id it got and the whole source record.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/sources" } },
   { name: "source.audio.set", summary: "Move a source's audio: the fader, the mute, and for a superimposed page the balance between its own sound and the videos under it.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/sources/{id}/audio" } },
+  { name: "source.backup.return", summary: "Go back from the backup to the source now, over the rule's transition. Refused while the source has no picture.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/sources/{id}/backup/return" } },
+  { name: "source.backup.stay", summary: "Keep the backup on even once the source is back, until source.backup.return.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/sources/{id}/backup/stay" } },
   { name: "source.duplicate", summary: "Add another source like one the mixer has: the same address and settings under a new id. A client cannot do this with source.add, because the address it is shown has everything after the host cut off.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/sources/{id}/duplicate" } },
   { name: "source.get", summary: "One source. Refused with the ids that exist when there is no such source.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/sources/{id}" } },
   { name: "source.group", summary: "Put sources in a tray folder. A tag for finding things, not a group on the canvas.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/sources/{id}/group" } },
   { name: "source.key_color", summary: "The colour to key a source on: the colour at a point of its picture, or with no point the green or blue screen it stands in front of.", scope: "read", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/sources/{id}/key_color" } },
   { name: "source.list", summary: "Every source, with its state, whether it has video and audio, and its fader.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/sources" } },
   { name: "source.missing", summary: "Sources that are not running, and why: failed, could not be started (with the error and the action that fixes it), removed, or unknown. Pass the ids a scene draws, or none for every one the mixer knows about.", scope: "read", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/sources/{id}/missing" } },
+  { name: "source.on_loss.clear", summary: "Take a source's backup away. If the backup is on now, the source is drawn as itself again at once.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/sources/{id}/on_loss/clear" } },
+  { name: "source.on_loss.set", summary: "Give a source a backup: another source drawn in its place, wherever it appears, once it has had no picture for after_secs, and taken off again when it is back. Only the fields named change; a source with no backup yet needs `backup`.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/sources/{id}/on_loss" } },
   { name: "source.remove", summary: "Remove a source. If it is on programme the mixer cuts to the slate first.", scope: "operate", mutating: true, destructive: true, rest: { method: "DELETE", path: "/api/v1/sources/{id}" } },
   { name: "source.restart", summary: "Build a source's pipeline again now, rather than waiting for its next retry. For a source that could not be started or was removed, use source.restore.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/sources/{id}/restart" } },
   { name: "source.restore", summary: "Put back a source that source.remove took away, as it was: same id, address, settings, fader and mute. The mixer remembers the last sixteen it removed, until it restarts.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/sources/{id}/restore" } },
@@ -4244,6 +4319,8 @@ export const EVENT_NAMES: readonly EventName[] = [
   "preview.changed",
   "source.state",
   "source.ended",
+  "source.backup.on",
+  "source.backup.off",
   "source.position",
   "output.state",
   "adbreak.changed",
@@ -5258,6 +5335,16 @@ export class GeneratedMethods {
     return this._call("source.audio.set", params as unknown as Record<string, unknown>) as Promise<SourceAudioState>;
   }
 
+  /** Go back from the backup to the source now, over the rule's transition. Refused while the source has no picture. */
+  sourceBackupReturn(params: BackupRequest): Promise<SourceStatus> {
+    return this._call("source.backup.return", params as unknown as Record<string, unknown>) as Promise<SourceStatus>;
+  }
+
+  /** Keep the backup on even once the source is back, until source.backup.return. */
+  sourceBackupStay(params: BackupRequest): Promise<SourceStatus> {
+    return this._call("source.backup.stay", params as unknown as Record<string, unknown>) as Promise<SourceStatus>;
+  }
+
   /** Add another source like one the mixer has: the same address and settings under a new id. A client cannot do this with source.add, because the address it is shown has everything after the host cut off. */
   sourceDuplicate(params: DuplicateSourceRequest): Promise<SourceStatus> {
     return this._call("source.duplicate", params as unknown as Record<string, unknown>) as Promise<SourceStatus>;
@@ -5286,6 +5373,16 @@ export class GeneratedMethods {
   /** Sources that are not running, and why: failed, could not be started (with the error and the action that fixes it), removed, or unknown. Pass the ids a scene draws, or none for every one the mixer knows about. */
   sourceMissing(params: MissingRequest = {}): Promise<MissingSource[]> {
     return this._call("source.missing", params as unknown as Record<string, unknown>) as Promise<MissingSource[]>;
+  }
+
+  /** Take a source's backup away. If the backup is on now, the source is drawn as itself again at once. */
+  sourceOnLossClear(params: IdRequest): Promise<SourceStatus> {
+    return this._call("source.on_loss.clear", params as unknown as Record<string, unknown>) as Promise<SourceStatus>;
+  }
+
+  /** Give a source a backup: another source drawn in its place, wherever it appears, once it has had no picture for after_secs, and taken off again when it is back. Only the fields named change; a source with no backup yet needs `backup`. */
+  sourceOnLossSet(params: SetOnLossRequest): Promise<SourceStatus> {
+    return this._call("source.on_loss.set", params as unknown as Record<string, unknown>) as Promise<SourceStatus>;
   }
 
   /** Remove a source. If it is on programme the mixer cuts to the slate first. */

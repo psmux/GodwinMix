@@ -12,7 +12,7 @@
 // measured for a tile nobody chose to meter.
 
 import { el, svg } from "../../shell/dom.js";
-import { ICONS } from "../../client/kinds.js";
+import { ICONS } from "../../client/kind-look.js";
 import { addView, meterElement } from "../../shell/meter.js";
 
 /**

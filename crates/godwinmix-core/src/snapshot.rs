@@ -743,6 +743,8 @@ mod tests {
             seekable: false,
             position_ms: None,
             duration_ms: None,
+            on_loss: None,
+            backup: None,
             extra: Default::default(),
         };
         MixerStatus {

@@ -10,6 +10,7 @@
 use godwinmix_core::config::SourceConfig;
 use godwinmix_core::mixer::{Command, MixerHandle};
 use godwinmix_core::scene::server::SceneServer;
+use godwinmix_protocol::backup::OnLoss;
 use serde_json::Value;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -25,6 +26,10 @@ pub trait Programme: Send + Sync {
     fn add_source(&self, cfg: SourceConfig) -> Result<(), String>;
     /// Take it away, as `source.remove` does.
     fn remove_source(&self, id: &str);
+    /// Its backup rule, if it has one, to keep while the source is gone.
+    fn rule_of(&self, _id: &str) -> Option<OnLoss> {
+        None
+    }
 }
 
 /// This process's own mixer and scenes.
@@ -99,6 +104,12 @@ impl Programme for Local {
         if self.mixer.send(Command::RemoveSource(id.to_string(), Some(ack))).is_ok() {
             let _ = answer(told, "source.remove");
         }
+    }
+
+    fn rule_of(&self, id: &str) -> Option<OnLoss> {
+        let (tx, rx) = oneshot::channel();
+        self.mixer.send(Command::Configs(tx)).ok()?;
+        answer(rx, "source.list").ok()?.sources.into_iter().find(|s| s.id == id)?.on_loss
     }
 }
 

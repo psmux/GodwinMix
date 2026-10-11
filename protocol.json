@@ -1018,6 +1018,106 @@
       ],
       "type": "object"
     },
+    "BackupPhase": {
+      "description": "Where a source with a backup stands.",
+      "oneOf": [
+        {
+          "const": "ready",
+          "description": "The source is live and drawn as itself.",
+          "type": "string"
+        },
+        {
+          "const": "lost",
+          "description": "It has no picture; its last frame is held until `switch_in_ms` runs out.",
+          "type": "string"
+        },
+        {
+          "const": "on_backup",
+          "description": "Its backup is drawn in its place.",
+          "type": "string"
+        },
+        {
+          "const": "returning",
+          "description": "It is live again and goes back when `return_in_ms` runs out.",
+          "type": "string"
+        },
+        {
+          "const": "main_back",
+          "description": "It is live again and the backup stays until the operator returns it.",
+          "type": "string"
+        }
+      ]
+    },
+    "BackupRequest": {
+      "description": "`source.backup.return` and `source.backup.stay`: the source by id.",
+      "properties": {
+        "id": {
+          "description": "The source that went down, not its backup.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object"
+    },
+    "BackupState": {
+      "description": "`backup` on a source's status, present when it has `on_loss`.",
+      "properties": {
+        "lost_ms": {
+          "description": "How long this source has had no picture, while it has none.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "never_live": {
+          "description": "True while the outage is the source's first connection: it has not\nbeen live since it was added, and has gone past\n`stall.connect_timeout_secs` or failed. \"Has not connected yet\"\nrather than \"lost\".",
+          "type": "boolean"
+        },
+        "phase": {
+          "$ref": "#/$defs/BackupPhase"
+        },
+        "return_in_ms": {
+          "description": "In `returning`, how long until the source goes back on.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "showing": {
+          "description": "The source drawn in this one's place, while one is.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "switch_in_ms": {
+          "description": "In `lost`, how long until the backup goes on.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "warning": {
+          "description": "Something the operator should know, such as the backup being down\ntoo, in a sentence that says what happens because of it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "phase"
+      ],
+      "type": "object"
+    },
     "BindRequest": {
       "description": "`scene.item.bind`.",
       "properties": {
@@ -8078,6 +8178,51 @@
       },
       "type": "object"
     },
+    "OnLoss": {
+      "additionalProperties": false,
+      "description": "`on_loss` on a source: what to show when it goes down.",
+      "properties": {
+        "after_secs": {
+          "default": 3.0,
+          "description": "Seconds to hold the last frame before switching. 0 switches at once.",
+          "format": "double",
+          "type": "number"
+        },
+        "backup": {
+          "description": "The source shown instead: any source id this mixer has, a camera, a\nlooping clip, a still or a graphic. When it is down too, its own\n`on_loss` backup is used, if it has one.",
+          "type": "string"
+        },
+        "duration_ms": {
+          "description": "How long the transition runs. Absent takes the transition's own\ndefault, 300 ms.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "return": {
+          "$ref": "#/$defs/ReturnMode",
+          "default": "auto",
+          "description": "`auto` goes back once the source is steady again; `manual` stays on\nthe backup until the operator calls `source.backup.return`."
+        },
+        "return_after_secs": {
+          "default": 5.0,
+          "description": "With `return = \"auto\"`, how long the source has to stay live before\nit goes back, so a feed that flickers does not flap the programme.",
+          "format": "double",
+          "type": "number"
+        },
+        "transition": {
+          "default": "fade",
+          "description": "Any transition a take can name, or `cut`. `dissolve` is read as `fade`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "backup"
+      ],
+      "type": "object"
+    },
     "Origin": {
       "description": "Where an item came from.",
       "oneOf": [
@@ -9923,6 +10068,21 @@
       ],
       "type": "object"
     },
+    "ReturnMode": {
+      "description": "How the programme goes back to a source that came back.",
+      "oneOf": [
+        {
+          "const": "auto",
+          "description": "By itself, once the source has stayed live for `return_after_secs`.",
+          "type": "string"
+        },
+        {
+          "const": "manual",
+          "description": "Only when the operator says so.",
+          "type": "string"
+        }
+      ]
+    },
     "RtmpInfo": {
       "description": "The RTMP port every channel shares.",
       "properties": {
@@ -10379,6 +10539,70 @@
         "scene",
         "item",
         "props"
+      ],
+      "type": "object"
+    },
+    "SetOnLossRequest": {
+      "additionalProperties": false,
+      "description": "`source.on_loss.set`: only what is named changes. A source with no rule\nyet needs `backup`; every other field has a default.",
+      "properties": {
+        "after_secs": {
+          "description": "Seconds to hold the last frame before switching. 3 by default.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "backup": {
+          "description": "The source to show instead.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "duration_ms": {
+          "description": "How long the transition runs. 0 is a cut.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "id": {
+          "description": "The source that may go down.",
+          "type": "string"
+        },
+        "return": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ReturnMode"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "`auto` or `manual`."
+        },
+        "return_after_secs": {
+          "description": "With `return = \"auto\"`, how long the source stays live before it goes\nback. 5 by default.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "transition": {
+          "description": "Any transition a take can name, or `cut`. `fade` by default.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id"
       ],
       "type": "object"
     },
@@ -11993,6 +12217,17 @@
             "null"
           ]
         },
+        "backup": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BackupState"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Where it stands with that backup: ready, lost, on the backup, or back\nand returning. Present whenever `on_loss` is."
+        },
         "cell": {
           "description": "Index into the multiview grid, or None while the source has no cell.",
           "format": "uint32",
@@ -12032,6 +12267,17 @@
         },
         "name": {
           "type": "string"
+        },
+        "on_loss": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OnLoss"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "What to show when this source goes down, when it has a backup."
         },
         "position_ms": {
           "description": "Where this source has got to, and how long it runs, in milliseconds.\n`None` on anything not seekable, and on a seekable source whose duration\nthe demuxer has not worked out yet.",
@@ -14018,6 +14264,62 @@
       },
       "since": "1",
       "summary": "A clip's last frame has gone out to the programme. at_end says what it does now: repeat plays it again from the start, hold keeps the last frame up, and leave holds it while the programme moves to the armed scene or the one on air before the clip."
+    },
+    {
+      "ext": null,
+      "legacy": "source_backup_on",
+      "name": "event/source.backup.on",
+      "pattern": "source.backup.on",
+      "payload": {
+        "properties": {
+          "backup": {
+            "description": "The source drawn in its place.",
+            "type": "string"
+          },
+          "lost_ms": {
+            "description": "How long it had been without a picture.",
+            "type": "integer"
+          },
+          "source": {
+            "description": "The source that went down.",
+            "type": "string"
+          },
+          "transition": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "since": "1",
+      "summary": "A source with on_loss went down for its after_secs and its backup is now                       drawn in its place, everywhere it appears. Sent again with the next                       backup when the first is down too and the chain moves on."
+    },
+    {
+      "ext": null,
+      "legacy": "source_backup_off",
+      "name": "event/source.backup.off",
+      "pattern": "source.backup.off",
+      "payload": {
+        "properties": {
+          "backup": {
+            "type": "string"
+          },
+          "reason": {
+            "enum": [
+              "returned",
+              "operator",
+              "cleared",
+              "backup_down"
+            ],
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "since": "1",
+      "summary": "The backup is no longer drawn in the source's place. reason is returned                       (the source came back and stayed steady), operator (source.backup.return),                       cleared (the rule was taken off) or backup_down (the backup went down too                       and nothing else could stand in)."
     },
     {
       "ext": "positions",
@@ -19797,6 +20099,51 @@
     {
       "destructive": false,
       "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "return_from_backup"
+      },
+      "mutating": true,
+      "name": "source.backup.return",
+      "params": {
+        "$ref": "#/$defs/BackupRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/sources/{id}/backup/return"
+      },
+      "result": {
+        "$ref": "#/$defs/SourceStatus"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "Go back from the backup to the source now, over the rule's transition. Refused while the source has no picture."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mutating": true,
+      "name": "source.backup.stay",
+      "params": {
+        "$ref": "#/$defs/BackupRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/sources/{id}/backup/stay"
+      },
+      "result": {
+        "$ref": "#/$defs/SourceStatus"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "Keep the backup on even once the source is back, until source.backup.return."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
       "mutating": true,
       "name": "source.duplicate",
       "params": {
@@ -19929,6 +20276,51 @@
       "scope": "read",
       "since": "1",
       "summary": "Sources that are not running, and why: failed, could not be started (with the error and the action that fixes it), removed, or unknown. Pass the ids a scene draws, or none for every one the mixer knows about."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mutating": true,
+      "name": "source.on_loss.clear",
+      "params": {
+        "$ref": "#/$defs/IdRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/sources/{id}/on_loss/clear"
+      },
+      "result": {
+        "$ref": "#/$defs/SourceStatus"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "Take a source's backup away. If the backup is on now, the source is drawn as itself again at once."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "set_source_backup"
+      },
+      "mutating": true,
+      "name": "source.on_loss.set",
+      "params": {
+        "$ref": "#/$defs/SetOnLossRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/sources/{id}/on_loss"
+      },
+      "result": {
+        "$ref": "#/$defs/SourceStatus"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "Give a source a backup: another source drawn in its place, wherever it appears, once it has had no picture for after_secs, and taken off again when it is back. Only the fields named change; a source with no backup yet needs `backup`."
     },
     {
       "destructive": true,

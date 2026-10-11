@@ -61,10 +61,48 @@ pub struct SourceStatus {
     /// and the tile takes that colour instead of the one derived from the id.
     #[serde(default)]
     pub color: Option<String>,
+    /// Where it stands with its backup, when it has one.
+    #[serde(default)]
+    pub backup: Option<Backup>,
 }
 
 fn unity() -> f64 {
     1.0
+}
+
+/// `BackupState`: a source's backup and where it stands.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct Backup {
+    /// `ready`, `lost`, `on_backup`, `returning` or `main_back`.
+    #[serde(default)]
+    pub phase: String,
+    #[serde(default)]
+    pub showing: Option<String>,
+    #[serde(default)]
+    pub lost_ms: Option<u64>,
+    #[serde(default)]
+    pub switch_in_ms: Option<u64>,
+    #[serde(default)]
+    pub return_in_ms: Option<u64>,
+    #[serde(default)]
+    pub warning: Option<String>,
+}
+
+impl Backup {
+    /// A few words for the source row, when there is something to say:
+    /// `lost 0:12, showing cam-wide`.
+    pub fn note(&self) -> Option<String> {
+        let secs = |ms: Option<u64>| ms.unwrap_or(0).div_ceil(1000);
+        let lost = self.lost_ms.unwrap_or(0) / 1000;
+        let showing = self.showing.as_deref().unwrap_or("its last frame");
+        Some(match self.phase.as_str() {
+            "lost" => format!("lost, backup in {} s", secs(self.switch_in_ms)),
+            "on_backup" => format!("lost {}:{:02}, showing {showing}", lost / 60, lost % 60),
+            "returning" => format!("back, returning in {} s", secs(self.return_in_ms)),
+            "main_back" => format!("back, {showing} stays until returned"),
+            _ => return self.warning.as_ref().map(|_| "backup has no picture".to_string()),
+        })
+    }
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]

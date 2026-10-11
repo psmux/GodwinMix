@@ -10,6 +10,7 @@
 use super::state::Station;
 use crate::channels::target::{places, Programme};
 use godwinmix_core::config::SourceConfig;
+use godwinmix_protocol::backup::OnLoss;
 use serde_json::{json, Value};
 use std::sync::Weak;
 use std::time::Duration;
@@ -54,10 +55,20 @@ impl Programme for FirstShow {
         params.insert("name".into(), json!(cfg.name));
         params.insert("type".into(), json!(cfg.type_id));
         params.insert("uri".into(), json!(format!("channel:{stream}")));
+        if let Some(rule) = &cfg.on_loss {
+            params.insert("on_loss".into(), json!(rule));
+        }
         self.ask("source.add", Value::Object(params)).map(|_| ())
     }
 
     fn remove_source(&self, id: &str) {
         let _ = self.ask("source.remove", json!({ "id": id }));
+    }
+
+    fn rule_of(&self, id: &str) -> Option<OnLoss> {
+        let list = self.ask("source.list", json!({})).ok()?;
+        let rows = list.get("sources").and_then(Value::as_array).or_else(|| list.as_array())?;
+        let row = rows.iter().find(|s| s.get("id").and_then(Value::as_str) == Some(id))?;
+        serde_json::from_value(row.get("on_loss")?.clone()).ok()
     }
 }

@@ -80,6 +80,8 @@ pub async fn waiting_record(app: &AppState, id: &str) -> Option<SourceStatus> {
         seekable: false,
         position_ms: None,
         duration_ms: None,
+        on_loss: None,
+        backup: None,
         extra,
     })
 }
