@@ -48,6 +48,11 @@ impl Liveness for Seen<'_> {
         match self.slot(id) {
             Some(s) => match s.input.observed_state() {
                 SourceState::Live => false,
+                // A try of one that would not start fails at once where a
+                // refused connection is answered at once (Linux, macOS), so
+                // until it has been live that is still its first connection,
+                // given the connect timeout by `unconnected_for`.
+                SourceState::Failed if s.watch.live_at.is_none() && self.2.first_tried(id).is_some() => false,
                 SourceState::Stalled | SourceState::Failed => true,
                 // Connecting again after it had a picture is down; its first
                 // connection is not.
