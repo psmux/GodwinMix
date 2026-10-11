@@ -40,7 +40,9 @@ runtime list and in `source.missing` with its error, and is tried again by
 itself. The first three tries follow the restart delay, half a second growing
 towards ten; after `stall.rebuild_attempts` (3) failures the wait is
 `stall.rebuild_backoff_secs` (30), doubling to `stall.rebuild_backoff_max_secs`
-(300). It reads `failed` in `event/source.state` between tries, and the log
+(300). A source with a backup stays on the restart delay, never more than
+ten seconds apart, since its backup covers it and the operator expects it
+back. It reads `failed` in `event/source.state` between tries, and the log
 says `the source did not start; trying it again later` with the count and the
 wait. A source waiting on a piece being set up, a plugin or the browser
 renderer, is not on this clock: it starts when the piece is ready. Removing
@@ -248,7 +250,9 @@ kind: RTMP, SRT, RIST, WHIP, RTSP, NDI, a device, a file, a plugin.
   start at all, such as a pull whose server refuses the connection, is the
   same: while it waits to be tried again it is listed as `failed`, its
   backup goes on as for any first connection, and the wait between tries
-  grows from half a second to ten until it has been live. With the timeout
+  grows from half a second to ten until it has been live. It can be taken
+  to programme while it waits, and its backup is drawn there until it
+  starts; one without a backup is refused with its error. With the timeout
   set to zero, `after_secs` alone decides.
 * **When the backup goes on.** `after_secs` (3) after it went down. Its last
   frame is held meanwhile, as above, for longer than 45 seconds if

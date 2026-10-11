@@ -98,6 +98,25 @@ impl UnstartedList {
 }
 
 impl Mixer {
+    /// Whether `id` can go on program. A source still waiting to start can,
+    /// when it has a backup: the backup is drawn until it starts, which is
+    /// what an operator who set a backup expects of a camera not there yet.
+    pub(super) fn takeable(&self, id: &SourceId) -> anyhow::Result<()> {
+        if self.sources.iter().any(|s| &s.input.id == id) {
+            return Ok(());
+        }
+        let Some(waiting) = self.unstarted.entries().iter().find(|u| u.config.id == *id) else {
+            anyhow::bail!("no such source {id}");
+        };
+        if self.backups.rule(id).is_some() {
+            return Ok(());
+        }
+        anyhow::bail!(
+            "{id} has not started ({}) and is tried again by itself; take it once it is live, or give it a backup to show meanwhile",
+            waiting.error
+        )
+    }
+
     /// Ask for an unstarted source again after the backoff, counting the
     /// failure. The supervisor clears the count once the source has been
     /// live, so a source that came up and later failed again starts from the
@@ -110,7 +129,13 @@ impl Mixer {
             state: SourceState::Failed,
         });
         let before = self.unstarted.tried(id);
-        let delay = backoff::unstarted_delay(&self.cfg.stall, before);
+        // One with a backup is a camera the operator expects back and is
+        // covering meanwhile, so it keeps the restart curve, up to ten
+        // seconds, rather than moving to tries minutes apart.
+        let delay = match self.backups.rule(id) {
+            Some(_) => backoff::restart_delay(before),
+            None => backoff::unstarted_delay(&self.cfg.stall, before),
+        };
         info!(source = %id, failures = before + 1, ?delay, "the source did not start; trying it again later");
         let handle = self.handle.clone();
         let again = id.clone();

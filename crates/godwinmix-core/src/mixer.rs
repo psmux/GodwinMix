@@ -2349,7 +2349,16 @@ impl Mixer {
             }
         };
         if let Err(e) = started {
+            // A source with a backup that the operator took while it waited
+            // stays taken: its backup is drawn until a later try starts it.
+            let kept = (self.program_source.as_ref() == Some(&cfg.id) && self.backups.rule(&cfg.id).is_some())
+                .then(|| self.program_source.take())
+                .flatten();
             let _ = self.remove_source(&cfg.id);
+            if kept.is_some() {
+                self.program_source = kept;
+                self.apply_visibility(true);
+            }
             return Err(e);
         }
         for f in configured
@@ -3351,9 +3360,7 @@ impl Mixer {
     /// arrive.
     pub fn take(&mut self, source: Option<SourceId>, at_running_time_ms: Option<u64>) -> Result<()> {
         if let Some(id) = &source {
-            if !self.sources.iter().any(|s| &s.input.id == id) {
-                anyhow::bail!("no such source {id}");
-            }
+            self.takeable(id)?;
         }
 
         if let Some(ms) = at_running_time_ms {
