@@ -7,7 +7,8 @@
 import { el } from "../../shell/dom.js";
 import { errorToast } from "../../shell/toast.js";
 import { nameOf } from "../sources/local.js";
-import { backupLine, namesIn } from "../sources/backup-line.js";
+import { backupLine } from "../sources/backup-line.js";
+import { namesIn } from "../sources/backup-slot.js";
 
 /** The sources whose backup has something to say on the programme. */
 export function standingIn(state) {
@@ -21,7 +22,7 @@ export class BackupBanner {
     this.node = el("div.backup-banner", { hidden: true, "aria-live": "polite" });
   }
 
-  render(state) {
+  sync(state) {
     const list = standingIn(state);
     const names = namesIn(state, nameOf);
     const keep = new Set(list.map((s) => s.id));

@@ -12,7 +12,7 @@ import { UNITY, gainToPos, gainLabel, fmtPosition } from "../../shell/fader.js";
 import { nameOf, colourOf, isLocal } from "./local.js";
 import { dragHandle } from "../../shell/pointer.js";
 import { repeatButton, syncRepeat, playbackText } from "./clip-end.js";
-import { backupLine } from "./backup-line.js";
+import { lazyLine } from "./backup-slot.js";
 
 /**
  * @param {object} source   a SourceStatus
@@ -39,7 +39,7 @@ export function buildTile(source, deps) {
   node.classList.toggle("sound", level.sound);
   node.classList.toggle("metered", !!level.meter);
   // What its backup is doing, or the offer of one when it went down with none.
-  const backup = backupLine({ call: (m, id) => deps.onBackup && deps.onBackup(m, id), openBackup: (id) => deps.onGear(id, "backup"), hint: true });
+  const backup = lazyLine({ call: deps.onBackup, openBackup: (id) => deps.onGear(id, "backup"), hint: true });
   node.append(pic, still, kindbox, ...[level.face, level.meter].filter(Boolean), slot, strip, bar, playback, backup.node);
 
   // ----------------------------------------------------------- the strip

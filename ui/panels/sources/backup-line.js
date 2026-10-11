@@ -3,12 +3,16 @@
 //
 // Hidden for a source that is fine. A clock ticks once a second, and only
 // while some line on the page is counting: a page with every source live runs
-// no timer at all.
+// no timer at all. Loaded by backup-slot.js when a line is first wanted, with
+// its own stylesheet, so a show with no backups pays for none of it.
 
 import { el, clear } from "../../shell/dom.js";
-import { backupView, wantsBackupHint, BackupClock } from "./backup-status.js";
+import { backupView, BackupClock } from "./backup-status.js";
+import { wantsBackupHint } from "./backup-slot.js";
 
 export const backupClock = new BackupClock();
+
+document.head.appendChild(el("link", { rel: "stylesheet", href: new URL("./backup.css", import.meta.url).href }));
 
 const ticking = new Set();
 let timer = null;
@@ -85,13 +89,4 @@ function paint(line, text, warn, buttons, deps) {
   for (const [i, action] of (view ? view.actions : []).entries()) {
     buttons.append(button(action.label, () => deps.call(action.method, source.id), i === 0));
   }
-}
-
-/** A name for every id in a state, with the names this page shows elsewhere. */
-export function namesIn(state, nameOf) {
-  const sources = (state && state.sources) || [];
-  return (id) => {
-    const found = sources.find((s) => s.id === id);
-    return found ? nameOf(found) : id;
-  };
 }

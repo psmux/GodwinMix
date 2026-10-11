@@ -7,7 +7,9 @@
 import { el } from "../../shell/dom.js";
 import { errorToast } from "../../shell/toast.js";
 import { nameOf } from "./local.js";
-import { namesIn } from "./backup-line.js";
+import { namesIn } from "./backup-slot.js";
+// For the stylesheet it brings, which colours the warning here as on a tile.
+import "./backup-line.js";
 import { TRANSITIONS, ruleValues, backupChoices, ruleRequest, backupWarning, ruleSummary } from "./backup-rule.js";
 
 function select(label, options, value) {

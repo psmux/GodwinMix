@@ -61,19 +61,6 @@ export function backupView(source, nameFor, elapsed = 0) {
   return view;
 }
 
-/** Text, ticker and template sources have their own editors and never go down. */
-const NO_PICTURE_TO_LOSE = /^(text|ticker|template)\//;
-
-/**
- * True when a source has just gone down and nothing is set to stand in for
- * it: the moment to offer a backup, on its tile.
- */
-export function wantsBackupHint(source) {
-  if (!source || source.on_loss || source.has_video === false) return false;
-  if (NO_PICTURE_TO_LOSE.test(source.type || "")) return false;
-  return source.state === "stalled" || source.state === "failed";
-}
-
 /**
  * When each source's last backup snapshot arrived, so a countdown runs from
  * the right moment. A snapshot with the same numbers keeps its first time:
