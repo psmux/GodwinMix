@@ -17,9 +17,24 @@ impl Liveness for Up {
     fn live(&self, id: &str) -> bool {
         self.0.contains(id)
     }
+    /// Anything not live is down here, except a name starting `new-`, which
+    /// is on its first connection.
+    fn down(&self, id: &str) -> bool {
+        !self.0.contains(id) && !id.starts_with("new-")
+    }
     fn live_within(&self, id: &str, _: Duration) -> bool {
         self.0.contains(id)
     }
+}
+
+#[test]
+fn a_source_on_its_first_connection_is_not_down() {
+    let t = Instant::now();
+    let mut b = Board::default();
+    b.adopt("new-cam", Some(&rule("wide", 0.0, 0.0)));
+    let up = Up::with(&["wide"]);
+    assert!(b.step(t, &up).is_empty(), "a camera slow to start was taken for one that went down");
+    assert_eq!(b.state("new-cam", t, &up).unwrap().phase, BackupPhase::Ready);
 }
 
 fn rule(backup: &str, after: f64, back: f64) -> OnLoss {

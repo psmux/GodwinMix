@@ -34,7 +34,13 @@ fn secs(s: f64) -> Duration {
 
 impl Watch {
     /// Take one look at the source and say whether that changes anything.
-    pub fn step(&mut self, rule: &OnLoss, live: bool, now: Instant) -> Option<Step> {
+    /// A source that is neither live nor down is still making its first
+    /// connection, and nothing moves for it: a camera slow to start is not a
+    /// camera that went down.
+    pub fn step(&mut self, rule: &OnLoss, live: bool, down: bool, now: Instant) -> Option<Step> {
+        if !live && !down {
+            return None;
+        }
         if live {
             self.down_since = None;
             self.engaged?;

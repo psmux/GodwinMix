@@ -32,6 +32,10 @@ pub const BACKUP_GRACE: Duration = Duration::from_secs(2);
 pub trait Liveness {
     /// Delivering now.
     fn live(&self, id: &str) -> bool;
+    /// Gone down: stalled, failed, or connecting again after it had been
+    /// live, or not in the mixer at all. A source on its first connection is
+    /// neither live nor down.
+    fn down(&self, id: &str) -> bool;
     /// Delivered at some point in the last `within`.
     fn live_within(&self, id: &str, within: Duration) -> bool;
 }
@@ -107,7 +111,7 @@ impl Board {
         let mut steps = Vec::new();
         for (id, entry) in &mut self.entries {
             let Some(rule) = &entry.rule else { continue };
-            if let Some(step) = entry.watch.step(rule, live.live(id), now) {
+            if let Some(step) = entry.watch.step(rule, live.live(id), live.down(id), now) {
                 if step == Step::Return {
                     entry.leaving = Some("returned");
                 }

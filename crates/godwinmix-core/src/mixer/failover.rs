@@ -14,6 +14,7 @@
 //! half a second at most.
 
 use super::{Mixer, SourceSlot};
+use crate::config::SourceConfig;
 use crate::failover::{Liveness, Step};
 use crate::state::{SourceId, SourceState};
 use std::sync::atomic::Ordering;
@@ -26,17 +27,37 @@ mod tell;
 
 pub use commands::BackupCommand;
 
-/// The mixer's sources, as the board asks about them.
-pub(super) struct Seen<'a>(pub &'a [SourceSlot]);
+/// The mixer's sources, as the board asks about them: the running ones, and
+/// the ones still having their page probed, which are not down.
+pub(super) struct Seen<'a>(pub &'a [SourceSlot], pub &'a [SourceConfig]);
+
+impl Seen<'_> {
+    fn slot(&self, id: &str) -> Option<&SourceSlot> {
+        self.0.iter().find(|s| s.input.id == id)
+    }
+}
 
 impl Liveness for Seen<'_> {
     fn live(&self, id: &str) -> bool {
-        self.0.iter().any(|s| s.input.id == id && matches!(s.input.observed_state(), SourceState::Live))
+        self.slot(id).is_some_and(|s| matches!(s.input.observed_state(), SourceState::Live))
+    }
+
+    fn down(&self, id: &str) -> bool {
+        match self.slot(id) {
+            Some(s) => match s.input.observed_state() {
+                SourceState::Live => false,
+                SourceState::Stalled | SourceState::Failed => true,
+                // Connecting again after it had a picture is down; its first
+                // connection is not.
+                SourceState::Connecting => s.watch.live_at.is_some(),
+            },
+            // Being rebuilt, or would not start: down. Being probed: not yet.
+            None => !self.1.iter().any(|c| c.id == id),
+        }
     }
 
     fn live_within(&self, id: &str, within: Duration) -> bool {
-        self.live(id)
-            || self.0.iter().any(|s| s.input.id == id && s.watch.live_at.is_some_and(|at| at.elapsed() < within))
+        self.live(id) || self.slot(id).is_some_and(|s| s.watch.live_at.is_some_and(|at| at.elapsed() < within))
     }
 }
 
@@ -47,7 +68,7 @@ impl Mixer {
         if !self.backups.busy() {
             return;
         }
-        let steps = self.backups.step(now, &Seen(&self.sources));
+        let steps = self.backups.step(now, &Seen(&self.sources, &self.pending));
         self.swap_stand_ins();
         for (id, step) in steps {
             if step == Step::Engage {
@@ -59,7 +80,7 @@ impl Mixer {
     /// Draw every stand in the board asks for, over a transition when one of
     /// them is on air.
     pub(super) fn swap_stand_ins(&mut self) {
-        let changes = self.backups.changes(&Seen(&self.sources));
+        let changes = self.backups.changes(&Seen(&self.sources, &self.pending));
         if changes.is_empty() || self.running_transition.is_some() || self.pending_fx.is_some() {
             return;
         }
