@@ -819,7 +819,9 @@ async fn cold_start_row(clip: &Path) -> Result<Row> {
         .lines()
         .find_map(|l| l.strip_prefix("cold-start-ms "))
         .and_then(|v| v.trim().parse().ok());
-    if child_ms.is_none() {
+    // A child that gave up still prints its clock, and that number is how
+    // long it waited, not how long a start took.
+    if child_ms.is_none() || !out.status.success() {
         return Ok(Row::not_yet(
             "cold-start",
             "Cold start, process exec to first encoded programme frame",
@@ -848,6 +850,11 @@ pub async fn cold_start_child(args: &BenchArgs) -> Result<()> {
     let started = Instant::now();
     let clip = args.clip.clone().context("the cold start child needs --clip")?;
     let mut cfg = bench_config(MultiviewConfig { enabled: false, ..Default::default() });
+    // The encoder pinned on. With the default `on-demand` it waits for its
+    // first consumer, this child has none, and the row would time the thirty
+    // second give up below instead of a start. Every nightly from 2026-09-16
+    // to 2026-10-11 printed 30.1 s here for that reason.
+    cfg.program.encoder = "always".into();
     // Built the way the API builds one, so the child starts the same pipeline
     // a real boot would.
     let source: SourceConfig = serde_json::from_value(serde_json::json!({
