@@ -93,6 +93,11 @@ async fn a_stalled_source_holds_its_last_frame_then_gives_way() {
     rig.add("id = \"held\"\nuri = \"test://ball\"\nstall_timeout_secs = 0.5\n");
     assert!(rig.until("held", SourceState::Live, Duration::from_secs(10)).await.is_some());
     rig.mix.take(Some("held".into()), None).unwrap();
+    // Two supervisor ticks while it is live, so the time it was last live is
+    // written down. With a half second stall limit and a half second tick, a
+    // loaded runner could judge it stalled before any tick had seen it live,
+    // and then there was no hold to measure.
+    rig.run(TICK * 2).await;
     let input = rig.slot("held").unwrap().input.clone();
     let _ = input.pipeline.set_state(gst::State::Paused);
     assert!(rig.until("held", SourceState::Stalled, Duration::from_secs(10)).await.is_some());
