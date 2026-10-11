@@ -62,8 +62,8 @@ fn a_chain_is_allowed_and_a_loop_is_not() {
     let ids = ["a", "b", "c"];
     assert!(check(&[("a", &a), ("b", &b)], &ids).is_ok(), "a chain of two is fine");
     let e = check(&[("a", &a), ("b", &b), ("c", &c)], &ids).unwrap_err();
-    assert!(e.message.contains("a -> b -> c -> a"), "{}", e.message);
-    assert_eq!(e.data["cycle"], serde_json::json!(["a", "b", "c", "a"]));
+    assert!(e.message.contains("c -> a -> b -> c"), "{}", e.message);
+    assert_eq!(e.data["cycle"], serde_json::json!(["c", "a", "b", "c"]));
 }
 
 #[test]

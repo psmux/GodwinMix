@@ -205,7 +205,7 @@ async fn a_loop_of_backups_is_refused() {
     let unknown = rig.mix.backup_command(BackupCommand::Set("main".into(), Some(godwinmix_protocol::backup::OnLoss::to("nope"))));
     let rule = rig.mix.backups.rule("main").map(|r| r.backup.clone());
     rig.mix.shutdown();
-    assert!(looped.unwrap_err().to_string().contains("main -> wide -> main"));
+    assert!(looped.unwrap_err().to_string().contains("wide -> main -> wide"));
     assert!(unknown.unwrap_err().to_string().contains("no source called nope"));
     assert_eq!(rule.as_deref(), Some("wide"), "a refused change changed the rule");
 }

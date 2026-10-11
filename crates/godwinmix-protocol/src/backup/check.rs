@@ -49,7 +49,7 @@ pub fn check(rules: &[(&str, &OnLoss)], ids: &[&str]) -> Result<(), Problem> {
     for (id, rule) in rules {
         one(id, rule, ids)?;
     }
-    for (id, _) in rules {
+    for (id, _) in rules.iter().rev() {
         if let Some(cycle) = loop_from(id, rules) {
             let shown = cycle.join(" -> ");
             return Err(Problem::new(
