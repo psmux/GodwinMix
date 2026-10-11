@@ -484,6 +484,42 @@ pub struct BackupInput {
     pub uri: String,
 }
 
+/// Where a source with a backup stands.
+pub type BackupPhase = String;
+/// The values api_level 1 knows for [`BackupPhase`].
+pub const BACKUP_PHASE_VALUES: &[&str] = &["ready", "lost", "on_backup", "returning", "main_back"];
+
+/// `source.backup.return` and `source.backup.stay`: the source by id.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct BackupRequest {
+    /// The source that went down, not its backup.
+    pub id: String,
+}
+
+/// `backup` on a source's status, present when it has `on_loss`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct BackupState {
+    /// How long this source has had no picture, while it has none.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lost_ms: Option<u64>,
+    pub phase: BackupPhase,
+    /// In `returning`, how long until the source goes back on.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub return_in_ms: Option<u64>,
+    /// The source drawn in this one's place, while one is.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub showing: Option<String>,
+    /// In `lost`, how long until the backup goes on.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub switch_in_ms: Option<u64>,
+    /// Something the operator should know, such as the backup being down
+    /// too, in a sentence that says what happens because of it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub warning: Option<String>,
+}
+
 /// `scene.item.bind`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -3557,6 +3593,35 @@ pub struct Ograf {
     pub version: Option<String>,
 }
 
+/// `on_loss` on a source: what to show when it goes down.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct OnLoss {
+    /// Seconds to hold the last frame before switching. 0 switches at once.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub after_secs: Option<f64>,
+    /// The source shown instead: any source id this mixer has, a camera, a
+    /// looping clip, a still or a graphic. When it is down too, its own
+    /// `on_loss` backup is used, if it has one.
+    pub backup: String,
+    /// How long the transition runs. Absent takes the transition's own
+    /// default, 300 ms.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub duration_ms: Option<u64>,
+    /// `auto` goes back once the source is steady again; `manual` stays on
+    /// the backup until the operator calls `source.backup.return`.
+    #[serde(rename = "return")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub r#return: Option<ReturnMode>,
+    /// With `return = "auto"`, how long the source has to stay live before
+    /// it goes back, so a feed that flickers does not flap the programme.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub return_after_secs: Option<f64>,
+    /// Any transition a take can name, or `cut`. `dissolve` is read as `fade`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub transition: Option<String>,
+}
+
 /// Where an item came from.
 pub type Origin = String;
 /// The values api_level 1 knows for [`Origin`].
@@ -4389,6 +4454,11 @@ pub struct Resync {
     pub from_seq: u64,
 }
 
+/// How the programme goes back to a source that came back.
+pub type ReturnMode = String;
+/// The values api_level 1 knows for [`ReturnMode`].
+pub const RETURN_MODE_VALUES: &[&str] = &["auto", "manual"];
+
 /// The RTMP port every channel shares.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -4610,6 +4680,35 @@ pub struct SetItemRequest {
     /// discard the echoes of moves it has already drawn past.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub seq: Option<u64>,
+}
+
+/// `source.on_loss.set`: only what is named changes. A source with no rule
+/// yet needs `backup`; every other field has a default.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SetOnLossRequest {
+    /// Seconds to hold the last frame before switching. 3 by default.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub after_secs: Option<f64>,
+    /// The source to show instead.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub backup: Option<String>,
+    /// How long the transition runs. 0 is a cut.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub duration_ms: Option<u64>,
+    /// The source that may go down.
+    pub id: String,
+    /// `auto` or `manual`.
+    #[serde(rename = "return")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub r#return: Option<ReturnMode>,
+    /// With `return = "auto"`, how long the source stays live before it goes
+    /// back. 5 by default.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub return_after_secs: Option<f64>,
+    /// Any transition a take can name, or `cut`. `fade` by default.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub transition: Option<String>,
 }
 
 /// `output.set`. Change one destination in place, naming only what moves.
@@ -5309,6 +5408,10 @@ pub struct SourceStatus {
     /// advertised an audio track that never produced a decoded sample.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub audio_idle_ms: Option<u64>,
+    /// Where it stands with that backup: ready, lost, on the backup, or back
+    /// and returning. Present whenever `on_loss` is.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub backup: Option<BackupState>,
     /// Index into the multiview grid, or None while the source has no cell.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cell: Option<u32>,
@@ -5327,6 +5430,9 @@ pub struct SourceStatus {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub muted: Option<bool>,
     pub name: String,
+    /// What to show when this source goes down, when it has a backup.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub on_loss: Option<OnLoss>,
     /// Where this source has got to, and how long it runs, in milliseconds.
     /// `None` on anything not seekable, and on a seekable source whose duration
     /// the demuxer has not worked out yet.
@@ -6156,6 +6262,33 @@ pub struct SourceEndedEvent {
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
+pub struct SourceBackupOnEvent {
+    /// The source drawn in its place.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub backup: Option<String>,
+    /// How long it had been without a picture.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lost_ms: Option<i64>,
+    /// The source that went down.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub transition: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SourceBackupOffEvent {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub backup: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct SourcePositionEvent {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub duration_ms: Option<i64>,
@@ -6308,7 +6441,7 @@ pub struct MethodInfo {
     pub rest: Option<(&'static str, &'static str)>,
 }
 
-pub const METHODS: [MethodInfo; 219] = [
+pub const METHODS: [MethodInfo; 223] = [
     MethodInfo { name: "adbreak.end", summary: "Cut a running ad short, or disarm one that is scheduled.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/end")) },
     MethodInfo { name: "adbreak.start", summary: "Interrupt the programme with a clip, then rejoin live when it ends.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/start")) },
     MethodInfo { name: "agent.setup", summary: "Set an AI agent tool up to use this mixer: its MCP config gets one entry, godwinmix, that runs this mixer's own executable, and its skills folder gets the GodwinMix skills. Other entries are kept and a changed file is copied aside first. dry_run answers every file it would write. The answer says how to start the tool and a first thing to ask it.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/agent/setup")) },
@@ -6503,12 +6636,16 @@ pub const METHODS: [MethodInfo; 219] = [
     MethodInfo { name: "snapshot.get", summary: "One JPEG: the whole contact sheet, the programme, or one source cut out of the mosaic.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/snapshot/{id}")) },
     MethodInfo { name: "source.add", summary: "Add a source while the mixer runs. Answers with the id it got and the whole source record.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/sources")) },
     MethodInfo { name: "source.audio.set", summary: "Move a source's audio: the fader, the mute, and for a superimposed page the balance between its own sound and the videos under it.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/sources/{id}/audio")) },
+    MethodInfo { name: "source.backup.return", summary: "Go back from the backup to the source now, over the rule's transition. Refused while the source has no picture.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/sources/{id}/backup/return")) },
+    MethodInfo { name: "source.backup.stay", summary: "Keep the backup on even once the source is back, until source.backup.return.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/sources/{id}/backup/stay")) },
     MethodInfo { name: "source.duplicate", summary: "Add another source like one the mixer has: the same address and settings under a new id. A client cannot do this with source.add, because the address it is shown has everything after the host cut off.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/sources/{id}/duplicate")) },
     MethodInfo { name: "source.get", summary: "One source. Refused with the ids that exist when there is no such source.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/sources/{id}")) },
     MethodInfo { name: "source.group", summary: "Put sources in a tray folder. A tag for finding things, not a group on the canvas.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/sources/{id}/group")) },
     MethodInfo { name: "source.key_color", summary: "The colour to key a source on: the colour at a point of its picture, or with no point the green or blue screen it stands in front of.", scope: "read", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/sources/{id}/key_color")) },
     MethodInfo { name: "source.list", summary: "Every source, with its state, whether it has video and audio, and its fader.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/sources")) },
     MethodInfo { name: "source.missing", summary: "Sources that are not running, and why: failed, could not be started (with the error and the action that fixes it), removed, or unknown. Pass the ids a scene draws, or none for every one the mixer knows about.", scope: "read", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/sources/{id}/missing")) },
+    MethodInfo { name: "source.on_loss.clear", summary: "Take a source's backup away. If the backup is on now, the source is drawn as itself again at once.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/sources/{id}/on_loss/clear")) },
+    MethodInfo { name: "source.on_loss.set", summary: "Give a source a backup: another source drawn in its place, wherever it appears, once it has had no picture for after_secs, and taken off again when it is back. Only the fields named change; a source with no backup yet needs `backup`.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/sources/{id}/on_loss")) },
     MethodInfo { name: "source.remove", summary: "Remove a source. If it is on programme the mixer cuts to the slate first.", scope: "operate", mutating: true, destructive: true, rest: Some(("DELETE", "/api/v1/sources/{id}")) },
     MethodInfo { name: "source.restart", summary: "Build a source's pipeline again now, rather than waiting for its next retry. For a source that could not be started or was removed, use source.restore.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/sources/{id}/restart")) },
     MethodInfo { name: "source.restore", summary: "Put back a source that source.remove took away, as it was: same id, address, settings, fader and mute. The mixer remembers the last sixteen it removed, until it restarts.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/sources/{id}/restore")) },
@@ -6530,13 +6667,15 @@ pub const METHODS: [MethodInfo; 219] = [
     MethodInfo { name: "vitals.set", summary: "Change the alarm thresholds, or whether a mosaic is kept up for the black and freeze checks while nobody is looking. Fields left out keep their defaults; a duration of 0 switches that check off. Applies within a second.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/vitals/set")) },
 ];
 
-pub const EVENT_NAMES: [&str; 35] = [
+pub const EVENT_NAMES: [&str; 37] = [
     "snapshot",
     "program.took",
     "scene.patch",
     "preview.changed",
     "source.state",
     "source.ended",
+    "source.backup.on",
+    "source.backup.off",
     "source.position",
     "output.state",
     "adbreak.changed",
@@ -6597,6 +6736,10 @@ pub enum Event {
     SourceState(SourceStateEvent),
     /// A clip's last frame has gone out to the programme. at_end says what it does now: repeat plays it again from the start, hold keeps the last frame up, and leave holds it while the programme moves to the armed scene or the one on air before the clip.
     SourceEnded(SourceEndedEvent),
+    /// A source with on_loss went down for its after_secs and its backup is now                       drawn in its place, everywhere it appears. Sent again with the next                       backup when the first is down too and the chain moves on.
+    SourceBackupOn(SourceBackupOnEvent),
+    /// The backup is no longer drawn in the source's place. reason is returned                       (the source came back and stayed steady), operator (source.backup.return),                       cleared (the rule was taken off) or backup_down (the backup went down too                       and nothing else could stand in).
+    SourceBackupOff(SourceBackupOffEvent),
     /// How far through a seekable source has got, a few times a second. Never sent for a camera, which has no position to report.
     SourcePosition(SourcePositionEvent),
     /// A destination connected, dropped or is retrying.
@@ -6687,6 +6830,14 @@ impl Event {
             },
             "source.ended" => match serde_json::from_value(params.clone()) {
                 Ok(payload) => Event::SourceEnded(payload),
+                Err(_) => Event::Other { name: pattern.to_string(), params },
+            },
+            "source.backup.on" => match serde_json::from_value(params.clone()) {
+                Ok(payload) => Event::SourceBackupOn(payload),
+                Err(_) => Event::Other { name: pattern.to_string(), params },
+            },
+            "source.backup.off" => match serde_json::from_value(params.clone()) {
+                Ok(payload) => Event::SourceBackupOff(payload),
                 Err(_) => Event::Other { name: pattern.to_string(), params },
             },
             "source.position" => match serde_json::from_value(params.clone()) {
@@ -6810,6 +6961,8 @@ impl Event {
             Event::PreviewChanged(_) => "preview.changed",
             Event::SourceState(_) => "source.state",
             Event::SourceEnded(_) => "source.ended",
+            Event::SourceBackupOn(_) => "source.backup.on",
+            Event::SourceBackupOff(_) => "source.backup.off",
             Event::SourcePosition(_) => "source.position",
             Event::OutputState(_) => "output.state",
             Event::AdbreakChanged(_) => "adbreak.changed",
@@ -7817,6 +7970,16 @@ impl Client {
         self.call("source.audio.set", params).await
     }
 
+    /// Go back from the backup to the source now, over the rule's transition. Refused while the source has no picture.
+    pub async fn source_backup_return(&self, params: &BackupRequest) -> Result<SourceStatus> {
+        self.call("source.backup.return", params).await
+    }
+
+    /// Keep the backup on even once the source is back, until source.backup.return.
+    pub async fn source_backup_stay(&self, params: &BackupRequest) -> Result<SourceStatus> {
+        self.call("source.backup.stay", params).await
+    }
+
     /// Add another source like one the mixer has: the same address and settings under a new id. A client cannot do this with source.add, because the address it is shown has everything after the host cut off.
     pub async fn source_duplicate(&self, params: &DuplicateSourceRequest) -> Result<SourceStatus> {
         self.call("source.duplicate", params).await
@@ -7845,6 +8008,16 @@ impl Client {
     /// Sources that are not running, and why: failed, could not be started (with the error and the action that fixes it), removed, or unknown. Pass the ids a scene draws, or none for every one the mixer knows about.
     pub async fn source_missing(&self, params: &MissingRequest) -> Result<Vec<MissingSource>> {
         self.call("source.missing", params).await
+    }
+
+    /// Take a source's backup away. If the backup is on now, the source is drawn as itself again at once.
+    pub async fn source_on_loss_clear(&self, params: &IdRequest) -> Result<SourceStatus> {
+        self.call("source.on_loss.clear", params).await
+    }
+
+    /// Give a source a backup: another source drawn in its place, wherever it appears, once it has had no picture for after_secs, and taken off again when it is back. Only the fields named change; a source with no backup yet needs `backup`.
+    pub async fn source_on_loss_set(&self, params: &SetOnLossRequest) -> Result<SourceStatus> {
+        self.call("source.on_loss.set", params).await
     }
 
     /// Remove a source. If it is on programme the mixer cuts to the slate first.
