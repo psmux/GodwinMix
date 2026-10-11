@@ -167,6 +167,7 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/media/panel.js", include_str!("../../../ui/panels/media/panel.js")),
     ("panels/multiview/panel.js", include_str!("../../../ui/panels/multiview/panel.js")),
     ("panels/multiview/wanted.js", include_str!("../../../ui/panels/multiview/wanted.js")),
+    ("panels/multiview/backup-banner.js", include_str!("../../../ui/panels/multiview/backup-banner.js")),
     ("panels/multiview/studio.js", include_str!("../../../ui/panels/multiview/studio.js")),
     ("panels/multiview/transition-picker.js", include_str!("../../../ui/panels/multiview/transition-picker.js")),
     ("panels/multiview/fx-gallery.js", include_str!("../../../ui/panels/multiview/fx-gallery.js")),
@@ -260,6 +261,12 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/sources/setreq.js", include_str!("../../../ui/panels/sources/setreq.js")),
     ("panels/sources/tile.js", include_str!("../../../ui/panels/sources/tile.js")),
     ("panels/sources/tile-level.js", include_str!("../../../ui/panels/sources/tile-level.js")),
+    // A source's backup: its line on the tile and the programme, and the
+    // section in its settings, which loads with the drawer.
+    ("panels/sources/backup-status.js", include_str!("../../../ui/panels/sources/backup-status.js")),
+    ("panels/sources/backup-line.js", include_str!("../../../ui/panels/sources/backup-line.js")),
+    ("panels/sources/backup-rule.js", include_str!("../../../ui/panels/sources/backup-rule.js")),
+    ("panels/sources/backup-form.js", include_str!("../../../ui/panels/sources/backup-form.js")),
     ("panels/sources/text-presets.js", include_str!("../../../ui/panels/sources/text-presets.js")),
     ("panels/sources/text-fields.js", include_str!("../../../ui/panels/sources/text-fields.js")),
     ("panels/sources/text-editor.js", include_str!("../../../ui/panels/sources/text-editor.js")),
@@ -432,6 +439,7 @@ const DEV_ASSETS: &[(&str, &str)] = &[
     ("test/presence.js", include_str!("../../../ui/test/presence.js")),
     ("test/touch-tray.js", include_str!("../../../ui/test/touch-tray.js")),
     ("test/tile-levels.js", include_str!("../../../ui/test/tile-levels.js")),
+    ("test/source-backup.js", include_str!("../../../ui/test/source-backup.js")),
     // The Channels panel against a stub of the channel contract, as tests and
     // as a page to look at: /test/channels.html?scene=cards&theme=light.
     ("test/channels.js", include_str!("../../../ui/test/channels.js")),

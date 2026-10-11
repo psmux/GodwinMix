@@ -25,6 +25,7 @@ import { SOURCE_KINDS, kindOfUri, discoverDevices } from "../../client/kinds.js"
 import { buildTile, syncTile, setTileMode } from "./tile.js";
 import { repeatRequest } from "./clip-end.js";
 import { setLocal, nameOf } from "./local.js";
+import { namesIn } from "./backup-line.js";
 import { addSourceTile, openSceneSources } from "./chooser-loader.js";
 import { focusedScene, onFocusChanged } from "../../shell/focus.js";
 import { SceneStrip } from "./scene-strip.js";
@@ -215,6 +216,7 @@ class SourcesPanel extends HTMLElement {
     }
 
     const producer = settings().producer;
+    const names = namesIn(s, nameOf);
     list.forEach((source, i) => {
       const tile = this.tiles.get(source.id);
       if (!tile) return;
@@ -228,6 +230,7 @@ class SourcesPanel extends HTMLElement {
         scrubBusy: this.scrub.active.has(source.id),
         showStrip: settings().meters || settings().faders,
         position: source.seekable ? this.scrub.read(source.id) : null,
+        names,
       });
       if (source.seekable && source.position_ms !== undefined) {
         this.scrub.seed(source.id, source.position_ms, source.duration_ms);
@@ -265,7 +268,8 @@ class SourcesPanel extends HTMLElement {
       const tile = buildTile(source, {
         audio: this.audio,
         scrub: this.scrub,
-        onGear: (id) => this.openDrawer(id),
+        onGear: (id, section) => this.openDrawer(id, section),
+        onBackup: (method, id) => this.client.call(method, { id }).catch((e) => errorToast(e, "Backup")),
         onMute: (id, muted) => this.audio.setMuted(id, muted).catch((e) => errorToast(e, "Mute")),
         meters: settings().meters,
         onRepeat: (s, on) => this.client.call("source.set", repeatRequest(s, on)).catch((e) => errorToast(e, "Repeat")),
@@ -538,11 +542,11 @@ class SourcesPanel extends HTMLElement {
   }
 
   /** The settings drawer, fetched on the first gear click and not before. */
-  async openDrawer(id) {
+  async openDrawer(id, section) {
     const source = this.client.store.source(id);
     if (!source) return;
     const { openSourceDrawer } = await import("./drawer.js");
-    return openSourceDrawer(this, source);
+    return openSourceDrawer(this, source, section);
   }
 
   onDrop(info) {

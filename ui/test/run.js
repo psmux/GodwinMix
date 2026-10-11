@@ -35,6 +35,7 @@ import { agentsTests } from "./agents.js";
 import { tileLevelTests } from "./tile-levels.js";
 import { recordingStopTests } from "./recording-stop.js";
 import { runningTests } from "./running.js";
+import { sourceBackupTests } from "./source-backup.js";
 // The test runner: forty lines, no dependencies, no toolchain. Open the page,
 // read the console, or read the list. Everything testable without a mixer is
 // here, including the legacy adapter against a stubbed server.
@@ -3014,6 +3015,12 @@ tileLevelTests(test, eq, ok)
   .catch((e) => {
     failed += 1;
     line("fail", "the what is running suite threw: " + e.message);
+    console.error(e);
+  })
+  .then(() => sourceBackupTests(test, eq, ok))
+  .catch((e) => {
+    failed += 1;
+    line("fail", "the source backup suite threw: " + e.message);
     console.error(e);
   })
   .then(outputNumbersSuite)

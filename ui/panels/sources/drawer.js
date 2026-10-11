@@ -14,9 +14,10 @@ import { schemaForSource, easeSchema, unease } from "../../client/devices.js";
 import { coreParams, withParams } from "../../client/kind-params.js";
 import { settableOnly, setRequest } from "./setreq.js";
 import { nameOf, setLocal } from "./local.js";
+import { backupSection } from "./backup-form.js";
 
 /** @param {object} panel the Sources panel, for its client and its redraw */
-export async function openSourceDrawer(panel, source) {
+export async function openSourceDrawer(panel, source, section) {
   // A text or a ticker gets its own editor, which applies as it is typed.
   if (["text/source", "ticker/source"].includes(source.type)) return (await import("./text-editor.js")).openTextEditor(panel, source);
   // A graphic drawn from a template gets its fields, applied the same way.
@@ -74,14 +75,19 @@ export async function openSourceDrawer(panel, source) {
       }
     },
   });
+  // What to show if it goes down. Saves on its own, apart from Apply.
+  const backup = backupSection(client, source);
   shell.drawer(
     el("div.pad.col", {}, [
       el("div.row", {}, [el("strong.grow", { text: nameOf(source) }), el("button.btn.icon", { text: "×", onclick: () => shell.drawer(null) })]),
       addressRow(client, source),
       form.el,
       el("div.row", {}, [apply]),
+      backup.node,
     ])
   );
+  // Opened from a tile's "Set a backup": straight to the box that picks one.
+  if (section === "backup") backup.focus();
 }
 
 /**
