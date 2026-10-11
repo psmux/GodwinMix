@@ -39,6 +39,11 @@ pub trait Liveness {
     fn down(&self, id: &str) -> bool;
     /// Delivered at some point in the last `within`.
     fn live_within(&self, id: &str, within: Duration) -> bool;
+    /// How long since it was added, while it has never been live. `None`
+    /// once it has been, and for a source the mixer cannot say about.
+    fn unconnected_for(&self, _id: &str) -> Option<Duration> {
+        None
+    }
 }
 
 #[derive(Debug, Default)]
@@ -57,6 +62,9 @@ struct Entry {
 #[derive(Debug, Default)]
 pub struct Board {
     entries: BTreeMap<String, Entry>,
+    /// How long a source's first connection is given before it counts as
+    /// down: `stall.connect_timeout_secs`, set by the mixer each tick.
+    pub connect_wait: Duration,
 }
 
 impl Board {
@@ -112,7 +120,13 @@ impl Board {
         let mut steps = Vec::new();
         for (id, entry) in &mut self.entries {
             let Some(rule) = &entry.rule else { continue };
-            if let Some(step) = entry.watch.step(rule, live.live(id), live.down(id), now) {
+            let look = watch::Look {
+                live: live.live(id),
+                down: live.down(id),
+                unconnected: live.unconnected_for(id),
+                connect_wait: self.connect_wait,
+            };
+            if let Some(step) = entry.watch.step(rule, look, now) {
                 if step == Step::Return {
                     entry.leaving = Some("returned");
                 }
@@ -129,5 +143,11 @@ impl Board {
 
     pub fn engaged(&self, id: &str) -> bool {
         self.entries.get(id).is_some_and(|e| e.watch.engaged())
+    }
+
+    /// The source has never been live since it was added, and its first
+    /// connection has run past the connect timeout or failed.
+    pub fn never_live(&self, id: &str) -> bool {
+        self.entries.get(id).is_some_and(|e| e.watch.never_live && e.watch.down_since.is_some())
     }
 }

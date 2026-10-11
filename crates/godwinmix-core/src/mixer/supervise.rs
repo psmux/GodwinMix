@@ -43,6 +43,9 @@ pub const RESTART_ABANDON: Duration = Duration::from_secs(30);
 pub(super) struct Watch {
     /// When the source was last seen live.
     pub live_at: Option<Instant>,
+    /// When the first tick saw this slot: how long a source that has never
+    /// been live has been trying, for its backup.
+    pub added_at: Option<Instant>,
     asked_at: Option<Instant>,
     asking: Arc<AtomicBool>,
     answer: Arc<Mutex<Option<Health>>>,
@@ -57,6 +60,7 @@ impl Mixer {
     /// The part of the tick that is this module's.
     pub(super) fn supervise(&mut self, now: Instant) {
         for slot in &mut self.sources {
+            slot.watch.added_at.get_or_insert(now);
             if matches!(slot.input.observed_state(), SourceState::Live) {
                 slot.watch.live_at = Some(now);
             }

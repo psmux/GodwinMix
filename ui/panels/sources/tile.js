@@ -3,16 +3,17 @@
 // Built once and then written into. A tile is never rebuilt while a pointer is
 // down on one of its controls, and its picture element is chosen by the gallery
 // mode rather than the tile being recreated when the mode changes, so a mode
-// toggle never ends a gesture.
+// toggle never ends a gesture. The fader, M and a clip's lane are
+// tile-strip.js.
 
 import { el, svg } from "../../shell/dom.js";
-import { ICONS, KIND_COLOUR, kindOfSource } from "../../client/kinds.js";
+import { ICONS, KIND_COLOUR, kindOfSource } from "../../client/kind-look.js";
 import { levelParts, syncLevel } from "./tile-level.js";
-import { UNITY, gainToPos, gainLabel, fmtPosition } from "../../shell/fader.js";
 import { nameOf, colourOf, isLocal } from "./local.js";
 import { dragHandle } from "../../shell/pointer.js";
-import { repeatButton, syncRepeat, playbackText } from "./clip-end.js";
+import { playbackText } from "./clip-end.js";
 import { lazyLine } from "./backup-slot.js";
+import { buildStrip, syncStrip } from "./tile-strip.js";
 
 /**
  * @param {object} source   a SourceStatus
@@ -41,54 +42,15 @@ export function buildTile(source, deps) {
   // What its backup is doing, or the offer of one when it went down with none.
   const backup = lazyLine({ call: deps.onBackup, openBackup: (id) => deps.onGear(id, "backup"), hint: true });
   node.append(pic, still, kindbox, ...[level.face, level.meter].filter(Boolean), slot, strip, bar, playback, backup.node);
-
-  // ----------------------------------------------------------- the strip
-
-  // A button that cannot be pressed says why: M and the fader are dead on a
-  // source with no sound in it and nothing else on the tile accounts for that.
-  const silent = source.has_audio === false;
-  const mute = el("button.btn.icon", {
-    text: "M",
-    title: silent ? "This source has no audio" : "Mute",
-    "data-nodrag": "",
-    disabled: silent,
-  });
-  const fader = el("input", {
-    type: "range",
-    min: "0",
-    max: "1",
-    step: "0.005",
-    value: String(gainToPos(source.gain === undefined ? 1 : source.gain)),
-    title: silent ? "This source has no audio" : "Level",
-    "data-nodrag": "",
-    disabled: silent,
-  });
-  const gv = el("span.num.sm", { text: gainLabel(source.gain === undefined ? 1 : source.gain) });
-  strip.append(fader, gv, mute);
-
-  let lane = null;
-  let pos = null;
-  let repeat = null;
-  if (source.seekable) {
-    pos = el("span.num.sm.dim", { style: { minWidth: "3.4em" } });
-    lane = el("input", { type: "range", min: "0", max: "1000", step: "1", value: "0", title: "Position", "data-nodrag": "" });
-    repeat = repeatButton(source, (s, on) => deps.onRepeat && deps.onRepeat(s, on));
-    const laneRow = el("div.strip", { style: { bottom: "0", opacity: "1", background: "transparent" } }, [lane, pos, repeat]);
-    node.appendChild(laneRow);
-  }
+  const controls = buildStrip(source, node, strip, deps);
 
   gear.onclick = (e) => {
     e.stopPropagation();
     deps.onGear(source.id);
   };
-  mute.onclick = (e) => {
-    e.stopPropagation();
-    deps.onMute(source.id, !mute.classList.contains("on"));
-  };
-  deps.audio.bindFader(fader, source.id, "gain");
-  if (lane) deps.scrub.bind(lane, source.id);
 
   return {
+    ...controls,
     id: source.id,
     node,
     pic,
@@ -98,18 +60,12 @@ export function buildTile(source, deps) {
     strip,
     name,
     dot,
-    gv,
-    fader,
-    mute,
     meter: level.meter,
     readout: level.readout,
     note: level.note,
     sound: level.sound,
-    lane,
-    pos,
     kind,
     playback,
-    repeat,
     backup,
   };
 }
@@ -134,40 +90,11 @@ export function syncTile(tile, source, view) {
     tile.slot.hidden = true;
   }
 
-  const gain = view.gain === undefined ? (source.gain === undefined ? 1 : source.gain) : view.gain;
-  if (document.activeElement !== tile.fader && !view.faderBusy) {
-    const wanted = String(gainToPos(gain));
-    if (tile.fader.value !== wanted) tile.fader.value = wanted;
-  }
-  tile.gv.textContent = gainLabel(gain);
-  tile.gv.classList.toggle("muted", !!source.muted);
-  tile.mute.classList.toggle("on", !!source.muted);
-  tile.mute.setAttribute("aria-pressed", String(!!source.muted));
-  // The reason stays on a button that has none of it to mute.
-  tile.mute.title = source.has_audio === false
-    ? "This source has no audio"
-    : source.muted
-      ? "Unmute"
-      : "Mute";
-
-  tile.strip.hidden = !view.showStrip;
+  syncStrip(tile, source, view);
   syncLevel(tile, source);
   const playing = playbackText(source);
   if (tile.playback.textContent !== playing) tile.playback.textContent = playing;
-  if (tile.repeat) syncRepeat(tile.repeat, source);
   tile.backup.sync(source, view.names || ((id) => id));
-
-  if (tile.lane) {
-    const p = view.position || { pos: 0, dur: null };
-    if (p.dur) {
-      tile.lane.disabled = false;
-      if (!view.scrubBusy) tile.lane.value = String(Math.round((p.pos / p.dur) * 1000));
-      tile.pos.textContent = `${fmtPosition(p.pos)} / ${fmtPosition(p.dur)}`;
-    } else {
-      tile.lane.disabled = true;
-      tile.pos.textContent = fmtPosition(p.pos);
-    }
-  }
 }
 
 /** Show the right picture for the gallery mode. Costs nothing to switch. */

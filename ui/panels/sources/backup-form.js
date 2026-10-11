@@ -10,7 +10,7 @@ import { nameOf } from "./local.js";
 import { namesIn } from "./backup-slot.js";
 // For the stylesheet it brings, which colours the warning here as on a tile.
 import "./backup-line.js";
-import { TRANSITIONS, ruleValues, backupChoices, ruleRequest, backupWarning, ruleSummary } from "./backup-rule.js";
+import { TRANSITIONS, TRANSITION_SECS, ruleValues, backupChoices, ruleRequest, backupWarning, ruleSummary } from "./backup-rule.js";
 
 function select(label, options, value) {
   const node = el("select", { "aria-label": label });
@@ -30,6 +30,10 @@ function boxes(source, sources) {
     backup: select("Backup source", backupChoices(source, sources, nameOf), v.backup),
     after: number("Seconds before the backup goes on", v.after_secs),
     transition: select("Transition to the backup", TRANSITIONS, v.transition),
+    length: el("input", {
+      type: "number", min: "0", max: "10", step: "0.1", value: String(v.duration_secs),
+      placeholder: String(TRANSITION_SECS), "aria-label": "Seconds the transition takes", style: { width: "5em" },
+    }),
     auto: el("input", { type: "checkbox", checked: v.auto }),
     steady: number("Seconds it must stay steady", v.return_after_secs),
   };
@@ -40,6 +44,7 @@ function read(b) {
     backup: b.backup.value,
     after_secs: b.after.value,
     transition: b.transition.value,
+    duration_secs: b.length.value,
     auto: b.auto.checked,
     return_after_secs: b.steady.value,
   };
@@ -55,6 +60,7 @@ export function backupSection(client, source) {
   const rest = el("div.col", {}, [
     el("label.inline", {}, ["after", b.after, "seconds"]),
     el("label.inline", {}, ["with", b.transition, "transition"]),
+    el("label.inline.length", {}, ["taking", b.length, `seconds (${TRANSITION_SECS} if left empty)`]),
     el("label.inline", {}, [b.auto, "Switch back by itself when it returns"]),
     el("label.inline.steady", {}, ["once it has been steady for", b.steady, "seconds"]),
   ]);
@@ -64,6 +70,7 @@ export function backupSection(client, source) {
     const v = read(b);
     rest.hidden = !v.backup;
     rest.querySelector(".steady").hidden = !v.auto;
+    rest.querySelector(".length").hidden = v.transition === "cut";
     const now = sources().find((s) => s.id === source.id) || source;
     warn.textContent = backupWarning(now, v.backup, sources(), nameOf);
     warn.hidden = !warn.textContent;
@@ -76,7 +83,8 @@ export function backupSection(client, source) {
     if (!request) return;
     try {
       await client.call(request.method, request.params);
-      current = { ...current, on_loss: values.backup ? { backup: values.backup } : undefined };
+      const sent = request.params;
+      current = { ...current, on_loss: values.backup ? { backup: sent.backup, duration_ms: sent.duration_ms } : undefined };
       status.textContent = "Saved. " + ruleSummary(source, values, namesIn(client.state, nameOf));
     } catch (e) {
       // The core's message names the fix: a loop of backups, an unknown one.

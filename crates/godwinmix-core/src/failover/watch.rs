@@ -26,6 +26,24 @@ pub(super) struct Watch {
     pub engaged: Option<Instant>,
     /// The operator said to stay on the backup until they return it.
     pub stay: bool,
+    /// Seen live at least once since the rule was set.
+    pub ever_live: bool,
+    /// The source has not been live since it was added: this outage is a
+    /// first connection that has not come.
+    pub never_live: bool,
+}
+
+/// One look at a source.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Look {
+    pub live: bool,
+    pub down: bool,
+    /// How long it has been making its first connection, while it has never
+    /// been live. See [`super::Liveness::unconnected_for`].
+    pub unconnected: Option<Duration>,
+    /// How long a first connection is given before it counts as down:
+    /// `stall.connect_timeout_secs`.
+    pub connect_wait: Duration,
 }
 
 fn secs(s: f64) -> Duration {
@@ -34,14 +52,21 @@ fn secs(s: f64) -> Duration {
 
 impl Watch {
     /// Take one look at the source and say whether that changes anything.
-    /// A source that is neither live nor down is still making its first
-    /// connection, and nothing moves for it: a camera slow to start is not a
-    /// camera that went down.
-    pub fn step(&mut self, rule: &OnLoss, live: bool, down: bool, now: Instant) -> Option<Step> {
-        if !live && !down {
+    ///
+    /// A source still making its first connection is given the connect
+    /// timeout before it counts as down, so a camera a second slow to start
+    /// does not swap the picture there and back. Past that, its outage is
+    /// dated from when it was added, and the backup goes on once `after_secs`
+    /// of it have passed: at the connect timeout or `after_secs`, whichever
+    /// is later.
+    pub fn step(&mut self, rule: &OnLoss, look: Look, now: Instant) -> Option<Step> {
+        let first = look.unconnected.filter(|_| !look.live);
+        if !look.live && !look.down && first.is_none_or(|waited| waited < look.connect_wait) {
             return None;
         }
-        if live {
+        self.ever_live |= look.live;
+        self.never_live = first.is_some() && !self.ever_live;
+        if look.live {
             self.down_since = None;
             self.engaged?;
             let up = *self.up_since.get_or_insert(now);
@@ -53,7 +78,8 @@ impl Watch {
             return None;
         }
         self.up_since = None;
-        let down = *self.down_since.get_or_insert(now);
+        let began = first.and_then(|waited| now.checked_sub(waited)).unwrap_or(now);
+        let down = *self.down_since.get_or_insert(began);
         if self.engaged.is_none() && now.saturating_duration_since(down) >= secs(rule.after_secs) {
             self.engaged = Some(now);
             return Some(Step::Engage);

@@ -3,8 +3,14 @@
 // No elements here, so the tests check the request without a page. The
 // section itself is backup-form.js.
 
-/** The same defaults the core uses for a rule that names only its backup. */
-export const DEFAULTS = { backup: "", after_secs: 3, transition: "fade", auto: true, return_after_secs: 5 };
+/**
+ * The same defaults the core uses for a rule that names only its backup. An
+ * empty `duration_secs` is the transition's own length, the 0.3 s a take runs.
+ */
+export const DEFAULTS = { backup: "", after_secs: 3, transition: "fade", duration_secs: "", auto: true, return_after_secs: 5 };
+
+/** How long a transition runs when its rule does not say, in seconds. */
+export const TRANSITION_SECS = 0.3;
 
 /** The transitions offered, in the order an operator reaches for them. */
 export const TRANSITIONS = [
@@ -29,6 +35,7 @@ export function ruleValues(source) {
     backup: rule.backup || "",
     after_secs: rule.after_secs ?? DEFAULTS.after_secs,
     transition: transition === "dissolve" ? "fade" : transition,
+    duration_secs: rule.duration_ms === undefined || rule.duration_ms === null ? "" : rule.duration_ms / 1000,
     auto: rule.return !== "manual",
     return_after_secs: rule.return_after_secs ?? DEFAULTS.return_after_secs,
   };
@@ -60,6 +67,11 @@ export function ruleRequest(source, values) {
     transition: values.transition || DEFAULTS.transition,
     return: values.auto ? "auto" : "manual",
   };
+  // An empty box is the transition's own length. A rule that had one of its
+  // own is sent that length back, since leaving the field out keeps it.
+  const length = seconds(values.duration_secs, null);
+  if (length !== null) params.duration_ms = Math.round(Math.min(length, 10) * 1000);
+  else if (source.on_loss && source.on_loss.duration_ms != null) params.duration_ms = TRANSITION_SECS * 1000;
   if (values.auto) params.return_after_secs = seconds(values.return_after_secs, DEFAULTS.return_after_secs);
   return { method: "source.on_loss.set", params };
 }
@@ -85,5 +97,8 @@ export function ruleSummary(source, values, nameFor) {
   if (!values.backup) return `Nothing stands in for ${name}.`;
   const after = seconds(values.after_secs, DEFAULTS.after_secs);
   const back = values.auto ? "It switches back by itself." : "You switch back when you are ready.";
-  return `If ${name} goes down, ${nameFor(values.backup)} goes on after ${after} s. ${back}`;
+  const kind = values.transition || DEFAULTS.transition;
+  const label = (TRANSITIONS.find(([id]) => id === kind) || [kind, kind])[1].toLowerCase();
+  const how = kind === "cut" ? "with a cut" : `with a ${seconds(values.duration_secs, TRANSITION_SECS)} s ${label}`;
+  return `If ${name} goes down, ${nameFor(values.backup)} goes on after ${after} s, ${how}. ${back}`;
 }

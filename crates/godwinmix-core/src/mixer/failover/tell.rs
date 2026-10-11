@@ -23,7 +23,7 @@ impl Mixer {
                     lost_ms: lost,
                 },
                 Severity::Warning,
-                format!("{id} has had no picture for {} s, so {to} is on in its place.", lost / 1000),
+                format!("{} so {to} is on in its place.", self.no_picture(id, lost / 1000)),
             ),
             (Some(from), Some(to), _) => (
                 Event::SourceBackupOn {
@@ -71,10 +71,24 @@ impl Mixer {
         let _ = self.events.send(Event::Alert {
             severity: Severity::Error,
             message: format!(
-                "{id} has had no picture for {lost} s and its backup {backup} has none either, so \
-                 {id}'s last frame stays up and then the slate. Take another source now."
+                "{} and its backup {backup} has no picture either, so {}. Take another source now.",
+                self.no_picture(id, lost).trim_end_matches(','),
+                match self.backups.never_live(id) {
+                    true => "the slate is on air where it is placed".to_string(),
+                    false => format!("{id}'s last frame stays up and then the slate"),
+                }
             ),
             action: None,
         });
+    }
+
+    /// The start of every line about a source without a picture, ending in a
+    /// comma: one that went down, or one that never came up.
+    fn no_picture(&self, id: &str, secs: u64) -> String {
+        if self.backups.never_live(id) {
+            format!("{id} has not connected in {secs} s,")
+        } else {
+            format!("{id} has had no picture for {secs} s,")
+        }
     }
 }

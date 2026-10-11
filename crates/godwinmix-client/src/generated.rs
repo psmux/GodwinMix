@@ -504,6 +504,12 @@ pub struct BackupState {
     /// How long this source has had no picture, while it has none.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub lost_ms: Option<u64>,
+    /// True while the outage is the source's first connection: it has not
+    /// been live since it was added, and has gone past
+    /// `stall.connect_timeout_secs` or failed. "Has not connected yet"
+    /// rather than "lost".
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub never_live: Option<bool>,
     pub phase: BackupPhase,
     /// In `returning`, how long until the source goes back on.
     #[serde(skip_serializing_if = "Option::is_none")]

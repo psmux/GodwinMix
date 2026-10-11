@@ -290,6 +290,8 @@ class BackupState(TypedDict, total=False):
 
     lost_ms: Optional[int]
     # How long this source has had no picture, while it has none.
+    never_live: bool
+    # True while the outage is the source's first connection: it has not been live since it was added, and has gone past `stall.connect_timeout_secs` or failed. "Has not connected yet" rather than "lost".
     phase: BackupPhase
     return_in_ms: Optional[int]
     # In `returning`, how long until the source goes back on.

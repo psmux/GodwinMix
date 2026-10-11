@@ -21,7 +21,6 @@ import { audioFor, ScrubGestures } from "../../shell/fader.js";
 import { dropViews, takeMeters } from "../../shell/meter.js";
 import { watchLevel } from "./tile-level.js";
 import { sheetWidthFor } from "../../client/frames.js";
-import { SOURCE_KINDS, kindOfUri, discoverDevices } from "../../client/kinds.js";
 import { buildTile, syncTile, setTileMode } from "./tile.js";
 import { repeatRequest } from "./clip-end.js";
 import { setLocal, nameOf } from "./local.js";

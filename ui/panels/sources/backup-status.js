@@ -41,16 +41,19 @@ export function backupView(source, nameFor, elapsed = 0) {
     view.text = `${name} is live`;
   } else if (b.phase === "lost") {
     const left = secondsLeft(b.switch_in_ms, elapsed);
-    view.text = left ? `${name} lost, backup in ${left} s` : `${name} lost, switching to the backup`;
+    const lost = b.never_live ? `${name} has not connected yet` : `${name} lost`;
+    view.text = left ? `${lost}, backup in ${left} s` : `${lost}, switching to the backup`;
   } else if (b.phase === "on_backup") {
-    const lost = b.lost_ms === undefined ? `${name} is down` : `${name} lost ${clock(b.lost_ms + elapsed)}`;
+    const lost = b.never_live
+      ? `${name} has not connected yet`
+      : b.lost_ms === undefined ? `${name} is down` : `${name} lost ${clock(b.lost_ms + elapsed)}`;
     view.text = b.showing ? `${lost}, showing ${nameFor(b.showing)}` : `${lost}, and its backup is down too`;
   } else if (b.phase === "returning") {
     const left = secondsLeft(b.return_in_ms, elapsed);
     view.text = left ? `${name} is back, returning in ${left} s` : `${name} is back, returning now`;
     view.actions = [
       { method: "source.backup.return", label: "Return now" },
-      { method: "source.backup.stay", label: "Stay on backup" },
+      { method: "source.backup.stay", label: b.showing ? `Stay on ${nameFor(b.showing)}` : "Stay on backup" },
     ];
   } else if (b.phase === "main_back") {
     view.text = b.showing ? `${name} is back, ${nameFor(b.showing)} is still on` : `${name} is back`;

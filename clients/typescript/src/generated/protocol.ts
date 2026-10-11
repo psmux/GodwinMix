@@ -263,6 +263,7 @@ export interface BackupRequest {
 /** `backup` on a source's status, present when it has `on_loss`. */
 export interface BackupState {
   lost_ms?: number | null;
+  never_live?: boolean;
   phase: BackupPhase;
   return_in_ms?: number | null;
   showing?: string | null;

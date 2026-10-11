@@ -40,6 +40,7 @@ const ASSETS: &[(&str, &str)] = &[
     ("client/index.js", include_str!("../../../ui/client/index.js")),
     ("client/kind-params.js", include_str!("../../../ui/client/kind-params.js")),
     ("client/kinds.js", include_str!("../../../ui/client/kinds.js")),
+    ("client/kind-look.js", include_str!("../../../ui/client/kind-look.js")),
     ("client/rpc.js", include_str!("../../../ui/client/rpc.js")),
     ("client/sandbox-client.js", include_str!("../../../ui/client/sandbox-client.js")),
     ("client/schema-form.js", include_str!("../../../ui/client/schema-form.js")),
@@ -260,6 +261,7 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/sources/scene-strip.js", include_str!("../../../ui/panels/sources/scene-strip.js")),
     ("panels/sources/setreq.js", include_str!("../../../ui/panels/sources/setreq.js")),
     ("panels/sources/tile.js", include_str!("../../../ui/panels/sources/tile.js")),
+    ("panels/sources/tile-strip.js", include_str!("../../../ui/panels/sources/tile-strip.js")),
     ("panels/sources/tile-level.js", include_str!("../../../ui/panels/sources/tile-level.js")),
     // A source's backup: its line on the tile and the programme, which loads
     // when a source first has something to say, and the section in its

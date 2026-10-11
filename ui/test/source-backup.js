@@ -49,6 +49,14 @@ export async function sourceBackupTests(test, eq, ok) {
     eq(backupView(at("ready", {}), nameFor), null, "a source that is fine has a line");
   });
 
+  test("a camera that never connected says so, not that it was lost", () => {
+    eq(backupView(at("lost", { switch_in_ms: 2000, never_live: true }), nameFor).text, "Cam main has not connected yet, backup in 2 s");
+    eq(backupView(at("on_backup", { showing: "cam-wide", lost_ms: 16000, never_live: true }), nameFor).text,
+      "Cam main has not connected yet, showing Cam wide");
+    eq(backupView(at("on_backup", { lost_ms: 16000, never_live: true }), nameFor).text,
+      "Cam main has not connected yet, and its backup is down too");
+  });
+
   test("the clocks run down from the snapshot by the time since it came", () => {
     eq(backupView(at("lost", { switch_in_ms: 2500 }), nameFor, 1000).text, "Cam main lost, backup in 2 s");
     eq(backupView(at("lost", { switch_in_ms: 2500 }), nameFor, 4000).text, "Cam main lost, switching to the backup");
@@ -97,7 +105,7 @@ export async function sourceBackupTests(test, eq, ok) {
     const node = tile.backup.node;
     ok(!tile.backup.part.node.hidden);
     ok(node.textContent.startsWith("Cam main is back, returning in 3 s"), node.textContent);
-    eq(labels(node), ["Return now", "Stay on backup"]);
+    eq(labels(node), ["Return now", "Stay on Cam wide"]);
     let reachedTile = false;
     tile.node.addEventListener("click", () => (reachedTile = true));
     node.querySelectorAll("button")[1].click();

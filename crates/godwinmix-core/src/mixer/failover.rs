@@ -59,6 +59,11 @@ impl Liveness for Seen<'_> {
     fn live_within(&self, id: &str, within: Duration) -> bool {
         self.live(id) || self.slot(id).is_some_and(|s| s.watch.live_at.is_some_and(|at| at.elapsed() < within))
     }
+
+    fn unconnected_for(&self, id: &str) -> Option<Duration> {
+        let slot = self.slot(id).filter(|s| s.watch.live_at.is_none())?;
+        slot.watch.added_at.map(|at| at.elapsed())
+    }
 }
 
 impl Mixer {
@@ -68,6 +73,7 @@ impl Mixer {
         if !self.backups.busy() {
             return;
         }
+        self.backups.connect_wait = Duration::from_secs(self.cfg.stall.connect_timeout_secs);
         let before = self.backups.phases();
         let steps = self.backups.step(now, &Seen(&self.sources, &self.pending));
         if self.backups.phases() != before {

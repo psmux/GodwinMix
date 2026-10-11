@@ -94,6 +94,7 @@ impl Board {
             switch_in_ms: entry.watch.switch_in(rule, now).map(ms),
             return_in_ms: entry.watch.return_in(rule, now).map(ms),
             warning: self.warning(id, phase, entry.showing.is_some(), live),
+            never_live: phase != BackupPhase::Ready && self.never_live(id),
         })
     }
 

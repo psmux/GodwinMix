@@ -1079,6 +1079,10 @@
               "null"
             ]
           },
+          "never_live": {
+            "description": "True while the outage is the source's first connection: it has not\nbeen live since it was added, and has gone past\n`stall.connect_timeout_secs` or failed. \"Has not connected yet\"\nrather than \"lost\".",
+            "type": "boolean"
+          },
           "phase": {
             "$ref": "#/components/schemas/BackupPhase"
           },

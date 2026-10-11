@@ -149,4 +149,10 @@ pub struct BackupState {
     /// too, in a sentence that says what happens because of it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub warning: Option<String>,
+    /// True while the outage is the source's first connection: it has not
+    /// been live since it was added, and has gone past
+    /// `stall.connect_timeout_secs` or failed. "Has not connected yet"
+    /// rather than "lost".
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub never_live: bool,
 }

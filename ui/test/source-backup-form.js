@@ -23,7 +23,8 @@ async function pick(client, backup) {
 
 export async function sourceBackupFormTests(test, eq, ok) {
   test("the settings build the request the core takes", () => {
-    eq(ruleValues({ id: "x" }), { backup: "", after_secs: 3, transition: "fade", auto: true, return_after_secs: 5 });
+    eq(ruleValues({ id: "x" }), { backup: "", after_secs: 3, transition: "fade", duration_secs: "", auto: true, return_after_secs: 5 });
+    eq(ruleValues({ ...MAIN, on_loss: { ...RULE, duration_ms: 800 } }).duration_secs, 0.8);
     eq(ruleValues({ ...MAIN, on_loss: { ...RULE, transition: "dissolve", return: "manual" } }).transition, "fade");
     const values = { backup: "cam-wide", after_secs: "2", transition: "wipe", auto: true, return_after_secs: "8" };
     eq(ruleRequest(WIDE, { ...values, backup: "cam-main" }), { method: "source.on_loss.set",
@@ -32,6 +33,12 @@ export async function sourceBackupFormTests(test, eq, ok) {
       { id: "cam-main", backup: "cam-wide", after_secs: 3, transition: "wipe", return: "manual" });
     eq(ruleRequest(MAIN, { ...values, backup: "" }), { method: "source.on_loss.clear", params: { id: "cam-main" } });
     eq(ruleRequest(WIDE, { ...values, backup: "" }), null, "Nothing on a source with no rule sent something");
+    // The transition's length: seconds in the box, milliseconds on the wire,
+    // and an emptied box puts a rule back on the transition's own 0.3 s.
+    eq(ruleRequest(MAIN, { ...values, duration_secs: "0.5" }).params.duration_ms, 500);
+    eq(ruleRequest(MAIN, { ...values, duration_secs: "" }).params.duration_ms, undefined);
+    eq(ruleRequest({ ...MAIN, on_loss: { ...RULE, duration_ms: 800 } }, { ...values, duration_secs: "" }).params.duration_ms, 300);
+    eq(ruleRequest(MAIN, { ...values, duration_secs: "60" }).params.duration_ms, 10000, "longer than a transition may run");
     eq(backupChoices(MAIN, [MAIN, WIDE], (s) => s.name), [["", NOTHING], ["cam-wide", "Cam wide"]]);
     eq(backupWarning(MAIN, "cam-wide", [MAIN, { ...WIDE, state: "stalled" }], (s) => s.name),
       "Cam wide has no picture right now, so it could not stand in until it does.");
@@ -43,7 +50,7 @@ export async function sourceBackupFormTests(test, eq, ok) {
   test("picking a backup in the settings saves it at once and says what it means", () => {
     ok(saved.restHidden, "the timings showed with no backup picked");
     eq(client.sent, [["source.on_loss.set", { id: "cam-wide", backup: "cam-main", after_secs: 3, transition: "fade", return: "auto", return_after_secs: 5 }]]);
-    eq(saved.said, "Saved. If Cam wide goes down, Cam main goes on after 3 s. It switches back by itself.");
+    eq(saved.said, "Saved. If Cam wide goes down, Cam main goes on after 3 s, with a 0.3 s dissolve. It switches back by itself.");
     ok(refused.said.includes("would loop"), "the core's reason was not shown: " + refused.said);
   });
 
