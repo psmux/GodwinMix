@@ -25,6 +25,19 @@ impl Mixer {
         p
     }
 
+    /// The transition a source's rule names, as a take would run it. A rule
+    /// that has been cleared comes off with a cut.
+    pub(super) fn backup_spec(&self, id: &str) -> Option<super::super::transition::TransitionSpec> {
+        use godwinmix_protocol::requests::{Transition, TransitionRequest};
+        let rule = self.backups.rule(id)?;
+        let request = Transition::Full(TransitionRequest {
+            type_id: rule.transition_name(),
+            duration_ms: rule.duration_ms,
+            params: Default::default(),
+        });
+        Some(super::super::transition::TransitionSpec::from(&request))
+    }
+
     /// A source id as it is drawn.
     pub(in crate::mixer) fn stand_in_for(&self, id: &SourceId) -> SourceId {
         self.backups.stand_in(id).map(SourceId::from).unwrap_or_else(|| id.clone())

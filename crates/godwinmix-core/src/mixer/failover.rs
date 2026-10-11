@@ -135,17 +135,4 @@ impl Mixer {
             None => self.program_source.iter().cloned().collect(),
         }
     }
-
-    /// The transition a source's rule names, as a take would run it. A rule
-    /// that has been cleared comes off with a cut.
-    fn backup_spec(&self, id: &str) -> Option<super::transition::TransitionSpec> {
-        use godwinmix_protocol::requests::{Transition, TransitionRequest};
-        let rule = self.backups.rule(id)?;
-        let request = Transition::Full(TransitionRequest {
-            type_id: rule.transition_name(),
-            duration_ms: rule.duration_ms,
-            params: Default::default(),
-        });
-        Some(super::transition::TransitionSpec::from(&request))
-    }
 }

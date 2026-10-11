@@ -144,10 +144,4 @@ impl Board {
     pub fn engaged(&self, id: &str) -> bool {
         self.entries.get(id).is_some_and(|e| e.watch.engaged())
     }
-
-    /// The source has never been live since it was added, and its first
-    /// connection has run past the connect timeout or failed.
-    pub fn never_live(&self, id: &str) -> bool {
-        self.entries.get(id).is_some_and(|e| e.watch.never_live && e.watch.down_since.is_some())
-    }
 }

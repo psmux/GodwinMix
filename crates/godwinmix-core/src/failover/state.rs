@@ -76,6 +76,12 @@ impl Board {
         Some(entry.leaving.take().unwrap_or("backup_down"))
     }
 
+    /// The source has never been live since it was added, and its first
+    /// connection has run past the connect timeout or failed.
+    pub fn never_live(&self, id: &str) -> bool {
+        self.entries.get(id).is_some_and(|e| e.watch.never_live && e.watch.down_since.is_some())
+    }
+
     /// How long `id` has been without a picture, while it has a rule.
     pub fn lost_for(&self, id: &str, now: Instant) -> Option<Duration> {
         self.entries.get(id)?.watch.lost_for(now)

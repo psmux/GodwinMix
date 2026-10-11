@@ -56,14 +56,6 @@ impl Channels {
         self.claim(record, stream, &id, !exists);
     }
 
-    /// The backup rule `id` had when its encoder last stopped, while the
-    /// backup it names is still a source. A rule naming a source that has
-    /// since gone would have the show refuse the stream.
-    fn kept_rule(&self, channel: &str, id: &str) -> Option<godwinmix_protocol::backup::OnLoss> {
-        let rule = self.records.lock().iter().find(|r| r.id == channel)?.auto_rules.get(id).cloned()?;
-        (self.target().has_source(&rule.backup) == Some(true)).then_some(rule)
-    }
-
     /// The mixer turned the stream down: keep why on it until it is taken.
     fn not_a_source(&self, record: &Record, stream: &str, why: String) {
         if let Some(l) = self.live.lock().iter_mut().find(|l| l.channel == record.id && l.name == stream) {
@@ -97,17 +89,11 @@ impl Channels {
         if !ours || self.held(id) {
             return false;
         }
-        // Its backup rule, kept for when the encoder comes back.
         let rule = self.target().rule_of(id);
         self.target().remove_source(id);
         info!(source = %id, kept_rule = rule.is_some(), "a channel's stream left and its source went with it");
+        self.keep_rule(id, rule);
         for r in self.records.lock().iter_mut() {
-            if r.auto_sources.iter().any(|s| s == id) {
-                match &rule {
-                    Some(rule) => r.auto_rules.insert(id.to_string(), rule.clone()),
-                    None => r.auto_rules.remove(id),
-                };
-            }
             r.auto_sources.retain(|s| s != id);
         }
         if let Err(e) = self.persist() {
