@@ -68,7 +68,13 @@ impl Mixer {
         if !self.backups.busy() {
             return;
         }
+        let before = self.backups.phases();
         let steps = self.backups.step(now, &Seen(&self.sources, &self.pending));
+        if self.backups.phases() != before {
+            // Lost, back, returning: a client draws its countdown from the
+            // snapshot, so it hears of each move as it happens.
+            self.broadcast_status();
+        }
         self.swap_stand_ins();
         for (id, step) in steps {
             if step == Step::Engage {

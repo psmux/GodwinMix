@@ -15,6 +15,7 @@ use godwinmix_protocol::backup::OnLoss;
 use std::collections::BTreeMap;
 use std::time::{Duration, Instant};
 
+mod operator;
 pub mod state;
 #[cfg(test)]
 mod tests;
@@ -121,26 +122,9 @@ impl Board {
         steps
     }
 
-    /// Go back to the source now. Refused when it is not on its backup.
-    pub fn release(&mut self, id: &str) -> Result<(), String> {
-        let entry = self.entries.get_mut(id).filter(|e| e.watch.engaged());
-        let Some(entry) = entry else {
-            return Err(format!("{id} is not on its backup, so there is nothing to return from."));
-        };
-        entry.watch.disengage();
-        entry.leaving = Some("operator");
-        Ok(())
-    }
-
-    /// Stay on the backup until the operator returns it.
-    pub fn stay(&mut self, id: &str) -> Result<(), String> {
-        match self.entries.get_mut(id).filter(|e| e.watch.engaged()) {
-            Some(entry) => {
-                entry.watch.stay = true;
-                Ok(())
-            }
-            None => Err(format!("{id} is not on its backup, so there is nothing to stay on.")),
-        }
+    /// Where every source with a rule stands, to tell when one has moved.
+    pub fn phases(&self) -> Vec<godwinmix_protocol::backup::BackupPhase> {
+        self.entries.values().filter_map(|e| Some(e.watch.phase(e.rule.as_ref()?))).collect()
     }
 
     pub fn engaged(&self, id: &str) -> bool {
