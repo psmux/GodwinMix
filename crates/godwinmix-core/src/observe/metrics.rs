@@ -842,9 +842,9 @@ mod tests {
 
     /// The case the gap gauge exists for: a streaming thread held for 200 ms,
     /// the way a hook that blocked the pipeline would hold it, has to read
-    /// well over two frame periods, which is the bar the soak judges it by.
+    /// over three frame periods, which is the bar the soak judges it by.
     #[test]
-    fn a_streaming_thread_held_for_two_hundred_milliseconds_reads_over_two_frame_periods() {
+    fn a_streaming_thread_held_for_two_hundred_milliseconds_reads_over_three_frame_periods() {
         use gstreamer::prelude::*;
         gstreamer::init().expect("gstreamer");
         let pipeline = gstreamer::Pipeline::with_name("metrics-wedge-test");
@@ -884,8 +884,8 @@ mod tests {
         let gap = gauge("gmx_programme_frame_gap_ms", &[]).get();
         pipeline.set_state(gstreamer::State::Null).unwrap();
 
-        let two_periods = 2000.0 / 30.0;
-        assert!(gap > two_periods, "a 200 ms hold read {gap:.1} ms, under {two_periods:.1}");
+        let bar = 3000.0 / 30.0;
+        assert!(gap > bar, "a 200 ms hold read {gap:.1} ms, under {bar:.1}");
         assert!(over_100(&histogram("gmx_programme_frame_interval_ms", &[])) > before);
     }
 }

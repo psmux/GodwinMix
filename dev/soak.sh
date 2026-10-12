@@ -86,23 +86,26 @@ FAILED=0
 
 # --- the bars ---------------------------------------------------------------
 #
-# A stall is a frame that did not come: the longest gap between two programme
-# frames, gmx_programme_frame_gap_ms, against two frame periods (66.7 ms at the
-# soak's 30 fps). Over that, a whole frame time passed with nothing in it.
+# A stall is frames that did not come: the longest gap between two programme
+# frames, gmx_programme_frame_gap_ms, against three frame periods (100 ms at
+# the soak's 30 fps). Over that, two whole frame times passed with nothing.
 #
 # It used to be the sixty frame average against 34 ms, one period plus a
 # millisecond. On a hosted runner that read 33.7 to 34.6 ms with nothing wrong:
 # a take with a fade, the mosaic coming up or down and the station's first run
 # encoder calibration each put a few late wake ups into one window, while the
-# frames still left the compositor about 930 ms before their deadline. A
-# twenty minute run there kept every single gap under 66 ms, calibration
-# included. A 200 ms wedge on a streaming thread is a 200 ms gap, three times
-# this bar; on the old average it was 36.6 ms, barely over its own.
+# frames still left the compositor about 930 ms before their deadline.
+#
+# Three periods and not two, because two is where that same runner's
+# scheduler lives. Three twenty minute runs there, about 108,000 frames, had
+# three gaps over 66 ms and none over 100, and the worst gap in an hour long
+# soak was 73.8 ms. A 200 ms wedge on a streaming thread is a 200 ms gap,
+# twice this bar; on the old average it read 36.6 ms, barely over its own.
 #
 # Judging against the frame's deadline instead would hide that wedge, since
 # a second of latency swallows it. The average is still written down, as
 # stall_ms, so the two can be compared run against run.
-STALL_FRAMES=2
+STALL_FRAMES=3
 # Memory measured against the warm up sample rather than against the start.
 # The first minute is where the pipeline builds its pools, the allocator takes
 # its arenas and GStreamer loads the plugins it turns out to need; growth there
@@ -396,7 +399,7 @@ fi
 # both hang up. Python because /pcm is a websocket and curl does not speak one.
 cat >"$WORK/streams.py" <<'PY'
 """Open an MJPEG stream and a PCM stream, read a little, close both."""
-import base64, os, socket, struct, sys, urllib.request
+import base64, glob, os, socket, struct, sys, urllib.request
 
 host, port, token = sys.argv[1], int(sys.argv[2]), sys.argv[3]
 base = f"http://{host}:{port}"
@@ -467,8 +470,27 @@ def some_pcm(count=3):
     s.close()
 
 
-one_jpeg()
-some_pcm()
+def evidence(prefix):
+    """The programme's graph and queues while a stream is still waiting, so a
+    stream that got nothing says which element it stopped at. The first three
+    of a run only; --keep or any failure leaves them in the working directory."""
+    if len(glob.glob(os.path.join(os.path.dirname(prefix), "streams-round-*.dot"))) >= 3:
+        return
+    for path, suffix in (("/api/v1/pipeline/dot?name=programme", ".dot"),
+                         ("/api/v1/pipeline/queues?name=programme", "-queues.json")):
+        try:
+            with urllib.request.urlopen(authed(path), timeout=5) as r:
+                open(prefix + suffix, "wb").write(r.read())
+        except Exception:
+            pass
+
+
+try:
+    one_jpeg()
+    some_pcm()
+except Exception:
+    evidence(sys.argv[4])
+    raise
 PY
 
 # --- one round --------------------------------------------------------------
@@ -541,7 +563,8 @@ round_take() {
 }
 
 round_streams() {
-    python3 "$WORK/streams.py" 127.0.0.1 "$PORT" "$TOKEN" >"$WORK/streams.log" 2>&1 \
+    python3 "$WORK/streams.py" 127.0.0.1 "$PORT" "$TOKEN" "$WORK/streams-round-$ROUND" \
+        >"$WORK/streams.log" 2>&1 \
         || note "streams" "round $ROUND: $(tail -1 "$WORK/streams.log")"
 }
 

@@ -35,9 +35,12 @@ before anything has gone wrong, so a soak built that way measures the compiler.
 | Open descriptors | `/proc/<pid>/fd` on Linux, `lsof -p` on macOS | Sockets, pipes and files the core has not closed |
 | Threads | `/proc/<pid>/task` on Linux, `ps -M` on macOS | How many threads the core is carrying |
 
-The gap gauge is the one worth understanding. Over two frame periods (66.7 ms
-at the soak's 30 fps) means a whole frame time went by with no frame in it,
-which is what a stall is. A streaming thread held for 200 ms reads 200 ms.
+The gap gauge is the one worth understanding. Over three frame periods (100 ms
+at the soak's 30 fps) means two whole frame times went by with no frame in
+them, which is what a stall is. A streaming thread held for 200 ms reads 200 ms.
+The bar is three periods rather than two because a hosted runner's scheduler
+reaches just past two now and then with nothing wrong: about 108,000 frames
+there had three gaps over 66 ms and none over 100.
 
 The soak used to judge the sixty frame average against 34 ms instead. On a
 hosted runner that read 33.7 to 34.6 ms with nothing wrong: a fade, the mosaic
@@ -50,7 +53,7 @@ due. The average is still in the record so two runs can be compared on it.
 
 | Bar | Fails when |
 |---|---|
-| Programme gap | the gap gauge reads more than two frame periods, from the warm up sample on |
+| Programme gap | the gap gauge reads more than three frame periods, from the warm up sample on |
 | Resident memory | it is more than 10 percent above the warm up sample at the end |
 | Open descriptors | the last sample is more than 8 above the warm up sample |
 | Threads | the last sample is more than 4 above the warm up sample |

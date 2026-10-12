@@ -82,13 +82,14 @@ periods (66.7 ms at 30 fps) the answer is yes.
 The two disagree on a busy machine, and that is the reason both exist. A take
 with a fade or the mosaic coming up puts a few late wake ups into one sixty
 frame window, and on a hosted runner the stall gauge read 33.7 to
-34.6 ms through those with nothing wrong, while the longest gap stayed under
-66 ms for twenty minutes. A streaming thread held for 200 ms, the way a
-blocking hook would hold it, is a 200 ms gap: three times the bar, where the
-sixty frame average reads 36.6 ms. `dev/soak.sh` judges a stall by this one.
+34.6 ms through those with nothing wrong, while about 108,000 frames there
+had three gaps over 66 ms and none over 100. A streaming thread held for
+200 ms, the way a blocking hook would hold it, is a 200 ms gap, where the sixty
+frame average reads 36.6 ms. `dev/soak.sh` judges a stall by this one, against
+three frame periods so that a busy scheduler's odd late wake up does not count.
 
 ```promql
-gmx_programme_frame_gap_ms > 2 * 1000 / 30
+gmx_programme_frame_gap_ms > 3 * 1000 / 30
 ```
 
 ## Sources
