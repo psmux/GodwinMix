@@ -1,0 +1,67 @@
+name: stall diag
+
+# A temporary look at the programme frame intervals during a soak on a hosted
+# runner, on the fix/soak-growth branch only. It scrapes /metrics every two
+# seconds beside the soak and keeps the frame interval histogram, the stall
+# gauge and the governor's calibration state.
+
+on:
+  push:
+    branches: [fix/soak-growth]
+    paths: [".github/workflows/stall-diag.yml"]
+
+jobs:
+  soak:
+    name: stall ${{ matrix.n }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        n: [1, 2, 3]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: GStreamer
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+            libgstreamer-plugins-bad1.0-dev libgstrtspserver-1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
+            gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav gstreamer1.0-tools
+      - name: Build
+        run: cargo build --release --locked
+      - name: Soak
+        env:
+          LIBGL_ALWAYS_SOFTWARE: "1"
+          GST_GL_DISABLED: "1"
+          GODWINMIX_SOAK_BIN_DIR: ${{ github.workspace }}/target/release
+        run: |
+          mkdir -p diag
+          (
+            cfg=""
+            for _ in $(seq 1 600); do
+              cfg="$(ls /tmp/gmx-soak.*/godwinmix.toml 2>/dev/null | head -1)"; [[ -n "$cfg" ]] && break; sleep 0.5
+            done
+            bind="$(grep -m1 '^bind = ' "$cfg" | cut -d'"' -f2)"
+            token="$(grep -m1 '^token = ' "$cfg" | cut -d'"' -f2)"
+            t0=$(date +%s%3N)
+            while :; do
+              now=$(date -u +%H:%M:%S.%3N)
+              m="$(curl -fsS --max-time 5 -H "Authorization: Bearer $token" "http://$bind/metrics" 2>/dev/null)" || { sleep 2; continue; }
+              g="$(curl -fsS --max-time 5 -H "Authorization: Bearer $token" "http://$bind/api/v1/governor/status" 2>/dev/null | tr -d '\n' | grep -o '"calibrating":[a-z]*')"
+              echo "t=$now $g $(echo "$m" | grep -E '^gmx_programme_frame_(interval_ms_bucket|stall_ms|interval_ms_count)' | sed 's/gmx_programme_frame_//' | tr '\n' ' ')" >>diag/metrics.log
+              pgrep -f 'show main' >/dev/null || break
+              sleep 2
+            done
+          ) &
+          dev/soak.sh --minutes 20 --machine "stall-${{ matrix.n }}" --keep 2>&1 | tee diag/soak.log || true
+          cp /tmp/gmx-soak.*/core.log diag/ 2>/dev/null || true
+          cp bench/results/*.json diag/ 2>/dev/null || true
+          head -5 diag/metrics.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: stall-${{ matrix.n }}
+          path: diag/
+          retention-days: 7
