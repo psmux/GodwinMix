@@ -1,0 +1,111 @@
+name: soak diag
+
+# A temporary diagnosis of the soak's memory growth, on the fix/soak-growth
+# branch only. Each variant runs the soak for half an hour and samples the
+# show process's memory map every thirty seconds.
+
+on:
+  push:
+    branches: [fix/soak-growth]
+    paths: [".github/workflows/soak-diag.yml"]
+
+jobs:
+  soak:
+    name: soak ${{ matrix.variant }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [full, no-take, no-streams, no-plugin, no-sources, arena2, heaptrack, leaks]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: diag
+      - name: GStreamer
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+            libgstreamer-plugins-bad1.0-dev libgstrtspserver-1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
+            gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav gstreamer1.0-tools \
+            heaptrack gdb
+          sudo sysctl -w kernel.yama.ptrace_scope=0
+      - name: Build
+        env:
+          CARGO_PROFILE_RELEASE_STRIP: none
+          CARGO_PROFILE_RELEASE_DEBUG: line-tables-only
+        run: cargo build --release --locked
+      - name: Soak
+        env:
+          LIBGL_ALWAYS_SOFTWARE: "1"
+          GST_GL_DISABLED: "1"
+          GODWINMIX_SOAK_BIN_DIR: ${{ github.workspace }}/target/release
+          V: ${{ matrix.variant }}
+          MINUTES: "30"
+        run: |
+          mkdir -p diag
+          ARGS=(--minutes "$MINUTES" --machine "diag-$V" --keep)
+          case "$V" in
+            no-*) ARGS+=(--skip "${V#no-}") ;;
+            arena2) export MALLOC_ARENA_MAX=2 ;;
+            leaks)
+              export GST_TRACERS="leaks" GST_LEAKS_TRACER_SIG=1
+              export GST_DEBUG="GST_TRACER:7" GST_DEBUG_FILE="$PWD/diag/leaks.log" GST_DEBUG_NO_COLOR=1 ;;
+          esac
+          (
+            pid=""
+            for _ in $(seq 1 600); do
+              pid="$(pgrep -f 'show main' | head -1)"; [[ -n "$pid" ]] && break; sleep 0.5
+            done
+            echo "show pid $pid" >diag/sampler.log
+            t=0
+            stop=$((MINUTES * 60 - 30))
+            while kill -0 "$pid" 2>/dev/null; do
+              {
+                echo "== t=$t"
+                grep -E "^(Rss|Pss_Anon|Pss_File|Anonymous|Private_Dirty)" /proc/$pid/smaps_rollup
+                echo "maps $(wc -l </proc/$pid/maps) threads $(ls /proc/$pid/task | wc -l)"
+              } >>diag/sampler.log
+              if [[ $t -eq 90 && "$V" == heaptrack ]]; then
+                heaptrack -o "$PWD/diag/heap" -p "$pid" >diag/heaptrack.out 2>&1 &
+              fi
+              if [[ $t -ge $stop && "$V" == heaptrack ]]; then
+                # Killed rather than shut down, so what was still allocated is
+                # what the run had grown to, not what a clean exit left behind.
+                kill -9 "$pid"
+              fi
+              if [[ "$V" == leaks && $t -ge 120 && $((t % 300)) -eq 120 ]]; then
+                echo "checkpoint t=$t" >>diag/sampler.log
+                kill -USR2 "$pid"
+              fi
+              sleep 30; t=$((t + 30))
+            done
+          ) &
+          dev/soak.sh "${ARGS[@]}" 2>&1 | tee diag/soak.log || true
+          sleep 20
+          cp /tmp/gmx-soak.*/core.log diag/ 2>/dev/null || true
+          cp bench/results/*.json diag/ 2>/dev/null || true
+          if [[ "$V" == heaptrack ]]; then
+            cat diag/heaptrack.out || true
+            ls -la diag
+            f="$(ls diag/heap*.zst diag/heap*.gz 2>/dev/null | head -1)"
+            if [[ -n "$f" ]]; then
+              heaptrack_print -f "$f" --print-leaks 1 --print-peaks 0 --print-allocators 0 \
+                --print-temporary 0 --peak-limit 40 >diag/heap-print.txt 2>&1 || true
+              grep -n -A60 "MEMORY LEAKS" diag/heap-print.txt | head -400 || head -300 diag/heap-print.txt
+              tail -20 diag/heap-print.txt
+            fi
+          fi
+          if [[ "$V" == leaks ]]; then
+            ls -la diag
+            grep -c "" diag/leaks.log || true
+          fi
+          tail -60 diag/sampler.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: diag-${{ matrix.variant }}
+          path: diag/
+          retention-days: 7
