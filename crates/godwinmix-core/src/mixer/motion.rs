@@ -56,12 +56,27 @@ impl Mixer {
         let Some(slate) = self.program.by_name("slate") else { return false };
         slate.set_property_from_str("pattern", "solid-color");
         slate.set_property("foreground-color", *colour);
+        self.size_slate((self.canvas.width, self.canvas.height));
         true
     }
 
     pub(super) fn untint_slate(&self) {
         if let Some(slate) = self.program.by_name("slate") {
             slate.set_property_from_str("pattern", "black");
+        }
+        // Zero is the compositor's "the input's own size", which is
+        // `SLATE_SIZE`: a black square on the black background.
+        self.size_slate((0, 0));
+    }
+
+    /// Draw the slate at this size. Scaling a 16 pixel picture costs the
+    /// compositor a little on every frame, so it is done only while a dip
+    /// shows the slate's colour.
+    fn size_slate(&self, (width, height): (i32, i32)) {
+        for (prop, v) in [("width", width), ("height", height)] {
+            if self.slate_pad.find_property(prop).is_some() {
+                self.slate_pad.set_property(prop, v);
+            }
         }
     }
 
