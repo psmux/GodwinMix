@@ -124,7 +124,9 @@ Which software encoder you get depends on what is installed:
 * `openh264enc` (rank 64) otherwise. Cisco's encoder, BSD licensed, ships in
   every build including a closed custom one.
 
-Either way the decoder is `avdec_h264` from gst-libav, or `openh264dec`.
+Either way the software decoder is `openh264dec`, or `avdec_h264` from
+gst-libav where openh264 is not installed. See
+[run-without-ffmpeg.md](run-without-ffmpeg.md) for putting libav first.
 
 ## Graphics: the compositor is a separate choice
 

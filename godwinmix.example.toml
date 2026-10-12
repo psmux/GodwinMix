@@ -19,8 +19,9 @@ keyframe_interval_secs = 2
 # Audio crossfade on a take. Zero gives you an audible click.
 audio_ramp_ms = 180
 # Milliseconds to hold video back relative to audio at the encoders. Unset
-# means the known priming delay of the AAC encoder in use (fdkaacenc 43 ms,
-# avenc_aac 21 ms), which puts a page's beep on its flash to within a frame.
+# means the measured priming delay of the AAC encoder in use (fdkaacenc 43 ms,
+# atenc 44, voaacenc 33, avenc_aac 21, mfaacenc 0), which puts a page's beep
+# on its flash to within a frame.
 # av_offset_ms = 43
 
 # The operator's mosaic. Nothing here runs until a client subscribes: the

@@ -27,7 +27,7 @@ change one scene into another and are transitions only.
 | Format | Read | Why |
 |---|---|---|
 | WebM, VP8 or VP9 with alpha | yes | `vp8alphadecodebin` and `vp9alphadecodebin` give the alpha; the bundled runtime keeps both |
-| MOV, ProRes 4444 with alpha | yes | `avdec_prores`, in the libav plugin the runtime keeps for H.264 |
+| MOV, ProRes 4444 with alpha | yes | `avdec_prores`, in the libav plugin the bundled runtimes keep as a fallback; a machine without gst-libav cannot open it |
 | MOV, QuickTime Animation (RLE) with alpha | yes | `avdec_qtrle`, the same plugin |
 | MOV with PNG frames | yes | `pngdec` |
 | MP4, MOV, WebM, MKV with no alpha | yes, as an overlay or an opaque stinger | any decoder the runtime has; a light leak in H.264 is the common case |

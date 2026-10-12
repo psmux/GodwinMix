@@ -57,8 +57,12 @@ with it:
 
 ```
 libgstreamer1.0-0, libgstreamer-plugins-base1.0-0, gstreamer1.0-plugins-base,
-gstreamer1.0-plugins-good, gstreamer1.0-plugins-bad, gstreamer1.0-libav
+gstreamer1.0-plugins-good, gstreamer1.0-plugins-bad, libgstrtspserver-1.0-0
 ```
+
+and recommends `gstreamer1.0-libav`, which `apt` installs unless you pass
+`--no-install-recommends`. It is a fallback only; see
+[run-without-ffmpeg.md](run-without-ffmpeg.md).
 
 Those serve `godwinmix` when you run it from a terminal rather than from the
 app, as `godwinmix doctor` or an AI agent does. The package is about 435 MB

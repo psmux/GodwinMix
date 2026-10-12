@@ -242,7 +242,7 @@ The same binary picks its codecs at startup and works with or without a GPU.
 | Intel / AMD (VA) | `vah264dec` | `vah264enc` |
 | Windows | `d3d11h264dec` | `mfh264enc` |
 | macOS | `vtdec_hw` | `vtenc_h264_hw` |
-| software | `avdec_h264` | `x264enc` |
+| software | `openh264dec`, else `avdec_h264` | `x264enc`, else `openh264enc` |
 
 Decode and encode are chosen independently, because a machine with NVDEC but no
 usable NVENC is a real configuration. Set `hardware.decode` or `hardware.encode`

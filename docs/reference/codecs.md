@@ -40,15 +40,24 @@ for what an unverified entry means in practice.
 | `h264-d3d12` | video | h264 | Windows | `d3d12h264dec` | 175 | LGPL-2.1-or-later | no |
 | `h264-v4l2` | video | h264 | Pi 4 and V4L2 SoCs | `v4l2h264enc` / `v4l2h264dec` | 160 | LGPL-2.1-or-later | no |
 | `h264-vulkan` | video | h264 | Linux, GStreamer 1.26+ | `vulkanh264enc` / `vulkanh264dec` | 20 | LGPL-2.1-or-later | no |
-| `h264-software-x264` | video | h264 | everywhere | `x264enc` / `avdec_h264` | 72 | GPL-2.0-or-later | no |
+| `h264-software-x264` | video | h264 | everywhere | `x264enc` | 72 | GPL-2.0-or-later | no |
 | `h264-software-openh264` | video | h264 | everywhere | `openh264enc` / `openh264dec` | 64 | BSD-2-Clause | no |
-| `h264-software-decode` | video | h264 | everywhere | `avdec_h264` | 70 | LGPL-2.1-or-later | no |
+| `h264-software-decode` | video | h264 | with gst-libav | `avdec_h264` | 30 | LGPL-2.1-or-later | no |
 | `av1-software` | video | av1 | everywhere | `svtav1enc` / `dav1ddec` | 60 | BSD-3-Clause | no |
-| `h265-software` | video | h265 | everywhere | `x265enc` / `avdec_h265` | 50 | GPL-2.0-or-later | no |
-| `aac-fdk` | audio | aac | everywhere | `fdkaacenc` / `avdec_aac` | 120 | FDK-AAC | no |
-| `aac-avenc` | audio | aac | everywhere | `avenc_aac` / `avdec_aac` | 100 | LGPL-2.1-or-later | no |
-| `aac-vo` | audio | aac | everywhere | `voaacenc` / `avdec_aac` | 80 | Apache-2.0 | no |
-| `aac-software-decode` | audio | aac | everywhere | `faad` | 90 | GPL-2.0-or-later | no |
+| `h265-software` | video | h265 | everywhere | `x265enc` | 50 | GPL-2.0-or-later | no |
+| `h265-d3d11` | video | h265 | Windows | `d3d11h265dec` | 185 | LGPL-2.1-or-later | no |
+| `h265-software-libde265` | video | h265 | Debian, Ubuntu | `libde265dec` | 45 | LGPL-3.0-or-later | no |
+| `h265-software-decode` | video | h265 | with gst-libav | `avdec_h265` | 30 | LGPL-2.1-or-later | no |
+| `aac-fdk` | audio | aac | where the operator installs it | `fdkaacenc` / `fdkaacdec` | 120 | FDK-AAC | no |
+| `aac-audiotoolbox` | audio | aac | macOS | `atenc` / `atdec` | 116 | LGPL-2.1-or-later | no |
+| `aac-mediafoundation` | audio | aac | Windows | `mfaacenc` / `mfaacdec` | 114 | LGPL-2.1-or-later | no |
+| `aac-vo` | audio | aac | everywhere but Homebrew | `voaacenc` | 110 | Apache-2.0 | no |
+| `aac-avenc` | audio | aac | with gst-libav | `avenc_aac` | 100 | LGPL-2.1-or-later | no |
+| `aac-software-decode` | audio | aac | Linux, Homebrew | `faad` | 90 | GPL-2.0-or-later | no |
+| `aac-libav-decode` | audio | aac | with gst-libav | `avdec_aac` | 30 | LGPL-2.1-or-later | no |
+| `mpeg-audio-decode` | audio | mp3 | everywhere | `mpg123audiodec` | 50 | LGPL-2.1-or-later | no |
+| `ac3-a52dec` | audio | ac3 | everywhere but Homebrew | `a52dec` | 50 | GPL-2.0-or-later | no |
+| `ac3-decode` | audio | ac3 | with gst-libav | `avdec_ac3` | 30 | LGPL-2.1-or-later | no |
 | `opus-software` | audio | opus | everywhere | `opusenc` / `opusdec` | 40 | BSD-3-Clause | no |
 | `cuda` | graphics |  | Linux, Windows | `cudacompositor` | 240 | LGPL-2.1-or-later | no |
 | `gl` | graphics |  | Linux, macOS, Windows | `glvideomixer` | 200 | LGPL-2.1-or-later | no |
@@ -64,9 +73,20 @@ Notes on the table:
   usable NVENC gets `nvh264dec` and `x264enc`.
 * `x264enc` and `x265enc` are GPL and are never bundled into a build. They are
   there for an operator who installs `gst-plugins-ugly` themselves. `fdkaacenc`
-  carries the Fraunhofer licence and is not redistributable either. The always
-  present fallbacks are openh264 and SVT-AV1, both permissive, plus `avenc_aac`
-  from gst-libav.
+  carries the Fraunhofer licence, which grants no patent licence and does not
+  mix with the GPL, so no release bundle carries it either. The always present
+  fallbacks are openh264 and SVT-AV1, both permissive.
+* gst-libav is the last resort for every codec. Each `avdec_` and `avenc_`
+  element sits in an entry of its own at a rank under every alternative, so it
+  is chosen only for a codec nothing else on the machine handles. The mixer
+  also swaps GStreamer ranks so `decodebin` follows the same order when it
+  opens a source. [explanation/ffmpeg.md](../explanation/ffmpeg.md) says why,
+  and [run-without-ffmpeg.md](../how-to/run-without-ffmpeg.md) how.
+* `priming_delay_ms` on an AAC entry is how many milliseconds late that
+  encoder's sound comes out, and the mixer holds the video back by it. Every
+  figure is measured by a test that runs on each CI platform: `fdkaacenc` 43,
+  `atenc` 44, `mfaacenc` 0 (it takes its delay out itself), `voaacenc` 33,
+  `avenc_aac` 21.
 * The Raspberry Pi 4's `v4l2h264enc` is in the table. The Raspberry Pi 5 has no
   hardware video encoder at all and falls back to software, which is why the
   newer board is the harder target for a mixer.

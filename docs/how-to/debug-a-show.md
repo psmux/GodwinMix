@@ -22,7 +22,8 @@ from, in the words of the platform you are standing in front of.
 ok    gstreamer         1.28.0
 ok    elements          all 23 elements the default pipeline needs are here
 warn  video encoder     x264enc only, which is software. Expect a core per 1080p30 encode
-ok    audio encoder     avenc_aac will be chosen; also here: fdkaacenc
+ok    audio encoder     voaacenc will be chosen; also here: avenc_aac
+ok    gst-libav         installed, and only a fallback: every codec has an element outside it.
 ok    config            godwinmix.toml parses: 3 sources, 1 outputs, canvas 1920x1080@30
 ok    control port      0.0.0.0:8080 is free
 ok    runtime directory /etc/godwinmix/.godwinmix is writable

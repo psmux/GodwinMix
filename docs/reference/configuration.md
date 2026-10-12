@@ -46,7 +46,7 @@ until the mixer stops.
 | `audio_bitrate_kbps` | 160 | audio bitrate |
 | `keyframe_interval_secs` | 2 | keyframe interval. Two seconds is what every CDN asks for |
 | `audio_ramp_ms` | 180 | audio crossfade on a take. Zero gives an audible click |
-| `av_offset_ms` | unset | milliseconds to hold video back relative to audio at the encoders. Unset means the known priming delay of the AAC encoder in use (`fdkaacenc` 43 ms, `avenc_aac` 21 ms) |
+| `av_offset_ms` | unset | milliseconds to hold video back relative to audio at the encoders. Unset means the measured priming delay of the AAC encoder in use, from its `priming_delay_ms` in the codec catalogue (`fdkaacenc` 43 ms, `atenc` 44, `voaacenc` 33, `avenc_aac` 21, `mfaacenc` 0) |
 
 ## `[multiview]`
 

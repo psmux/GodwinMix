@@ -20,7 +20,8 @@ development headers.
 
 ```sh
 brew install gstreamer                  # macOS
-# Linux: your distro's gstreamer plus plugins base, good, bad, ugly, libav, rs
+# Linux: your distro's gstreamer plus plugins base, good, bad, ugly and rs;
+#        libav optional, it is only a fallback (docs/how-to/run-without-ffmpeg.md)
 # Windows: the MSVC installer from gstreamer.freedesktop.org, see below
 
 cargo build
