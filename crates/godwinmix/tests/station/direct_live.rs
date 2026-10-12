@@ -187,7 +187,17 @@ async fn a_direct_show_carries_a_real_udp_feed_to_a_udp_copy_output_through_the_
     let asked = call(&mut ws, 3, "plugin.add", json!({"source": source.to_string_lossy()})).await;
     assert!(asked.get("error").is_none(), "{asked}");
     let got = received(&receiver, Duration::from_secs(60), 200_000);
-    let stats = output_state(&mut ws, 4).await;
+    // The input's rates are measured over a second and passed on once a
+    // second by the input and once by the host. On a Windows runner the
+    // first 200 kB came in a burst, and a reading taken that instant was
+    // from before the first whole second: 0 kbps and 0 fps with a frame
+    // 50 ms old. Read until there is a rate, for a few seconds at most.
+    let mut stats = output_state(&mut ws, 4).await;
+    let until = Instant::now() + Duration::from_secs(5);
+    while stats["input"]["kbps"].as_u64().unwrap_or(0) == 0 && Instant::now() < until {
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        stats = output_state(&mut ws, 4).await;
+    }
     assert!(got >= 200_000, "only {got} bytes reached the copy output in 60 s: {stats}; see {}", dir.join("log.jsonl").display());
     assert_eq!(stats["outputs"][0]["state"], "live", "{stats}");
     assert!(stats["input"]["kbps"].as_u64().unwrap_or(0) > 0, "{stats}");
