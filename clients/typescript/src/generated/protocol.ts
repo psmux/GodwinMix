@@ -739,6 +739,18 @@ export interface DestinationRefusal {
 /** Where a destination has got to. */
 export type DestinationState = "off" | "waiting" | "connecting" | "live" | "reconnecting" | "failed";
 
+/**
+ * `channel.destination.to_output`. Send the programme where a channel's
+ * destination points, with its key and format, without the key ever
+ * leaving the core.
+ */
+export interface DestinationToOutputRequest {
+  destination: string;
+  id: string;
+  remove?: boolean;
+  show?: string | null;
+}
+
 export interface Detected {
   found?: string | null;
   installed: boolean;
@@ -3578,6 +3590,7 @@ export interface MethodParams {
   "channel.destination.add": AddDestinationRequest;
   "channel.destination.remove": RemoveDestinationRequest;
   "channel.destination.set": SetDestinationRequest;
+  "channel.destination.to_output": DestinationToOutputRequest;
   "channel.get": IdRequest;
   "channel.key.add": ChannelKeyAddRequest;
   "channel.key.remove": ChannelKeyRemoveRequest;
@@ -3805,6 +3818,7 @@ export interface MethodResults {
   "channel.destination.add": Record<string, unknown>;
   "channel.destination.remove": Record<string, unknown>;
   "channel.destination.set": Record<string, unknown>;
+  "channel.destination.to_output": Record<string, unknown>;
   "channel.get": Channel;
   "channel.key.add": KeyAdded;
   "channel.key.remove": Channel;
@@ -4086,6 +4100,7 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "channel.destination.add", summary: "Send a channel's stream on to YouTube, Facebook, Twitch, an RTMP server or an SRT receiver as it arrives. Nothing is decoded or encoded. The key is write only.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/channels/{id}/destination/add" } },
   { name: "channel.destination.remove", summary: "Stop sending a channel's stream to one destination and forget it. The publisher and the other destinations are not touched.", scope: "admin", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/channels/{id}/destination/remove" } },
   { name: "channel.destination.set", summary: "Change one of a channel's destinations, naming only what moves: a new key, another server, which stream it sends, on or off. A key left out is kept.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/channels/{id}/destination" } },
+  { name: "channel.destination.to_output", summary: "Send the programme where one of a channel's destinations points, with its key and              format, as a new output. The key is read inside the core and never sent back.              `remove` (on unless false) takes the destination off the channel.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/channels/{id}/destination/to_output" } },
   { name: "channel.get", summary: "One channel.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/channels/{id}" } },
   { name: "channel.key.add", summary: "Make another key for a channel, to give to one more person or encoder. The key is in this answer, and channel.key.reveal reads it again later.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/channels/{id}/key/add" } },
   { name: "channel.key.remove", summary: "Take one key back. A publisher on air with it is cut off and the next one is turned away; the other keys are untouched.", scope: "admin", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/channels/{id}/key/remove" } },
@@ -4418,6 +4433,11 @@ export class GeneratedMethods {
   /** Change one of a channel's destinations, naming only what moves: a new key, another server, which stream it sends, on or off. A key left out is kept. */
   channelDestinationSet(params: SetDestinationRequest): Promise<Record<string, unknown>> {
     return this._call("channel.destination.set", params as unknown as Record<string, unknown>) as Promise<Record<string, unknown>>;
+  }
+
+  /** Send the programme where one of a channel's destinations points, with its key and              format, as a new output. The key is read inside the core and never sent back.              `remove` (on unless false) takes the destination off the channel. */
+  channelDestinationToOutput(params: DestinationToOutputRequest): Promise<Record<string, unknown>> {
+    return this._call("channel.destination.to_output", params as unknown as Record<string, unknown>) as Promise<Record<string, unknown>>;
   }
 
   /** One channel. */

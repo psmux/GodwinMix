@@ -1379,6 +1379,27 @@ pub type DestinationState = String;
 /// The values api_level 1 knows for [`DestinationState`].
 pub const DESTINATION_STATE_VALUES: &[&str] = &["off", "waiting", "connecting", "live", "reconnecting", "failed"];
 
+/// `channel.destination.to_output`. Send the programme where a channel's
+/// destination points, with its key and format, without the key ever
+/// leaving the core.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct DestinationToOutputRequest {
+    /// The destination's id within the channel.
+    pub destination: String,
+    /// The channel.
+    pub id: String,
+    /// Whether to take the destination off the channel once the output is
+    /// added, so an encoder sent to the channel later cannot use the same
+    /// key at the same time. On unless said otherwise.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub remove: Option<bool>,
+    /// Under a station, the show that sends it. Left out, the show the
+    /// connection is on, or the first show.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub show: Option<String>,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Detected {
@@ -6447,7 +6468,7 @@ pub struct MethodInfo {
     pub rest: Option<(&'static str, &'static str)>,
 }
 
-pub const METHODS: [MethodInfo; 223] = [
+pub const METHODS: [MethodInfo; 224] = [
     MethodInfo { name: "adbreak.end", summary: "Cut a running ad short, or disarm one that is scheduled.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/end")) },
     MethodInfo { name: "adbreak.start", summary: "Interrupt the programme with a clip, then rejoin live when it ends.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/start")) },
     MethodInfo { name: "agent.setup", summary: "Set an AI agent tool up to use this mixer: its MCP config gets one entry, godwinmix, that runs this mixer's own executable, and its skills folder gets the GodwinMix skills. Other entries are kept and a changed file is copied aside first. dry_run answers every file it would write. The answer says how to start the tool and a first thing to ask it.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/agent/setup")) },
@@ -6459,6 +6480,7 @@ pub const METHODS: [MethodInfo; 223] = [
     MethodInfo { name: "channel.destination.add", summary: "Send a channel's stream on to YouTube, Facebook, Twitch, an RTMP server or an SRT receiver as it arrives. Nothing is decoded or encoded. The key is write only.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/channels/{id}/destination/add")) },
     MethodInfo { name: "channel.destination.remove", summary: "Stop sending a channel's stream to one destination and forget it. The publisher and the other destinations are not touched.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/channels/{id}/destination/remove")) },
     MethodInfo { name: "channel.destination.set", summary: "Change one of a channel's destinations, naming only what moves: a new key, another server, which stream it sends, on or off. A key left out is kept.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/channels/{id}/destination")) },
+    MethodInfo { name: "channel.destination.to_output", summary: "Send the programme where one of a channel's destinations points, with its key and format, as a new output. The key is read inside the core and never sent back. `remove` (on unless false) takes the destination off the channel.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/channels/{id}/destination/to_output")) },
     MethodInfo { name: "channel.get", summary: "One channel.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/channels/{id}")) },
     MethodInfo { name: "channel.key.add", summary: "Make another key for a channel, to give to one more person or encoder. The key is in this answer, and channel.key.reveal reads it again later.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/channels/{id}/key/add")) },
     MethodInfo { name: "channel.key.remove", summary: "Take one key back. A publisher on air with it is cut off and the next one is turned away; the other keys are untouched.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/channels/{id}/key/remove")) },
@@ -7059,6 +7081,11 @@ impl Client {
     /// Change one of a channel's destinations, naming only what moves: a new key, another server, which stream it sends, on or off. A key left out is kept.
     pub async fn channel_destination_set(&self, params: &SetDestinationRequest) -> Result<BTreeMap<String, Value>> {
         self.call("channel.destination.set", params).await
+    }
+
+    /// Send the programme where one of a channel's destinations points, with its key and format, as a new output. The key is read inside the core and never sent back. `remove` (on unless false) takes the destination off the channel.
+    pub async fn channel_destination_to_output(&self, params: &DestinationToOutputRequest) -> Result<BTreeMap<String, Value>> {
+        self.call("channel.destination.to_output", params).await
     }
 
     /// One channel.

@@ -848,6 +848,18 @@ class DestinationRefusal(TypedDict, total=False):
     message: str
     need: Union[Cost, None]
 
+class DestinationToOutputRequest(TypedDict, total=False):
+    """`channel.destination.to_output`. Send the programme where a channel's destination points, with its key and format, without the key ever leaving the core."""
+
+    destination: str
+    # The destination's id within the channel.
+    id: str
+    # The channel.
+    remove: bool
+    # Whether to take the destination off the channel once the output is added, so an encoder sent to the channel later cannot use the same key at the same time. On unless said otherwise.
+    show: Optional[str]
+    # Under a station, the show that sends it. Left out, the show the connection is on, or the first show.
+
 class Detected(TypedDict, total=False):
     found: Optional[str]
     # What was found: the command's path, or the config folder.
@@ -4182,6 +4194,7 @@ METHODS = (
     {"name": "channel.destination.add", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/channels/{id}/destination/add"), "summary": "Send a channel's stream on to YouTube, Facebook, Twitch, an RTMP server or an SRT receiver as it arrives. Nothing is decoded or encoded. The key is write only."},
     {"name": "channel.destination.remove", "scope": "admin", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/channels/{id}/destination/remove"), "summary": "Stop sending a channel's stream to one destination and forget it. The publisher and the other destinations are not touched."},
     {"name": "channel.destination.set", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/channels/{id}/destination"), "summary": "Change one of a channel's destinations, naming only what moves: a new key, another server, which stream it sends, on or off. A key left out is kept."},
+    {"name": "channel.destination.to_output", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/channels/{id}/destination/to_output"), "summary": "Send the programme where one of a channel's destinations points, with its key and format, as a new output. The key is read inside the core and never sent back. `remove` (on unless false) takes the destination off the channel."},
     {"name": "channel.get", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/channels/{id}"), "summary": 'One channel.'},
     {"name": "channel.key.add", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/channels/{id}/key/add"), "summary": 'Make another key for a channel, to give to one more person or encoder. The key is in this answer, and channel.key.reveal reads it again later.'},
     {"name": "channel.key.remove", "scope": "admin", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/channels/{id}/key/remove"), "summary": 'Take one key back. A publisher on air with it is cut off and the next one is turned away; the other keys are untouched.'},
@@ -4640,6 +4653,24 @@ class GeneratedMethods:
         if stream is not None:
             params["stream"] = stream
         return await self._call("channel.destination.set", params)
+
+    async def channel_destination_to_output(
+        self,
+        destination: str,
+        id: str,
+        *,
+        remove: Optional[bool] = None,
+        show: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Send the programme where one of a channel's destinations points, with its key and format, as a new output. The key is read inside the core and never sent back. `remove` (on unless false) takes the destination off the channel."""
+        params: Dict[str, Any] = {}
+        params["destination"] = destination
+        params["id"] = id
+        if remove is not None:
+            params["remove"] = remove
+        if show is not None:
+            params["show"] = show
+        return await self._call("channel.destination.to_output", params)
 
     async def channel_get(
         self,
