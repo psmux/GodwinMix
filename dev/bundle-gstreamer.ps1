@@ -191,7 +191,7 @@ $required = @(
     "compositor", "videoflip", "videocrop", "videoscale", "audiomixer", "proxysink",
     "rtmp2sink", "srtsink",
     "webrtcbin", "srtpenc", "dtlssrtpenc", "nicesrc",
-    "matroskademux", "flvdemux", "qtdemux", "h264parse", "avdec_h264", "aacparse", "avdec_aac",
+    "matroskademux", "flvdemux", "qtdemux", "h264parse", "aacparse",
     "opusdec", "vp8dec", "vp9dec",
     "pngdec", "jpegdec", "rsvgdec", "gdkpixbufdec", "imagefreeze",
     "glupload", "glcolorconvert", "glshader", "gldownload"
@@ -216,6 +216,25 @@ foreach ($element in @("openh264enc", "x264enc")) {
 }
 if ($software) { Write-Host "ok ($software)" }
 else { Write-Host "FAIL (neither openh264enc nor x264enc is loadable)"; $failed++ }
+
+# The H.264 and AAC decoders and the AAC encoder, each the first the codec
+# catalogue would take, so the log says whether this tree needs gst-libav.
+# libav's are the last of each list and any one is enough.
+$firsts = [ordered]@{
+    "an H.264 decoder" = @("d3d11h264dec", "openh264dec", "avdec_h264")
+    "an AAC decoder"   = @("fdkaacdec", "mfaacdec", "faad", "avdec_aac")
+    "an AAC encoder"   = @("fdkaacenc", "mfaacenc", "voaacenc", "avenc_aac")
+}
+foreach ($label in $firsts.Keys) {
+    Write-Host -NoNewline ("{0,-26}" -f $label)
+    $found = ""
+    foreach ($element in $firsts[$label]) {
+        & $inspect $element > $null 2>&1
+        if ($LASTEXITCODE -eq 0) { $found = $element; break }
+    }
+    if ($found) { Write-Host "ok ($found)" }
+    else { Write-Host ("FAIL (none of {0} is loadable)" -f ($firsts[$label] -join ", ")); $failed++ }
+}
 
 # Media Foundation is the reason to be on Windows at all, so its absence is
 # said out loud without failing a machine that has no hardware encoder.

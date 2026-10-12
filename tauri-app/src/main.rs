@@ -247,6 +247,19 @@ fn bundled_runtime_check(app: &AppHandle) -> Option<i32> {
             failed = true;
         }
     }
+    // RTMP carries AAC, so one AAC encoder is required too. These are the
+    // catalogue's, best first; avenc_aac from gst-libav is the last resort,
+    // and the line says which one the app will use.
+    let aac = ["fdkaacenc", "atenc", "mfaacenc", "voaacenc", "avenc_aac"]
+        .into_iter()
+        .find_map(|e| sidecar::inspect_element(app, e).ok().map(|f| (e, f)));
+    match aac {
+        Some((element, file)) => println!("  {element} from {}", file.display()),
+        None => {
+            println!("FAIL no AAC encoder is in the bundled runtime");
+            failed = true;
+        }
+    }
     if failed {
         println!("the bundled runtime is not usable; rebuild it with dev/bundle-gstreamer.sh");
         return Some(1);
