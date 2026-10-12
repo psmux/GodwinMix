@@ -26,51 +26,56 @@ jobs:
         include:
           - name: restart-linux
             os: ubuntu-26.04
-            build: -p godwinmix --test station
-            test: -p godwinmix --test station -- --nocapture direct_restart::
+            build: "-p godwinmix --test station"
+            test: "-p godwinmix --test station -- --nocapture direct_restart::"
             ingest: true
             n: 16
           - name: collab-linux
             os: ubuntu-26.04
-            build: -p godwinmix --test collab
-            test: -p godwinmix --test collab -- --nocapture two_people_on_one_token
+            build: "-p godwinmix --test collab"
+            test: "-p godwinmix --test collab -- --nocapture two_people_on_one_token"
             n: 30
           - name: pool-macos
             os: macos-latest
-            build: -p godwinmix-core --lib
-            test: -p godwinmix-core --lib -- --nocapture mixer::tests::full_pool
+            build: "-p godwinmix-core --lib"
+            test: "-p godwinmix-core --lib -- --nocapture mixer::tests::full_pool"
+            n: 30
+          - name: pool-windows
+            os: windows-latest
+            build: "-p godwinmix-core --lib"
+            test: "-p godwinmix-core --lib -- --nocapture mixer::tests::full_pool"
             n: 30
           - name: governor-macos
             os: macos-latest
-            build: -p godwinmix --test station
-            test: -p godwinmix --test station -- --nocapture direct_live::governor_status_counts
+            build: "-p godwinmix --test station"
+            test: "-p godwinmix --test station -- --nocapture direct_live::governor_status_counts"
             ingest: true
             n: 12
           - name: rtsp-windows
             os: windows-latest
-            build: -p godwinmix-core --lib
-            test: -p godwinmix-core --lib -- --nocapture --test-threads 1 mixer::tests::replug::an_rtsp mixer::tests::rtsp_live
+            build: "-p godwinmix-core --lib"
+            test: "-p godwinmix-core --lib -- --nocapture --test-threads 1 mixer::tests::replug::an_rtsp mixer::tests::rtsp_live"
             n: 16
           - name: srt-windows
             os: windows-latest
-            build: -p gmx-ingest --bin gmx-ingest
-            test: -p gmx-ingest --bin gmx-ingest -- --nocapture srt::tests::a_player_on_the_publishers_port
+            build: "-p gmx-ingest --bin gmx-ingest"
+            test: "-p gmx-ingest --bin gmx-ingest -- --nocapture srt::tests::a_player_on_the_publishers_port"
             n: 20
           - name: direct-live-windows
             os: windows-latest
-            build: -p godwinmix --test station
-            test: -p godwinmix --test station -- --nocapture direct_live::a_direct_show_carries
+            build: "-p godwinmix --test station"
+            test: "-p godwinmix --test station -- --nocapture direct_live::a_direct_show_carries"
             ingest: true
             n: 16
           - name: catch-up-windows
             os: windows-latest
-            build: -p godwinmix-core --test catch_up
-            test: -p godwinmix-core --test catch_up -- --nocapture
+            build: "-p godwinmix-core --test catch_up"
+            test: "-p godwinmix-core --test catch_up -- --nocapture"
             n: 20
           - name: framebus-linux
             os: ubuntu-26.04
-            build: -p godwinmix-framebus --test failures
-            test: -p godwinmix-framebus --test failures -- --nocapture
+            build: "-p godwinmix-framebus --test failures"
+            test: "-p godwinmix-framebus --test failures -- --nocapture"
             n: 40
     steps:
       - uses: actions/checkout@v4
