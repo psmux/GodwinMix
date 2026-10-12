@@ -3140,6 +3140,36 @@
         }
       ]
     },
+    "DestinationToOutputRequest": {
+      "description": "`channel.destination.to_output`. Send the programme where a channel's\ndestination points, with its key and format, without the key ever\nleaving the core.",
+      "properties": {
+        "destination": {
+          "description": "The destination's id within the channel.",
+          "type": "string"
+        },
+        "id": {
+          "description": "The channel.",
+          "type": "string"
+        },
+        "remove": {
+          "default": true,
+          "description": "Whether to take the destination off the channel once the output is\nadded, so an encoder sent to the channel later cannot use the same\nkey at the same time. On unless said otherwise.",
+          "type": "boolean"
+        },
+        "show": {
+          "description": "Under a station, the show that sends it. Left out, the show the\nconnection is on, or the first show.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "destination"
+      ],
+      "type": "object"
+    },
     "Detected": {
       "properties": {
         "found": {
@@ -15839,6 +15869,25 @@
       "scope": "admin",
       "since": "1",
       "summary": "Change one of a channel's destinations, naming only what moves: a new key, another server, which stream it sends, on or off. A key left out is kept."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mutating": true,
+      "name": "channel.destination.to_output",
+      "params": {
+        "$ref": "#/$defs/DestinationToOutputRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/channels/{id}/destination/to_output"
+      },
+      "result": {
+        "type": "object"
+      },
+      "scope": "admin",
+      "since": "1",
+      "summary": "Send the programme where one of a channel's destinations points, with its key and              format, as a new output. The key is read inside the core and never sent back.              `remove` (on unless false) takes the destination off the channel."
     },
     {
       "destructive": false,

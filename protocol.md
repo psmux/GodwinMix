@@ -45,6 +45,7 @@ Keys accepted on every method, handled before a method runs.
 | `channel.destination.add` | `POST /api/v1/channels/{id}/destination/add` | admin |  | 1 | Send a channel's stream on to YouTube, Facebook, Twitch, an RTMP server or an SRT receiver as it arrives. Nothing is decoded or encoded. The key is write only. |
 | `channel.destination.remove` | `POST /api/v1/channels/{id}/destination/remove` | admin | yes | 1 | Stop sending a channel's stream to one destination and forget it. The publisher and the other destinations are not touched. |
 | `channel.destination.set` | `POST /api/v1/channels/{id}/destination` | admin |  | 1 | Change one of a channel's destinations, naming only what moves: a new key, another server, which stream it sends, on or off. A key left out is kept. |
+| `channel.destination.to_output` | `POST /api/v1/channels/{id}/destination/to_output` | admin |  | 1 | Send the programme where one of a channel's destinations points, with its key and              format, as a new output. The key is read inside the core and never sent back.              `remove` (on unless false) takes the destination off the channel. |
 | `channel.get` | `GET /api/v1/channels/{id}` | read |  | 1 | One channel. |
 | `channel.key.add` | `POST /api/v1/channels/{id}/key/add` | admin |  | 1 | Make another key for a channel, to give to one more person or encoder. The key is in this answer, and channel.key.reveal reads it again later. |
 | `channel.key.remove` | `POST /api/v1/channels/{id}/key/remove` | admin | yes | 1 | Take one key back. A publisher on air with it is cut off and the next one is turned away; the other keys are untouched. |
@@ -439,6 +440,21 @@ MCP tool `set_channel_destination` in the `search` profile: readOnlyHint false, 
 {
   "params": {
     "$ref": "#/$defs/SetDestinationRequest"
+  },
+  "result": {
+    "type": "object"
+  }
+}
+```
+
+#### `channel.destination.to_output`
+
+Send the programme where one of a channel's destinations points, with its key and              format, as a new output. The key is read inside the core and never sent back.              `remove` (on unless false) takes the destination off the channel.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/DestinationToOutputRequest"
   },
   "result": {
     "type": "object"
