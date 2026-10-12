@@ -4,7 +4,8 @@ name: pcm diag
 # twenty seconds, on the fix/soak-growth branch only. The soak's stream client
 # is patched to give up after four seconds and, while its socket is still
 # open, raise GStreamer's aggregator debug for a few seconds and save the
-# programme's graph, latency and clock. Four full soaks side by side.
+# programme's graph, latency and clock. Four full soaks side by side, run
+# again on the build that starts the monitoring branch before linking it.
 
 on:
   push:
