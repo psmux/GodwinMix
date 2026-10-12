@@ -10,8 +10,14 @@ pub const THUMB_WIDTH: i32 = 320;
 
 /// The decoders tried for each video codec, best first, each marked whether
 /// it is hardware: the machine's hardware decoder behind a parser (which puts
-/// the size in the caps a hardware decoder wants), then the CPU decoders in
-/// the order the core's codec catalogue ranks them, with libav last.
+/// the size in the caps a hardware decoder wants), then the CPU decoders.
+///
+/// Here libav comes before the other CPU decoders, the opposite of the
+/// core's codec catalogue, because a job is one keyframe and an end of
+/// stream, and a decoder has to hand that keyframe back at once.
+/// `openh264dec` does not: given a stream of one frame it returns nothing,
+/// so it is not in the list at all. libde265 comes after libav for the same
+/// reason, untested, and is what a machine without gst-libav has.
 fn decoders(kind: &str) -> &'static [(bool, &'static [&'static str])] {
     match kind {
         "video/x-h264" => &[
@@ -19,7 +25,6 @@ fn decoders(kind: &str) -> &'static [(bool, &'static [&'static str])] {
             (true, &["h264parse", "vah264dec"]),
             (true, &["h264parse", "nvh264dec"]),
             (true, &["h264parse", "d3d11h264dec"]),
-            (false, &["h264parse", "openh264dec"]),
             (false, &["avdec_h264"]),
         ],
         "video/x-h265" => &[
@@ -27,8 +32,8 @@ fn decoders(kind: &str) -> &'static [(bool, &'static [&'static str])] {
             (true, &["h265parse", "vah265dec"]),
             (true, &["h265parse", "nvh265dec"]),
             (true, &["h265parse", "d3d11h265dec"]),
-            (false, &["h265parse", "libde265dec"]),
             (false, &["avdec_h265"]),
+            (false, &["h265parse", "libde265dec"]),
         ],
         "video/x-av1" => &[
             (true, &["av1parse", "vtdec_hw"]),
@@ -84,14 +89,17 @@ pub fn chain_for(kind: &str, cpu: bool) -> Option<Chain> {
     built.ok()
 }
 
-/// The decoders tried for each kind of sound (`sound::kind`), best first and
-/// libav last. AAC and MPEG-1 audio are both `audio/mpeg` and share no
-/// decoder. E-AC-3 has no decoder outside libav.
+/// The decoders tried for each kind of sound (`sound::kind`), best first.
+/// AAC and MPEG-1 audio are both `audio/mpeg` and share no decoder. libav
+/// comes first where it is installed, as for the pictures above, because a
+/// job is a few frames and an end of stream; the others are what a machine
+/// without gst-libav reads its levels with. E-AC-3 has no decoder outside
+/// libav.
 fn sound_decoders(kind: &str) -> Option<&'static [&'static str]> {
     Some(match kind {
-        "audio/mpeg" => &["fdkaacdec", "faad", "avdec_aac"],
+        "audio/mpeg" => &["avdec_aac", "fdkaacdec", "faad"],
         "audio/mpeg-1" => &["mpg123audiodec", "avdec_mp2float", "avdec_mp3float"],
-        "audio/x-ac3" => &["a52dec", "avdec_ac3"],
+        "audio/x-ac3" => &["avdec_ac3", "a52dec"],
         "audio/x-eac3" => &["avdec_eac3"],
         _ => return None,
     })
