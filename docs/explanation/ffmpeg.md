@@ -94,6 +94,12 @@ lips stay on the sound. Those figures are measured by a test on every CI
 platform (`catalogue::priming_tests`), which fails when a figure is off by
 more than 4 ms.
 
+Decoders differ on the same point. faad drops the first 1024 samples of a
+stream and `avdec_aac` does not, so an AAC source decoded by faad, which is
+the Linux default now, has its sound 21 ms earlier against its picture than
+it had through libav. For a source whose encoder left the usual 1024 samples
+of delay in, that is the sound back where it was recorded.
+
 ## What still needs libav
 
 E-AC-3 has no decoder outside it. Neither do ProRes and QuickTime Animation

@@ -18,6 +18,19 @@ use gstreamer::prelude::*;
 use gstreamer_app as gst_app;
 
 const RATE: usize = 48_000;
+
+/// What a decoder takes off the front of the sound itself, in milliseconds.
+/// `priming_delay_ms` is the delay a viewer's player shows, and players
+/// decode as FFmpeg does, leaving the encoder's delay in. faad drops the
+/// first 1024 samples of every stream, measured on Linux: `voaacenc` came
+/// out 12.1 ms late through it and 33.4 ms through `avdec_aac` and
+/// `mfaacdec`. So a figure read through faad has that added back.
+fn decoder_trim_ms(decoder: &str) -> f64 {
+    match decoder {
+        "faad" => 1024.0 * 1000.0 / RATE as f64,
+        _ => 0.0,
+    }
+}
 const BEEP_AT: usize = RATE / 2;
 
 /// Two seconds of stereo silence with 100 ms of a 1 kHz tone at 500 ms.
@@ -93,7 +106,8 @@ fn every_installed_aac_encoder_s_priming_delay_matches_the_catalogue() {
                 continue;
             };
             measured += 1;
-            println!("{encoder} through {decoder}: beep {got:.1} ms late, catalogue says {want} ms");
+            let got = got + decoder_trim_ms(decoder);
+            println!("{encoder} through {decoder}: beep {got:.1} ms late as a player sees it, catalogue says {want} ms");
             if (got - want).abs() > 4.0 {
                 wrong.push(format!("{encoder} through {decoder}: {got:.1} ms, catalogue says {want} ms"));
             }
