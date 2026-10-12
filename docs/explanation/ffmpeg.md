@@ -48,7 +48,7 @@ stays pluggable, so a stream the preferred decoder's caps refuse still opens.
 | H.264 | hardware, then `x264enc`, then `openh264enc` | `openh264dec`, then `avdec_h264` |
 | HEVC | hardware, then `x265enc` | `d3d11h265dec` on Windows, `libde265dec`, then `avdec_h265` |
 | AV1 | hardware, then `svtav1enc` | `dav1ddec` |
-| AAC | `fdkaacenc`, `atenc` (macOS), `mfaacenc` (Windows), `voaacenc`, then `avenc_aac` | `fdkaacdec`, `atdec`, `mfaacdec`, `faad`, then `avdec_aac` |
+| AAC | `fdkaacenc`, `atenc` (macOS), `mfaacenc` (Windows), `voaacenc`, then `avenc_aac` | `fdkaacdec`, `mfaacdec`, `faad`, `atdec`, then `avdec_aac` |
 | MP2 and MP3 | none needed | `mpg123audiodec` |
 | AC-3 | none needed | `a52dec`, then `avdec_ac3` |
 
@@ -57,7 +57,7 @@ stays pluggable, so a stream the preferred decoder's caps refuse still opens.
 | build | AAC encoder | AAC decoder | software H.264 decoder | HEVC decoder | needs libav for |
 |---|---|---|---|---|---|
 | Windows installer | `mfaacenc` | `mfaacdec` | `openh264dec` | `d3d11h265dec` | E-AC-3, HEVC on a GPU with no HEVC decode, ProRes and QuickTime Animation clips |
-| macOS app | `atenc` | `atdec` | none (VideoToolbox decodes) | VideoToolbox | AC-3, E-AC-3, ProRes clips; H.264 on a Mac whose VideoToolbox refuses a stream |
+| macOS app | `atenc` | `faad` | none (VideoToolbox decodes) | VideoToolbox | AC-3, E-AC-3, ProRes clips; H.264 on a Mac whose VideoToolbox refuses a stream |
 | Linux AppImage | `voaacenc` | `faad` | `openh264dec` | `libde265dec` | E-AC-3, ProRes clips |
 | Linux `.deb` | `voaacenc` | `faad` | `openh264dec` | `libde265dec` | the same; gst-libav is a recommended package, not a dependency |
 | Docker image | `voaacenc` | `faad` | `openh264dec` | `libde265dec` | the same; `--build-arg WITH_LIBAV=0` leaves it out |

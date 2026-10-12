@@ -188,7 +188,7 @@ first_of() {
     FAILED=1
 }
 first_of "an H.264 decoder" vtdec_hw d3d11h264dec openh264dec avdec_h264
-first_of "an AAC decoder" fdkaacdec atdec mfaacdec faad avdec_aac
+first_of "an AAC decoder" fdkaacdec mfaacdec faad atdec avdec_aac
 first_of "an AAC encoder" fdkaacenc atenc mfaacenc voaacenc avenc_aac
 # The HLS ladder and file conversion make x264enc by name. A tree trimmed
 # with --exclude-gpl has none, which is allowed, and said here.

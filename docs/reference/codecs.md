@@ -49,7 +49,8 @@ for what an unverified entry means in practice.
 | `h265-software-libde265` | video | h265 | Debian, Ubuntu | `libde265dec` | 45 | LGPL-3.0-or-later | no |
 | `h265-software-decode` | video | h265 | with gst-libav | `avdec_h265` | 30 | LGPL-2.1-or-later | no |
 | `aac-fdk` | audio | aac | where the operator installs it | `fdkaacenc` / `fdkaacdec` | 120 | FDK-AAC | no |
-| `aac-audiotoolbox` | audio | aac | macOS | `atenc` / `atdec` | 116 | LGPL-2.1-or-later | no |
+| `aac-audiotoolbox` | audio | aac | macOS | `atenc` | 116 | LGPL-2.1-or-later | no |
+| `aac-audiotoolbox-decode` | audio | aac | macOS | `atdec` | 80 | LGPL-2.1-or-later | no |
 | `aac-mediafoundation` | audio | aac | Windows | `mfaacenc` / `mfaacdec` | 114 | LGPL-2.1-or-later | no |
 | `aac-vo` | audio | aac | everywhere but Homebrew | `voaacenc` | 110 | Apache-2.0 | no |
 | `aac-avenc` | audio | aac | with gst-libav | `avenc_aac` | 100 | LGPL-2.1-or-later | no |

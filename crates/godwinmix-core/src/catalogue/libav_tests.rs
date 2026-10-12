@@ -112,7 +112,7 @@ fn selection_prefers_what_is_not_libav() {
     let mac = base(&["x264enc", "avdec_h264", "atenc", "atdec", "avenc_aac", "avdec_aac", "faad"]);
     let sel = cat.select(&Request::default(), &mac).unwrap();
     assert_eq!(sel.audio_encode.element, "atenc");
-    assert_eq!(sel.audio_decode.element, "atdec");
+    assert_eq!(sel.audio_decode.element, "faad", "atdec is ranked under faad");
 }
 
 /// The whole programme selects with no gst-libav at all.

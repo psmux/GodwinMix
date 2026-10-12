@@ -501,15 +501,27 @@ codec = "aac"
 accel = "software"
 rank = 116
 encoder = "atenc"
-decoder = "atdec"
 parser = "aacparse"
 requires = []
 license = "LGPL-2.1-or-later"
 container = ["flv", "mpegts", "mp4", "matroska"]
 priming_delay_ms = 44
 verified = []
-comment = "Apple's AAC encoder and decoder through AudioToolbox, on every Mac with GStreamer 1.26 or newer. As good as Fraunhofer's. atenc leaves Apple's 2112 samples of encoder delay in its timestamps (its source says so), which is 44 ms at 48 kHz."
+comment = "Apple's AAC encoder through AudioToolbox, on every Mac with GStreamer 1.26 or newer. As good as Fraunhofer's. atenc leaves Apple's 2112 samples of encoder delay in its timestamps (its source says so), which is 44 ms at 48 kHz, and the priming test measures it on the macOS runner. Encode only; Apple's decoder is the entry below."
 properties = { bitrate = { unit = "bit", from = "audio.bitrate_kbps" }, "rate-control" = "cbr", "perfect-timestamp" = true }
+
+[[audio]]
+id = "aac-audiotoolbox-decode"
+codec = "aac"
+accel = "software"
+rank = 80
+decoder = "atdec"
+parser = "aacparse"
+requires = []
+license = "LGPL-2.1-or-later"
+container = ["flv", "mpegts", "mp4", "matroska"]
+verified = []
+comment = "Decode only. Apple's AAC decoder, ranked under faad: with atdec first, a receiver decoding the programme from a live MPEG-TS stream on the macOS runner stopped after three or four pictures, twice, where faad and libav keep going. It is what a Mac with neither faad nor gst-libav decodes AAC with."
 
 [[audio]]
 id = "aac-mediafoundation"
