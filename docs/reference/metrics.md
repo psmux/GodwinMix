@@ -26,6 +26,7 @@ against a running show does not break when the box restarts.
 | `gmx_programme_frames_total` | counter | | Frames leaving the programme mixer. |
 | `gmx_programme_frame_interval_ms` | histogram | | Wall clock gap between two programme frames. |
 | `gmx_programme_frame_stall_ms` | gauge | | Worst average frame interval over any sixty consecutive frames in the last 30 to 60 seconds. |
+| `gmx_programme_frame_gap_ms` | gauge | | Longest single gap between two programme frames in the last 30 to 60 seconds. |
 
 Buckets: 8, 16, 20, 25, 33, 40, 50, 66, 100, 250, 1000 ms. They straddle the
 periods of 25, 30, 50 and 60 frames a second, so "frames are landing late" is
@@ -70,6 +71,25 @@ gmx_programme_frame_stall_ms > 34
 
 This is the metric to put on a dashboard first. If the programme is dropping
 frames, this shows it before anybody watching does.
+
+### A frame that did not come
+
+`gmx_programme_frame_gap_ms` is the longest single gap between two programme
+frames over the same 30 to 60 seconds. It asks a narrower question than the
+stall gauge: did a whole frame time pass with no frame in it. Over two frame
+periods (66.7 ms at 30 fps) the answer is yes.
+
+The two disagree on a busy machine, and that is the reason both exist. A take
+with a fade or the mosaic coming up puts a few late wake ups into one sixty
+frame window, and on a hosted runner the stall gauge read 33.7 to
+34.6 ms through those with nothing wrong, while the longest gap stayed under
+66 ms for twenty minutes. A streaming thread held for 200 ms, the way a
+blocking hook would hold it, is a 200 ms gap: three times the bar, where the
+sixty frame average reads 36.6 ms. `dev/soak.sh` judges a stall by this one.
+
+```promql
+gmx_programme_frame_gap_ms > 2 * 1000 / 30
+```
 
 ## Sources
 
