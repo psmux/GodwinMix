@@ -90,12 +90,12 @@ jobs:
             if [ $code != 0 ]; then
               echo "--- what the failing run said"
               grep -aE -A3 'panicked|ms ahead' run.log | cut -c1-2500 | head -40
-              grep -aE 'source=far|far:|cam|rtsp|aligned|timeline|caught|catch|stall|restart|live' run.log | grep -avE 'DEBUG.*(least lead|preview|multiview)' | cut -c1-400 | tail -150
+              grep -aE 'source=far|far:|cam|rtsp|aligned|timeline|caught|catch|stall|restart|live' run.log | grep -avE 'preview|multiview' | cut -c1-400 | tail -200
               tail -n 5 run.log | cut -c1-600
               for log in $(ls -d /tmp/gmx-station-test-* "$tmp"/gmx-station-test-* 2>/dev/null); do
                 [ -f "$log/log.jsonl" ] || continue
                 echo "--- $log/log.jsonl, the input, outputs and plans"
-                grep -aiE 'ingest|direct|input|rendition|plan|sending|nothing|session|stall|refus|admit' "$log/log.jsonl" | cut -c1-600 | tail -150
+                grep -aiE 'ingest|direct|input|rendition|plan|sending|nothing|session|stall|refus|admit' "$log/log.jsonl" | cut -c1-600 | tail -200
               done
             fi
             ps -eo pid,ppid,pcpu,etime,args 2>/dev/null | grep -iE 'gmx|godwinmix' | grep -v grep | cut -c1-200 | head -10
