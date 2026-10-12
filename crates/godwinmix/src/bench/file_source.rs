@@ -109,5 +109,36 @@ fn queued() -> String {
             held.push(format!("{} {}", q.element, q.buffers));
         }
     }
-    format!("queued buffers: {}", if held.is_empty() { "none".into() } else { held.join(", ") })
+    let held = if held.is_empty() { "none".into() } else { held.join(", ") };
+    format!("queued buffers: {held}; {}; {}", compositor_latency(), decoders())
+}
+
+/// What the compositor says it waits, which is how much of every input sits
+/// on its pads.
+fn compositor_latency() -> String {
+    let report = godwinmix_core::observe::introspect::latency(godwinmix_core::observe::PROGRAMME);
+    let vmix = report.ok().and_then(|r| r.stages.into_iter().find(|s| s.element == "vmix"));
+    match vmix {
+        Some(s) => format!("compositor latency {:.0} ms", s.min_ms),
+        None => "compositor latency unknown".into(),
+    }
+}
+
+/// The clip's video decoders and the threads each was given.
+fn decoders() -> String {
+    use gstreamer::prelude::*;
+    let Some(pipeline) = godwinmix_core::observe::introspect::pipeline(&format!("input-{ID}")) else {
+        return "no clip pipeline".into();
+    };
+    let found: Vec<String> = pipeline
+        .iterate_recurse()
+        .into_iter()
+        .flatten()
+        .filter(|e| e.factory().is_some_and(|f| f.klass().contains("Decoder")))
+        .map(|e| match e.find_property("max-threads") {
+            Some(_) => format!("{} max-threads {}", e.name(), e.property_value("max-threads").serialize().unwrap_or_default()),
+            None => e.name().to_string(),
+        })
+        .collect();
+    format!("decoders: {}", found.join(", "))
 }
