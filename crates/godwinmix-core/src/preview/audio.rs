@@ -188,6 +188,16 @@ impl AudioTap {
             .drop(true)
             .sync(false)
             .build();
+        // Not async. A sink that has to preroll, added to a running pipeline,
+        // answers with ASYNC and the programme loses PLAYING to PAUSED pending
+        // until the preroll lands. Most times it lands in a few milliseconds.
+        // On a loaded runner it sometimes did not land at all: the soak's PCM
+        // client then waited twenty seconds for a frame that never came, two
+        // rounds in an hour in a full soak and every round from the fifty
+        // fifth on in one without the sources phase. The thumbnail and
+        // preview sinks have the same line for the same reason, and a sink
+        // that does not sync has nothing to wait for anyway.
+        sink.set_property("async", false);
 
         let mut branch: Vec<gst::Element> = vec![queue, convert, resample, caps];
         if req.codec == Codec::Opus {
@@ -228,7 +238,8 @@ impl AudioTap {
             .context("the raw audio tee refused a pad for monitoring")?;
         pad.link(&sink).context("linking the monitoring branch onto the audio tee")?;
         // Linked first, then brought up from the far end. This branch ends in
-        // an appsink, a real sink that prerolls, and bringing one up inside a
+        // an appsink, which prerolled until it was made not async in `build`,
+        // and bringing one up inside a
         // running pipeline before any buffer can reach it left the mixer's
         // core suite crashing on two macOS runners in a row (elements of this
         // branch disposed while PLAYING). The thumbnail and output feeds end
@@ -262,9 +273,9 @@ impl Drop for AudioTap {
         // still owns: when its child list changes under it, `GstBin` resyncs
         // the iterator it is walking and starts the pass again, and when an
         // async transition finishes it commits the new state over the whole
-        // list. This branch is what puts the programme into that async cycle
-        // in the first place, because it ends in an appsink that has to
-        // preroll. So an element set to NULL here and not yet removed can be
+        // list. This branch was what put the programme into that async cycle,
+        // when its appsink still had to preroll, and anything else that does
+        // can still start one. So an element set to NULL here and not yet removed can be
         // put back to PLAYING by that pass, and is then removed and disposed
         // in PLAYING with its pads still active and its streaming thread
         // still running: "Trying to dispose element mon-q-..., but it is in
