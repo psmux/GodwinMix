@@ -2206,6 +2206,7 @@ impl Mixer {
             &input.audio_proxy,
             cfg.gain,
             cfg.muted,
+            input.manifest().plugin == "file",
         )?;
 
         // One slot, now, while this source has not produced a frame yet.

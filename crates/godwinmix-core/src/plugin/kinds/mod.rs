@@ -10,6 +10,7 @@ pub mod browser;
 pub mod clip_alpha;
 pub mod clip_pace;
 pub mod clip_start;
+mod decode_threads;
 pub mod exec;
 pub mod file;
 pub mod html;
@@ -143,6 +144,7 @@ pub fn uridecode(ctx: &BuildCtx, thumb: bool, livesync: bool) -> Result<MediaEnd
     let el = crate::gstutil::make("uridecodebin", &format!("{}-src-uri", ctx.id))?;
     el.set_property("uri", crate::input::to_uri(&ctx.cfg.uri));
     crate::probe::set_bool(&el, "use-buffering", true);
+    decode_threads::cap(&el);
     if rtsp::is_rtsp(&ctx.cfg.uri) {
         rtsp::tune(&el, &ctx.cfg.uri, &ctx.cfg.effective_params());
         rtsp_origin::rebase(&el, &ctx.id);

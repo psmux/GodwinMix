@@ -19,7 +19,10 @@ use std::time::Duration;
 const ID: &str = "bench-clip";
 
 pub async fn row(args: &BenchArgs, clip: &Path) -> Result<Row> {
-    let cfg = bench_config_with(MultiviewConfig { enabled: false, ..Default::default() }, &args.encode);
+    let mut cfg = bench_config_with(MultiviewConfig { enabled: false, ..Default::default() }, &args.encode);
+    if args.decode == "software" {
+        cfg.hardware.decode = godwinmix_core::config::Accel::Software;
+    }
     let (mut mix, handle, cmd_rx, _bus_rx) = godwinmix_core::mixer::Mixer::build(cfg)?;
     mix.start().context("starting the file source mixer")?;
     let thread = godwinmix_core::mixer::spawn(mix, cmd_rx, handle.clone());
@@ -35,7 +38,7 @@ pub async fn row(args: &BenchArgs, clip: &Path) -> Result<Row> {
     )
     .load(after.minus(before))
     .other(super::plugins::loaded_line())
-    .note(&note()))
+    .note(&note(args)))
 }
 
 /// The idle core, then the same core with the clip added and on programme.
@@ -62,7 +65,7 @@ async fn measure(args: &BenchArgs, clip: &Path, handle: &MixerHandle) -> Result<
     Ok((before, after))
 }
 
-fn note() -> String {
+fn note(args: &BenchArgs) -> String {
     let mut note = String::from(
         "The core's own file source, added with `source.add` and taken to \
          programme, against the same idle core just before. In process, not \
@@ -70,7 +73,8 @@ fn note() -> String {
          GStreamer process. The other column is the GStreamer plugins loaded \
          once it was on.",
     );
-    let hw_decode = godwinmix_core::probe::Backends::probe(
+    let hw_decode = args.decode != "software"
+        && godwinmix_core::probe::Backends::probe(
         godwinmix_core::config::Accel::Auto,
         godwinmix_core::config::Accel::Auto,
     )

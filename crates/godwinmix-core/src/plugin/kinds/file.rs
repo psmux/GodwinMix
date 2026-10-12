@@ -17,6 +17,7 @@ use crate::plugin::{
 };
 use anyhow::Result;
 use gstreamer as gst;
+use gstreamer::prelude::*;
 use serde_json::Value;
 
 pub const MANIFEST: Manifest = Manifest {
@@ -91,6 +92,13 @@ impl Source for FileSource {
             return Err(missing.into());
         }
         let ends = super::clip_start::open(&self.ctx, thumb)?;
+        // A clip decodes as fast as it is let, so the normaliser's queue in
+        // front of the programme proxy would sit full: a second of canvas
+        // frames, 40 MB at 720p. See `plugin::branch::FINITE_QUEUE_SECS`.
+        if let Some(q) = ends.pipeline.by_name(&format!("{}-vprog-q", self.ctx.id)) {
+            let secs = crate::plugin::branch::FINITE_QUEUE_SECS;
+            q.set_property("max-size-time", (secs * 1e9) as u64);
+        }
         self.pipeline = Some(ends.pipeline.clone());
         Ok(ends)
     }

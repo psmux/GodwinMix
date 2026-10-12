@@ -1251,6 +1251,10 @@ impl SlotPool {
             branch.vtee.release_request_pad(&tee_pad);
             return Err(e);
         }
+        // A finite clip fills every queue it is let into; see
+        // `ProgrammeBranch::finite`. A live source gets the second back.
+        let secs = if branch.finite { crate::plugin::branch::FINITE_QUEUE_SECS } else { 1.0 };
+        self.slots[index].queue.set_property("max-size-time", (secs * 1e9) as u64);
         for el in &self.slots[index].elements {
             el.sync_state_with_parent().ok();
         }

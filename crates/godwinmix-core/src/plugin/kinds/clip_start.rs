@@ -51,6 +51,7 @@ pub fn start(ctx: &BuildCtx, thumb: bool) -> Result<MediaEnds> {
     let decode = crate::gstutil::make("uridecodebin", &format!("{}-src-uri", ctx.id))?;
     decode.set_property("uri", crate::input::to_uri(&ctx.cfg.uri));
     crate::probe::set_bool(&decode, "use-buffering", true);
+    super::decode_threads::cap(&decode);
     prefer_alpha(&decode);
     let tap = Arc::new(AlphaTap::build(&ctx.id, &ctx.canvas)?);
     let mut els = vec![decode.clone()];
