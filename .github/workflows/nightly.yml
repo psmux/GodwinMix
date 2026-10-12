@@ -22,8 +22,11 @@ env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
 
+# One group per branch. With a single group a run dispatched on one branch
+# waited out another branch's hour of soak, and a second pending run replaced
+# the first, which cancelled somebody else's measurement.
 concurrency:
-  group: nightly
+  group: nightly-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
