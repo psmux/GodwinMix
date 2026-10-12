@@ -96,8 +96,9 @@ OBS Studio, for comparison, ships about 160 MB with everything inside it.
 
 What travels: the core and base plugins, the good plugins the containers and
 the multiview mosaic need, `rtmp2` and `srt` for the two ways a programme
-leaves the building, libav for AAC, the WebRTC plugins, and Media Foundation
-and Direct3D 11 for hardware encode and decode. What does not: every
+leaves the building, the WebRTC plugins, Media Foundation for AAC and for
+hardware encode, Direct3D 11 for hardware decode, openh264 for H.264 on the
+CPU, and libav as the fallback for what nothing else decodes. What does not: every
 development file, the MinGW tree, the Python and Perl bindings, the editing
 services, and every plugin for a format no entry in `codecs.toml` can select.
 

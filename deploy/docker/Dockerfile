@@ -63,12 +63,18 @@ RUN mkdir -p /browser-runtime \
 # ---------------------------------------------------------------- runtime ---
 FROM debian:trixie-slim AS runtime
 
-# x264enc is the only software H.264 encoder the mixer's probe knows
-# (crates/godwinmix-core/src/probe.rs), and on Debian it ships inside gstreamer1.0-plugins-ugly.
-# Build with --build-arg WITH_X264=0 if that package's licensing is a problem
-# where the image runs; the mixer then needs a hardware encoder (VA, NVENC)
-# and refuses to start without one.
+# x264enc is the codec catalogue's preferred software H.264 encoder, and on
+# Debian it ships inside gstreamer1.0-plugins-ugly. Build with
+# --build-arg WITH_X264=0 if that package's licensing is a problem where the
+# image runs; the programme is then encoded by openh264enc from
+# gstreamer1.0-plugins-bad, or by a hardware encoder (VA, NVENC).
 ARG WITH_X264=1
+# gst-libav is a fallback only: the catalogue takes openh264, libde265,
+# voaacenc and faad from gstreamer1.0-plugins-bad, mpg123 from good and
+# a52dec from ugly first. Build with --build-arg WITH_LIBAV=0 for an image
+# with no FFmpeg in it; E-AC-3, interlaced H.264 and ProRes clips then do
+# not decode.
+ARG WITH_LIBAV=1
 # gstreamer1.0-wpe renders a web page through wpesrc, which is how a `web+`
 # source works when no browser sidecar is installed next to the binary.
 # It is an optional fallback for images built without CEF.
@@ -82,17 +88,18 @@ ENV DEBIAN_FRONTEND=noninteractive
 #       inputs, the parsers, playbin.
 # good: rtmp2src and rtmp2sink, flvmux, matroska, the proxy elements, jpegenc
 #       for the multiview mosaic, rtp, souphttpsrc for HLS and DASH.
-# bad:  srtsrc and srtsink, the DASH and HLS demuxers, videoparsers, voaacenc,
-#       and the GL elements the compositor uses when there is a context.
-# libav: avdec_h264 and avdec_aac for decode, avenc_aac for the programme's
-#       audio when fdkaacenc is absent (it is: libfdk-aac is not in Debian).
+# bad:  srtsrc and srtsink, the DASH and HLS demuxers, videoparsers, the
+#       programme's AAC encoder (voaacenc), the software H.264, HEVC and AAC
+#       decoders (openh264dec, libde265dec, faad), and the GL elements the
+#       compositor uses when there is a context. fdkaacenc would be better
+#       than voaacenc, but libfdk-aac is in Debian's non-free and is not here.
+# libav: the fallback, below, for what nothing else decodes.
 # tools: gst-inspect-1.0 and gst-launch-1.0, for `docker exec` when a pipeline
 #       misbehaves. Half a megabyte and worth it on a headless box.
 RUN apt-get update && apt-get install -y --no-install-recommends \
       gstreamer1.0-plugins-base \
       gstreamer1.0-plugins-good \
       gstreamer1.0-plugins-bad \
-      gstreamer1.0-libav \
       gstreamer1.0-tools \
       ca-certificates \
       curl \
@@ -111,12 +118,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
            libgl1-mesa-dri libegl1 libgles2 \
            fonts-dejavu-core fonts-liberation ; \
        fi \
-    # Only the x264 element out of the ugly set, not the DVD and RealMedia
-    # demuxers that come with it. dpkg still believes the package is whole,
-    # which is fine in an image that is never upgraded in place.
+    # Only the x264 and a52dec elements out of the ugly set, not the DVD and
+    # RealMedia demuxers that come with them. a52dec decodes AC-3 without
+    # libav. dpkg still believes the package is whole, which is fine in an
+    # image that is never upgraded in place.
     && if [ "$WITH_X264" = "1" ]; then \
          apt-get install -y --no-install-recommends gstreamer1.0-plugins-ugly && \
-         dpkg -L gstreamer1.0-plugins-ugly | grep '\.so$' | grep -v 'libgstx264\.so' | xargs -r rm -f ; \
+         dpkg -L gstreamer1.0-plugins-ugly | grep '\.so$' | grep -v 'libgstx264\.so\|libgsta52dec\.so' | xargs -r rm -f ; \
+       fi \
+    && if [ "$WITH_LIBAV" = "1" ]; then \
+         apt-get install -y --no-install-recommends gstreamer1.0-libav ; \
        fi \
     && rm -rf /var/lib/apt/lists/*
 

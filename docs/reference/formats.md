@@ -171,7 +171,7 @@ Apple M series Mac. Two seconds at 25 fps is 50 frames.
 | SDI capture tested on real hardware | there is no DeckLink card here. `decklinkvideosrc` is installed (the Blackmagic driver is not), so a kind can be built and its detection tested, but not a picture |
 | AJA capture | `ajasrc` is not in this GStreamer build |
 | NDI in either direction | the NDI runtime is not installed, and its licence forbids shipping it |
-| AAC with `fdkaacenc` | not in this build; `avenc_aac` is used |
+| AAC with `fdkaacenc` | not in any release bundle (its licence does not mix with the GPL plugins they carry); installed by the operator, it is used first. Otherwise `atenc` on macOS, `mfaacenc` on Windows, `voaacenc` on Linux |
 | AV1 over RTMP (enhanced FLV) | no GStreamer 1.28 muxer writes AV1 into FLV (`eflvmux` takes H.264 and HEVC only), and `flvdemux` cannot read it, so a channel refuses it and names SRT as the way out |
 | AV1 in to a channel rendition | the decoder works, but its frame size is not read from the stream yet, so the planner cannot size a rendition |
 | WebRTC (WHEP) with Homebrew's GStreamer alone | `nicesrc` and `nicesink` come from libnice's GStreamer plugin, which Homebrew's `gstreamer` does not install. Install `libnice-gstreamer`, or point `GST_PLUGIN_PATH` at a build of it |

@@ -48,6 +48,16 @@ fi
 video="videotestsrc is-live=true pattern=smpte ! video/x-raw,width=320,height=240,framerate=30/1 \
  ! x264enc tune=zerolatency bitrate=800 key-int-max=30 ! h264parse"
 audio="audiotestsrc is-live=true wave=sine freq=440 volume=0.2 ! audioconvert ! audioresample"
+# The first AAC encoder installed, in the codec catalogue's order, so a
+# GStreamer without gst-libav publishes too.
+aac=""
+for element in fdkaacenc atenc mfaacenc voaacenc avenc_aac; do
+  if gst-inspect-1.0 "$element" >/dev/null 2>&1; then aac=$element; break; fi
+done
+if [ -z "$aac" ]; then
+  echo "this build of GStreamer has no AAC encoder; skipped" >&2
+  exit 2
+fi
 
 publish_rtmp() {
   local port=$1 path=$2
@@ -60,7 +70,7 @@ publish_rtmp() {
   $RUN gst-launch-1.0 -q flvmux name=mux streamable=true \
     ! rtmp2sink "location=rtmp://127.0.0.1:$port/$path" \
     $video ! mux. \
-    $audio ! "audio/x-raw,rate=44100" ! avenc_aac ! aacparse ! mux.
+    $audio ! "audio/x-raw,rate=44100" ! $aac ! aacparse ! mux.
 }
 
 publish_srt() {
@@ -74,7 +84,7 @@ publish_srt() {
   $RUN gst-launch-1.0 -q mpegtsmux name=mux \
     ! srtsink "uri=srt://127.0.0.1:$port?mode=caller&latency=125" wait-for-connection=false \
     $video ! mux. \
-    $audio ! avenc_aac ! aacparse ! mux.
+    $audio ! $aac ! aacparse ! mux.
 }
 
 case "$mode" in

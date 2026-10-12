@@ -13,9 +13,29 @@ use crate::tagger::{self, Shared, Zero};
 fn chain(encoding: &str) -> Option<&'static [&'static str]> {
     match encoding {
         "H264" => Some(&["rtph264depay", "h264parse"]),
-        "OPUS" => Some(&["rtpopusdepay", "opusdec", "audioconvert", "audioresample", "avenc_aac", "aacparse"]),
+        "OPUS" => Some(&["rtpopusdepay", "opusdec", "audioconvert", "audioresample", AAC, "aacparse"]),
         _ => None,
     }
+}
+
+/// Stands in the chain for whichever AAC encoder is installed.
+const AAC: &str = "aac-encoder";
+
+/// The AAC encoders, in the order the core's codec catalogue ranks them, so
+/// a publisher's sound is encoded the way the programme's is and gst-libav is
+/// the last resort rather than a requirement.
+const AAC_ENCODERS: &[&str] = &["fdkaacenc", "atenc", "mfaacenc", "voaacenc", "avenc_aac"];
+
+fn make(factory: &str) -> Option<gst::Element> {
+    if factory != AAC {
+        return gst::ElementFactory::make(factory).build().ok();
+    }
+    let name = AAC_ENCODERS.iter().find(|n| gst::ElementFactory::find(n).is_some())?;
+    let enc = gst::ElementFactory::make(name).build().ok()?;
+    if enc.find_property("bitrate").is_some() {
+        enc.set_property_from_str("bitrate", "128000");
+    }
+    Some(enc)
 }
 
 /// The elements for one stream, first to last, without the queue or the sink.
@@ -26,7 +46,7 @@ fn elements(encoding: &str) -> Option<Vec<gst::Element>> {
     }
     let mut out = Vec::new();
     for factory in chain(encoding).unwrap_or(&[]) {
-        let e = gst::ElementFactory::make(factory).build().ok()?;
+        let e = make(factory)?;
         // Ask the browser for a keyframe when packets are lost, so a gap
         // heals at the next one rather than whenever it chooses.
         if e.find_property("request-keyframe").is_some() {

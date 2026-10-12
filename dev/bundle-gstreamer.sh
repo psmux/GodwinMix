@@ -143,7 +143,7 @@ rm -f "$GST_REGISTRY"
 REQUIRED="compositor videoflip videocrop videoscale audiomixer proxysink
     rtmp2sink srtsink
     webrtcbin srtpenc dtlssrtpenc nicesrc
-    matroskademux flvdemux qtdemux h264parse avdec_h264 aacparse avdec_aac
+    matroskademux flvdemux qtdemux h264parse aacparse
     opusdec vp8dec vp9dec
     pngdec jpegdec webpdec rsvgdec gdkpixbufdec imagefreeze
     glupload glcolorconvert glshader gldownload"
@@ -172,6 +172,24 @@ else
     echo "FAIL (neither openh264enc nor x264enc is loadable)"
     FAILED=1
 fi
+# The H.264 and AAC decoders and the AAC encoder, each the first the codec
+# catalogue would take, so the log says whether this tree needs gst-libav.
+# libav's are the last of each list and any one is enough.
+first_of() {
+    local label="$1"; shift
+    printf '%-25s' "$label"
+    for element in "$@"; do
+        if "$OUT/bin/gst-inspect-1.0" "$element" >/dev/null 2>&1; then
+            echo "ok ($element)"
+            return
+        fi
+    done
+    echo "FAIL (none of $* is loadable)"
+    FAILED=1
+}
+first_of "an H.264 decoder" vtdec_hw d3d11h264dec openh264dec avdec_h264
+first_of "an AAC decoder" fdkaacdec mfaacdec faad atdec avdec_aac
+first_of "an AAC encoder" fdkaacenc atenc mfaacenc voaacenc avenc_aac
 # The HLS ladder and file conversion make x264enc by name. A tree trimmed
 # with --exclude-gpl has none, which is allowed, and said here.
 if ! "$OUT/bin/gst-inspect-1.0" x264enc >/dev/null 2>&1; then

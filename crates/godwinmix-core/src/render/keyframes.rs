@@ -18,8 +18,14 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
 /// The interval index a timestamp falls in.
+///
+/// A frame within half a millisecond before a boundary counts as on it. At
+/// 30 fps every thirtieth frame lands exactly on a whole second, and two
+/// rungs' segments can put that frame a nanosecond either side of it: with
+/// no video offset (Media Foundation's AAC encoder needs none) one rung asked
+/// for its keyframe at 2000 ms and the other at 2033.
 pub fn slot(pts_ns: u64, interval_ms: u32) -> u64 {
-    pts_ns / (u64::from(interval_ms.max(1)) * 1_000_000)
+    (pts_ns + 500_000) / (u64::from(interval_ms.max(1)) * 1_000_000)
 }
 
 /// Ask `encoder` for a keyframe at every multiple of `interval_ms` of
@@ -74,5 +80,14 @@ mod tests {
         assert_eq!(slot(1999 * ms, 2000), 0);
         assert_eq!(slot(2000 * ms, 2000), 1);
         assert_eq!(slot(4100 * ms, 2000), 2);
+    }
+
+    /// The thirtieth frame of a second, a nanosecond short of the boundary
+    /// on one rung and on it on another, is in the same interval on both.
+    #[test]
+    fn a_frame_a_hair_before_a_boundary_is_on_it() {
+        let ms = 1_000_000;
+        assert_eq!(slot(2000 * ms - 1, 1000), slot(2000 * ms, 1000));
+        assert_eq!(slot(1966 * ms, 1000), 1);
     }
 }

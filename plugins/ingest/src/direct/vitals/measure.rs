@@ -8,14 +8,39 @@ use super::picture::Luma;
 /// How wide a thumbnail is. The height follows the picture's shape.
 pub const THUMB_WIDTH: i32 = 320;
 
-/// The decoders tried for each video codec, best first: the machine's
-/// hardware decoder behind a parser (which puts the size in the caps a
-/// hardware decoder wants), then libav or dav1d on the CPU.
-fn decoders(kind: &str) -> &'static [&'static [&'static str]] {
+/// The decoders tried for each video codec, best first, each marked whether
+/// it is hardware: the machine's hardware decoder behind a parser (which puts
+/// the size in the caps a hardware decoder wants), then the CPU decoders.
+///
+/// Here libav comes before the other CPU decoders, the opposite of the
+/// core's codec catalogue, because a job is one keyframe and an end of
+/// stream, and a decoder has to hand that keyframe back at once.
+/// `openh264dec` does not: given a stream of one frame it returns nothing,
+/// so it is not in the list at all. libde265 comes after libav for the same
+/// reason, untested, and is what a machine without gst-libav has.
+fn decoders(kind: &str) -> &'static [(bool, &'static [&'static str])] {
     match kind {
-        "video/x-h264" => &[&["h264parse", "vtdec_hw"], &["h264parse", "vah264dec"], &["h264parse", "nvh264dec"], &["h264parse", "d3d11h264dec"], &["avdec_h264"]],
-        "video/x-h265" => &[&["h265parse", "vtdec_hw"], &["h265parse", "vah265dec"], &["h265parse", "nvh265dec"], &["h265parse", "d3d11h265dec"], &["avdec_h265"]],
-        "video/x-av1" => &[&["av1parse", "vtdec_hw"], &["av1parse", "vaav1dec"], &["dav1ddec"], &["avdec_av1"]],
+        "video/x-h264" => &[
+            (true, &["h264parse", "vtdec_hw"]),
+            (true, &["h264parse", "vah264dec"]),
+            (true, &["h264parse", "nvh264dec"]),
+            (true, &["h264parse", "d3d11h264dec"]),
+            (false, &["avdec_h264"]),
+        ],
+        "video/x-h265" => &[
+            (true, &["h265parse", "vtdec_hw"]),
+            (true, &["h265parse", "vah265dec"]),
+            (true, &["h265parse", "nvh265dec"]),
+            (true, &["h265parse", "d3d11h265dec"]),
+            (false, &["avdec_h265"]),
+            (false, &["h265parse", "libde265dec"]),
+        ],
+        "video/x-av1" => &[
+            (true, &["av1parse", "vtdec_hw"]),
+            (true, &["av1parse", "vaav1dec"]),
+            (false, &["dav1ddec"]),
+            (false, &["avdec_av1"]),
+        ],
         _ => &[],
     }
 }
@@ -43,7 +68,7 @@ pub fn chain_for(kind: &str, cpu: bool) -> Option<Chain> {
     // measure a machine without one.
     let cpu = cpu || std::env::var_os("GMX_VITALS_CPU").is_some();
     let scale = ["videoscale", "videoconvert"];
-    if let Some(names) = decoders(kind).iter().filter(|d| !cpu || d.len() == 1).find(|d| exists(d)) {
+    if let Some((_, names)) = decoders(kind).iter().filter(|(hw, _)| !cpu || !hw).find(|(_, d)| exists(d)) {
         let all: Vec<&str> = names.iter().chain(scale.iter()).copied().collect();
         return Chain::new(&all, thumb_caps()).ok();
     }
@@ -65,10 +90,14 @@ pub fn chain_for(kind: &str, cpu: bool) -> Option<Chain> {
 }
 
 /// The decoders tried for each kind of sound (`sound::kind`), best first.
-/// AAC and MPEG-1 audio are both `audio/mpeg` and share no decoder.
+/// AAC and MPEG-1 audio are both `audio/mpeg` and share no decoder. libav
+/// comes first where it is installed, as for the pictures above, because a
+/// job is a few frames and an end of stream; the others are what a machine
+/// without gst-libav reads its levels with. E-AC-3 has no decoder outside
+/// libav.
 fn sound_decoders(kind: &str) -> Option<&'static [&'static str]> {
     Some(match kind {
-        "audio/mpeg" => &["avdec_aac", "fdkaacdec"],
+        "audio/mpeg" => &["avdec_aac", "fdkaacdec", "faad"],
         "audio/mpeg-1" => &["mpg123audiodec", "avdec_mp2float", "avdec_mp3float"],
         "audio/x-ac3" => &["avdec_ac3", "a52dec"],
         "audio/x-eac3" => &["avdec_eac3"],

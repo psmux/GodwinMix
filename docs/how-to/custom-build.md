@@ -53,6 +53,7 @@ left out, copyleft licence
   h264-software-x264 (GPL-2.0-or-later)
   h265-software (GPL-2.0-or-later)
   aac-software-decode (GPL-2.0-or-later)
+  ac3-a52dec (GPL-2.0-or-later)
   A machine that has these installed still uses them; they are not bundled.
 ```
 

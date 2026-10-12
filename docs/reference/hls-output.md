@@ -209,8 +209,8 @@ segments no player plays:
 
 `{"audio": {"codec": "aac"}}` decodes the sound once, encodes it as AAC and
 still copies the picture. MPEG audio and AC-3 are decoded by the codec
-catalogue's `mpeg-audio-decode` (`mpg123audiodec`) and `ac3-decode`
-(`avdec_ac3`); E-AC-3 has no decoder in the catalogue yet and is refused by
+catalogue's `mpeg-audio-decode` (`mpg123audiodec`) and `ac3-a52dec`
+(`a52dec`), or `ac3-decode` (`avdec_ac3`) where only gst-libav has it; E-AC-3 has no decoder in the catalogue yet and is refused by
 the planner.
 
 The packager is the station's binary run with `--hls-packager`, a child of

@@ -377,3 +377,83 @@ jobs:
             tauri-app/target/release/bundle/**/*.deb
             tauri-app/target/release/bundle/**/*.AppImage
           if-no-files-found: ignore
+
+  # GodwinMix runs without FFmpeg. This runner has every GStreamer plugin set
+  # the Linux job has except gstreamer1.0-libav, and proves the mixer selects,
+  # encodes, records, decodes and takes an RTMP publisher with nothing from
+  # libav: the codec catalogue's openh264, voaacenc, faad, libde265 and a52dec
+  # do the work. The other platforms' jobs above still run with libav
+  # installed, which is where the catalogue has to prefer the alternatives
+  # over it rather than just survive without it.
+  no-libav:
+    name: linux without gst-libav
+    runs-on: ubuntu-26.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: platforms-no-libav
+
+      - name: GStreamer, with no gst-libav
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+            libgstreamer-plugins-bad1.0-dev libgstrtspserver-1.0-dev gstreamer1.0-plugins-base \
+            gstreamer1.0-plugins-good gstreamer1.0-plugins-bad \
+            gstreamer1.0-plugins-ugly gstreamer1.0-tools \
+            gstreamer1.0-nice libssl-dev xvfb
+          if dpkg -s gstreamer1.0-libav >/dev/null 2>&1; then
+            sudo apt-get remove -y gstreamer1.0-libav
+          fi
+          rm -rf "$HOME/.cache/gstreamer-1.0"
+          if gst-inspect-1.0 libav >/dev/null 2>&1; then
+            echo "::error::gst-libav is still in the registry" >&2
+            exit 1
+          fi
+          for element in avdec_h264 avdec_aac avenc_aac; do
+            if gst-inspect-1.0 "$element" >/dev/null 2>&1; then
+              echo "::error::$element is still loadable" >&2
+              exit 1
+            fi
+          done
+
+      - name: Build
+        run: cargo build --locked -p godwinmix --bins
+
+      - name: What the catalogue picks, and what gmx doctor says
+        run: |
+          ./target/debug/godwinmix --probe 2>&1 | tee probe.txt || true
+          ./target/debug/gmx doctor 2>&1 | tee doctor.txt || true
+          {
+            echo "## Codecs without gst-libav"
+            echo '```'
+            cat probe.txt doctor.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          grep -q "gst-libav *not installed" doctor.txt
+
+      - name: The catalogue, the doctor and the priming delays
+        env:
+          GMX_EXPECT_NO_LIBAV: 1
+        run: >
+          cargo test --locked -p godwinmix-core --lib --
+          catalogue probe observe::doctor --nocapture
+
+      - name: A programme recorded and decoded back, live
+        env:
+          GMX_EXPECT_NO_LIBAV: 1
+          GODWINMIX_TIMING_SLACK: 3
+        run: >
+          xvfb-run -a cargo test --locked -p godwinmix-core
+          --test no_libav --test recording_live -- --nocapture
+
+      - name: The core runs a test:// source headless
+        run: ./target/debug/godwinmix --test-core
+
+      - name: Smoke test
+        env:
+          GODWINMIX_TIMING_SLACK: 3
+        run: ./dev/smoke.sh

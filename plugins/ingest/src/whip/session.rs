@@ -4,7 +4,7 @@
 //! ```text
 //!   webrtcbin ─┬─► rtph264depay ──► h264parse ──► appsink (video tags)
 //!              ├─► rtpvp8depay ──► vp8dec ──► H.264 encoder ──► h264parse ──► appsink
-//!              └─► rtpopusdepay ──► opusdec ──► avenc_aac ──► aacparse ──► appsink (audio tags)
+//!              └─► rtpopusdepay ──► opusdec ──► AAC encoder ──► aacparse ──► appsink (audio tags)
 //! ```
 //!
 //! H.264 video is never decoded: it comes first in the answer, so a browser

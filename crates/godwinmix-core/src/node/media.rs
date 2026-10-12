@@ -449,10 +449,21 @@ fn video_chain(
 fn audio_chain(id: &str, aac: bool) -> Result<(Vec<gst::Element>, Vec<gst::Element>)> {
     let convert = make("audioconvert", &format!("{id}-aconv"))?;
     let resample = make("audioresample", &format!("{id}-ares"))?;
-    // MPEG-TS wants AAC; RTP and WebRTC want Opus. Both are in the same base
-    // install, so this is a choice rather than a dependency.
-    let (factory, parser) = if aac { ("avenc_aac", Some("aacparse")) } else { ("opusenc", None) };
+    // MPEG-TS wants AAC; RTP and WebRTC want Opus. The AAC encoder is the
+    // catalogue's best, the one the programme uses, so a node needs no
+    // gst-libav either.
+    let (factory, parser) = if aac {
+        let best = crate::probe::best_audio_encoder().ok_or_else(|| {
+            anyhow::anyhow!("no AAC encoder is installed on this node; install gst-plugins-bad for voaacenc, or gst-libav")
+        })?;
+        (best, Some("aacparse"))
+    } else {
+        ("opusenc", None)
+    };
     let enc = make(factory, &format!("{id}-aenc"))?;
+    if aac {
+        crate::probe::configure_audio_encoder(&enc, 128);
+    }
     let mut chain = vec![convert, resample, enc];
     if let Some(p) = parser {
         chain.push(make(p, &format!("{id}-aparse"))?);

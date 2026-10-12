@@ -71,7 +71,8 @@ docker run --rm ghcr.io/psmux/godwinmix ctl --url https://mixer.example.com --to
 
 | Argument | Default | What it does |
 |---|---|---|
-| `WITH_X264` | `1` | Installs `gstreamer1.0-plugins-ugly` and keeps only `libgstx264.so` out of it. `x264enc` is the only software H.264 encoder the mixer's probe knows, so an image built with `0` needs a hardware encoder (VA or NVENC) and refuses to start without one. Build with `0` where that package's licensing is a problem. |
+| `WITH_X264` | `1` | Installs `gstreamer1.0-plugins-ugly` and keeps only `libgstx264.so` and `libgsta52dec.so` out of it. An image built with `0` encodes with `openh264enc` instead, and decodes AC-3 with libav. Build with `0` where that package's licensing is a problem. |
+| `WITH_LIBAV` | `1` | Installs `gstreamer1.0-libav` as a fallback. The codec catalogue takes everything it can from the other plugin sets first, so an image built with `0` has no FFmpeg in it and still mixes and streams; E-AC-3, interlaced H.264 and ProRes clips then do not decode. |
 | `WITH_CEF` | `1` | Builds and ships the Chromium browser sidecar and its runtime. Web pages run outside the mixer process. |
 | `WITH_WPE` | `0` | Installs `gstreamer1.0-wpe` and the X and Mesa pieces it needs, so a `web+` source renders through WPE WebKit with no sidecar. Costs about 120 MB. Used only when no CEF sidecar is installed. |
 
@@ -93,7 +94,7 @@ container the GPU (`--gpus all`, or the compose
 `NVIDIA_DRIVER_CAPABILITIES=compute,video,graphics,utility`) and the probe
 picks `nvh264dec` and `nvh264enc` on its own, because `hardware.decode` and
 `hardware.encode` are `auto`. The same image on a host without the driver runs
-on `avdec_h264` and `x264enc` and nothing else changes.
+on `openh264dec` and `x264enc` and nothing else changes.
 
 For VA (Intel or AMD), pass the render node: `--device /dev/dri:/dev/dri`, and
 add the `gstreamer1.0-vaapi` or `va` plugin to the runtime stage. It is not in
