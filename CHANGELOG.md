@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+* A direct show's rendition keeps its frame rate when the input is read again from the start or its sender restarts. The second around the restart read as 1 or 3 fps, the station took that reading in place of the 30 fps it had measured, and the rendition was planned again at 1 fps and sat waiting. The measured rate is now kept while the picture keeps its codec and size.
+* Two devices that open the page at the same moment see each other in the presence list. One that joined while the other's subscribe answer was being written was announced to nobody, and the first device never listed it until somebody else came or went.
+
 ## 0.3.4 (2026-10-11)
 
 * A source can have a backup that takes over when it goes down. `on_loss = { backup = "cam-wide" }` on a source, or **If this source goes down** in its settings, draws cam-wide wherever the source appears (the programme, any scene, the inset of a picture in picture, the armed scene in the preview) 3 seconds after it reads stalled or failed, over a fade, and puts the source back once it has been live for 5 seconds without a break. Every part can be changed: `after_secs`, `transition` (any a take can name, or cut), `duration_ms`, `return` (`auto`, or `manual` to wait for the operator) and `return_after_secs`. A backup that is down too hands on to its own backup. A camera that has not connected by the time the show starts counts as down once `stall.connect_timeout_secs` (15) has passed since it was added, or `after_secs` if that is longer, and its backup goes on with "Cam main has not connected yet, showing Cam wide". A source a channel made for an encoder keeps its backup rule with the channel when the encoder stops, and has it again when the encoder comes back. The rule never makes a take, so a scene the operator takes meanwhile is what goes out, and the programme does not stop or stall at any point. An unknown backup or a loop of backups is refused at start and over the API, with the ids there are or the loop spelled out. It works for every kind of source, and a source without it costs nothing. See `docs/how-to/keep-the-show-on-air-when-a-feed-drops.md`.
