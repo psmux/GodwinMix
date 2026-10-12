@@ -44,9 +44,11 @@ pub fn libav(cat: &Catalogue, reg: &dyn Registry, installed: bool) -> Check {
     let used: Vec<String> =
         in_use(cat, reg).into_iter().map(|(role, codec, element)| format!("{codec} {role} ({element})")).collect();
     let missing = undecodable(cat, reg);
-    let gap = (!missing.is_empty())
-        .then(|| format!(" Nothing here decodes {}, so a source in it will not open.", missing.join(", ")))
-        .unwrap_or_default();
+    let gap = if missing.is_empty() {
+        String::new()
+    } else {
+        format!(" Nothing here decodes {}, so a source in it will not open.", missing.join(", "))
+    };
     let (verdict, line) = match (installed, used.is_empty()) {
         (true, true) => (Verdict::Ok, "installed, and only a fallback: every codec has an element outside it.".to_string()),
         (true, false) => (Verdict::Ok, format!("installed, and used for {}. Nothing else here handles those.", used.join(", "))),
