@@ -164,6 +164,21 @@ pub struct ProgrammeBranch {
 /// How much of a finite clip waits in its programme side video queue.
 pub const FINITE_QUEUE_SECS: f64 = 0.1;
 
+/// `proxysrc` is a bin with a queue of its own inside, at the queue's
+/// defaults: ten megabytes, which is seven 720p frames a clip keeps full.
+/// Held to the same tenth of a second as the clip's other queues, with six
+/// buffers as the backstop should its timestamps stop counting.
+fn shorten_proxy_queue(proxysrc: &gst::Element) {
+    let Some(bin) = proxysrc.downcast_ref::<gst::Bin>() else { return };
+    for el in bin.iterate_elements().into_iter().flatten() {
+        if el.factory().is_some_and(|f| f.name() == "queue") {
+            el.set_property("max-size-time", (FINITE_QUEUE_SECS * 1e9) as u64);
+            el.set_property("max-size-buffers", 6u32);
+            el.set_property("max-size-bytes", 0u32);
+        }
+    }
+}
+
 /// What the branch needs to know that is not about this source.
 pub struct BranchCtx<'a> {
     pub program: &'a gst::Pipeline,
@@ -194,6 +209,9 @@ impl ProgrammeBranch {
         // of a second keeps the thread boundary and leaves the slot queue to
         // cover a slow frame.
         let vq_secs = if finite { FINITE_QUEUE_SECS } else { 1.0 };
+        if finite {
+            shorten_proxy_queue(&vsrc);
+        }
         let vq = gstutil::queue_time(&format!("pgm-vq-{id}"), vq_secs, false)?;
         // A flush from the source's pipeline ends here and not at a
         // compositor pad.
