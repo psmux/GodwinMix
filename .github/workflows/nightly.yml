@@ -100,7 +100,7 @@ jobs:
         run: ./target/release/gmx bench --nightly --machine ci-linux --encode software
 
       # TEMPORARY, fix/footprint-idle: the file row alone, and with glibc
-      # with one decoder thread. Removed before the branch merges.
+      # mapping every large allocation on its own. Removed before the merge.
       - name: file-source alone (diagnostic)
         if: always()
         continue-on-error: true
@@ -109,7 +109,7 @@ jobs:
           GST_GL_DISABLED: "1"
         run: |
           ./target/release/gmx bench --only file-source --machine ci-linux --encode software --no-write 2>/dev/null | grep -E "^\| Added"
-          GODWINMIX_DECODE_THREADS=1 ./target/release/gmx bench --only file-source --machine ci-linux --encode software --no-write 2>/dev/null | grep -E "^\| Added"
+          MALLOC_MMAP_THRESHOLD_=131072 ./target/release/gmx bench --only file-source --machine ci-linux --encode software --no-write 2>/dev/null | grep -E "^\| Added"
           ./target/release/gmx bench --only core-idle --machine ci-linux --encode software --no-write 2>/dev/null | grep -E "^\| Core idle RSS"
 
       - name: The numbers
