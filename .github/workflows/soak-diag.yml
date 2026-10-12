@@ -13,11 +13,11 @@ jobs:
   soak:
     name: soak ${{ matrix.variant }}
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 240
     strategy:
       fail-fast: false
       matrix:
-        variant: [full, no-take, no-streams, no-plugin, no-sources, arena2, heaptrack, leaks]
+        variant: [long]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -43,7 +43,7 @@ jobs:
           GST_GL_DISABLED: "1"
           GODWINMIX_SOAK_BIN_DIR: ${{ github.workspace }}/target/release
           V: ${{ matrix.variant }}
-          MINUTES: "30"
+          MINUTES: ${{ matrix.variant == 'long' && '180' || '30' }}
         run: |
           mkdir -p diag
           ARGS=(--minutes "$MINUTES" --machine "diag-$V" --keep)
