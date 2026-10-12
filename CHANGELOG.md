@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.5 (2026-10-12)
 
 * A show on Linux keeps its memory level through a long session. In the nightly hour long soak the show process grew from 475 to 527 MB, more slowly as the hour went on, and nothing in it was being kept: every pipeline had the same elements and pads round after round, and GStreamer's leak tracer found no object left over between checkpoints. It was glibc giving the threads of each mosaic and audio branch that came and went their own malloc arenas, up to eight per core, and keeping each arena's high water mark. The core now caps glibc at two arenas when it starts, and the same soak held at about 464 MB from its second minute to its thirtieth. Set `MALLOC_ARENA_MAX` to choose another number.
 * Opening a PCM or Opus monitor on the programme no longer stops the programme's sound. The monitoring branch was linked to the audio tee before it was started, and a buffer that landed in the few microseconds between found its queue not yet active. The tee passed that refusal back to the audio mixer, which paused and stayed paused until something happened to restart it. In the nightly soak that was about one open in 540, and the client waited twenty seconds for nothing; in one run without the sources phase the sound never came back. The branch is now started before it is linked, as the thumbnail branches already were, and its sink no longer waits for a preroll. A local raw preview on Linux and macOS had the same order on the video tee and has the same fix.
