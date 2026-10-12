@@ -4,7 +4,7 @@
 
 use super::{encode_bridge, parser_for};
 use crate::catalogue::apply::{self, Vars};
-use crate::catalogue::Selection;
+use crate::catalogue::select::Selection;
 use crate::encoder::Build;
 use crate::gstutil::{self, make};
 use gstreamer as gst;
