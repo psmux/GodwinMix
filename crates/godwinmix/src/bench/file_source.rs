@@ -29,8 +29,8 @@ pub async fn row(args: &BenchArgs, clip: &Path) -> Result<Row> {
     let measured = measure(args, clip, &handle).await;
     let _ = handle.send(Command::Shutdown);
     let _ = tokio::task::spawn_blocking(move || thread.join()).await;
-    let (before, after, split) = measured?;
-    let mut other = super::plugins::loaded_line();
+    let (before, after, split, queued) = measured?;
+    let mut other = format!("{queued}; {}", super::plugins::loaded_line());
     if let Some(((a0, f0), (a1, f1))) = split {
         other = format!("anonymous {:+.1} MB, file backed {:+.1} MB; {other}", a1 - a0, f1 - f0);
     }
@@ -48,7 +48,7 @@ pub async fn row(args: &BenchArgs, clip: &Path) -> Result<Row> {
 /// The idle core, then the same core with the clip added and on programme.
 type Split = Option<((f64, f64), (f64, f64))>;
 
-async fn measure(args: &BenchArgs, clip: &Path, handle: &MixerHandle) -> Result<(Load, Load, Split)> {
+async fn measure(args: &BenchArgs, clip: &Path, handle: &MixerHandle) -> Result<(Load, Load, Split, String)> {
     let before = steady(args.warmup(), args.window()).await;
     let split_before = super::plugins::rss_split();
     let source: SourceConfig = serde_json::from_value(serde_json::json!({
@@ -70,7 +70,8 @@ async fn measure(args: &BenchArgs, clip: &Path, handle: &MixerHandle) -> Result<
         .context("taking the clip took more than thirty seconds")??;
     let after = steady(args.warmup(), args.window()).await;
     let split = split_before.zip(super::plugins::rss_split());
-    Ok((before, after, split))
+    let queued = queued();
+    Ok((before, after, split, queued))
 }
 
 fn note(args: &BenchArgs) -> String {
@@ -96,4 +97,17 @@ fn note(args: &BenchArgs) -> String {
         );
     }
     note
+}
+
+/// Every queue holding a buffer on the programme and in the clip's own
+/// pipeline, so the row says where its frames wait.
+fn queued() -> String {
+    use godwinmix_core::observe::introspect::queues;
+    let mut held: Vec<String> = Vec::new();
+    for name in [godwinmix_core::observe::PROGRAMME.to_string(), format!("input-{ID}")] {
+        for q in queues(&name).unwrap_or_default().into_iter().filter(|q| q.buffers > 0) {
+            held.push(format!("{} {}", q.element, q.buffers));
+        }
+    }
+    format!("queued buffers: {}", if held.is_empty() { "none".into() } else { held.join(", ") })
 }
