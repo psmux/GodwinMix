@@ -1,0 +1,71 @@
+name: pcm diag
+
+# A temporary look at why the soak's PCM stream sometimes gets no frame for
+# twenty seconds, on the fix/soak-growth branch only. The soak runs without
+# its sources phase, which is where the hang held for the rest of a run, and
+# the programme pipeline's audio elements are read every three seconds.
+
+on:
+  push:
+    branches: [fix/soak-growth]
+    paths: [".github/workflows/pcm-diag.yml"]
+
+jobs:
+  soak:
+    name: pcm ${{ matrix.n }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        n: [1, 2]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: GStreamer
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+            libgstreamer-plugins-bad1.0-dev libgstrtspserver-1.0-dev gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
+            gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly gstreamer1.0-libav gstreamer1.0-tools
+      - name: Build
+        run: cargo build --release --locked
+      - name: Soak
+        env:
+          LIBGL_ALWAYS_SOFTWARE: "1"
+          GST_GL_DISABLED: "1"
+          GODWINMIX_SOAK_BIN_DIR: ${{ github.workspace }}/target/release
+        run: |
+          mkdir -p diag/dots
+          (
+            cfg=""
+            for _ in $(seq 1 600); do
+              cfg="$(ls /tmp/gmx-soak.*/godwinmix.toml 2>/dev/null | head -1)"; [[ -n "$cfg" ]] && break; sleep 0.5
+            done
+            bind="$(grep -m1 '^bind = ' "$cfg" | cut -d'"' -f2)"
+            token="$(grep -m1 '^token = ' "$cfg" | cut -d'"' -f2)"
+            n=0
+            while :; do
+              now=$(date -u +%H:%M:%S.%3N)
+              dot="$(curl -fsS --max-time 5 -H "Authorization: Bearer $token" "http://$bind/api/v1/pipeline/dot?name=programme" 2>/dev/null)" || { sleep 3; continue; }
+              states="$(echo "$dot" | grep -oE 'label="Gst[A-Za-z]+[\]n(mon-[^\]*|araw-tee|amix|pgm-level)[\]n[^"\\]*' | sed 's/label="Gst//' | tr '\n' ';')"
+              pads="$(echo "$dot" | grep -oE 'node_mon_[a-z]+_[^ ]*_node_(sink|src)_[^ ]* \[[^]]*label="[a-z_0-9]*[\]n[^"]*"' | sed -E 's/_[0-9A-Fa-f]{8,}//g;s/\[color=black, fillcolor="#[a-f]+", //' | tr '\n' ';')"
+              echo "t=$now $states | $pads" >>diag/states.log
+              n=$((n + 1))
+              # A dot every half minute, and the last few kept whole.
+              [[ $((n % 10)) -eq 0 ]] && echo "$dot" >"diag/dots/$now.dot"
+              pgrep -f 'show main' >/dev/null || break
+              sleep 3
+            done
+          ) &
+          dev/soak.sh --minutes 20 --machine "pcm-${{ matrix.n }}" --keep --skip sources 2>&1 | tee diag/soak.log || true
+          cp /tmp/gmx-soak.*/core.log diag/ 2>/dev/null || true
+          cp bench/results/*-2026-1*.json diag/ 2>/dev/null || true
+          tail -20 diag/states.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pcm-${{ matrix.n }}
+          path: diag/
+          retention-days: 7
