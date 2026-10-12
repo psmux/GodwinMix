@@ -110,9 +110,11 @@ is measured over thirty seconds of steady state after a five second warm up.
 
 Two rows to look at first on a Pi:
 
-* **Core idle CPU.** GodwinMix builds and plays the programme pipeline,
-  encoder included, from boot. On a Pi 5 with no hardware encoder that means
-  x264 is running on a black slate before you have added anything.
+* **Core idle CPU.** The compositor and the audio mixer run from boot; the
+  encoder is made only when an output, a WHEP viewer or a recording asks for
+  it. The `core-idle-encoder-always` row beside it is what x264 on a black
+  slate costs a Pi 5, which has no hardware encoder, when `[program] encoder =
+  "always"` is set.
 * **Two live sources with programme encode.** This is the shape of a real
   broadcast. If it is near a whole core on a Pi 4, or near two on a Pi 5, you
   have no headroom for a camera reconnecting.
