@@ -356,14 +356,13 @@ codec = "h264"
 accel = "software"
 rank = 72
 encoder = "x264enc"
-decoder = "avdec_h264"
 parser = "h264parse"
 requires = []
 license = "GPL-2.0-or-later"
 container = ["flv", "mpegts", "mp4", "matroska"]
 keyframe = { property = "key-int-max", unit = "frames" }
 verified = []
-comment = "Preferred over openh264 where it is installed, and never bundled: x264 is GPL and the operator installs gst-plugins-ugly themselves. B frames are off everywhere because they cost latency and buy little at live bitrates. `byte-stream = false` because the FLV muxer wants AVC sample format."
+comment = "Preferred over openh264 where it is installed, and never bundled: x264 is GPL and the operator installs gst-plugins-ugly themselves. B frames are off everywhere because they cost latency and buy little at live bitrates. `byte-stream = false` because the FLV muxer wants AVC sample format. Encode only: H.264 is decoded by openh264dec below, or by libav where openh264 is missing."
 properties = { "speed-preset" = "veryfast", tune = "zerolatency", pass = "cbr", bitrate = { unit = "kbit", from = "video.bitrate_kbps" }, bframes = 0, aud = false, "byte-stream" = false, threads = { unit = "count", from = "cpu.count" } }
 
 [[video]]
@@ -379,21 +378,21 @@ license = "BSD-2-Clause"
 container = ["flv", "mpegts", "mp4", "matroska"]
 keyframe = { property = "gop-size", unit = "frames" }
 verified = []
-comment = "The permissive fallback. Cisco's openh264 is BSD licensed, so it ships in every build including a closed custom one, and it is what the GPU free CI runner exercises on every commit."
+comment = "The permissive fallback. Cisco's openh264 is BSD licensed, so it ships in every build including a closed custom one, and it is what the GPU free CI runner exercises on every commit. Its decoder is the software H.264 decoder ahead of libav. It takes 4:2:0 8 bit streams (baseline, main and high); a High 10 or 4:2:2 stream does not match its caps and goes to avdec_h264. It does not decode interlaced coding, and it runs on one thread: on a 1080p30 high profile stream it cost about 1.5 times avdec_h264's CPU time. A machine taking interlaced broadcast feeds, or decoding several cameras on the CPU, wants `GMX_CODEC_RANK=h264-software-decode=70`."
 properties = { complexity = "low", "rate-control" = "bitrate", bitrate = { unit = "bit", from = "video.bitrate_kbps" }, "multi-thread" = { unit = "count", from = "cpu.count" } }
 
 [[video]]
 id = "h264-software-decode"
 codec = "h264"
 accel = "software"
-rank = 70
+rank = 30
 decoder = "avdec_h264"
 parser = "h264parse"
 requires = []
 license = "LGPL-2.1-or-later"
 container = ["flv", "mpegts", "mp4", "matroska"]
 verified = []
-comment = "Decode only, so a machine whose only encoder is hardware still has an honest software decoder underneath it."
+comment = "Decode only, from gst-libav, and the last resort for H.264: it is taken when neither a hardware decoder nor openh264 is installed. It is also what decodebin falls back to for a High 10 or 4:2:2 stream openh264 cannot take. Raise it above 64 to prefer it to openh264 (see that entry's comment for when)."
 
 [[video]]
 id = "av1-software"
@@ -417,19 +416,68 @@ codec = "h265"
 accel = "software"
 rank = 50
 encoder = "x265enc"
-decoder = "avdec_h265"
 parser = "h265parse"
 requires = []
 license = "GPL-2.0-or-later"
 container = ["mpegts", "mp4", "matroska"]
 keyframe = { property = "key-int-max", unit = "frames" }
 verified = []
-comment = "GPL like x264, and much slower. Present so an operator who wants HEVC out of a CPU can have it, not because anyone should."
+comment = "GPL like x264, and much slower. Present so an operator who wants HEVC out of a CPU can have it, not because anyone should. Encode only; the HEVC decoders are the entries below."
 properties = { "speed-preset" = "ultrafast", tune = "zerolatency", bitrate = { unit = "kbit", from = "video.bitrate_kbps" } }
+
+[[video]]
+id = "h265-d3d11"
+codec = "h265"
+accel = "d3d11"
+rank = 185
+decoder = "d3d11h265dec"
+download = "d3d11download"
+parser = "h265parse"
+requires = []
+license = "LGPL-2.1-or-later"
+container = ["mpegts", "mp4", "matroska"]
+verified = []
+comment = "Decode only. Windows DXVA on any GPU that decodes HEVC, which is what keeps an HEVC camera off libav on Windows."
+
+[[video]]
+id = "h265-software-libde265"
+codec = "h265"
+accel = "software"
+rank = 45
+decoder = "libde265dec"
+parser = "h265parse"
+requires = []
+license = "LGPL-3.0-or-later"
+container = ["mpegts", "mp4", "matroska"]
+verified = []
+comment = "Decode only. libde265, from gst-plugins-bad on Debian and Ubuntu. The one software HEVC decoder outside libav; the official Windows and macOS runtimes do not carry it, and there HEVC is decoded in hardware or by libav."
+
+[[video]]
+id = "h265-software-decode"
+codec = "h265"
+accel = "software"
+rank = 30
+decoder = "avdec_h265"
+parser = "h265parse"
+requires = []
+license = "LGPL-2.1-or-later"
+container = ["mpegts", "mp4", "matroska"]
+verified = []
+comment = "Decode only, from gst-libav, and the last resort for HEVC."
 
 # ---------------------------------------------------------------------------
 # Audio
 # ---------------------------------------------------------------------------
+
+# AAC is what RTMP carries, so every machine needs an encoder for it. The
+# order is quality first and libav last: Fraunhofer's encoder where the
+# operator has installed it, the operating system's own on a Mac and on
+# Windows, then VisualOn's, then FFmpeg's. Each encoder's priming delay is
+# measured by `catalogue::priming_tests` on every CI platform that has it,
+# against a beep at a known time, and that test fails when the number here is
+# wrong by more than a few milliseconds. Decoding is ranked the same way, with
+# the libav decoders in entries of their own at rank 30 so they are taken only
+# when nothing else is installed.
 
 [[audio]]
 id = "aac-fdk"
@@ -437,15 +485,62 @@ codec = "aac"
 accel = "software"
 rank = 120
 encoder = "fdkaacenc"
-decoder = "avdec_aac"
+decoder = "fdkaacdec"
 parser = "aacparse"
 requires = []
 license = "FDK-AAC"
 container = ["flv", "mpegts", "mp4", "matroska"]
 priming_delay_ms = 43
 verified = []
-comment = "2048 samples of priming delay at 48 kHz, measured on air with browser/dev/tail-offset.sh: a file whose flash and beep coincide came out with the beep 43 ms late, whatever the video encoder. The Fraunhofer licence is not redistributable, so this entry is never bundled."
+comment = "The best AAC encoder there is for GStreamer. 2048 samples of priming delay at 48 kHz, measured on air with browser/dev/tail-offset.sh: a file whose flash and beep coincide came out with the beep 43 ms late, whatever the video encoder. The Fraunhofer licence allows redistribution but grants no patent licence and does not mix with the GPL, so no release bundle carries it: x264 and faad travel in the same runtimes. An operator installs it (`gstreamer1.0-fdkaac` on Ubuntu and Debian) and it is taken from then on."
 properties = { bitrate = { unit = "bit", from = "audio.bitrate_kbps" }, "rate-control" = "cbr", "perfect-timestamp" = true }
+
+[[audio]]
+id = "aac-audiotoolbox"
+codec = "aac"
+accel = "software"
+rank = 116
+encoder = "atenc"
+decoder = "atdec"
+parser = "aacparse"
+requires = []
+license = "LGPL-2.1-or-later"
+container = ["flv", "mpegts", "mp4", "matroska"]
+priming_delay_ms = 44
+verified = []
+comment = "Apple's AAC encoder and decoder through AudioToolbox, on every Mac with GStreamer 1.26 or newer. As good as Fraunhofer's. atenc leaves Apple's 2112 samples of encoder delay in its timestamps (its source says so), which is 44 ms at 48 kHz."
+properties = { bitrate = { unit = "bit", from = "audio.bitrate_kbps" }, "rate-control" = "cbr", "perfect-timestamp" = true }
+
+[[audio]]
+id = "aac-mediafoundation"
+codec = "aac"
+accel = "software"
+rank = 114
+encoder = "mfaacenc"
+decoder = "mfaacdec"
+parser = "aacparse"
+requires = []
+license = "LGPL-2.1-or-later"
+container = ["flv", "mpegts", "mp4", "matroska"]
+priming_delay_ms = 0
+verified = []
+comment = "Windows' own AAC encoder and decoder through Media Foundation, on every Windows except an N edition without the Media Feature Pack. It takes the encoder delay out itself: a beep at 500 ms decoded at 500 ms. It knows a fixed set of bitrates (96, 128, 160, 192, 256 and 320 kbit/s among them) and rounds any other up to the next one."
+properties = { bitrate = { unit = "bit", from = "audio.bitrate_kbps" }, "perfect-timestamp" = true }
+
+[[audio]]
+id = "aac-vo"
+codec = "aac"
+accel = "software"
+rank = 110
+encoder = "voaacenc"
+parser = "aacparse"
+requires = []
+license = "Apache-2.0"
+container = ["flv", "mpegts", "mp4", "matroska"]
+priming_delay_ms = 33
+verified = []
+comment = "VisualOn's encoder, from gst-plugins-bad, permissively licensed and in the official runtimes and the Debian and Ubuntu packages. It is the weakest encoder here by ear, and still clean at 128 kbit/s and up for speech and music on a stream; it is ranked over libav's because the point is a programme that needs no FFmpeg. 1600 samples of delay, 33 ms, measured. Encode only."
+properties = { bitrate = { unit = "bit", from = "audio.bitrate_kbps" }, "perfect-timestamp" = true }
 
 [[audio]]
 id = "aac-avenc"
@@ -453,30 +548,13 @@ codec = "aac"
 accel = "software"
 rank = 100
 encoder = "avenc_aac"
-decoder = "avdec_aac"
 parser = "aacparse"
 requires = []
 license = "LGPL-2.1-or-later"
 container = ["flv", "mpegts", "mp4", "matroska"]
 priming_delay_ms = 21
 verified = []
-comment = "1024 samples of priming at 48 kHz, measured the same way. This is the figure mixer.rs used to hold in a match arm; the mixer now takes it from here and holds the video back by it at the encoder's own pad."
-properties = { bitrate = { unit = "bit", from = "audio.bitrate_kbps" }, "perfect-timestamp" = true }
-
-[[audio]]
-id = "aac-vo"
-codec = "aac"
-accel = "software"
-rank = 80
-encoder = "voaacenc"
-decoder = "avdec_aac"
-parser = "aacparse"
-requires = []
-license = "Apache-2.0"
-container = ["flv", "mpegts", "mp4", "matroska"]
-priming_delay_ms = 21
-verified = []
-comment = "Assumed to behave like a standard AAC-LC encoder. Not measured; if you have it installed, run `gmx codec test aac-vo` and send the number."
+comment = "FFmpeg's encoder, through gst-libav, and the last resort for AAC. 1024 samples of priming at 48 kHz, measured the same way. The mixer takes the figure from here and holds the video back by it at the encoder's own pad. Encode only."
 properties = { bitrate = { unit = "bit", from = "audio.bitrate_kbps" }, "perfect-timestamp" = true }
 
 [[audio]]
@@ -490,7 +568,20 @@ requires = []
 license = "GPL-2.0-or-later"
 container = ["flv", "mpegts", "mp4", "matroska"]
 verified = []
-comment = "Decode only, for a build without gst-libav."
+comment = "Decode only. faad2, from gst-plugins-bad on Linux and Homebrew; the official Windows and macOS runtimes do not carry it."
+
+[[audio]]
+id = "aac-libav-decode"
+codec = "aac"
+accel = "software"
+rank = 30
+decoder = "avdec_aac"
+parser = "aacparse"
+requires = []
+license = "LGPL-2.1-or-later"
+container = ["flv", "mpegts", "mp4", "matroska"]
+verified = []
+comment = "Decode only, from gst-libav, and the last resort for AAC."
 
 [[audio]]
 id = "mpeg-audio-decode"
@@ -503,20 +594,33 @@ requires = []
 license = "LGPL-2.1-or-later"
 container = ["mpegts"]
 verified = []
-comment = "Decode only: MPEG audio layers I, II and III, which broadcast feeds carry as MP2. A direct show's output that converts such a feed's sound to AAC decodes it here."
+comment = "Decode only: MPEG audio layers I, II and III, which broadcast feeds carry as MP2. A direct show's output that converts such a feed's sound to AAC decodes it here. mpg123 is in gst-plugins-good, so no libav entry is needed under it."
+
+[[audio]]
+id = "ac3-a52dec"
+codec = "ac3"
+accel = "software"
+rank = 50
+decoder = "a52dec"
+parser = "ac3parse"
+requires = []
+license = "GPL-2.0-or-later"
+container = ["mpegts"]
+verified = []
+comment = "Decode only: AC-3 from a broadcast feed, for an output that converts its sound to AAC. liba52, from gst-plugins-ugly and the official runtimes. It does not decode E-AC-3, which only libav does."
 
 [[audio]]
 id = "ac3-decode"
 codec = "ac3"
 accel = "software"
-rank = 50
+rank = 30
 decoder = "avdec_ac3"
 parser = "ac3parse"
 requires = []
 license = "LGPL-2.1-or-later"
 container = ["mpegts"]
 verified = []
-comment = "Decode only: AC-3 from a broadcast feed, for an output that converts its sound to AAC."
+comment = "Decode only, from gst-libav, and the last resort for AC-3."
 
 [[audio]]
 id = "opus-software"
