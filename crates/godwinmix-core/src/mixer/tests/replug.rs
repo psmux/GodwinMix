@@ -103,6 +103,7 @@ fn free_port() -> u16 {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn an_rtsp_camera_comes_back_from_a_pulled_cable_and_stays_on_time() {
+    let _ = tracing_subscriber::fmt().with_max_level(tracing::Level::DEBUG).with_ansi(false).with_writer(std::io::stderr).try_init();
     let port = free_port();
     let Some(_cam) = super::rtsp_live::Camera::serve(port) else { return };
     let cable = Cable::to(port, true);

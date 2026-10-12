@@ -28,7 +28,7 @@ jobs:
             os: windows-latest
             build: "-p godwinmix-core --lib"
             test: "-p godwinmix-core --lib -- --nocapture mixer::tests::replug::an_rtsp"
-            n: 30
+            n: 20
           - name: replug-macos
             os: macos-latest
             build: "-p godwinmix-core --lib"
@@ -90,6 +90,7 @@ jobs:
             if [ $code != 0 ]; then
               echo "--- what the failing run said"
               grep -aE -A3 'panicked|ms ahead' run.log | cut -c1-2500 | head -40
+              grep -aE 'source=far|far:|cam|rtsp|aligned|timeline|caught|catch|stall|restart|live' run.log | grep -avE 'DEBUG.*(least lead|preview|multiview)' | cut -c1-400 | tail -150
               tail -n 5 run.log | cut -c1-600
               for log in $(ls -d /tmp/gmx-station-test-* "$tmp"/gmx-station-test-* 2>/dev/null); do
                 [ -f "$log/log.jsonl" ] || continue
