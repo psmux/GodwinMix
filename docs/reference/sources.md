@@ -117,15 +117,22 @@ timeline aligner the seek needs, and repeats the same way.
 
 ### What a clip holds in memory
 
-A clip is not live: it decodes as fast as the mixer lets it, so every queue
-between its decoder and the compositor sits full. Its three queues (the one in
-front of its programme proxy, its programme queue and the queue of the slot
-it is drawn in) hold a tenth of a second each, where a live source's hold a
-second. The compositor pad in front of them holds about a second of frames for
-every source, live or not, because the compositor runs a second behind so that
-a source arriving late never stalls the programme. At 720p that second is
-about 40 MB. A live source bound to a slot a clip used before gets its second
-back.
+A clip is not live: left alone it decodes as fast as the mixer lets it, and
+every queue between its decoder and the compositor sits full. The compositor
+takes frames onto a pad until the pad holds a second of them, because it
+allows a second for a late source before it gives up on it, so a clip kept a
+second of canvas frames there (about 40 MB at 720p) where a live camera keeps
+one or two.
+
+So a clip is paced. A `clocksync` in front of its programme queue lets each
+frame go 150 ms before the programme is due to draw it, and the decoder waits
+behind that. A frame is drawn at the same moment as before; it has waited in
+the decoder instead of on the compositor pad. The clip's queues (the one in
+front of its programme proxy, the proxy's own, its programme queue and the
+queue of the slot it is drawn in) hold a tenth of a second each, where a live
+source's hold a second, and a live source bound to a slot a clip used before
+gets its second back. A GStreamer without `clocksync` (older than 1.18) runs
+the clip ahead as before.
 
 A software video decoder inside a clip, an HLS stream or an RTSP camera runs
 two threads, not one per core. Set `GODWINMIX_DECODE_THREADS` in the mixer's

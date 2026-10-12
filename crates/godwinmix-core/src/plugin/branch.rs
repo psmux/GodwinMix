@@ -33,6 +33,8 @@ use gstreamer as gst;
 use gstreamer::prelude::*;
 use std::sync::Arc;
 
+mod pace;
+
 /// The loudest a fader can be set to. Matches the ceiling the control plane
 /// clamps to, so a request that arrives from somewhere else cannot push a
 /// volume element past what the API would have allowed.
@@ -61,6 +63,8 @@ pub struct VideoPads {
 struct VideoPadsInner {
     offset: i64,
     pads: Vec<gst::Pad>,
+    /// A clip's `clocksync`, which follows the offset. See `pace`.
+    pace: Option<gst::Element>,
 }
 
 impl VideoPads {
@@ -109,6 +113,18 @@ impl VideoPads {
         for pad in &inner.pads {
             pad.set_offset(offset);
         }
+        if let Some(el) = &inner.pace {
+            pace::follow(el, offset);
+        }
+    }
+
+    /// Hold a clip's frames back until shortly before the compositor wants
+    /// them, by keeping `clocksync`'s offset on this source's own. See
+    /// `plugin::branch::pace`.
+    pub fn pace(&self, el: gst::Element) {
+        let mut inner = self.inner.lock();
+        pace::follow(&el, inner.offset);
+        inner.pace = Some(el);
     }
 
     pub fn offset(&self) -> i64 {
@@ -248,21 +264,15 @@ impl ProgrammeBranch {
         let amute = make("volume", &format!("pgm-amute-{id}"))?;
         amute.set_property("mute", muted);
 
-        let elements = vec![
-            vsrc,
-            vq.clone(),
-            vtee.clone(),
-            asrc,
-            aq.clone(),
-            again.clone(),
-            alevel,
-            amute.clone(),
-        ];
+        let pace = if finite { pace::make(id) } else { None };
+        let mut video = vec![vsrc];
+        video.extend(pace.clone());
+        video.extend([vq.clone(), vtee.clone()]);
+        let audio = vec![asrc, aq.clone(), again.clone(), alevel, amute.clone()];
+        let elements: Vec<gst::Element> = video.iter().chain(audio.iter()).cloned().collect();
         ctx.program.add_many(&elements).context("adding source branch")?;
-        gst::Element::link_many([&elements[0], &elements[1], &elements[2]])
-            .context("linking source video")?;
-        gst::Element::link_many([&elements[3], &elements[4], &elements[5], &elements[6], &elements[7]])
-            .context("linking source audio")?;
+        gst::Element::link_many(&video).context("linking source video")?;
+        gst::Element::link_many(&audio).context("linking source audio")?;
 
         let apad = ctx.amix.request_pad_simple("sink_%u").context("mixer refused a pad")?;
         apad.set_property("volume", 0.0f64);
@@ -273,12 +283,16 @@ impl ProgrammeBranch {
             .link(&apad)
             .context("linking audio into mixer")?;
 
+        let pads = VideoPads::new();
+        if let Some(pace) = pace {
+            pads.pace(pace);
+        }
         Ok(Self {
             id: id.clone(),
             elements,
             vq,
             vtee,
-            pads: VideoPads::new(),
+            pads,
             again,
             amute,
             aq,

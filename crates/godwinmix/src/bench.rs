@@ -28,6 +28,7 @@
 //! on every machine and the gaps are visible rather than absent.
 
 mod file_source;
+mod held;
 mod plugins;
 
 use godwinmix_core::config::{Config, MultiviewConfig, SnapshotConfig, SourceConfig};
@@ -1067,7 +1068,10 @@ pub async fn run(args: BenchArgs) -> Result<()> {
     let clip = if clip_needed { Some(test_clip(&args)?) } else { None };
 
     if args.wants("file-source") {
-        rows.push(file_source::row(&args, clip.as_ref().unwrap()).await?);
+        rows.push(file_source::file_row(&args, clip.as_ref().unwrap()).await?);
+    }
+    if args.wants("live-source") {
+        rows.push(file_source::live_row(&args).await?);
     }
     if args.wants("two-live") {
         rows.extend(programme_rows(&args).await?);
