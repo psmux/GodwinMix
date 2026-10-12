@@ -587,7 +587,10 @@ async fn mixer_rows(args: &BenchArgs) -> Result<Vec<Row>> {
     let thread = godwinmix_core::mixer::spawn(mix, cmd_rx, handle.clone());
 
     let idle = steady(args.warmup(), args.window()).await;
-    let idle_plugins = plugins::loaded_line();
+    let idle_plugins = match plugins::rss_split() {
+        Some((anon, file)) => format!("anonymous {anon:.1} MB, file backed {file:.1} MB; {}", plugins::loaded_line()),
+        None => plugins::loaded_line(),
+    };
     rows.push(
         Row::new(
             "core-idle",
