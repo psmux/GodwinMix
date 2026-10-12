@@ -90,7 +90,12 @@ pub fn decode_ts(path: &std::path::Path) -> (u32, u32) {
         let _ = pad.link(&sink.static_pad("sink").unwrap());
     });
     p.set_state(gst::State::Playing).unwrap();
-    let _ = p.bus().unwrap().timed_pop_filtered(gst::ClockTime::from_seconds(20), &[gst::MessageType::Eos, gst::MessageType::Error]);
+    let ended = p.bus().unwrap().timed_pop_filtered(gst::ClockTime::from_seconds(20), &[gst::MessageType::Eos, gst::MessageType::Error]);
+    // A decoder that gave up reads as no pictures; say which and why.
+    if let Some(gst::MessageView::Error(e)) = ended.as_ref().map(|m| m.view()) {
+        let from = e.src().map(|s| s.path_string().to_string()).unwrap_or_default();
+        eprintln!("decoding {} stopped at {from}: {} ({:?})", path.display(), e.error(), e.debug());
+    }
     let _ = p.set_state(gst::State::Null);
     let v = *counts[0].lock().unwrap();
     let a = *counts[1].lock().unwrap();
