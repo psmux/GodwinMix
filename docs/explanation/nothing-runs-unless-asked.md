@@ -70,6 +70,9 @@ an operator pressing a button and the picture changing.
 
 Only the encode chain comes and goes: the queue, the conversion, the encoder,
 its parser and the encoded tee. Those are downstream of the picture, not in it.
+The chain is not even made until the first consumer asks, because making an
+encoder loads its plugin: on Ubuntu the audio encoder is gst-libav, and with it
+every library the distribution's FFmpeg links against.
 
 Two things follow that had to be got right.
 
@@ -164,12 +167,15 @@ The strongest check does not trust a counter at all. `gmx dot program` prints th
 programme pipeline as Graphviz:
 
 ```bash
-gmx dot program | grep -c venc
+gmx dot program | grep venc
 ```
 
-On an idle core with `on-demand`, the encoder is there as an element but at NULL
-and not linked to the tee. The tests assert exactly that, by reading the
-element's state rather than a flag.
+On an idle core with `on-demand` the only element that matches is `venc-tee`:
+the encoder, its queue and its parser have not been made yet, so the encoder's
+plugin is not loaded either. The encoded tees are there, because
+outputs link to them, and the rest of the chain is made by the first consumer
+and kept after that. The tests assert that no encoder element exists, rather
+than reading a flag.
 
 ## Turning it off
 
