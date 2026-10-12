@@ -99,7 +99,7 @@ fn a_copy_over_udp_is_the_input_s_own_frames_and_decodes() {
     let _ = encoder.set_state(gst::State::Null);
     assert_eq!(got.len() % 188, 0, "whole transport packets");
     let (pictures, sound) = decode(&got, "udp");
-    assert!(pictures >= 80, "decoded {pictures} pictures from about 4 s at 30 fps");
+    assert!(pictures >= 80, "decoded {pictures} pictures and {sound} sound frames from about 4 s at 30 fps, {} bytes", got.len());
     assert!(sound >= 80, "and {sound} sound frames");
     let inputs = said(&heard, "direct.input");
     let live = inputs.iter().find(|v| v["state"] == "live").expect("direct.input said live");

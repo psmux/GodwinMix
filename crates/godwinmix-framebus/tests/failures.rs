@@ -25,9 +25,14 @@ fn a_second_owner_of_a_live_name_is_refused_and_a_dead_ones_socket_is_replaced()
     assert_eq!(e.code(), "name-taken", "{e}");
     assert!(e.to_string().contains("Subscriber"), "{e}");
     drop(first);
-    // A socket file nobody answers on, as a killed owner leaves behind.
+    // A socket file nobody answers on, as a killed owner leaves behind. Not
+    // a listener: the next test in this binary spawns children, and a child
+    // forked while the listener was open held it until its exec and
+    // accepted the claim's connect, so the dead name read as taken (twice
+    // on a loaded Linux runner). A stream connect to a datagram socket is
+    // refused whoever holds it.
     let path = reg.path(&name()).unwrap();
-    drop(std::os::unix::net::UnixListener::bind(&path).unwrap());
+    drop(std::os::unix::net::UnixDatagram::bind(&path).unwrap());
     assert!(path.exists());
     let _second = godwinmix_framebus::Publisher::create(&reg, &name(), small(), opts).unwrap();
     assert_eq!(reg.list(), vec![name()]);

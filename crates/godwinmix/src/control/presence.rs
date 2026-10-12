@@ -24,6 +24,9 @@ use seat::Seat;
 pub struct Presence {
     seats: Mutex<BTreeMap<u64, Seat>>,
     next: AtomicU64,
+    /// Moves on every change, announced or not, so a connection can tell
+    /// whether the list it sent is still the list.
+    version: AtomicU64,
     changed: broadcast::Sender<()>,
 }
 
@@ -32,6 +35,7 @@ impl Presence {
         Arc::new(Presence {
             seats: Mutex::new(BTreeMap::new()),
             next: AtomicU64::new(1),
+            version: AtomicU64::new(0),
             changed: broadcast::channel(16).0,
         })
     }
@@ -83,7 +87,15 @@ impl Presence {
         self.changed.subscribe()
     }
 
+    /// Which change the list is at. A connection reads it before it builds
+    /// the list it sends, and again once it holds a receiver: a change in
+    /// between was announced to nobody and the list it sent is stale.
+    pub fn version(&self) -> u64 {
+        self.version.load(Ordering::Acquire)
+    }
+
     fn announce(&self) {
+        self.version.fetch_add(1, Ordering::AcqRel);
         if self.changed.receiver_count() > 0 {
             let _ = self.changed.send(());
         }

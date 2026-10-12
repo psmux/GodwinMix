@@ -63,12 +63,7 @@ fn input(st: &Arc<Station>, v: &Value) {
     if !known(st, &id) {
         return;
     }
-    let shape = |x: &Value| (x["state"].clone(), x["video"].clone(), x["audio"].clone(), x["relay"].clone(), x["stream"].clone());
-    let moved = with_seen(st, &id, |s| {
-        let moved = s.input.as_ref().map(shape) != Some(shape(v));
-        s.input = Some(v.clone());
-        moved
-    });
+    let moved = with_seen(st, &id, |s| s.take_input(v));
     if moved && replans(st, &id) {
         st.direct.hand_over();
     }

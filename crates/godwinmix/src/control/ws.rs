@@ -103,6 +103,8 @@ struct Connection {
     /// `ext.telemetry` and `ext.agent`. Holding this is what keeps the
     /// telemetry probes measuring. See `control/push.rs`.
     push: crate::control::push::Push,
+    /// The presence version the last list sent was built at.
+    presence_told: u64,
 }
 
 pub async fn serve_rpc(socket: WebSocket, ctx: Ctx, token: Token, who: Who) {
@@ -135,6 +137,7 @@ pub async fn serve_rpc(socket: WebSocket, ctx: Ctx, token: Token, who: Who) {
         wants_mosaic: None,
         wants_preview: None,
         push: crate::control::push::Push::none(),
+        presence_told: 0,
     };
     // Holding this is what keeps the mosaic up, and dropping it is what takes
     // it down again after the linger. A client that never asks for
@@ -187,6 +190,14 @@ pub async fn serve_rpc(socket: WebSocket, ctx: Ctx, token: Token, who: Who) {
                     }
                     if conn.wants_presence() != presence.is_some() {
                         presence = conn.wants_presence().then(|| conn.ctx.app.presence.subscribe());
+                        // The list the subscribe answer carried was built
+                        // before this receiver existed. A seat taken in
+                        // between was announced to nobody, and a phone and a
+                        // laptop opened together never saw each other.
+                        let stale = conn.ctx.app.presence.version() != conn.presence_told;
+                        if presence.is_some() && stale && (conn.send_presence().await.is_err() || conn.flush().await.is_err()) {
+                            break 'client "a presence list could not be written";
+                        }
                     }
                 }
                 Some(Ok(_)) => {}

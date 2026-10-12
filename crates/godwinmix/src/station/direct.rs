@@ -25,6 +25,7 @@ mod intake;
 mod mixed;
 pub mod outputs;
 mod plan;
+mod rate;
 mod seen;
 mod table;
 #[cfg(test)]

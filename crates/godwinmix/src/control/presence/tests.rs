@@ -32,3 +32,20 @@ fn a_seat_is_given_back_when_the_connection_goes() {
     assert!(presence.list(None).clients.is_empty(), "the seat outlived its connection");
     assert!(!presence.set("open.s1", None, None), "nobody is there to describe");
 }
+
+/// A connection compares this before and after it holds a receiver, so it
+/// has to move with nobody subscribed.
+#[test]
+fn the_version_moves_on_every_change_even_with_nobody_told() {
+    let presence = Presence::new();
+    let token = Token::open();
+    let before = presence.version();
+    let here = presence.join("open.s1", &token, None, None);
+    let joined = presence.version();
+    assert!(joined > before, "a seat taken with no receiver left the version where it was");
+    assert!(presence.set("open.s1", Some("wide".into()), None));
+    let set = presence.version();
+    assert!(set > joined, "a change of scene left the version where it was");
+    drop(here);
+    assert!(presence.version() > set, "a seat given back left the version where it was");
+}

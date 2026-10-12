@@ -58,6 +58,7 @@ impl Connection {
         if !self.wants_presence() {
             return Ok(());
         }
+        self.presence_told = self.ctx.app.presence.version();
         let list = self.ctx.app.presence.list(Some(&self.client_id));
         let mut value = serde_json::to_value(list).map_err(|_| ())?;
         if let Some(map) = value.as_object_mut() {

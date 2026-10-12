@@ -66,11 +66,15 @@ async fn a_restart_for_an_end_of_stream_is_not_a_strike() {
     }
     let strikes = rig.mix.patience.get(&id).map(|p| p.strikes()).unwrap_or(0);
     let attempts = rig.mix.source_attempts.get(&id).copied();
+    // Live again after the last restart, judged over a while rather than at
+    // one instant: with a half second stall limit, a Windows runner with
+    // every core busy read the source stalled at the moment of asking.
+    let live = rig.until(SourceState::Live).await;
     let state = rig.state();
     rig.mix.shutdown();
     assert_eq!(strikes, 0, "an end of stream was counted as a stall");
     assert_eq!(attempts, Some(0), "a looping clip's restart delay was not cleared by its next frame");
-    assert_eq!(state, Some(SourceState::Live));
+    assert!(live, "the source did not come back after its restart: {state:?}");
 }
 
 /// The shape of 2026-10-05: a source that stalls, is restarted, delivers for

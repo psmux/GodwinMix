@@ -65,7 +65,14 @@ impl Person {
         let until = std::time::Instant::now() + Duration::from_secs(15).mul_f64(slack);
         let mut last = Vec::new();
         while std::time::Instant::now() < until {
-            let Some(frame) = self.read().await else { break };
+            // `read` gives up after five quiet seconds, and this wait is
+            // longer: a quiet socket is not the end of it, a closed one is.
+            let left = until.saturating_duration_since(std::time::Instant::now());
+            let frame = match tokio::time::timeout(left, self.socket.next()).await {
+                Ok(Some(Ok(Message::Text(text)))) => serde_json::from_str::<Value>(&text).unwrap_or_default(),
+                Ok(Some(Ok(_))) | Err(_) => continue,
+                Ok(_) => break,
+            };
             if frame["method"] != "event/presence.changed" {
                 continue;
             }
