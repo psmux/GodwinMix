@@ -22,8 +22,10 @@ env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
 
+# One at a time per branch. A single group for every branch let a run asked for
+# on one branch replace another branch's run that was still waiting its turn.
 concurrency:
-  group: nightly
+  group: nightly-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
