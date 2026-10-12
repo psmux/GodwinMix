@@ -100,6 +100,13 @@ the work of that round: the plugin install, or the mosaic coming up for the
 MJPEG stream. A stall that starts partway through and never goes away is the
 interesting one, because something is now in the way of every frame.
 
+**A stream that did not answer.** When the MJPEG or PCM client gives up, it
+first saves the programme's graph and queue levels while its connection is
+still open, as `streams-round-N.dot` and `streams-round-N-queues.json` in the
+working directory, for the first three that fail. In the dot file a pad task
+written `[t]` is paused and `[T]` is running. A paused task on `amix` is how
+the monitoring branch that stopped the programme's sound was found.
+
 **Memory.** Run it again with `--minutes 60` and look at the `samples` array in
 the JSON. A leak is a straight line. A core that settles at a new level and
 stays there for half an hour is a pool that grew once, which is the sort of
