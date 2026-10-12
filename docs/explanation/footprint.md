@@ -100,10 +100,16 @@ decodes in hardware the decode happens somewhere else: macOS runs
 VideoToolbox in its own XPC process, so the mixer's own CPU barely moves and
 the number describes the mixer rather than the machine. `--decode software`
 pins the software decoder, which is what a Pi or a laptop without one pays.
-What is left once a clip's queues are short and its decoder has two threads is
-mostly the second of frames the compositor holds for every input, about 40 MB
-at 720p, and the decoder's own reference frames. See
+A clip is paced to the programme's clock, so it holds a few frames on its way
+to the compositor rather than a second of them, and its decoder runs two
+threads. What is left is mostly the decoder's own reference frames and, the
+first time a clip is added, the decoder's libraries. See
 [sources](../reference/sources.md#what-a-clip-holds-in-memory).
+
+**Added per live source.** The same measurement with `test://smpte`, a live
+720p30 picture with no decoder. It is not budgeted; it is the floor under
+every source, and the difference between it and the file row is what decoding
+a clip costs.
 
 **Multiview.** The mosaic the operator watches, and the only source of frames
 for the snapshot routes. It does not exist until a client subscribes, and it is
