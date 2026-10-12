@@ -9,9 +9,10 @@
 
 pub(crate) mod rules;
 mod store;
+mod to_output;
 
 use godwinmix_protocol::destination::{
-    AddDestinationRequest, RemoveDestinationRequest, SetDestinationRequest,
+    AddDestinationRequest, DestinationToOutputRequest, RemoveDestinationRequest, SetDestinationRequest,
 };
 use godwinmix_protocol::error::RpcError;
 use godwinmix_protocol::method::{any_object, schema_of, MethodDef, Registry};
@@ -68,6 +69,20 @@ pub fn register(reg: &mut Registry<Call>) {
         .params(schema_of::<RemoveDestinationRequest>)
         .result(any_object)
         .destructive(),
+    );
+
+    reg.register(
+        MethodDef::new(
+            "channel.destination.to_output",
+            Scope::Admin,
+            "Send the programme where one of a channel's destinations points, with its key and              format, as a new output. The key is read inside the core and never sent back.              `remove` (on unless false) takes the destination off the channel.",
+            handler(|call: Call, params| async move {
+                let req: DestinationToOutputRequest = call.params(&params)?;
+                to_output::run(call, req).await
+            }),
+        )
+        .params(schema_of::<DestinationToOutputRequest>)
+        .result(any_object),
     );
 }
 

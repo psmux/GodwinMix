@@ -154,7 +154,7 @@ async fn find(call: &Call, id: &str) -> Result<OutputStatus, RpcError> {
     })
 }
 
-async fn add(call: Call, params: Value) -> Result<Value, RpcError> {
+pub(crate) async fn add(call: Call, params: Value) -> Result<Value, RpcError> {
     let req: AddOutputRequest = call.params(&params)?;
     let cfg: godwinmix_core::config::OutputConfig = serde_json::from_value(req.to_config_json())
         .map_err(|e| RpcError::invalid_params(format!("that is not a usable output: {e}")))?;

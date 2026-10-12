@@ -77,3 +77,23 @@ pub struct RemoveDestinationRequest {
     /// The destination's id within the channel.
     pub destination: String,
 }
+
+/// `channel.destination.to_output`. Send the programme where a channel's
+/// destination points, with its key and format, without the key ever
+/// leaving the core.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct DestinationToOutputRequest {
+    /// The channel.
+    pub id: String,
+    /// The destination's id within the channel.
+    pub destination: String,
+    /// Whether to take the destination off the channel once the output is
+    /// added, so an encoder sent to the channel later cannot use the same
+    /// key at the same time. On unless said otherwise.
+    #[serde(default = "yes")]
+    pub remove: bool,
+}
+
+fn yes() -> bool {
+    true
+}

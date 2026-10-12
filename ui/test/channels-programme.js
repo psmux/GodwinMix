@@ -36,6 +36,8 @@ export async function programmeTests(test, eq, ok) {
     eq(freeOutputId(client, "youtube"), "youtube-2");
     eq(programmeParams(client, platform("youtube"), "", " abcd \n").params, { id: "youtube-2", uri: "rtmp://a.rtmp.youtube.com/live2/abcd", policy: "cdn" });
     eq(programmeParams(client, platform("youtube"), "", "").error, "Paste the stream key.");
+    eq(programmeParams(client, platform("custom"), "rtmp://h/live", "k", { preset: "youtube-720p30" }).params.rendition, { preset: "youtube-720p30" }, "the format picked goes with it");
+    eq(programmeParams(client, platform("custom"), "rtmp://h/live", "k", { preset: "copy" }).params.rendition, undefined, "same as the source is the programme encoder");
     ok(programmeParams(client, platform("custom"), "127.0.0.1:1935/live", "k").error.includes("rtmp://"), "a server with no scheme is turned back here");
   });
 
@@ -64,9 +66,9 @@ export async function programmeTests(test, eq, ok) {
   });
   closeAll();
 
-  // A tile already saved on the channel: the note under the strip, and the
-  // key once more, because the channel never hands one back.
-  await stub.call("channel.destination.add", { id: "live", platform: "facebook", server: "rtmps://live-api-s.facebook.com:443/rtmp", key: "fb-key", enabled: true });
+  // A tile already saved on the channel: the note under the strip, and one
+  // press. The core reads the sealed key itself, so nobody pastes it again.
+  await stub.call("channel.destination.add", { id: "live", platform: "facebook", server: "rtmps://live-api-s.facebook.com:443/rtmp", key: "fb-key", enabled: true, rendition: { preset: "facebook-720p30" } });
   await wait();
   const note = () => card().querySelector(".chn-idle");
   test("a channel with a platform waiting and no encoder says so under the tiles", () => {
@@ -76,17 +78,16 @@ export async function programmeTests(test, eq, ok) {
   });
   button(note(), "Send the programme to Facebook instead").click();
   await wait();
-  test("moving a saved platform asks for the key again and says why", () => {
-    ok(top().textContent.includes("cannot hand this one back"), top().textContent);
-    ok(top().querySelector("input[type=password]"), "no key box");
+  test("moving a saved platform does not ask for the key again", () => {
+    ok(top().textContent.includes("stream key and format you already gave it"), top().textContent);
+    ok(!top().querySelector("input[type=password]"), "a key box is back");
   });
-  paste(top().querySelector("input[type=password]"), "fb-key");
   button(top(), "Send the programme").click();
   await wait(60);
-  test("and then adds the output and takes the platform off the channel", () => {
-    const [add, remove] = stub.calls.slice(-2);
-    eq(add, { method: "output.add", params: { id: "facebook", uri: "rtmps://live-api-s.facebook.com:443/rtmp/fb-key", policy: "cdn" } });
-    eq(remove, { method: "channel.destination.remove", params: { id: "live", destination: "facebook" } });
+  test("and then moves it to Outputs in the core, format and all", () => {
+    const move = stub.calls.find((c) => c.method === "channel.destination.to_output");
+    eq(move, { method: "channel.destination.to_output", params: { id: "live", destination: "facebook", remove: true } });
+    eq(stub.state.outputs.at(-1).rendition, { preset: "facebook-720p30" });
     ok(!note() || note().hidden, "the note stayed with nothing left waiting");
   });
   closeAll();

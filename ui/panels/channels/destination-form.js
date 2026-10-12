@@ -85,7 +85,8 @@ function addForm(view, channel, p) {
     // The same server and key, under Outputs, and nothing added to the channel.
     instead.onclick = async () => {
       instead.disabled = true;
-      const sent = await sendProgramme(view.client, p, p.fixed ? p.server : server.value(), key && key.value());
+      await format.ready;
+      const sent = await sendProgramme(view.client, p, p.fixed ? p.server : server.value(), key && key.value(), format.value());
       if (sent) m.close();
       else instead.disabled = false;
     };

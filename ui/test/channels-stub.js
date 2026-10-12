@@ -189,6 +189,18 @@ const METHODS = {
     this.changed(c.id);
     return c;
   },
+  // A saved destination sent as the programme: the core reads the key, adds
+  // the output with the destination's format, and takes it off the channel.
+  "channel.destination.to_output"(p) {
+    const c = this.channel(p.id);
+    const d = c.destinations.find((x) => x.id === p.destination);
+    let id = d.id;
+    for (let n = 2; this.state.outputs.some((o) => o.id === id); n++) id = `${d.id}-${n}`;
+    const o = { id, uri_host: d.uri_host, has_key: d.has_key, state: "connecting", reconnects: 0, queue_secs: 0, ...(d.rendition ? { rendition: d.rendition } : {}) };
+    this.state.outputs.push(o);
+    if (p.remove !== false) this["channel.destination.remove"]({ id: p.id, destination: p.destination });
+    return o;
+  },
   // The programme sent to a platform instead, from the note on a channel
   // with no encoder. The core answers with the output, without its address.
   "output.add"(p) {

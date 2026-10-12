@@ -420,6 +420,7 @@ fn rehearsal_refusal(app: &AppState, method: &str) -> Option<RpcError> {
             | "output.start"
             | "channel.destination.add"
             | "channel.destination.set"
+            | "channel.destination.to_output"
     );
     if !app.rehearsal || !sends {
         return None;

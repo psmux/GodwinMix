@@ -86,7 +86,7 @@ export function openSettingsDialog(client, opts = {}) {
     )
   );
   advanced.appendChild(
-    field("Picture rate", number(s.multiviewFps, 1, 30, (v) => setSetting("multiviewFps", v)), "Frames a second for live tiles. Lower costs the mixer less.")
+    field("Picture rate", number(s.multiviewFps, 1, 30, (v) => setSetting("multiviewFps", v)), "Frames a second for Preview, Programme and the live tiles. 25 plays smoothly; lower costs the mixer less.")
   );
   advanced.appendChild(
     field("Snapshot refresh", number(s.snapshotSecs, 0, 600, (v) => setSetting("snapshotSecs", v)), "Seconds between snapshot refreshes. 0 means only when you click a tile.")

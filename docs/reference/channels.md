@@ -650,6 +650,17 @@ is sent with `scope: "channel:<id>"` whenever the channel's table changes.
 destination is forgotten; the publisher and the other destinations are not
 touched. It is destructive, so `dry_run: true` answers what it would stop.
 
+### `channel.destination.to_output`
+
+`id`, `destination` and `remove` (true unless false). Sends the programme
+where that destination points: the core adds an output with the
+destination's server, its sealed key and its format, so nobody pastes the key
+again. A format of `{"preset": "copy"}` gives the output the programme
+encoder. With `remove` the destination comes off the channel once the output
+is added. Answers the new output, under an id not taken yet (`custom`, then
+`custom-2`). The Channels panel calls it from "Send the programme to ...
+instead" under a channel no encoder is sending to.
+
 ### The destination record
 
 | Field | |

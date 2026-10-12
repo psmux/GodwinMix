@@ -24,10 +24,17 @@ const DEFAULTS = {
   faders: true,
   lanes: true,
   tileWidth: 168,
-  multiviewFps: 8,
+  // Eight a second read as a slide show in the monitors, and a tester said
+  // so. A machine with eight threads or more takes 25 without noticing.
+  multiviewFps: monitorRate(),
   confirmRemove: true,
   confirmTake: true,
 };
+
+function monitorRate() {
+  const threads = (typeof navigator !== "undefined" && navigator.hardwareConcurrency) || 4;
+  return threads >= 8 ? 25 : 15;
+}
 
 let state = null;
 const listeners = new Set();
@@ -46,12 +53,15 @@ export function settings() {
   // set since `studioChosen` existed is kept; the rest start in Studio mode.
   if (!saved || typeof saved !== "object") saved = {};
   if (!saved.studioChosen) delete saved.producer;
+  // The same for the picture rate, which was saved at the old default of 8.
+  if (!saved.fpsChosen) delete saved.multiviewFps;
   state = Object.assign({}, DEFAULTS, saved);
   return state;
 }
 
 export function setSetting(key, value) {
   if (key === "producer") settings().studioChosen = true;
+  if (key === "multiviewFps") settings().fpsChosen = true;
   settings()[key] = value;
   try {
     localStorage.setItem(KEY, JSON.stringify(state));

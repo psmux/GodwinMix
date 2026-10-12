@@ -10,8 +10,10 @@
 // So while a channel has destinations and no encoder, the strip says what a
 // channel is for and offers the other thing: the same platform as an output.
 // From the add form that is one press, because the key is in the form. From
-// a tile already saved it is the key pasted once more, because the channel
-// keeps its keys sealed and never hands one back.
+// a tile already saved it is one press too: `channel.destination.to_output`
+// reads the sealed key inside the core. Asking for the key again, and
+// dropping the format picked for it, was reported as a bug (the output ran
+// at the programme's 6 Mb/s, not the 3 Mb/s chosen).
 
 import { el } from "../../shell/dom.js";
 import { modal } from "../../shell/modal.js";
@@ -21,7 +23,7 @@ import { schemeError } from "../outputs/destination.js";
 import { followStart } from "../outputs/failure.js";
 import { isLive } from "./model.js";
 import { write } from "./keyed.js";
-import { field, keyField, toggle } from "./fields.js";
+import { toggle } from "./fields.js";
 
 /**
  * The sentence a form or a strip shows while nothing is sending to the
@@ -42,8 +44,8 @@ export function freeOutputId(client, base) {
   return id;
 }
 
-/** The `output.add` params for a platform, a server and a key, or an error. */
-export function programmeParams(client, p, server, key) {
+/** The `output.add` params for a platform, a server, a key and a format, or an error. */
+export function programmeParams(client, p, server, key, rendition) {
   const base = String(server || p.server || "").trim();
   const secret = String(key || "").trim();
   if (!base) return { error: "Fill in the server address." };
@@ -51,12 +53,15 @@ export function programmeParams(client, p, server, key) {
   const uri = p.key ? joinKey(base, secret) : base;
   const wrong = schemeError(p, uri);
   if (wrong) return { error: wrong };
-  return { params: { id: freeOutputId(client, p.id), uri, policy: p.policy || "own" } };
+  const params = { id: freeOutputId(client, p.id), uri, policy: p.policy || "own" };
+  // Same as the source means nothing here: the programme has its encoder.
+  if (rendition && rendition.preset !== "copy") params.rendition = rendition;
+  return { params };
 }
 
 /** Add the platform under Outputs. True when the core took it. */
-export async function sendProgramme(client, p, server, key) {
-  const asked = programmeParams(client, p, server, key);
+export async function sendProgramme(client, p, server, key, rendition) {
+  const asked = programmeParams(client, p, server, key, rendition);
   if (asked.error) {
     toast({ kind: "warning", text: asked.error });
     return false;
@@ -67,10 +72,13 @@ export async function sendProgramme(client, p, server, key) {
     errorToast(e, `Send the programme to ${p.title}`);
     return false;
   }
-  const id = asked.params.id;
+  announce(client, p, asked.params.id);
+  return true;
+}
+
+function announce(client, p, id) {
   toast({ text: `Connecting the programme to ${p.title}. It is under Outputs as ${id}, which says when it is live, or why not.` });
   followStart(client, id, (text) => toast({ kind: "info", text }));
-  return true;
 }
 
 /** The note under a channel's tiles, shown while it has places to go and no encoder. */
@@ -97,39 +105,35 @@ export function waitingNote(view) {
   return { node, update };
 }
 
-/** From a saved tile: the key again, then the output, then the tile off the channel. */
+/** From a saved tile: its server, key and format, under Outputs, in one press. */
 export function moveForm(view, channel, dest) {
   const p = platform(dest.platform) || platform("custom");
   const label = dest.label || p.title;
-  const server = p.fixed ? null : field("Server", { placeholder: dest.uri_host || p.example || "rtmp://your.server/live", mono: true });
-  const key = p.key ? keyField(p.keyOptional ? "Stream key, if it has one" : "Stream key", "Paste the stream key") : null;
   const drop = toggle(`Take ${label} off ${channel.name}`, true, "So an encoder sent to the channel later cannot use the same key at the same time.");
   const go = el("button.btn.primary", { text: "Send the programme" });
+  const where = dest.uri_host ? ` at ${dest.uri_host}` : "";
   const m = modal({
     title: `Send the programme to ${label}`,
     body: el("div.chn-dform", {}, [
-      el("p.chn-dim", { text: `This adds ${p.title} under Outputs, which sends what is on programme. The channel keeps its keys sealed and cannot hand this one back, so paste it once more.`, style: { marginTop: "0" } }),
-      server && server.node,
-      key && key.node,
+      el("p.chn-dim", { text: `This adds ${label}${where} under Outputs, which sends what is on programme, with the stream key and format you already gave it.`, style: { marginTop: "0" } }),
       drop.node,
     ]),
     footer: [el("button.btn", { text: "Cancel", onclick: () => m.close() }), go],
   });
   go.onclick = async () => {
     go.disabled = true;
-    const sent = await sendProgramme(view.client, p, server ? server.value() : p.server, key && key.value());
-    if (!sent) {
+    let added;
+    try {
+      added = await view.client.call("channel.destination.to_output", { id: channel.id, destination: dest.id, remove: drop.value() });
+    } catch (e) {
+      errorToast(e, `Send the programme to ${label}`);
       go.disabled = false;
       return;
     }
     m.close();
-    if (!drop.value()) return;
-    try {
-      view.accept(await view.client.call("channel.destination.remove", { id: channel.id, destination: dest.id }));
-    } catch (e) {
-      errorToast(e, `Take ${label} off ${channel.name}`);
-    }
+    announce(view.client, p, (added && added.id) || dest.id);
+    if (drop.value()) view.client.call("channel.get", { id: channel.id }).then((c) => view.accept(c), () => {});
   };
-  (key || server)?.focus();
+  go.focus();
   return m;
 }
