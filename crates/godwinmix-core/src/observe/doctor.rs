@@ -14,6 +14,8 @@ use crate::config::Config;
 use serde::Serialize;
 use std::path::Path;
 
+mod codecs;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Verdict {
@@ -99,14 +101,13 @@ const VIDEO_ENCODERS: &[&str] = &[
     "x264enc",
 ];
 
-const AUDIO_ENCODERS: &[&str] = &["fdkaacenc", "avenc_aac", "voaacenc"];
 
 /// Run every check. `config_path` is the config the operator would start with.
 pub fn run(config_path: &Path) -> Vec<Check> {
     let mut checks = vec![gstreamer_version()];
     checks.extend(elements());
     checks.push(encoder("video encoder", VIDEO_ENCODERS));
-    checks.push(encoder("audio encoder", AUDIO_ENCODERS));
+    checks.extend(codecs::checks());
 
     // Loaded once. `Config::load` logs what it found, and loading twice put
     // every one of those lines on the screen twice.

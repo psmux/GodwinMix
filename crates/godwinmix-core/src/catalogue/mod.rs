@@ -25,6 +25,7 @@
 
 pub mod apply;
 pub mod check;
+pub mod libav;
 pub mod model;
 pub mod preload;
 pub mod select;
@@ -581,3 +582,5 @@ pub fn log_selection(sel: &Selection) {
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod priming_tests;

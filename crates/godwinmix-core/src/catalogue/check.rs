@@ -177,8 +177,8 @@ pub fn test_entry(cat: &Catalogue, id: &str, seconds: f64, width: i32, height: i
                 accel: e.accel.clone(),
                 encoder,
                 parser: e.parser.clone(),
-                decoder: e.decoder.clone(),
-                download: e.download.clone(),
+                decoder: e.decoder.clone().or_else(|| software_decoder(cat, &e.codec)),
+                download: e.decoder.as_ref().and(e.download.clone()),
                 properties: e.properties.clone(),
                 keyframe: e.keyframe.clone(),
             },
@@ -193,7 +193,8 @@ pub fn test_entry(cat: &Catalogue, id: &str, seconds: f64, width: i32, height: i
         let Some(encoder) = e.encoder.clone() else {
             bail!("{id} is a decode only entry: there is nothing to encode with");
         };
-        return audio_round_trip(id, &e.codec, &encoder, e.parser.as_deref(), e.decoder.as_deref(), &e.properties, seconds);
+        let decoder = e.decoder.clone().or_else(|| software_decoder(cat, &e.codec));
+        return audio_round_trip(id, &e.codec, &encoder, e.parser.as_deref(), decoder.as_deref(), &e.properties, seconds);
     }
     if cat.graphics_entry(id).is_some() {
         bail!("{id} is a graphics entry. Force it with [hardware] graphics = \"{id}\" and watch the programme; there is no encode to test.");
@@ -205,6 +206,13 @@ pub fn test_entry(cat: &Catalogue, id: &str, seconds: f64, width: i32, height: i
         .chain(cat.audio.iter().map(|e| e.id()))
         .collect();
     bail!("no catalogue entry called {id:?}. Known entries: {}", known.join(", "))
+}
+
+/// The decoder an encode only entry is checked with: the best software
+/// decoder installed for its codec, which is what would decode it here.
+fn software_decoder(cat: &Catalogue, codec: &str) -> Option<String> {
+    let ladders = super::libav::ladders(cat, Role::Decode, &super::select::GstRegistry);
+    ladders.get(codec)?.iter().find(|(_, accel)| accel == "software").map(|(e, _)| e.clone())
 }
 
 struct Spec {

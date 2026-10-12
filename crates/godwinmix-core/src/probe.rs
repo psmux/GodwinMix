@@ -182,7 +182,12 @@ impl Backends {
     /// built on it such as `fallbacksrc`, converges on the same choice we made
     /// here. Without this the auto-plugger picks by its own ranking and you end
     /// up with software decode on a machine that has a perfectly good GPU.
+    ///
+    /// Every other codec's software decoder is put ahead of gst-libav's first,
+    /// where the catalogue ranks it so (`catalogue::libav`), so a source in
+    /// HEVC or AC-3 is opened without FFmpeg too when something else can.
     pub fn apply_decoder_ranks(&self) {
+        catalogue::libav::prefer_over_libav(&catalogue::global());
         if let Some(f) = gst::ElementFactory::find(self.video_decode.element) {
             f.set_rank(gst::Rank::PRIMARY + 256);
             debug!(element = self.video_decode.element, "raised decoder rank for autoplugging");
