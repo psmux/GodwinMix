@@ -23,17 +23,22 @@ pub(super) fn count_pad(pad: &gst::Pad) -> Arc<std::sync::atomic::AtomicU64> {
     frames
 }
 
-/// Count the buffers that reach a slot's queue with no segment in front of
-/// them, which is what the compositor turns into an abort. Installed ahead of
-/// the slot's own guard, so it sees what arrived rather than what was mended.
+/// Count the buffers that reach a slot's compositor pad with no segment on
+/// it, which is what `gst_video_aggregator_fill_queues` aborts on.
+///
+/// Counted at the compositor and not as they leave the valve. A frame that
+/// passed the valve just before `Pool::unbind` flushed the slot can reach the
+/// queue after the flush took its segment away; the slot's guard sends the
+/// segment again before that frame goes on (`slot_guard.rs`), so a count at
+/// the valve read 1 on a loaded runner for a frame the compositor placed.
+/// The queue's own thread pushes into the compositor and a flush stops it,
+/// so nothing races a count here.
 fn count_unsegmented(mix: &Mixer) -> Arc<std::sync::atomic::AtomicU64> {
     let bad = Arc::new(std::sync::atomic::AtomicU64::new(0));
     for slot in mix.pool.slots() {
-        let gate = mix.program.by_name(&format!("slot-gate-{}", slot.index)).unwrap();
-        let below = gate.static_pad("src").unwrap().peer().unwrap();
         let seen = bad.clone();
-        gate.static_pad("src").unwrap().add_probe(gst::PadProbeType::BUFFER, move |_, _| {
-            if below.sticky_event::<gst::event::Segment>(0).is_none() {
+        slot.pad().add_probe(gst::PadProbeType::BUFFER, move |pad, _| {
+            if pad.sticky_event::<gst::event::Segment>(0).is_none() {
                 seen.fetch_add(1, Ordering::Relaxed);
             }
             gst::PadProbeReturn::Ok
@@ -110,7 +115,7 @@ async fn a_source_back_on_the_slot_it_left_brings_its_segment_with_it() {
     let unsegmented = bad.load(Ordering::Relaxed);
     let drawn = drawn.load(Ordering::Relaxed);
     mix.shutdown();
-    assert_eq!(unsegmented, 0, "frames left a slot's valve with no segment below it");
+    assert_eq!(unsegmented, 0, "a frame reached the compositor with no segment to place it by");
     assert!(after > before + 10, "the programme stopped: {before} then {after}");
     assert_eq!(showing, Some(id), "the source did not come back on air");
     assert!(drawn > 10, "the slot it came back to had {drawn} frames in a second");
