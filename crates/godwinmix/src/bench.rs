@@ -92,6 +92,12 @@ pub struct BenchArgs {
     #[arg(long, default_value = "auto")]
     pub encode: String,
 
+    /// Which decode path the file-source row uses: `auto` or `software`.
+    /// Pinned to software, a machine with a hardware decoder measures what a
+    /// Pi or a laptop without one would pay for the same clip.
+    #[arg(long, default_value = "auto")]
+    pub decode: String,
+
     /// Where to write the Markdown table. Defaults to
     /// `bench/results/<machine>-<date>.md` under the working directory.
     #[arg(long)]

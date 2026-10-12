@@ -155,7 +155,14 @@ pub struct ProgrammeBranch {
     pub aq: gst::Element,
     pub apad: gst::Pad,
     pub meter: String,
+    /// A clip rather than a live feed: its queues here and on the slot it is
+    /// bound to hold a tenth of a second, not a second. See
+    /// `FINITE_QUEUE_SECS`.
+    pub finite: bool,
 }
+
+/// How much of a finite clip waits in its programme side video queue.
+pub const FINITE_QUEUE_SECS: f64 = 0.1;
 
 /// What the branch needs to know that is not about this source.
 pub struct BranchCtx<'a> {
@@ -175,10 +182,19 @@ impl ProgrammeBranch {
         audio_proxy: &gst::Element,
         gain: f64,
         muted: bool,
+        finite: bool,
     ) -> Result<Self> {
         let vsrc = make("proxysrc", &format!("pgm-vsrc-{id}"))?;
         vsrc.set_property("proxysink", video_proxy);
-        let vq = gstutil::queue_thread(&format!("pgm-vq-{id}"))?;
+        // A clip is not live: it decodes as fast as it is let, so every queue
+        // on its way to the compositor fills to its limit and stays there.
+        // A second of full canvas frames here was 40 MB at 720p, on top of
+        // the second the slot queue and the compositor pad each hold, for a
+        // source that can make the next frame whenever it is asked. A tenth
+        // of a second keeps the thread boundary and leaves the slot queue to
+        // cover a slow frame.
+        let vq_secs = if finite { FINITE_QUEUE_SECS } else { 1.0 };
+        let vq = gstutil::queue_time(&format!("pgm-vq-{id}"), vq_secs, false)?;
         // A flush from the source's pipeline ends here and not at a
         // compositor pad.
         gstutil::stop_flushes_here(&vq)?;
@@ -250,6 +266,7 @@ impl ProgrammeBranch {
             aq,
             apad,
             meter,
+            finite,
         })
     }
 
