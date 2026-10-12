@@ -18,6 +18,9 @@ use std::fmt::Write as _;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, LazyLock};
 
+mod recent;
+use recent::Recent;
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Kind {
     Counter,
@@ -62,6 +65,14 @@ const DEFS: &[(&str, Kind, &str, &[f64])] = &[
          thirty to sixty seconds, in milliseconds. The measure the 34 ms acceptance bar is \
          written against: a single late thread wake up averages out of it, a pipeline that \
          really stopped does not.",
+        &[],
+    ),
+    (
+        "gmx_programme_frame_gap_ms",
+        Kind::Gauge,
+        "Longest wall clock gap between two programme frames in the last thirty to sixty \
+         seconds, in milliseconds. Over two frame periods means a whole frame time passed \
+         with no frame at all.",
         &[],
     ),
     ("gmx_source_buffers_total", Kind::Counter, "Buffers seen from a source.", &[]),
@@ -398,6 +409,7 @@ pub fn attach_programme_probe(tee: &gstreamer::Element) {
     let frames = counter("gmx_programme_frames_total", &[]);
     let intervals = histogram("gmx_programme_frame_interval_ms", &[]);
     let stall = gauge("gmx_programme_frame_stall_ms", &[]);
+    let gap_gauge = gauge("gmx_programme_frame_gap_ms", &[]);
     let base = std::time::Instant::now();
     let last = AtomicU64::new(0);
     let ring: [AtomicU64; FRAME_WINDOW] = std::array::from_fn(|_| AtomicU64::new(0));
@@ -406,10 +418,10 @@ pub fn attach_programme_probe(tee: &gstreamer::Element) {
     // against one from before it.
     let filled = AtomicU64::new(0);
     let generation = AtomicU64::new(WINDOW_GENERATION.load(Ordering::Relaxed));
-    // The gauge's own two buckets. See `GAUGE_SPAN`.
-    let bucket_opened = AtomicU64::new(0);
-    let this_bucket = AtomicU64::new(0);
-    let last_bucket = AtomicU64::new(0);
+    // Both gauges age, so each answers for the last thirty to sixty seconds
+    // rather than for the life of the process. See `recent::SPAN_NS`.
+    let recent_window = Recent::default();
+    let recent_gap = Recent::default();
     pad.add_probe(gstreamer::PadProbeType::BUFFER, move |_, _| {
         frames.inc();
         let now = base.elapsed().as_nanos() as u64;
@@ -418,6 +430,7 @@ pub fn attach_programme_probe(tee: &gstreamer::Element) {
             let gap = now - prev;
             intervals.observe(gap as f64 / 1_000_000.0);
             LONGEST_GAP_NS.fetch_max(gap, Ordering::Relaxed);
+            gap_gauge.set(recent_gap.observe(now, gap) as f64 / 1_000_000.0);
         }
         let current = WINDOW_GENERATION.load(Ordering::Relaxed);
         if generation.swap(current, Ordering::Relaxed) != current {
@@ -428,39 +441,16 @@ pub fn attach_programme_probe(tee: &gstreamer::Element) {
         if n >= FRAME_WINDOW as u64 {
             let per_frame = now.saturating_sub(oldest) / FRAME_WINDOW as u64;
             LONGEST_WINDOW_NS.fetch_max(per_frame, Ordering::Relaxed);
-            // The gauge ages. Two buckets, rolled over every `GAUGE_SPAN`, and
-            // the gauge shows the worse of the one being filled and the one
-            // before it, so it always answers for at least `GAUGE_SPAN` of
-            // history and never for more than twice that.
-            if now.saturating_sub(bucket_opened.load(Ordering::Relaxed)) >= GAUGE_SPAN_NS {
-                last_bucket.store(this_bucket.swap(0, Ordering::Relaxed), Ordering::Relaxed);
-                bucket_opened.store(now, Ordering::Relaxed);
-            }
-            let recent = this_bucket
-                .fetch_max(per_frame, Ordering::Relaxed)
-                .max(per_frame)
-                .max(last_bucket.load(Ordering::Relaxed));
-            stall.set(recent as f64 / 1_000_000.0);
+            stall.set(recent_window.observe(now, per_frame) as f64 / 1_000_000.0);
         }
         gstreamer::PadProbeReturn::Ok
     });
 }
 
-/// How long the published gauge looks back.
-///
-/// The gauge answers "has the programme stalled lately", not "did it ever",
-/// and the difference matters to everybody who reads it. A number that only
-/// ever goes up is poisoned for the life of the process by one bad moment
-/// during startup: an alert stays lit after the cause is gone, and a soak run
-/// cannot say which of its rounds was the bad one. Thirty seconds, in two
-/// buckets, so the answer covers between thirty and sixty seconds of history
-/// and a scrape at any ordinary interval cannot miss a spike.
-///
-/// The worst since the process started is not lost. The histogram keeps the
-/// whole distribution, `longest_frame_gap` keeps the single worst gap, and
-/// `worst_frame_stall` keeps the worst window since the last reset, which is
-/// what the tests assert on.
-const GAUGE_SPAN_NS: u64 = 30_000_000_000;
+// The worst since the process started is not lost to the gauges' ageing. The
+// histogram keeps the whole distribution, `longest_frame_gap` keeps the single
+// worst gap, and `worst_frame_stall` keeps the worst window since the last
+// reset, which is what the tests assert on.
 
 /// How many consecutive frames the stall measure averages over.
 ///
@@ -534,6 +524,7 @@ pub fn reset_longest_frame_gap() {
     LONGEST_WINDOW_NS.store(0, Ordering::Relaxed);
     WINDOW_GENERATION.fetch_add(1, Ordering::Relaxed);
     gauge("gmx_programme_frame_stall_ms", &[]).set(0.0);
+    gauge("gmx_programme_frame_gap_ms", &[]).set(0.0);
 }
 
 /// Record a control call. The api agent's router gets this through
@@ -847,5 +838,54 @@ mod tests {
             "the probe should have counted ten frames"
         );
         assert!(histogram("gmx_programme_frame_interval_ms", &[]).count() >= 9);
+    }
+
+    /// The case the gap gauge exists for: a streaming thread held for 200 ms,
+    /// the way a hook that blocked the pipeline would hold it, has to read
+    /// over three frame periods, which is the bar the soak judges it by.
+    #[test]
+    fn a_streaming_thread_held_for_two_hundred_milliseconds_reads_over_three_frame_periods() {
+        use gstreamer::prelude::*;
+        gstreamer::init().expect("gstreamer");
+        let pipeline = gstreamer::Pipeline::with_name("metrics-wedge-test");
+        let src = gstreamer::ElementFactory::make("videotestsrc")
+            .property("is-live", true)
+            .property("num-buffers", 45i32)
+            .property_from_str("pattern", "black")
+            .build()
+            .expect("videotestsrc");
+        let caps = gstreamer::ElementFactory::make("capsfilter")
+            .property("caps", gstreamer::Caps::builder("video/x-raw").field("framerate", gstreamer::Fraction::new(30, 1)).build())
+            .build()
+            .expect("capsfilter");
+        let tee = gstreamer::ElementFactory::make("tee").build().expect("tee");
+        let sink = gstreamer::ElementFactory::make("fakesink").build().expect("fakesink");
+        pipeline.add_many([&src, &caps, &tee, &sink]).unwrap();
+        gstreamer::Element::link_many([&src, &caps, &tee, &sink]).unwrap();
+        let seen = AtomicU64::new(0);
+        src.static_pad("src").unwrap().add_probe(gstreamer::PadProbeType::BUFFER, move |_, _| {
+            if seen.fetch_add(1, Ordering::Relaxed) == 20 {
+                std::thread::sleep(std::time::Duration::from_millis(200));
+            }
+            gstreamer::PadProbeReturn::Ok
+        });
+
+        let over_100 = |h: &Histogram| {
+            let i = h.bounds.iter().position(|b| *b == 100.0).expect("a 100 ms bucket");
+            h.count() - h.series.buckets[i].load(Ordering::Relaxed)
+        };
+        let before = over_100(&histogram("gmx_programme_frame_interval_ms", &[]));
+        attach_programme_probe(&tee);
+        pipeline.set_state(gstreamer::State::Playing).unwrap();
+        let _ = pipeline.bus().unwrap().timed_pop_filtered(
+            gstreamer::ClockTime::from_seconds(10),
+            &[gstreamer::MessageType::Eos, gstreamer::MessageType::Error],
+        );
+        let gap = gauge("gmx_programme_frame_gap_ms", &[]).get();
+        pipeline.set_state(gstreamer::State::Null).unwrap();
+
+        let bar = 3000.0 / 30.0;
+        assert!(gap > bar, "a 200 ms hold read {gap:.1} ms, under {bar:.1}");
+        assert!(over_100(&histogram("gmx_programme_frame_interval_ms", &[])) > before);
     }
 }

@@ -18,6 +18,7 @@
 
 pub mod address;
 pub mod agents;
+pub mod arenas;
 pub mod bundled;
 pub mod bench;
 pub mod channels;
@@ -591,6 +592,8 @@ fn first_run(config_path: &std::path::Path) -> Result<()> {
 /// first Windows smoke test died in `--example-config` with a stack overflow.
 /// Sixty four megabytes is address space, not memory, until it is touched.
 pub fn main_with_room() -> anyhow::Result<()> {
+    // While this is still the only thread. See `arenas`.
+    arenas::cap();
     // Before anything, on the one thread there is: the GStreamer DLLs are
     // delay loaded and this says where they are. See `bundled`.
     bundled::prepare();

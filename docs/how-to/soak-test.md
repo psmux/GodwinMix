@@ -6,9 +6,15 @@ works an hour later.
 It starts a core, then every five seconds does one round of the things an
 operator does: adds a source and removes one, takes between two scenes with a
 fade, opens and closes an MJPEG stream and a PCM stream, installs a plugin and
-removes it. After each round it writes down four numbers. At the end it prints a
+removes it. After each round it writes down five numbers. At the end it prints a
 table, writes the numbers to `bench/results/`, and exits non-zero if any of the
-four went the wrong way.
+four it judges went the wrong way.
+
+Before the first round it waits for the station's encoder calibration. A
+station measures a machine's encoders once, the first time it runs there, and
+every soak starts in a fresh directory, so every soak is that first run. On a
+hosted runner it takes about nine seconds and the summary says how long it
+waited.
 
 ```
 dev/soak.sh                  # ten minutes
@@ -23,31 +29,55 @@ before anything has gone wrong, so a soak built that way measures the compiler.
 
 | Number | Where it comes from | What it means |
 |---|---|---|
-| `gmx_programme_frame_stall_ms` | `/metrics` | The worst average gap between programme frames over sixty consecutive frames |
-| Resident memory | `ps -o rss=` on the core | What the process is actually holding |
+| `gmx_programme_frame_gap_ms` | `/metrics` | The longest gap between two programme frames in the last 30 to 60 seconds |
+| `gmx_programme_frame_stall_ms` | `/metrics` | The worst average gap over sixty consecutive frames, written down and not judged |
+| Resident memory | `ps -o rss=` on the show process | What the process is actually holding |
 | Open descriptors | `/proc/<pid>/fd` on Linux, `lsof -p` on macOS | Sockets, pipes and files the core has not closed |
 | Threads | `/proc/<pid>/task` on Linux, `ps -M` on macOS | How many threads the core is carrying |
 
-The stall gauge is the one worth understanding. There is a second metric with a
-similar name, `gmx_programme_frame_interval_ms`, and it is a histogram of raw
-wall clock gaps: it includes every ordinary late thread wake up and it is not
-what the 34 ms bar is written against. The stall gauge averages over sixty
-frames, so a single hiccup averages out of it and a pipeline that really
-stopped cannot hide in it.
+The gap gauge is the one worth understanding. Over three frame periods (100 ms
+at the soak's 30 fps) means two whole frame times went by with no frame in
+them, which is what a stall is. A streaming thread held for 200 ms reads 200 ms.
+The bar is three periods rather than two because a hosted runner's scheduler
+reaches just past two now and then with nothing wrong: about 108,000 frames
+there had three gaps over 66 ms and none over 100.
+
+The soak used to judge the sixty frame average against 34 ms instead. On a
+hosted runner that read 33.7 to 34.6 ms with nothing wrong: a fade, the mosaic
+coming up and the calibration each put a few late wake ups into one window,
+while the frames still left the compositor most of a second before they were
+due. The average is still in the record so two runs can be compared on it.
+`docs/reference/metrics.md` has both.
 
 ## The four bars
 
 | Bar | Fails when |
 |---|---|
-| Programme stall | the gauge ever reads more than 34 ms |
-| Resident memory | it is more than 10 percent above the warm up sample at the end |
+| Programme gap | the gap gauge reads more than three frame periods, from the warm up sample on |
+| Resident memory | its median over the last five minutes is more than 10 percent above its median over the two minutes from the warm up sample |
 | Open descriptors | the last sample is more than 8 above the warm up sample |
 | Threads | the last sample is more than 4 above the warm up sample |
 
 The warm up sample is the first one taken at or after sixty seconds. The first
 minute is where the pipeline builds its pools and the allocator takes its
 arenas, so growth there is the core arriving at its working size. Comparing
-against the start instead would fail every run for the wrong reason.
+against the start instead would fail every run for the wrong reason. The gap
+bar starts there too: the gauge looks back up to a minute, and from the warm up
+sample on that minute holds only rounds.
+
+On Linux the core caps glibc at two malloc arenas when it starts. Without the
+cap the show grew by about a tenth over an hour of the nightly soak, more
+slowly as the hour went on, with the same elements in every pipeline and no
+object left over between leak tracer checkpoints: glibc was spreading the
+threads of each mosaic and audio branch across new arenas and keeping each
+one's high water mark. With the cap the same soak held level from the second
+minute. Setting `MALLOC_ARENA_MAX` yourself overrides it.
+
+Memory is judged on medians rather than on two single samples. A sample lands
+either while the round's mosaic is still up or just after it has gone, and
+those are about 15 MB apart, so the last sample against the warm up sample
+moved by half the bar on its own. In an hour on a hosted runner the five minute
+medians went 267, 274, then 280 to 283 MB for the remaining fifty minutes.
 
 The slack on descriptors and threads is what one round in flight costs. A
 sample is taken while the round is still settling: a socket the kernel has not
@@ -70,10 +100,21 @@ the work of that round: the plugin install, or the mosaic coming up for the
 MJPEG stream. A stall that starts partway through and never goes away is the
 interesting one, because something is now in the way of every frame.
 
+**A stream that did not answer.** When the MJPEG or PCM client gives up, it
+first saves the programme's graph and queue levels while its connection is
+still open, as `streams-round-N.dot` and `streams-round-N-queues.json` in the
+working directory, for the first three that fail. In the dot file a pad task
+written `[t]` is paused and `[T]` is running. A paused task on `amix` is how
+the monitoring branch that stopped the programme's sound was found.
+
 **Memory.** Run it again with `--minutes 60` and look at the `samples` array in
 the JSON. A leak is a straight line. A core that settles at a new level and
 stays there for half an hour is a pool that grew once, which is the sort of
-thing to explain in a comment rather than fix.
+thing to explain in a comment rather than fix. A line that bends, growing more
+slowly as the run goes on, is often the allocator rather than the mixer. Take
+one phase out at a time with `--skip` to see which one the growth leaves with,
+then count that phase's pipeline elements with `gmx dot` at round ten and at
+round two hundred: the same count at both says nothing is being kept.
 
 **Descriptors.** Divide the growth by the number of rounds. If it is close to a
 whole number, that is how many a round leaks, and the round has four parts to
