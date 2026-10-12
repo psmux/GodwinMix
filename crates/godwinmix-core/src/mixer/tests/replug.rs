@@ -14,9 +14,18 @@ use super::supervision::Rig;
 use super::*;
 
 /// Where the source's last picture and last sound sit on its own timeline,
-/// and how far ahead of the programme its picture is placed, in ms.
-fn placement(rig: &Rig, id: &str) -> Option<(i64, i64)> {
+/// and how far ahead of the programme its picture is placed, in ms. `None`
+/// when no new picture has passed since the reading before (`last` is the
+/// count of pictures then): the last picture's time is then a measure of the
+/// gap since it, not of where pictures are placed. A loaded runner that
+/// missed two and a half seconds of the camera's pictures read as a picture
+/// placed 2.5 s off, on macOS and Windows alike.
+fn placement(rig: &Rig, id: &str, last: &mut u64) -> Option<(i64, i64)> {
     let slot = rig.slot(id)?;
+    let seen = slot.input.last_video.seen();
+    if std::mem::replace(last, seen) == seen {
+        return None;
+    }
     let video = slot.input.last_video.running()?.nseconds() as i64;
     let audio = slot.input.last_audio.running()?.nseconds() as i64;
     let aligner = slot.aligner.as_ref()?;
@@ -58,13 +67,17 @@ async fn pull_and_replug(cable: &Cable, uri: &str, lip: bool) -> Option<()> {
     let back = rig.until("far", SourceState::Live, Duration::from_secs(40)).await;
     let tried = attempts(&rig);
 
-    let mut worst = (0i64, 0i64);
+    let (mut worst, mut series, mut last) = ((0i64, 0i64), Vec::new(), 0u64);
     for _ in 0..24 {
         rig.run(Duration::from_millis(500)).await;
-        if let Some((apart, ahead)) = placement(&rig, "far") {
+        let read = placement(&rig, "far", &mut last);
+        series.push(read.map(|(_, ahead)| ahead));
+        if let Some((apart, ahead)) = read {
             worst = (worst.0.max(apart.abs()), worst.1.max(ahead.abs()));
         }
     }
+    let placed = series.iter().filter(|r| r.is_some()).count();
+    eprintln!("{uri}: ms ahead each half second after coming back, None for no new picture: {series:?}");
     let (again, end) = (attempts(&rig).saturating_sub(tried), rig.state("far"));
     rig.mix.shutdown();
 
@@ -76,7 +89,8 @@ async fn pull_and_replug(cable: &Cable, uri: &str, lip: bool) -> Option<()> {
     // The programme's mixers run a second behind the clock, so a picture a
     // second either side of now is still drawn; the fault put it as far ahead
     // as the programme was old.
-    assert!(worst.1 < 1000, "{uri}: the picture was placed {} ms off the programme's time", worst.1);
+    assert!(placed >= 12, "{uri}: new pictures in only {placed} of 24 half seconds after coming back: {series:?}");
+    assert!(worst.1 < 1000, "{uri}: the picture was placed {} ms off the programme's time; each half second: {series:?}", worst.1);
     assert!(!lip || worst.0 < 2000, "{uri}: picture and sound were {} ms apart on the source's timeline", worst.0);
     Some(())
 }
