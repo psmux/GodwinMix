@@ -4,6 +4,7 @@
 
 * A direct show's rendition keeps its frame rate when the input is read again from the start or its sender restarts. The second around the restart read as 1 or 3 fps, the station took that reading in place of the 30 fps it had measured, and the rendition was planned again at 1 fps and sat waiting. The measured rate is now kept while the picture keeps its codec and size.
 * Two devices that open the page at the same moment see each other in the presence list. One that joined while the other's subscribe answer was being written was announced to nobody, and the first device never listed it until somebody else came or went.
+* A camera whose first frames arrive late and drain slowly, as a camera plugin's frames over a pipe do on a busy Windows machine, is caught up by the whole of its delay. The catch up guard moved it while the backlog was still arriving, by as little as 0.2 of 1.5 seconds, then read the rest of the backlog as a source that fills up again and left it a second behind for good. It now waits until the delay stops growing.
 
 ## 0.3.4 (2026-10-11)
 

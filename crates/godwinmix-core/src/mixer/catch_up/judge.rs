@@ -10,6 +10,9 @@ pub const KEEP: i64 = 40_000_000;
 pub const TICKS_TO_ACT: u32 = 4;
 /// A second catch up this soon after the first means the source is not live.
 pub const RELAPSE: Duration = Duration::from_secs(10);
+/// A lead that grows by more than this from one tick to the next is a
+/// backlog still arriving, faster than the clock.
+pub const RISING: i64 = 100_000_000;
 
 /// What the guard decided on one tick.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -26,6 +29,8 @@ pub enum Verdict {
 pub struct Judge {
     over: u32,
     least: i64,
+    /// The least lead of the tick before, to see a backlog still arriving.
+    prev: i64,
     /// When the last catch up was, and the lead it removed.
     last: Option<(Instant, i64)>,
     off: bool,
@@ -42,6 +47,18 @@ impl Judge {
             self.over = 0;
             return Verdict::Hold;
         };
+        // A backlog that drains slowly (a Windows runner, frames from a
+        // pipe) shows a lead still climbing. Cut by the least lead of those
+        // ticks and the rest of the backlog lands after the cut, as a second
+        // catch up soon after the first that reads as a relapse, and the
+        // source was left a second behind for good. So the count starts
+        // again until the lead stops climbing.
+        let rising = self.over > 0 && least > self.prev + RISING;
+        self.prev = least;
+        if rising {
+            (self.least, self.over) = (least, 1);
+            return Verdict::Hold;
+        }
         self.least = if self.over == 0 { least } else { self.least.min(least) };
         self.over += 1;
         if self.over < TICKS_TO_ACT {

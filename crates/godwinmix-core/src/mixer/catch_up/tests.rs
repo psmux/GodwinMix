@@ -63,6 +63,20 @@ fn a_backlog_bigger_than_the_queues_is_caught_up_in_two_steps() {
     assert_eq!(run(&mut judge, &[Some(900 * MS); 4], soon)[3], Verdict::CatchUp(900 * MS - KEEP));
 }
 
+/// A backlog of a second and a half that arrives over two seconds, as the
+/// catch up test's frames did on a Windows runner. Caught up while the lead
+/// still climbed, it was cut by 191 to 655 ms, and the rest of it read as a
+/// relapse. It is caught up once, by nearly all of it, once it stops.
+#[test]
+fn a_backlog_still_arriving_is_caught_up_once_it_has_arrived() {
+    let mut judge = Judge::default();
+    let t = Instant::now();
+    let leads: Vec<Option<i64>> = [300, 600, 900, 1200, 1460, 1470, 1455, 1460].iter().map(|l| Some(l * MS)).collect();
+    let verdicts = run(&mut judge, &leads, t);
+    let caught: Vec<Verdict> = verdicts.iter().copied().filter(|v| *v != Verdict::Hold).collect();
+    assert_eq!(caught, vec![Verdict::CatchUp(1455 * MS - KEEP)], "{verdicts:?}");
+}
+
 #[test]
 fn a_new_backlog_long_after_is_caught_up_again() {
     let mut judge = Judge::default();
