@@ -54,7 +54,7 @@ due. The average is still in the record so two runs can be compared on it.
 | Bar | Fails when |
 |---|---|
 | Programme gap | the gap gauge reads more than three frame periods, from the warm up sample on |
-| Resident memory | it is more than 10 percent above the warm up sample at the end |
+| Resident memory | its median over the last five minutes is more than 10 percent above its median over the two minutes from the warm up sample |
 | Open descriptors | the last sample is more than 8 above the warm up sample |
 | Threads | the last sample is more than 4 above the warm up sample |
 
@@ -72,6 +72,12 @@ object left over between leak tracer checkpoints: glibc was spreading the
 threads of each mosaic and audio branch across new arenas and keeping each
 one's high water mark. With the cap the same soak held level from the second
 minute. Setting `MALLOC_ARENA_MAX` yourself overrides it.
+
+Memory is judged on medians rather than on two single samples. A sample lands
+either while the round's mosaic is still up or just after it has gone, and
+those are about 15 MB apart, so the last sample against the warm up sample
+moved by half the bar on its own. In an hour on a hosted runner the five minute
+medians went 267, 274, then 280 to 283 MB for the remaining fifty minutes.
 
 The slack on descriptors and threads is what one round in flight costs. A
 sample is taken while the round is still settling: a socket the kernel has not

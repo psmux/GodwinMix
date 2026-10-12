@@ -110,7 +110,18 @@ STALL_FRAMES=3
 # The first minute is where the pipeline builds its pools, the allocator takes
 # its arenas and GStreamer loads the plugins it turns out to need; growth there
 # is the core arriving at its working size, not a leak.
+#
+# Each end is the median of a stretch of samples, not one sample: the two
+# minutes from the warm up on, and the last five minutes. A sample lands
+# either while the round's mosaic is still up or just after it has gone, and
+# with the allocator's arenas capped those are about 15 MB apart (265 against
+# 281 MB in an hour long run on a hosted runner), so one sample against one
+# sample moved by half the bar for no reason at all. A median of a few dozen
+# rounds is the level the show sits at, and a leak still moves it: a hundred
+# rounds of anything kept per round is in every sample of the last stretch.
 RSS_GROWTH_PCT=10
+RSS_WARM_SECS=120
+RSS_END_SECS=300
 WARMUP_SECS=60
 # Descriptors and threads are compared late against warm up with a fixed slack
 # rather than demanding they are equal. Two reasons for the slack, and neither
@@ -682,11 +693,12 @@ RECORD="$REPO/bench/results/soak-$MACHINE-$DATE.json"
 
 python3 - "$SAMPLES" "$RECORD" "$MACHINE" "$COMMIT" "$MINUTES" "$PERIOD" \
     "$STALL_FRAMES" "$FPS" "$RSS_GROWTH_PCT" "$WARMUP_SECS" "$FD_SLACK" "$THREAD_SLACK" \
-    "$SKIPPED" <<'PY'
+    "$SKIPPED" "$RSS_WARM_SECS" "$RSS_END_SECS" <<'PY'
 import json, platform, sys, datetime
 
 (samples, record, machine, commit, minutes, period,
- stall_frames, fps, rss_pct, warmup, fd_slack, thread_slack, skipped) = sys.argv[1:14]
+ stall_frames, fps, rss_pct, warmup, fd_slack, thread_slack, skipped,
+ rss_warm_secs, rss_end_secs) = sys.argv[1:16]
 skipped = skipped.split()
 stall_bar = int(stall_frames) * 1000.0 / int(fps)
 rss_pct = float(rss_pct)
@@ -734,9 +746,19 @@ peak_rss = max(r["rss_kb"] for r in rows)
 peak_fds = max(r["fds"] for r in rows)
 peak_threads = max(r["threads"] for r in rows)
 
+# Each end of the memory bar is a median over a stretch of rounds. See the
+# note on RSS_GROWTH_PCT for why one sample against one sample is not enough.
+def median_rss(stretch):
+    got = sorted(r["rss_kb"] for r in stretch)
+    return got[len(got) // 2]
+
+warm_from = warm["elapsed_s"]
+rss_warm = median_rss(
+    [r for r in rows if warm_from <= r["elapsed_s"] < warm_from + int(rss_warm_secs)] or [warm])
+rss_end = median_rss([r for r in rows if r["elapsed_s"] >= last["elapsed_s"] - int(rss_end_secs)])
 rss_growth = 0.0
-if warm["rss_kb"]:
-    rss_growth = (last["rss_kb"] - warm["rss_kb"]) * 100.0 / warm["rss_kb"]
+if rss_warm:
+    rss_growth = (rss_end - rss_warm) * 100.0 / rss_warm
 fd_growth = last["fds"] - warm["fds"]
 thread_growth = last["threads"] - warm["threads"]
 
@@ -753,12 +775,13 @@ checks = [
     },
     {
         "name": "resident memory (MB)",
-        "warm": f'{warm["rss_kb"] / 1024:.1f}',
-        "last": f'{last["rss_kb"] / 1024:.1f}',
+        "warm": f"{rss_warm / 1024:.1f}",
+        "last": f"{rss_end / 1024:.1f}",
         "worst": f"{peak_rss / 1024:.1f}",
         "bar": f"at most +{rss_pct:.0f}% on warm up",
         "ok": rss_growth <= rss_pct,
-        "why": f"{rss_growth:+.1f}% against the warm up sample",
+        "why": f"{rss_growth:+.1f}% from the median of the {int(rss_warm_secs)} s after warm up "
+               f"to the median of the last {int(rss_end_secs)} s",
     },
     {
         "name": "open descriptors",
@@ -852,6 +875,8 @@ out = {
         }
         for name in phases
     },
+    "rss_warm_kb": rss_warm,
+    "rss_end_kb": rss_end,
     "rss_growth_pct": round(rss_growth, 2),
     "fd_growth": fd_growth,
     "thread_growth": thread_growth,
