@@ -38,7 +38,7 @@ pub(super) async fn run(call: Call, req: DestinationToOutputRequest) -> Result<V
 
 /// The destination as kept, key and all. The edit leaves the list alone, so
 /// nothing is saved.
-fn find(store: &dyn ChannelStore, channel: &str, wanted: &str) -> Result<StoredDestination, RpcError> {
+pub(crate) fn find(store: &dyn ChannelStore, channel: &str, wanted: &str) -> Result<StoredDestination, RpcError> {
     let mut found = None;
     store.edit_destinations(channel, &mut |list| {
         found = list.iter().find(|d| d.id == wanted).cloned();
@@ -53,7 +53,7 @@ fn find(store: &dyn ChannelStore, channel: &str, wanted: &str) -> Result<StoredD
 
 /// `output.add` params: the same address and key, the same format, and an
 /// id not taken yet (`custom`, then `custom-2`).
-fn output_params(d: &StoredDestination, taken: &[String]) -> Value {
+pub(crate) fn output_params(d: &StoredDestination, taken: &[String]) -> Value {
     let mut id = d.id.clone();
     let mut n = 2;
     while taken.contains(&id) {

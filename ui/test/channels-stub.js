@@ -198,7 +198,10 @@ const METHODS = {
     for (let n = 2; this.state.outputs.some((o) => o.id === id); n++) id = `${d.id}-${n}`;
     const o = { id, uri_host: d.uri_host, has_key: d.has_key, state: "connecting", reconnects: 0, queue_secs: 0, ...(d.rendition ? { rendition: d.rendition } : {}) };
     this.state.outputs.push(o);
-    if (p.remove !== false) this["channel.destination.remove"]({ id: p.id, destination: p.destination });
+    if (p.remove !== false) {
+      c.destinations = c.destinations.filter((x) => x.id !== p.destination);
+      this.changed(c.id);
+    }
     return o;
   },
   // The programme sent to a platform instead, from the note on a channel

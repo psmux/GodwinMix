@@ -6,7 +6,7 @@ use super::state::Station;
 use crate::channels::Channels;
 use crate::control::methods::channel_destinations as dest;
 use godwinmix_protocol::channels::*;
-use godwinmix_protocol::destination::{AddDestinationRequest, RemoveDestinationRequest, SetDestinationRequest};
+use godwinmix_protocol::destination::{AddDestinationRequest, DestinationToOutputRequest, RemoveDestinationRequest, SetDestinationRequest};
 use godwinmix_protocol::error::RpcError;
 use godwinmix_protocol::requests::IdRequest;
 use godwinmix_protocol::scope::Token;
@@ -25,6 +25,9 @@ fn out<T: Serialize>(v: Result<T, RpcError>) -> Result<Value, RpcError> {
 
 pub async fn call(st: &Arc<Station>, token: &Token, method: &str, params: Value) -> Result<Value, RpcError> {
     let channels = st.channels.get().cloned().ok_or_else(|| RpcError::not_in_state("the channels are not open yet; try again in a moment"))?;
+    if method == "channel.destination.to_output" {
+        return to_output(st, channels, parse(method, params)?).await;
+    }
     let method = method.to_string();
     let caller = token.id.clone();
     tokio::task::spawn_blocking(move || run(&channels, &method, params, &caller))
@@ -55,4 +58,25 @@ fn run(c: &Channels, method: &str, params: Value, caller: &str) -> Result<Value,
         }
         other => Err(RpcError::not_found("method", other, &[])),
     }
+}
+
+/// The programme of one show sent where a channel's destination points: the
+/// key is read here, in the station, and handed to the show's `output.add`.
+async fn to_output(st: &Arc<Station>, channels: Arc<Channels>, req: DestinationToOutputRequest) -> Result<Value, RpcError> {
+    const ASK: std::time::Duration = std::time::Duration::from_secs(15);
+    let show = req.show.clone().unwrap_or_else(|| st.first());
+    let (c, (channel, wanted)) = (channels.clone(), (req.id.clone(), req.destination.clone()));
+    let found = tokio::task::spawn_blocking(move || dest::to_output::find(&*c, &channel, &wanted))
+        .await
+        .map_err(|e| RpcError::internal(format!("reading the destination stopped: {e}")))??;
+    let status = st.ask_show(&show, "core.status", Value::Null, ASK).await?;
+    let taken: Vec<String> = status["outputs"].as_array().into_iter().flatten().filter_map(|o| o["id"].as_str().map(String::from)).collect();
+    let output = st.ask_show(&show, "output.add", dest::to_output::output_params(&found, &taken), ASK).await?;
+    if req.remove {
+        let gone = RemoveDestinationRequest { id: req.id, destination: req.destination };
+        tokio::task::spawn_blocking(move || dest::remove(&*channels, &gone, None))
+            .await
+            .map_err(|e| RpcError::internal(format!("taking the destination off the channel stopped: {e}")))??;
+    }
+    Ok(output)
 }

@@ -9,7 +9,7 @@
 
 pub(crate) mod rules;
 mod store;
-mod to_output;
+pub(crate) mod to_output;
 
 use godwinmix_protocol::destination::{
     AddDestinationRequest, DestinationToOutputRequest, RemoveDestinationRequest, SetDestinationRequest,

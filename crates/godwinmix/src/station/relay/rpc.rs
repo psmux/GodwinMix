@@ -115,7 +115,11 @@ impl Relay {
     async fn client_frame(&mut self, text: &str, up_rx: &mut Option<SplitStream<Upstream>>, answers: &mpsc::Sender<Value>) -> Option<Value> {
         let frame: Value = serde_json::from_str(text).unwrap_or(Value::Null);
         let method = frame.get("method").and_then(Value::as_str).unwrap_or_default().to_string();
-        let params = frame.get("params").cloned().unwrap_or(Value::Null);
+        let mut params = frame.get("params").cloned().unwrap_or(Value::Null);
+        // The programme it sends is this connection's show's.
+        if method == "channel.destination.to_output" && params.get("show").is_none() && params.is_object() {
+            params["show"] = Value::String(self.show.clone());
+        }
         if methods::answers(&method, &params) {
             self.answer_later(frame.get("id").cloned(), method, params, answers.clone());
             return None;

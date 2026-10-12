@@ -92,6 +92,10 @@ pub struct DestinationToOutputRequest {
     /// key at the same time. On unless said otherwise.
     #[serde(default = "yes")]
     pub remove: bool,
+    /// Under a station, the show that sends it. Left out, the show the
+    /// connection is on, or the first show.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub show: Option<String>,
 }
 
 fn yes() -> bool {
