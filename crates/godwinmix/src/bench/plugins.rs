@@ -26,3 +26,15 @@ pub fn loaded_line() -> String {
     let names = loaded();
     format!("{} plugins loaded: {}", names.len(), names.join(", "))
 }
+
+/// Anonymous and file backed resident memory in MB, from `/proc/self/status`.
+/// Anonymous is frames, queues and heap; file backed is mapped libraries. Only
+/// Linux says, so elsewhere this is `None` and the rows leave it out.
+pub fn rss_split() -> Option<(f64, f64)> {
+    let status = std::fs::read_to_string("/proc/self/status").ok()?;
+    let mb = |key: &str| -> Option<f64> {
+        let line = status.lines().find(|l| l.starts_with(key))?;
+        line.split_whitespace().nth(1)?.parse::<f64>().ok().map(|kb| kb / 1024.0)
+    };
+    Some((mb("RssAnon:")?, mb("RssFile:")?))
+}

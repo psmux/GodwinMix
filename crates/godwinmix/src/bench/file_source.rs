@@ -29,7 +29,11 @@ pub async fn row(args: &BenchArgs, clip: &Path) -> Result<Row> {
     let measured = measure(args, clip, &handle).await;
     let _ = handle.send(Command::Shutdown);
     let _ = tokio::task::spawn_blocking(move || thread.join()).await;
-    let (before, after) = measured?;
+    let (before, after, split) = measured?;
+    let mut other = super::plugins::loaded_line();
+    if let Some(((a0, f0), (a1, f1))) = split {
+        other = format!("anonymous {:+.1} MB, file backed {:+.1} MB; {other}", a1 - a0, f1 - f0);
+    }
     Ok(Row::new(
         "file-source",
         "Added RSS and CPU per 720p30 file source on programme, no encode",
@@ -37,13 +41,16 @@ pub async fn row(args: &BenchArgs, clip: &Path) -> Result<Row> {
         "gmx bench --only file-source".into(),
     )
     .load(after.minus(before))
-    .other(super::plugins::loaded_line())
+    .other(other)
     .note(&note(args)))
 }
 
 /// The idle core, then the same core with the clip added and on programme.
-async fn measure(args: &BenchArgs, clip: &Path, handle: &MixerHandle) -> Result<(Load, Load)> {
+type Split = Option<((f64, f64), (f64, f64))>;
+
+async fn measure(args: &BenchArgs, clip: &Path, handle: &MixerHandle) -> Result<(Load, Load, Split)> {
     let before = steady(args.warmup(), args.window()).await;
+    let split_before = super::plugins::rss_split();
     let source: SourceConfig = serde_json::from_value(serde_json::json!({
         "id": ID,
         "uri": godwinmix_core::input::file_uri(clip),
@@ -62,7 +69,8 @@ async fn measure(args: &BenchArgs, clip: &Path, handle: &MixerHandle) -> Result<
         .await
         .context("taking the clip took more than thirty seconds")??;
     let after = steady(args.warmup(), args.window()).await;
-    Ok((before, after))
+    let split = split_before.zip(super::plugins::rss_split());
+    Ok((before, after, split))
 }
 
 fn note(args: &BenchArgs) -> String {

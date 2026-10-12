@@ -99,6 +99,19 @@ jobs:
           GST_GL_DISABLED: "1"
         run: ./target/release/gmx bench --nightly --machine ci-linux --encode software
 
+      # TEMPORARY, fix/footprint-idle: the file row alone, and with glibc
+      # held to two malloc arenas. Removed before the branch merges.
+      - name: file-source alone (diagnostic)
+        if: always()
+        continue-on-error: true
+        env:
+          LIBGL_ALWAYS_SOFTWARE: "1"
+          GST_GL_DISABLED: "1"
+        run: |
+          ./target/release/gmx bench --only file-source --machine ci-linux --encode software --no-write 2>/dev/null | grep -E "^\| Added"
+          MALLOC_ARENA_MAX=2 ./target/release/gmx bench --only file-source --machine ci-linux --encode software --no-write 2>/dev/null | grep -E "^\| Added"
+          ./target/release/gmx bench --only core-idle --machine ci-linux --encode software --no-write 2>/dev/null | grep -E "^\| Core idle RSS"
+
       - name: The numbers
         if: always()
         run: cat bench/results/ci-linux-*.md >> "$GITHUB_STEP_SUMMARY"
