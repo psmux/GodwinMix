@@ -62,15 +62,17 @@ function addForm(view, channel, p) {
   const key = p.key ? keyField(p.keyOptional ? "Stream key, if it has one" : "Stream key", "Paste the stream key") : null;
   const stream = streamChoice(channel, "*");
   const label = field("Name on the tile", { placeholder: p.title });
-  const start = el("button.btn.primary", { text: "Start sending" });
+  // On a channel no encoder sends to, the programme is what most people
+  // meant, so that is the button in colour and the channel's is plain.
+  const idle = !isLive(channel);
+  const start = el(idle ? "button.btn" : "button.btn.primary", { text: "Start sending" });
   const more = el("details.chn-more-opts", {}, [el("summary", { text: "More options" }), label.node, stream && stream.node]);
   // Copy first, as the strip promises; a platform's own format one press away.
   const format = formatStep(view.client, { platform: p.id, platformTitle: p.title, shape: channelShape(channel), id: () => p.id, copyFirst: true });
   const refused = el("div", { hidden: true });
   // Said before the key is pasted, not after: this is where a person who
   // wanted the programme on YouTube finds out a channel is something else.
-  const idle = !isLive(channel);
-  const instead = idle ? el("button.btn", { text: "Send the programme instead" }) : null;
+  const instead = idle ? el("button.btn.primary", { text: "Send the programme instead" }) : null;
   const body = el("div.chn-dform", {}, [
     idle ? el("p.chn-addnote", { role: "note", text: waitingWords(channel, p.title) }) : null,
     el("div.chn-dhead", {}, [brandMark(p.id, 48), el("div", {}, [el("strong", { text: p.title }), el("p.chn-dim", { text: p.where })])]),
@@ -91,7 +93,7 @@ function addForm(view, channel, p) {
       else instead.disabled = false;
     };
   }
-  on(body, "keydown", (e) => { if (e.key === "Enter" && e.target.tagName === "INPUT") { e.preventDefault(); start.click(); } });
+  on(body, "keydown", (e) => { if (e.key === "Enter" && e.target.tagName === "INPUT") { e.preventDefault(); (instead || start).click(); } });
   start.onclick = async () => {
     const asked = addParams(p, channel, { server: server.value(), key: key && key.value(), stream: stream && stream.value(), label: label.value() });
     if (asked.error) {

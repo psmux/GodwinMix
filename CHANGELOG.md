@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.6 (2026-10-12)
+
+* A Custom format chosen for a platform is what reaches it. A tester added Custom RTMP to a channel no encoder was sending to, picked 3000 kb/s video, AAC 128 kb/s and a keyframe every 2 seconds, then pressed **Send the programme instead**. The output that made was given the server and key but not the format, so it went out at the programme encoder's 6 Mb/s and 160 kb/s, and Livebox showed 6 to 8 Mb/s. The format now goes with it. Measured against an RTMP listener: 3.0 to 3.25 Mb/s of 1080p video on pure noise, 128 kb/s of audio, a keyframe every 2 seconds.
+* Sending the programme to a platform already saved on a channel no longer asks for the stream key again. New method `channel.destination.to_output` reads the sealed key inside the core (or the station) and adds the output with the destination's server, key and format, then takes the destination off the channel unless `remove` is false. The Channels tab's **Send the programme to ... instead** is one press. On a channel nothing is sending to, **Send the programme instead** is now the highlighted button in the add form and Enter presses it, since that is what most people adding a platform there meant.
+* Preview and Programme play smoothly. Both monitors and the live tiles asked the core for 8 pictures a second, which looked like a slide show with a moving clip in Preview. The default is now 25 on a machine with eight threads or more and 15 below that, and a picture rate saved at the old default moves to the new one. Settings, Picture rate still chooses it.
+
 ## 0.3.5 (2026-10-12)
 
 * A show on Linux keeps its memory level through a long session. In the nightly hour long soak the show process grew from 475 to 527 MB, more slowly as the hour went on, and nothing in it was being kept: every pipeline had the same elements and pads round after round, and GStreamer's leak tracer found no object left over between checkpoints. It was glibc giving the threads of each mosaic and audio branch that came and went their own malloc arenas, up to eight per core, and keeping each arena's high water mark. The core now caps glibc at two arenas when it starts, and the same soak held at about 464 MB from its second minute to its thirtieth. Set `MALLOC_ARENA_MAX` to choose another number.

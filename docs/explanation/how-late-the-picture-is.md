@@ -21,7 +21,7 @@ camera sidecar ──pipe──> source pipeline ──> programme compositor �
 | The pipe | on Windows an `appsrc` that blocks at 16 MB, about five raw 1080p frames (`input::pipe_source`) |
 | Placement | the frames' place on the programme's timeline, decided once when the source's first segment arrives (`TimelineAligner`). This is where seconds went |
 | Programme compositor | waits for an input only while that input has no frame for the moment it is drawing, at most its one second budget (`MIN_UPSTREAM_LATENCY_NS`). With every input on time it draws within tens of milliseconds |
-| Mosaic and Studio preview | one compositor each, at the mosaic's rate (8 frames a second by default), then a JPEG |
+| Mosaic and Studio preview | one compositor each, at the mosaic's rate (25 frames a second by default on a machine with eight threads or more, 15 below that), then a JPEG |
 | Transport | the JPEG on `/rpc`, two frames deep per client, newest kept. No HLS, no WebRTC and no video encoder on this path, so there is no GOP, B frame or rate control buffer to tune |
 | Page | decode with `createImageBitmap`, then one `drawImage` per canvas |
 

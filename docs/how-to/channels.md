@@ -33,13 +33,14 @@ To send the programme, use **Add destination** on the Outputs panel. See
 
 The Channels tab says this itself while a channel has platforms and no
 encoder: a note under the tiles explains it and has a **Send the programme to
-YouTube instead** button for each waiting platform. That asks for the stream
-key once more (a channel never hands a key back), adds the platform under
-Outputs, and takes the tile off the channel unless you switch that off. The
-form for adding a platform to an idle channel says the same above the key
-box, and its **Send the programme instead** button adds the output straight
-away with the server and key you pasted, without adding anything to the
-channel.
+YouTube instead** button for each waiting platform. One press adds the
+platform under Outputs with the server, key and format the tile already has
+(the core reads the sealed key itself, so you never paste it again) and takes
+the tile off the channel unless you switch that off. The form for adding a
+platform to an idle channel says the same above the key box, and its **Send
+the programme instead** button, the one in colour there, adds the output
+straight away with the server, key and format you chose, without adding
+anything to the channel.
 
 ## Before you start
 

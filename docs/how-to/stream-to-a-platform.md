@@ -16,12 +16,12 @@ YouTube Studio says "No data" for as long as it does.
 So the Channels tab says this whenever a channel has platforms and no
 encoder. The add form says it above the key box, with **Send the programme
 instead** beside **Start sending**: that adds the platform under Outputs with
-the server and key you just pasted, and nothing to the channel. A tile already
+the server, key and format you just chose (a Custom 3000 kb/s goes out at
+3000 kb/s, not at the programme encoder's rate), and nothing to the channel. A tile already
 saved on a waiting channel has **Send the programme to YouTube instead** under
-the strip. It asks for the key once more, because a channel keeps its keys
-sealed and never hands one back, adds the output, and takes the tile off the
-channel unless you switch that off, so two things never publish with the same
-key.
+the strip. One press adds the output with the tile's server, key and format,
+which the core reads itself, and takes the tile off the channel unless you
+switch that off, so two things never publish with the same key.
 
 ## From the Outputs panel
 
