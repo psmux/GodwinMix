@@ -328,3 +328,6 @@ impl ProgrammeBranch {
         self.meter == element_name
     }
 }
+
+#[cfg(test)]
+mod tests;
