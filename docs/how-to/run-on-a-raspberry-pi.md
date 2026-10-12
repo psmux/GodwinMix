@@ -129,3 +129,9 @@ Two rows to look at first on a Pi:
 * Keep the source count down. Every source is a decode and a scale before it
   reaches the compositor, and that cost is per source whether or not it is on
   air.
+* On a Pi 5 every H.264 camera is decoded on the CPU, by `openh264dec` when it
+  is installed. It uses one core per stream and more CPU than libav's decoder.
+  With more than one H.264 camera and gst-libav installed, start the mixer
+  with `GMX_CODEC_RANK=h264-software-decode=70` so libav's multithreaded
+  decoder takes them. [run-without-ffmpeg.md](run-without-ffmpeg.md) has the
+  rest.
