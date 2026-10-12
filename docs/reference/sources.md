@@ -115,6 +115,24 @@ cannot be seeked, so `repeat` on one still restarts it, after its tail has
 played. A clip with transparency is drawn by the overlay board without the
 timeline aligner the seek needs, and repeats the same way.
 
+### What a clip holds in memory
+
+A clip is not live: it decodes as fast as the mixer lets it, so every queue
+between its decoder and the compositor sits full. Its three queues (the one in
+front of its programme proxy, its programme queue and the queue of the slot
+it is drawn in) hold a tenth of a second each, where a live source's hold a
+second. The compositor pad in front of them holds about a second of frames for
+every source, live or not, because the compositor runs a second behind so that
+a source arriving late never stalls the programme. At 720p that second is
+about 40 MB. A live source bound to a slot a clip used before gets its second
+back.
+
+A software video decoder inside a clip, an HLS stream or an RTSP camera runs
+two threads, not one per core. Set `GODWINMIX_DECODE_THREADS` in the mixer's
+environment to change that for every source; `0` is the decoder's own choice,
+one thread per core. A 4K clip on a machine with cores to spare is the case
+for raising it.
+
 ### RTSP cameras
 
 Every scheme `rtspsrc` knows is a continuous stream (`hls/source`):
