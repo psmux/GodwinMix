@@ -190,13 +190,10 @@ impl AudioTap {
             .build();
         // Not async. A sink that has to preroll, added to a running pipeline,
         // answers with ASYNC and the programme loses PLAYING to PAUSED pending
-        // until the preroll lands. Most times it lands in a few milliseconds.
-        // On a loaded runner it sometimes did not land at all: the soak's PCM
-        // client then waited twenty seconds for a frame that never came, two
-        // rounds in an hour in a full soak and every round from the fifty
-        // fifth on in one without the sources phase. The thumbnail and
-        // preview sinks have the same line for the same reason, and a sink
-        // that does not sync has nothing to wait for anyway.
+        // until the preroll lands, and it is what made `attach` link the
+        // branch before starting it. The thumbnail and preview sinks have the
+        // same line for the same reason, and a sink that does not sync has
+        // nothing to wait for anyway.
         sink.set_property("async", false);
 
         let mut branch: Vec<gst::Element> = vec![queue, convert, resample, caps];
@@ -229,23 +226,38 @@ impl AudioTap {
         Ok(tap)
     }
 
+    /// Bring the branch up, from the far end, and only then link it to the tee.
+    ///
+    /// The order is the whole of it. A queue whose sink pad is not active yet
+    /// answers a buffer with FLUSHING, the tee hands that straight back to
+    /// `amix`, and an aggregator whose push comes back FLUSHING pauses its
+    /// source task and waits for a flush or a state change to start it again.
+    /// The programme's sound stopped until something did. Linked first, there
+    /// was a window of a few microseconds between the link and the queue
+    /// reaching PAUSED in which the next 10 ms buffer could land; on a hosted
+    /// runner it landed about once in 540 soak rounds, and the PCM client got
+    /// nothing for twenty seconds. The soak's aggregator trace at that moment
+    /// had the video mixer logging every frame and `amix` not a single line.
+    ///
+    /// It used to be linked first because the appsink at the end prerolled,
+    /// and bringing a prerolling sink up before anything could reach it put
+    /// the programme into a lost state cycle. It is not async now (see
+    /// `build`), so it goes to PLAYING on its own, the way the programme
+    /// thumbnail's appsink and the thumbnail ends do.
     fn attach(&mut self) -> Result<()> {
         let head = self.branch.first().context("an empty monitoring branch")?;
         let sink = head.static_pad("sink").context("the branch head has no sink pad")?;
+        for el in self.branch.iter().rev() {
+            el.sync_state_with_parent()
+                .with_context(|| format!("starting {} on the monitoring branch", el.name()))?;
+        }
         let pad = self
             .tee
             .request_pad_simple("src_%u")
             .context("the raw audio tee refused a pad for monitoring")?;
-        pad.link(&sink).context("linking the monitoring branch onto the audio tee")?;
-        // Linked first, then brought up from the far end. This branch ends in
-        // an appsink, which prerolled until it was made not async in `build`,
-        // and bringing one up inside a
-        // running pipeline before any buffer can reach it left the mixer's
-        // core suite crashing on two macOS runners in a row (elements of this
-        // branch disposed while PLAYING). The thumbnail and output feeds end
-        // in a proxysink, which does not preroll, and take the other order.
-        for el in self.branch.iter().rev() {
-            el.sync_state_with_parent().ok();
+        if let Err(e) = pad.link(&sink) {
+            self.tee.release_request_pad(&pad);
+            return Err(anyhow::Error::from(e).context("linking the monitoring branch onto the audio tee"));
         }
         self.pad = Some(pad);
         Ok(())

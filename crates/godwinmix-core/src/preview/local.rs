@@ -140,6 +140,9 @@ mod imp {
             // A preview client that goes away must not become an error on a tee
             // the programme also hangs off.
             crate::probe::set_bool(&sink, "sync", false);
+            // Started before it is linked, so it must not wait for a preroll
+            // that nothing can bring it yet.
+            crate::probe::set_bool(&sink, "async", false);
 
             let branch = vec![queue, sink];
             pipeline.add_many(&branch).context("adding a local preview branch")?;
@@ -153,16 +156,23 @@ mod imp {
             Ok(preview)
         }
 
+        /// Up first, then linked, for the reason on `AudioTap::attach`: a
+        /// queue not yet active answers the tee with FLUSHING, and the
+        /// programme's aggregator pauses on it.
         fn attach(&mut self) -> Result<()> {
             let head = self.branch.first().context("an empty local preview branch")?;
             let sink = head.static_pad("sink").context("the branch head has no sink pad")?;
+            for el in self.branch.iter().rev() {
+                el.sync_state_with_parent()
+                    .with_context(|| format!("starting {} on a local preview", el.name()))?;
+            }
             let pad = self
                 .tee
                 .request_pad_simple("src_%u")
                 .context("the raw video tee refused a pad for a local preview")?;
-            pad.link(&sink).context("linking a local preview onto the raw tee")?;
-            for el in self.branch.iter().rev() {
-                el.sync_state_with_parent().ok();
+            if let Err(e) = pad.link(&sink) {
+                self.tee.release_request_pad(&pad);
+                return Err(anyhow::Error::from(e).context("linking a local preview onto the raw tee"));
             }
             self.pad = Some(pad);
             Ok(())
