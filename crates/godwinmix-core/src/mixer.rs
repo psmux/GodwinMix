@@ -84,6 +84,10 @@ const AD_PREROLL: Duration = Duration::from_millis(1200);
 /// extra half second is delay a viewer never notices on HLS and margin that
 /// the aggregators need.
 const MIN_UPSTREAM_LATENCY_NS: i64 = 1_000_000_000;
+
+/// The width and height of the slate's own frames. Small, because a second
+/// of them waits on the compositor pad; see the slate in `Mixer::build`.
+pub(crate) const SLATE_SIZE: i32 = 16;
 /// Lead-in between rolling an ad and cutting to it.
 ///
 /// The ad's first frame has to be *due* slightly in the future, not right now.
@@ -414,6 +418,7 @@ mod catch_up;
 mod clip_act;
 mod clip_end;
 mod clip_frame;
+mod encode_chain;
 mod backoff;
 mod cue;
 mod exited;
@@ -1306,6 +1311,9 @@ pub struct Mixer {
     /// The compositor's slots: where a scene's items are actually drawn. See
     /// `mixer::slots`.
     pool: SlotPool,
+    /// The slate's compositor pad, sized to the canvas only while a dip
+    /// tints it. See `SLATE_SIZE`.
+    slate_pad: gst::Pad,
     /// Text, tickers and pictures with alpha, drawn after the compositor.
     /// Empty, and with no probe installed, until one is added. See `overlay`.
     overlay: Arc<crate::overlay::Board>,
@@ -1582,13 +1590,6 @@ fn parser_for(name: Option<&str>, element_name: &str) -> Result<Vec<gst::Element
     Ok(vec![el])
 }
 
-/// Link a tee to a chain of elements that were built as a list.
-fn link_from(head: &gst::Element, chain: &[gst::Element]) -> Result<()> {
-    let all: Vec<&gst::Element> = std::iter::once(head).chain(chain.iter()).collect();
-    gst::Element::link_many(all)?;
-    Ok(())
-}
-
 /// Compositor pads disagree about the width of `zorder` across backends, and
 /// a mismatch is a panic rather than an error.
 fn set_pad_u32(pad: &gst::Pad, prop: &str, v: u32) {
@@ -1663,35 +1664,21 @@ impl Mixer {
         // same frames and cost one atomic load while nobody is subscribed.
         crate::telemetry::attach(&vraw_tee);
 
-        let venc = make(&sel.video_encode.element, "venc")?;
-        crate::catalogue::apply::apply(&venc, &sel.video_encode.properties, &vars);
-        crate::catalogue::apply::apply_keyframe(&venc, sel.video_encode.keyframe.as_ref(), &vars);
+        // The encoded tee is made now, because outputs link to it whether or
+        // not anything is encoding. What feeds it (queue, bridge, encoder,
+        // parser) is made by the encoder on its first consumer: see
+        // `encoder::lazy` and `mixer::encode_chain`.
         let venc_tee = make("tee", "venc-tee")?;
         venc_tee.set_property("allow-not-linked", true);
 
-        // queue, whatever it takes to get the canvas into the shape this
-        // encoder wants, the encoder, its parser, the tee. With the software
-        // graphics entry the bridge is one `videoconvert`, exactly as before;
-        // with a GPU entry the frame has been on the GPU since the compositor
-        // and comes down only if the encoder cannot take it there.
-        let mut vchain: Vec<gst::Element> = vec![gstutil::queue_thread("venc-q")?];
-        vchain.extend(encode_bridge(gfx, &sel.video_encode)?);
-        vchain.push(venc.clone());
-        vchain.extend(parser_for(sel.video_encode.parser.as_deref(), "vparse")?);
-        vchain.push(venc_tee.clone());
-
         // Hold the video back by the audio encoder's uncompensated delay, so
         // what the viewer hears lines up with what they see. The figure is
-        // `priming_delay_ms` on the audio entry. Applied at the encoder's own
-        // pad: the raw programme tee for the multiview is not shifted, and the
-        // muxer sees both streams already aligned.
+        // `priming_delay_ms` on the audio entry, applied at the encoder's own
+        // pad when the chain is made.
         let av_offset_ns = match cfg.program.av_offset_ms {
             Some(ms) => ms * 1_000_000,
             None => (sel.audio_encode.priming_delay_ms.unwrap_or(0) * 1_000_000) as i64,
         };
-        if let Some(sink) = venc.static_pad("sink") {
-            sink.set_offset(av_offset_ns);
-        }
         info!(
             audio_encoder = %sel.audio_encode.element,
             offset_ms = av_offset_ns / 1_000_000,
@@ -1734,37 +1721,8 @@ impl Mixer {
         let araw_tee = make("tee", "araw-tee")?;
         araw_tee.set_property("allow-not-linked", true);
 
-        let aenc = make(&sel.audio_encode.element, "aenc")?;
-        crate::catalogue::apply::apply(&aenc, &sel.audio_encode.properties, &vars);
         let aenc_tee = make("tee", "aenc-tee")?;
         aenc_tee.set_property("allow-not-linked", true);
-
-        // Defensive. The mixer is a live aggregator whose inputs are stamped
-        // by another process against its own wall clock, so a contiguous
-        // stream into the encoder is worth guaranteeing rather than assuming.
-        // Added while chasing an on-air fault that turned out to live in the
-        // RTMP server downstream, which re-serves AAC with its timeline
-        // stepped backwards; this output, captured straight into ffmpeg,
-        // measured clean without it. Kept because it costs nothing and closes
-        // a gap that would otherwise be real the day an input drifts.
-        //
-        // `skip-to-first`, because the chain is attached on demand to a
-        // programme that may have been running for hours. Without it
-        // `audiorate` fills from the start of the segment to its first buffer,
-        // so the first output added an hour in got an hour of silence in one
-        // burst, stamped from zero, ahead of a video stream stamped an hour in.
-        // Found on 2026-10-01 by the scale harness: a udp output's remuxer
-        // waited on that audio for its video and never sent again.
-        let arate = make("audiorate", "aenc-rate")?;
-        crate::probe::set_bool(&arate, "skip-to-first", true);
-        let mut achain: Vec<gst::Element> = vec![
-            gstutil::queue_thread("aenc-q")?,
-            make("audioconvert", "aenc-conv")?,
-            arate,
-            aenc.clone(),
-        ];
-        achain.extend(parser_for(sel.audio_encode.parser.as_deref(), "aparse")?);
-        achain.push(aenc_tee.clone());
 
         // The mosaic carries no audio, so the operator confirms that program
         // has sound from a meter instead. `level` passes audio through
@@ -1778,13 +1736,21 @@ impl Mixer {
         // program falls back to when no source is selected or the selected one
         // has gone quiet, and they guarantee both mixers always have at least
         // one active pad.
+        //
+        // The slate is drawn `SLATE_SIZE` square in the corner, black on the
+        // compositor's black background, rather than at the canvas size. It
+        // runs a second early (the compositor's `min-upstream-latency`), so
+        // about thirty of its frames are always queued on its pad: at 720p
+        // that was 40 MB of black pictures on an idle core. A dip to a colour
+        // scales it to the canvas for as long as the dip lasts; see
+        // `mixer::motion`. Its rate and timing are the canvas's, as before.
         let slate = make("videotestsrc", "slate")?;
         slate.set_property_from_str("pattern", "black");
         slate.set_property("is-live", true);
-        let slate_caps = gstutil::capsfilter("slate-caps", &canvas.video())?;
+        let slate_caps =
+            gstutil::capsfilter("slate-caps", &CanvasCaps::video_at(SLATE_SIZE, SLATE_SIZE, canvas.fps))?;
 
         let silence = make("audiotestsrc", "silence")?;
-        slate.set_property("is-live", true);
         silence.set_property_from_str("wave", "silence");
         silence.set_property("is-live", true);
         let silence_caps = gstutil::capsfilter("silence-caps", &canvas.audio())?;
@@ -1794,25 +1760,24 @@ impl Mixer {
         let mut slate_chain: Vec<gst::Element> = vec![slate.clone(), slate_caps.clone()];
         slate_chain.extend(upload_bridge(gfx, "slate")?);
 
-        let fixed = [&vmix, &vmix_caps, &vraw_tee, &amix, &amix_caps, &level, &araw_tee, &silence, &silence_caps];
+        let fixed = [
+            &vmix, &vmix_caps, &vraw_tee, &venc_tee, &amix, &amix_caps, &level, &araw_tee, &aenc_tee, &silence,
+            &silence_caps,
+        ];
         let all: Vec<&gst::Element> = fixed
             .into_iter()
-            .chain(vchain.iter())
             .chain(rchain.iter())
-            .chain(achain.iter())
             .chain(slate_chain.iter())
             .collect();
         program.add_many(all).context("adding program elements")?;
 
         gst::Element::link_many([&vmix, &vmix_caps, &vraw_tee]).context("linking video mixer")?;
-        link_from(&vraw_tee, &vchain).context("linking video encoder")?;
         // Linked to each other but not to the tee. See `attach_programme_return`.
         gst::Element::link_many(rchain.iter().collect::<Vec<_>>())
             .context("linking program return video")?;
 
         gst::Element::link_many([&amix, &amix_caps, &level, &araw_tee])
             .context("linking audio mixer")?;
-        link_from(&araw_tee, &achain).context("linking audio encoder")?;
 
         gst::Element::link_many(slate_chain.iter().collect::<Vec<_>>())
             .context("linking slate")?;
@@ -1858,13 +1823,12 @@ impl Mixer {
 
         // --- encoder lifecycle: the whole of it, in one block ---------------
         //
-        // Everything above built and linked the encode chains exactly as it
-        // always did. This adopts them, and with `[program] encoder =
-        // "on-demand"` (the default) takes them straight back off the raw tees
-        // so a core nobody is reading encodes nothing. The first consumer, an
-        // output or a WHEP session or a recording, takes a lease and the chain
-        // comes back with a keyframe on its first frame. The raw programme is
-        // untouched either way. See `encoder.rs`.
+        // The encoded tees are in the pipeline; what feeds them is a recipe.
+        // With `[program] encoder = "on-demand"` (the default) nothing is
+        // made until the first consumer, an output or a WHEP session or a
+        // recording, takes a lease; then the chain is made, joined to the raw
+        // tees and starts on a keyframe. With `always` it is made here. The
+        // raw programme is untouched either way. See `encoder.rs`.
         let enc_policy = cfg.program.encoder_policy();
         let enc = crate::encoder::EncoderHandle::new(enc_policy, {
             let h = handle.clone();
@@ -1874,8 +1838,20 @@ impl Mixer {
         });
         let mut encoder = crate::encoder::Encoder::new(
             enc.clone(),
-            crate::encoder::EncodeChain::new("video", &vraw_tee, vchain.clone()),
-            crate::encoder::EncodeChain::new("audio", &araw_tee, achain.clone()),
+            crate::encoder::EncodeChain::lazy(
+                "video",
+                &vraw_tee,
+                program.upcast_ref(),
+                venc_tee.clone(),
+                encode_chain::video(&sel, vars, av_offset_ns),
+            ),
+            crate::encoder::EncodeChain::lazy(
+                "audio",
+                &araw_tee,
+                program.upcast_ref(),
+                aenc_tee.clone(),
+                encode_chain::audio(&sel, vars),
+            ),
         );
         encoder.arm().context("arming the programme encoder")?;
 
@@ -1988,6 +1964,7 @@ impl Mixer {
             retired: Vec::new(),
             programme_filters: Vec::new(),
             pool,
+            slate_pad,
             overlay,
             program_scene: None,
             ramp: None,

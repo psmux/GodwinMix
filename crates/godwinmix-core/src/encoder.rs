@@ -51,7 +51,10 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use tracing::{debug, info, warn};
 
+mod lazy;
 mod retire;
+
+pub use lazy::Build;
 
 /// `[program] encoder`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -301,6 +304,8 @@ pub struct EncodeChain {
     /// Head first. The head's sink pad is what the tee links to.
     chain: Vec<gst::Element>,
     pad: Option<gst::Pad>,
+    /// The part not built yet, for a chain made with [`EncodeChain::lazy`].
+    pending: Option<lazy::Pending>,
 }
 
 impl EncodeChain {
@@ -316,7 +321,25 @@ impl EncodeChain {
             .and_then(|head| head.static_pad("sink"))
             .and_then(|sink| sink.peer())
             .filter(|peer| peer.parent().as_ref() == Some(tee.upcast_ref()));
-        Self { tag, tee: tee.clone(), chain, pad }
+        Self { tag, tee: tee.clone(), chain, pad, pending: None }
+    }
+
+    /// A chain whose elements are made the first time it is attached.
+    ///
+    /// `tail` is the encoded tee, already in `bin`, which outputs link to
+    /// whether or not anything is encoding. Everything in front of it (queue,
+    /// conversion, encoder, parser) comes from `build`, called once on the
+    /// first attach. Until then no encoder element exists, so its plugin is
+    /// never loaded: on Ubuntu the audio encoder alone is gst-libav and the
+    /// whole of FFmpeg behind it, mapped into a core nobody is reading.
+    pub fn lazy(tag: &'static str, tee: &gst::Element, bin: &gst::Bin, tail: gst::Element, build: lazy::Build) -> Self {
+        let pending = lazy::Pending { bin: bin.clone(), build };
+        Self { tag, tee: tee.clone(), chain: vec![tail], pad: None, pending: Some(pending) }
+    }
+
+    /// Whether the elements in front of the tail have been made yet.
+    pub fn is_built(&self) -> bool {
+        self.pending.is_none()
     }
 
     pub fn is_attached(&self) -> bool {
@@ -359,6 +382,11 @@ impl EncodeChain {
     pub fn attach(&mut self) -> Result<()> {
         if self.pad.is_some() {
             return Ok(());
+        }
+        if let Some(pending) = self.pending.as_mut() {
+            let front = pending.make(self.tag, &self.chain)?;
+            self.chain.splice(0..0, front);
+            self.pending = None;
         }
         let head = self
             .chain
@@ -627,8 +655,8 @@ mod tests {
     }
 
     /// The acceptance test for the switch: nothing asked for, nothing
-    /// encoding, and the encoder element really is at NULL rather than merely
-    /// flagged off.
+    /// encoding, and no encoder element made, rather than one merely flagged
+    /// off.
     #[tokio::test(flavor = "multi_thread")]
     async fn an_idle_core_on_demand_has_no_encoder_running() {
         let _ = gst::init();
@@ -636,9 +664,10 @@ mod tests {
             crate::mixer::Mixer::build(mixer_cfg("on-demand")).unwrap();
         mix.start().unwrap();
         assert!(!mix.encoder_running(), "an idle core is encoding and must not be");
+        // Not at NULL: not made at all, so its plugin is not loaded either.
         let (venc, aenc) = mix.encoder_element_states();
-        assert_eq!(venc, Some(gst::State::Null), "the video encoder is not at NULL");
-        assert_eq!(aenc, Some(gst::State::Null), "the audio encoder is not at NULL");
+        assert_eq!(venc, None, "the video encoder was made with nobody reading it");
+        assert_eq!(aenc, None, "the audio encoder was made with nobody reading it");
         let enc = mix.encoder_handle();
         assert_eq!(enc.consumers(), 0);
         assert!(!enc.is_running());
