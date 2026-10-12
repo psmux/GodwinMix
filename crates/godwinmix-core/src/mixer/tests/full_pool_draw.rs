@@ -39,7 +39,13 @@ async fn every_source_is_drawn_after_takes_move_every_slot() {
         for id in ids {
             let id: SourceId = id.into();
             mix.take(Some(id.clone()), None).unwrap();
-            let pad = mix.pool.slots().iter().find(|s| s.showing()).map(|s| s.pad().clone()).unwrap();
+            // Once on a Windows runner nothing was showing straight after a
+            // take. A source that is not live is not drawn, so the message
+            // says what state each source was in.
+            let pad = mix.pool.slots().iter().find(|s| s.showing()).map(|s| s.pad().clone()).unwrap_or_else(|| {
+                let states: Vec<String> = mix.sources.iter().map(|s| format!("{} {:?}", s.input.id, s.input.observed_state())).collect();
+                panic!("no slot showing straight after taking {id} in round {round}; the sources: {states:?}")
+            });
             let drawn = count_pad(&pad);
             tokio::time::sleep(Duration::from_millis(400)).await;
             let n = drawn.load(Ordering::Relaxed);
