@@ -112,7 +112,7 @@ jobs:
       - name: Many runs
         shell: bash {0}
         run: |
-          busy() { for _ in 1 2; do ( while :; do :; done ) & echo $!; done; }
+          busy() { for _ in 1 2; do ( while :; do :; done ) >/dev/null 2>&1 & echo $!; done; }
           tmp="${TMPDIR:-${TEMP:-/tmp}}"
           pass=0; fail=0; n=${{ matrix.n }}
           for i in $(seq 1 $n); do
