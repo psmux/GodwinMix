@@ -8,7 +8,6 @@
 //! idle core and its budget.
 
 use gstreamer as gst;
-use gstreamer::prelude::*;
 
 /// The names of every loaded plugin, sorted.
 pub fn loaded() -> Vec<String> {
