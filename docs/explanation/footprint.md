@@ -78,23 +78,32 @@ The release installer and hardware gates remain separate.
 
 ## What each row means
 
-**Core idle.** The daemon with the control server up, no sources, no outputs
-and nobody subscribed to anything. It is the floor a plugin author inherits
-before their plugin starts. Note what is inside it: GodwinMix builds and plays
-the programme pipeline, encoder included, from boot, because the design is that
-the output encoder starts once and never restarts. An idle GodwinMix is
-therefore encoding a black slate. On a machine with a hardware encoder that
-costs almost nothing; on a Pi 5, which has no H.264 encoder at all, it will not
-be nothing, and this row is where that shows up.
+**Core idle.** The mixer with no sources, no outputs and nobody subscribed to
+anything. It is the floor a plugin author inherits before their plugin starts.
+The compositor, the audio mixer and the black slate run, so the picture never
+stops; the encode chain is not built until an output, a WHEP viewer or a
+recording asks for it, so no encoder plugin is loaded either. On Ubuntu that
+matters more than the encoder's CPU: the audio encoder is `avenc_aac`, and
+loading it maps gst-libav and every library the distribution's FFmpeg links
+against. The row's other column lists the GStreamer plugins loaded at the end
+of the window, so a plugin that should not be there shows up by name. The
+slate is a 16 pixel square drawn on the compositor's black background,
+because the compositor holds about a second of every input and a second of
+720p black frames was 40 MB.
 
-**Added per file source.** One 720p30 file decoded into the compositor with no
-encode on the far side, measured as the difference between a compositor at rest
-and the same compositor with the file in it. On a machine that decodes in
-hardware the decode happens somewhere else: macOS runs VideoToolbox in its own
-XPC process, so the mixer's own CPU barely moves and the number describes the
-mixer rather than the machine. The 40 MB target is for container mode, where a
-sidecar plugin also pays about 41 MB for its own GStreamer process; the number
-here is in process and so is the cheaper half of it.
+**Added per file source.** The mixer's own file source: a core like the one
+above, then the same core with one 720p30 clip added with `source.add` and
+taken to programme, with nothing encoding. Until 0.3.4 this row was a
+`gst-launch` pipeline (`filesrc ! decodebin ! compositor`), which measured
+GStreamer's defaults rather than what adding a clip costs. On a machine that
+decodes in hardware the decode happens somewhere else: macOS runs
+VideoToolbox in its own XPC process, so the mixer's own CPU barely moves and
+the number describes the mixer rather than the machine. `--decode software`
+pins the software decoder, which is what a Pi or a laptop without one pays.
+What is left once a clip's queues are short and its decoder has two threads is
+mostly the second of frames the compositor holds for every input, about 40 MB
+at 720p, and the decoder's own reference frames. See
+[sources](../reference/sources.md#what-a-clip-holds-in-memory).
 
 **Multiview.** The mosaic the operator watches, and the only source of frames
 for the snapshot routes. It does not exist until a client subscribes, and it is
