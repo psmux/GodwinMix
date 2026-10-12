@@ -27,6 +27,9 @@
 //! are printed as "not yet" with their target, so the table has the same shape
 //! on every machine and the gaps are visible rather than absent.
 
+mod file_source;
+mod plugins;
+
 use godwinmix_core::config::{Config, MultiviewConfig, SnapshotConfig, SourceConfig};
 use godwinmix_core::multiview::{MultiviewHandle, MultiviewRequest};
 use godwinmix_core::snapshot::Tracker;
@@ -578,6 +581,7 @@ async fn mixer_rows(args: &BenchArgs) -> Result<Vec<Row>> {
     let thread = godwinmix_core::mixer::spawn(mix, cmd_rx, handle.clone());
 
     let idle = steady(args.warmup(), args.window()).await;
+    let idle_plugins = plugins::loaded_line();
     rows.push(
         Row::new(
             "core-idle",
@@ -586,10 +590,12 @@ async fn mixer_rows(args: &BenchArgs) -> Result<Vec<Row>> {
             "gmx bench --only core-idle".into(),
         )
         .load(idle)
+        .other(idle_plugins)
         .note(
             "With `[program] encoder = \"on-demand\"`, which is the default, the \
-             encode chain is off the raw tees and at NULL until something reads \
-             it. The compositor, the audio mixer and both raw tees run, so the \
+             encode chain is not built until something reads it, so no encoder \
+             plugin is loaded either; the other column lists the plugins that \
+             are. The compositor, the audio mixer and both raw tees run, so the \
              picture never stops and a take is never delayed. The row below is \
              the same core with the encoder pinned on, which is what every \
              release before this one did.",
@@ -691,49 +697,6 @@ async fn mixer_rows(args: &BenchArgs) -> Result<Vec<Row>> {
     let _ = handle.send(godwinmix_core::mixer::Command::Shutdown);
     tokio::task::spawn_blocking(move || thread.join()).await.ok();
     Ok(rows)
-}
-
-/// One 720p30 file decoded into a compositor with nothing encoding on the far
-/// side, measured as the difference between a compositor at rest and the same
-/// compositor with the file in it.
-async fn file_source_row(args: &BenchArgs, clip: &Path) -> Result<Row> {
-    let caps = format!("video/x-raw,width={BENCH_WIDTH},height={BENCH_HEIGHT},framerate={BENCH_FPS}/1");
-    let base = format!(
-        "videotestsrc pattern=black is-live=true ! {caps} ! \
-         compositor name=comp background=black ! {caps} ! fakesink sync=true"
-    );
-    let with_file = format!(
-        "{base} filesrc location={} ! decodebin ! videoconvert ! videoscale ! \
-         videorate ! {caps} ! comp.",
-        launch_path(clip)
-    );
-    let baseline = measure_pipeline(args, &base).await?;
-    let loaded = measure_pipeline(args, &with_file).await?;
-    let hw_decode = godwinmix_core::probe::Backends::probe(
-        godwinmix_core::config::Accel::Auto,
-        godwinmix_core::config::Accel::Auto,
-    )
-    .map(|b| b.video_decode.accel != godwinmix_core::config::Accel::Software)
-    .unwrap_or(false);
-    let mut note = String::from(
-        "In process, not container mode: a sidecar source pays about 41 MB more \
-         for its own GStreamer process.",
-    );
-    if hw_decode {
-        note.push_str(
-            " This machine decodes in hardware, and on macOS VideoToolbox runs in \
-             its own XPC process, so the decode does not appear in this process's \
-             CPU at all. The number is the mixer's own cost, not the machine's.",
-        );
-    }
-    Ok(Row::new(
-        "file-source",
-        "Added RSS and CPU per 720p30 file source into the compositor, no encode",
-        "at most 40 MB, at most 15 percent of one core on `pi4`",
-        format!("gst-launch-1.0 {with_file}"),
-    )
-    .load(loaded.minus(baseline))
-    .note(&note))
 }
 
 /// Two live 720p30 sources composited and encoded, once on x264 and once on
@@ -1095,7 +1058,7 @@ pub async fn run(args: BenchArgs) -> Result<()> {
     let clip = if clip_needed { Some(test_clip(&args)?) } else { None };
 
     if args.wants("file-source") {
-        rows.push(file_source_row(&args, clip.as_ref().unwrap()).await?);
+        rows.push(file_source::row(&args, clip.as_ref().unwrap()).await?);
     }
     if args.wants("two-live") {
         rows.extend(programme_rows(&args).await?);
