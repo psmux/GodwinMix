@@ -60,6 +60,10 @@ pub struct Bundle {
     pub page: Value,
     #[serde(default)]
     pub media: Vec<MediaEntry>,
+    /// Every folder in the media library, `Sermons/2026` style, so an
+    /// import makes the empty ones too.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub media_folders: Vec<String>,
     /// What was taken out, in words: "output youtube: its stream key".
     #[serde(default)]
     pub removed: Vec<String>,
@@ -73,6 +77,9 @@ pub struct MediaEntry {
     /// Base64, present only when the export was asked to include media.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub data: Option<String>,
+    /// Its tags in the library.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tags: Vec<String>,
 }
 
 impl Bundle {
@@ -96,6 +103,7 @@ impl Bundle {
             scenes: Value::Null,
             page: Value::Null,
             media: Vec::new(),
+            media_folders: Vec::new(),
             removed: Vec::new(),
         }
     }

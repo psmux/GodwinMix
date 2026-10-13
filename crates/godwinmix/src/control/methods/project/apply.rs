@@ -64,6 +64,10 @@ pub async fn run(call: &Call, plan: Plan, replace: bool, report: &mut Report) ->
     let waiting = call.app.channels.project_import(plan.channels, replace)?;
     report.waiting.extend(waiting);
     write_media(call, plan.media, report).await;
+    let dir = call.app.library.dir().to_path_buf();
+    let layout = plan.library;
+    let failed = tokio::task::spawn_blocking(move || super::media_layout::lay_out(&dir, &layout)).await.unwrap_or_default();
+    report.failed.extend(failed);
     Ok(())
 }
 

@@ -30,7 +30,7 @@ fn walk(root: &Path, dir: &Path, depth: usize, out: &mut Vec<MediaEntry>) {
         } else if meta.is_file() && godwinmix_core::media::is_media(&path) {
             let Ok(rel) = path.strip_prefix(root) else { continue };
             let name = rel.components().map(|c| c.as_os_str().to_string_lossy()).collect::<Vec<_>>().join("/");
-            out.push(MediaEntry { name, size: meta.len(), data: None });
+            out.push(MediaEntry { name, size: meta.len(), data: None, tags: Vec::new() });
         }
     }
 }
@@ -107,7 +107,7 @@ mod tests {
         write(&other, &found[0]).unwrap();
         assert_eq!(std::fs::read(other.join("ads/one.png")).unwrap(), b"12345");
         assert_eq!(action(&other, &found[0]), "keep");
-        let evil = MediaEntry { name: "../x.mp4".into(), size: 1, data: Some("YQ==".into()) };
+        let evil = MediaEntry { name: "../x.mp4".into(), size: 1, data: Some("YQ==".into()), tags: Vec::new() };
         assert!(write(&other, &evil).is_err());
         std::fs::remove_dir_all(&dir).ok();
     }

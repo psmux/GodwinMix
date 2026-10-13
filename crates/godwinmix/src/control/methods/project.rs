@@ -15,6 +15,7 @@ mod entries;
 mod export;
 mod ids;
 mod media;
+mod media_layout;
 mod plan;
 mod redact;
 mod settings;

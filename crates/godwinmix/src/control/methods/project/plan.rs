@@ -21,6 +21,9 @@ pub struct Plan {
     pub scenes: Option<Collection>,
     pub channels: Vec<Incoming>,
     pub media: Vec<MediaEntry>,
+    /// Folders to make and tags to give, for the clips that are here after
+    /// the import: added, or the same file already here.
+    pub library: super::media_layout::Layout,
 }
 
 pub async fn build(call: &Call, bundle: &Bundle, replace: bool, machine: bool, report: &mut Report) -> Result<Plan, RpcError> {
@@ -38,7 +41,8 @@ pub async fn build(call: &Call, bundle: &Bundle, replace: bool, machine: bool, r
     let scenes = plan_scenes(call, bundle, replace, &sources.renamed, report)?;
     let channels = plan_channels(call, bundle, replace, report)?;
     let media = plan_media(call, bundle, report);
-    Ok(Plan { settings, sources, outputs, scenes, channels, media })
+    let library = super::media_layout::layout(call.app.library.dir(), bundle);
+    Ok(Plan { settings, sources, outputs, scenes, channels, media, library })
 }
 
 fn plan_settings(call: &Call, bundle: &Bundle, replace: bool, machine: bool, report: &mut Report) -> serde_json::Map<String, Value> {
