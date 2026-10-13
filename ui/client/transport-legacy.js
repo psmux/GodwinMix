@@ -281,8 +281,8 @@ export class LegacyTransport {
     }
   }
 
-  upload(name, file, onProgress) {
-    return httpUpload(this.base, this.token, name, file, onProgress);
+  upload(name, file, onProgress, into) {
+    return httpUpload(this.base, this.token, name, file, onProgress, into);
   }
 
   snapshotUrl(name, width) {

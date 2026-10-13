@@ -190,8 +190,9 @@ export class Client {
     return outputs;
   }
 
-  upload(name, file, onProgress) {
-    return this.transport.upload(name, file, onProgress);
+  /** `into` is `{folder, tags}`: where in the library, and its tags. */
+  upload(name, file, onProgress, into) {
+    return this.transport.upload(name, file, onProgress, into);
   }
 
   snapshotUrl(name, width) {

@@ -167,7 +167,18 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/header/stop.js", include_str!("../../../ui/panels/header/stop.js")),
     ("panels/header/banner.js", include_str!("../../../ui/panels/header/banner.js")),
     ("panels/media/entry.js", include_str!("../../../ui/panels/media/entry.js")),
+    ("panels/media/actions.js", include_str!("../../../ui/panels/media/actions.js")),
+    ("panels/media/adbreak.js", include_str!("../../../ui/panels/media/adbreak.js")),
+    ("panels/media/bar.js", include_str!("../../../ui/panels/media/bar.js")),
+    ("panels/media/drag.js", include_str!("../../../ui/panels/media/drag.js")),
+    ("panels/media/edit.js", include_str!("../../../ui/panels/media/edit.js")),
+    ("panels/media/media.css", include_str!("../../../ui/panels/media/media.css")),
+    ("panels/media/menus.js", include_str!("../../../ui/panels/media/menus.js")),
+    ("panels/media/model.js", include_str!("../../../ui/panels/media/model.js")),
     ("panels/media/panel.js", include_str!("../../../ui/panels/media/panel.js")),
+    ("panels/media/rail.js", include_str!("../../../ui/panels/media/rail.js")),
+    ("panels/media/row.js", include_str!("../../../ui/panels/media/row.js")),
+    ("panels/media/upload.js", include_str!("../../../ui/panels/media/upload.js")),
     ("panels/multiview/panel.js", include_str!("../../../ui/panels/multiview/panel.js")),
     ("panels/multiview/wanted.js", include_str!("../../../ui/panels/multiview/wanted.js")),
     ("panels/multiview/backup-banner.js", include_str!("../../../ui/panels/multiview/backup-banner.js")),
@@ -424,6 +435,8 @@ const DEV_ASSETS: &[(&str, &str)] = &[
     ("test/live-data-feed.json", include_str!("../../../ui/test/live-data-feed.json")),
     ("test/graphics.js", include_str!("../../../ui/test/graphics.js")),
     ("test/gallery.js", include_str!("../../../ui/test/gallery.js")),
+    ("test/media.js", include_str!("../../../ui/test/media.js")),
+    ("test/media-stub.js", include_str!("../../../ui/test/media-stub.js")),
     ("test/studio.js", include_str!("../../../ui/test/studio.js")),
     ("test/transitions.js", include_str!("../../../ui/test/transitions.js")),
     ("test/take-bar.js", include_str!("../../../ui/test/take-bar.js")),
@@ -1109,6 +1122,8 @@ mod tests {
         reachable.extend(closure_of("shell/palette.js"));
         reachable.extend(closure_of("shell/settings-dialog.js"));
         reachable.extend(closure_of("panels/media/panel.js"));
+        // The Media panel's dialogs: tags, Move to, a name, removing a folder.
+        reachable.extend(closure_of("panels/media/edit.js"));
         reachable.extend(closure_of("shell/dock-menu.js"));
         reachable.extend(closure_of("shell/picker.js"));
         reachable.extend(closure_of("panels/sources/chooser.js"));

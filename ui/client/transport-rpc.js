@@ -68,8 +68,8 @@ export class RpcTransport {
    * Uploads go over HTTP even here: a WebSocket frame is capped at 4 MiB and a
    * clip is not, and only XHR reports progress on the way up.
    */
-  upload(name, file, onProgress) {
-    return httpUpload(this.base, this.token, name, file, onProgress);
+  upload(name, file, onProgress, into) {
+    return httpUpload(this.base, this.token, name, file, onProgress, into);
   }
 
   snapshotUrl(name, width) {
@@ -113,11 +113,13 @@ export function withShow(u) {
 }
 
 /** Shared by both transports: one file, streamed, with a progress callback. */
-export function httpUpload(base, token, name, file, onProgress) {
+export function httpUpload(base, token, name, file, onProgress, into) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     const u = new URL("/api/media/upload", base);
     u.searchParams.set("name", name);
+    if (into && into.folder) u.searchParams.set("folder", into.folder);
+    if (into && into.tags && into.tags.length) u.searchParams.set("tags", into.tags.join(","));
     withShow(u);
     xhr.open("POST", u.toString());
     xhr.setRequestHeader("Content-Type", "application/octet-stream");
