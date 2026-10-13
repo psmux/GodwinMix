@@ -586,6 +586,11 @@ async fn describe(call: Call, params: Value) -> Result<Value, RpcError> {
 
 async fn add(call: Call, params: Value) -> Result<Value, RpcError> {
     let req: AddPluginRequest = call.params(&params)?;
+    if godwinmix_host::sources::Source::parse(&req.source).is_err()
+        && godwinmix_core::plugin::first_party::find(&req.source).is_none()
+    {
+        default_marketplace(&call).await;
+    }
     let source = godwinmix_host::sources::Source::parse(&req.source)
         .or_else(|direct| {
             // Not a source form. It may still be a plugin that ships with this
@@ -792,6 +797,7 @@ fn not_a_source(spec: &str, only: &[String], parsed: String) -> RpcError {
 
 async fn search(call: Call, params: Value) -> Result<Value, RpcError> {
     let req: SearchRequest = call.params(&params).unwrap_or(SearchRequest { term: String::new() });
+    default_marketplace(&call).await;
     let only = options(&call).only;
     let found = godwinmix_host::marketplace::search(&req.term, &only);
     let installed: Vec<String> = loader::list().iter().map(|p| p.name().to_string()).collect();
@@ -817,6 +823,16 @@ async fn search(call: Call, params: Value) -> Result<Value, RpcError> {
             })
             .collect(),
     })
+}
+
+/// Add the community index the first time a name is searched for or looked
+/// up, and only then. A copy already on disk is read as it is.
+async fn default_marketplace(call: &Call) {
+    let only = options(call).only;
+    let _ = tokio::task::spawn_blocking(move || {
+        godwinmix_host::marketplace::gallery::refresh_now(&only, None)
+    })
+    .await;
 }
 
 /// What the operator's config says an install may do.

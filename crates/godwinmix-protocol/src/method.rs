@@ -294,6 +294,8 @@ const COLLECTION_LEVEL: &[&str] = &[
     "show.add_many",
     "show.remove_many",
     "show.stats",
+    // Every listing in every marketplace: about plugins, not one of them.
+    "plugin.gallery",
 ];
 
 /// True when a method is about the collection rather than one of its members.

@@ -5256,6 +5256,40 @@
       ],
       "type": "object"
     },
+    "Gallery": {
+      "description": "What `plugin.gallery` answers with.",
+      "properties": {
+        "marketplaces": {
+          "description": "The marketplaces read, and how fresh each copy is.",
+          "items": {
+            "$ref": "#/$defs/GalleryMarketplace"
+          },
+          "type": "array"
+        },
+        "offline": {
+          "description": "True when a marketplace was due and could not be reached, so what is\nshown is the copy from before.",
+          "type": "boolean"
+        },
+        "platform": {
+          "description": "This machine, as a platform triple: `windows-x86_64`.",
+          "type": "string"
+        },
+        "plugins": {
+          "description": "Every plugin listed, once each, highest tier first.",
+          "items": {
+            "$ref": "#/$defs/GalleryEntry"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "platform",
+        "marketplaces",
+        "plugins",
+        "offline"
+      ],
+      "type": "object"
+    },
     "GalleryDuplicateRequest": {
       "description": "`gallery.duplicate`.",
       "properties": {
@@ -5316,6 +5350,153 @@
           ]
         }
       },
+      "type": "object"
+    },
+    "GalleryEntry": {
+      "description": "One plugin, as a gallery card and its detail view show it.",
+      "properties": {
+        "author": {
+          "type": "string"
+        },
+        "bundled": {
+          "description": "It ships with GodwinMix and installs with no download.",
+          "type": "boolean"
+        },
+        "description": {
+          "type": "string"
+        },
+        "downloads": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "fit": {
+          "description": "The card's word for that: \"Runs here\", \"Not for Windows\".",
+          "type": "string"
+        },
+        "fit_detail": {
+          "description": "The sentence behind it.",
+          "type": "string"
+        },
+        "homepage": {
+          "type": "string"
+        },
+        "icon": {
+          "description": "Picture URLs, loaded by the browser from where they are.",
+          "type": "string"
+        },
+        "install": {
+          "description": "What to pass to `plugin.add` as `source`.",
+          "type": "string"
+        },
+        "installed": {
+          "type": "boolean"
+        },
+        "installed_version": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kinds": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "license": {
+          "type": "string"
+        },
+        "marketplace": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "repository": {
+          "type": "string"
+        },
+        "runs_here": {
+          "description": "Whether it runs on this machine at this mixer's protocol level.",
+          "type": "boolean"
+        },
+        "screenshots": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "signed": {
+          "description": "Whether that version's assets were signed by the marketplace's CI.",
+          "type": "boolean"
+        },
+        "stars": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "tags": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "thumbnail": {
+          "type": "string"
+        },
+        "tier": {
+          "description": "custom, bronze, silver or gold.",
+          "type": "string"
+        },
+        "title": {
+          "description": "The human name. The name when the listing has none.",
+          "type": "string"
+        },
+        "update": {
+          "description": "Installed, and the listing has a newer version.",
+          "type": "boolean"
+        },
+        "updated": {
+          "description": "When it last changed, RFC 3339.",
+          "type": "string"
+        },
+        "version": {
+          "description": "The newest listed version this mixer can run, else the newest listed.",
+          "type": "string"
+        },
+        "versions": {
+          "default": [],
+          "description": "Every version listed, oldest first.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "name",
+        "title",
+        "description",
+        "tier",
+        "kinds",
+        "bundled",
+        "signed",
+        "install",
+        "marketplace",
+        "installed",
+        "update",
+        "runs_here",
+        "fit",
+        "fit_detail"
+      ],
       "type": "object"
     },
     "GalleryExportRequest": {
@@ -5643,6 +5824,40 @@
       },
       "type": "object"
     },
+    "GalleryMarketplace": {
+      "description": "One marketplace the gallery read.",
+      "properties": {
+        "fetched": {
+          "description": "When the copy was fetched, seconds since the epoch. 0 when there is none.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "name": {
+          "type": "string"
+        },
+        "problem": {
+          "description": "Why it was not fetched just now, when it was due.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source": {
+          "description": "What was added: `owner/repo`, a URL or a path.",
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "source",
+        "fetched"
+      ],
+      "type": "object"
+    },
     "GalleryPlaceRequest": {
       "additionalProperties": false,
       "description": "`gallery.place`: add an item to a scene in its zone. Hidden unless\n`visible`; `gallery.show` takes it on air.",
@@ -5831,6 +6046,17 @@
             "integer",
             "null"
           ]
+        }
+      },
+      "type": "object"
+    },
+    "GalleryRequest": {
+      "description": "`plugin.gallery`.",
+      "properties": {
+        "refresh": {
+          "default": false,
+          "description": "Fetch every marketplace now, however fresh its copy. Without it a copy\nyounger than ten minutes is read as it is.",
+          "type": "boolean"
         }
       },
       "type": "object"
@@ -18165,6 +18391,25 @@
       "scope": "admin",
       "since": "1",
       "summary": "Turn a plugin back on. It registers what it declares and its instances start."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mutating": false,
+      "name": "plugin.gallery",
+      "params": {
+        "$ref": "#/$defs/GalleryRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/plugins/gallery"
+      },
+      "result": {
+        "$ref": "#/$defs/Gallery"
+      },
+      "scope": "read",
+      "since": "1",
+      "summary": "Every plugin the marketplaces list, once each, with its pictures, stars, downloads and tier, whether it is installed here, and whether it runs on this machine. Install one by passing its `install` to plugin.add. The community index is read by default; a copy younger than ten minutes is used as it is, and the last copy is used when the network is not there."
     },
     {
       "destructive": false,

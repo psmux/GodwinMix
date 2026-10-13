@@ -38,6 +38,7 @@ mod outputs;
 mod output_stop;
 mod preview;
 pub(crate) mod plugins;
+mod plugin_gallery;
 mod presence;
 pub mod presets;
 pub mod renditions;
@@ -94,6 +95,7 @@ pub fn registry() -> Registry<Call> {
     presence::register(&mut reg);
     preview::register(&mut reg);
     plugins::register(&mut reg);
+    plugin_gallery::register(&mut reg);
     channels::register(&mut reg);
     channels::register_certificate(&mut reg);
     nodes::register(&mut reg);

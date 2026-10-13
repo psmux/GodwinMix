@@ -2268,6 +2268,21 @@ pub struct FxSkipped {
     pub reason: String,
 }
 
+/// What `plugin.gallery` answers with.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Gallery {
+    /// The marketplaces read, and how fresh each copy is.
+    pub marketplaces: Vec<GalleryMarketplace>,
+    /// True when a marketplace was due and could not be reached, so what is
+    /// shown is the copy from before.
+    pub offline: bool,
+    /// This machine, as a platform triple: `windows-x86_64`.
+    pub platform: String,
+    /// Every plugin listed, once each, highest tier first.
+    pub plugins: Vec<GalleryEntry>,
+}
+
 /// `gallery.duplicate`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -2295,6 +2310,64 @@ pub struct GalleryEditRequest {
     pub values: Option<BTreeMap<String, Value>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub zone: Option<String>,
+}
+
+/// One plugin, as a gallery card and its detail view show it.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct GalleryEntry {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub author: Option<String>,
+    /// It ships with GodwinMix and installs with no download.
+    pub bundled: bool,
+    pub description: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub downloads: Option<u64>,
+    /// The card's word for that: "Runs here", "Not for Windows".
+    pub fit: String,
+    /// The sentence behind it.
+    pub fit_detail: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub homepage: Option<String>,
+    /// Picture URLs, loaded by the browser from where they are.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
+    /// What to pass to `plugin.add` as `source`.
+    pub install: String,
+    pub installed: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub installed_version: Option<String>,
+    pub kinds: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub license: Option<String>,
+    pub marketplace: String,
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub repository: Option<String>,
+    /// Whether it runs on this machine at this mixer's protocol level.
+    pub runs_here: bool,
+    pub screenshots: Vec<String>,
+    /// Whether that version's assets were signed by the marketplace's CI.
+    pub signed: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stars: Option<u64>,
+    pub tags: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub thumbnail: Option<String>,
+    /// custom, bronze, silver or gold.
+    pub tier: String,
+    /// The human name. The name when the listing has none.
+    pub title: String,
+    /// Installed, and the listing has a newer version.
+    pub update: bool,
+    /// When it last changed, RFC 3339.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub updated: Option<String>,
+    /// The newest listed version this mixer can run, else the newest listed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
+    /// Every version listed, oldest first.
+    pub versions: Vec<String>,
 }
 
 /// `gallery.export`: items as one zip to carry to another mixer.
@@ -2430,6 +2503,22 @@ pub struct GalleryListRequest {
     pub query: Option<String>,
 }
 
+/// One marketplace the gallery read.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct GalleryMarketplace {
+    /// When the copy was fetched, seconds since the epoch. 0 when there is none.
+    pub fetched: u64,
+    pub name: String,
+    /// Why it was not fetched just now, when it was due.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub problem: Option<String>,
+    /// What was added: `owner/repo`, a URL or a path.
+    pub source: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+}
+
 /// `gallery.place`: add an item to a scene in its zone. Hidden unless
 /// `visible`; `gallery.show` takes it on air.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -2517,6 +2606,16 @@ pub struct GalleryPreviewRequest {
     /// third needs.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub width: Option<u32>,
+}
+
+/// `plugin.gallery`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct GalleryRequest {
+    /// Fetch every marketplace now, however fresh its copy. Without it a copy
+    /// younger than ten minutes is read as it is.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub refresh: Option<bool>,
 }
 
 /// `gallery.save`: one call for any kind. Give exactly one of `svg`, `html`,
@@ -6518,7 +6617,7 @@ pub struct MethodInfo {
     pub rest: Option<(&'static str, &'static str)>,
 }
 
-pub const METHODS: [MethodInfo; 224] = [
+pub const METHODS: [MethodInfo; 225] = [
     MethodInfo { name: "adbreak.end", summary: "Cut a running ad short, or disarm one that is scheduled.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/end")) },
     MethodInfo { name: "adbreak.start", summary: "Interrupt the programme with a clip, then rejoin live when it ends.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/start")) },
     MethodInfo { name: "agent.setup", summary: "Set an AI agent tool up to use this mixer: its MCP config gets one entry, godwinmix, that runs this mixer's own executable, and its skills folder gets the GodwinMix skills. Other entries are kept and a changed file is copied aside first. dry_run answers every file it would write. The answer says how to start the tool and a first thing to ask it.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/agent/setup")) },
@@ -6620,6 +6719,7 @@ pub const METHODS: [MethodInfo; 224] = [
     MethodInfo { name: "plugin.describe", summary: "One plugin in full: its manifest, the settings schema of every provide, and the description from each SKILL.md.", scope: "read", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/plugins/{id}/describe")) },
     MethodInfo { name: "plugin.disable", summary: "Turn a plugin off without uninstalling it. It registers nothing and runs no process until it is enabled again.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/plugins/{id}/disable")) },
     MethodInfo { name: "plugin.enable", summary: "Turn a plugin back on. It registers what it declares and its instances start.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/plugins/{id}/enable")) },
+    MethodInfo { name: "plugin.gallery", summary: "Every plugin the marketplaces list, once each, with its pictures, stars, downloads and tier, whether it is installed here, and whether it runs on this machine. Install one by passing its `install` to plugin.add. The community index is read by default; a copy younger than ten minutes is used as it is, and the last copy is used when the network is not there.", scope: "read", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/plugins/gallery")) },
     MethodInfo { name: "plugin.list", summary: "Every plugin installed, with what it provides and what each running instance is costing in cpu, memory, latency, dropped buffers and restarts.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/plugins")) },
     MethodInfo { name: "plugin.reload", summary: "Read a plugin's directory again and swap its running instances one at a time, with the freeze frame covering each.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/plugins/{id}/reload")) },
     MethodInfo { name: "plugin.remove", summary: "Uninstall a plugin and unwind everything it registered: its provides, its tools, its panels, its hooks and its discovery matchers.", scope: "admin", mutating: true, destructive: true, rest: Some(("DELETE", "/api/v1/plugins/{id}")) },
@@ -7581,6 +7681,11 @@ impl Client {
     /// Turn a plugin back on. It registers what it declares and its instances start.
     pub async fn plugin_enable(&self, params: &PluginName) -> Result<PluginRecord> {
         self.call("plugin.enable", params).await
+    }
+
+    /// Every plugin the marketplaces list, once each, with its pictures, stars, downloads and tier, whether it is installed here, and whether it runs on this machine. Install one by passing its `install` to plugin.add. The community index is read by default; a copy younger than ten minutes is used as it is, and the last copy is used when the network is not there.
+    pub async fn plugin_gallery(&self, params: &GalleryRequest) -> Result<Gallery> {
+        self.call("plugin.gallery", params).await
     }
 
     /// Every plugin installed, with what it provides and what each running instance is costing in cpu, memory, latency, dropped buffers and restarts.

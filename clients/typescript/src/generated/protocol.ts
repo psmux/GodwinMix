@@ -1248,6 +1248,14 @@ export interface FxSkipped {
   reason: string;
 }
 
+/** What `plugin.gallery` answers with. */
+export interface Gallery {
+  marketplaces: GalleryMarketplace[];
+  offline: boolean;
+  platform: string;
+  plugins: GalleryEntry[];
+}
+
 /** `gallery.duplicate`. */
 export interface GalleryDuplicateRequest {
   id?: string;
@@ -1262,6 +1270,38 @@ export interface GalleryEditRequest {
   tags?: unknown;
   values?: Record<string, unknown> | null;
   zone?: string | null;
+}
+
+/** One plugin, as a gallery card and its detail view show it. */
+export interface GalleryEntry {
+  author?: string;
+  bundled: boolean;
+  description: string;
+  downloads?: number | null;
+  fit: string;
+  fit_detail: string;
+  homepage?: string;
+  icon?: string;
+  install: string;
+  installed: boolean;
+  installed_version?: string | null;
+  kinds: string[];
+  license?: string;
+  marketplace: string;
+  name: string;
+  repository?: string;
+  runs_here: boolean;
+  screenshots?: string[];
+  signed: boolean;
+  stars?: number | null;
+  tags?: string[];
+  thumbnail?: string;
+  tier: string;
+  title: string;
+  update: boolean;
+  updated?: string;
+  version?: string;
+  versions?: string[];
 }
 
 /** `gallery.export`: items as one zip to carry to another mixer. */
@@ -1335,6 +1375,15 @@ export interface GalleryListRequest {
   query?: string | null;
 }
 
+/** One marketplace the gallery read. */
+export interface GalleryMarketplace {
+  fetched: number;
+  name: string;
+  problem?: string | null;
+  source: string;
+  title?: string;
+}
+
 /**
  * `gallery.place`: add an item to a scene in its zone. Hidden unless
  * `visible`; `gallery.show` takes it on air.
@@ -1379,6 +1428,11 @@ export interface GalleryPreviewRequest {
   id?: string;
   values?: Record<string, unknown> | null;
   width?: number | null;
+}
+
+/** `plugin.gallery`. */
+export interface GalleryRequest {
+  refresh?: boolean;
 }
 
 /**
@@ -3715,6 +3769,7 @@ export interface MethodParams {
   "plugin.describe": PluginName;
   "plugin.disable": PluginName;
   "plugin.enable": PluginName;
+  "plugin.gallery": GalleryRequest;
   "plugin.list": Record<string, never>;
   "plugin.reload": PluginName;
   "plugin.remove": PluginName;
@@ -3943,6 +3998,7 @@ export interface MethodResults {
   "plugin.describe": PluginDescription;
   "plugin.disable": PluginRecord;
   "plugin.enable": PluginRecord;
+  "plugin.gallery": Gallery;
   "plugin.list": PluginListing;
   "plugin.reload": PluginRecord;
   "plugin.remove": PluginRemoved;
@@ -4225,6 +4281,7 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "plugin.describe", summary: "One plugin in full: its manifest, the settings schema of every provide, and the description from each SKILL.md.", scope: "read", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/plugins/{id}/describe" } },
   { name: "plugin.disable", summary: "Turn a plugin off without uninstalling it. It registers nothing and runs no process until it is enabled again.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/plugins/{id}/disable" } },
   { name: "plugin.enable", summary: "Turn a plugin back on. It registers what it declares and its instances start.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/plugins/{id}/enable" } },
+  { name: "plugin.gallery", summary: "Every plugin the marketplaces list, once each, with its pictures, stars, downloads and tier, whether it is installed here, and whether it runs on this machine. Install one by passing its `install` to plugin.add. The community index is read by default; a copy younger than ten minutes is used as it is, and the last copy is used when the network is not there.", scope: "read", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/plugins/gallery" } },
   { name: "plugin.list", summary: "Every plugin installed, with what it provides and what each running instance is costing in cpu, memory, latency, dropped buffers and restarts.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/plugins" } },
   { name: "plugin.reload", summary: "Read a plugin's directory again and swap its running instances one at a time, with the freeze frame covering each.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/plugins/{id}/reload" } },
   { name: "plugin.remove", summary: "Uninstall a plugin and unwind everything it registered: its provides, its tools, its panels, its hooks and its discovery matchers.", scope: "admin", mutating: true, destructive: true, rest: { method: "DELETE", path: "/api/v1/plugins/{id}" } },
@@ -4918,6 +4975,11 @@ export class GeneratedMethods {
   /** Turn a plugin back on. It registers what it declares and its instances start. */
   pluginEnable(params: PluginName): Promise<PluginRecord> {
     return this._call("plugin.enable", params as unknown as Record<string, unknown>) as Promise<PluginRecord>;
+  }
+
+  /** Every plugin the marketplaces list, once each, with its pictures, stars, downloads and tier, whether it is installed here, and whether it runs on this machine. Install one by passing its `install` to plugin.add. The community index is read by default; a copy younger than ten minutes is used as it is, and the last copy is used when the network is not there. */
+  pluginGallery(params: GalleryRequest = {}): Promise<Gallery> {
+    return this._call("plugin.gallery", params as unknown as Record<string, unknown>) as Promise<Gallery>;
   }
 
   /** Every plugin installed, with what it provides and what each running instance is costing in cpu, memory, latency, dropped buffers and restarts. */

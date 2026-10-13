@@ -135,6 +135,7 @@ Keys accepted on every method, handled before a method runs.
 | `plugin.describe` | `POST /api/v1/plugins/{id}/describe` | read |  | 1 | One plugin in full: its manifest, the settings schema of every provide, and the description from each SKILL.md. |
 | `plugin.disable` | `POST /api/v1/plugins/{id}/disable` | admin |  | 1 | Turn a plugin off without uninstalling it. It registers nothing and runs no process until it is enabled again. |
 | `plugin.enable` | `POST /api/v1/plugins/{id}/enable` | admin |  | 1 | Turn a plugin back on. It registers what it declares and its instances start. |
+| `plugin.gallery` | `POST /api/v1/plugins/gallery` | read |  | 1 | Every plugin the marketplaces list, once each, with its pictures, stars, downloads and tier, whether it is installed here, and whether it runs on this machine. Install one by passing its `install` to plugin.add. The community index is read by default; a copy younger than ten minutes is used as it is, and the last copy is used when the network is not there. |
 | `plugin.list` | `GET /api/v1/plugins` | read |  | 1 | Every plugin installed, with what it provides and what each running instance is costing in cpu, memory, latency, dropped buffers and restarts. |
 | `plugin.reload` | `POST /api/v1/plugins/{id}/reload` | admin |  | 1 | Read a plugin's directory again and swap its running instances one at a time, with the freeze frame covering each. |
 | `plugin.remove` | `DELETE /api/v1/plugins/{id}` | admin | yes | 1 | Uninstall a plugin and unwind everything it registered: its provides, its tools, its panels, its hooks and its discovery matchers. |
@@ -1942,6 +1943,21 @@ Turn a plugin back on. It registers what it declares and its instances start.
   },
   "result": {
     "$ref": "#/$defs/PluginRecord"
+  }
+}
+```
+
+#### `plugin.gallery`
+
+Every plugin the marketplaces list, once each, with its pictures, stars, downloads and tier, whether it is installed here, and whether it runs on this machine. Install one by passing its `install` to plugin.add. The community index is read by default; a copy younger than ten minutes is used as it is, and the last copy is used when the network is not there.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/GalleryRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/Gallery"
   }
 }
 ```

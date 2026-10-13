@@ -1404,6 +1404,18 @@ class FxSkipped(TypedDict, total=False):
     file: str
     reason: str
 
+class Gallery(TypedDict, total=False):
+    """What `plugin.gallery` answers with."""
+
+    marketplaces: List[GalleryMarketplace]
+    # The marketplaces read, and how fresh each copy is.
+    offline: bool
+    # True when a marketplace was due and could not be reached, so what is shown is the copy from before.
+    platform: str
+    # This machine, as a platform triple: `windows-x86_64`.
+    plugins: List[GalleryEntry]
+    # Every plugin listed, once each, highest tier first.
+
 class GalleryDuplicateRequest(TypedDict, total=False):
     """`gallery.duplicate`."""
 
@@ -1421,6 +1433,51 @@ class GalleryEditRequest(TypedDict, total=False):
     values: Optional[Dict[str, Any]]
     # Field values to keep with the item; `null` drops one.
     zone: Optional[str]
+
+class GalleryEntry(TypedDict, total=False):
+    """One plugin, as a gallery card and its detail view show it."""
+
+    author: str
+    bundled: bool
+    # It ships with GodwinMix and installs with no download.
+    description: str
+    downloads: Optional[int]
+    fit: str
+    # The card's word for that: "Runs here", "Not for Windows".
+    fit_detail: str
+    # The sentence behind it.
+    homepage: str
+    icon: str
+    # Picture URLs, loaded by the browser from where they are.
+    install: str
+    # What to pass to `plugin.add` as `source`.
+    installed: bool
+    installed_version: Optional[str]
+    kinds: List[str]
+    license: str
+    marketplace: str
+    name: str
+    repository: str
+    runs_here: bool
+    # Whether it runs on this machine at this mixer's protocol level.
+    screenshots: List[str]
+    signed: bool
+    # Whether that version's assets were signed by the marketplace's CI.
+    stars: Optional[int]
+    tags: List[str]
+    thumbnail: str
+    tier: str
+    # custom, bronze, silver or gold.
+    title: str
+    # The human name. The name when the listing has none.
+    update: bool
+    # Installed, and the listing has a newer version.
+    updated: str
+    # When it last changed, RFC 3339.
+    version: str
+    # The newest listed version this mixer can run, else the newest listed.
+    versions: List[str]
+    # Every version listed, oldest first.
 
 class GalleryExportRequest(TypedDict, total=False):
     """`gallery.export`: items as one zip to carry to another mixer."""
@@ -1513,6 +1570,18 @@ class GalleryListRequest(TypedDict, total=False):
     query: Optional[str]
     # Words to look for in the name, tags, description and kind: `"lower third"`, `"red news"`, `"background"`.
 
+class GalleryMarketplace(TypedDict, total=False):
+    """One marketplace the gallery read."""
+
+    fetched: int
+    # When the copy was fetched, seconds since the epoch. 0 when there is none.
+    name: str
+    problem: Optional[str]
+    # Why it was not fetched just now, when it was due.
+    source: str
+    # What was added: `owner/repo`, a URL or a path.
+    title: str
+
 class GalleryPlaceRequest(TypedDict, total=False):
     """`gallery.place`: add an item to a scene in its zone. Hidden unless `visible`; `gallery.show` takes it on air."""
 
@@ -1567,6 +1636,12 @@ class GalleryPreviewRequest(TypedDict, total=False):
     # Field values to try, over the item's own, without saving them.
     width: Optional[int]
     # Pixels wide, 64 to 1920. Default 960, which is what reading a lower third needs.
+
+class GalleryRequest(TypedDict, total=False):
+    """`plugin.gallery`."""
+
+    refresh: bool
+    # Fetch every marketplace now, however fresh its copy. Without it a copy younger than ten minutes is read as it is.
 
 class GallerySaveRequest(TypedDict, total=False):
     """`gallery.save`: one call for any kind. Give exactly one of `svg`, `html`, `data`, `file`, `source` or `set`; the kind is worked out from it."""
@@ -4315,6 +4390,7 @@ METHODS = (
     {"name": "plugin.describe", "scope": "read", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/plugins/{id}/describe"), "summary": 'One plugin in full: its manifest, the settings schema of every provide, and the description from each SKILL.md.'},
     {"name": "plugin.disable", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/plugins/{id}/disable"), "summary": 'Turn a plugin off without uninstalling it. It registers nothing and runs no process until it is enabled again.'},
     {"name": "plugin.enable", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/plugins/{id}/enable"), "summary": 'Turn a plugin back on. It registers what it declares and its instances start.'},
+    {"name": "plugin.gallery", "scope": "read", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/plugins/gallery"), "summary": 'Every plugin the marketplaces list, once each, with its pictures, stars, downloads and tier, whether it is installed here, and whether it runs on this machine. Install one by passing its `install` to plugin.add. The community index is read by default; a copy younger than ten minutes is used as it is, and the last copy is used when the network is not there.'},
     {"name": "plugin.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/plugins"), "summary": 'Every plugin installed, with what it provides and what each running instance is costing in cpu, memory, latency, dropped buffers and restarts.'},
     {"name": "plugin.reload", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/plugins/{id}/reload"), "summary": "Read a plugin's directory again and swap its running instances one at a time, with the freeze frame covering each."},
     {"name": "plugin.remove", "scope": "admin", "mutating": True, "destructive": True, "rest": ("DELETE", "/api/v1/plugins/{id}"), "summary": 'Uninstall a plugin and unwind everything it registered: its provides, its tools, its panels, its hooks and its discovery matchers.'},
@@ -5915,6 +5991,17 @@ class GeneratedMethods:
         params: Dict[str, Any] = {}
         params["id"] = id
         return await self._call("plugin.enable", params)
+
+    async def plugin_gallery(
+        self,
+        *,
+        refresh: Optional[bool] = None,
+    ) -> Gallery:
+        """Every plugin the marketplaces list, once each, with its pictures, stars, downloads and tier, whether it is installed here, and whether it runs on this machine. Install one by passing its `install` to plugin.add. The community index is read by default; a copy younger than ten minutes is used as it is, and the last copy is used when the network is not there."""
+        params: Dict[str, Any] = {}
+        if refresh is not None:
+            params["refresh"] = refresh
+        return await self._call("plugin.gallery", params)
 
     async def plugin_list(
         self,
