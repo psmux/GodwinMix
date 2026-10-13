@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.3.8 (unreleased)
+## 0.3.8 (2026-10-13)
 
 * A clip in the config, or one put back from the runtime store, no longer stays open after its source is removed. On Windows the file could not be renamed or deleted until the show ended: the camera and screen plugins start with the show, a moment after the sources, and a new process inherits every open handle that is marked inheritable, which the handle of a clip read by GStreamer is. The core now marks the files it has open as private just before it starts a plugin, an `exec:` source, the browser sidecar or a hook command. A clip added later was never affected, because nothing was starting beside it.
 * `gmx marketplace add` adds a marketplace. It stopped with "Cannot drop a runtime in a context where blocking is not allowed", because its blocking download ran on the CLI's async runtime; it now runs on a thread of its own.
