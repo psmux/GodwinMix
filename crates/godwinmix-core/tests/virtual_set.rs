@@ -100,3 +100,45 @@ fn key_bins(pipeline: &gst::Pipeline) -> Vec<String> {
         .filter(|n| n.starts_with("filter-chroma-") && !n.ends_with("-key"))
         .collect()
 }
+
+/// What a person does from the composer: the scene is on air unkeyed, the
+/// key goes on, and later comes off. The programme never stops, nothing is
+/// rebuilt but the item's own chain, and the compositor stays in I420 the
+/// whole time: the board draws the key, so no format changes.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_key_added_and_taken_off_on_air_keeps_the_programme_running() {
+    let (handle, frames, thread, pipeline) = running_with_pipeline();
+    add(&handle, SourceConfig::bare("set", "test://blue")).await;
+    add(&handle, SourceConfig::bare("presenter", "test://smpte")).await;
+    take(&handle, vec![full("set"), full("presenter")]).await;
+    settle(1_200).await;
+    let format = || programme_format(&pipeline);
+    let (plain, plain_format) = (frames.latest().unwrap().yuv(GREEN_BAR, 40), format());
+    let mark = frames.mark();
+    take(&handle, vec![full("set"), keyed("presenter", "color = \"#00c000\"")]).await;
+    settle(1_000).await;
+    let f = frames.latest().unwrap();
+    let (keyed_screen, keyed_white, keyed_format) = (f.yuv(GREEN_BAR, 40), f.yuv(WHITE_BAR, 60), format());
+    take(&handle, vec![full("set"), full("presenter")]).await;
+    settle(1_000).await;
+    let after = frames.latest().unwrap().yuv(GREEN_BAR, 40);
+    let (worst, _) = frames.worst_since(mark);
+    let count = frames.mark() - mark;
+    stop(handle, thread);
+    assert!(!near(plain, BLUE), "unkeyed, the green bar is the presenter: {plain:?}");
+    assert!(near(keyed_screen, BLUE), "keyed, the green bar shows the set: {keyed_screen:?}");
+    assert!(is_white(keyed_white), "keyed, the white bar is still the presenter: {keyed_white:?}");
+    assert!(!near(after, BLUE), "with the key off, the presenter is whole again: {after:?}");
+    assert_eq!(plain_format.as_deref(), Some("I420"), "the programme is composited in I420");
+    assert_eq!(keyed_format, plain_format, "a key does not change the compositor's format");
+    assert!(count >= 45, "about 60 frames in two seconds, got {count}");
+    let slack = godwinmix_core::plugin::harness::timing_slack();
+    assert!(worst < 34.0 * 2.0 * slack, "the key going on and off left a gap of {worst:.1} ms");
+}
+
+/// The format on the compositor's output, as negotiated.
+fn programme_format(pipeline: &gst::Pipeline) -> Option<String> {
+    let caps = pipeline.by_name("vmix-caps")?.static_pad("src")?.current_caps()?;
+    caps.structure(0)?.get::<String>("format").ok()
+}
+

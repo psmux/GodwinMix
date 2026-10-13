@@ -55,11 +55,21 @@ opacity the scene gives the item, the same as a text or a transparent PNG. So
 a picture behind the presenter stays behind, and a transparent picture above
 the presenter in the scene, such as a desk, stays in front.
 
+The compositor's output stays I420 with or without a key. GStreamer's
+`compositor` refuses a pad with alpha when its output has none (an AYUV or
+BGRA input into an I420 output does not negotiate on 1.28), and compositing
+the whole programme in AYUV costs 2.6 times the CPU at 1080p30. The board
+needs neither: adding or removing a key changes nothing downstream of the
+compositor, and the programme does not renegotiate.
+
 Where nothing can draw it, it flattens the key into the frame over black:
 
 * On a source's input side (`filter.add` with `side = "input"`).
 * On the programme itself (`attach = { programme = true }`).
-* On a programme composited on a GPU graphics entry.
+* On a programme composited on a GPU graphics entry. There
+  `scene.item.filter.add` refuses a key with `data.field` set to
+  `hardware.graphics` and `data.next` saying to set it to `auto` and restart,
+  because a key that can only stand on black is not worth adding.
 
 A key on a source's programme side (`side = "programme"`) draws on the board
 wherever the scene puts that source.
@@ -96,7 +106,23 @@ the compositor as an opaque picture. The figures for this key include drawing
 the presenter on the board, which the compositor no longer does. The key's own
 work, without the drawing, is 0.7 ms a frame at 720p and 1.4 ms at 1080p.
 
-The measurement is `crates/godwinmix-core/tests/key_cost.rs`:
+The same measurement on a Windows 11 laptop (Intel Core Ultra with Arc
+140T graphics, GStreamer 1.28.6, release build), taken while the machine was
+at 100 percent load from other builds, so the figures are high:
+
+| Canvas | Presenter | No key | Keyed | The key |
+|---|---|---|---|---|
+| 1920x1080 | figure | 10.9 percent of a core | 55.8 | 44.8 |
+| 1920x1080 | bars | 33.8 | 80.8 | 47.0 |
+
+There the key's own work was 9.2 ms a frame at 1080p and the board's drawing
+5.2 ms (`key_cost_per_frame`), against 1.4 ms for the key on the M4 Pro.
+
+The compositor's own cost does not change with a key: it composites in I420
+either way.
+
+The measurement is `crates/godwinmix-core/tests/key_cost.rs`, which runs on
+Linux, macOS and Windows:
 
 ```sh
 GMX_KEY_SOURCE=studio GMX_KEY_CANVAS=1280x720 cargo test -p godwinmix-core --release --test key_cost -- --ignored --nocapture

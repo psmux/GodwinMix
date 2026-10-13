@@ -138,3 +138,29 @@ async fn a_presenter_scene_is_made_in_one_call_from_a_camera_and_two_library_pic
     assert!(rgb[1] > 150 && rgb[0] < 90 && rgb[2] < 90, "the colour at the green bar is green: {color}");
     let _ = std::fs::remove_dir_all(&media);
 }
+
+/// Issue 14: the composer's Chroma Key on an item of a plain scene. It was
+/// refused on every software programme with "a chroma key cannot be drawn by
+/// this mixer yet", though the overlay board had been drawing keys since the
+/// virtual set. It goes on now, and its settings change in place.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_chroma_key_goes_on_an_item_of_a_plain_scene() {
+    let media = std::env::temp_dir().join(format!("gmx-key-item-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&media);
+    std::fs::create_dir_all(&media).unwrap();
+    let url = serve(&media).await;
+    let (mut socket, _) = tokio_tungstenite::connect_async(&url).await.expect("connecting to /rpc");
+    let made = ask(&mut socket, 1, "scene.create_from", json!({"sources": ["cam"], "name": "Keyed"})).await;
+    let made = made.get("result").unwrap_or_else(|| panic!("scene.create_from failed: {made}"));
+    let item = made["geometry"][0]["item"].as_str().unwrap_or_else(|| panic!("an item id: {made}")).to_string();
+
+    let key = json!({"scene": "Keyed", "item": item, "type": "chroma/filter", "name": "Key", "params": {"color": "#00ff00"}});
+    let added = ask(&mut socket, 2, "scene.item.filter.add", key).await;
+    assert!(added.get("error").is_none(), "the key is refused: {added}");
+    assert!(added["result"].to_string().contains("chroma/filter"), "the scene answered carries the key: {added}");
+
+    let set = json!({"scene": "Keyed", "item": item, "filter": "Key", "params": {"spill": 0.8}});
+    let changed = ask(&mut socket, 3, "scene.item.filter.set", set).await;
+    assert!(changed.get("error").is_none(), "{changed}");
+    let _ = std::fs::remove_dir_all(&media);
+}
