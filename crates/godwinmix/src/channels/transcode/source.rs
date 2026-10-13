@@ -8,8 +8,13 @@ use crate::channels::Live;
 /// What a stream carries, once enough is known to plan against it. `None`
 /// while the codecs or the frame rate are still arriving: a plan made on a
 /// guess would be made again a second later, and every node in it moved.
+///
+/// Also `None` until the listener has measured the bit rates. Planned on a
+/// rate of 0, which reads as unknown, a destination that asked for 128
+/// kbit/s sound was given a copy of the programme's 160, and the plan kept
+/// it, since a moving rate does not move a plan.
 pub fn info(live: &Live) -> Option<StreamInfo> {
-    if live.state != "live" {
+    if live.state != "live" || live.measured == Some(false) {
         return None;
     }
     let video = match &live.video {

@@ -97,7 +97,9 @@ pub struct DestinationLive {
     pub state: DestinationState,
     /// Milliseconds since `state` last changed.
     pub since_ms: u64,
-    /// What is going out, over the last second.
+    /// What is going out, in kbit/s, sound and container included. A
+    /// channel's destination averages it over the last four seconds, two
+    /// keyframe intervals at 2 s; others over the last second.
     pub kbps: u32,
     /// Connections lost and made again since it was switched on.
     pub reconnects: u32,

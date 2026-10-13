@@ -14,6 +14,9 @@ use crate::media_tag::{MediaTag, TagKind};
 /// How long a rate is measured over before it is reported.
 const WINDOW: Duration = Duration::from_secs(1);
 
+/// Windows after which the rates count as measured even with a track silent.
+const SETTLE_WINDOWS: u32 = 4;
+
 /// One publisher's session, measured.
 pub struct Meter {
     pub since_ms: u64,
@@ -35,6 +38,11 @@ pub struct Meter {
     /// where the measured one is only near: 29.97 and 30 look alike over a
     /// second of frames.
     declared_fps: Option<f64>,
+    /// Whether the bit rates mean something yet (`settle`). A plan made before then took an unknown rate for one that
+    /// fits, and copied 160 kbit/s sound to a destination that asked for 128.
+    measured: bool,
+    /// Windows measured before `measured`.
+    windows: u32,
     pub total_bytes: u64,
 }
 
@@ -59,6 +67,8 @@ impl Meter {
             fps: 0.0,
             told_fps: 0.0,
             declared_fps: None,
+            measured: false,
+            windows: 0,
             total_bytes: 0,
         }
     }
@@ -70,6 +80,12 @@ impl Meter {
         self.last_tag = now;
         let len = tag.payload.len() as u64;
         self.total_bytes += len;
+        // The first window starts with the first frame: a publisher whose
+        // media came more than a second after it connected measured an empty
+        // first second, which read as 0 kbit/s measured.
+        if !self.measured && self.windows == 0 && self.video_bytes + self.audio_bytes == 0 {
+            self.window_start = now;
+        }
         let mut news = false;
         match tag.kind {
             TagKind::Video if tag.sequence_header => {
@@ -109,9 +125,27 @@ impl Meter {
             self.video_bytes = 0;
             self.audio_bytes = 0;
             self.frames = 0;
+            news |= self.settle();
             news |= self.rate_moved();
         }
         news
+    }
+
+    /// After a window: the rates count as measured from the second window
+    /// on in which every track the stream has carried bytes, or after
+    /// `SETTLE_WINDOWS` whatever they carried, so a track that never sends
+    /// cannot hold a plan back for ever. The first window is a warm up: the
+    /// programme's 160 kbit/s sound, starting part way into it, read 120.
+    /// True the once it happens: the first rates are news of their own, for
+    /// a stream with no video whose frame rate never moves.
+    fn settle(&mut self) -> bool {
+        if self.measured {
+            return false;
+        }
+        self.windows += 1;
+        let whole = (self.video.is_none() || self.video_kbps > 0) && (self.audio.is_none() || self.audio_kbps > 0);
+        self.measured = (whole && self.windows >= 2) || self.windows >= SETTLE_WINDOWS;
+        self.measured
     }
 
     /// Read the frame rate out of `onMetaData`. True when it is new.
@@ -144,6 +178,11 @@ impl Meter {
     /// sends a keyframe, and a reader must not wait for one.
     pub fn has_video(&self) -> bool {
         self.video.is_some() || self.frames > 0 || self.video_kbps > 0
+    }
+
+    /// Whether the bit rates have settled enough to plan against.
+    pub fn measured(&self) -> bool {
+        self.measured
     }
 
     /// The `video` and `audio` members of the contract's Stream shape.

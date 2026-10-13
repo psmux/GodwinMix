@@ -94,7 +94,7 @@ export async function programmeTests(test, eq, ok) {
   await wait();
   test("a live channel shows LIVE with its picture and sound", () => {
     eq(hall().querySelector(".chn-pill").textContent, "LIVE");
-    eq(hall().querySelector(".chn-statetext").textContent, "Video 1920x1080 3.0 Mb/s | Audio AAC 128 kb/s");
+    eq(hall().querySelector(".chn-statetext").textContent, "Coming in: Video 1920x1080 3.0 Mb/s | Audio AAC 128 kb/s");
   });
   host.view.stop();
   host.remove();

@@ -1332,7 +1332,9 @@ pub struct Destination {
     pub has_key: bool,
     /// A slug, unique within its channel: `youtube`, `youtube-2`.
     pub id: String,
-    /// What is going out, over the last second.
+    /// What is going out, in kbit/s, sound and container included. A
+    /// channel's destination averages it over the last four seconds, two
+    /// keyframe intervals at 2 s; others over the last second.
     pub kbps: u32,
     /// The key's last four characters, as a channel key's `hint`, so a person
     /// can see which key is saved. Left out for a key under eight characters,

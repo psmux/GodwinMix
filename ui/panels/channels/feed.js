@@ -53,7 +53,9 @@ export function statusOf(channel) {
   if (!channel.enabled) return { state: "off", label: "Off", text: "Switched off" };
   if (isLive(channel)) {
     const first = (channel.streams || []).find((s) => s.state === "live");
-    return { state: "live", label: "LIVE", text: specLine(first) };
+    // What arrives, not what a destination sends: a destination's own
+    // format is on its tile.
+    return { state: "live", label: "LIVE", text: `Coming in: ${specLine(first)}` };
   }
   return { state: "offline", label: "Offline", text: offlineReason(channel) };
 }

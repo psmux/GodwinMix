@@ -820,7 +820,7 @@ class Destination(TypedDict, total=False):
     id: str
     # A slug, unique within its channel: `youtube`, `youtube-2`.
     kbps: int
-    # What is going out, over the last second.
+    # What is going out, in kbit/s, sound and container included. A channel's destination averages it over the last four seconds, two keyframe intervals at 2 s; others over the last second.
     key_hint: Optional[str]
     # The key's last four characters, as a channel key's `hint`, so a person can see which key is saved. Left out for a key under eight characters, where four would be half of it. Never the key itself.
     label: str

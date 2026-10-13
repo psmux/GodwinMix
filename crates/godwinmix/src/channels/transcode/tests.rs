@@ -190,3 +190,5 @@ fn a_shed_destination_says_why_and_comes_back_when_there_is_room() {
 
 #[path = "tests_hevc.rs"]
 mod hevc;
+#[path = "tests_measured.rs"]
+mod measured;

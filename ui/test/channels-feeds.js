@@ -31,9 +31,9 @@ export async function feedTests(test, eq, ok) {
     eq(f.offlineReason(channel({ kind: "pull", uri_host: "srt://cam:9000", state: "connecting" })), "pulling srt://cam:9000, connecting");
   });
 
-  test("live is the picture and the sound, as Livebox says it", () => {
+  test("live is the picture and the sound coming in, as Livebox says it", () => {
     const s = liveStream("main", { video: { codec: "h264", width: 1280, height: 720, fps: 30, kbps: 2500 }, audio: { codec: "aac", channels: 2, sample_rate: 48000, kbps: 96 } });
-    eq(f.statusOf(channel({ kind: "pull" }, { streams: [s] })), { state: "live", label: "LIVE", text: "Video 1280x720 2.5 Mb/s | Audio AAC 96 kb/s" });
+    eq(f.statusOf(channel({ kind: "pull" }, { streams: [s] })), { state: "live", label: "LIVE", text: "Coming in: Video 1280x720 2.5 Mb/s | Audio AAC 96 kb/s" });
     eq(f.specLine({ video: { codec: "h264", width: 0, kbps: 0 } }), "Video H.264");
   });
 

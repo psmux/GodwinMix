@@ -40,8 +40,10 @@ export function streamRow(view, getChannel, urlOf) {
     frame,
     dot,
     el("div.chn-sid", {}, [el("div.chn-snameline", {}, [name, copyUrl]), who]),
-    el("div.chn-specs", {}, [res, fps, chips]),
-    el("div.chn-bits", {}, [spark.node, rate]),
+    // What arrives, which each destination may convert: its own size and
+    // rate are on its tile (sends.js).
+    el("div.chn-specs", { title: "What comes into the channel. Each destination's tile says what it sends." }, [el("span.chn-in", { text: "Coming in" }), res, fps, chips]),
+    el("div.chn-bits", { title: "The bitrate coming into the channel" }, [spark.node, rate]),
     clock,
     feeds,
   ]);
