@@ -8,6 +8,11 @@ and validation rules. Successful responses keep the existing shape:
 {"name":"clip.mp4","path":"/absolute/library/clip.mp4","size_bytes":1234}
 ```
 
+Add `folder=Sermons/2026` to put the file in a folder of the library, made
+when it is missing, and `tags=easter,choir` to tag it. The answer's `name` is
+then the file's path in the library, `Sermons/2026/clip.mp4`. See
+[media library folders and tags](media-library.md).
+
 Names contain one path segment and at most 200 bytes. Leading and trailing
 whitespace is trimmed. Hidden names, path separators, colons and control
 characters are refused. Extension checks are case insensitive.
