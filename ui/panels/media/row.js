@@ -43,7 +43,7 @@ export function row(host, item) {
     item.has_audio === false ? el("span.pill", { text: "mute", style: { color: "var(--warn)" } }) : null,
     failed ? el("span.pill", { text: "convert failed", style: { color: "var(--bad)" } }) : null,
     el("span.num.sm.faint", { text: item.duration_ms ? fmtPosition(item.duration_ms) : fmtBytes(item.size_bytes) }),
-    converting
+    el("span.mx-actions", {}, [converting
       ? el("span.sm.dim", { text: `converting ${Math.round((item.conversion.progress || 0) * 100)}%` })
       : el("button.btn.icon", { text: "Add as source", "data-nodrag": "", onclick: stop(() => act.addAsSource(host.client, item)) }),
     !item.web_safe && !item.converted_path && !converting
@@ -52,7 +52,7 @@ export function row(host, item) {
           host.client.call("media.convert", { name: item.name }).catch((err) => errorToast(err, "Convert"));
         }) })
       : null,
-    el("button.btn.icon.danger", { text: "×", title: "Delete", onclick: stop(() => remove(host.client, item)) }),
+    el("button.btn.icon.danger", { text: "×", title: "Delete", onclick: stop(() => remove(host.client, item)) })]),
   ]);
 }
 

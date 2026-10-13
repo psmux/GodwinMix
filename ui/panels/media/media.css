@@ -1,13 +1,17 @@
-/* The Media panel: folders down the left, files on the right. On a narrow
-   screen the folders sit above the files. Colours are the theme's tokens,
-   so dark and light both come for free. */
+/* The Media panel: folders down the left, files on the right. In a narrow
+   dock the folders sit above the files, judged by the panel's own width
+   rather than the window's. Colours are the theme's tokens, so dark and
+   light both come for free. */
 
-gmx-media-view { display: block; }
+gmx-media-view { display: block; container-type: inline-size; }
 .mx-head { gap: 6px; }
 .mx-search { flex: 1 1 140px; max-width: 260px; }
 .mx-bar { gap: 6px; padding: 0 var(--pad) 6px; align-items: center; }
 .mx-body { display: grid; grid-template-columns: minmax(130px, 200px) minmax(0, 1fr); gap: 6px; padding: 0 var(--pad); }
-@media (max-width: 560px) { .mx-body { grid-template-columns: 1fr; } .mx-rail { max-height: 120px; } }
+@container (max-width: 620px) {
+  .mx-body { grid-template-columns: 1fr; }
+  .mx-rail { max-height: 140px; border-right: 0; border-bottom: var(--border) solid var(--line-soft); padding: 0 0 4px; }
+}
 .mx-rail { max-height: 220px; overflow: auto; border-right: var(--border) solid var(--line-soft); padding-right: 4px; }
 .mx-list { max-height: 220px; overflow: auto; gap: 2px; }
 .mx-node {
@@ -23,8 +27,11 @@ gmx-media-view { display: block; }
   color: var(--dim); font-size: var(--fs-sm); cursor: pointer;
 }
 .mx-new { margin: 4px 0; align-self: flex-start; }
-.mx-row { min-height: 30px; border-radius: var(--radius-sm); padding: 0 4px; user-select: none; }
-.mx-name { min-width: 60px; }
+.mx-row { min-height: 30px; border-radius: var(--radius-sm); padding: 3px 4px; user-select: none; flex-wrap: wrap; row-gap: 2px; }
+.mx-row > * { flex-shrink: 0; }
+.mx-row + .mx-row { border-top: var(--border) solid var(--line-soft); }
+.mx-actions { display: flex; gap: 4px; margin-left: auto; align-items: center; }
+.mx-row > .mx-name { flex: 1 1 140px; min-width: 120px; }
 .mx-tag {
   font: inherit; font-size: var(--fs-sm); cursor: pointer; color: var(--text);
   background: var(--select-fill); border: var(--border) solid var(--line); max-width: 12em;

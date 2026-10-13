@@ -68,13 +68,15 @@ export function editTags(client, items, inUse) {
       } }),
     ],
   });
+  // The box is what a person came to type in, ahead of the close button.
+  input.focus();
 }
 
 /** Pick a folder: for files (`names`) or for a folder (`folder`). */
 export function moveTo(client, folders, what) {
   let chosen = null;
   const box = el("div.col.mx-pick", { role: "listbox", "aria-label": "Folders" });
-  const allowed = (path) => (what.folder ? canMoveFolder(what.folder, path) : true);
+  const allowed = (path) => (what.folder ? canMoveFolder(what.folder, path) : !what.names.every((n) => parentOf(n) === path));
   const paint = () => {
     clear(box);
     const add = (path, label, depth) => {
