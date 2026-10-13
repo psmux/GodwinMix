@@ -83,7 +83,7 @@ fn millis(pdt: &str) -> i64 {
 /// The newest whole segment of one rung behind the init segment it names,
 /// as a new player would fetch them.
 async fn newest(st: &Running, dir: &str, playlist: &str, file: &std::path::Path) -> String {
-    let (_, (_, map, uri)) = segments(playlist).into_iter().last().expect("a segment");
+    let (_, (_, map, uri)) = segments(playlist).into_iter().next_back().expect("a segment");
     let get = |p: String| async move {
         let answer = reqwest::get(format!("http://{}{dir}{p}", st.url)).await.unwrap();
         assert!(answer.status().is_success(), "{dir}{p}: {}", answer.status());
