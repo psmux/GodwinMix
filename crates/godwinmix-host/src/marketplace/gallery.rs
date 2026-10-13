@@ -23,7 +23,7 @@ pub const DEFAULT_ENV: &str = "GMX_DEFAULT_MARKETPLACE";
 /// How old a copy may be before opening the gallery fetches it again.
 pub const TTL_SECS: u64 = 600;
 /// How long one request may take while a person looks at the page.
-const ASK_FOR: Duration = Duration::from_secs(3);
+const ASK_FOR: Duration = Duration::from_secs(4);
 /// How long a marketplace that could not be reached is left alone.
 const RETRY_SECS: u64 = 60;
 

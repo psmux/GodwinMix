@@ -435,7 +435,7 @@ fn fetch_document(spec: &str, timeout: Duration) -> Result<(String, Marketplace)
                     .with_context(|| format!("reading {url}"))?;
                 return Ok((url.clone(), doc));
             }
-            Err(e) => last = format!("{e}"),
+            Err(e) => last = format!("{e:#}"),
         }
     }
     anyhow::bail!(
