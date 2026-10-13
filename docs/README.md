@@ -173,6 +173,7 @@ Start here if you have never run it.
 * [The plugin manifest](reference/plugin-manifest.md)
 * [The frame bus](reference/frame-bus.md)
 * [The index format](reference/index-format.md)
+* [plugin.gallery, the Plugins page's one call](reference/plugin-gallery.md)
 * [The quality scale](reference/quality-scale.md)
 * [Surfaces: a whole UI, and `gmx ui`](reference/surfaces.md)
 * [The plugin protocol](reference/plugin-protocol.md)

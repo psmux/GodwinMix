@@ -43,41 +43,61 @@ they need has been written already.
 
 ## 3. Get it listed
 
-Open a pull request against the index repository adding an entry to
-`index.json`. [The index format](../reference/index-format.md) is one page and
-the entry is about twelve lines. A bot checks it: the manifest validates, the
-source resolves, the platforms are real ones, and the conformance harness
-passes. If a check fails the bot says which one, and the pull request waits for
-you rather than for a person.
+The list every mixer reads is
+[psmux/godwinmix-plugins](https://github.com/psmux/godwinmix-plugins). A fresh
+mixer knows it already, so once your plugin is on it, it shows on the Plugins
+page of every mixer and `gmx plugin add <name>` finds it.
 
-Once it is merged, the index CI takes over and this is what you stop having to
-do yourself:
+Open a pull request there adding one small file, `listings/<name>.toml`:
 
-* It builds your plugin from the tagged source on Linux x86_64, Linux aarch64
-  (a Raspberry Pi class runner), macOS arm64, macOS x86_64 and Windows x86_64.
-* It runs the conformance harness on each one.
-* It signs every asset with sigstore, keyless, tied to the CI's own identity.
-  You need no signing key, no certificate, and no Apple developer account.
-* It publishes the assets and their `.sigstore.json` bundles as release assets
-  on the index repository rather than on yours. That is not a preference: the
-  signing identity in `index.json` names the index's own workflow, and a core
-  verifying against it has to find the assets where that workflow put them.
-* It writes the badge for your README and updates the public compatibility
-  dashboard.
+```toml
+name = "thing"
+repo = "you/gmx-thing"
+title = "Thing"            # optional, the name on the card
+```
 
-The signing is worth dwelling on, because it is the thing that stopped people
-writing OBS plugins. Three platform builds, notarisation, and 99 dollars a year
-to Apple, per author, to publish something you are giving away. A GodwinMix
-plugin is a separate process rather than a library loaded into an app bundle,
-so the rules that make an in process plugin a notarisation problem do not
-apply: the core is notarised once, and it runs your binary the way it runs any
-other program. What `gmx plugin add` checks is the index CI's signature. See
-[trust and signing](../explanation/trust-and-signing.md) for the whole of it.
+`name` is the plugin's name from your manifest and the file's name. That is
+the whole entry. A workflow in that repository reads your repository once a day
+and writes what it finds into `index.json`:
+
+* the description: the `description` in `gmx-plugin.toml`, else the first
+  paragraph of your README, else the repository's own description
+* the kinds, from your manifest's `[[provides]]` blocks
+* the newest release, the platforms its asset names carry, and every
+  download of every release added together
+* the repository's stars, licence, topics and when it last changed
+
+It runs on the pull request too, and names the problem if it cannot read your
+repository or your manifest names a different plugin.
+
+### Pictures for the card
+
+Put them in a `gallery` folder at the root of your repository:
+
+| File | What it is for |
+|---|---|
+| `gallery/icon.png` | a square icon beside the name. 256 by 256 is plenty |
+| `gallery/thumbnail.png` | the card's picture, 16 by 9. 1280 by 720 is plenty |
+| `gallery/screenshot-1.png`, `-2`, and on | the detail view, in name order |
+
+PNG, JPEG, WebP and GIF all work. With no thumbnail the first screenshot is the
+card's picture, and with no screenshots the repository's social preview is. With
+none of them the card shows an icon for the plugin's kind. The browser loads
+the pictures straight from GitHub; the mixer never fetches them.
+
+### What the list does not do yet
+
+It does not build your plugin, run the conformance harness or sign anything.
+Every listing in it is `custom` and every version says `"signed": false`, and
+the list has no `signing` block, so a mixer checks no signature against it. A
+mixer set to `[plugins] allow_unsigned = false` will not install from it. The
+plugins that ship with GodwinMix are listed there too, marked `bundled`, and are
+installed from the copy beside the mixer.
 
 ## 4. Publishing the assets yourself
 
-You do not have to use the index CI. If you build your own binaries, list them
-at the `custom` tier and say so. `gmx plugin add` installs them and labels them
+The list does not build anything yet, so for now you build your own release
+assets, and your listing is at the `custom` tier. `gmx plugin add` installs them and labels them
 `custom, unreviewed` wherever an operator can see them, which is honest rather
 than punitive: an operator who trusts you installs it anyway.
 

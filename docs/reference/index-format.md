@@ -2,9 +2,15 @@
 
 One schema, used by three things: the official marketplace
 (`godwinmix-marketplace.json` at the root of this repository), the community
-index (`index.json` in the `godwinmix-plugins` repository), and any marketplace
-anybody else runs. The community index has more fields filled in because its CI
-fills them; the reader is the same.
+index (`index.json` in
+[psmux/godwinmix-plugins](https://github.com/psmux/godwinmix-plugins)), and any
+marketplace anybody else runs. The community index has the gallery fields
+filled in because its workflow reads each plugin's repository daily; the reader
+is the same.
+
+A mixer reads the community index with no setup: the Plugins page, a search or
+an install of a bare name adds it the first time, and never before. See
+[plugin.gallery](plugin-gallery.md).
 
 `gmx marketplace add` fetches the document, `gmx plugin search` reads the cached
 copy, and `gmx plugin add <name>` resolves a bare name through it.
@@ -58,6 +64,30 @@ against the bytes that arrived and nothing more.
 | `repository` | string | no | Where the code is. |
 | `versions` | array | no | One entry per published version, newest last. |
 
+### What a gallery shows
+
+All optional, so a document without them reads as it always did. The Plugins
+page draws a card from them; `gmx plugin add` reads none of them.
+
+| Field | Type | What it is |
+|---|---|---|
+| `title` | string | A human name for the card, "NDI" for `ndi`. The name is shown when there is none. |
+| `icon` | string | A square picture, a URL. |
+| `thumbnail` | string | The card's picture, a URL, 16 by 9. |
+| `screenshots` | array of string | Pictures for the detail view, URLs. |
+| `stars` | integer | The repository's GitHub stars. |
+| `downloads` | integer | Every download of every release asset, added together. |
+| `updated` | string | When it last changed, RFC 3339. |
+| `author` | string | Who makes it. The marketplace's `owner` is shown when there is none. |
+| `homepage` | string | A web page about it. |
+| `tags` | array of string | Words to search by. |
+| `bundled` | boolean | It ships with GodwinMix. Its `source` may then be a path such as `./plugins/camera`, and installing it by name takes the copy beside the mixer with no download. |
+
+The pictures are loaded by the browser from where they are; the core never
+fetches one. The community index's workflow takes them from the plugin
+repository's `gallery/` folder (`icon.png`, `thumbnail.png`,
+`screenshot-*.png`) and falls back to the repository's social preview.
+
 ### A version entry
 
 | Field | Type | Required | What it is |
@@ -106,6 +136,10 @@ rules of the kinds that do have a binary.
 | path | `./plugins/ndi` | Relative to the marketplace document for a local marketplace. Always `custom` for trust purposes. |
 
 ## A whole document
+
+This is the shape a signed index takes. The community index today has no
+`signing` block and says `"signed": false` on every version, because its
+workflow does not build or sign anything yet; its README says so.
 
 ```json
 {

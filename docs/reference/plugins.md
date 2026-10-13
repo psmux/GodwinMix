@@ -4,7 +4,7 @@ Everything in `plugins/` in this repository: one directory per plugin, each a
 Rust crate on `godwinmix-sdk`, each installable with
 `gmx plugin add ./plugins/<name>`, or by its name alone (`gmx plugin add
 camera`) on a mixer built from the checkout or installed with its plugins
-beside it. See [Install a plugin](../how-to/install-a-plugin.md#install-it) for
+beside it. See [Install a plugin](../how-to/install-a-plugin.md#install-it-from-a-terminal) for
 the folders a bare name is looked for in.
 
 They use only the public sidecar contract. Nothing here is reachable by this

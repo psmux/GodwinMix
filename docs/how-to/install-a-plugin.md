@@ -6,7 +6,44 @@ break the programme and removing one takes everything it added with it.
 
 This page takes about five minutes.
 
-## Install it
+## From the Plugins page
+
+Open **Sources > More plugins…**, or press **More plugins** at the bottom of the
+add source picker. The page lists every plugin the mixer's plugin lists know,
+one card each: a picture, the name, a line about it, its GitHub stars and how
+many times it was downloaded, its quality tier, and whether it runs on this
+computer. A plugin that ships with GodwinMix says **Included** and installs with
+no download.
+
+* Type in **Search plugins** to find one by name, description, kind or tag.
+* Press a chip (**Inputs**, **Outputs**, **Graphics**, **Transitions**,
+  **Effects**, **Helpers**, **Installed**) to see only those.
+* Press **Install** on a card. That is the whole install: the card says what
+  it is doing, then `Installed. Nothing restarted.`, or says in a sentence why
+  it did not install.
+* Press the picture or the name for the detail view: screenshots, the whole
+  description, who makes it, the licence, the versions, a link to the source
+  code, and **Install**, **Update** or **Remove**.
+
+A card that says `Not for Windows` (or Mac, or Linux) has no build for this
+computer, and `Needs a newer GodwinMix` means it was written for a newer
+protocol level than this mixer runs.
+
+The list comes from
+[psmux/godwinmix-plugins](https://github.com/psmux/godwinmix-plugins), which a
+fresh mixer reads with no setup. Nothing is fetched until the page is opened, a
+name is searched for or a name is installed. A copy younger than ten minutes is
+used as it is; **Check again** fetches it now. With no network the page shows
+the last copy it fetched and says `Offline`. The pictures come straight from
+GitHub to the browser; the mixer never fetches them.
+
+To stop using that list, `gmx marketplace remove godwinmix-plugins`. It is not
+added back. To start a mixer that never reads it, set
+`GMX_DEFAULT_MARKETPLACE` to nothing in its environment, or name another list
+there. `[marketplaces] only` in the config is obeyed as well: a list it does not
+name is never fetched.
+
+## Install it from a terminal
 
 `gmx plugin add` takes seven forms. Reach for the first one:
 
