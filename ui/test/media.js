@@ -24,7 +24,8 @@ async function drag(from, to) {
   pointer(window, "pointermove", a.left + 30, a.top + 20);
   pointer(window, "pointermove", b.left + 10, b.top + b.height / 2);
   pointer(window, "pointerup", b.left + 10, b.top + b.height / 2);
-  await settle(30);
+  // A click in the moment after a drag is the drag's own, and is dropped.
+  await settle(120);
 }
 
 function rightClick(target) {
@@ -69,8 +70,19 @@ export async function mediaTests(test, eq, ok) {
   });
 
   await import("../panels/media/panel.js");
-  const client = mediaStub({ refuseOnce: true });
+  // The folders a person left open are kept per browser; start with none.
+  localStorage.removeItem("gmx.mediaOpen");
   const view = document.createElement("gmx-media-view");
+  try {
+    await panelTests(view, test, eq, ok);
+  } finally {
+    view.remove();
+    for (const t of document.querySelectorAll(".toast, .menu, .scrim")) t.remove();
+  }
+}
+
+async function panelTests(view, test, eq, ok) {
+  const client = mediaStub({ refuseOnce: true });
   view.setClient(client);
   view.style.cssText = "display:block;position:fixed;top:0;left:0;width:900px;z-index:50;background:var(--bg)";
   document.body.appendChild(view);
@@ -159,6 +171,4 @@ export async function mediaTests(test, eq, ok) {
   await settle(30);
   test("Move to moves every chosen file to the folder picked", () => eq(client.sent("media.move").pop(), { names: ["welcome.mp4", "Ads/promo.mp4"], folder: "Sermons" }));
   test("no word the panel shows has a dash in it", () => ok(!DASHES.some((d) => view.textContent.includes(d))));
-  view.remove();
-  for (const t of document.querySelectorAll(".toast, .menu, .scrim")) t.remove();
 }
