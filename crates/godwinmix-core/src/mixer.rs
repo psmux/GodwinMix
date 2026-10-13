@@ -5273,12 +5273,12 @@ impl Mixer {
                     });
                 }
             }
-            return Ok(());
+            return self.preview_settled();
         }
         match at.demand {
             Demand::Build(shape) => {
                 if self.multiview.as_ref().is_some_and(|mv| mv.shape() == shape) {
-                    return Ok(());
+                    return self.preview_settled();
                 }
                 // A rebuild at another size drops the old one first, so there
                 // is never a moment with two mosaic encoders running.
@@ -5354,6 +5354,21 @@ impl Mixer {
         // second.
         self.broadcast_status();
         Ok(())
+    }
+
+    /// Reconcile the preview when what it is built at is not what is asked.
+    ///
+    /// A client asking for the preview at a new rate takes a new hold and
+    /// drops the old one, and dropping the old one's mosaic hold bumps the
+    /// generation without asking for anything, since the mosaic is unchanged.
+    /// The preview demand in front of it was then refused as stale and the
+    /// preview stayed at the old rate: a page asking 10 frames a second went
+    /// on getting 25.
+    fn preview_settled(&mut self) -> Result<()> {
+        if self.multiview.is_none() || self.mv.preview_built() == self.mv.preview_wanted(&self.canvas) {
+            return Ok(());
+        }
+        self.preview_demand_now()
     }
 
     /// Reconcile the preview compositor against what is subscribed.
@@ -5840,6 +5855,7 @@ mod tests {
     mod restart;
     mod rtsp_live;
     mod preview_churn;
+    mod preview_rate;
     mod slow_restart;
     mod sound_only;
     mod supervision;
