@@ -13,10 +13,6 @@ pub enum Contents {
     Top,
 }
 
-/// Files a file manager leaves behind, which go with the folder rather than
-/// standing in the way of removing it.
-const LITTER: &[&str] = &[".DS_Store", "Thumbs.db", "desktop.ini"];
-
 /// Every folder in the library, `Sermons/2026` style, sorted the way a file
 /// manager would. A dotted folder, a link, and a Graphics gallery folder
 /// are not listed: none of them is somewhere to keep clips.
@@ -68,12 +64,12 @@ pub fn make_folder(root: &Path, raw: &str) -> Result<(String, bool), Refusal> {
     Ok((at, made))
 }
 
-fn shown(rel: &str) -> &str {
+pub(super) fn shown(rel: &str) -> &str {
     if rel.is_empty() { "the top of the library" } else { rel }
 }
 
 /// A folder that is there, as a real path, or why not.
-fn existing(root: &Path, rel: &str, field: &'static str) -> Result<std::path::PathBuf, Refusal> {
+pub(super) fn existing(root: &Path, rel: &str, field: &'static str) -> Result<std::path::PathBuf, Refusal> {
     let path = inside(root, rel, field)?;
     if rel.is_empty() || !path.is_dir() || path.join(crate::gallery::MARKER).is_file() {
         return Err(Refusal::missing(field, format!("there is no folder {rel:?} in the media library. Call media.folder.list to see the folders.")));
@@ -84,6 +80,16 @@ fn existing(root: &Path, rel: &str, field: &'static str) -> Result<std::path::Pa
 /// Move a folder into another (`""` is the top) and give it a new name,
 /// either or both. Refused when it would go inside itself.
 pub fn move_folder(root: &Path, from: &str, into: Option<&str>, name: Option<&str>) -> Result<Moved, Refusal> {
+    let m = plan_folder(root, from, into, name)?;
+    if m.from != m.to {
+        rename_patiently(&m.from_path, &m.to_path).map_err(|e| Refusal::io("moving the folder", e))?;
+    }
+    Ok(m)
+}
+
+/// A folder's move checked but not done, so a caller can refuse a bad one
+/// before it asks anything else.
+pub fn plan_folder(root: &Path, from: &str, into: Option<&str>, name: Option<&str>) -> Result<Moved, Refusal> {
     let from = rel_path(from, "name")?;
     existing(root, &from, "name")?;
     let into = match into {
@@ -110,38 +116,5 @@ pub fn move_folder(root: &Path, from: &str, into: Option<&str>, name: Option<&st
         return Err(Refusal::invalid("to", format!("{:?} already has something called {have:?}. Pick another name, or move that out of the way first.", shown(&into))));
     }
     let (old, new) = (plain(root, &from), plain(root, &to));
-    rename_patiently(&old, &new).map_err(|e| Refusal::io("moving the folder", e))?;
     Ok(Moved { from, to, from_path: old, to_path: new, also: Vec::new() })
-}
-
-/// Remove a folder, moving everything in it out first. Answers what moved.
-/// Refused, with nothing moved, when any of it would land on a name that
-/// is already taken where it is going.
-pub fn remove_folder(root: &Path, raw: &str, contents: Contents) -> Result<Vec<Moved>, Refusal> {
-    let rel = rel_path(raw, "name")?;
-    let dir = existing(root, &rel, "name")?;
-    let into = if contents == Contents::Up { parent_of(&rel).to_string() } else { String::new() };
-    let dest = inside(root, &into, "name")?;
-    let mut names: Vec<String> = std::fs::read_dir(&dir).map_err(|e| Refusal::io("reading the folder", e))?.flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect();
-    names.retain(|n| !LITTER.contains(&n.as_str()));
-    let blocked: Vec<String> = names.iter().filter_map(|n| clash(&dest, n, None).map(|_| join(&into, n))).collect();
-    if !blocked.is_empty() {
-        return Err(Refusal::invalid(
-            "contents",
-            format!("{} already holds {}, so what is in {rel:?} cannot move there. Rename or move those first, or choose the other place for what is inside.", shown(&into), blocked.join(", ")),
-        )
-        .with_valid(blocked));
-    }
-    let mut moved = Vec::new();
-    for n in names {
-        let (from_rel, to_rel) = (join(&rel, &n), join(&into, &n));
-        let (from_path, to_path) = (plain(root, &from_rel), plain(root, &to_rel));
-        rename_patiently(&from_path, &to_path).map_err(|e| Refusal::io(&format!("moving {n} out of the folder"), e))?;
-        moved.push(Moved { from: from_rel, to: to_rel, from_path, to_path, also: Vec::new() });
-    }
-    for l in LITTER {
-        let _ = std::fs::remove_file(dir.join(l));
-    }
-    std::fs::remove_dir(&dir).map_err(|e| Refusal::io("removing the empty folder", e))?;
-    Ok(moved)
 }

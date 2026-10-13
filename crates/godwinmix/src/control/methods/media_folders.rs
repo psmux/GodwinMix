@@ -65,6 +65,8 @@ async fn move_folder(call: Call, params: Value) -> Result<Value, RpcError> {
     let req: MediaFolderMoveRequest = call.params(&params)?;
     let dir = call.app.library.dir().to_path_buf();
     let from = org::rel_path(&req.name, "name").map_err(refused)?;
+    let (root, ask) = (dir.clone(), req.clone());
+    blocking(move || org::plan_folder(&root, &ask.name, ask.into.as_deref(), ask.to.as_deref())).await?;
     let froms = [org::plain(&dir, &from)];
     media_refs::check(&call, &froms, req.force).await?;
     if call.dry_run {

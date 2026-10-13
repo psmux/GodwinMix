@@ -15,6 +15,7 @@ mod filter;
 mod folders;
 mod moves;
 mod paths;
+mod remove;
 mod tag_rules;
 mod tags;
 #[cfg(test)]
@@ -23,7 +24,8 @@ mod tests;
 mod tests_folders;
 
 pub use filter::{folder_counts, tag_counts, Filter};
-pub use folders::{list_folders, make_folder, move_folder, remove_folder, Contents};
+pub use folders::{list_folders, make_folder, move_folder, plan_folder, Contents};
+pub use remove::remove_folder;
 pub use moves::{move_file, plan_file, Moved};
 pub use paths::{inside, join, parent_of, plain, rel_path, segment};
 pub use tag_rules::{tag_files, tag_list};
