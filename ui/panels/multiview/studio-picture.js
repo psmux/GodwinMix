@@ -16,6 +16,7 @@ import { settings } from "../../shell/settings.js";
 import { drawScene } from "../scenes/draw.js";
 import { sceneKit } from "./studio-next.js";
 import { resolve } from "./studio-armed.js";
+import { attachCell, monitorFps, pacedObserver } from "./monitor-rate.js";
 
 /** The mosaic cell a source is drawn in, or null. */
 function cellOf(s, source) {
@@ -37,10 +38,12 @@ function showTile(panel, cell) {
   releaseStream(panel);
   stopDrawing(panel);
   if (cell === null) return detach(panel);
-  if (panel.previewCell !== cell) {
+  const rate = monitorFps("preview");
+  if (panel.previewCell !== cell || panel.previewRate !== rate) {
     detach(panel);
-    panel.detachPreview = panel.client.sheet.attach(panel.previewCanvas, cell);
+    panel.detachPreview = attachCell(panel.client.sheet, panel.previewCanvas, cell, "preview");
     panel.previewCell = cell;
+    panel.previewRate = rate;
   }
   size(panel);
 }
@@ -50,22 +53,26 @@ function showDrawn(panel) {
   releaseStream(panel);
   detach(panel);
   size(panel);
-  if (panel.offDrawn) return;
-  panel.offDrawn = panel.client.sheet.observe((bitmap, layout) => {
+  const rate = monitorFps("preview");
+  if (panel.offDrawn && panel.drawnRate === rate) return;
+  stopDrawing(panel);
+  panel.drawnRate = rate;
+  panel.offDrawn = panel.client.sheet.observe(pacedObserver("preview", (bitmap, layout) => {
     const kit = sceneKit(panel);
     const next = panel.next;
     const view = kit && next && next.kind === "scene" ? kit.view(next.id) : null;
     if (!view) return;
     const cells = new Map((layout.cells || []).filter((c) => c.source).map((c) => [c.source, c]));
     drawScene(panel.previewCanvas, view, kit.mirror, cells, bitmap);
-  });
+  }));
 }
 
 function showStream(panel) {
   stopDrawing(panel);
   if (panel.previewCell !== undefined) detach(panel);
   const box = panel.previewCanvas.getBoundingClientRect();
-  const fps = settings().multiviewFps;
+  // The core makes this stream for this page alone, so the cap is asked of it.
+  const fps = monitorFps("preview");
   // One picture rather than a sheet, so one cell across.
   const width = panel.resizeTimer && panel.previewWant ? panel.lastPreviewWidth : sheetWidthFor(box.width || 320, 1);
   if (!panel.previewWant) panel.previewWant = panel.client.want("preview", { fps, width });

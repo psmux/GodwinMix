@@ -22,6 +22,7 @@ import { releasePreview, retunePreview } from "./studio-picture.js";
 import { render } from "./studio-armed.js";
 import { picker } from "./transition-picker.js";
 import { effects } from "./fx-gallery.js";
+import { rateMenu } from "./monitor-rate.js";
 
 export { retunePreview, releasePreview, render };
 
@@ -35,7 +36,9 @@ function previewPane(panel) {
     title: "Double click to take this to programme",
     ondblclick: () => take(panel, duration(panel)),
   }, [
-    el("div.monitor-label", {}, [el("strong", { text: "PREVIEW" }), panel.previewName, panel.previewWhy]),
+    el("div.monitor-label", {}, [
+      el("strong", { text: "PREVIEW" }), panel.previewName, panel.previewWhy, rateMenu("preview", "Preview"),
+    ]),
     panel.previewNote,
     el("div.preview-frame", {}, [panel.previewCanvas, panel.previewSlots]),
   ]);

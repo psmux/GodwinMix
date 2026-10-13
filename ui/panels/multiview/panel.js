@@ -16,6 +16,7 @@ import { settings, setSetting, onSettingsChanged } from "../../shell/settings.js
 import { errorToast } from "../../shell/toast.js";
 import { mosaicWanted } from "./wanted.js";
 import { lazyBanner } from "../sources/backup-slot.js";
+import { attachCell, monitorFps, mosaicRate, rateMenu } from "./monitor-rate.js";
 
 class ProgramPanel extends HTMLElement {
   static get panel() {
@@ -41,7 +42,7 @@ class ProgramPanel extends HTMLElement {
 
     this.programName = el("span.ellipsis", { text: "Black" });
     const monitor = el("div.program.monitor-pane", {}, [el("div.monitor-label", {}, [
-      el("strong", { text: "PROGRAMME" }), this.programName,
+      el("strong", { text: "PROGRAMME" }), this.programName, rateMenu("programme", "Programme"),
     ]), this.canvas, this.still, this.note]);
     this.row = el("div.monitor-stage", {}, [monitor]);
     this.studioButton = el("button.btn", { text: "Studio mode", onclick: () => setSetting("producer", !settings().producer) });
@@ -147,7 +148,7 @@ class ProgramPanel extends HTMLElement {
     const cols = (s.multiview && s.multiview.cols) || 1;
     // State flushes during dragging must not renegotiate an intermediate size.
     const width = this.resizeTimer && this.want ? this.lastWidth : sheetWidthFor(box.width || 640, cols);
-    const fps = settings().multiviewFps;
+    const fps = mosaicRate(this);
     if (!this.want) this.want = this.client.want("multiview", { fps, width });
     else if (width !== this.lastWidth || fps !== this.lastFps) this.want.update({ fps, width });
     this.lastWidth = width;
@@ -162,10 +163,12 @@ class ProgramPanel extends HTMLElement {
       this.canvas.width = w;
       this.canvas.height = h;
     }
-    if (cell !== this.attachedCell || (!this.detach && cell !== null)) {
+    const rate = monitorFps("programme");
+    if (cell !== this.attachedCell || rate !== this.attachedRate || (!this.detach && cell !== null)) {
       if (this.detach) this.detach();
-      this.detach = cell === null ? null : this.client.sheet.attach(this.canvas, cell);
+      this.detach = cell === null ? null : attachCell(this.client.sheet, this.canvas, cell, "programme");
       this.attachedCell = cell;
+      this.attachedRate = rate;
     }
   }
 

@@ -653,6 +653,9 @@ gmx-program .monitor-pane { display: flex; flex-direction: column; flex: 1 1 0; 
 .monitor-label strong { font-size: 10px; letter-spacing: 0.1em; }
 .program .monitor-label strong { color: var(--live); }
 .preview-pane .monitor-label strong { color: var(--ok); }
+/* Each monitor's frame rate menu, at the right end of its title bar. */
+.monitor-label .monitor-rate { margin-left: auto; flex: 0 0 auto; width: auto; height: 22px; min-height: 0; padding: 0 4px; font-size: var(--fs-sm); color: var(--dim); }
+.monitor-label .monitor-rate:hover, .monitor-label .monitor-rate:focus-visible { color: inherit; }
 gmx-program .monitor-pane canvas, gmx-program .monitor-pane img { width: 100%; height: auto; max-height: 45vh; aspect-ratio: 16 / 9; object-fit: contain; }
 .monitor-controls { flex-wrap: wrap; border-top: 1px solid var(--line); }
 .monitor-controls [aria-pressed="true"] { color: var(--accent); background: var(--select-fill); }

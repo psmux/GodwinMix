@@ -1,4 +1,5 @@
 import { monitorResizeTests } from './monitor-resize.js';
+import { monitorRateTests } from './monitor-rate.js';
 import { DEFAULT_MAP } from '../shell/keymap.js';
 import { settings, setSetting } from '../shell/settings.js';
 // Exercise the studio controls against the public request shape.
@@ -18,6 +19,7 @@ export async function studioTests(test, eq, ok) {
   const { default: ProgramPanel } = await import('../panels/multiview/panel.js');
   const studio = await import('../panels/multiview/studio.js');
   await monitorResizeTests(test, eq, ok, ProgramPanel);
+  await monitorRateTests(test, eq, ok, ProgramPanel);
   const panel = new ProgramPanel();
   panel.studio = studio;
   const calls = [];
