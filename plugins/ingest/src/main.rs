@@ -40,6 +40,7 @@ mod relay;
 mod remux;
 mod rest;
 mod rtmp;
+mod pulls;
 mod sends;
 #[cfg(test)]
 mod testfeed;
@@ -242,6 +243,7 @@ impl Device for Publishers {
         let table = channels::Table::from_params(&ready.params);
         let running = device::Discover::start(&self.settings, table, Some(reporter)).map_err(internal)?;
         running.set_sends(sends::wanted(&ready.params), transcode::specs(&ready.params));
+        running.set_pulls(pulls::wanted(&ready.params));
         running.set_direct(&ready.params);
         self.running = Some(running);
         Ok(InitializeResult::default())
@@ -254,6 +256,7 @@ impl Device for Publishers {
         if let Some(running) = &self.running {
             running.set_table(channels::Table::from_params(&params));
             running.set_sends(sends::wanted(&params), transcode::specs(&params));
+            running.set_pulls(pulls::wanted(&params));
             running.set_direct(&params);
         }
         let wanted = device::Settings::from_params(&params);

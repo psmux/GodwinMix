@@ -60,6 +60,8 @@ pub struct InputStats {
     pub last_frame_ms: Option<u64>,
     pub program: Option<u16>,
     pub programs: Vec<ProgramInfo>,
+    /// While it waits to try again after a failure: how long it waits.
+    pub retry_ms: Option<u64>,
 }
 
 impl InputStats {

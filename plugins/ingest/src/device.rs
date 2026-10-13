@@ -109,6 +109,8 @@ pub struct Discover {
     added: Mutex<Vec<String>>,
     /// The channels' destinations, each a restream reading the hub.
     sends: Sends,
+    /// The channels that pull their stream from an address.
+    pulls: crate::pulls::Pulls,
     /// The shows with compositing off (`src/direct/`), on the same hub.
     pub direct: Arc<crate::direct::Host>,
 }
@@ -132,7 +134,8 @@ impl Discover {
         let sends = Sends::new(gate.hub.clone(), reporter.clone());
         let whip = crate::whip::Sessions::new(gate.clone(), settings.webrtc_port);
         let direct = direct_host(&gate, reporter);
-        Ok(Discover { gate, listeners: Mutex::new(listeners), whip, added: Mutex::new(Vec::new()), sends, direct })
+        let pulls = crate::pulls::Pulls::new(gate.clone());
+        Ok(Discover { gate, listeners: Mutex::new(listeners), whip, added: Mutex::new(Vec::new()), sends, pulls, direct })
     }
 
     /// The RTMP port, bound or to be bound.
@@ -154,6 +157,11 @@ impl Discover {
     /// Run the destinations the channel table asks for, and no others.
     pub fn set_sends(&self, wanted: Vec<Wanted>, specs: Vec<crate::transcode::StreamSpec>) {
         self.sends.apply(wanted, specs);
+    }
+
+    /// Pull what the channel table asks for, and nothing else.
+    pub fn set_pulls(&self, wanted: Vec<crate::pulls::Want>) {
+        self.pulls.apply(wanted);
     }
 
     /// Take a new channel table. A publisher it no longer lets in (its key

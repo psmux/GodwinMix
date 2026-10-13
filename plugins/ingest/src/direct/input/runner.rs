@@ -77,7 +77,9 @@ pub fn run(mut plan: impl Plan, sink: Sink, stop: StopSignal) {
         }
         stats.state = State::Retrying;
         stats.error = Some(why);
+        stats.retry_ms = Some(wait.as_millis() as u64);
         out.publish(&mut stats);
+        stats.retry_ms = None;
         if stop.wait(wait) {
             break;
         }

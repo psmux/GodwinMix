@@ -34,6 +34,7 @@ mod ts_in;
 
 use super::{Input, Sink, StopSignal};
 use crate::hub::Hub;
+pub use pull::redact;
 pub use spec::{InputError, InputSpec, Kind};
 pub use stats::InputStats;
 
