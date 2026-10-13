@@ -32,15 +32,33 @@ const SEED_TOKEN: &str = r#"
 })();
 "#;
 
+/// The webview's own right click menu (Back, Refresh, Save as, Print) is a
+/// browser's, not this app's. Testers picked Refresh from it and took the
+/// reload for the app losing their work, so it is kept to text fields, where
+/// Cut, Copy and Paste live. The page's own menus open on the same right
+/// click before this runs and are untouched. Debug builds keep it, for
+/// Inspect.
+const NO_BROWSER_MENU: &str = r#"
+window.addEventListener('contextmenu', function (e) {
+  var t = e.target;
+  if (t && t.closest && t.closest('input, textarea, [contenteditable=""], [contenteditable="true"]')) return;
+  e.preventDefault();
+});
+"#;
+
 /// Build the one window. It starts on the shell's own connect page, which
 /// either sends it straight on to the core that was used last time or asks
 /// which core to use.
 pub fn build_window(app: &AppHandle) -> tauri::Result<WebviewWindow> {
     let config = app.config().app.windows[0].clone();
     let handle = app.clone();
-    let window = WebviewWindowBuilder::from_config(app, &config)?
+    let mut builder = WebviewWindowBuilder::from_config(app, &config)?
         .user_agent(crate::USER_AGENT)
-        .initialization_script(SEED_TOKEN)
+        .initialization_script(SEED_TOKEN);
+    if !cfg!(debug_assertions) {
+        builder = builder.initialization_script(NO_BROWSER_MENU);
+    }
+    let window = builder
         .on_navigation(move |url| on_navigation(&handle, url))
         // Each page the core serves is told again that the menu bar is the
         // native one, since a reload forgets.

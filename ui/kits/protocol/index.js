@@ -34,6 +34,13 @@ export class SceneClient {
     this.dirty = false;
     this.offs = [];
     this.supported = true;
+    /**
+     * False until the core has answered `scene.list` once. Until then "no
+     * scenes" means "not read yet", and a panel that drew it as an empty
+     * collection showed every source in the mixer for the second after a
+     * reload, which testers read as removed sources coming back.
+     */
+    this.loaded = false;
     /** The last thing the core called the scene on air, and what it resolved to. */
     this.liveSaid = undefined;
     this.liveId = null;
@@ -163,12 +170,14 @@ export class SceneClient {
       // A core with no scene server. Every caller checks `supported` and shows
       // the sentence rather than a broken panel.
       if (e && e.code === -32601) this.supported = false;
+      this.loaded = true;
       this.summaries = [];
       this.changed();
       return [];
     }
     this.supported = true;
     this.summaries = (list && list.scenes) || [];
+    this.loaded = true;
     const views = [];
     for (const summary of this.summaries) {
       try {

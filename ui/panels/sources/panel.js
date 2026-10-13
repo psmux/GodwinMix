@@ -147,6 +147,8 @@ class SourcesPanel extends HTMLElement {
   // ---------------------------------------------------------------- data
 
   sources(s) {
+    // Scenes not read yet: nothing, rather than every source in the mixer.
+    if (this.readingScenes()) return [];
     let list = s.sources || [];
     const scene = this.scopedTo();
     if (scene) {
@@ -165,6 +167,16 @@ class SourcesPanel extends HTMLElement {
     if (!ids.length) return null;
     const id = focusedScene(ids) || ids[0];
     return id ? scenes.summary(id) : null;
+  }
+
+  /**
+   * True from a page load until the core first answers `scene.list`. The tray
+   * scopes to a scene it cannot name yet, so it waits instead of falling back
+   * to the whole mixer, which looked like removed sources coming back.
+   */
+  readingScenes() {
+    const scenes = this.sceneClient();
+    return !!scenes && scenes.loaded === false;
   }
 
   /** Sources belong to the focused scene whenever scenes are available. */
@@ -243,7 +255,7 @@ class SourcesPanel extends HTMLElement {
 
   paintScope() {
     const scene = this.focusedSummary();
-    this.sceneLabel.textContent = scene ? scene.name : "Sources";
+    this.sceneLabel.textContent = scene ? scene.name : this.readingScenes() ? "Reading scenes" : "Sources";
     const scenes = this.sceneClient();
     this.strip.paint(scenes ? scenes.scenes() : [], scene ? scene.id : null);
     this.addTile.setAttribute("aria-label", scene ? `Add sources to ${scene.name}` : "Add source");
@@ -401,7 +413,8 @@ class SourcesPanel extends HTMLElement {
   // ------------------------------------------------------------ actions
 
   /** The scene add tile and Ctrl+N share the existing-source chooser. */
-  addSource(opts) {
+  async addSource(opts) {
+    if (this.readingScenes()) await this.sceneSession.ready;
     const scene = this.scopedTo();
     if (scene && !opts?.category) return openSceneSources(this.client, this.sceneClient(), scene);
     return openPicker(this.client, "source", {

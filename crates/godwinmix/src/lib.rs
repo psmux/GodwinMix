@@ -1078,18 +1078,9 @@ pub async fn run() -> Result<()> {
         godwinmix_core::caps::CanvasCaps::new(&cfg_for_control.canvas),
     )
     .context("opening the scene collection")?;
-    if scenes.list().is_empty() {
-        let sources: Vec<String> = cfg_for_control.sources.iter().map(|source| source.id.clone()).collect();
-        scenes.edit(None, |doc| {
-            let scene = if sources.is_empty() {
-                godwinmix_core::scene::Scene::new("Default scene")
-            } else {
-                godwinmix_core::scene::server::ops::create_from(doc, &sources, None, Some("Default scene"))?
-            };
-            doc.scenes.push(scene);
-            Ok(())
-        }).context("creating the default scene")?;
-    }
+    // Only into a collection with no scenes: one somebody emptied stays empty.
+    let sources: Vec<String> = cfg_for_control.sources.iter().map(|source| source.id.clone()).collect();
+    scenes.seed_default(&sources).context("creating the default scene")?;
     {
         let path = on_air::path_for(&config_path);
         on_air::spawn_recorder(handle.clone(), path.clone());

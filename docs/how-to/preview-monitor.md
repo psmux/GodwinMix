@@ -8,6 +8,8 @@ arrangement is remembered in this browser. See
 
 Sources are shared inputs. A scene arranges those inputs on screen, and the same source can be used in several scenes. A new empty collection starts with a Default scene, containing the configured sources when available. Drag sources onto a scene to add them, then double click the scene to edit its layout. Creating a scene does not put it on air.
 
+The Sources panel lists the sources the focused scene draws. **Remove from scene** takes a source off that scene and leaves it in the mixer for other scenes, and a scene you empty stays empty: it is never filled again, after a reload or a restart of the mixer. Right after the page loads, Sources reads **Reading scenes** until the mixer has said which scenes there are, rather than showing every source in the mixer for that moment.
+
 Outputs are destinations for the programme feed. They are separate from scenes, so changing a scene does not restart the stream or recording. Media is the shared file library.
 
 For a manually operated mixer that should switch immediately, set this in the mixer configuration and restart it:
