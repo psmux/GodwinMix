@@ -195,7 +195,7 @@ process reads it.
 No arguments. Answers `{port, relay, streams}`, one row per live stream with
 `app`, `stream`, `since_ms`, `from`, `key`, `video` (`codec`, `width`,
 `height`, `fps`, `kbps`), `audio` (`codec`, `channels`, `sample_rate`,
-`kbps`), `measured` (false until a whole second of the stream has been
+`kbps`), `measured` (false until two full seconds of the stream have been
 measured, so a rate of 0 before then means not known), `readers`,
 `dropped_gops` and `bytes`. Reads numbers the listener
 keeps anyway and changes nothing.

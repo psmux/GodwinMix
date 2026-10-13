@@ -147,9 +147,9 @@ machine over the last four seconds, sound included, so a 3000 kb/s video with
 128 kb/s sound reads about 3.1 Mb/s.
 
 A destination that asked for a bitrate never gets a copy running more than 5
-percent over it, for the sound as well as the picture. The plan waits until a
-whole second of the stream has been measured, which is why a converting
-destination starts a second or so after the channel goes live.
+percent over it, for the sound as well as the picture. The plan waits until
+two full seconds of the stream have been measured, which is why a converting
+destination starts two seconds or so after the channel goes live.
 
 The stream is decoded once however many destinations convert it, and every
 destination that asks for the same format shares one encoder, so three

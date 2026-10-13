@@ -38,8 +38,7 @@ pub struct Meter {
     /// where the measured one is only near: 29.97 and 30 look alike over a
     /// second of frames.
     declared_fps: Option<f64>,
-    /// Whether a whole window has been measured, so the bit rates mean
-    /// something. A plan made before then took an unknown rate for one that
+    /// Whether the bit rates mean something yet (`settle`). A plan made before then took an unknown rate for one that
     /// fits, and copied 160 kbit/s sound to a destination that asked for 128.
     measured: bool,
     /// Windows measured before `measured`.
@@ -181,7 +180,7 @@ impl Meter {
         self.video.is_some() || self.frames > 0 || self.video_kbps > 0
     }
 
-    /// Whether the bit rates have been measured over a whole window yet.
+    /// Whether the bit rates have settled enough to plan against.
     pub fn measured(&self) -> bool {
         self.measured
     }

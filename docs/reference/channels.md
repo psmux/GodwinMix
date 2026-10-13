@@ -576,7 +576,7 @@ stream}` with the whole address. The plugin raises `event/channel.stream` (a
 stream went live, learned its codecs, or left), `event/channel.refused`, and
 `event/channel.destination` (`{channel, destination, state, since_ms, kbps,
 reconnects, error}`) when a destination's state, error or reconnect count
-moves. The first rates of a stream, a second in, are news too, and until then
+moves. The first rates of a stream, two seconds in, are news too, and until then
 the core plans no converting destination for it. It answers the `streams`
 tool with every live stream measured and each
 destination's `kbps` under `destinations`. It runs one restream per

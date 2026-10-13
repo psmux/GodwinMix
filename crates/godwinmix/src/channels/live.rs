@@ -25,7 +25,7 @@ pub struct Live {
     /// The frame rate the publisher's `onMetaData` states, exact where the
     /// measured `fps` is only near. A converting destination plans from it.
     pub declared_fps: Option<f64>,
-    /// Whether the listener has measured the bit rates over a whole second
+    /// Whether the listener has measured the bit rates over two full seconds
     /// of this session yet. `Some(false)` holds a converting destination's
     /// plan back, since a rate of 0 then means not known rather than nothing
     /// sent. `None` from a listener that does not say: planned at once.
