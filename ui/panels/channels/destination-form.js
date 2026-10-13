@@ -13,6 +13,7 @@ import { PLATFORMS, platform } from "../../client/destinations.js";
 import { schemeError } from "../outputs/destination.js";
 import { brandMark } from "./brands.js";
 import { tileState } from "./model.js";
+import { sends } from "./sends.js";
 import { field, keyField, streamChoice } from "./fields.js";
 import { formatStep, channelShape } from "../renditions/format-step.js";
 import { isRefusal, showRefusal } from "../renditions/refusal.js";
@@ -156,7 +157,8 @@ export function editDestination(view, channel, dest) {
   const key = p.key ? keyField("Stream key", "kept", true) : null;
   const format = formatStep(view.client, { platform: p.id, platformTitle: p.title, shape: channelShape(channel), current: dest.rendition || { preset: "copy" }, id: () => dest.id });
   const refused = el("div", { hidden: true });
-  const status = el("div.chn-dstatus", { "data-state": dest.state }, [el("strong", { text: tileState(dest) }), dest.error ? el("span", { text: dest.error }) : null]);
+  const sent = sends(dest).line;
+  const status = el("div.chn-dstatus", { "data-state": dest.state }, [el("strong", { text: tileState(dest) }), sent ? el("span.chn-dsends", { text: sent }) : null, dest.error ? el("span", { text: dest.error }) : null]);
   const save = el("button.btn.primary", { text: "Save" });
   const remove = el("button.btn.danger", { text: "Remove" });
   const m = modal({

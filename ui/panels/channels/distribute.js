@@ -12,6 +12,7 @@ import { platform } from "../../client/destinations.js";
 import { brandMark } from "./brands.js";
 import { keyed, write } from "./keyed.js";
 import { tileState, ringState, startedAt } from "./model.js";
+import { sends } from "./sends.js";
 import { bulkButton } from "./bulk.js";
 import { addDestination, editDestination } from "./destination-form.js";
 import { waitingNote } from "./to-programme.js";
@@ -97,10 +98,12 @@ function destinationTile(view, getChannel) {
   const ring = el("span.chn-ring");
   const label = el("span.chn-tlabel");
   const words = el("span.chn-tstate");
+  // What this destination sends, which is not what comes into the channel.
+  const out = el("span.chn-tsends");
   const error = el("span.chn-terr");
   const plan = el("span.chn-tplan");
   const open = () => (isLocal(dest.platform) ? editLocal : editDestination)(view, getChannel(), dest);
-  const main = el("button.chn-tmain", { type: "button", onclick: open }, [ring, label, words]);
+  const main = el("button.chn-tmain", { type: "button", onclick: open }, [ring, label, words, out]);
   const box = el("input", { type: "checkbox" });
   const toggle = el("label.chn-switch", {}, [box, el("span.chn-knob")]);
   const node = el("div.chn-tile", {}, [main, toggle, plan, error]);
@@ -117,6 +120,9 @@ function destinationTile(view, getChannel) {
       const seen = view.model && view.model.seenAt.get(getChannel().id + "#" + d.id);
       began = d.state === "live" && d.since_ms != null ? startedAt(d.since_ms, seen) : 0;
       write(words, "textContent", tileState(d, began));
+      const sent = sends(d);
+      write(out, "textContent", d.state === "live" ? sent.short : "");
+      write(out, "title", sent.line);
       write(box, "checked", !!d.enabled);
       // What the planner made of it: "Copied", or the encoder, whole on hover.
       const id = getChannel().id;

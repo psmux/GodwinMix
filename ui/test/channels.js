@@ -10,6 +10,7 @@ import { defaultChannelTests } from "./channels-default.js";
 import { programmeTests } from "./channels-programme.js";
 import { feedTests } from "./channels-feeds.js";
 import { localDestinationTests } from "./channels-local.js";
+import { sendsTests } from "./channels-sends.js";
 
 const wait = (ms = 30) => new Promise((r) => setTimeout(r, ms));
 const dialogs = () => [...document.querySelectorAll(".dialog")];
@@ -223,6 +224,7 @@ export async function channelTests(test, eq, ok) {
   await programmeTests(test, eq, ok);
   await feedTests(test, eq, ok);
   await localDestinationTests(test, eq, ok);
+  await sendsTests(test, eq, ok);
 }
 
 /** The card's Connect section, then a live stream's own Copy URL. */
