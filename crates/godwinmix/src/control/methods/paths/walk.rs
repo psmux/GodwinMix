@@ -1,11 +1,12 @@
 //! The filesystem half of `path.list` and `path.create`, with no control
 //! plane in it so the tests can run it against a scratch folder.
 //!
-//! Every path is canonicalised before it is compared, so `..` and a symlink
-//! cannot walk out of the places a client may look: the mixer's home folder
-//! and the mixer's own folders (the media folder and the folder the config is
-//! in). Only folders are listed, never files, and nothing hidden.
+//! Any folder on the mixer can be listed, on any drive, because a recording
+//! that has to go to a second disk is the reason somebody opens the picker.
+//! Only folders are listed, never files, and nothing hidden. Every path goes
+//! out written the way a person types it (see `places::shown`).
 
+use super::places::{drive_top, shown};
 use super::{PathEntry, PathListing, PathRoot};
 use std::path::{Path, PathBuf};
 
@@ -16,8 +17,6 @@ pub const MAX_ENTRIES: usize = 500;
 /// Why a path was not listed or created.
 #[derive(Debug, PartialEq)]
 pub enum Refusal {
-    /// Outside every root. Carries the path asked for.
-    Outside(String),
     /// Not there. Carries the path and the nearest folder that is.
     Missing { path: String, nearest: Option<String> },
     /// There, but not a folder, or not readable. Carries the reason.
@@ -26,9 +25,11 @@ pub enum Refusal {
     BadName(String),
 }
 
-/// The places a client may look, canonicalised. A root that does not exist is
-/// left out: a media folder nobody created yet is somewhere inside home.
-pub fn roots(places: &[(&str, Option<PathBuf>)]) -> Vec<(String, PathBuf)> {
+/// The places a picker offers: the mixer's own folders, canonicalised and
+/// left out when they do not exist, then `system` (the drives, or `/` and the
+/// mounted volumes) as they are, since probing a drive that is offline can
+/// take seconds.
+pub fn roots(places: &[(&str, Option<PathBuf>)], system: Vec<(String, PathBuf)>) -> Vec<(String, PathBuf)> {
     let mut out: Vec<(String, PathBuf)> = Vec::new();
     for (label, place) in places {
         let Some(found) = place.as_ref().and_then(|p| std::fs::canonicalize(p).ok()) else {
@@ -38,57 +39,60 @@ pub fn roots(places: &[(&str, Option<PathBuf>)]) -> Vec<(String, PathBuf)> {
             out.push((label.to_string(), found));
         }
     }
+    out.extend(system);
     out
 }
 
-fn inside(roots: &[(String, PathBuf)], path: &Path) -> bool {
-    roots.iter().any(|(_, root)| path.starts_with(root))
-}
-
-/// `~` and a relative path both start at the first root, which is home.
+/// `~` and a relative path both start at the first root, which is home. A
+/// bare drive letter is the top of that drive.
 fn absolute(roots: &[(String, PathBuf)], asked: Option<&str>) -> PathBuf {
     let home = roots.first().map(|(_, p)| p.clone()).unwrap_or_default();
     match asked.map(str::trim).filter(|s| !s.is_empty() && *s != "~") {
         None => home,
-        Some(text) => home.join(text.strip_prefix("~/").unwrap_or(text)),
+        Some(text) => match drive_top(text) {
+            Some(top) => PathBuf::from(top),
+            None => home.join(text.strip_prefix("~/").unwrap_or(text)),
+        },
     }
 }
 
-fn nearest(roots: &[(String, PathBuf)], wanted: &Path) -> Option<String> {
-    wanted
-        .ancestors()
-        .skip(1)
-        .filter_map(|a| std::fs::canonicalize(a).ok())
-        .find(|a| inside(roots, a))
-        .map(|a| a.display().to_string())
+fn nearest(wanted: &Path) -> Option<String> {
+    wanted.ancestors().skip(1).filter_map(|a| std::fs::canonicalize(a).ok()).find(|a| a.is_dir()).map(|a| shown(&a))
+}
+
+/// A dot folder, or one Windows marks hidden or system, such as
+/// `$Recycle.Bin` and `System Volume Information`.
+fn hidden(entry: &std::fs::DirEntry, name: &str) -> bool {
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        const HIDDEN_OR_SYSTEM: u32 = 0x2 | 0x4;
+        if entry.metadata().is_ok_and(|m| m.file_attributes() & HIDDEN_OR_SYSTEM != 0) {
+            return true;
+        }
+    }
+    #[cfg(not(windows))]
+    let _ = entry;
+    name.starts_with('.')
 }
 
 /// List the folders in `asked`, or in home when nothing is asked.
 pub fn list(roots: &[(String, PathBuf)], asked: Option<&str>) -> Result<PathListing, Refusal> {
     let wanted = absolute(roots, asked);
-    let shown = wanted.display().to_string();
     let path = match std::fs::canonicalize(&wanted) {
         Ok(p) => p,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-            return Err(Refusal::Missing { path: shown, nearest: nearest(roots, &wanted) });
+            return Err(Refusal::Missing { path: shown(&wanted), nearest: nearest(&wanted) });
         }
-        Err(e) => return Err(Refusal::Unreadable { path: shown, reason: e.to_string() }),
+        Err(e) => return Err(Refusal::Unreadable { path: shown(&wanted), reason: e.to_string() }),
     };
-    if !inside(roots, &path) {
-        return Err(Refusal::Outside(path.display().to_string()));
-    }
-    let unreadable = |e: std::io::Error| Refusal::Unreadable { path: path.display().to_string(), reason: e.to_string() };
+    let unreadable = |e: std::io::Error| Refusal::Unreadable { path: shown(&path), reason: e.to_string() };
     let mut dirs = Vec::new();
     for entry in std::fs::read_dir(&path).map_err(unreadable)?.flatten() {
         let name = entry.file_name().to_string_lossy().into_owned();
-        if name.starts_with('.') {
-            continue;
-        }
-        // A symlink that points out of the roots is not offered, because
-        // walking into it would be refused.
-        let Ok(real) = std::fs::canonicalize(entry.path()) else { continue };
-        if real.is_dir() && inside(roots, &real) {
-            dirs.push(PathEntry { name, writable: writable(&real), path: entry.path().display().to_string() });
+        let inner = entry.path();
+        if !hidden(&entry, &name) && inner.is_dir() {
+            dirs.push(PathEntry { name, writable: writable(&inner), path: shown(&inner) });
         }
     }
     dirs.sort_by_key(|d| d.name.to_lowercase());
@@ -96,11 +100,11 @@ pub fn list(roots: &[(String, PathBuf)], asked: Option<&str>) -> Result<PathList
     dirs.truncate(MAX_ENTRIES);
     Ok(PathListing {
         writable: writable(&path),
-        parent: path.parent().filter(|p| inside(roots, p)).map(|p| p.display().to_string()),
-        path: path.display().to_string(),
+        parent: path.parent().map(shown),
+        path: shown(&path),
         dirs,
         truncated,
-        roots: roots.iter().map(|(label, p)| PathRoot { label: label.clone(), path: p.display().to_string() }).collect(),
+        roots: roots.iter().map(|(label, p)| PathRoot { label: label.clone(), path: shown(p) }).collect(),
     })
 }
 
