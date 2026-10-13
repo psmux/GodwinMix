@@ -11,7 +11,7 @@
 //! under the same id at the new place, with its fader and backup rule.
 
 use super::media_refs_map::Mapping;
-pub use super::media_refs_live::{check, release, restore};
+pub use super::media_refs_live::{check, release, restore, Released};
 use crate::control::call::Call;
 use godwinmix_core::config::SourceConfig;
 use godwinmix_core::media_org::Moved;
@@ -20,11 +20,12 @@ use godwinmix_core::mixer::Command;
 /// After the move: point every source, scene and template at the new
 /// places. Answers what was changed, in words; a part that could not be
 /// changed is said too, never hidden.
-pub async fn follow(call: &Call, moved: &[Moved], released: Vec<SourceConfig>) -> Vec<String> {
+pub async fn follow(call: &Call, moved: &[Moved], released: Released) -> Vec<String> {
     let root = call.app.library.dir().to_path_buf();
     let map = Mapping::new(&root, moved);
     let mut out = Vec::new();
-    for s in released {
+    let (program, scene) = released.on_air();
+    for s in released.sources {
         let id = s.id.clone();
         let next = rewritten(&map, &s).unwrap_or(s);
         match call.app.mixer.request(|ack| Command::AddSource(Box::new(next), Some(ack))).await {
@@ -32,6 +33,7 @@ pub async fn follow(call: &Call, moved: &[Moved], released: Vec<SourceConfig>) -
             Err(e) => out.push(format!("source {id} did not start again at the new place: {e}. Bring it back with source.restore")),
         }
     }
+    out.extend(super::media_refs_live::retake(call, program, scene).await);
     if map.is_empty() {
         return out;
     }

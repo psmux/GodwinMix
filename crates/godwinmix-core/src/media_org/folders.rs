@@ -1,6 +1,6 @@
 //! Folders: directories under the library, listed, made, moved and removed.
 
-use super::paths::{clash, inside, join, name_of, parent_of, plain, rel_path, segment};
+use super::paths::{clash, inside, join, rename_patiently, name_of, parent_of, plain, rel_path, segment};
 use super::{Moved, Refusal};
 use std::path::Path;
 
@@ -110,7 +110,7 @@ pub fn move_folder(root: &Path, from: &str, into: Option<&str>, name: Option<&st
         return Err(Refusal::invalid("to", format!("{:?} already has something called {have:?}. Pick another name, or move that out of the way first.", shown(&into))));
     }
     let (old, new) = (plain(root, &from), plain(root, &to));
-    std::fs::rename(&old, &new).map_err(|e| Refusal::io("moving the folder", e))?;
+    rename_patiently(&old, &new).map_err(|e| Refusal::io("moving the folder", e))?;
     Ok(Moved { from, to, from_path: old, to_path: new, also: Vec::new() })
 }
 
@@ -136,7 +136,7 @@ pub fn remove_folder(root: &Path, raw: &str, contents: Contents) -> Result<Vec<M
     for n in names {
         let (from_rel, to_rel) = (join(&rel, &n), join(&into, &n));
         let (from_path, to_path) = (plain(root, &from_rel), plain(root, &to_rel));
-        std::fs::rename(&from_path, &to_path).map_err(|e| Refusal::io(&format!("moving {n} out of the folder"), e))?;
+        rename_patiently(&from_path, &to_path).map_err(|e| Refusal::io(&format!("moving {n} out of the folder"), e))?;
         moved.push(Moved { from: from_rel, to: to_rel, from_path, to_path, also: Vec::new() });
     }
     for l in LITTER {

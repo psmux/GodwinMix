@@ -124,3 +124,18 @@ pub fn clash(dir: &Path, name: &str, except: Option<&str>) -> Option<String> {
     let low = name.to_lowercase();
     std::fs::read_dir(dir).ok()?.flatten().map(|e| e.file_name().to_string_lossy().into_owned()).find(|n| n.to_lowercase() == low && Some(n.as_str()) != except)
 }
+
+/// Rename, waiting up to three seconds while the file is still held open,
+/// as one is on Windows for a moment after the source playing it stops.
+pub fn rename_patiently(from: &Path, to: &Path) -> std::io::Result<()> {
+    let mut tries = 0;
+    loop {
+        match std::fs::rename(from, to) {
+            Err(e) if tries < 30 && (e.kind() == std::io::ErrorKind::PermissionDenied || e.raw_os_error() == Some(32)) => {
+                tries += 1;
+                std::thread::sleep(std::time::Duration::from_millis(100));
+            }
+            other => return other,
+        }
+    }
+}

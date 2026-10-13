@@ -1,6 +1,6 @@
 //! Moving and renaming one file, its converted copy with it.
 
-use super::paths::{clash, inside, join, name_of, parent_of, plain, rel_path, segment};
+use super::paths::{clash, inside, join, rename_patiently, name_of, parent_of, plain, rel_path, segment};
 use super::Refusal;
 use std::path::{Path, PathBuf};
 
@@ -72,9 +72,9 @@ pub fn move_file(m: &Moved) -> Result<(), Refusal> {
     if m.from == m.to {
         return Ok(());
     }
-    std::fs::rename(&m.from_path, &m.to_path).map_err(|e| Refusal::io(&format!("moving {}", m.from), e))?;
+    rename_patiently(&m.from_path, &m.to_path).map_err(|e| Refusal::io(&format!("moving {}", m.from), e))?;
     for (a, b) in &m.also {
-        let _ = std::fs::rename(a, b);
+        let _ = rename_patiently(a, b);
     }
     Ok(())
 }

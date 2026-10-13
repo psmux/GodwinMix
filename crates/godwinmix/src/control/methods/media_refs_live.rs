@@ -46,11 +46,21 @@ fn probe(call: &Call, froms: &[PathBuf]) -> Mapping {
     Mapping::new(call.app.library.dir(), &moved)
 }
 
+/// The sources taken out for a move, and what the programme showed, so it
+/// can show it again once they are back.
+#[derive(Default)]
+pub struct Released {
+    pub sources: Vec<SourceConfig>,
+    program: Option<String>,
+    scene: Option<String>,
+}
+
 /// Before the move: take out every source playing from what moves, so no
-/// file is held open. Answers their configs, to put back.
-pub async fn release(call: &Call, froms: &[PathBuf]) -> Vec<SourceConfig> {
+/// file is held open.
+pub async fn release(call: &Call, froms: &[PathBuf]) -> Released {
     let map = probe(call, froms);
-    let Ok(configs) = call.app.mixer.configs().await else { return Vec::new() };
+    let status = call.app.mixer.status().await.ok();
+    let Ok(configs) = call.app.mixer.configs().await else { return Released::default() };
     let mut out = Vec::new();
     for s in configs.sources.into_iter().chain(configs.unstarted.into_iter().map(|u| u.config)).filter(|s| uses(&map, s)) {
         let id = s.id.clone();
@@ -58,13 +68,38 @@ pub async fn release(call: &Call, froms: &[PathBuf]) -> Vec<SourceConfig> {
             out.push(s);
         }
     }
-    out
+    let (program, scene) = status.map(|s| (s.program.map(|p| p.to_string()), s.scene)).unwrap_or_default();
+    let on_air = |id: &str| program.as_deref() == Some(id) || scene.as_ref().is_some_and(|sc| call.app.scenes.sources_in(sc).iter().any(|x| x == id));
+    let live = out.iter().any(|s| on_air(&s.id.to_string()));
+    Released { sources: out, program: program.filter(|_| live), scene: scene.filter(|_| live) }
 }
 
 /// The move failed: put the sources back as they were.
-pub async fn restore(call: &Call, released: Vec<SourceConfig>) {
-    for s in released {
+pub async fn restore(call: &Call, released: Released) {
+    for s in released.sources {
         let _ = call.app.mixer.request(|ack| Command::AddSource(Box::new(s), Some(ack))).await;
+    }
+    let _ = retake(call, released.program, released.scene).await;
+}
+
+/// Put back on programme what was there before a source on it was taken
+/// out, scene first. `None` when there was nothing to take again or it
+/// went back; otherwise what to say.
+pub async fn retake(call: &Call, program: Option<String>, scene: Option<String>) -> Option<String> {
+    let params = match (scene, program) {
+        (Some(scene), _) => serde_json::json!({ "scene": scene }),
+        (None, Some(source)) => serde_json::json!({ "source": source }),
+        (None, None) => return None,
+    };
+    match super::project::invoke(call, "program.take", params.clone()).await {
+        Ok(_) => None,
+        Err(e) => Some(format!("the programme did not go back to {params} after the move: {}. Take it again", e.message)),
+    }
+}
+
+impl Released {
+    pub fn on_air(&self) -> (Option<String>, Option<String>) {
+        (self.program.clone(), self.scene.clone())
     }
 }
 

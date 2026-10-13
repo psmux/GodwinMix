@@ -126,7 +126,7 @@ async fn remove(call: Call, params: Value) -> Result<Value, RpcError> {
     }
 }
 
-async fn followed(call: &Call, moved: Vec<Moved>, released: Vec<godwinmix_core::config::SourceConfig>) -> Result<Value, RpcError> {
+async fn followed(call: &Call, moved: Vec<Moved>, released: media_refs::Released) -> Result<Value, RpcError> {
     let updated = media_refs::follow(call, &moved, released).await;
     call.app.mixer.emit(Event::MediaChanged { name: String::new(), conversion: None });
     body(MediaMoved { moved: moved.into_iter().map(|m| MediaMove { from: m.from, to: m.to }).collect(), updated })
