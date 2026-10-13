@@ -63,6 +63,45 @@ up, so it is not live`. A source that can be scrubbed is a file and is never
 touched. `RUST_LOG=godwinmix_core::mixer::catch_up=debug` prints each source's
 least lead every tick. The code is `crates/godwinmix-core/src/mixer/catch_up`.
 
+## A clip is early, not late
+
+A clip is the opposite case. It is not live, so it decodes as fast as the
+programme's queues take it, and its frames reach its tee seconds before they
+are due. On 2026-10-13, with a 1080p30 clip on air, a frame left the source's
+tee 1 s before it left the source's programme queue, 2 s before it left the
+programme branch's queue, and about 4 s before the mosaic drew it. The
+programme is right, because the compositor draws each frame at its time.
+
+The clip's tile hangs off the same tee, so its frames reached the mosaic 4 s
+early too and waited at their pad. The tile's queue held two frames and
+dropped the rest, so each time the waiting frame came due the next one was
+again seconds ahead: the tile, a Preview showing the clip, and an armed scene
+with the clip in it moved about once a second and froze in between, while the
+programme beside them played smoothly. A source tile's queue now holds up to
+five seconds of frames (`multiview::early`). They are thumbnails by then,
+about 190 kB each, so a clip costs about 19 MB while its tile is shown and a
+live source almost nothing; the queue is still leaky, so a mosaic that stops
+reading never holds a source up.
+
+Measured on Windows (24 threads) with a 1080p30 H.264 clip that carries its
+frame number as a barcode, a 1080p30 canvas and the page's own request of 25
+frames a second, a reader on `/rpc` counting different frames for 30 seconds:
+
+| Different frames a second | Before | After |
+|---|---|---|
+| The clip's tile, which Preview shows for a single source | 1.2 | 24.0 |
+| The Studio preview of a scene holding the clip | 1.2 | 23.9 |
+| The programme tile | 8.0 | 25.0 |
+| The tile of a clip added while the page was open | 0.8 | 25.0 |
+
+The "after" figures for the tile and the preview include the first second and
+a quarter after the preview was built, when nothing has come due yet; past it
+both drew every frame of the 25. The programme tile and a source added while
+a mosaic was running were also made at the configured 8 frames a second
+rather than the mosaic's rate; both now follow the mosaic. The core's test
+`multiview::latency_tests::clip_rate` plays a clip into a 25 fps mosaic and
+Studio preview and counts the different frames each shows.
+
 ## Measured
 
 A debug build on this laptop (Windows 11, 16 threads, other builds running),
