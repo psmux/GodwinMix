@@ -7,14 +7,15 @@ import { picture } from "./card.js";
 import { oneLine, kindWords } from "./model.js";
 
 /**
- * The Featured row: what the index marked featured, else the plugins that
- * run here and have a picture, best first. Fewer than two is no row.
+ * The Featured row: what the index marked featured, even one, else the
+ * plugins that run here and have a picture, best first, when there are at
+ * least two of them.
  */
 export function featured(plugins, max = 6) {
   const marked = plugins.filter((p) => p.featured);
-  const pool = marked.length ? marked : plugins.filter((p) => p.runs_here && (p.thumbnail || (p.media || []).length));
-  const out = pool.slice(0, max);
-  return out.length >= 2 ? out : [];
+  if (marked.length) return marked.slice(0, max);
+  const pictured = plugins.filter((p) => p.runs_here && (p.thumbnail || (p.media || []).length)).slice(0, max);
+  return pictured.length >= 2 ? pictured : [];
 }
 
 /** New and updated: the most recently changed, newest first. */

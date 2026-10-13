@@ -216,11 +216,12 @@ fn pinning_with_only_hides_every_other_marketplace() {
 }
 
 #[test]
-fn owner_slash_repo_becomes_a_raw_github_url_for_both_file_names() {
+fn owner_slash_repo_becomes_a_raw_github_url_for_every_file_name() {
     let urls = candidate_urls("psmux/godwinmix-plugins").expect("it makes URLs");
-    assert_eq!(urls.len(), 2);
+    assert_eq!(urls.len(), 3);
     assert!(urls[0].ends_with("/psmux/godwinmix-plugins/HEAD/godwinmix-marketplace.json"), "{urls:?}");
-    assert!(urls[1].ends_with("/psmux/godwinmix-plugins/HEAD/index.json"), "{urls:?}");
+    assert!(urls[1].ends_with("/psmux/godwinmix-plugins/HEAD/index2.json"), "the newer index first: {urls:?}");
+    assert!(urls[2].ends_with("/psmux/godwinmix-plugins/HEAD/index.json"), "{urls:?}");
 }
 
 #[test]

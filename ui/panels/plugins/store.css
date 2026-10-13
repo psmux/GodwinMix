@@ -49,7 +49,7 @@
 
 /* The detail view: a large carousel first, then everything else. */
 .pg-hero { position: relative; border-radius: var(--radius); overflow: hidden; background: #000; }
-.pg-track { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; overscroll-behavior-x: contain; }
+.pg-track { display: flex; overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; scrollbar-width: none; overscroll-behavior-x: contain; }
 .pg-track::-webkit-scrollbar { display: none; }
 .pg-track:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .pg-slide { flex: 0 0 100%; scroll-snap-align: center; aspect-ratio: 16 / 9; max-height: 58vh; display: flex; align-items: center; justify-content: center; position: relative; }

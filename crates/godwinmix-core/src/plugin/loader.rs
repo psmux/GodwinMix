@@ -881,8 +881,15 @@ pub fn install(spec: &str, opts: &InstallOptions) -> Result<Installed> {
     ctx.identity = identity;
     if let Some(report) = opts.report.clone().filter(|_| source.needs_network()) {
         report.say("downloading", None);
+        // Once a percent, not once a read: a fast download reads thousands
+        // of times a second and nobody reads the task that often.
+        let last = std::sync::atomic::AtomicI64::new(-1);
         ctx.progress = Some(godwinmix_host::sources::Progress(std::sync::Arc::new(move |done, size| {
-            report.say("downloading", size.filter(|s| *s > 0).map(|s| done as f64 / s as f64));
+            let fraction = size.filter(|s| *s > 0).map(|s| done as f64 / s as f64);
+            let pct = fraction.map(|f| (f * 100.0) as i64).unwrap_or(0);
+            if last.swap(pct, std::sync::atomic::Ordering::Relaxed) != pct {
+                report.say("downloading", fraction);
+            }
         })));
     }
     let mut fetched = godwinmix_host::sources::fetch(&source, &ctx)?;

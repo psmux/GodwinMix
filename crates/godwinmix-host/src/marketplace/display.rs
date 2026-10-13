@@ -38,6 +38,10 @@ pub struct Display {
     /// The index put it in the Featured row.
     #[serde(default, skip_serializing_if = "is_false")]
     pub featured: bool,
+    /// The oldest GodwinMix that runs it, `0.3.10`. A listing with one is
+    /// only in `index2.json`, which older mixers never read.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub mixer: String,
     /// The repository's GitHub stars when the index last looked.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stars: Option<u64>,

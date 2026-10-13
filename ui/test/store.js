@@ -37,7 +37,8 @@ export async function storeTests(test, eq, ok) {
     const list = shiny();
     eq(featured(list).map((p) => p.name), ["scripture", "hls-player"]);
     eq(fresh(list).map((p) => p.name), ["scripture", "hls-player", "social-chat"]);
-    eq(featured(list.slice(0, 1)), [], "one is not a row");
+    eq(featured(list.slice(0, 1)).map((p) => p.name), ["scripture"], "one marked is a row");
+    eq(featured([{ ...list[2], featured: false }]), [], "one picked for its picture is not");
   });
 
   test("store: a failed install names the next step, the core's own when it wrote one", () => {

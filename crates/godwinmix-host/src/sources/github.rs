@@ -9,7 +9,7 @@
 
 use super::{archive, http, FetchCtx, Fetched, Source};
 use crate::verify::{self, Trust};
-use anyhow::{Context, Result};
+use anyhow::Result;
 use std::path::PathBuf;
 
 /// Every platform triple `launch::this_platform` can answer, so a refusal can
