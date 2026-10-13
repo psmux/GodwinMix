@@ -106,7 +106,23 @@ the compositor as an opaque picture. The figures for this key include drawing
 the presenter on the board, which the compositor no longer does. The key's own
 work, without the drawing, is 0.7 ms a frame at 720p and 1.4 ms at 1080p.
 
-The measurement is `crates/godwinmix-core/tests/key_cost.rs`:
+The same measurement on a Windows 11 laptop (Intel Core Ultra with Arc
+140T graphics, GStreamer 1.28.6, release build), taken while the machine was
+at 100 percent load from other builds, so the figures are high:
+
+| Canvas | Presenter | No key | Keyed | The key |
+|---|---|---|---|---|
+| 1920x1080 | figure | 10.9 percent of a core | 55.8 | 44.8 |
+| 1920x1080 | bars | 33.8 | 80.8 | 47.0 |
+
+There the key's own work was 9.2 ms a frame at 1080p and the board's drawing
+5.2 ms (`key_cost_per_frame`), against 1.4 ms for the key on the M4 Pro.
+
+The compositor's own cost does not change with a key: it composites in I420
+either way.
+
+The measurement is `crates/godwinmix-core/tests/key_cost.rs`, which runs on
+Linux, macOS and Windows:
 
 ```sh
 GMX_KEY_SOURCE=studio GMX_KEY_CANVAS=1280x720 cargo test -p godwinmix-core --release --test key_cost -- --ignored --nocapture

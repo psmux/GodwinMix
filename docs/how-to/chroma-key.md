@@ -65,7 +65,10 @@ gmx ctl rpc config.set '{"values": {"hardware.graphics": "auto"}}'
 
 ## What it costs
 
-On a 1920x1080 programme at 30 frames a second, one keyed camera adds about
-what drawing that camera opaque costs, since the board draws it instead of the
-compositor. The figures, and how to measure them on your own machine, are in
-the [chroma key reference](../reference/chroma-key.md#cost).
+A key costs CPU only while it is on: the programme is composited the same
+way with or without one, and nothing changes when the last key comes off. One
+keyed camera on a 1920x1080 programme at 30 frames a second measured 14.7
+percent of a core on an Apple M4 Pro and about 45 on a busy Windows laptop.
+On a small machine, a 1280x720 canvas costs about half that. The figures, and
+how to measure them on your own machine, are in the
+[chroma key reference](../reference/chroma-key.md#cost).
