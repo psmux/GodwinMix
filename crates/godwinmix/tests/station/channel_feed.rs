@@ -11,7 +11,7 @@ use std::path::Path;
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
-struct Ffmpeg(Child);
+pub struct Ffmpeg(Child);
 
 impl Drop for Ffmpeg {
     fn drop(&mut self) {
@@ -26,12 +26,12 @@ fn ffmpeg(args: &[&str]) -> Option<Ffmpeg> {
     Some(Ffmpeg(child))
 }
 
-fn free_port() -> u16 {
+pub fn free_port() -> u16 {
     std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port()
 }
 
 /// An RTMP server that writes what it is sent to `file`, as it came.
-fn destination(port: u16, file: &Path) -> Option<Ffmpeg> {
+pub fn destination(port: u16, file: &Path) -> Option<Ffmpeg> {
     let url = format!("rtmp://127.0.0.1:{port}/live/dest");
     ffmpeg(&["-listen", "1", "-timeout", "180", "-i", &url, "-c", "copy", "-f", "flv", "-y", &file.to_string_lossy()])
 }
@@ -55,13 +55,13 @@ fn probe(file: &Path) -> String {
     out.replace("\r", "")
 }
 
-async fn channel(ws: &mut Ws, id: u64, channel: &str) -> Value {
+pub async fn channel(ws: &mut Ws, id: u64, channel: &str) -> Value {
     let got = call(ws, id, "channel.get", json!({"id": channel})).await;
     got["result"].clone()
 }
 
 /// Channel sunday once `ok` holds of it, within `limit`.
-async fn until(ws: &mut Ws, what: &str, limit: Duration, ok: impl Fn(&Value) -> bool) -> Value {
+pub async fn until(ws: &mut Ws, what: &str, limit: Duration, ok: impl Fn(&Value) -> bool) -> Value {
     let (until, mut id) = (Instant::now() + limit, 500u64);
     loop {
         id += 1;
@@ -80,7 +80,7 @@ async fn programme_outputs(ws: &mut Ws, id: u64) -> Vec<String> {
     outputs.iter().filter_map(|o| o["id"].as_str().map(String::from)).filter(|o| o.starts_with("to-channel-")).collect()
 }
 
-async fn ready(dir: &Path, port: u16) -> (Running, Ws) {
+pub async fn ready(dir: &Path, port: u16) -> (Running, Ws) {
     let st = start(dir.to_path_buf(), port, &[]).await;
     let ws = rpc(&st, "").await;
     (st, ws)

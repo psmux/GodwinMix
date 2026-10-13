@@ -50,7 +50,12 @@ it takes effect at once:
 
 The line under the name says how it is going, as Livebox does. Green
 **LIVE** with what arrives, for example
-`Video 1920x1080 3.0 Mb/s | Audio AAC 128 kb/s`, or red **Offline** with the
+`Coming in: Video 1920x1080 3.0 Mb/s | Audio AAC 128 kb/s`. That is the
+channel's own stream, before any destination converts it; a destination with
+a format of its own says on its tile what it sends, such as
+`1280×720 30 fps H.264` (see
+[Send one destination a smaller picture](restream-a-channel.md#send-one-destination-a-smaller-picture)).
+Otherwise the line is red **Offline** with the
 reason in words: `waiting for an encoder`,
 `waiting for this mixer's programme`, or
 `pulling rtmp://203.0.113.5:1935, trying again in 4 s: connection refused`.

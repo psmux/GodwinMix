@@ -3,6 +3,7 @@
 //! each, and a show killed while another runs, with the governor's book
 //! across the two processes. See `docs/reference/shows.md`.
 
+mod channel_custom;
 mod channel_feed;
 mod direct;
 mod direct_live;
