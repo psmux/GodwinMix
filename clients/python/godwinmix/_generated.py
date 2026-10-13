@@ -486,6 +486,8 @@ class Channel(TypedDict, total=False):
     # Where the channel's streams are sent on to, with what each is doing. Changed by `channel.destination.*`.
     enabled: bool
     # Off turns every publisher away with a sentence saying so.
+    feed: ChannelFeed
+    # What gives the channel its picture, and how that is going. A channel made before feeds existed is fed by an encoder.
     id: str
     # A slug, and never changes once the channel exists.
     key_mode: KeyMode
@@ -507,6 +509,8 @@ class ChannelAddRequest(TypedDict, total=False):
     app: Optional[str]
     # The application name encoders put after the port, as they already type it: `Church`, or `Youth Hall`. Defaults to a slug of the name. Matched without regard to case, so two channels cannot differ only in case.
     auto_source: Optional[bool]
+    feed: Union[FeedRequest, None]
+    # What feeds it. An encoder when left out.
     key_mode: Union[KeyMode, None]
     name: str
     protocols: Optional[List[ChannelProtocol]]
@@ -519,6 +523,22 @@ class ChannelAdded(TypedDict, total=False):
 
     channel: Channel
     key: NewKey
+
+class ChannelFeed(TypedDict, total=False):
+    """A channel's feed as a list shows it."""
+
+    error: Optional[str]
+    # What went wrong last, in words, while it is not live.
+    kind: FeedKind
+    output: Optional[str]
+    # The output in that show that publishes the programme here, for `programme`: `to-channel-<channel id>`.
+    retry_in_ms: Optional[int]
+    # When a pull that dropped is tried next, in milliseconds from now.
+    show: Optional[str]
+    # The show whose programme feeds it, for `programme`.
+    state: FeedState
+    uri_host: Optional[str]
+    # Scheme, host and port of the pull address, for `pull`.
 
 class ChannelKey(TypedDict, total=False):
     """One key, as a list shows it."""
@@ -585,6 +605,8 @@ class ChannelSetRequest(TypedDict, total=False):
     app: Optional[str]
     auto_source: Optional[bool]
     enabled: Optional[bool]
+    feed: Union[FeedRequest, None]
+    # What feeds it: this mixer's programme, an encoder, or a pull.
     id: str
     key_mode: Union[KeyMode, None]
     name: Optional[str]
@@ -1086,7 +1108,7 @@ class FeedStatus(TypedDict, total=False):
     # Fetches the server answered `304 Not Modified`.
     paused: bool
     # Stopped by `feed.pause`: nothing is fetched and nothing is written.
-    state: FeedState
+    state: FeedState2
     timeout_s: Optional[float]
     # Seconds one fetch may take before it counts as failed. 10 when absent.
 
@@ -4071,8 +4093,17 @@ DestinationState = Literal['off', 'waiting', 'connecting', 'live', 'reconnecting
 # How the body is read. `auto` decides from the content type and the first byte; `sse` reads an `http(s)` address as a Server-Sent Events stream.
 FeedFormat = Union[Literal['auto', 'json'], Literal['rss'], Literal['csv'], Literal['text'], Literal['sse']]
 
+# Which of the three a channel has.
+FeedKind = Literal['programme', 'encoder', 'pull']
+
+# The three ways a channel is fed, as `channel.add` and `channel.set` take them: `{"kind": "programme"}`, `{"kind": "encoder"}` or `{"kind": "pull", "url": "rtmp://..."}`.
+FeedRequest = Dict[str, Any]
+
+# How the feed is doing.
+FeedState = Literal['live', 'waiting', 'connecting', 'reconnecting', 'off']
+
 # Where a feed is.
-FeedState = Union[Literal['paused'], Literal['starting'], Literal['ok'], Literal['failing']]
+FeedState2 = Union[Literal['paused'], Literal['starting'], Literal['ok'], Literal['failing']]
 
 # What a field holds.
 FieldType = Literal['text', 'color', 'image']
@@ -4188,7 +4219,7 @@ METHODS = (
     {"name": "agent.setup", "scope": "admin", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/agent/setup"), "summary": "Set an AI agent tool up to use this mixer: its MCP config gets one entry, godwinmix, that runs this mixer's own executable, and its skills folder gets the GodwinMix skills. Other entries are kept and a changed file is copied aside first. dry_run answers every file it would write. The answer says how to start the tool and a first thing to ask it."},
     {"name": "agent.state", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/agent/state"), "summary": "The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing."},
     {"name": "agent.tools", "scope": "admin", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/agent/tools"), "summary": 'The AI agent tools this mixer can set up, the ones installed on its machine first, each with what was found: a command on PATH or a config folder.'},
-    {"name": "channel.add", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/channels"), "summary": 'Make a channel and its first key, which is in this answer. channel.key.reveal reads it again later.'},
+    {"name": "channel.add", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/channels"), "summary": 'Make a channel and its first key, which is in this answer. channel.key.reveal reads it again later. `feed` says what gives it its picture: {"kind": "programme"} for this mixer\'s programme, {"kind": "pull", "url": ...} for a stream it pulls, or an encoder publishing to it when left out.'},
     {"name": "channel.certificate.generate", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/channels/certificate/generate"), "summary": "Make a self signed certificate for RTMPS, for this machine's addresses unless names are given. Encoders must be told to accept it; one from a certificate authority needs no such step."},
     {"name": "channel.certificate.set", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/channels/certificate/set"), "summary": 'Give RTMPS a certificate: the PEM of the certificate (and its chain) and of its private key, as a certificate authority issued them. Checked before it is kept; the key is sealed and never read back.'},
     {"name": "channel.destination.add", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/channels/{id}/destination/add"), "summary": "Send a channel's stream on to YouTube, Facebook, Twitch, an RTMP server or an SRT receiver as it arrives. Nothing is decoded or encoded. The key is write only."},
@@ -4199,9 +4230,9 @@ METHODS = (
     {"name": "channel.key.add", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/channels/{id}/key/add"), "summary": 'Make another key for a channel, to give to one more person or encoder. The key is in this answer, and channel.key.reveal reads it again later.'},
     {"name": "channel.key.remove", "scope": "admin", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/channels/{id}/key/remove"), "summary": 'Take one key back. A publisher on air with it is cut off and the next one is turned away; the other keys are untouched.'},
     {"name": "channel.key.reveal", "scope": "admin", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/channels/{id}/key/reveal"), "summary": 'Read one key of a channel back, to give it to an encoder again. Admin only; a list shows only the last four characters. Each read is logged with who asked, never with the key.'},
-    {"name": "channel.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/channels"), "summary": 'Every channel with its keys (as hints), the address to publish to over each protocol it has on, and what is live on it; and which ingest ports are open and for which channels.'},
+    {"name": "channel.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/channels"), "summary": "Every channel with its keys (as hints), what feeds it (this mixer's programme, an encoder, or an address it pulls) and how that is going, the address to publish to over each protocol it has on, and what is live on it; and which ingest ports are open and for which channels."},
     {"name": "channel.remove", "scope": "admin", "mutating": True, "destructive": True, "rest": ("DELETE", "/api/v1/channels/{id}"), "summary": 'Remove a channel and forget its keys. Sources it made that no scene holds go with it.'},
-    {"name": "channel.set", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/channels/{id}/set"), "summary": 'Rename a channel, switch it on or off, or change its application name, whether its streams become sources, how its key is given, which protocols it takes (rtmp, srt, whip) or RTMPS and its port. A port opens when the first channel needs it and closes when the last one stops. Only what is named moves.'},
+    {"name": "channel.set", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/channels/{id}/set"), "summary": 'Rename a channel, switch it on or off, or change its application name, whether its streams become sources, how its key is given, which protocols it takes (rtmp, srt, whip) or RTMPS and its port, or what feeds it (`feed`: programme, encoder, or pull with a url that is never read back). A port opens when the first channel needs it and closes when the last one stops. Only what is named moves.'},
     {"name": "channel.thumbnail", "scope": "read", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/channels/{id}/thumbnail"), "summary": "A live channel stream's picture as a small JPEG in base64, {channel, stream, jpeg, width, height, at_ms}, or {pending: true, retry_after_ms} while the first keyframe is on its way. Keyframes only, about one a second, for ten seconds after an ask; nothing is decoded between asks. GET /api/v1/channels/{id}/streams/{stream}/thumbnail.jpg serves the JPEG itself."},
     {"name": "codec.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/codecs"), "summary": 'Every codec and element in the catalogue, which of them this machine actually has, and what it would pick.'},
     {"name": "config.get", "scope": "admin", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/config"), "summary": "The mixer's settings: each key's value in the config file, its default, when a change to it takes effect, and which keys are waiting for a restart. Secrets say only whether one is set."},
@@ -4542,17 +4573,20 @@ class GeneratedMethods:
         *,
         app: Optional[str] = None,
         auto_source: Optional[bool] = None,
+        feed: Optional[Union[FeedRequest, None]] = None,
         key_mode: Optional[Union[KeyMode, None]] = None,
         protocols: Optional[List[ChannelProtocol]] = None,
         secret: Optional[str] = None,
     ) -> ChannelAdded:
-        """Make a channel and its first key, which is in this answer. channel.key.reveal reads it again later."""
+        """Make a channel and its first key, which is in this answer. channel.key.reveal reads it again later. `feed` says what gives it its picture: {"kind": "programme"} for this mixer's programme, {"kind": "pull", "url": ...} for a stream it pulls, or an encoder publishing to it when left out."""
         params: Dict[str, Any] = {}
         params["name"] = name
         if app is not None:
             params["app"] = app
         if auto_source is not None:
             params["auto_source"] = auto_source
+        if feed is not None:
+            params["feed"] = feed
         if key_mode is not None:
             params["key_mode"] = key_mode
         if protocols is not None:
@@ -4722,7 +4756,7 @@ class GeneratedMethods:
     async def channel_list(
         self,
     ) -> ChannelList:
-        """Every channel with its keys (as hints), the address to publish to over each protocol it has on, and what is live on it; and which ingest ports are open and for which channels."""
+        """Every channel with its keys (as hints), what feeds it (this mixer's programme, an encoder, or an address it pulls) and how that is going, the address to publish to over each protocol it has on, and what is live on it; and which ingest ports are open and for which channels."""
         params: Dict[str, Any] = {}
         return await self._call("channel.list", params)
 
@@ -4742,12 +4776,13 @@ class GeneratedMethods:
         app: Optional[str] = None,
         auto_source: Optional[bool] = None,
         enabled: Optional[bool] = None,
+        feed: Optional[Union[FeedRequest, None]] = None,
         key_mode: Optional[Union[KeyMode, None]] = None,
         name: Optional[str] = None,
         protocols: Optional[List[ChannelProtocol]] = None,
         rtmps: Optional[Union[Rtmps, None]] = None,
     ) -> Channel:
-        """Rename a channel, switch it on or off, or change its application name, whether its streams become sources, how its key is given, which protocols it takes (rtmp, srt, whip) or RTMPS and its port. A port opens when the first channel needs it and closes when the last one stops. Only what is named moves."""
+        """Rename a channel, switch it on or off, or change its application name, whether its streams become sources, how its key is given, which protocols it takes (rtmp, srt, whip) or RTMPS and its port, or what feeds it (`feed`: programme, encoder, or pull with a url that is never read back). A port opens when the first channel needs it and closes when the last one stops. Only what is named moves."""
         params: Dict[str, Any] = {}
         params["id"] = id
         if app is not None:
@@ -4756,6 +4791,8 @@ class GeneratedMethods:
             params["auto_source"] = auto_source
         if enabled is not None:
             params["enabled"] = enabled
+        if feed is not None:
+            params["feed"] = feed
         if key_mode is not None:
             params["key_mode"] = key_mode
         if name is not None:

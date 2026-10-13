@@ -795,6 +795,10 @@ pub struct Channel {
     pub destinations: Vec<Destination>,
     /// Off turns every publisher away with a sentence saying so.
     pub enabled: bool,
+    /// What gives the channel its picture, and how that is going. A channel
+    /// made before feeds existed is fed by an encoder.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub feed: Option<ChannelFeed>,
     /// A slug, and never changes once the channel exists.
     pub id: String,
     pub key_mode: KeyMode,
@@ -825,6 +829,9 @@ pub struct ChannelAddRequest {
     pub app: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub auto_source: Option<bool>,
+    /// What feeds it. An encoder when left out.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub feed: Option<FeedRequest>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub key_mode: Option<KeyMode>,
     pub name: String,
@@ -844,6 +851,30 @@ pub struct ChannelAddRequest {
 pub struct ChannelAdded {
     pub channel: Channel,
     pub key: NewKey,
+}
+
+/// A channel's feed as a list shows it.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ChannelFeed {
+    /// What went wrong last, in words, while it is not live.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    pub kind: FeedKind,
+    /// The output in that show that publishes the programme here, for
+    /// `programme`: `to-channel-<channel id>`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub output: Option<String>,
+    /// When a pull that dropped is tried next, in milliseconds from now.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub retry_in_ms: Option<u64>,
+    /// The show whose programme feeds it, for `programme`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub show: Option<String>,
+    pub state: FeedState,
+    /// Scheme, host and port of the pull address, for `pull`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub uri_host: Option<String>,
 }
 
 /// One key, as a list shows it.
@@ -943,6 +974,9 @@ pub struct ChannelSetRequest {
     pub auto_source: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub enabled: Option<bool>,
+    /// What feeds it: this mixer's programme, an encoder, or a pull.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub feed: Option<FeedRequest>,
     pub id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub key_mode: Option<KeyMode>,
@@ -971,7 +1005,8 @@ pub struct ChannelStream {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub key: Option<String>,
     pub name: String,
-    /// How it arrived: `rtmp`, `rtmps`, `srt` or `whip`.
+    /// How it arrived: `rtmp`, `rtmps`, `srt`, `whip`, or `pull` for a
+    /// stream the channel pulled itself.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub protocol: Option<String>,
     /// Where a mixer on this machine reads it: the listener's own port on
@@ -1697,6 +1732,11 @@ pub struct FeedIdRequest {
     pub id: String,
 }
 
+/// Which of the three a channel has.
+pub type FeedKind = String;
+/// The values api_level 1 knows for [`FeedKind`].
+pub const FEED_KIND_VALUES: &[&str] = &["programme", "encoder", "pull"];
+
 /// `feed.list`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -1704,6 +1744,11 @@ pub struct FeedList {
     pub bindings: Vec<BindingStatus>,
     pub feeds: Vec<FeedStatus>,
 }
+
+/// The three ways a channel is fed, as `channel.add` and `channel.set`
+/// take them: `{"kind": "programme"}`, `{"kind": "encoder"}` or
+/// `{"kind": "pull", "url": "rtmp://..."}`.
+pub type FeedRequest = Value;
 
 /// `feed.set`: only what is named changes.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -1723,10 +1768,15 @@ pub struct FeedSetRequest {
     pub timeout_s: Option<f64>,
 }
 
-/// Where a feed is.
+/// How the feed is doing.
 pub type FeedState = String;
 /// The values api_level 1 knows for [`FeedState`].
-pub const FEED_STATE_VALUES: &[&str] = &["starting", "ok", "failing", "paused"];
+pub const FEED_STATE_VALUES: &[&str] = &["live", "waiting", "connecting", "reconnecting", "off"];
+
+/// Where a feed is.
+pub type FeedState2 = String;
+/// The values api_level 1 knows for [`FeedState2`].
+pub const FEED_STATE2_VALUES: &[&str] = &["starting", "ok", "failing", "paused"];
 
 /// A feed with what it has been doing.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -1766,7 +1816,7 @@ pub struct FeedStatus {
     /// Stopped by `feed.pause`: nothing is fetched and nothing is written.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub paused: Option<bool>,
-    pub state: FeedState,
+    pub state: FeedState2,
     /// Seconds one fetch may take before it counts as failed. 10 when absent.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub timeout_s: Option<f64>,
@@ -6474,7 +6524,7 @@ pub const METHODS: [MethodInfo; 224] = [
     MethodInfo { name: "agent.setup", summary: "Set an AI agent tool up to use this mixer: its MCP config gets one entry, godwinmix, that runs this mixer's own executable, and its skills folder gets the GodwinMix skills. Other entries are kept and a changed file is copied aside first. dry_run answers every file it would write. The answer says how to start the tool and a first thing to ask it.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/agent/setup")) },
     MethodInfo { name: "agent.state", summary: "The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/agent/state")) },
     MethodInfo { name: "agent.tools", summary: "The AI agent tools this mixer can set up, the ones installed on its machine first, each with what was found: a command on PATH or a config folder.", scope: "admin", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/agent/tools")) },
-    MethodInfo { name: "channel.add", summary: "Make a channel and its first key, which is in this answer. channel.key.reveal reads it again later.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/channels")) },
+    MethodInfo { name: "channel.add", summary: "Make a channel and its first key, which is in this answer. channel.key.reveal reads it again later. `feed` says what gives it its picture: {\"kind\": \"programme\"} for this mixer's programme, {\"kind\": \"pull\", \"url\": ...} for a stream it pulls, or an encoder publishing to it when left out.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/channels")) },
     MethodInfo { name: "channel.certificate.generate", summary: "Make a self signed certificate for RTMPS, for this machine's addresses unless names are given. Encoders must be told to accept it; one from a certificate authority needs no such step.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/channels/certificate/generate")) },
     MethodInfo { name: "channel.certificate.set", summary: "Give RTMPS a certificate: the PEM of the certificate (and its chain) and of its private key, as a certificate authority issued them. Checked before it is kept; the key is sealed and never read back.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/channels/certificate/set")) },
     MethodInfo { name: "channel.destination.add", summary: "Send a channel's stream on to YouTube, Facebook, Twitch, an RTMP server or an SRT receiver as it arrives. Nothing is decoded or encoded. The key is write only.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/channels/{id}/destination/add")) },
@@ -6485,9 +6535,9 @@ pub const METHODS: [MethodInfo; 224] = [
     MethodInfo { name: "channel.key.add", summary: "Make another key for a channel, to give to one more person or encoder. The key is in this answer, and channel.key.reveal reads it again later.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/channels/{id}/key/add")) },
     MethodInfo { name: "channel.key.remove", summary: "Take one key back. A publisher on air with it is cut off and the next one is turned away; the other keys are untouched.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/channels/{id}/key/remove")) },
     MethodInfo { name: "channel.key.reveal", summary: "Read one key of a channel back, to give it to an encoder again. Admin only; a list shows only the last four characters. Each read is logged with who asked, never with the key.", scope: "admin", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/channels/{id}/key/reveal")) },
-    MethodInfo { name: "channel.list", summary: "Every channel with its keys (as hints), the address to publish to over each protocol it has on, and what is live on it; and which ingest ports are open and for which channels.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/channels")) },
+    MethodInfo { name: "channel.list", summary: "Every channel with its keys (as hints), what feeds it (this mixer's programme, an encoder, or an address it pulls) and how that is going, the address to publish to over each protocol it has on, and what is live on it; and which ingest ports are open and for which channels.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/channels")) },
     MethodInfo { name: "channel.remove", summary: "Remove a channel and forget its keys. Sources it made that no scene holds go with it.", scope: "admin", mutating: true, destructive: true, rest: Some(("DELETE", "/api/v1/channels/{id}")) },
-    MethodInfo { name: "channel.set", summary: "Rename a channel, switch it on or off, or change its application name, whether its streams become sources, how its key is given, which protocols it takes (rtmp, srt, whip) or RTMPS and its port. A port opens when the first channel needs it and closes when the last one stops. Only what is named moves.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/channels/{id}/set")) },
+    MethodInfo { name: "channel.set", summary: "Rename a channel, switch it on or off, or change its application name, whether its streams become sources, how its key is given, which protocols it takes (rtmp, srt, whip) or RTMPS and its port, or what feeds it (`feed`: programme, encoder, or pull with a url that is never read back). A port opens when the first channel needs it and closes when the last one stops. Only what is named moves.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/channels/{id}/set")) },
     MethodInfo { name: "channel.thumbnail", summary: "A live channel stream's picture as a small JPEG in base64, {channel, stream, jpeg, width, height, at_ms}, or {pending: true, retry_after_ms} while the first keyframe is on its way. Keyframes only, about one a second, for ten seconds after an ask; nothing is decoded between asks. GET /api/v1/channels/{id}/streams/{stream}/thumbnail.jpg serves the JPEG itself.", scope: "read", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/channels/{id}/thumbnail")) },
     MethodInfo { name: "codec.list", summary: "Every codec and element in the catalogue, which of them this machine actually has, and what it would pick.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/codecs")) },
     MethodInfo { name: "config.get", summary: "The mixer's settings: each key's value in the config file, its default, when a change to it takes effect, and which keys are waiting for a restart. Secrets say only whether one is set.", scope: "admin", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/config")) },
@@ -7053,7 +7103,7 @@ impl Client {
         self.call("agent.tools", &serde_json::json!({})).await
     }
 
-    /// Make a channel and its first key, which is in this answer. channel.key.reveal reads it again later.
+    /// Make a channel and its first key, which is in this answer. channel.key.reveal reads it again later. `feed` says what gives it its picture: {"kind": "programme"} for this mixer's programme, {"kind": "pull", "url": ...} for a stream it pulls, or an encoder publishing to it when left out.
     pub async fn channel_add(&self, params: &ChannelAddRequest) -> Result<ChannelAdded> {
         self.call("channel.add", params).await
     }
@@ -7108,7 +7158,7 @@ impl Client {
         self.call("channel.key.reveal", params).await
     }
 
-    /// Every channel with its keys (as hints), the address to publish to over each protocol it has on, and what is live on it; and which ingest ports are open and for which channels.
+    /// Every channel with its keys (as hints), what feeds it (this mixer's programme, an encoder, or an address it pulls) and how that is going, the address to publish to over each protocol it has on, and what is live on it; and which ingest ports are open and for which channels.
     pub async fn channel_list(&self) -> Result<ChannelList> {
         self.call("channel.list", &serde_json::json!({})).await
     }
@@ -7118,7 +7168,7 @@ impl Client {
         self.call("channel.remove", params).await
     }
 
-    /// Rename a channel, switch it on or off, or change its application name, whether its streams become sources, how its key is given, which protocols it takes (rtmp, srt, whip) or RTMPS and its port. A port opens when the first channel needs it and closes when the last one stops. Only what is named moves.
+    /// Rename a channel, switch it on or off, or change its application name, whether its streams become sources, how its key is given, which protocols it takes (rtmp, srt, whip) or RTMPS and its port, or what feeds it (`feed`: programme, encoder, or pull with a url that is never read back). A port opens when the first channel needs it and closes when the last one stops. Only what is named moves.
     pub async fn channel_set(&self, params: &ChannelSetRequest) -> Result<Channel> {
         self.call("channel.set", params).await
     }

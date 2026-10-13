@@ -433,6 +433,7 @@ export interface Channel {
   auto_source: boolean;
   destinations?: Destination[];
   enabled: boolean;
+  feed?: ChannelFeed;
   id: string;
   key_mode: KeyMode;
   keys: ChannelKey[];
@@ -447,6 +448,7 @@ export interface Channel {
 export interface ChannelAddRequest {
   app?: string | null;
   auto_source?: boolean | null;
+  feed?: FeedRequest | null;
   key_mode?: KeyMode | null;
   name: string;
   protocols?: ChannelProtocol[] | null;
@@ -457,6 +459,17 @@ export interface ChannelAddRequest {
 export interface ChannelAdded {
   channel: Channel;
   key: NewKey;
+}
+
+/** A channel's feed as a list shows it. */
+export interface ChannelFeed {
+  error?: string | null;
+  kind: FeedKind;
+  output?: string | null;
+  retry_in_ms?: number | null;
+  show?: string | null;
+  state: FeedState;
+  uri_host?: string | null;
 }
 
 /** One key, as a list shows it. */
@@ -519,6 +532,7 @@ export interface ChannelSetRequest {
   app?: string | null;
   auto_source?: boolean | null;
   enabled?: boolean | null;
+  feed?: FeedRequest | null;
   id: string;
   key_mode?: KeyMode | null;
   name?: string | null;
@@ -906,11 +920,29 @@ export interface FeedIdRequest {
   id: string;
 }
 
+/** Which of the three a channel has. */
+export type FeedKind = "programme" | "encoder" | "pull";
+
 /** `feed.list`. */
 export interface FeedList {
   bindings: BindingStatus[];
   feeds: FeedStatus[];
 }
+
+/**
+ * The three ways a channel is fed, as `channel.add` and `channel.set`
+ * take them: `{"kind": "programme"}`, `{"kind": "encoder"}` or
+ * `{"kind": "pull", "url": "rtmp://..."}`.
+ */
+export type FeedRequest = {
+  kind: "programme";
+  show?: string | null;
+} | {
+  kind: "encoder";
+} | {
+  kind: "pull";
+  url: string;
+};
 
 /** `feed.set`: only what is named changes. */
 export interface FeedSetRequest {
@@ -922,8 +954,11 @@ export interface FeedSetRequest {
   timeout_s?: number | null;
 }
 
+/** How the feed is doing. */
+export type FeedState = "live" | "waiting" | "connecting" | "reconnecting" | "off";
+
 /** Where a feed is. */
-export type FeedState = "paused" | "starting" | "ok" | "failing";
+export type FeedState2 = "paused" | "starting" | "ok" | "failing";
 
 /** A feed with what it has been doing. */
 export interface FeedStatus {
@@ -941,7 +976,7 @@ export interface FeedStatus {
   last_fetch?: string | null;
   not_modified: number;
   paused?: boolean;
-  state: FeedState;
+  state: FeedState2;
   timeout_s?: number | null;
 }
 
@@ -4094,7 +4129,7 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "agent.setup", summary: "Set an AI agent tool up to use this mixer: its MCP config gets one entry, godwinmix, that runs this mixer's own executable, and its skills folder gets the GodwinMix skills. Other entries are kept and a changed file is copied aside first. dry_run answers every file it would write. The answer says how to start the tool and a first thing to ask it.", scope: "admin", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/agent/setup" } },
   { name: "agent.state", summary: "The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/agent/state" } },
   { name: "agent.tools", summary: "The AI agent tools this mixer can set up, the ones installed on its machine first, each with what was found: a command on PATH or a config folder.", scope: "admin", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/agent/tools" } },
-  { name: "channel.add", summary: "Make a channel and its first key, which is in this answer. channel.key.reveal reads it again later.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/channels" } },
+  { name: "channel.add", summary: "Make a channel and its first key, which is in this answer. channel.key.reveal reads it again later. `feed` says what gives it its picture: {\"kind\": \"programme\"} for this mixer's programme, {\"kind\": \"pull\", \"url\": ...} for a stream it pulls, or an encoder publishing to it when left out.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/channels" } },
   { name: "channel.certificate.generate", summary: "Make a self signed certificate for RTMPS, for this machine's addresses unless names are given. Encoders must be told to accept it; one from a certificate authority needs no such step.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/channels/certificate/generate" } },
   { name: "channel.certificate.set", summary: "Give RTMPS a certificate: the PEM of the certificate (and its chain) and of its private key, as a certificate authority issued them. Checked before it is kept; the key is sealed and never read back.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/channels/certificate/set" } },
   { name: "channel.destination.add", summary: "Send a channel's stream on to YouTube, Facebook, Twitch, an RTMP server or an SRT receiver as it arrives. Nothing is decoded or encoded. The key is write only.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/channels/{id}/destination/add" } },
@@ -4105,9 +4140,9 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "channel.key.add", summary: "Make another key for a channel, to give to one more person or encoder. The key is in this answer, and channel.key.reveal reads it again later.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/channels/{id}/key/add" } },
   { name: "channel.key.remove", summary: "Take one key back. A publisher on air with it is cut off and the next one is turned away; the other keys are untouched.", scope: "admin", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/channels/{id}/key/remove" } },
   { name: "channel.key.reveal", summary: "Read one key of a channel back, to give it to an encoder again. Admin only; a list shows only the last four characters. Each read is logged with who asked, never with the key.", scope: "admin", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/channels/{id}/key/reveal" } },
-  { name: "channel.list", summary: "Every channel with its keys (as hints), the address to publish to over each protocol it has on, and what is live on it; and which ingest ports are open and for which channels.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/channels" } },
+  { name: "channel.list", summary: "Every channel with its keys (as hints), what feeds it (this mixer's programme, an encoder, or an address it pulls) and how that is going, the address to publish to over each protocol it has on, and what is live on it; and which ingest ports are open and for which channels.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/channels" } },
   { name: "channel.remove", summary: "Remove a channel and forget its keys. Sources it made that no scene holds go with it.", scope: "admin", mutating: true, destructive: true, rest: { method: "DELETE", path: "/api/v1/channels/{id}" } },
-  { name: "channel.set", summary: "Rename a channel, switch it on or off, or change its application name, whether its streams become sources, how its key is given, which protocols it takes (rtmp, srt, whip) or RTMPS and its port. A port opens when the first channel needs it and closes when the last one stops. Only what is named moves.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/channels/{id}/set" } },
+  { name: "channel.set", summary: "Rename a channel, switch it on or off, or change its application name, whether its streams become sources, how its key is given, which protocols it takes (rtmp, srt, whip) or RTMPS and its port, or what feeds it (`feed`: programme, encoder, or pull with a url that is never read back). A port opens when the first channel needs it and closes when the last one stops. Only what is named moves.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/channels/{id}/set" } },
   { name: "channel.thumbnail", summary: "A live channel stream's picture as a small JPEG in base64, {channel, stream, jpeg, width, height, at_ms}, or {pending: true, retry_after_ms} while the first keyframe is on its way. Keyframes only, about one a second, for ten seconds after an ask; nothing is decoded between asks. GET /api/v1/channels/{id}/streams/{stream}/thumbnail.jpg serves the JPEG itself.", scope: "read", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/channels/{id}/thumbnail" } },
   { name: "codec.list", summary: "Every codec and element in the catalogue, which of them this machine actually has, and what it would pick.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/codecs" } },
   { name: "config.get", summary: "The mixer's settings: each key's value in the config file, its default, when a change to it takes effect, and which keys are waiting for a restart. Secrets say only whether one is set.", scope: "admin", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/config" } },
@@ -4405,7 +4440,7 @@ export class GeneratedMethods {
     return this._call("agent.tools", {}) as Promise<Detected[]>;
   }
 
-  /** Make a channel and its first key, which is in this answer. channel.key.reveal reads it again later. */
+  /** Make a channel and its first key, which is in this answer. channel.key.reveal reads it again later. `feed` says what gives it its picture: {"kind": "programme"} for this mixer's programme, {"kind": "pull", "url": ...} for a stream it pulls, or an encoder publishing to it when left out. */
   channelAdd(params: ChannelAddRequest): Promise<ChannelAdded> {
     return this._call("channel.add", params as unknown as Record<string, unknown>) as Promise<ChannelAdded>;
   }
@@ -4460,7 +4495,7 @@ export class GeneratedMethods {
     return this._call("channel.key.reveal", params as unknown as Record<string, unknown>) as Promise<KeyRevealed>;
   }
 
-  /** Every channel with its keys (as hints), the address to publish to over each protocol it has on, and what is live on it; and which ingest ports are open and for which channels. */
+  /** Every channel with its keys (as hints), what feeds it (this mixer's programme, an encoder, or an address it pulls) and how that is going, the address to publish to over each protocol it has on, and what is live on it; and which ingest ports are open and for which channels. */
   channelList(): Promise<ChannelList> {
     return this._call("channel.list", {}) as Promise<ChannelList>;
   }
@@ -4470,7 +4505,7 @@ export class GeneratedMethods {
     return this._call("channel.remove", params as unknown as Record<string, unknown>) as Promise<ChannelRemoved>;
   }
 
-  /** Rename a channel, switch it on or off, or change its application name, whether its streams become sources, how its key is given, which protocols it takes (rtmp, srt, whip) or RTMPS and its port. A port opens when the first channel needs it and closes when the last one stops. Only what is named moves. */
+  /** Rename a channel, switch it on or off, or change its application name, whether its streams become sources, how its key is given, which protocols it takes (rtmp, srt, whip) or RTMPS and its port, or what feeds it (`feed`: programme, encoder, or pull with a url that is never read back). A port opens when the first channel needs it and closes when the last one stops. Only what is named moves. */
   channelSet(params: ChannelSetRequest): Promise<Channel> {
     return this._call("channel.set", params as unknown as Record<string, unknown>) as Promise<Channel>;
   }
