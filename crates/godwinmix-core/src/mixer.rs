@@ -5802,6 +5802,7 @@ mod tests {
     mod blackhole;
     mod bounded;
     mod cable;
+    mod child_holds_clip;
     mod clip_end;
     mod endurance;
     mod flush_window;

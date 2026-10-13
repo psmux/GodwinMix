@@ -21,6 +21,8 @@ use tokio::io::AsyncWriteExt;
 /// script that sleeps from outliving the show.
 pub async fn run(argv: &[String], hook: &Hook, body: Value) -> anyhow::Result<Decision> {
     let (program, args) = argv.split_first().context("a hook command with no program in it")?;
+    // A hook started while a clip plays must not keep the clip open.
+    godwinmix_core::inherit::keep_files_from_children();
     let mut child = tokio::process::Command::new(program)
         .args(args)
         .env("GMX_HOOK", &hook.event)

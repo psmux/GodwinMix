@@ -55,6 +55,7 @@ pub mod graphics;
 pub mod gstutil;
 pub mod hls;
 pub mod hooks;
+pub mod inherit;
 pub mod input;
 pub mod media;
 pub mod media_org;

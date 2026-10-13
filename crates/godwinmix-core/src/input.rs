@@ -2264,6 +2264,10 @@ fn exec_process(spec: &ExecSpec, stdout: std::process::Stdio) -> Result<std::pro
         cmd.process_group(0);
     }
 
+    // After the clips this process has open are made private to it. See
+    // `inherit`: a child started while a clip plays would otherwise keep the
+    // file open after its source was removed.
+    crate::inherit::keep_files_from_children();
     cmd.spawn().with_context(|| format!("starting `{program}`"))
 }
 

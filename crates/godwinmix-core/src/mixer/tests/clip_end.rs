@@ -6,7 +6,7 @@ use std::sync::atomic::AtomicU64;
 /// A two second clip with picture and sound, written with elements every
 /// GStreamer install has. AVI, so it takes the ordinary decode path rather
 /// than the one a container that may hold alpha gets.
-fn write_clip(name: &str) -> Option<std::path::PathBuf> {
+pub(super) fn write_clip(name: &str) -> Option<std::path::PathBuf> {
     let dir = std::env::temp_dir().join(format!("gmx-clip-end-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).ok()?;
