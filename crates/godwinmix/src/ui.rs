@@ -771,6 +771,8 @@ fn content_type(path: &str) -> &'static str {
 /// `img-src` names the GitHub hosts the Plugins page's pictures come from, and
 /// only those: the browser loads them straight from GitHub, the core never
 /// fetches one, and a picture anywhere else shows as the kind's icon.
+/// `media-src` names the one host a plugin's clip comes from, for the same
+/// reason.
 const CSP: &str = concat!(
     "default-src 'self'; ",
     "script-src 'self'; ",
@@ -779,7 +781,7 @@ const CSP: &str = concat!(
     "style-src 'self' 'unsafe-inline'; ",
     "img-src 'self' data: blob: https://raw.githubusercontent.com https://opengraph.githubassets.com ",
     "https://repository-images.githubusercontent.com https://avatars.githubusercontent.com; ",
-    "media-src 'self' blob:; ",
+    "media-src 'self' blob: https://raw.githubusercontent.com; ",
     "font-src 'self' data:; ",
     "connect-src 'self' ws: wss:; ",
     "frame-src 'self'; ",

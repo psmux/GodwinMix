@@ -25,6 +25,7 @@ mod many;
 #[cfg(unix)]
 mod orphans;
 mod project;
+mod release_server;
 mod support;
 mod switch;
 mod wall;

@@ -18,12 +18,15 @@ no download.
 * Type in **Search plugins** to find one by name, description, kind or tag.
 * Press a chip (**Inputs**, **Outputs**, **Graphics**, **Transitions**,
   **Effects**, **Helpers**, **Installed**) to see only those.
-* Press **Install** on a card. That is the whole install: the card says what
-  it is doing, then `Installed. Nothing restarted.`, or says in a sentence why
-  it did not install.
-* Press the picture or the name for the detail view: screenshots, the whole
-  description, who makes it, the licence, the versions, a link to the source
-  code, and **Install**, **Update** or **Remove**.
+* Press **Install** on a card. That is the whole install: the button says
+  `Downloading 42%`, `Installing` and `Starting`, then turns into **Open**, and
+  a plugin with a panel has it open already. One that did not install says
+  why on the card, and what to do next. [Install a plugin from the
+  gallery](install-from-the-gallery.md) has the whole of it.
+* Press the picture or the name for the detail view: a carousel of its
+  pictures and clips, the whole description, who makes it, the licence, the
+  versions, a link to the source code, and **Install**, **Open**, **Update**
+  or **Remove**.
 
 A card that says `Not for Windows` (or Mac, or Linux) has no build for this
 computer, and `Needs a newer GodwinMix` means it was written for a newer

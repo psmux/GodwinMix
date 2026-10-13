@@ -71,6 +71,7 @@ Start here if you have never run it.
 * [Write a WASM plugin: a sandboxed service or transition, no media](how-to/write-a-wasm-plugin.md)
 * [Write a source plugin in Rust](how-to/write-a-source-plugin.md)
 * [Install a plugin](how-to/install-a-plugin.md)
+* [Install a plugin from the gallery](how-to/install-from-the-gallery.md)
 * [Add a second machine](how-to/add-a-node.md)
 * [Test a plugin](how-to/test-a-plugin.md)
 * [Publish a plugin](how-to/publish-a-plugin.md)

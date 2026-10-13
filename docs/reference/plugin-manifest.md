@@ -485,7 +485,10 @@ macos-aarch64    macos-x86_64
 windows-x86_64   windows-aarch64
 ```
 
-Anything else is refused, in `plugin.platforms` and in the keys of `run.bin`.
+`plugin.platforms` also takes `any`, for a plugin with no binary that runs
+wherever its runtime does: a pure Python or Node plugin. Anything else is
+refused, in `plugin.platforms` and in the keys of `run.bin`, where `any` is
+not a key.
 
 ## Placements
 

@@ -839,9 +839,12 @@ pub struct InstallOptions {
     pub report: Option<Reporter>,
 }
 
+/// What a [`Reporter`] calls: a stage, and how far through it when known.
+pub type Say = dyn Fn(&str, Option<f64>) + Send + Sync;
+
 /// A stage of an install, and how far through it when that is known.
 #[derive(Clone)]
-pub struct Reporter(pub std::sync::Arc<dyn Fn(&str, Option<f64>) + Send + Sync>);
+pub struct Reporter(pub std::sync::Arc<Say>);
 
 impl Reporter {
     fn say(&self, stage: &str, fraction: Option<f64>) {

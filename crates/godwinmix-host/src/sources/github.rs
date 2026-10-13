@@ -122,14 +122,24 @@ fn release(
 ) -> Result<serde_json::Value> {
     let base = ctx.github_api.trim_end_matches('/');
     let Some(version) = version else {
-        return http::get_json(&format!("{base}/repos/{owner}/{repo}/releases/latest"))
-            .with_context(|| {
-                format!(
+        let url = format!("{base}/repos/{owner}/{repo}/releases/latest");
+        return http::get_json(&url).map_err(|e| {
+            // A 404 is a repository with no release. Anything else is the
+            // network, and saying "no release" then sends a person to the
+            // author when the fix is on their own side.
+            if format!("{e:#}").contains(" answered 404") {
+                e.context(format!(
                     "{owner}/{repo} has no published release. A plugin is installed from a \
                      release asset; if the author has not tagged one, install from the git \
                      source instead: gmx plugin add https://github.com/{owner}/{repo}.git"
-                )
-            });
+                ))
+            } else {
+                e.context(format!(
+                    "the releases of {owner}/{repo} could not be reached. Check the mixer \
+                     can reach {base}, then try again"
+                ))
+            }
+        });
     };
     // `v1.2.0` is what almost everyone tags; `1.2.0` is what the rest do.
     let tagged = version.strip_prefix('v').unwrap_or(version);
