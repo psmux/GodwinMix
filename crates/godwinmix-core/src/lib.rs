@@ -57,6 +57,7 @@ pub mod hls;
 pub mod hooks;
 pub mod input;
 pub mod media;
+pub mod media_labels;
 pub mod mixer;
 pub mod multiview;
 pub mod node;

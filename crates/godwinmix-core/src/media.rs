@@ -68,6 +68,13 @@ pub struct MediaItem {
     /// this process's lifetime.
     #[serde(default)]
     pub conversion: Option<crate::convert::ConversionState>,
+    /// The folder it is in, absent when it is in All only. See
+    /// `media_labels`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub folder: Option<String>,
+    /// Its tags, in the case each was first typed.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tags: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
@@ -81,6 +88,9 @@ pub struct MediaListing {
     /// client can say "made the media folder" once instead of nothing.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub created: bool,
+    /// Every folder in the library, in the order made, empty ones included.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub folders: Vec<String>,
 }
 
 /// Cached probe result, keyed by path and invalidated when the file changes.
@@ -210,7 +220,12 @@ impl MediaLibrary {
                 it.conversion = conv.state(&it.name);
             }
         }
-        MediaListing { dir: dir.display().to_string(), items, error, created }
+        let labels = crate::media_labels::load(&dir);
+        for it in items.iter_mut() {
+            let label = labels.of(&it.name);
+            (it.folder, it.tags) = (label.folder, label.tags);
+        }
+        MediaListing { dir: dir.display().to_string(), items, error, created, folders: labels.folders }
     }
 
     fn walk(
@@ -284,6 +299,8 @@ impl MediaLibrary {
                 faststart: probed.faststart,
                 converted_path: None,
                 conversion: None,
+                folder: None,
+                tags: Vec::new(),
             });
         }
         Ok(())
