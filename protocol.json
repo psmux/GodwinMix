@@ -18977,7 +18977,7 @@
       },
       "rest": {
         "method": "POST",
-        "path": "/api/v1/plugins/{id}/search"
+        "path": "/api/v1/plugins/search"
       },
       "result": {
         "$ref": "#/$defs/SearchResults"

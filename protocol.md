@@ -145,7 +145,7 @@ Keys accepted on every method, handled before a method runs.
 | `plugin.list` | `GET /api/v1/plugins` | read |  | 1 | Every plugin installed, with what it provides and what each running instance is costing in cpu, memory, latency, dropped buffers and restarts. |
 | `plugin.reload` | `POST /api/v1/plugins/{id}/reload` | admin |  | 1 | Read a plugin's directory again and swap its running instances one at a time, with the freeze frame covering each. |
 | `plugin.remove` | `DELETE /api/v1/plugins/{id}` | admin | yes | 1 | Uninstall a plugin and unwind everything it registered: its provides, its tools, its panels, its hooks and its discovery matchers. |
-| `plugin.search` | `POST /api/v1/plugins/{id}/search` | read |  | 1 | Search every marketplace this mixer knows for a plugin, by name, description or kind. Answers what `gmx plugin add <name>` would install. |
+| `plugin.search` | `POST /api/v1/plugins/search` | read |  | 1 | Search every marketplace this mixer knows for a plugin, by name, description or kind. Answers what `gmx plugin add <name>` would install. |
 | `plugin.settings.get` | `GET /api/v1/plugins/{id}/settings` | read |  | 1 | A plugin's settings as they stand, with its schema beside them. |
 | `plugin.settings.set` | `POST /api/v1/plugins/{id}/settings` | admin |  | 1 | Change a plugin's settings. A plugin that cannot take a change while running says so rather than being restarted behind your back. |
 | `plugin.stats` | `POST /api/v1/plugins/{id}/stats` | read |  | 1 | Per instance cpu, memory, media latency, dropped buffers and restarts, refreshed once a second. |

@@ -44,6 +44,9 @@ pub fn router(ctx: Ctx, max_upload: usize) -> Router<Ctx> {
         )
         // `/api/v1/status` because that is what everyone types. The method is
         // `core.status`, and `/api/v1/core/status` answers too.
+        // A project carries its clips' bytes when asked to, far past the 2 MB
+        // every other call is held to, so it gets the upload limit.
+        .route("/api/v1/project/import", post(generic).layer(DefaultBodyLimit::max(max_upload)))
         .route("/api/v1/status", get(generic))
         .route("/api/v1/{*rest}", any(generic))
         .with_state(ctx)

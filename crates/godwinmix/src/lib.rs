@@ -660,7 +660,13 @@ pub async fn run() -> Result<()> {
             let cfg = Config::load(&config::path_in_force(&args.config)).ok();
             return cli::codec::run(cmd, cfg.as_ref(), args.codecs.as_deref());
         }
-        Some(Command::Marketplace { cmd }) => return cli::marketplace::run(cmd),
+        // Blocking HTTP, so on a thread of its own: the blocking client
+        // makes and drops a runtime, which panics on this one.
+        Some(Command::Marketplace { cmd }) => {
+            return tokio::task::spawn_blocking(move || cli::marketplace::run(cmd))
+                .await
+                .context("the marketplace command stopped")?;
+        }
         Some(Command::Plugin { url, token, cmd }) => {
             let (url, token) = address::resolve(url, token);
             return cli::plugin::run(&url, token.as_deref(), cmd).await;

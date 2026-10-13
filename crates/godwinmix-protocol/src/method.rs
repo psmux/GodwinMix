@@ -299,6 +299,9 @@ const COLLECTION_LEVEL: &[&str] = &[
     "show.stats",
     // Every listing in every marketplace: about plugins, not one of them.
     "plugin.gallery",
+    // A search over every marketplace: no plugin to name either, and the
+    // CLI sent a literal `{id}` in the path before this was listed.
+    "plugin.search",
 ];
 
 /// True when a method is about the collection rather than one of its members.

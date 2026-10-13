@@ -18251,6 +18251,44 @@
         "x-scope": "read"
       }
     },
+    "/api/v1/plugins/search": {
+      "post": {
+        "description": "JSON-RPC method `plugin.search`. Needs the `read` scope.",
+        "operationId": "plugin.search",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SearchRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchResults"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Search every marketplace this mixer knows for a plugin, by name, description or kind. Answers what `gmx plugin add <name>` would install.",
+        "tags": [
+          "plugin"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
     "/api/v1/plugins/{id}": {
       "delete": {
         "description": "JSON-RPC method `plugin.remove`. Needs the `admin` scope. Destructive: accepts `dry_run: true`, and on a token whose policy is `confirm = required` it is refused once with -32020 and a confirm token. Accepts `idempotency_key`, honoured for 24 hours.",
@@ -18494,55 +18532,6 @@
         "x-destructive": false,
         "x-idempotent": true,
         "x-scope": "admin"
-      }
-    },
-    "/api/v1/plugins/{id}/search": {
-      "post": {
-        "description": "JSON-RPC method `plugin.search`. Needs the `read` scope.",
-        "operationId": "plugin.search",
-        "parameters": [
-          {
-            "description": "The id, as listed by the matching list call.",
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SearchRequest"
-              }
-            }
-          },
-          "required": false
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SearchResults"
-                }
-              }
-            },
-            "description": "the full resulting object, so no follow up read is needed"
-          },
-          "default": {
-            "$ref": "#/components/responses/Error"
-          }
-        },
-        "summary": "Search every marketplace this mixer knows for a plugin, by name, description or kind. Answers what `gmx plugin add <name>` would install.",
-        "tags": [
-          "plugin"
-        ],
-        "x-destructive": false,
-        "x-idempotent": true,
-        "x-scope": "read"
       }
     },
     "/api/v1/plugins/{id}/settings": {
