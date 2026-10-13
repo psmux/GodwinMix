@@ -110,7 +110,7 @@ Keys accepted on every method, handled before a method runs.
 | `media.folder.add` | `POST /api/v1/media/folder/add` | operate |  | 1 | Make a folder in the media library, inside another when the name has a / in it. |
 | `media.folder.list` | `GET /api/v1/media/folder/list` | read |  | 1 | Every folder in the media library with how many files are in it, and every tag in use. |
 | `media.folder.move` | `POST /api/v1/media/folder/move` | operate |  | 1 | Rename a media folder, move it into another folder or to the top, or both. Sources using its files follow. |
-| `media.folder.remove` | `POST /api/v1/media/folder/remove` | operate | yes | 1 | Remove a media folder, moving what is in it up a level or to the top first. No file is deleted. |
+| `media.folder.remove` | `POST /api/v1/media/folder/remove` | operate |  | 1 | Remove a media folder, moving what is in it up a level or to the top first. No file is deleted. |
 | `media.list` | `GET /api/v1/media` | read |  | 1 | The clips in the library, with durations, whether each has audio, its folder and its tags.              Narrow it by folder, tag or words. |
 | `media.move` | `POST /api/v1/media/{id}/move` | operate |  | 1 | Move library files into another folder, or rename one, on disk. Sources using them follow. |
 | `media.remove` | `DELETE /api/v1/media/{id}` | operate | yes | 1 | Delete a library file and its converted copy. Refused while it is a live source. |
@@ -1550,7 +1550,7 @@ MCP tool `move_media_folder` in the `search` profile: readOnlyHint false, destru
 
 Remove a media folder, moving what is in it up a level or to the top first. No file is deleted.
 
-MCP tool `remove_media_folder` in the `search` profile: readOnlyHint false, destructiveHint true, idempotentHint true.
+MCP tool `remove_media_folder` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint false.
 
 ```json
 {

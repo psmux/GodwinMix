@@ -16843,7 +16843,7 @@
     },
     "/api/v1/media/folder/remove": {
       "post": {
-        "description": "JSON-RPC method `media.folder.remove`. Needs the `operate` scope. Destructive: accepts `dry_run: true`, and on a token whose policy is `confirm = required` it is refused once with -32020 and a confirm token. Accepts `idempotency_key`, honoured for 24 hours.",
+        "description": "JSON-RPC method `media.folder.remove`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
         "operationId": "media.folder.remove",
         "requestBody": {
           "content": {
@@ -16874,8 +16874,8 @@
         "tags": [
           "media"
         ],
-        "x-destructive": true,
-        "x-idempotent": true,
+        "x-destructive": false,
+        "x-idempotent": false,
         "x-scope": "operate"
       }
     },

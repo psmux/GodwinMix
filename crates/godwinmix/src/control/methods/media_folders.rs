@@ -33,7 +33,7 @@ pub fn register(reg: &mut Registry<Call>) {
         MethodDef::new("media.folder.remove", Scope::Operate, "Remove a media folder, moving what is in it up a level or to the top first. No file is deleted.", handler(remove))
             .params(schema_of::<MediaFolderRemoveRequest>)
             .result(schema_of::<MediaMoved>)
-            .destructive()
+            .not_idempotent()
             .tool("remove_media_folder", Tier::Search, "Remove a folder of the media library. Say what happens to what is in it: `contents` \"up\" moves it into the folder above, \"top\" to the top of the library. No clip is deleted, and sources using the files follow."),
     );
 }

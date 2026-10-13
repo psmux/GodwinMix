@@ -17940,11 +17940,11 @@
       "summary": "Rename a media folder, move it into another folder or to the top, or both. Sources using its files follow."
     },
     {
-      "destructive": true,
-      "idempotent": true,
+      "destructive": false,
+      "idempotent": false,
       "mcp": {
-        "destructiveHint": true,
-        "idempotentHint": true,
+        "destructiveHint": false,
+        "idempotentHint": false,
         "profile": "search",
         "readOnlyHint": false,
         "tool": "remove_media_folder"
