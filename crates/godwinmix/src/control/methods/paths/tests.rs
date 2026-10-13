@@ -67,6 +67,24 @@ fn paths_come_back_without_the_verbatim_prefix_and_without_hidden_system_folders
     assert!(top.dirs.iter().all(|d| d.name != "$Recycle.Bin" && d.name != "System Volume Information"));
 }
 
+/// Explorer sets the read only attribute on Videos and Documents, and Windows
+/// ignores it for writes into a folder, so it must not grey the folder out.
+#[cfg(windows)]
+#[test]
+fn a_folder_marked_read_only_by_explorer_is_still_writable() {
+    let dir = scratch("readonly");
+    let videos = dir.join("Videos");
+    std::fs::create_dir_all(&videos).unwrap();
+    let mut perms = std::fs::metadata(&videos).unwrap().permissions();
+    perms.set_readonly(true);
+    std::fs::set_permissions(&videos, perms).unwrap();
+    assert!(std::fs::metadata(&videos).unwrap().permissions().readonly());
+    let got = walk::list(&home(&dir), None).unwrap();
+    assert!(got.dirs.iter().any(|d| d.name == "Videos" && d.writable), "{:?}", got.dirs);
+    std::fs::write(videos.join("proof.txt"), "written").unwrap();
+    assert!(!walk::writable(&dir.join("absent")), "a folder that is not there is not writable");
+}
+
 #[test]
 fn simplify_takes_the_prefix_off_only_when_the_path_means_the_same_without_it() {
     let cases = [

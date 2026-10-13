@@ -139,9 +139,21 @@ pub fn writable(path: &Path) -> bool {
     unsafe { libc::access(c.as_ptr(), libc::W_OK) == 0 }
 }
 
-/// Windows has no cheap access check. The read only attribute is what the
-/// metadata says, and a denied write still fails later with its reason.
-#[cfg(not(unix))]
+/// Opens the folder asking for the right to add a file and a folder to it,
+/// which Windows checks against the folder's access list without writing
+/// anything. The read only attribute is not asked: on a folder Windows ignores
+/// it for writes and Explorer sets it on Videos, Documents and Users to mark a
+/// customised folder, so going by it greyed out Use this folder in Videos.
+#[cfg(windows)]
 pub fn writable(path: &Path) -> bool {
-    std::fs::metadata(path).map(|m| !m.permissions().readonly()).unwrap_or(false)
+    use std::os::windows::fs::OpenOptionsExt;
+    const FILE_ADD_FILE: u32 = 0x2;
+    const FILE_ADD_SUBDIRECTORY: u32 = 0x4;
+    // Needed to open a folder at all.
+    const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x0200_0000;
+    std::fs::OpenOptions::new()
+        .access_mode(FILE_ADD_FILE | FILE_ADD_SUBDIRECTORY)
+        .custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
+        .open(path)
+        .is_ok()
 }
