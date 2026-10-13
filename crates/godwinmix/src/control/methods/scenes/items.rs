@@ -577,18 +577,8 @@ async fn filter_add(call: Call, params: Value) -> Result<Value, RpcError> {
             ),
         ));
     }
-    // A key makes transparency, and the software programme has nowhere to
-    // keep it. Said here, because the alternative was an ok and a filter that
-    // never went on. See `mixer::programme_keeps_alpha`.
-    let makes_alpha = req.type_id == "chroma/filter" || req.type_id == "matte/filter";
-    if makes_alpha && !godwinmix_core::mixer::programme_keeps_alpha() {
-        return Err(RpcError::not_in_state(
-            "a chroma key cannot be drawn by this mixer yet. Its programme is composited in \
-             I420, which has no transparency, so a keyed picture has nothing to show through \
-             to and GStreamer refuses it. Compositing with transparency costs about 2.6 times \
-             the CPU and is not switched on. Nothing was changed.",
-        )
-        .with("filter", req.type_id.clone()));
+    if let Some(refused) = key_refused(&req.type_id) {
+        return Err(refused);
     }
     // A cutout needs a runtime and a model on this machine. Asked here, so a
     // machine without them hears what to install instead of getting a filter
@@ -616,6 +606,31 @@ async fn filter_add(call: Call, params: Value) -> Result<Value, RpcError> {
         Ok(())
     })
     .await
+}
+
+/// Whether a key or a cutout cannot be drawn on this programme, and why.
+///
+/// On the software compositor, which is the default everywhere, it always
+/// can: the overlay board draws the keyed picture over the I420 frame after
+/// the compositor (`mixer::keyed`). Only a programme pinned to a GPU graphics
+/// entry has no board, and there a key would stand on black, so it is refused
+/// with the setting that brings the board back.
+fn key_refused(type_id: &str) -> Option<RpcError> {
+    let makes_alpha = type_id == "chroma/filter" || type_id == "matte/filter";
+    if !makes_alpha || !godwinmix_core::mixer::programme_keeps_alpha() {
+        return None;
+    }
+    Some(
+        RpcError::not_in_state(
+            "this programme is composited on a GPU graphics entry, pinned with [hardware] \
+             graphics, and a key is drawn only on the software compositor; here the keyed \
+             parts would be black. Set [hardware] graphics = \"auto\" (or \"software\") and \
+             restart the mixer, then add the key again. Nothing was changed.",
+        )
+        .with("filter", type_id)
+        .with("field", "hardware.graphics")
+        .with("next", "config.set {\"values\": {\"hardware.graphics\": \"auto\"}}, then restart the mixer"),
+    )
 }
 
 async fn filter_set(call: Call, params: Value) -> Result<Value, RpcError> {

@@ -1462,12 +1462,16 @@ fn encoder_vars(cfg: &Config) -> crate::catalogue::apply::Vars {
 ///
 /// Not on the software path. Its compositor's output is pinned to I420, which
 /// has no alpha plane, and a `compositor` whose output has none refuses every
-/// input that has one: a chroma key on a scene item would not link, the call
-/// that added it answered ok, and the slot pool tried again twice a second.
-/// Compositing in a format that keeps alpha and converting afterwards works
-/// and was measured here at 2.6 times the CPU for 1080p30 (2.8 s against 7.1 s
-/// of CPU for ten seconds of picture), which is not something to switch on for
-/// everybody. Until it is an option, a key is refused with the reason.
+/// input that has one (linking BGRA or AYUV into it fails with "can't handle
+/// caps" on 1.28). Compositing in a format that keeps alpha and converting
+/// afterwards works and was measured here at 2.6 times the CPU for 1080p30
+/// (2.8 s against 7.1 s of CPU for ten seconds of picture), which is not
+/// something to switch on for everybody.
+///
+/// So on the software path a picture with alpha, a chroma key among them, is
+/// drawn by the overlay board after the compositor (`overlay`, `keyed`), and
+/// this answers false. True means a GPU compositor, which has no board: there
+/// a key flattens over black, and `scene.item.filter.add` refuses one.
 static PROGRAMME_KEEPS_ALPHA: AtomicBool = AtomicBool::new(false);
 
 /// See [`PROGRAMME_KEEPS_ALPHA`].

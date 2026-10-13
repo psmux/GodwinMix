@@ -13,9 +13,6 @@
 //! presenter-shaped figure on a green screen instead, about a third solid,
 //! which is closer to a real shot.
 
-// getrusage is a Unix call; the key costs the same on Windows.
-#![cfg(unix)]
-
 use godwinmix_core::config::{Config, Params, SourceConfig};
 use godwinmix_core::mixer::slots::{ItemFilter, Placement, Sizing};
 use godwinmix_core::mixer::{self, Command, Mixer, MixerHandle, ProgramScene};
@@ -28,12 +25,10 @@ fn canvas() -> (i32, i32) {
     (w.parse().unwrap(), h.parse().unwrap())
 }
 
+/// This process's CPU time so far: getrusage on Unix, GetProcessTimes on
+/// Windows.
 fn cpu_seconds() -> f64 {
-    // SAFETY: getrusage writes into the struct it is given and nothing else.
-    let mut usage: libc::rusage = unsafe { std::mem::zeroed() };
-    unsafe { libc::getrusage(libc::RUSAGE_SELF, &mut usage) };
-    let t = |tv: libc::timeval| tv.tv_sec as f64 + tv.tv_usec as f64 / 1e6;
-    t(usage.ru_utime) + t(usage.ru_stime)
+    godwinmix_govern::load::sys::process_cpu_ns().unwrap_or(0) as f64 / 1e9
 }
 
 fn placement(source: &str, w: i32, h: i32, filters: Vec<ItemFilter>) -> Placement {
