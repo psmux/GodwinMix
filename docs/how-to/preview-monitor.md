@@ -93,6 +93,36 @@ something is in Preview.
 
 Closing or hiding the monitor releases its preview subscriptions.
 
+### Slow a monitor down
+
+Each monitor has a small menu at the right end of its title bar, after the
+name of what it shows. It reads **Auto** until you change it. Pick **30 fps**,
+**25 fps**, **15 fps**, **10 fps** or **5 fps** to show at most that many
+frames a second on that monitor. The browser remembers the choice for each
+monitor separately. Screen readers call the menus **Preview frame rate** and
+**Programme frame rate**, and Tab reaches them like any other control.
+
+Auto is the **Picture rate** in **Settings**. A number is a cap: a choice
+above the Picture rate changes nothing, so on a page set to 15, picking 25
+still shows 15.
+
+What a cap saves depends on where the picture comes from:
+
+* A scene armed in Preview is a stream the mixer makes for this page alone.
+  The page asks for it at the cap, so the mixer composites, encodes and sends
+  no more frames than that.
+* The Programme picture, a single source in Preview and a suggested scene are
+  cut out of the multiview sheet. The page asks for that sheet at the highest
+  rate the monitors drawn from it need. When the source tiles are not live
+  (the gallery is on Icon, Label or Snapshot) and no other page or client is
+  watching multiview, the whole sheet runs at the cap and the mixer does less
+  work for it. When the live source tiles or another page want it faster, the
+  sheet stays at their rate and the cap only stops this page painting the
+  extra frames.
+
+The cap never touches the programme output, a recording or a stream: it is
+only what you watch here.
+
 ## Input levels
 
 Every tile in **Sources** that carries sound has a level bar between its
