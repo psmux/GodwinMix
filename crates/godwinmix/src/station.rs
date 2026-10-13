@@ -21,6 +21,7 @@ pub mod registry;
 mod ask;
 pub mod calibrate;
 mod channel_calls;
+mod channel_feed;
 pub mod direct;
 pub mod child;
 mod files;

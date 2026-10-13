@@ -31,6 +31,7 @@ mod destinations;
 mod edit;
 mod events;
 pub mod feed;
+pub mod feed_loop;
 mod guard;
 mod handover;
 pub mod hooks;
@@ -96,6 +97,8 @@ pub struct Channels {
     sending: Lock<Vec<sending::Sending>>,
     /// What each feed last said. See `feed.rs`.
     feeds: Lock<Vec<feed::Seen>>,
+    /// The task that keeps the programme's outputs in step. See `feed_loop.rs`.
+    feed_loop: OnceLock<Arc<feed_loop::Loop>>,
     /// Destination edits, one at a time, so two cannot seal over each other.
     edits: Mutex<()>,
     port: AtomicU16,
@@ -160,6 +163,7 @@ impl Channels {
             live: Lock::new("live", Vec::new()),
             sending: Lock::new("sending", Vec::new()),
             feeds: Lock::new("feeds", Vec::new()),
+            feed_loop: OnceLock::new(),
             edits: Mutex::new(()),
             port: AtomicU16::new(ports.rtmp),
             transcode: transcode::Transcode::new(data_dir),
@@ -204,6 +208,7 @@ impl Channels {
     fn commit(&self, changed: Option<&str>) -> Result<(), RpcError> {
         self.persist().map_err(|e| RpcError::internal(format!("saving the channels: {e:#}")))?;
         self.hand_over(true);
+        self.poke_feeds();
         if let Some(id) = changed {
             self.announce(id);
         }

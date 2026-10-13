@@ -193,6 +193,10 @@ impl AppState {
         } = engine;
         let channels = channels_for(cfg, &plugins, &mixer, &scenes);
         join_channels_to_renditions(&channels);
+        // A show under a station has no channels of its own to feed.
+        if !crate::station::show::under_station() {
+            channels.run_programme_feeds(Arc::new(crate::channels::feed_loop::OwnMixer { mixer: mixer.clone() }));
+        }
         let tokens = crate::station::show::with_station_token(cfg.tokens(rehearsal))
             .with_devices(crate::devices::for_config(&cfg.source_path));
         let safety =
