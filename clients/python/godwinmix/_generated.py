@@ -821,6 +821,8 @@ class Destination(TypedDict, total=False):
     # A slug, unique within its channel: `youtube`, `youtube-2`.
     kbps: int
     # What is going out, over the last second.
+    key_hint: Optional[str]
+    # The key's last four characters, as a channel key's `hint`, so a person can see which key is saved. Left out for a key under eight characters, where four would be half of it. Never the key itself.
     label: str
     plan: Union[DestinationPlan, None]
     # What the plan gave it, while its stream is live.
@@ -834,6 +836,8 @@ class Destination(TypedDict, total=False):
     # Why it is not sending what it asked for, and what would fit.
     rendition: Union[RenditionChoice, None]
     # What it asked to be converted to. Absent: sent as it arrives.
+    server: Optional[str]
+    # The server as it was given, without its query or a user and password, for an edit form to show. Only for a destination whose key is kept apart from the address; left out where the key may be the address's own path, as on a whole address pasted with no key.
     since_ms: int
     # Milliseconds since `state` last changed.
     state: DestinationState

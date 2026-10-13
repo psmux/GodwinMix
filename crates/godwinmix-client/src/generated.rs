@@ -1334,6 +1334,11 @@ pub struct Destination {
     pub id: String,
     /// What is going out, over the last second.
     pub kbps: u32,
+    /// The key's last four characters, as a channel key's `hint`, so a person
+    /// can see which key is saved. Left out for a key under eight characters,
+    /// where four would be half of it. Never the key itself.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub key_hint: Option<String>,
     pub label: String,
     /// What the plan gave it, while its stream is live.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1352,6 +1357,12 @@ pub struct Destination {
     /// What it asked to be converted to. Absent: sent as it arrives.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rendition: Option<RenditionChoice>,
+    /// The server as it was given, without its query or a user and password,
+    /// for an edit form to show. Only for a destination whose key is kept
+    /// apart from the address; left out where the key may be the address's
+    /// own path, as on a whole address pasted with no key.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub server: Option<String>,
     /// Milliseconds since `state` last changed.
     pub since_ms: u64,
     pub state: DestinationState,
