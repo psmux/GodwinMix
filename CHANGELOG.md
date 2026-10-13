@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.3.10 (2026-10-14)
+
+A frame rate menu on the monitors, the Plugins page as an app store, a watch link that survives a feed restart, and fixes to the plugin host found while building three new plugins.
+
+* Preview and Programme each have a frame rate menu at the right end of their title bar: Auto, which is the Picture rate in Settings, or a cap of 30, 25, 15, 10 or 5 frames a second, kept per monitor in the browser. An armed scene in Preview is asked of the mixer at the cap. The mosaic that Programme and a single source are cut from is asked at the highest rate the two monitors need, so with the source tiles not live and no other page watching, the mixer makes the whole mosaic at the cap; otherwise the page only paints fewer frames. Measured with both at 10 on a page asking 25: each monitor went from 25.7 to 10.2 frames painted a second, and the core's CPU from 2.4 to 3.1 percent of one core down to 0.9 to 1.6.
+* The mixer rebuilds the armed scene's preview when a client asks for it at a new rate. Before, the preview kept the first rate it was built at: a page asking for 10 frames a second went on receiving 26.
+* The Plugins page works like a phone's app store. Featured and New and updated rows sit at the top, a card plays its clip under the mouse, and the detail view opens on a large carousel with arrows, dots and swipe.
+* Install shows what it is doing: Downloading with a percent, Installing, Starting, then Open. The plugin is ready with no other step: its services run, its panel opens, and a source is in the add source picker. A failed install says what happened and what to do next on the card, and offers Try again.
+* A plugin installed from the gallery shows its panel. Before, panels were looked for only in a folder the installer never writes to.
+* A pure Python plugin can ship one release for every computer, named with `any`, and its environment is made correctly on Windows and when `uv` is installed. `gmx plugin add` says what to do next by what the plugin brought.
+* The gallery reads `index2.json` first, and a listing that needs a newer GodwinMix is kept out of older mixers' galleries.
+* A watch link's sound is now cut where its picture is cut, and a feed restart is marked on both at once. Before, with an encoder sending a keyframe every 2 s against 1 s segments, the picture had segment 18 where the sound had segment 39, and after a reconnect the sound's playlist was a discontinuity ahead of the picture's, so hls.js showed a new viewer nothing. Now both list the same segment numbers, each pair starting within 120 ms, with one discontinuity before the same segment, and hls.js plays the link straight after a restart.
+* Plugins get the core's address in `GMX_RPC`, which was always empty, and a `GMX_TOKEN` the control port accepts when the core has tokens of its own. Under a station it is the show's own port. The token still reaches only the plugin's own tools.
+* `plugin.remove`, and reinstalling or updating a running plugin, wait for its processes to exit before touching its folder. Windows no longer says "Access is denied", and an upgrade stops the old singleton before the new one starts. Measured: 1.5 s for a Python service that takes 1.5 s to shut down.
+* A Python plugin's pipes are UTF-8 on Windows, and a line that is not UTF-8 no longer ends a plugin's channel.
+* `tool.call` takes bodies up to 4 MiB. Anything over a limit answers 413 with a sentence instead of 400, or 502 through a station.
+* Snapshots of the programme honour `width` up to the canvas (1280 gives 1280, not 320) and come back in 0.1 s instead of 3.3 s. Source stills are held wider, up to a 1920 mosaic, and come back in 0.3 s instead of 3.3 s.
+* New words on a text source reach the programme in 168 ms median instead of 733 ms, measured full screen at 1080p.
+* Three plugins are in the gallery, each in its own repository and none bundled: HLS Player (psmux/godwinmix-hls-player), an embeddable player for a watch link with a panel that gives the embed code; Bible Verses and Lyrics (psmux/godwinmix-scripture); and a social comments plugin. They need 0.3.10.
+
 ## 0.3.9 (2026-10-13)
 
 Fixes for tester issues 14 to 20, and a recording bug found while testing them.
