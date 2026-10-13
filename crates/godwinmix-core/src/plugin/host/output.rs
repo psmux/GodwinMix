@@ -176,6 +176,9 @@ impl Output for SidecarOutput {
         crate::probe::set_bool(&sink, "async", false);
         crate::probe::set_bool(&sink, "sync", false);
         ctx.pipeline.add_many([&mux, &sink]).context("adding the plugin output")?;
+        // A plugin that writes what it reads to a file, as `file-record`
+        // does, gets a stream that starts at zero. See `output::origin`.
+        crate::output::origin::start_at_zero(video, audio)?;
         gst::Element::link(&mux, &sink).context("linking the plugin muxer to its FIFO")?;
         video.link(&mux).context("linking the programme video to the plugin")?;
         if self.spec.manifest.media.audio != StreamMode::None {

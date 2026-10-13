@@ -45,6 +45,8 @@ pub fn build(
         .build()
         .with_context(|| format!("recording needs {parser}; install the GStreamer bad plugins"))?;
     pipeline.add_many([&parse, &mux, &sink])?;
+    // The file starts at zero, not at the show's running time. See `origin`.
+    crate::output::origin::start_at_zero(video, audio)?;
     video
         .link(&parse)
         .context("linking encoded picture to its parser")?;
