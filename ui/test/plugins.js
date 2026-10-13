@@ -65,7 +65,8 @@ export async function pluginGalleryTests(test, eq, ok) {
     eq(plainly("add", new Error("`clock` has no asset for windows-x86_64. It ships: linux.")), "It did not install: clock has no asset for windows-x86_64.");
   });
 
-  // The page itself.
+  // The page itself, with the modal slot the real page has.
+  const slot = document.querySelector(".slot-modal") ? null : document.body.appendChild(Object.assign(document.createElement("div"), { className: "slot-modal" }));
   const stub = new GalleryStub({ fail: { macfx: "the download stopped halfway." } });
   const view = openGallery(stub);
   await until(() => view.root.querySelectorAll(".pg-card").length === 4);
@@ -137,4 +138,5 @@ export async function pluginGalleryTests(test, eq, ok) {
     ok(offline.root.querySelector(".pg-top").textContent.includes("Offline. Showing the list from 2 h ago."));
   });
   offline.close();
+  slot?.remove();
 }
