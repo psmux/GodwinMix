@@ -77,7 +77,7 @@ pub async fn ensure(app: &AppState, piece: &str, progress: &Progress) -> Result<
     };
     tracing::info!(plugin = piece, from = %dir.display(), "installing a first party plugin on first use");
     let started = std::time::Instant::now();
-    match crate::control::methods::plugins::install_and_start(app, piece.to_string()).await {
+    match crate::control::methods::plugins::install_and_start(app, piece.to_string(), None).await {
         Ok((_, failures)) => {
             for (provide, why) in failures {
                 tracing::warn!(%provide, %why, "a plugin singleton would not start");

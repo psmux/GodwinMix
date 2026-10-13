@@ -801,6 +801,8 @@ fn with_headers(kind: &'static str, body: Body, _path: &str) -> Response {
 
 // ------------------------------------------------------------------ plugins
 
+mod panels;
+
 /// What panels are on disk, read at request time so a file dropped into
 /// `~/.godwinmix/plugins/x/ui/` appears on the next reload with no restart.
 ///
@@ -842,6 +844,9 @@ async fn plugin_index() -> Response {
             }));
         }
     }
+    let by_hand: Vec<String> =
+        found.iter().filter_map(|p| p["name"].as_str().map(str::to_string)).collect();
+    found.extend(panels::installed(&by_hand));
     found.sort_by(|a, b| a["name"].as_str().cmp(&b["name"].as_str()));
     let body = json!({ "plugins": found, "dir": root.display().to_string() });
     (
@@ -863,7 +868,12 @@ async fn plugin_file(UrlPath((name, path)): UrlPath<(String, String)>) -> Respon
     let Some(relative) = safe_relative(&path) else {
         return (StatusCode::NOT_FOUND, "that path is not inside the plugin's ui directory").into_response();
     };
-    let file = dirs().plugins.join(&name).join("ui").join(&relative);
+    let by_hand = dirs().plugins.join(&name).join("ui").join(&relative);
+    let file = if by_hand.is_file() {
+        by_hand
+    } else {
+        panels::file(&name, &relative).unwrap_or(by_hand)
+    };
     match std::fs::read(&file) {
         Ok(body) => with_headers(content_type(&path), Body::from(body), &path),
         Err(_) => (

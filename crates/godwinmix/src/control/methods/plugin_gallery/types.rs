@@ -66,6 +66,17 @@ pub struct GalleryEntry {
     pub thumbnail: String,
     #[serde(default)]
     pub screenshots: Vec<String>,
+    /// Every picture and clip for the detail view's carousel, in order, each
+    /// with its type. Made from `screenshots` when the index has no `media`.
+    #[serde(default)]
+    pub media: Vec<GalleryMedia>,
+    /// The first animation or video, which a card plays on hover. Empty when
+    /// there is none.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub preview: String,
+    /// The index put it in the Featured row.
+    #[serde(default)]
+    pub featured: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub stars: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -99,4 +110,13 @@ pub struct GalleryEntry {
     pub fit: String,
     /// The sentence behind it.
     pub fit_detail: String,
+}
+
+/// One picture or clip in a plugin's gallery.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
+pub struct GalleryMedia {
+    pub url: String,
+    /// `image`, `animation` (a GIF or an animated WebP) or `video`.
+    #[serde(rename = "type")]
+    pub kind: String,
 }

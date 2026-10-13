@@ -17,6 +17,9 @@ use super::{add_within, load_store, Added, Listing};
 use std::sync::Mutex;
 use std::time::Duration;
 
+/// The platform word for a release with one asset for every computer: a
+/// pure Python plugin, say, whose asset holds source and no binary.
+pub const ANY: &str = "any";
 pub const DEFAULT_SOURCE: &str = "psmux/godwinmix-plugins";
 pub const DEFAULT_NAME: &str = "godwinmix-plugins";
 pub const DEFAULT_ENV: &str = "GMX_DEFAULT_MARKETPLACE";
@@ -151,6 +154,9 @@ pub fn fit(listing: &Listing, platform: &str, shipped: bool) -> Fit {
     };
     if version.platforms.is_empty() || version.platforms.iter().any(|p| p == platform) {
         return yes("There is a build of it for this computer.");
+    }
+    if version.platforms.iter().any(|p| p == ANY) {
+        return yes("One download runs on every computer, so it installs here.");
     }
     let system = os_name(platform);
     let same_os = version.platforms.iter().any(|p| os_name(p) == system);

@@ -634,8 +634,8 @@ async fn add(call: Call, params: Value) -> Result<Value, RpcError> {
         &call.app.tasks,
         "plugin.add",
         Some(serde_json::json!({ "source": req.source })),
-        move |_ctx| async move {
-            let (installed, failures) = install_and_start(&app, spec).await?;
+        move |ctx| async move {
+            let (installed, failures) = install_and_start(&app, spec, Some(ctx)).await?;
             let mut answer =
                 serde_json::to_value(record(&installed)).map_err(|e| e.to_string())?;
             if let (Some(map), false) = (answer.as_object_mut(), failures.is_empty()) {
@@ -660,8 +660,10 @@ async fn add(call: Call, params: Value) -> Result<Value, RpcError> {
 pub(crate) async fn install_and_start(
     app: &crate::control::AppState,
     spec: String,
+    task: Option<godwinmix_core::tasks::TaskContext>,
 ) -> Result<(loader::Installed, Vec<(String, String)>), String> {
-    let opts = options_of(app);
+    let mut opts = options_of(app);
+    opts.report = task.clone().map(install_stages);
     let installed = tokio::task::spawn_blocking(move || loader::install(&spec, &opts))
         .await
         .map_err(|e| format!("the install task did not finish: {e}"))?
@@ -674,6 +676,9 @@ pub(crate) async fn install_and_start(
     // starts now rather than at the next restart. Anything already running is
     // left alone. Under a station the ingest plugin is the station's to run,
     // with the channel and direct tables; a show leaves it alone.
+    if let Some(task) = &task {
+        task.stage("starting", Some(0.95));
+    }
     let supervisor = app.plugins.clone();
     let failures = tokio::task::spawn_blocking(move || crate::start_singletons(&supervisor))
         .await
@@ -685,6 +690,20 @@ pub(crate) async fn install_and_start(
         let _ = tokio::task::spawn_blocking(move || channels.ensure_default()).await;
     }
     Ok((installed, failures))
+}
+
+/// An install's stages as the task's progress, one bar from 0 to 1: the
+/// download is most of it when there is one, the copy and the venv next,
+/// and starting what it brings the last step.
+fn install_stages(task: godwinmix_core::tasks::TaskContext) -> loader::Reporter {
+    loader::Reporter(std::sync::Arc::new(move |stage, fraction| {
+        let overall = match stage {
+            "downloading" => fraction.map(|f| 0.05 + 0.75 * f.clamp(0.0, 1.0)).or(Some(0.05)),
+            "installing" => Some(0.85),
+            _ => fraction,
+        };
+        task.stage(stage, overall);
+    }))
 }
 
 /// One line saying what an install would do, for `--dry-run`.
@@ -841,7 +860,12 @@ fn options(call: &Call) -> loader::InstallOptions {
 }
 
 fn options_of(app: &crate::control::AppState) -> loader::InstallOptions {
-    loader::InstallOptions { allow_unsigned: app.allow_unsigned, only: app.marketplaces_only.clone(), offline: false }
+    loader::InstallOptions {
+        allow_unsigned: app.allow_unsigned,
+        only: app.marketplaces_only.clone(),
+        offline: false,
+        report: None,
+    }
 }
 
 async fn remove(call: Call, params: Value) -> Result<Value, RpcError> {

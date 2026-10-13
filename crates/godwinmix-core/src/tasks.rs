@@ -55,6 +55,10 @@ pub struct TaskView {
     /// 0 to 1 where the work can say, absent where it cannot.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub progress: Option<f64>,
+    /// What it is doing now, one word, where the work says: `downloading`,
+    /// `installing` and `starting` for `plugin.add`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stage: Option<String>,
     /// The body the method would have answered with, once it is done.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub result: Option<Value>,
@@ -71,6 +75,7 @@ struct Entry {
     kind: String,
     state: TaskState,
     progress: Option<f64>,
+    stage: Option<String>,
     result: Option<Value>,
     error: Option<String>,
     started: Instant,
@@ -104,6 +109,18 @@ impl TaskContext {
         let mut entries = self.tasks.entries.lock();
         if let Some(entry) = entries.get_mut(&self.id) {
             entry.progress = Some(fraction.clamp(0.0, 1.0));
+        }
+    }
+
+    /// Say what the work is doing now, and how far along it is overall when
+    /// that is known. A stage with no fraction keeps the last one.
+    pub fn stage(&self, stage: &str, fraction: Option<f64>) {
+        let mut entries = self.tasks.entries.lock();
+        if let Some(entry) = entries.get_mut(&self.id) {
+            entry.stage = Some(stage.to_string());
+            if let Some(f) = fraction {
+                entry.progress = Some(f.clamp(0.0, 1.0));
+            }
         }
     }
 
@@ -159,6 +176,7 @@ impl Tasks {
                 kind: kind.to_string(),
                 state: TaskState::Running,
                 progress: None,
+                stage: None,
                 result: None,
                 error: None,
                 started: Instant::now(),
@@ -239,6 +257,7 @@ fn view(id: &str, e: &Entry) -> TaskView {
         kind: e.kind.clone(),
         state: e.state,
         progress: e.progress,
+        stage: e.stage.clone(),
         result: e.result.clone(),
         error: e.error.clone(),
         age_secs: e.started.elapsed().as_secs(),
@@ -319,6 +338,28 @@ mod tests {
         assert_eq!(view.result.unwrap()["name"], "clip.mp4");
         assert_eq!(view.poll_interval_ms, None, "a finished task is not polled again");
         assert_eq!(view.kind, "media.convert");
+    }
+
+    #[tokio::test]
+    async fn a_stage_is_read_while_it_runs_and_keeps_the_last_fraction() {
+        let tasks = Tasks::new();
+        let (go, wait) = tokio::sync::oneshot::channel::<()>();
+        let id = tasks.spawn("plugin.add", |ctx| async move {
+            ctx.stage("downloading", Some(0.4));
+            ctx.stage("installing", None);
+            let _ = wait.await;
+            Ok(json!({}))
+        });
+        for _ in 0..100 {
+            if tasks.get(&id).unwrap().stage.as_deref() == Some("installing") {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+        let view = tasks.get(&id).unwrap();
+        assert_eq!(view.stage.as_deref(), Some("installing"));
+        assert_eq!(view.progress, Some(0.4), "a stage with no fraction keeps the last one");
+        let _ = go.send(());
     }
 
     #[tokio::test]

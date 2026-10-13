@@ -41,6 +41,7 @@ pub mod lifecycle;
 pub mod marketplace;
 pub mod offline;
 pub mod probe;
+pub mod python;
 pub mod sampler;
 pub mod sources;
 pub mod verify;

@@ -6,7 +6,8 @@
 //! whole surface is three functions.
 
 use anyhow::{Context, Result};
-use std::io::Write;
+use super::Progress;
+use std::io::{Read, Write};
 use std::path::Path;
 use std::time::Duration;
 
@@ -66,7 +67,12 @@ pub fn get_json_within(url: &str, timeout: Duration) -> Result<serde_json::Value
 
 /// GET a file to disk. Answers with how many bytes arrived.
 pub fn download(url: &str, to: &Path) -> Result<u64> {
-    match download_optional(url, to)? {
+    download_with(url, to, None)
+}
+
+/// [`download`], telling `progress` how much has arrived as it goes.
+pub fn download_with(url: &str, to: &Path, progress: Option<&Progress>) -> Result<u64> {
+    match fetch_to(url, to, progress)? {
         Some(bytes) => Ok(bytes),
         None => anyhow::bail!("{url} answered 404, so there is nothing to download there."),
     }
@@ -75,6 +81,10 @@ pub fn download(url: &str, to: &Path) -> Result<u64> {
 /// The same, but a 404 is an answer rather than a failure. That is how a
 /// missing signature file is told from a broken network.
 pub fn download_optional(url: &str, to: &Path) -> Result<Option<u64>> {
+    fetch_to(url, to, None)
+}
+
+fn fetch_to(url: &str, to: &Path, progress: Option<&Progress>) -> Result<Option<u64>> {
     let mut request = client()?.get(url).header("Accept", "application/octet-stream");
     if url.contains("github") {
         if let Some(token) = github_token() {
@@ -97,11 +107,38 @@ pub fn download_optional(url: &str, to: &Path) -> Result<Option<u64>> {
     let file = std::fs::File::create(to)
         .with_context(|| format!("writing {}", to.display()))?;
     let mut writer = std::io::BufWriter::new(file);
-    let bytes = response
-        .copy_to(&mut writer)
+    let size = response.content_length();
+    let bytes = copy_counting(&mut response, &mut writer, size, progress)
         .with_context(|| format!("saving {url} to {}", to.display()))?;
     writer.flush().with_context(|| format!("finishing {}", to.display()))?;
     Ok(Some(bytes))
+}
+
+/// Copy a body to a file, saying how far along it is after every read.
+fn copy_counting(
+    from: &mut impl Read,
+    to: &mut impl Write,
+    size: Option<u64>,
+    progress: Option<&Progress>,
+) -> std::io::Result<u64> {
+    let mut buf = vec![0u8; 64 * 1024];
+    let mut done = 0u64;
+    if let Some(tell) = progress {
+        (tell.0)(0, size);
+    }
+    loop {
+        let n = match from.read(&mut buf) {
+            Ok(0) => return Ok(done),
+            Ok(n) => n,
+            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(e) => return Err(e),
+        };
+        to.write_all(&buf[..n])?;
+        done += n as u64;
+        if let Some(tell) = progress {
+            (tell.0)(done, size);
+        }
+    }
 }
 
 /// The first line of an error body, trimmed. A GitHub error is JSON with a
@@ -114,4 +151,27 @@ fn first_words(body: &str) -> String {
     }
     let line = body.lines().find(|l| !l.trim().is_empty()).unwrap_or("").trim();
     line.chars().take(80).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::{Arc, Mutex};
+
+    #[test]
+    fn a_copy_says_how_far_along_it_is_against_the_size_given() {
+        let body = vec![7u8; 150 * 1024];
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let log = seen.clone();
+        let tell = Progress(Arc::new(move |done, size| log.lock().unwrap().push((done, size))));
+        let mut out = Vec::new();
+        let copied = copy_counting(&mut body.as_slice(), &mut out, Some(150 * 1024), Some(&tell))
+            .expect("it copies");
+        assert_eq!(copied, 150 * 1024);
+        assert_eq!(out, body);
+        let seen = seen.lock().unwrap();
+        assert_eq!(seen.first(), Some(&(0, Some(150 * 1024))));
+        assert_eq!(seen.last(), Some(&(150 * 1024, Some(150 * 1024))));
+        assert!(seen.windows(2).all(|w| w[0].0 <= w[1].0), "it only goes forward: {seen:?}");
+    }
 }

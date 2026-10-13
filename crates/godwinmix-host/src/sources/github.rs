@@ -66,7 +66,7 @@ pub fn fetch(
 
     let downloads = ctx.staging.join("download");
     let file = downloads.join(&asset);
-    let bytes = http::download(&url, &file)?;
+    let bytes = http::download_with(&url, &file, ctx.progress.as_ref())?;
     let mut notes =
         vec![format!("{owner}/{repo} {tag}: {asset} ({} KB)", bytes / 1024)];
 

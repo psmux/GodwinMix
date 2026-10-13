@@ -31,7 +31,7 @@ use std::time::Duration;
 
 mod display;
 pub mod gallery;
-pub use display::Display;
+pub use display::{Display, Media};
 
 /// The two file names a marketplace repository may use. `index.json` is what
 /// the community index carries because it holds more than a listing; both are
