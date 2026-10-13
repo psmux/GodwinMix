@@ -1,7 +1,6 @@
 //! Moving and renaming one file, its converted copy with it.
 
-use super::folders::clash;
-use super::paths::{inside, join, name_of, parent_of, plain, rel_path, segment};
+use super::paths::{clash, inside, join, name_of, parent_of, plain, rel_path, segment};
 use super::Refusal;
 use std::path::{Path, PathBuf};
 

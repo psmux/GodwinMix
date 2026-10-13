@@ -1,6 +1,6 @@
 //! Folders: directories under the library, listed, made, moved and removed.
 
-use super::paths::{inside, join, name_of, parent_of, plain, rel_path, segment};
+use super::paths::{clash, inside, join, name_of, parent_of, plain, rel_path, segment};
 use super::{Moved, Refusal};
 use std::path::Path;
 
@@ -41,14 +41,6 @@ fn walk(dir: &Path, rel: &str, depth: usize, out: &mut Vec<String>) {
             walk(&e.path(), &here, depth - 1, out);
         }
     }
-}
-
-/// A name already in `dir` that is `name` but for case, other than `except`.
-/// Refused even on Linux, so a library copied to a Windows or Mac machine
-/// does not lose a folder.
-pub fn clash(dir: &Path, name: &str, except: Option<&str>) -> Option<String> {
-    let low = name.to_lowercase();
-    std::fs::read_dir(dir).ok()?.flatten().map(|e| e.file_name().to_string_lossy().into_owned()).find(|n| n.to_lowercase() == low && Some(n.as_str()) != except)
 }
 
 /// Make a folder and any folders above it that are missing. Answers its

@@ -29,6 +29,12 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::OnceLock;
 
+/// Every clip in the library by its path, without opening any of them.
+/// Converted copies are left out: they go with their originals.
+pub(crate) fn media_names(dir: &std::path::Path, depth: usize) -> Vec<String> {
+    media::list(dir, depth).into_iter().map(|e| e.name).filter(|n| !godwinmix_core::convert::is_converted_name(n)).collect()
+}
+
 #[derive(Debug, Default, Deserialize, JsonSchema)]
 pub struct ExportRequest {
     /// What to call the project. Defaults to "GodwinMix project".

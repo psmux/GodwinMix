@@ -116,3 +116,11 @@ pub fn plain(root: &Path, rel: &str) -> PathBuf {
     }
     out
 }
+
+/// A name already in `dir` that is `name` but for case, other than `except`.
+/// Refused even on Linux, so a library copied to a Windows or Mac machine
+/// does not lose a folder.
+pub fn clash(dir: &Path, name: &str, except: Option<&str>) -> Option<String> {
+    let low = name.to_lowercase();
+    std::fs::read_dir(dir).ok()?.flatten().map(|e| e.file_name().to_string_lossy().into_owned()).find(|n| n.to_lowercase() == low && Some(n.as_str()) != except)
+}

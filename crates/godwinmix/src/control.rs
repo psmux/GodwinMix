@@ -1163,6 +1163,7 @@ async fn delete_media(
             removed.push(p.display().to_string());
         }
     }
+    godwinmix_core::media_org::forget(app.library.dir(), &name);
     app.mixer.emit(Event::MediaChanged { name, conversion: None });
     Ok(Json(json!({ "removed": removed })))
 }
