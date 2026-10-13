@@ -66,7 +66,8 @@ export function card(p, open, act) {
     title: go.act ? null : p.fit_detail || null,
     onclick: (e) => { e.stopPropagation(); act(p, go.act, button); },
   });
-  const fits = el(`span.pg-fit${p.runs_here ? ".yes" : ".no"}`, { text: p.fit, title: p.fit_detail });
+  // The button already says why a plugin cannot run; the line says only yes.
+  const fits = p.runs_here ? el("span.pg-fit.yes", { text: p.fit, title: p.fit_detail }) : null;
   return el("article.pg-card", { "data-name": p.name }, [
     el("button.pg-open", { type: "button", "aria-label": `${p.title}: more about it`, onclick: () => open(p) }, [
       picture(p, p.thumbnail),

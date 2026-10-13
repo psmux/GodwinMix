@@ -2,7 +2,8 @@
    work; loaded when the page first opens. */
 
 .plugins-page {
-  position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
+  /* Under the modal slot (40), so a plugin's detail opens over the page. */
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 39;
   display: flex; flex-direction: column; background: var(--bg);
   border-top: var(--border) solid var(--line);
 }

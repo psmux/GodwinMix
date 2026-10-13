@@ -38,7 +38,7 @@ export async function pluginGalleryTests(test, eq, ok) {
     eq([count(8), count(1240), count(98000), count(2500000), count(undefined)], ["8", "1.2k", "98k", "2.5M", ""]);
     eq(tier({ tier: "gold" }).label, "Gold");
     eq(tier({}).label, "Unreviewed");
-    eq(oneLine(all[0].description), "A USB or built in camera as a source");
+    eq(oneLine(all[0].description), "A USB or built in camera as a source: v4l2 on Linux.");
     eq(kindWords(all[0]), ["Input", "Finds devices"]);
   });
 
@@ -110,6 +110,8 @@ export async function pluginGalleryTests(test, eq, ok) {
   test("plugins: the detail view has the facts, the source link and Update and Remove", () => {
     ok(dialog && dialog.textContent.includes("NDI in and out."));
     ok(button("Update") && button("Remove"), "both buttons");
+    const box = dialog.getBoundingClientRect();
+    ok(dialog.contains(document.elementFromPoint(box.x + box.width / 2, box.y + 12)), "the detail opens over the page, not under it");
   });
   button("Update")?.click();
   await until(() => document.querySelector(".dialog .pg-note")?.textContent === "Updated.");

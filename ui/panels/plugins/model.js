@@ -67,8 +67,8 @@ export function tier(p) {
 /** The first sentence of a description, for the card. */
 export function oneLine(text) {
   const t = String(text || "").trim();
-  const end = t.search(/[.:;](\s|$)/);
-  return end > 0 ? t.slice(0, end + (t[end] === "." ? 1 : 0)) : t;
+  const end = t.search(/\.(\s|$)/);
+  return end > 0 ? t.slice(0, end + 1) : t;
 }
 
 /**
