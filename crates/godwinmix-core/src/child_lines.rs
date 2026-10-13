@@ -13,6 +13,7 @@ use tracing::warn;
 
 /// Split `pending` at each new line and hand every whole line on. What is
 /// left is a line still being written.
+#[cfg_attr(not(unix), allow(dead_code))]
 pub(crate) fn split(name: &str, pending: &mut Vec<u8>, on_line: &mut impl FnMut(&str)) {
     while let Some(nl) = pending.iter().position(|b| *b == b'\n') {
         let line: Vec<u8> = pending.drain(..=nl).collect();
@@ -21,6 +22,7 @@ pub(crate) fn split(name: &str, pending: &mut Vec<u8>, on_line: &mut impl FnMut(
 }
 
 /// Every line `reader` gives until it ends.
+#[cfg_attr(unix, allow(dead_code))]
 pub(crate) fn read_all(name: &str, reader: impl std::io::Read, on_line: &mut impl FnMut(&str)) {
     let mut reader = std::io::BufReader::new(reader);
     let mut line = Vec::new();

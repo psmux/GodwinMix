@@ -35,7 +35,7 @@ fn python_here() -> bool {
     ok
 }
 
-fn install(tag: &str) -> (PathBuf, Supervisor) {
+fn install(tag: &str) -> (PathBuf, Arc<Supervisor>) {
     let dir = std::env::temp_dir().join(format!("gmx-pyhost-{}-{tag}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("a temporary directory");
@@ -108,7 +108,7 @@ fn reinstalling_the_running_version_stops_the_old_process_first_and_the_new_one_
         return;
     }
     let (dir, supervisor) = install("reinstall");
-    let supervisor = Arc::new(supervisor);
+
     let old = pid_of_service();
     let retiring = supervisor.clone();
     let opts = loader::InstallOptions {
