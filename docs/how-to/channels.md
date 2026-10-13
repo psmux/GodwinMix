@@ -1,10 +1,20 @@
-# Take streams from several encoders into one channel
+# Feed a channel and send it on
 
-A channel is a named place encoders publish to. The Sunday service has one,
-the youth hall has another, and each can take several streams at once: the
-main camera, a second camera, a phone in the gallery, a guest in a browser.
-One channel has one set of keys and takes its streams by whichever protocols
-you switch on for it:
+A channel is one live stream with its own address, the way Livebox has it.
+It gets its picture one of three ways, and sends it on to the platforms you
+add under **Send on to** (its push destinations):
+
+* **This mixer's programme.** What is on air here goes into the channel, and
+  from there to every platform on it, each in its own format.
+* **An encoder (OBS, a phone, a camera).** It publishes to the channel's
+  address with one of its keys. One channel can take several streams at once:
+  the main camera, a second camera, a phone in the gallery, a guest in a
+  browser.
+* **Pull from a URL.** The channel takes a stream from somewhere else, over
+  RTMP, RTMPS, SRT, RTSP or an HLS playlist, and takes it again by itself
+  whenever it drops.
+
+An encoder reaches a channel by whichever protocols you switch on for it:
 
 * RTMP, on the mixer's one RTMP port. What OBS, a phone app and most hardware
   encoders speak.
@@ -21,26 +31,56 @@ platforms like any other.
 Everything here is done on the Channels tab. The same things can be done
 through the `channel.*` methods in [the channel reference](../reference/channels.md).
 
-## A channel does not send the programme
+## Choose what feeds a channel
 
-A channel passes on what an encoder sends it. Its platform tiles under
-**Send on to** forward that encoder's stream to YouTube or Facebook; they do
-not send the picture this mixer makes. A YouTube tile on a channel nothing is
-sending to says **Waits for the stream**, and YouTube gets nothing.
+Each card has **Fed by** under its name with the three choices. Pick one and
+it takes effect at once:
 
-To send the programme, use **Add destination** on the Outputs panel. See
-[Stream to YouTube, Facebook or Twitch](stream-to-a-platform.md).
+* **This mixer's programme.** Nothing else to set. The show adds an output
+  called `to-channel-<channel>` that publishes the programme into the channel
+  on this machine, using the programme's own encoder, so it costs nothing
+  extra on air. The Outputs panel lists it as feeding the channel. To stop it,
+  pick another feed here; removing it on the Outputs panel does not stick.
+* **An encoder (OBS, a phone, a camera).** Press **Connect** for the address
+  and the key, as below.
+* **Pull from a URL.** A box opens. Paste the whole address, such as
+  `rtmp://203.0.113.5:1935/live/stream` or `srt://cam.example:9000?streamid=x`,
+  and press **Pull**. The address can carry a key, so it is kept sealed and
+  never shown again: the card shows only `rtmp://203.0.113.5:1935`.
 
-The Channels tab says this itself while a channel has platforms and no
-encoder: a note under the tiles explains it and has a **Send the programme to
-YouTube instead** button for each waiting platform. One press adds the
-platform under Outputs with the server, key and format the tile already has
-(the core reads the sealed key itself, so you never paste it again) and takes
-the tile off the channel unless you switch that off. The form for adding a
-platform to an idle channel says the same above the key box, and its **Send
-the programme instead** button, the one in colour there, adds the output
-straight away with the server, key and format you chose, without adding
-anything to the channel.
+The line under the name says how it is going, as Livebox does. Green
+**LIVE** with what arrives, for example
+`Video 1920x1080 3.0 Mb/s | Audio AAC 128 kb/s`, or red **Offline** with the
+reason in words: `waiting for an encoder`,
+`waiting for this mixer's programme`, or
+`pulling rtmp://203.0.113.5:1935, trying again in 4 s: connection refused`.
+Small marks beside it say what the channel does: Programme or Pull for its
+feed, Push when it sends on to a platform, Rec when it records, Convert when a
+platform gets its own format.
+
+A pull that drops is tried again after 1 second, then 2, 4 and 8, and then
+every 10 seconds for as long as it takes. Nobody has to press anything when
+the source comes back.
+
+A channel fed by the programme is never made a mixer source of its own,
+since the programme would then show itself.
+
+A channel you made before feeds existed is fed by an encoder, as it always
+was. If an encoder's channel has platforms and nothing arriving, a note under
+the tiles says so and has a **Feed it from this mixer's programme** button,
+and the form for adding a platform to it has **Feed it from the programme and
+start**, which does both in one press.
+
+From the API, `channel.set` with `feed`:
+
+```sh
+gmx ctl rpc channel.set '{"id": "live", "feed": {"kind": "programme"}}'
+gmx ctl rpc channel.set '{"id": "relay", "feed": {"kind": "pull", "url": "rtmp://203.0.113.5:1935/live/stream"}}'
+gmx ctl rpc channel.set '{"id": "live", "feed": {"kind": "encoder"}}'
+```
+
+Under a station with several shows, `{"kind": "programme", "show": "second-room"}`
+takes that show's programme; the first show's when `show` is left out.
 
 ## Before you start
 
@@ -80,10 +120,13 @@ in the palette (Ctrl+K).
 
 Type a name, say `Sunday service`. The address it will have is drawn under the
 box as you type, something like `rtmp://192.168.1.20:1935/sunday-service`.
-Press **Create channel**. A new channel takes RTMP; switch the others on in its
-settings.
+Under **Fed by**, this mixer's programme is picked; pick **An encoder** for a
+channel OBS or a phone will publish to, or **Pull from a URL** and paste the
+address. Press **Create channel**. A new channel takes RTMP; switch the others
+on in its settings.
 
-The card that opens next is the one to set an encoder up from. It has the two
+For an encoder's channel, the card that opens next is the one to set the
+encoder up from. It has the two
 boxes OBS asks for under Settings, Stream, with Service set to Custom, and the
 whole address for an encoder with one box:
 

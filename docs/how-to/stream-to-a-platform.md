@@ -5,23 +5,23 @@ opening a config file.
 
 This page takes about five minutes.
 
-## Outputs, not a channel
+## Outputs, or a channel fed by the programme
 
-The programme goes to a platform from the **Outputs** panel. The Channels tab
-has platform tiles too, and they do something else: a channel takes a stream
-from an encoder pointed at it (OBS, a phone, a hardware encoder) and passes
-that stream on. A YouTube tile on a channel nobody is sending to waits, and
-YouTube Studio says "No data" for as long as it does.
+There are two ways to send the programme to a platform, and both use the
+programme encoder the mixer already runs.
 
-So the Channels tab says this whenever a channel has platforms and no
-encoder. The add form says it above the key box, with **Send the programme
-instead** beside **Start sending**: that adds the platform under Outputs with
-the server, key and format you just chose (a Custom 3000 kb/s goes out at
-3000 kb/s, not at the programme encoder's rate), and nothing to the channel. A tile already
-saved on a waiting channel has **Send the programme to YouTube instead** under
-the strip. One press adds the output with the tile's server, key and format,
-which the core reads itself, and takes the tile off the channel unless you
-switch that off, so two things never publish with the same key.
+* The **Outputs** panel, below. One platform, one output.
+* A channel on the **Channels** tab, fed by **This mixer's programme**. The
+  channel takes the programme and sends it on to every platform you add under
+  **Send on to**, each in its own format, the way Livebox sends a channel to
+  its push destinations. Add Channel picks the programme for a new channel;
+  for one you have, pick it under **Fed by** on its card. See
+  [Feed a channel and send it on](channels.md#choose-what-feeds-a-channel).
+
+A channel fed by an encoder passes on what that encoder sends and nothing
+else. If it has platforms and nothing arriving, its card says so and has a
+**Feed it from this mixer's programme** button, and the form for adding a
+platform to it has **Feed it from the programme and start**.
 
 ## From the Outputs panel
 

@@ -124,7 +124,7 @@ Start here if you have never run it.
 * [Write a panel](how-to/write-a-panel.md)
 * [Add shows in bulk](how-to/add-shows-in-bulk.md)
 * [Benchmark GodwinMix at headend scale](how-to/benchmark-at-scale.md)
-* [Take streams from several encoders into one channel](how-to/channels.md)
+* [Feed a channel and send it on: the programme, an encoder or a pull](how-to/channels.md)
 * [Move your channels from Livebox](how-to/move-from-livebox.md): keep the address and password your encoders already send
 * [Customize the workspace](how-to/customize-the-workspace.md)
 * [Run the mixer from a phone or a tablet](how-to/use-a-phone-or-tablet.md): long press for the item menu, double tap to open, drag by the grip

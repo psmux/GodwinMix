@@ -311,5 +311,5 @@ lists what the link takes.
 ## Where to go next
 
 * [Use a webcam](use-a-webcam.md), for a camera plugged into the mixer itself
-* [Take streams from several encoders into one channel](channels.md)
+* [Feed a channel and send it on](channels.md)
 * [Serve the mixer over https](serve-https.md)

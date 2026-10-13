@@ -1,7 +1,10 @@
 # The channel methods
 
-A channel is a named place encoders publish to, with one set of keys, over
-every protocol it has switched on:
+A channel is one live stream with its own address, sent on to its
+destinations. Its `feed` says where its picture comes from: this mixer's
+programme, an encoder that publishes to it, or an address it pulls (see
+[The feed](#the-feed)). An encoder publishes with one of the channel's keys,
+over every protocol it has switched on:
 
 ```
 rtmp://<mixer>:<rtmp port>/<app>/<stream>?psk=<key>
@@ -22,8 +25,8 @@ which channels, and why one a channel wants is not.
 |---|---|---|---|---|
 | `channel.list` | `GET /api/v1/channels` | read | no | Every channel, and the port they share |
 | `channel.get {id}` | `GET /api/v1/channels/{id}` | read | no | One channel |
-| `channel.add {name, app?, auto_source?, key_mode?, protocols?, secret?}` | `POST /api/v1/channels` | admin | no | A channel and its first key |
-| `channel.set {id, name?, app?, enabled?, auto_source?, key_mode?, protocols?, rtmps?}` | `POST /api/v1/channels/{id}/set` | admin | no | Change what is named, leave the rest |
+| `channel.add {name, app?, auto_source?, key_mode?, protocols?, secret?, feed?}` | `POST /api/v1/channels` | admin | no | A channel and its first key |
+| `channel.set {id, name?, app?, enabled?, auto_source?, key_mode?, protocols?, rtmps?, feed?}` | `POST /api/v1/channels/{id}/set` | admin | no | Change what is named, leave the rest |
 | `channel.remove {id}` | `DELETE /api/v1/channels/{id}` | admin | yes | The channel, its keys, and the sources it made that no scene holds |
 | `channel.key.add {id, label?, secret?}` | `POST /api/v1/channels/{id}/key/add` | admin | no | One more key |
 | `channel.key.remove {id, key}` | `POST /api/v1/channels/{id}/key/remove` | admin | yes | Take one key back |
@@ -81,7 +84,8 @@ and `data.allowed`.
       "dropped_gops": 0
     }
   ],
-  "destinations": []
+  "destinations": [],
+  "feed": { "kind": "encoder", "state": "live" }
 }
 ```
 
@@ -99,7 +103,8 @@ and `data.allowed`.
 | `publish.addresses` | The same for every protocol it has on, RTMP first: `{protocol, server, example}` with `<key>` where the key goes |
 | `streams` | Every live stream, and any stream that left while a scene still holds its source (`state: "idle"`) |
 | `streams[].key` | The id of the key that let it in |
-| `streams[].protocol` | How it arrived: `rtmp`, `rtmps`, `srt` or `whip` |
+| `streams[].protocol` | How it arrived: `rtmp`, `rtmps`, `srt` or `whip`, or `pull` for a stream the channel pulled itself |
+| `feed` | What gives the channel its picture and how that is going. See [The feed](#the-feed) |
 | `streams[].video`, `.audio` | Read from the codec sequence headers and the byte rate. `fps` and `kbps` are measured over the last second |
 | `streams[].source` | The mixer source it feeds, `<app>-<stream>` |
 | `streams[].dropped_gops` | Whole GOPs readers of this stream lost by falling behind, this session. A reader that falls behind loses from the front of its queue and starts again at the next keyframe; the publisher is never slowed |
@@ -108,6 +113,72 @@ and `data.allowed`.
 
 In `stream` key mode the stream is named after the key's id, so a key never
 becomes part of a source id or a log line.
+
+## The feed
+
+`feed` on `channel.add` and `channel.set` is one of:
+
+| `feed` | What feeds the channel |
+|---|---|
+| `{"kind": "programme"}` | This mixer's programme. Under a station, `"show": "<id>"` names the show; the first show when it is left out |
+| `{"kind": "encoder"}` | An encoder publishing to the channel's address with one of its keys. The default, and what every channel made before feeds is |
+| `{"kind": "pull", "url": "<address>"}` | The channel pulls `rtmp://`, `rtmps://`, `srt://`, `rtsp://`, `rtsps://`, or an `http(s)://` HLS playlist |
+
+`channel.set` without `feed` leaves the feed as it is. The channel record
+carries it back as:
+
+```json
+"feed": {
+  "kind": "pull",
+  "uri_host": "rtmp://203.0.113.5:1935",
+  "state": "reconnecting",
+  "error": "rtmp://203.0.113.5:1935: Could not connect to RTMP stream",
+  "retry_in_ms": 3600
+}
+```
+
+| Field | What it is |
+|---|---|
+| `kind` | `programme`, `encoder` or `pull` |
+| `show` | For `programme`, the show named, when one was |
+| `output` | For `programme`, the output in that show that publishes the programme into the channel: `to-channel-<channel id>` |
+| `uri_host` | For `pull`, scheme, host and port of the address. The address itself is sealed in the secret store under `channel.<id>.pull` and never read back by any method, since it may carry a key |
+| `state` | `live` while a picture arrives; `waiting` for an encoder or for the programme; `connecting` while a pull opens; `reconnecting` while a pull waits to try again; `off` for a channel switched off |
+| `error` | While it is not live, what went wrong last, in words. For a pull, the address in it is cut to `uri_host` |
+| `retry_in_ms` | For a pull that dropped, when it is tried next |
+
+How each works:
+
+* `programme`: the channel gets a key of its own labelled `Programme`, listed
+  with its keys, and the show is asked for `output.add` with the id
+  `to-channel-<channel id>`, the address
+  `rtmp://127.0.0.1:<rtmp port>/<app>/programme?psk=<that key>` (or
+  `/<that key>` in `stream` key mode), policy `own` and no rendition. The
+  programme encoder is shared, so it costs nothing on air, and each of the
+  channel's destinations makes its own format from it. The show keeps the
+  output across a restart. The core looks at the shows at start, after every
+  channel change and every 15 seconds while any channel is fed by the
+  programme: it adds the output where it is missing, gives one found after a
+  restart its address again, and takes off any `to-channel-` output no
+  channel wants. A show that cannot be asked yet is asked again later, and
+  `error` says why meanwhile. A stream the programme feeds is never made a
+  mixer source by `auto_source`. The channel needs RTMP on; one without it is
+  refused with `data.field` set to `feed` and the way to switch RTMP on.
+  Choosing another feed removes the output and the key.
+* `encoder`: nothing runs.
+* `pull`: the ingest plugin opens the address with GStreamer, demuxes it
+  without decoding and publishes it on the channel as the stream `main`, with
+  `protocol` set to `pull`. It is live while frames arrive. A failure, or ten
+  seconds without a frame, ends the stream, and it is tried again after 1
+  second, doubling to 10 seconds, for as long as it takes; a connection that
+  held for ten seconds starts the waits again. An address with a scheme it
+  does not take is refused with `data.field` set to `feed.url`. While an
+  encoder is publishing `main` on the same channel the pull waits, and
+  `error` says so. A project file carries the feed but not a pull's sealed
+  address; pull it again after an import.
+
+`event/channel.changed` carries the channel whenever its feed's state or
+error moves.
 
 ## `channel.list`
 
@@ -651,6 +722,11 @@ destination is forgotten; the publisher and the other destinations are not
 touched. It is destructive, so `dry_run: true` answers what it would stop.
 
 ### `channel.destination.to_output`
+
+Since 0.3.7 a channel can be fed by the programme instead (see
+[The feed](#the-feed)), which sends the programme to every destination of
+the channel at once, each in its own format. This method is kept for a
+client that wants one destination under Outputs.
 
 `id`, `destination` and `remove` (true unless false). Sends the programme
 where that destination points: the core adds an output with the
