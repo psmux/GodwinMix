@@ -36,6 +36,7 @@ mod media_folders;
 pub(crate) mod media_org;
 mod media_refs;
 mod media_refs_files;
+mod media_refs_live;
 mod media_refs_map;
 mod paths;
 mod nodes;

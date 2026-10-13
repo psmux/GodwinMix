@@ -67,6 +67,8 @@ async fn files_and_folders_move_on_disk_and_what_names_them_follows() {
     assert!(dir.join("a.png").is_file(), "nothing moved");
     let moved = core.call(&token, "media.move", json!({ "name": "a.png", "folder": "Sermons", "force": true })).await.unwrap();
     assert_eq!(moved["moved"], json!([{ "from": "a.png", "to": "Sermons/a.png" }]));
+    assert_eq!(moved["updated"], json!(["source pic"]), "taken out before the move and put back after: {moved}");
+    core.wait_live("pic").await;
     assert!(uri_of(&core, "pic").await.ends_with("a.png") && uri_of(&core, "pic").await.contains("Sermons"), "{}", uri_of(&core, "pic").await);
 
     // A source off air by file URI, and a template naming a picture, follow

@@ -93,28 +93,46 @@ async fn move_files(call: Call, params: Value) -> Result<Value, RpcError> {
     })
     .await?;
     let plans: Vec<Moved> = plans.into_iter().filter(|m| m.from != m.to).collect();
-    let froms: Vec<_> = plans.iter().map(|m| m.from_path.clone()).collect();
+    let froms: Vec<_> = plans.iter().flat_map(Moved::pairs).map(|(a, _)| a).collect();
     media_refs::check(&call, &froms, req.force).await?;
     if call.dry_run {
         return Ok(call.dry_run_answer(!plans.is_empty(), plans.iter().map(|m| format!("move {} to {}", m.from, m.to)).collect()));
     }
-    done(&call, plans).await
+    done(&call, plans, &froms).await
 }
 
 /// Do the moves, carry the tags, point everything at the new places, and
 /// tell every open page.
-pub async fn done(call: &Call, plans: Vec<Moved>) -> Result<Value, RpcError> {
+async fn done(call: &Call, plans: Vec<Moved>, froms: &[std::path::PathBuf]) -> Result<Value, RpcError> {
     let dir = call.app.library.dir().to_path_buf();
+    let released = media_refs::release(call, froms).await;
     let todo = plans.clone();
-    blocking(move || {
+    let result = blocking_partial(move || {
+        let mut done = Vec::new();
         for m in &todo {
-            org::move_file(m)?;
+            if let Err(e) = org::move_file(m) {
+                return Err((e, done));
+            }
             org::moved(&dir, &m.from, &m.to);
+            done.push(m.clone());
         }
         Ok(())
-    })
-    .await?;
-    let updated = media_refs::follow(call, &plans).await;
+    });
+    let plans = match result.await {
+        Ok(()) => plans,
+        Err((e, done)) if done.is_empty() => {
+            media_refs::restore(call, released).await;
+            return Err(refused(e));
+        }
+        // Some moved before one could not: say which, and point what used
+        // the moved ones at their new places.
+        Err((e, done)) => {
+            let updated = media_refs::follow(call, &done, released).await;
+            let moved: Vec<String> = done.iter().map(|m| format!("{} to {}", m.from, m.to)).collect();
+            return Err(refused(e).with("moved", moved).with("updated", updated));
+        }
+    };
+    let updated = media_refs::follow(call, &plans, released).await;
     for m in &plans {
         call.app.mixer.emit(Event::MediaChanged { name: m.to.clone(), conversion: None });
     }
@@ -124,4 +142,9 @@ pub async fn done(call: &Call, plans: Vec<Moved>) -> Result<Value, RpcError> {
 /// File work off the async workers, a refusal as the protocol says it.
 pub async fn blocking<T: Send + 'static>(f: impl FnOnce() -> Result<T, Refusal> + Send + 'static) -> Result<T, RpcError> {
     tokio::task::spawn_blocking(f).await.map_err(|e| RpcError::internal(format!("the media library work stopped: {e}")))?.map_err(refused)
+}
+
+/// The same, with a failure carrying what it had done.
+async fn blocking_partial<T: Send + 'static>(f: impl FnOnce() -> Result<(), (Refusal, Vec<T>)> + Send + 'static) -> Result<(), (Refusal, Vec<T>)> {
+    tokio::task::spawn_blocking(f).await.unwrap_or_else(|e| Err((Refusal::invalid("name", format!("the media library work stopped: {e}")), Vec::new())))
 }

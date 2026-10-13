@@ -65,18 +65,26 @@ async fn move_folder(call: Call, params: Value) -> Result<Value, RpcError> {
     let req: MediaFolderMoveRequest = call.params(&params)?;
     let dir = call.app.library.dir().to_path_buf();
     let from = org::rel_path(&req.name, "name").map_err(refused)?;
-    media_refs::check(&call, &[org::plain(&dir, &from)], req.force).await?;
+    let froms = [org::plain(&dir, &from)];
+    media_refs::check(&call, &froms, req.force).await?;
     if call.dry_run {
         return Ok(call.dry_run_answer(true, vec![format!("move the folder {from} and everything in it")]));
     }
+    let released = media_refs::release(&call, &froms).await;
     let root = dir.clone();
     let m = blocking(move || {
         let m = org::move_folder(&root, &req.name, req.into.as_deref(), req.to.as_deref())?;
         org::moved(&root, &m.from, &m.to);
         Ok(m)
     })
-    .await?;
-    followed(&call, vec![m]).await
+    .await;
+    match m {
+        Ok(m) => followed(&call, vec![m], released).await,
+        Err(e) => {
+            media_refs::restore(&call, released).await;
+            Err(e)
+        }
+    }
 }
 
 async fn remove(call: Call, params: Value) -> Result<Value, RpcError> {
@@ -94,10 +102,12 @@ async fn remove(call: Call, params: Value) -> Result<Value, RpcError> {
     };
     let dir = call.app.library.dir().to_path_buf();
     let rel = org::rel_path(&req.name, "name").map_err(refused)?;
-    media_refs::check(&call, &[org::plain(&dir, &rel)], req.force).await?;
+    let froms = [org::plain(&dir, &rel)];
+    media_refs::check(&call, &froms, req.force).await?;
     if call.dry_run {
         return Ok(call.dry_run_answer(true, vec![format!("remove the folder {rel}, keeping everything in it")]));
     }
+    let released = media_refs::release(&call, &froms).await;
     let root = dir.clone();
     let moved = blocking(move || {
         let moved = org::remove_folder(&root, &rel, contents)?;
@@ -106,12 +116,18 @@ async fn remove(call: Call, params: Value) -> Result<Value, RpcError> {
         }
         Ok(moved)
     })
-    .await?;
-    followed(&call, moved).await
+    .await;
+    match moved {
+        Ok(moved) => followed(&call, moved, released).await,
+        Err(e) => {
+            media_refs::restore(&call, released).await;
+            Err(e)
+        }
+    }
 }
 
-async fn followed(call: &Call, moved: Vec<Moved>) -> Result<Value, RpcError> {
-    let updated = media_refs::follow(call, &moved).await;
+async fn followed(call: &Call, moved: Vec<Moved>, released: Vec<godwinmix_core::config::SourceConfig>) -> Result<Value, RpcError> {
+    let updated = media_refs::follow(call, &moved, released).await;
     call.app.mixer.emit(Event::MediaChanged { name: String::new(), conversion: None });
     body(MediaMoved { moved: moved.into_iter().map(|m| MediaMove { from: m.from, to: m.to }).collect(), updated })
 }
