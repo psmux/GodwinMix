@@ -39,7 +39,7 @@ Keys accepted on every method, handled before a method runs.
 | `agent.setup` | `POST /api/v1/agent/setup` | admin | yes | 1 | Set an AI agent tool up to use this mixer: its MCP config gets one entry, godwinmix, that runs this mixer's own executable, and its skills folder gets the GodwinMix skills. Other entries are kept and a changed file is copied aside first. dry_run answers every file it would write. The answer says how to start the tool and a first thing to ask it. |
 | `agent.state` | `GET /api/v1/agent/state` | read |  | 1 | The compact document written for agents: the programme, each source's state and a motion score saying how much its picture is changing. |
 | `agent.tools` | `POST /api/v1/agent/tools` | admin |  | 1 | The AI agent tools this mixer can set up, the ones installed on its machine first, each with what was found: a command on PATH or a config folder. |
-| `channel.add` | `POST /api/v1/channels` | admin |  | 1 | Make a channel and its first key, which is in this answer. channel.key.reveal reads it again later. |
+| `channel.add` | `POST /api/v1/channels` | admin |  | 1 | Make a channel and its first key, which is in this answer. channel.key.reveal reads it again later. `feed` says what gives it its picture: {"kind": "programme"} for this mixer's programme, {"kind": "pull", "url": ...} for a stream it pulls, or an encoder publishing to it when left out. |
 | `channel.certificate.generate` | `POST /api/v1/channels/certificate/generate` | admin |  | 1 | Make a self signed certificate for RTMPS, for this machine's addresses unless names are given. Encoders must be told to accept it; one from a certificate authority needs no such step. |
 | `channel.certificate.set` | `POST /api/v1/channels/certificate/set` | admin |  | 1 | Give RTMPS a certificate: the PEM of the certificate (and its chain) and of its private key, as a certificate authority issued them. Checked before it is kept; the key is sealed and never read back. |
 | `channel.destination.add` | `POST /api/v1/channels/{id}/destination/add` | admin |  | 1 | Send a channel's stream on to YouTube, Facebook, Twitch, an RTMP server or an SRT receiver as it arrives. Nothing is decoded or encoded. The key is write only. |
@@ -50,9 +50,9 @@ Keys accepted on every method, handled before a method runs.
 | `channel.key.add` | `POST /api/v1/channels/{id}/key/add` | admin |  | 1 | Make another key for a channel, to give to one more person or encoder. The key is in this answer, and channel.key.reveal reads it again later. |
 | `channel.key.remove` | `POST /api/v1/channels/{id}/key/remove` | admin | yes | 1 | Take one key back. A publisher on air with it is cut off and the next one is turned away; the other keys are untouched. |
 | `channel.key.reveal` | `POST /api/v1/channels/{id}/key/reveal` | admin |  | 1 | Read one key of a channel back, to give it to an encoder again. Admin only; a list shows only the last four characters. Each read is logged with who asked, never with the key. |
-| `channel.list` | `GET /api/v1/channels` | read |  | 1 | Every channel with its keys (as hints), the address to publish to over each protocol it has on, and what is live on it; and which ingest ports are open and for which channels. |
+| `channel.list` | `GET /api/v1/channels` | read |  | 1 | Every channel with its keys (as hints), what feeds it (this mixer's programme, an encoder, or an address it pulls) and how that is going, the address to publish to over each protocol it has on, and what is live on it; and which ingest ports are open and for which channels. |
 | `channel.remove` | `DELETE /api/v1/channels/{id}` | admin | yes | 1 | Remove a channel and forget its keys. Sources it made that no scene holds go with it. |
-| `channel.set` | `POST /api/v1/channels/{id}/set` | admin |  | 1 | Rename a channel, switch it on or off, or change its application name, whether its streams become sources, how its key is given, which protocols it takes (rtmp, srt, whip) or RTMPS and its port. A port opens when the first channel needs it and closes when the last one stops. Only what is named moves. |
+| `channel.set` | `POST /api/v1/channels/{id}/set` | admin |  | 1 | Rename a channel, switch it on or off, or change its application name, whether its streams become sources, how its key is given, which protocols it takes (rtmp, srt, whip) or RTMPS and its port, or what feeds it (`feed`: programme, encoder, or pull with a url that is never read back). A port opens when the first channel needs it and closes when the last one stops. Only what is named moves. |
 | `channel.thumbnail` | `POST /api/v1/channels/{id}/thumbnail` | read |  | 1 | A live channel stream's picture as a small JPEG in base64, {channel, stream, jpeg, width, height, at_ms}, or {pending: true, retry_after_ms} while the first keyframe is on its way. Keyframes only, about one a second, for ten seconds after an ask; nothing is decoded between asks. GET /api/v1/channels/{id}/streams/{stream}/thumbnail.jpg serves the JPEG itself. |
 | `codec.list` | `GET /api/v1/codecs` | read |  | 1 | Every codec and element in the catalogue, which of them this machine actually has, and what it would pick. |
 | `config.get` | `GET /api/v1/config` | admin |  | 1 | The mixer's settings: each key's value in the config file, its default, when a change to it takes effect, and which keys are waiting for a restart. Secrets say only whether one is set. |
@@ -351,7 +351,7 @@ The AI agent tools this mixer can set up, the ones installed on its machine firs
 
 #### `channel.add`
 
-Make a channel and its first key, which is in this answer. channel.key.reveal reads it again later.
+Make a channel and its first key, which is in this answer. channel.key.reveal reads it again later. `feed` says what gives it its picture: {"kind": "programme"} for this mixer's programme, {"kind": "pull", "url": ...} for a stream it pulls, or an encoder publishing to it when left out.
 
 MCP tool `add_channel` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint false.
 
@@ -526,7 +526,7 @@ Read one key of a channel back, to give it to an encoder again. Admin only; a li
 
 #### `channel.list`
 
-Every channel with its keys (as hints), the address to publish to over each protocol it has on, and what is live on it; and which ingest ports are open and for which channels.
+Every channel with its keys (as hints), what feeds it (this mixer's programme, an encoder, or an address it pulls) and how that is going, the address to publish to over each protocol it has on, and what is live on it; and which ingest ports are open and for which channels.
 
 MCP tool `list_channels` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
 
@@ -562,7 +562,7 @@ MCP tool `remove_channel` in the `search` profile: readOnlyHint false, destructi
 
 #### `channel.set`
 
-Rename a channel, switch it on or off, or change its application name, whether its streams become sources, how its key is given, which protocols it takes (rtmp, srt, whip) or RTMPS and its port. A port opens when the first channel needs it and closes when the last one stops. Only what is named moves.
+Rename a channel, switch it on or off, or change its application name, whether its streams become sources, how its key is given, which protocols it takes (rtmp, srt, whip) or RTMPS and its port, or what feeds it (`feed`: programme, encoder, or pull with a url that is never read back). A port opens when the first channel needs it and closes when the last one stops. Only what is named moves.
 
 MCP tool `set_channel` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
 

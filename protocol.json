@@ -1763,6 +1763,14 @@
           "description": "Off turns every publisher away with a sentence saying so.",
           "type": "boolean"
         },
+        "feed": {
+          "$ref": "#/$defs/ChannelFeed",
+          "default": {
+            "kind": "encoder",
+            "state": "waiting"
+          },
+          "description": "What gives the channel its picture, and how that is going. A channel\nmade before feeds existed is fed by an encoder."
+        },
         "id": {
           "description": "A slug, and never changes once the channel exists.",
           "type": "string"
@@ -1839,6 +1847,17 @@
             "null"
           ]
         },
+        "feed": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FeedRequest"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "What feeds it. An encoder when left out."
+        },
         "key_mode": {
           "anyOf": [
             {
@@ -1888,6 +1907,59 @@
       "required": [
         "channel",
         "key"
+      ],
+      "type": "object"
+    },
+    "ChannelFeed": {
+      "description": "A channel's feed as a list shows it.",
+      "properties": {
+        "error": {
+          "description": "What went wrong last, in words, while it is not live.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kind": {
+          "$ref": "#/$defs/FeedKind"
+        },
+        "output": {
+          "description": "The output in that show that publishes the programme here, for\n`programme`: `to-channel-<channel id>`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "retry_in_ms": {
+          "description": "When a pull that dropped is tried next, in milliseconds from now.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "show": {
+          "description": "The show whose programme feeds it, for `programme`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "state": {
+          "$ref": "#/$defs/FeedState"
+        },
+        "uri_host": {
+          "description": "Scheme, host and port of the pull address, for `pull`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "state"
       ],
       "type": "object"
     },
@@ -2103,6 +2175,17 @@
             "null"
           ]
         },
+        "feed": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FeedRequest"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "What feeds it: this mixer's programme, an encoder, or a pull."
+        },
         "id": {
           "type": "string"
         },
@@ -2184,7 +2267,7 @@
           "type": "string"
         },
         "protocol": {
-          "description": "How it arrived: `rtmp`, `rtmps`, `srt` or `whip`.",
+          "description": "How it arrived: `rtmp`, `rtmps`, `srt`, `whip`, or `pull` for a\nstream the channel pulled itself.",
           "type": [
             "string",
             "null"
@@ -3766,6 +3849,15 @@
       ],
       "type": "object"
     },
+    "FeedKind": {
+      "description": "Which of the three a channel has.",
+      "enum": [
+        "programme",
+        "encoder",
+        "pull"
+      ],
+      "type": "string"
+    },
     "FeedList": {
       "description": "`feed.list`.",
       "properties": {
@@ -3787,6 +3879,60 @@
         "bindings"
       ],
       "type": "object"
+    },
+    "FeedRequest": {
+      "description": "The three ways a channel is fed, as `channel.add` and `channel.set`\ntake them: `{\"kind\": \"programme\"}`, `{\"kind\": \"encoder\"}` or\n`{\"kind\": \"pull\", \"url\": \"rtmp://...\"}`.",
+      "oneOf": [
+        {
+          "description": "This mixer's programme. Under a station, `show` names whose; the\nfirst show when it is left out.",
+          "properties": {
+            "kind": {
+              "const": "programme",
+              "type": "string"
+            },
+            "show": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "OBS, a phone or a camera publishes to the channel's address with one\nof its keys. What every channel did before feeds existed.",
+          "properties": {
+            "kind": {
+              "const": "encoder",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The channel pulls this stream and takes it again by itself whenever\nit drops: `rtmp://`, `rtmps://`, `srt://`, `rtsp://`, or an\n`http(s)://` HLS playlist. Never read back.",
+          "properties": {
+            "kind": {
+              "const": "pull",
+              "type": "string"
+            },
+            "url": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "url"
+          ],
+          "type": "object"
+        }
+      ]
     },
     "FeedSetRequest": {
       "additionalProperties": false,
@@ -3842,6 +3988,36 @@
       "type": "object"
     },
     "FeedState": {
+      "description": "How the feed is doing.",
+      "oneOf": [
+        {
+          "const": "live",
+          "description": "A picture is arriving.",
+          "type": "string"
+        },
+        {
+          "const": "waiting",
+          "description": "Nothing is arriving yet: no encoder has published, or the programme\nhas not reached the channel yet.",
+          "type": "string"
+        },
+        {
+          "const": "connecting",
+          "description": "Opening the pull address, or waiting for its first frame.",
+          "type": "string"
+        },
+        {
+          "const": "reconnecting",
+          "description": "The pull dropped or failed and is tried again by itself; `error`\nsays why and `retry_in_ms` when.",
+          "type": "string"
+        },
+        {
+          "const": "off",
+          "description": "The channel is switched off.",
+          "type": "string"
+        }
+      ]
+    },
+    "FeedState2": {
       "description": "Where a feed is.",
       "oneOf": [
         {
@@ -3950,7 +4126,7 @@
           "type": "boolean"
         },
         "state": {
-          "$ref": "#/$defs/FeedState"
+          "$ref": "#/$defs/FeedState2"
         },
         "timeout_s": {
           "description": "Seconds one fetch may take before it counts as failed. 10 when absent.",
@@ -15752,7 +15928,7 @@
       },
       "scope": "admin",
       "since": "1",
-      "summary": "Make a channel and its first key, which is in this answer. channel.key.reveal reads it again later."
+      "summary": "Make a channel and its first key, which is in this answer. channel.key.reveal reads it again later. `feed` says what gives it its picture: {\"kind\": \"programme\"} for this mixer's programme, {\"kind\": \"pull\", \"url\": ...} for a stream it pulls, or an encoder publishing to it when left out."
     },
     {
       "destructive": false,
@@ -15998,7 +16174,7 @@
       },
       "scope": "read",
       "since": "1",
-      "summary": "Every channel with its keys (as hints), the address to publish to over each protocol it has on, and what is live on it; and which ingest ports are open and for which channels."
+      "summary": "Every channel with its keys (as hints), what feeds it (this mixer's programme, an encoder, or an address it pulls) and how that is going, the address to publish to over each protocol it has on, and what is live on it; and which ingest ports are open and for which channels."
     },
     {
       "destructive": true,
@@ -16050,7 +16226,7 @@
       },
       "scope": "admin",
       "since": "1",
-      "summary": "Rename a channel, switch it on or off, or change its application name, whether its streams become sources, how its key is given, which protocols it takes (rtmp, srt, whip) or RTMPS and its port. A port opens when the first channel needs it and closes when the last one stops. Only what is named moves."
+      "summary": "Rename a channel, switch it on or off, or change its application name, whether its streams become sources, how its key is given, which protocols it takes (rtmp, srt, whip) or RTMPS and its port, or what feeds it (`feed`: programme, encoder, or pull with a url that is never read back). A port opens when the first channel needs it and closes when the last one stops. Only what is named moves."
     },
     {
       "destructive": false,
