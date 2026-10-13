@@ -78,6 +78,16 @@ page draws a card from them; `gmx plugin add` reads none of them.
 | `media` | array of object | Every picture and clip, in order, each `{"url": "...", "type": "image" \| "animation" \| "video"}`. The detail view's carousel. When it is missing the carousel is made from `screenshots`, a `.gif` read as an animation. |
 | `preview` | string | The first animation or video in `media`, which a card plays while a mouse is over it. |
 | `featured` | boolean | Put it in the Featured row at the top of the Plugins page. |
+| `mixer` | string | The oldest GodwinMix that runs it, `0.3.10`. An older mixer shows the card as `Needs a newer GodwinMix` and offers no Install. |
+
+### index.json and index2.json
+
+A marketplace repository may carry `index2.json` beside `index.json`. A mixer
+from 0.3.10 on tries `godwinmix-marketplace.json`, then `index2.json`, then
+`index.json`, and reads the first it finds. A mixer from before 0.3.10 never
+asks for `index2.json`. The community index uses that to keep plugins away
+from mixers that cannot run them: `index2.json` has every listing, and
+`index.json` leaves out every listing that names `mixer`.
 | `stars` | integer | The repository's GitHub stars. |
 | `downloads` | integer | Every download of every release asset, added together. |
 | `updated` | string | When it last changed, RFC 3339. |

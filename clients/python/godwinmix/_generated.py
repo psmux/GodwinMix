@@ -1446,6 +1446,8 @@ class GalleryEntry(TypedDict, total=False):
     # It ships with GodwinMix and installs with no download.
     description: str
     downloads: Optional[int]
+    featured: bool
+    # The index put it in the Featured row.
     fit: str
     # The card's word for that: "Runs here", "Not for Windows".
     fit_detail: str
@@ -1460,7 +1462,11 @@ class GalleryEntry(TypedDict, total=False):
     kinds: List[str]
     license: str
     marketplace: str
+    media: List[GalleryMedia]
+    # Every picture and clip for the detail view's carousel, in order, each with its type. Made from `screenshots` when the index has no `media`.
     name: str
+    preview: str
+    # The first animation or video, which a card plays on hover. Empty when there is none.
     repository: str
     runs_here: bool
     # Whether it runs on this machine at this mixer's protocol level.
@@ -1585,6 +1591,13 @@ class GalleryMarketplace(TypedDict, total=False):
     source: str
     # What was added: `owner/repo`, a URL or a path.
     title: str
+
+class GalleryMedia(TypedDict, total=False):
+    """One picture or clip in a plugin's gallery."""
+
+    type: str
+    # `image`, `animation` (a GIF or an animated WebP) or `video`.
+    url: str
 
 class GalleryPlaceRequest(TypedDict, total=False):
     """`gallery.place`: add an item to a scene in its zone. Hidden unless `visible`; `gallery.show` takes it on air."""
@@ -2688,6 +2701,8 @@ class PluginDescription(TypedDict, total=False):
     name: str
     problem: Optional[str]
     # Why it is not loaded, when it is not.
+    provide_kinds: Dict[str, Any]
+    # The kind of each of those, by id: `{"hls/player": "source"}`, so a picker offers a source whose id is not `source`.
     provides: List[str]
     # The type ids it contributes: what goes in `type` on a source, an output or a filter.
     root: str
@@ -2727,6 +2742,8 @@ class PluginRecord(TypedDict, total=False):
     name: str
     problem: Optional[str]
     # Why it is not loaded, when it is not.
+    provide_kinds: Dict[str, Any]
+    # The kind of each of those, by id: `{"hls/player": "source"}`, so a picker offers a source whose id is not `source`.
     provides: List[str]
     # The type ids it contributes: what goes in `type` on a source, an output or a filter.
     root: str
@@ -3726,6 +3743,8 @@ class TaskView(TypedDict, total=False):
     # 0 to 1 where the work can say, absent where it cannot.
     result: Any
     # The body the method would have answered with, once it is done.
+    stage: Optional[str]
+    # What it is doing now, one word, where the work says: `downloading`, `installing` and `starting` for `plugin.add`.
     state: TaskState
     task_id: str
 
