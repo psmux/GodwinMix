@@ -76,8 +76,7 @@ export function pickFolder(client, opts = {}) {
       use.disabled = true;
       make.disabled = true;
       note.textContent = "Drives and places on the mixer. Open one, or type a folder above.";
-      const label = (r) => (r.path.startsWith(r.label) ? r.label : `${r.label} (${r.path})`);
-      folders(known.map((r) => ({ name: label(r), path: r.path })), "The mixer named no places.");
+      folders(known.map((r) => ({ name: r.label, path: r.path })), "The mixer named no places.");
     }
 
     make.onclick = async () => {
@@ -95,6 +94,11 @@ export function pickFolder(client, opts = {}) {
     on(name, "keydown", (e) => { if (e.key === "Enter") make.click(); });
     go.onclick = () => where.value.trim() && load(where.value.trim());
     on(where, "keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); go.click(); } });
+    // Like an address bar: one click selects it all, so a paste replaces it.
+    // The mouseup after that click would put the caret back, so it is eaten.
+    let focusing = false;
+    on(where, "focus", () => { focusing = true; where.select(); });
+    on(where, "mouseup", (e) => { if (focusing) e.preventDefault(); focusing = false; });
     up.onclick = () => current && (current.parent ? load(current.parent) : places());
     use.onclick = () => { chosen = current.path; m.close(); };
 
