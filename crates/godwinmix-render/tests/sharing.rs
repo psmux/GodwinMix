@@ -11,7 +11,7 @@ fn a_matching_source_is_copied_with_no_decode_and_no_encode() {
     let want = VideoWant {
         width: Some(1920),
         height: Some(1080),
-        bitrate_kbps: Some(5500),
+        bitrate_kbps: Some(6000),
         ..VideoWant::default()
     };
     let reqs = on("cam", vec![with_video(request("yt", Container::Flv), want)]);

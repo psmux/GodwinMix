@@ -12,6 +12,19 @@ use crate::sizing::{default_kbps, size};
 /// Fraction either way a bitrate may differ and still be copied.
 pub const DEFAULT_TOLERANCE: f32 = 0.25;
 
+/// How far over the asked bitrate a stream may run and still be copied: the
+/// wobble of a measured rate, no more. A platform caps what it takes, and a
+/// tester who set 128 kbit/s saw 160 to 200 arrive when the tolerance went
+/// both ways, so above the ask it no longer does.
+pub const OVER_TOLERANCE: f32 = 0.05;
+
+/// Whether a stream at `src` kbit/s is close enough to `want` to copy:
+/// up to `tolerance` under it, and at most `OVER_TOLERANCE` over.
+pub fn bitrate_fits(src: u32, want: u32, tolerance: f32) -> bool {
+    let (src, want) = (f64::from(src), f64::from(want));
+    src <= want * (1.0 + f64::from(OVER_TOLERANCE.min(tolerance))) && src >= want * (1.0 - f64::from(tolerance))
+}
+
 #[derive(Debug, Clone)]
 pub enum VideoDecision {
     None,
@@ -155,8 +168,7 @@ fn mismatch(
         ));
     }
     if let (Some(want), true) = (kbps, src.bitrate_kbps > 0) {
-        let off = (f64::from(src.bitrate_kbps) - f64::from(want)).abs();
-        if off > f64::from(want) * f64::from(tolerance) {
+        if !bitrate_fits(src.bitrate_kbps, want, tolerance) {
             return Some(format!(
                 "the source runs at {} kbit/s and this output wants {want}",
                 src.bitrate_kbps
@@ -170,4 +182,19 @@ fn mismatch(
         ));
     }
     None
+}
+
+#[cfg(test)]
+mod over_tests {
+    use super::*;
+
+    #[test]
+    fn a_stream_over_the_ask_is_not_copied_and_one_a_little_under_is() {
+        assert!(!bitrate_fits(160, 128, DEFAULT_TOLERANCE), "160 for an ask of 128 is the reported bug");
+        assert!(!bitrate_fits(3500, 3000, DEFAULT_TOLERANCE));
+        assert!(bitrate_fits(3100, 3000, DEFAULT_TOLERANCE), "a measured wobble is still a copy");
+        assert!(bitrate_fits(2400, 3000, DEFAULT_TOLERANCE));
+        assert!(!bitrate_fits(2000, 3000, DEFAULT_TOLERANCE));
+        assert!(bitrate_fits(3000, 3000, 0.0));
+    }
 }

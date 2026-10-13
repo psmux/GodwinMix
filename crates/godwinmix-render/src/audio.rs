@@ -5,7 +5,7 @@ use godwinmix_protocol::rendition::{AudioCodec, AudioShape, RenditionRequest, St
 
 use crate::container::{audio_codecs, audio_name, audio_slug, carries_audio, container_slug};
 use crate::error::PlanError;
-use crate::resolve::{missing, DEFAULT_TOLERANCE};
+use crate::resolve::{bitrate_fits, missing, DEFAULT_TOLERANCE};
 
 #[derive(Debug, Clone)]
 pub enum AudioDecision {
@@ -119,8 +119,7 @@ fn mismatch(
         ));
     }
     let want = kbps?;
-    let off = (f64::from(src.bitrate_kbps) - f64::from(want)).abs();
-    if src.bitrate_kbps > 0 && off > f64::from(want) * f64::from(DEFAULT_TOLERANCE) {
+    if src.bitrate_kbps > 0 && !bitrate_fits(src.bitrate_kbps, want, DEFAULT_TOLERANCE) {
         return Some(format!(
             "the source's sound is {} kbit/s and this output wants {want}",
             src.bitrate_kbps
