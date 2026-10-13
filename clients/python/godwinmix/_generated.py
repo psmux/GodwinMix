@@ -820,7 +820,7 @@ class Destination(TypedDict, total=False):
     id: str
     # A slug, unique within its channel: `youtube`, `youtube-2`.
     kbps: int
-    # What is going out, over the last second.
+    # What is going out, in kbit/s, sound and container included. A channel's destination averages it over the last four seconds, two keyframe intervals at 2 s; others over the last second.
     label: str
     plan: Union[DestinationPlan, None]
     # What the plan gave it, while its stream is live.

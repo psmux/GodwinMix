@@ -2983,7 +2983,7 @@
             "type": "string"
           },
           "kbps": {
-            "description": "What is going out, over the last second.",
+            "description": "What is going out, in kbit/s, sound and container included. A\nchannel's destination averages it over the last four seconds, two\nkeyframe intervals at 2 s; others over the last second.",
             "format": "uint32",
             "minimum": 0,
             "type": "integer"
