@@ -15,7 +15,7 @@ use crate::media_tag::{MediaTag, TagKind};
 const WINDOW: Duration = Duration::from_secs(1);
 
 /// Windows after which the rates count as measured even with a track silent.
-const SETTLE_WINDOWS: u32 = 3;
+const SETTLE_WINDOWS: u32 = 4;
 
 /// One publisher's session, measured.
 pub struct Meter {
@@ -132,18 +132,20 @@ impl Meter {
         news
     }
 
-    /// After a window: the rates count as measured once every track the
-    /// stream has carried bytes in one, or after `SETTLE_WINDOWS` whatever
-    /// they carried, so a track that never sends cannot hold a plan back for
-    /// ever. True the once it happens: the first rates are news of their
-    /// own, for a stream with no video whose frame rate never moves.
+    /// After a window: the rates count as measured from the second window
+    /// on in which every track the stream has carried bytes, or after
+    /// `SETTLE_WINDOWS` whatever they carried, so a track that never sends
+    /// cannot hold a plan back for ever. The first window is a warm up: the
+    /// programme's 160 kbit/s sound, starting part way into it, read 120.
+    /// True the once it happens: the first rates are news of their own, for
+    /// a stream with no video whose frame rate never moves.
     fn settle(&mut self) -> bool {
         if self.measured {
             return false;
         }
         self.windows += 1;
         let whole = (self.video.is_none() || self.video_kbps > 0) && (self.audio.is_none() || self.audio_kbps > 0);
-        self.measured = whole || self.windows >= SETTLE_WINDOWS;
+        self.measured = (whole && self.windows >= 2) || self.windows >= SETTLE_WINDOWS;
         self.measured
     }
 

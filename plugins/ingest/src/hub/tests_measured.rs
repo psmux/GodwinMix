@@ -34,6 +34,9 @@ fn a_stream_says_once_its_rates_are_measured_and_the_first_rates_are_news() {
     assert_eq!(first["measured"], false, "{first}");
     assert_eq!(first["audio"]["kbps"], 0, "{first}");
     second();
+    assert!(!p.push(audio(false, 400)), "the first window is a warm up");
+    assert_eq!(hub.stream("church", "radio").unwrap()["measured"], false);
+    second();
     // A stream with no video never has a frame rate to move, so the first
     // rates have to be news by themselves for the core to hear of them.
     assert!(p.push(audio(false, 400)), "the first measured rates are worth an event");
@@ -44,13 +47,13 @@ fn a_stream_says_once_its_rates_are_measured_and_the_first_rates_are_news() {
 }
 
 #[test]
-fn a_track_that_never_sends_holds_the_rates_back_three_seconds_and_no_longer() {
+fn a_track_that_never_sends_holds_the_rates_back_four_seconds_and_no_longer() {
     let hub = Hub::new();
     let p = hub.publish("church", "silent", "x", None).unwrap();
     p.push(tag(TagKind::Video, true, 30));
     p.push(audio(true, 4));
     p.push(tag(TagKind::Video, false, 20_000));
-    for _ in 0..2 {
+    for _ in 0..3 {
         second();
         p.push(tag(TagKind::Video, false, 20_000));
         assert_eq!(hub.stream("church", "silent").unwrap()["measured"], false, "sound announced and none sent yet");

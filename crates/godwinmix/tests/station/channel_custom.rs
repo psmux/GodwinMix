@@ -62,12 +62,13 @@ async fn a_custom_720p_destination_on_a_programme_channel_sends_720p_at_the_aske
     }
     let (dir, port) = folder_with_relay("feed-custom");
     let file = dir.join("dest.flv");
+    let plugin = staged_ingest(&dir);
+    let (_st, mut ws) = ready(&dir, port).await;
+    // Started after the plugin is built, which can outlast ffmpeg's wait.
     let rtmp = free_port();
     let Some(_server) = destination(rtmp, &file) else {
         return eprintln!("ffmpeg is not installed; the custom format test needs it as an RTMP server");
     };
-    let plugin = staged_ingest(&dir);
-    let (_st, mut ws) = ready(&dir, port).await;
     let asked = call(&mut ws, 1, "plugin.add", json!({"source": plugin.to_string_lossy()})).await;
     assert!(asked.get("error").is_none(), "{asked}");
     // A moving picture, so the encoder has something to spend its bits on.
