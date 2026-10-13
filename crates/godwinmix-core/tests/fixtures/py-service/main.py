@@ -19,8 +19,28 @@ def send(obj):
     sys.stderr.flush()
 
 
+def core_info():
+    """Call the core back the way a service does: GMX_RPC's host, GMX_TOKEN."""
+    import urllib.error
+    import urllib.request
+    rpc = os.environ.get("GMX_RPC", "")
+    if not rpc:
+        return {"error": "GMX_RPC is empty"}
+    url = "http://" + rpc.split("://", 1)[1].rsplit("/rpc", 1)[0] + "/api/v1/core/info"
+    req = urllib.request.Request(url, headers={"Authorization": "Bearer " + os.environ.get("GMX_TOKEN", "")})
+    try:
+        with urllib.request.urlopen(req, timeout=10) as r:
+            return {"status": r.status, "url": url}
+    except urllib.error.HTTPError as e:
+        return {"status": e.code, "url": url, "answer": e.read().decode("utf-8", "replace")[:300]}
+    except Exception as e:
+        return {"error": str(e), "url": url}
+
+
 def tool(rid, params):
     name, args = params.get("name"), params.get("arguments") or {}
+    if name == "core":
+        args = core_info()
     if name == "raw":
         sys.stderr.flush()
         sys.stderr.buffer.write(b'{"note":"Lord\x92s"}\n')

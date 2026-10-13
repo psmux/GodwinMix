@@ -29,6 +29,11 @@ description = "Answer with a sentence that is not ASCII, the plugin's environmen
 input = "echo.json"
 
 [[tools]]
+name = "core"
+description = "Call the core's /api/v1/core/info at the address in GMX_RPC with GMX_TOKEN, and answer with the status. Example: tool.call {name: \"pyservice/core\", arguments: {}}."
+input = "echo.json"
+
+[[tools]]
 name = "raw"
 description = "Write one line in the Windows code page, which is not UTF-8, then answer. Example: tool.call {name: \"pyservice/raw\", arguments: {}}."
 input = "echo.json"
