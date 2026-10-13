@@ -4,7 +4,7 @@
 //! did not, hls.js loaded nothing for a new viewer.
 
 use super::direct_live::staged_ingest;
-use super::hls_channel::{encoder, until};
+use super::hls_channel::{encoder_with, until};
 use super::hls_direct::{discover, folder_with_relay, text};
 use super::support::*;
 use gstreamer::prelude::*;
@@ -113,34 +113,37 @@ async fn a_watch_link_marks_a_feed_restart_the_same_on_picture_and_sound() {
     assert!(asked.get("error").is_none(), "{asked}");
     tokio::time::sleep(Duration::from_secs(3)).await;
     let url = format!("rtmp://127.0.0.1:{rtmp}/sunday/main?psk={secret}");
-    let first = encoder(&url);
+    // A keyframe every two seconds against one second segments, as an
+    // encoder left at its defaults sends: the picture is cut every two.
+    let first = encoder_with(&url, 60);
     let link = until(&mut ws, "watch-link", |d| d["state"] == "live", Duration::from_secs(90)).await;
     let master = link["playback"]["master_url_path"].as_str().unwrap().to_string();
-    tokio::time::sleep(Duration::from_secs(4)).await;
+    tokio::time::sleep(Duration::from_secs(6)).await;
     let (_, v, _, a) = both(&st, &master).await;
     let before = agree(&v, &a);
 
     first.set_state(gstreamer::State::Null).unwrap();
     tokio::time::sleep(Duration::from_secs(4)).await;
-    let second = encoder(&url);
-    // Long enough for the break to sit in the middle of the window.
+    let second = encoder_with(&url, 60);
+    // Until the break is inside both windows and the two windows start at
+    // the same segment, which they do once the sound's newest segment is
+    // as whole as the picture's.
     let limit = Instant::now() + Duration::from_secs(60);
+    let after = |p: &str| segments(p).into_iter().filter(|(_, (s, _, _))| s.disc > before).map(|(m, _)| m).collect::<Vec<_>>();
     let (vdir, v, adir, a) = loop {
         let (vd, v, ad, a) = both(&st, &master).await;
-        let after = |p: &str| segments(p).values().filter(|(s, _, _)| s.disc > before).count();
-        if after(&v) >= 3 && after(&a) >= 3 {
+        let same_window = segments(&v).keys().next() == segments(&a).keys().next();
+        if after(&v).len() >= 3 && after(&a).len() >= 3 && same_window && after(&v).len() < segments(&v).len() {
             break (vd, v, ad, a);
         }
-        assert!(Instant::now() < limit, "no segments after the restart:\n{v}\n{a}");
-        tokio::time::sleep(Duration::from_millis(500)).await;
+        assert!(Instant::now() < limit, "the two playlists never listed the same window across the restart:\n{v}\n{a}");
+        tokio::time::sleep(Duration::from_millis(250)).await;
     };
     assert_eq!(agree(&v, &a), before + 1, "one restart is one discontinuity:\n{v}\n{a}");
+    assert_eq!(after(&v).first(), after(&a).first(), "the break falls before the same segment:\n{v}\n{a}");
     let seq = |p: &str| p.lines().find(|l| l.starts_with("#EXT-X-DISCONTINUITY-SEQUENCE")).map(str::to_string);
     let count = |p: &str| p.matches("#EXT-X-DISCONTINUITY\n").count();
-    let (sv, sa) = (segments(&v), segments(&a));
-    if sv.keys().next() == sa.keys().next() {
-        assert_eq!((seq(&v), count(&v)), (seq(&a), count(&a)), "the same window says the same:\n{v}\n{a}");
-    }
+    assert_eq!((seq(&v), count(&v)), (seq(&a), count(&a)), "the same window says the same:\n{v}\n{a}");
     // A player arriving now plays both from the newest segments.
     let seen = newest(&st, &vdir, &v, &dir.join("after-v.mp4")).await;
     assert!(seen.contains("H.264") && !seen.contains("rror"), "{seen}");

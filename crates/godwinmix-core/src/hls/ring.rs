@@ -27,10 +27,16 @@ pub struct Part {
 pub struct Segment {
     /// Media sequence number.
     pub msn: u64,
+    /// Running time of its first sample, for a follower to cut beside it.
+    pub start_ns: u64,
+    /// Discontinuity sequence number: how many times the feed behind the
+    /// stream started again before this segment. The same in every track.
+    pub disc: u32,
     /// Wall clock at the first sample, milliseconds since 1970.
     pub pdt_ms: i64,
-    /// Which init segment decodes it. Changes only when the muxer was
-    /// rebuilt, and then the playlist says so with a discontinuity.
+    /// Which init segment decodes it. A new one is a new `EXT-X-MAP`; only
+    /// `disc` makes a discontinuity, so a muxer that writes its header again
+    /// cannot put one track a discontinuity ahead of the others.
     pub init: u32,
     /// Its first `tfdt`, in the track's timescale, for a DASH timeline.
     pub decode_time: Option<u64>,
@@ -58,11 +64,15 @@ pub struct Ring {
     segments: VecDeque<Segment>,
     version: u64,
     longest_ns: u64,
+    /// The discontinuity the next segment is in.
+    disc: u32,
+    /// The number the next segment gets, when a break or a leader said.
+    resume: Option<u64>,
 }
 
 impl Ring {
     pub fn new(capacity: usize) -> Ring {
-        Ring { capacity: capacity.max(3), inits: Vec::new(), segments: VecDeque::new(), version: 0, longest_ns: 0 }
+        Ring { capacity: capacity.max(3), inits: Vec::new(), segments: VecDeque::new(), version: 0, longest_ns: 0, disc: 0, resume: None }
     }
 
     /// Bumped by every change, so a rendered playlist can be reused until
@@ -98,14 +108,9 @@ impl Ring {
     pub fn begin(&mut self, start_ns: u64, segment_ns: u64, pdt_ms: i64) -> Option<u64> {
         let init = self.current_init()?;
         self.close();
-        // A playlist numbers its segments one apart, so only the first is
-        // placed by time; after that a late keyframe makes a long segment,
-        // never a gap in the numbers.
-        let msn = match self.segments.back() {
-            Some(last) => last.msn + 1,
-            None => (start_ns + segment_ns / 2) / segment_ns.max(1),
-        };
-        self.segments.push_back(Segment { msn, pdt_ms, init, decode_time: None, parts: Vec::new(), complete: false });
+        let msn = self.next_msn(start_ns, segment_ns);
+        let disc = self.disc;
+        self.segments.push_back(Segment { msn, start_ns, disc, pdt_ms, init, decode_time: None, parts: Vec::new(), complete: false });
         while self.segments.len() > self.capacity {
             self.segments.pop_front();
         }
@@ -175,6 +180,8 @@ impl Ring {
             .iter()
             .map(|s| SegmentView {
                 msn: s.msn,
+                start_ns: s.start_ns,
+                disc: s.disc,
                 pdt_ms: s.pdt_ms,
                 init: s.init,
                 decode_time: s.decode_time,
@@ -201,6 +208,10 @@ impl Ring {
         }
     }
 }
+
+#[path = "ring_align.rs"]
+mod align;
+pub use align::Place;
 
 #[cfg(test)]
 #[path = "ring_tests.rs"]

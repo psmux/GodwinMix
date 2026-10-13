@@ -34,8 +34,9 @@ fn secs(ms: u64) -> String {
 /// The segments a representation lists: whole, stamped, on the newest init.
 fn listed<'a>(view: &'a View, p: &HlsParams) -> Vec<&'a SegmentView> {
     let whole: Vec<&SegmentView> = view.segments.iter().filter(|s| s.complete && s.decode_time.is_some()).collect();
-    let Some(init) = whole.last().map(|s| s.init) else { return Vec::new() };
-    let same: Vec<&SegmentView> = whole.into_iter().filter(|s| s.init == init).collect();
+    // A break starts the timeline again, so only the newest run is listed.
+    let Some((init, disc)) = whole.last().map(|s| (s.init, s.disc)) else { return Vec::new() };
+    let same: Vec<&SegmentView> = whole.into_iter().filter(|s| s.init == init && s.disc == disc).collect();
     same[same.len().saturating_sub(p.listed())..].to_vec()
 }
 

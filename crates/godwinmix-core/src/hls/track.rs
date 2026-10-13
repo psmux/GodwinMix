@@ -173,3 +173,6 @@ impl Track {
         (ns > 0).then(|| (peak, bytes * 8_000_000_000 / ns))
     }
 }
+
+#[path = "track_align.rs"]
+mod align;

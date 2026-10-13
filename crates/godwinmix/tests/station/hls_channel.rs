@@ -14,9 +14,14 @@ use std::time::{Duration, Instant};
 
 /// An encoder publishing 320x180 H.264 and AAC to `url`, as OBS would.
 pub fn encoder(url: &str) -> gstreamer::Pipeline {
+    encoder_with(url, 30)
+}
+
+/// The same, with a keyframe every `key_int` frames of the 30 a second.
+pub fn encoder_with(url: &str, key_int: u32) -> gstreamer::Pipeline {
     gstreamer::init().unwrap();
     let line = format!(
-        "videotestsrc is-live=true ! video/x-raw,width=320,height=180,framerate=30/1 ! x264enc tune=zerolatency key-int-max=30 bitrate=600 \
+        "videotestsrc is-live=true ! video/x-raw,width=320,height=180,framerate=30/1 ! x264enc tune=zerolatency key-int-max={key_int} bitrate=600 \
          ! h264parse ! flvmux streamable=true name=m ! rtmp2sink location=\"{url}\" \
          audiotestsrc is-live=true ! audioconvert ! audioresample ! audio/x-raw,rate=48000,channels=2 ! avenc_aac ! aacparse ! m."
     );

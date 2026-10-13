@@ -71,19 +71,23 @@ pub fn media(view: &View, p: &HlsParams, reports: &[Report]) -> String {
         let _ = writeln!(out, "#EXT-X-PART-INF:PART-TARGET={pt:.3}");
     }
     let _ = writeln!(out, "#EXT-X-MEDIA-SEQUENCE:{}", first.map(|s| s.msn).unwrap_or(0));
-    if let Some(s) = first.filter(|s| s.init > 0) {
-        let _ = writeln!(out, "#EXT-X-DISCONTINUITY-SEQUENCE:{}", s.init);
+    if let Some(s) = first.filter(|s| s.disc > 0) {
+        let _ = writeln!(out, "#EXT-X-DISCONTINUITY-SEQUENCE:{}", s.disc);
     }
     // Parts are listed for the last three target durations, which is what
     // 8216bis asks for and what a player joining at the live edge needs.
     let keep = (3 * target * 1000).div_ceil(u64::from(p.segment_ms)) as usize;
     let parts_from = listed.len().saturating_sub(keep);
-    let mut init = None;
+    // A discontinuity is the stream's break, the same on every track; a new
+    // init segment on its own is only a new map.
+    let (mut init, mut disc) = (None, first.map(|s| s.disc));
     for (i, s) in listed.iter().enumerate() {
+        if disc != Some(s.disc) {
+            out.push_str("#EXT-X-DISCONTINUITY\n");
+            disc = Some(s.disc);
+            init = None;
+        }
         if init != Some(s.init) {
-            if init.is_some() {
-                out.push_str("#EXT-X-DISCONTINUITY\n");
-            }
             let _ = writeln!(out, "#EXT-X-MAP:URI=\"{}\"", init_uri(s.init));
             init = Some(s.init);
         }

@@ -92,10 +92,15 @@ fn plain_media_playlist_lists_only_whole_segments() {
 }
 
 #[test]
-fn a_new_init_is_a_discontinuity() {
+fn a_break_is_a_discontinuity_and_a_new_header_alone_is_a_new_map() {
     let mut r = ring(2, 0);
+    r.mark_break(1, 101);
     r.set_init(Bytes::from_static(b"rebuilt"));
-    r.begin(102 * SEG, SEG, T0 + 4000);
+    r.begin(0, SEG, T0 + 4000);
+    r.push_part(Part { bytes: Bytes::from_static(b"x"), duration_ns: SEG, independent: true });
+    // The muxer writes its header again, changed: the same timeline.
+    r.set_init(Bytes::from_static(b"again"));
+    r.begin(SEG, SEG, T0 + 6000);
     r.push_part(Part { bytes: Bytes::from_static(b"x"), duration_ns: SEG, independent: true });
     r.close();
     let p = HlsParams::default();

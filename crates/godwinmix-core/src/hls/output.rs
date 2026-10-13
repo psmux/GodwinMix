@@ -101,6 +101,8 @@ impl Output for HlsOutput {
                 s
             })
             .clone();
+        // A rebuilt pipeline starts its timestamps again: one break, on every track.
+        stream.restart();
         let pad = |el: &gst::Element| el.static_pad("src").context("the output queue has no src pad");
         attach(ctx.pipeline, &stream, Input { id: "audio", kind: TrackKind::Audio, pad: &pad(audio)?, declared_kbps: 0 })?;
         if ctx.taps.is_empty() {
