@@ -58,7 +58,7 @@ export async function channelRowsTests(test, eq, ok) {
     eq(main.began, NOW - 3723000);
     eq(main.sending, "3 of 4 sending");
     eq(main.rings.map((g) => g.state), ["live", "live", "live", "failed"]);
-    eq([lobby.state, lobby.status, lobby.spec, lobby.began, lobby.sending], ["waiting", "Waiting for an encoder", "", 0, "0 of 1 sending"]);
+    eq([lobby.state, lobby.status, lobby.spec, lobby.began, lobby.sending], ["waiting", "Offline: waiting for an encoder", "", 0, "0 of 1 sending"]);
     eq([spare.state, spare.status, spare.sending], ["off", "Switched off", "No push destinations"]);
   });
 

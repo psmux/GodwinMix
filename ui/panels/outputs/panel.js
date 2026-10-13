@@ -80,6 +80,16 @@ export function stalledAdvice(output) {
   return `Nothing answered${where}. Check the address and that the server is up.`;
 }
 
+/**
+ * An output the Channels page keeps, which sends the programme into one of
+ * this mixer's channels. Removed here, it comes back; the channel's feed is
+ * where it is changed.
+ */
+export function feedsChannel(id) {
+  const channel = String(id || "").match(/^to-channel-(.+)$/);
+  return channel ? `Feeds the channel ${channel[1]} on this mixer. To stop it, pick another feed for the channel on the Channels page.` : "";
+}
+
 /** Which dot a destination gets. A missing key is a fault, not a warning. */
 export function dotClass(output) {
   if (output.state === "live") return "live";
@@ -320,7 +330,7 @@ class OutputsPanel extends HTMLElement {
       write(dot, "className", "dot " + dotClass(next));
       write(dot, "title", next.state || "");
       write(label, "textContent", stateLabel(next));
-      write(host, "textContent", hls ? "Served from this mixer's own port" : next.uri_host || "");
+      write(host, "textContent", hls ? "Served from this mixer's own port" : feedsChannel(next.id) || next.uri_host || "");
       write(numbers, "textContent", `buffer ${Number(next.queue_secs || 0).toFixed(1)}s · ${next.reconnects || 0} reconnects`);
       write(plan, "textContent", this.planText ? this.planText(next.id) : "");
       if (extra.update) extra.update(next);

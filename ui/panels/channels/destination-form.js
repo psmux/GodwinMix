@@ -12,11 +12,12 @@ import { toast, errorToast } from "../../shell/toast.js";
 import { PLATFORMS, platform } from "../../client/destinations.js";
 import { schemeError } from "../outputs/destination.js";
 import { brandMark } from "./brands.js";
-import { tileState, isLive } from "./model.js";
+import { tileState } from "./model.js";
 import { field, keyField, streamChoice } from "./fields.js";
 import { formatStep, channelShape } from "../renditions/format-step.js";
 import { isRefusal, showRefusal } from "../renditions/refusal.js";
-import { waitingWords, sendProgramme } from "./to-programme.js";
+import { waitingWords, waitsForEncoder } from "./to-programme.js";
+import { feedParams, addedWords } from "./feed.js";
 import { LOCAL, addLocal, localLine } from "./local.js";
 
 /** The tile grid, or straight to the form when the platform is known. */
@@ -62,17 +63,17 @@ function addForm(view, channel, p) {
   const key = p.key ? keyField(p.keyOptional ? "Stream key, if it has one" : "Stream key", "Paste the stream key") : null;
   const stream = streamChoice(channel, "*");
   const label = field("Name on the tile", { placeholder: p.title });
-  // On a channel no encoder sends to, the programme is what most people
-  // meant, so that is the button in colour and the channel's is plain.
-  const idle = !isLive(channel);
+  // On a channel meant for an encoder and with none, the programme is what
+  // most people meant, so feeding it from there is the button in colour.
+  const idle = waitsForEncoder(channel);
   const start = el(idle ? "button.btn" : "button.btn.primary", { text: "Start sending" });
   const more = el("details.chn-more-opts", {}, [el("summary", { text: "More options" }), label.node, stream && stream.node]);
   // Copy first, as the strip promises; a platform's own format one press away.
   const format = formatStep(view.client, { platform: p.id, platformTitle: p.title, shape: channelShape(channel), id: () => p.id, copyFirst: true });
   const refused = el("div", { hidden: true });
   // Said before the key is pasted, not after: this is where a person who
-  // wanted the programme on YouTube finds out a channel is something else.
-  const instead = idle ? el("button.btn.primary", { text: "Send the programme instead" }) : null;
+  // wanted the programme on YouTube finds out nothing feeds the channel.
+  const instead = idle ? el("button.btn.primary", { text: "Feed it from the programme and start" }) : null;
   const body = el("div.chn-dform", {}, [
     idle ? el("p.chn-addnote", { role: "note", text: waitingWords(channel, p.title) }) : null,
     el("div.chn-dhead", {}, [brandMark(p.id, 48), el("div", {}, [el("strong", { text: p.title }), el("p.chn-dim", { text: p.where })])]),
@@ -83,29 +84,43 @@ function addForm(view, channel, p) {
     refused,
   ]);
   const m = modal({ title: `Send ${channel.name} to ${p.title}`, body, footer: [el("button.btn", { text: "Cancel", onclick: () => m.close() }), instead, start] });
+  let fed = false;
+  /** The params Start sends, or nothing once it has said what is missing. */
+  function checked() {
+    const asked = addParams(p, channel, { server: server.value(), key: key && key.value(), stream: stream && stream.value(), label: label.value() });
+    if (!asked.error) return asked.params;
+    (asked.field === "key" && key ? key : server).bad();
+    toast({ kind: "warning", text: asked.error });
+    return null;
+  }
+  async function begin(params, button) {
+    button.disabled = true;
+    await format.ready;
+    const rendition = format.value();
+    if (rendition !== undefined) params.rendition = rendition;
+    if (!(await send(params))) button.disabled = false;
+  }
   if (instead) {
-    // The same server and key, under Outputs, and nothing added to the channel.
+    // The channel fed by the programme, then the platform added as Start would.
     instead.onclick = async () => {
+      const params = checked();
+      if (!params) return;
       instead.disabled = true;
-      await format.ready;
-      const sent = await sendProgramme(view.client, p, p.fixed ? p.server : server.value(), key && key.value(), format.value());
-      if (sent) m.close();
-      else instead.disabled = false;
+      try {
+        view.accept(await view.client.call("channel.set", feedParams(channel.id, "programme").params));
+      } catch (e) {
+        errorToast(e, "Feed it from the programme");
+        instead.disabled = false;
+        return;
+      }
+      fed = true;
+      await begin(params, instead);
     };
   }
   on(body, "keydown", (e) => { if (e.key === "Enter" && e.target.tagName === "INPUT") { e.preventDefault(); (instead || start).click(); } });
-  start.onclick = async () => {
-    const asked = addParams(p, channel, { server: server.value(), key: key && key.value(), stream: stream && stream.value(), label: label.value() });
-    if (asked.error) {
-      (asked.field === "key" && key ? key : server).bad();
-      toast({ kind: "warning", text: asked.error });
-      return;
-    }
-    start.disabled = true;
-    await format.ready;
-    const rendition = format.value();
-    if (rendition !== undefined) asked.params.rendition = rendition;
-    if (!(await send(asked.params))) start.disabled = false;
+  start.onclick = () => {
+    const params = checked();
+    if (params) begin(params, start);
   };
   async function send(params) {
     try {
@@ -116,7 +131,7 @@ function addForm(view, channel, p) {
       return false;
     }
     m.close();
-    toast({ text: isLive(channel) ? `${p.title} added. It goes live with ${channel.name}.` : `${p.title} added. It waits for an encoder to send to ${channel.name}; nothing reaches ${p.title} until one does.` });
+    toast({ text: addedWords(p.title, channel, fed) });
     return true;
   }
   if (!coarse()) (key || server).focus();

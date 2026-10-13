@@ -30,13 +30,14 @@ function channelRow(open) {
   const dot = el("span.chn-dot");
   const name = el("strong.chn-rname");
   const status = el("span.chn-rstatus");
+  const marks = el("span.chn-marks");
   const spec = el("span.chn-rspec");
   const uptime = el("span.chn-rtime", { title: "Publishing for" });
   const rings = el("span.chn-rrings");
   const sending = el("span.chn-rsend");
   const node = el("button.chn-row", { type: "button", role: "listitem" }, [
     dot,
-    el("span.chn-rid", {}, [name, status]),
+    el("span.chn-rid", {}, [name, status, marks]),
     spec,
     uptime,
     el("span.chn-rdest", {}, [rings, sending]),
@@ -59,6 +60,11 @@ function channelRow(open) {
       write(status, "textContent", r.status);
       write(spec, "textContent", r.spec);
       write(sending, "textContent", r.sending);
+      const kinds = r.marks.map((m) => m.id).join(" ");
+      if (marks.dataset.shape !== kinds) {
+        marks.dataset.shape = kinds;
+        marks.replaceChildren(...r.marks.map((m) => el("span.chn-mark", { "data-mark": m.id, title: m.title, text: m.id })));
+      }
       // Red while a destination fails, with which one and why on hover.
       sending.classList.toggle("bad", r.failing.length > 0);
       write(sending, "title", r.failing.join("\n"));

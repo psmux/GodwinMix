@@ -22,7 +22,11 @@
 .chn-rid { display: flex; flex-direction: column; min-width: 0; }
 .chn-rname { font-size: 13px; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chn-rstatus { font-size: 11.5px; color: var(--dim); white-space: nowrap; }
+.chn-rstatus { overflow: hidden; text-overflow: ellipsis; }
 .chn-row[data-state="live"] .chn-rstatus { color: var(--ok); font-weight: 600; }
+.chn-row[data-state="waiting"] .chn-rstatus { color: var(--bad); }
+.chn-rid .chn-marks { margin: 2px 0 0; }
+.chn-rid .chn-marks:empty { display: none; }
 .chn-rspec, .chn-rtime { font-family: var(--num); font-size: 11.5px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .chn-rtime { text-align: right; color: var(--text); }
 .chn-rdest { display: flex; align-items: center; gap: 8px; justify-content: flex-end; min-width: 0; font-size: 11.5px; color: var(--dim); white-space: nowrap; }

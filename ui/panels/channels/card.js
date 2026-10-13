@@ -9,6 +9,8 @@ import { streamRow } from "./streams.js";
 import { destinationStrip } from "./distribute.js";
 import { connectSection } from "./connect.js";
 import { editChannel } from "./edit.js";
+import { statusLine, fedBy, feedFromProgramme } from "./fed-by.js";
+import { feedKind, statusOf } from "./feed.js";
 
 const GEAR = "M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4zM19.4 13.5l1.6 1.2-1.6 2.8-1.9-.7a7 7 0 0 1-1.7 1l-.3 2h-3.2l-.3-2a7 7 0 0 1-1.7-1l-1.9.7-1.6-2.8 1.6-1.2a7 7 0 0 1 0-2l-1.6-1.2 1.6-2.8 1.9.7a7 7 0 0 1 1.7-1l.3-2h3.2l.3 2a7 7 0 0 1 1.7 1l1.9-.7 1.6 2.8-1.6 1.2a7 7 0 0 1 0 2z";
 const PLUG = "M9 3v5M15 3v5M6 8h12v3a6 6 0 0 1-12 0zM12 17v4";
@@ -26,6 +28,8 @@ export function channelCard(view, first) {
   const rows = new Map();
   const waiting = el("div.chn-waiting");
   const strip = destinationStrip(view, first);
+  const status = statusLine(false);
+  const feed = fedBy(view, () => channel);
 
   const section = connectSection(view, () => channel, () => openSettings(view, channel));
   const connect = el("button.btn.chn-connect", { type: "button", "aria-expanded": "false", title: "Server, stream keys and full URLs, to copy" }, [svg(PLUG, 15), el("span", { text: "Connect" }), svg(CHEVRON, 14)]);
@@ -47,6 +51,8 @@ export function channelCard(view, first) {
       pill,
       el("div.chn-actions", {}, [connect, settings]),
     ]),
+    status.node,
+    feed.node,
     section.node,
     streams,
     strip.node,
@@ -61,8 +67,11 @@ export function channelCard(view, first) {
     write(name, "textContent", next.name || next.id);
     write(address, "textContent", serverOf(view, next));
     const count = liveCount(next);
-    write(pill, "textContent", !next.enabled ? "Off" : live ? (count > 1 ? `Live, ${count} streams` : "Live") : "Waiting");
-    write(pill, "className", "chn-pill" + (live ? " live" : next.enabled ? "" : " off"));
+    const said = statusOf(next);
+    write(pill, "textContent", live && count > 1 ? `LIVE, ${count} streams` : said.label);
+    write(pill, "className", "chn-pill " + said.state + (live ? " live" : ""));
+    status.update(next);
+    feed.update(next);
     section.update(next);
     drawStreams(next);
     strip.update(next);
@@ -75,7 +84,7 @@ export function channelCard(view, first) {
       if (waiting.parentNode !== streams) streams.replaceChildren(waiting);
       // Rebuilt only when what it offers changes, so a button stays put
       // under a press while the channel's other numbers move.
-      const mode = next.enabled ? "waiting" : "off";
+      const mode = next.enabled ? `waiting-${feedKind(next)}` : "off";
       if (waiting.dataset.mode !== mode) waiting.replaceChildren(...waitingLine(view, next, () => fold(true)));
       waiting.dataset.mode = mode;
       waiting.classList.toggle("off", !next.enabled);
@@ -117,12 +126,17 @@ function waitingLine(view, channel, openConnect) {
     };
     return [el("span", { text: "Switched off. Encoders are turned away until it is on again." }), on];
   }
+  const kind = feedKind(channel);
+  if (kind === "programme") return [el("span.chn-radar"), el("span", { text: "Waiting for this mixer's programme to arrive." })];
+  if (kind === "pull") return [el("span.chn-radar"), el("span", { text: "Waiting for the stream it pulls." })];
   return [
     el("span.chn-radar"),
     el("span", { text: "Waiting for an encoder. " }),
     el("button.chn-link", { type: "button", text: "Where do I point it?", onclick: openConnect }),
+    feedFromProgramme(view, channel),
   ];
 }
+
 
 function openSettings(view, channel) {
   return editChannel(view, channel);

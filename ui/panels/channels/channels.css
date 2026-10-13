@@ -55,6 +55,22 @@
 .chn-pill { font-size: 11.5px; font-weight: 650; padding: 3px 10px; border-radius: 999px; background: var(--raise); color: var(--dim); white-space: nowrap; }
 .chn-pill.live { background: color-mix(in srgb, var(--ok) 16%, transparent); color: var(--ok); }
 .chn-pill.off { background: transparent; box-shadow: inset 0 0 0 1px var(--line); }
+.chn-pill.offline { background: color-mix(in srgb, var(--bad) 14%, transparent); color: var(--bad); }
+/* LIVE with what arrives, or Offline with why, as Livebox says it. */
+.chn-status { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 0 16px 8px; font-size: 12.5px; color: var(--dim); }
+.chn-status .chn-state { font-weight: 700; }
+.chn-status.live .chn-state { color: var(--ok); }
+.chn-status.offline .chn-state { color: var(--bad); }
+.chn-statetext { font-variant-numeric: tabular-nums; min-width: 0; overflow-wrap: anywhere; }
+.chn-marks { display: inline-flex; gap: 4px; margin-left: auto; }
+.chn-mark { font-size: 10px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; padding: 1px 6px; border-radius: 4px; box-shadow: inset 0 0 0 1px var(--line); color: var(--dim); }
+.chn-feed { border: 0; margin: 0; padding: 0 16px 10px; display: grid; gap: 6px; }
+.chn-feed legend { padding: 0; margin-bottom: 4px; }
+.chn-feedopts { display: flex; flex-wrap: wrap; gap: 4px 14px; }
+.chn-feedopt { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; }
+.chn-feedurlrow { display: flex; gap: 6px; }
+.chn-feedurlrow[hidden] { display: none; }
+.chn-feedurl { flex: 1; min-width: 0; font-family: var(--num, monospace); font-size: 12.5px; }
 
 /* ------------------------------------------------------------ streams */
 

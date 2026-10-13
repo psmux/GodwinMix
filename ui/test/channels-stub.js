@@ -64,6 +64,18 @@ export class ChannelStub {
     return c;
   }
 
+  /** A new feed, as the core keeps it: a pull's address is never shown, only its host. */
+  feed(c, f) {
+    if (f.kind === "pull") {
+      if (!/^\w+:\/\/[^/]/.test(f.url || "")) throw Object.assign(new Error("a pull address starts with its scheme."), { code: -32602, data: { field: "feed.url" } });
+      c.feed = { kind: "pull", uri_host: f.url.replace(/^(\w+:\/\/[^/?]+).*$/, "$1"), state: "connecting" };
+    } else if (f.kind === "programme") {
+      c.feed = { kind: "programme", output: `to-channel-${c.id}`, state: "waiting", ...(f.show ? { show: f.show } : {}) };
+    } else {
+      c.feed = { kind: "encoder", state: "waiting" };
+    }
+  }
+
   newKey(c, label, typed) {
     this.n += 1;
     // Different every time, and the same on every run, so a test can say what it expects.
@@ -103,7 +115,7 @@ const METHODS = {
   "channel.get"({ id }) {
     return this.channel(id);
   },
-  "channel.add"({ name, app, auto_source, key_mode, secret }) {
+  "channel.add"({ name, app, auto_source, key_mode, secret, feed }) {
     // The id is always a slug; the address keeps what was typed, as the core does.
     const id = slugify(app || name);
     const address = app || id;
@@ -115,16 +127,18 @@ const METHODS = {
       id, name, app: address, enabled: true, auto_source: auto_source !== false, key_mode: key_mode || "query", keys: [],
       protocols: ["rtmp"], rtmps: { enabled: false, port: 443 },
       publish: { server: `${this.urls[0]}/${address}`, example: `${this.urls[0]}/${address}/main?psk=<key>` },
-      streams: [], destinations: [],
+      streams: [], destinations: [], feed: { kind: "encoder", state: "waiting" },
     };
     this.channels.set(id, c);
     const key = this.newKey(c, undefined, secret);
+    if (feed) this.feed(c, feed);
     this.changed(id);
     return { channel: c, key };
   },
   "channel.set"(p) {
     const c = this.channel(p.id);
     for (const k of ["name", "enabled", "auto_source", "key_mode", "protocols", "rtmps"]) if (p[k] !== undefined) c[k] = p[k];
+    if (p.feed) this.feed(c, p.feed);
     this.changed(c.id);
     return c;
   },

@@ -1,6 +1,7 @@
-// The Channels panel: every channel as a card, what is publishing to it (by
-// RTMP, RTMPS, SRT or WHIP) and where it is being sent on to, and one small
-// line saying which ingest ports are open and for which channels.
+// The Channels panel: every channel as a card, what feeds it (this mixer's
+// programme, an encoder publishing by RTMP, RTMPS, SRT or WHIP, or a URL it
+// pulls) and where it is being sent on to, and one small line saying which
+// ingest ports are open and for which channels.
 //
 // Loaded the first time its tab is shown (entry.js is the part the page
 // loads). While it is on screen it asks the core for `channel.*` events, and
@@ -71,7 +72,7 @@ export class ChannelsView {
     this.head = el("header.chn-top", {}, [
       el("div.grow", {}, [
         el("h2", {}, ["Channels ", this.count]),
-        el("p.chn-lede", { text: "Encoders publish to the mixer by RTMP, SRT or WHIP. Each channel can go on air and on to the platforms." }),
+        el("p.chn-lede", { text: "A channel is one live stream. It gets its picture from this mixer's programme, from an encoder (OBS, a phone, a camera) or from a URL it pulls, and sends it on to its push destinations." }),
         this.ports,
       ]),
       more,

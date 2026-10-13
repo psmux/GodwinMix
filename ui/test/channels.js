@@ -8,6 +8,7 @@ import { ChannelStub, liveStream } from "./channels-stub.js";
 import { waysTests } from "./channels-ways.js";
 import { defaultChannelTests } from "./channels-default.js";
 import { programmeTests } from "./channels-programme.js";
+import { feedTests } from "./channels-feeds.js";
 import { localDestinationTests } from "./channels-local.js";
 
 const wait = (ms = 30) => new Promise((r) => setTimeout(r, ms));
@@ -91,6 +92,10 @@ export async function channelTests(test, eq, ok) {
   const input = document.querySelector(".chn-bigin");
   input.value = "Sunday Service";
   input.dispatchEvent(new Event("input"));
+  // The programme is picked first; this one is an encoder's, so it has a key to show.
+  const byEncoder = top().querySelector("input[name=chn-new-feed][value=encoder]");
+  byEncoder.checked = true;
+  byEncoder.dispatchEvent(new Event("change"));
   button(top(), "Create channel").click();
   await wait(60);
   const created = stub.calls.find((c) => c.method === "channel.add");
@@ -177,7 +182,7 @@ export async function channelTests(test, eq, ok) {
   await wait();
   test("event/channel.changed updates the card in place", () => {
     ok(card().classList.contains("live"), "the card is live");
-    eq(card().querySelector(".chn-pill").textContent, "Live");
+    eq(card().querySelector(".chn-pill").textContent, "LIVE");
     eq(card().querySelector(".chn-sname").textContent, "main");
     ok(card().querySelector(".chn-stream").textContent.includes("1920×1080"), "the resolution");
     eq(card().querySelector(".chn-feeds").textContent, "sunday-service-main");
@@ -216,6 +221,7 @@ export async function channelTests(test, eq, ok) {
   host.remove();
   await defaultChannelTests(test, eq, ok);
   await programmeTests(test, eq, ok);
+  await feedTests(test, eq, ok);
   await localDestinationTests(test, eq, ok);
 }
 

@@ -3,6 +3,7 @@
 // testable with a plain object.
 
 import { Channels, isLive, liveCount, resolution, fmtFps, fmtKbps, streamKbps, startedAt, ringState } from "./model.js";
+import { offlineReason, badgesOf } from "./feed.js";
 
 /** Every channel in a `channel.list` answer as row data, in the panel's order. */
 export function rowsOf(answer, now = Date.now()) {
@@ -28,7 +29,8 @@ export function rowOf(channel, now = Date.now()) {
     id: channel.id,
     name: channel.name || channel.id,
     state: !channel.enabled ? "off" : live ? "live" : "waiting",
-    status: !channel.enabled ? "Switched off" : live ? (count > 1 ? `Live, ${count} streams` : "Live") : "Waiting for an encoder",
+    status: !channel.enabled ? "Switched off" : live ? (count > 1 ? `Live, ${count} streams` : "Live") : `Offline: ${offlineReason(channel)}`,
+    marks: badgesOf(channel),
     spec: first ? specOf(first) : "",
     began: first ? startedAt(first.since_ms, now) : 0,
     sending: dests.length ? `${sending} of ${dests.length} sending` : "No push destinations",
