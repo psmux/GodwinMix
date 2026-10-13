@@ -31,8 +31,8 @@ these and nothing else. A generated `openapi.json` and a `protocol.md` from
 | `GET /api/v1/tasks/{id}` | one job: `state`, `progress`, `result`, `error`. See [tasks.md](tasks.md) |
 | `POST /api/v1/tasks/{id}/cancel` | ask one to stop, cooperatively |
 | `GET /api/snapshot/sheet.jpg` | every source and the programme in one mosaic JPEG; `?width=N` scales it |
-| `GET /api/snapshot/program.jpg` | the programme alone |
-| `GET /api/snapshot/{source_id}.jpg` | one source alone |
+| `GET /api/snapshot/program.jpg` | the programme alone, taken from the programme itself rather than the mosaic: `?width=N` is honoured up to the canvas's width. No mosaic is built for it |
+| `GET /api/snapshot/{source_id}.jpg` | one source alone, cut from its cell on the mosaic. A `?width=N` wider than the cell holds the mosaic wider for as long as stills are being asked for, up to a 1920 wide mosaic, so a source's still is at most its cell at that size: 960 with two cells, 640 with three columns |
 | `POST /api/golive` | `{"url", "rtmp", "superimpose", "id"}`: add a page as a source, add the destination, take it once live; answers 202 |
 | `GET /ws` | JSON events and state, plus mosaic JPEGs as binary frames |
 
@@ -53,7 +53,7 @@ same thing without a mixer. The ones the how to pages reach for:
 | `POST /api/v1/outputs/{id}/set` | `output.set`: `{"uri","policy","queue_secs"}`, naming only what moves. `uri` is write only and an absent one keeps the address in force, which is how a stream key is replaced without anything ever reading it back. See [stream to a platform](../how-to/stream-to-a-platform.md) |
 | `POST /api/v1/outputs/{id}/stop` | `output.stop`: no body. Stops sending to one destination and keeps it, address, key and all; its state reads `stopped` until `output.start`. See [stop streaming and quit](../how-to/stop-streaming-and-quit.md) |
 | `POST /api/v1/outputs/{id}/start` | `output.start`: no body. Sends to a stopped destination again with the address and key it kept |
-| `POST /api/v1/tool/call` | `tool.call`: `{"name","arguments"}`, the name being `<plugin>/<tool>` |
+| `POST /api/v1/tool/call` | `tool.call`: `{"name","arguments"}`, the name being `<plugin>/<tool>`. The body may be up to 4 MiB, the length of one line to a plugin |
 | `GET /api/v1/plugins/{id}/settings` | a plugin's settings, and `POST` with `{"settings":{...}}` changes the keys it names |
 | `GET /api/v1/channels` | `channel.list`: every RTMP channel with its keys as hints, its streams and its destinations, and the port they share. See [channels.md](channels.md) |
 | `POST /api/v1/channels` | `channel.add`: `{"name","app","auto_source","key_mode"}`, only `name` required. The answer carries the first key; `channel.key.reveal` reads it again |
@@ -63,6 +63,16 @@ same thing without a mixer. The ones the how to pages reach for:
 | `POST /api/v1/channels/{id}/destination/add` | `channel.destination.add`: `{"platform","label","server","key","stream","enabled"}`. See [restream a channel](../how-to/restream-a-channel.md) |
 | `POST /api/v1/channels/{id}/destination` | `channel.destination.set`: `{"destination", ...}`, naming only what moves. A key left out is kept |
 | `POST /api/v1/channels/{id}/destination/remove` | `channel.destination.remove`: `{"destination"}` |
+
+Widths over `[snapshot] max_width` (1280 unless the config says otherwise) are
+refused unless the request carries `allow_large=true`; `/api/v1/snapshot/{id}`
+takes the same `width`, `force` and `allow_large`.
+
+A JSON body is read up to 1 MiB, or 4 MiB for `tool.call`, and a graphic saved
+to or imported into the gallery takes what an upload takes. A longer body is
+answered 413 with `-32602`, a sentence naming the limit and `data.limit_bytes`,
+after the rest of it has been read, so the client hears the answer rather than
+a reset connection. Through a station the answer is the same.
 
 A scheduled take takes `at_running_time_ms`, armed on the pipeline clock so it
 lands on the intended frame rather than whenever the request happened to arrive.

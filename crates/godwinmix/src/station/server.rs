@@ -81,13 +81,16 @@ async fn api(State(st): State<Arc<Station>>, req: Request) -> Response {
             return (StatusCode::UNAUTHORIZED, Json(e.body(&godwinmix_protocol::trace::new_id()))).into_response();
         }
     };
-    let body = match axum::body::to_bytes(req.into_body(), 1 << 20).await {
+    let limit = crate::control::rest_limit::DEFAULT;
+    let (parts, body) = req.into_parts();
+    let body = match crate::control::rest_limit::read(&parts.headers, body, limit).await {
         Ok(b) if b.is_empty() => Value::Null,
         Ok(b) => match serde_json::from_slice(&b) {
             Ok(v) => v,
             Err(e) => return http::refusal(&godwinmix_protocol::error::RpcError::invalid_params(format!("the body is not JSON: {e}"))),
         },
-        Err(e) => return http::refusal(&godwinmix_protocol::error::RpcError::invalid_params(format!("could not read the body: {e}"))),
+        Err(crate::control::rest_limit::Unread::TooLarge) => return crate::control::rest_limit::too_large(route.method, limit, &godwinmix_protocol::trace::new_id()),
+        Err(crate::control::rest_limit::Unread::Failed(e)) => return http::refusal(&godwinmix_protocol::error::RpcError::invalid_params(format!("could not read the body: {e}"))),
     };
     let query = super::relay::without_show(Some(&query)).unwrap_or_default();
     let params = rest::params_from(body, &query, captures);

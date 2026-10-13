@@ -99,7 +99,7 @@ set; two is an error, and so is none.
 | Key | Type | What the core runs | What `gmx plugin add` does |
 |---|---|---|---|
 | `bin` | table of platform triple to path | the binary, argv exactly as declared, no extra arguments | verifies the signature, marks it executable |
-| `python` | path | `.venv/bin/python <entry>` | finds `python3 >= 3.10` on PATH or `GMX_PYTHON`, creates `.venv` under the plugin directory with `uv venv` if `uv` exists and `python -m venv` otherwise, installs `pyproject.toml` or `requirements.txt` |
+| `python` | path | `.venv/bin/python <entry>`, with `PYTHONUTF8=1` and `PYTHONIOENCODING=utf-8` unless the core's own environment sets them | finds `python3 >= 3.10` on PATH or `GMX_PYTHON`, creates `.venv` under the plugin directory with `uv venv` if `uv` exists and `python -m venv` otherwise, installs `pyproject.toml` or `requirements.txt` |
 | `node` | path | `node <entry>` | finds `node >= 20`, runs `npm ci --omit=dev` |
 | `shell` | path | `sh <entry>` on Unix | marks it executable |
 

@@ -116,7 +116,27 @@ pub fn plan(manifest: &Manifest, ctx: &LaunchCtx) -> anyhow::Result<Launch> {
         )
     })?;
     let (runtime, argv) = argv_for(manifest, run, &ctx.root)?;
-    Ok(Launch { argv, env: environment(manifest, ctx), cwd: ctx.root.clone(), runtime })
+    let mut env = environment(manifest, ctx);
+    if runtime == Runtime::Python {
+        python_utf8(&mut env, |key| std::env::var_os(key).is_some());
+    }
+    Ok(Launch { argv, env, cwd: ctx.root.clone(), runtime })
+}
+
+/// UTF-8 on a Python plugin's pipes, whatever the machine's code page.
+///
+/// Python on Windows opens stdin, stdout and stderr in the local code page
+/// (cp1252 on most machines), so a verse with a curly quote in a plugin's
+/// reply came out as bytes the channel could not read and the channel ended.
+/// The channel is UTF-8 by the protocol. A variable already in the core's own
+/// environment was put there by whoever runs it and is left alone; the
+/// plugin's own process can still choose otherwise for anything it starts.
+fn python_utf8(env: &mut BTreeMap<String, String>, already: impl Fn(&str) -> bool) {
+    for (key, value) in [("PYTHONUTF8", "1"), ("PYTHONIOENCODING", "utf-8")] {
+        if !already(key) {
+            env.insert(key.into(), value.into());
+        }
+    }
 }
 
 fn argv_for(manifest: &Manifest, run: &Run, root: &Path) -> anyhow::Result<(Runtime, Vec<String>)> {
@@ -300,6 +320,26 @@ settings = "settings.json"
         assert_eq!(env["GMX_PLUGIN"], "clock");
         assert_eq!(env["GMX_INSTANCE"], "cam1");
         assert_eq!(env["GMX_MEDIA"], "");
+    }
+
+    #[test]
+    fn a_python_plugin_is_told_to_speak_utf8_unless_the_core_was_told_otherwise() {
+        let m = manifest("[run]\npython = \"main.py\"");
+        let plan = plan(&m, &ctx(Path::new("/plugins/clock/0.1.0"))).expect("a python plan");
+        if std::env::var_os("PYTHONIOENCODING").is_none() {
+            assert_eq!(plan.env.get("PYTHONIOENCODING").map(String::as_str), Some("utf-8"));
+        }
+        let mut env = BTreeMap::new();
+        python_utf8(&mut env, |key| key == "PYTHONIOENCODING");
+        assert_eq!(env.get("PYTHONUTF8").map(String::as_str), Some("1"));
+        assert!(!env.contains_key("PYTHONIOENCODING"), "the operator's own setting stays");
+        let node = plan_of_node();
+        assert!(!node.env.contains_key("PYTHONUTF8"), "only the python runtime gets it");
+    }
+
+    fn plan_of_node() -> Launch {
+        let m = manifest("[run]\nnode = \"main.js\"");
+        plan(&m, &ctx(Path::new("/plugins/clock/0.1.0"))).expect("a node plan")
     }
 
     #[test]

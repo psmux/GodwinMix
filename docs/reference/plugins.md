@@ -153,7 +153,9 @@ A mixer that ships these plugins puts each one, built, in
 bare name installs it from there.
 
 Remove a source before removing the plugin that provides it: removing a plugin
-does not stop instances that are using it.
+does not stop instances that are using it, and `plugin.remove` refuses while
+one is, naming it. Its singletons it does stop, and it waits for their
+processes to exit before the folder goes.
 
 ## See also
 

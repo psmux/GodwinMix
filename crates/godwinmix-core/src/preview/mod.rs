@@ -37,6 +37,7 @@ pub mod hub;
 pub mod local;
 pub mod mjpeg;
 pub mod thumb;
+pub mod thumb_size;
 pub mod whep;
 
 pub use hub::{AudioStream, LocalStream, PreviewDemand, PreviewHandle};

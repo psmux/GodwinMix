@@ -1,0 +1,39 @@
+# A service in Python with nothing but the standard library, on every platform.
+#
+# It exists for the host's own tests on Windows, where the shell fixture
+# cannot run: a real venv, a real interpreter, the JSON lines channel on
+# stderr, a tool whose answer is not ASCII, and a shutdown that takes a moment,
+# as a real plugin's does.
+[plugin]
+name = "pyservice"
+version = "0.1.0"
+api = 1
+description = "A Python service for the host's own tests."
+license = "Apache-2.0"
+platforms = ["linux-x86_64", "linux-aarch64", "macos-aarch64", "macos-x86_64", "windows-x86_64"]
+placements = ["sidecar"]
+process = "singleton"
+
+[run]
+python = "main.py"
+
+[[provides]]
+kind = "service"
+id = "service"
+capabilities = ["health"]
+settings = "settings.json"
+
+[[tools]]
+name = "echo"
+description = "Answer with a sentence that is not ASCII, the plugin's environment and the arguments. Example: tool.call {name: \"pyservice/echo\", arguments: {say: \"hello\"}}."
+input = "echo.json"
+
+[[tools]]
+name = "core"
+description = "Call the core's /api/v1/core/info at the address in GMX_RPC with GMX_TOKEN, and answer with the status. Example: tool.call {name: \"pyservice/core\", arguments: {}}."
+input = "echo.json"
+
+[[tools]]
+name = "raw"
+description = "Write one line in the Windows code page, which is not UTF-8, then answer. Example: tool.call {name: \"pyservice/raw\", arguments: {}}."
+input = "echo.json"

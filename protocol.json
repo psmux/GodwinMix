@@ -12782,7 +12782,7 @@
           "type": "string"
         },
         "width": {
-          "description": "Scale down to this many pixels across, keeping the aspect. Never\nenlarges. Omit for the `[snapshot] default_width` of 320, which is\nenough to see who is in shot; `width: 0` for the cell's own size.",
+          "description": "This many pixels across, keeping the aspect. Never enlarges. The\nprogramme is taken from itself, up to the canvas's width; a source is\ncut from its multiview cell, which is held wider for the request up to\na 1920 wide mosaic. Omit for the `[snapshot] default_width` of 320,\nwhich is enough to see who is in shot; `width: 0` for the cell's own\nsize, or the canvas's for the programme.",
           "format": "uint32",
           "minimum": 0,
           "type": [

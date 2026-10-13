@@ -9,6 +9,7 @@
 
 pub mod compose;
 pub mod glyphs;
+mod overlay_cache;
 pub mod style;
 
 use super::rendered::{self, Rendering};

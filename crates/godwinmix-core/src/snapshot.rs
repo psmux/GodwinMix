@@ -41,6 +41,8 @@ use std::time::{Duration, Instant};
 use tokio::sync::broadcast;
 use tracing::{debug, info, warn};
 
+pub mod wide;
+
 /// Quality for the JPEGs this module encodes itself. The mosaic arrives at
 /// the operator's configured quality; cropping and re-encoding at a lower one
 /// would throw away detail twice, so this sits a little above the default.
@@ -138,6 +140,11 @@ pub struct Tracker {
     /// `latest` was drawn with every tile in it, and so is every frame after
     /// it until a tile is added. Set after `latest` is written.
     settled: AtomicBool,
+    /// Where a still of the programme comes from at the size asked for. See
+    /// `programme`.
+    programme: std::sync::OnceLock<crate::preview::PreviewHandle>,
+    /// The mosaic held wider for a source's still. See `wide`.
+    wide: wide::Held,
 }
 
 impl Tracker {
@@ -158,7 +165,28 @@ impl Tracker {
             last_served: Mutex::new(HashMap::new()),
             starts: AtomicU64::new(0),
             settled: AtomicBool::new(false),
+            programme: std::sync::OnceLock::new(),
+            wide: Default::default(),
         })
+    }
+
+    /// Take stills of the programme from its own branch on the raw programme
+    /// tee rather than from its cell on the mosaic.
+    ///
+    /// The cell is as wide as the mosaic's layout makes it, 320 pixels with
+    /// three columns on the default 960 wide mosaic, so a snapshot of the
+    /// programme was 320 wide whatever `width` asked for. The branch scales the
+    /// programme itself, up to the canvas, and needs no mosaic.
+    pub fn see_programme_through(&self, preview: crate::preview::PreviewHandle) {
+        let _ = self.programme.set(preview);
+    }
+
+    /// A JPEG of the programme `width` wide (`None`: the canvas's own width),
+    /// or `None` with no branch to take it from or no frame yet.
+    pub async fn programme(&self, width: Option<u32>) -> Option<Vec<u8>> {
+        let preview = self.programme.get()?;
+        let picture = preview.programme_picture(width.unwrap_or(u32::MAX)).await.ok()??;
+        Some(picture.jpeg.to_vec())
     }
 
     /// A tracker with nothing behind it, for tests.
@@ -358,6 +386,13 @@ impl Tracker {
                 }
                 Ok(Err(broadcast::error::RecvError::Closed)) => break,
             };
+            // Behind the mosaic, score the newest frame and skip the rest. A
+            // tracker that decoded every frame in turn on a busy machine (or
+            // in a debug build) never caught up, so `pending` below was never
+            // zero, no frame was ever counted as drawn, and every still waited
+            // out its three seconds and was served whatever frame was there:
+            // after a rebuild, a black one.
+            let jpeg = sub.newest().unwrap_or(jpeg);
             // This frame was drawn whole if a drawn frame had gone out and
             // nothing is waiting behind this one, read in that order: the
             // drawn frame is then this one or one before it. Every frame
@@ -432,6 +467,7 @@ impl Tracker {
     fn clear(&self) {
         self.settled.store(false, Ordering::Release);
         *self.latest.write() = None;
+        self.wide.lock().take();
     }
 }
 

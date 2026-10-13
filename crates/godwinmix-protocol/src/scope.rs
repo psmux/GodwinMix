@@ -328,6 +328,15 @@ impl Tokens {
         before - minted.len()
     }
 
+    /// These entries, checking the minted tokens `other` holds. The loader
+    /// mints with one copy before the control server builds its own from the
+    /// config, and a plugin's `GMX_TOKEN` was refused by a core with tokens
+    /// because the two lists were never the same one.
+    pub fn sharing_minted(mut self, other: &Tokens) -> Self {
+        self.minted = other.minted.clone();
+        self
+    }
+
     /// How many per instance tokens are live.
     pub fn minted(&self) -> usize {
         self.minted.lock().len()
@@ -546,6 +555,17 @@ mod tests {
         assert_eq!(who.plugin.as_deref(), Some("ndi"));
         assert!(tokens.revoke_node("studio-b") == 1);
         assert_eq!(tokens.authenticate(Some(&secret)), Err(AuthFailure::Wrong));
+    }
+
+    #[test]
+    fn a_token_minted_by_the_loader_is_accepted_by_a_list_built_later_from_the_config() {
+        let config = || vec![token("op", "operator-secret", &[Scope::Admin])];
+        let loader = Tokens::new(config(), false);
+        let server = Tokens::new(config(), false).sharing_minted(&loader);
+        let secret = loader.mint_for_plugin("scripture", "scripture-service", None);
+        let who = server.authenticate(Some(&secret)).expect("the server knows the minted token");
+        assert_eq!(who.plugin.as_deref(), Some("scripture"));
+        assert_eq!(Tokens::new(config(), false).authenticate(Some(&secret)), Err(AuthFailure::Wrong));
     }
 
     #[test]

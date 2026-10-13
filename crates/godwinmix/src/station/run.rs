@@ -39,6 +39,8 @@ pub async fn run(opts: Options) -> Result<()> {
     let _ = godwinmix_core::catalogue::init(Some(&cfg), opts.codecs.as_deref());
     let runtime = core_observe::runtime_dir(&opts.config);
     load_plugins(&cfg, &tokens, &runtime);
+    // The ingest plugin runs here, and calls the station's own port.
+    crate::control::plugin_access::announce_bind(&bind);
 
     let (events, commands) = MixerHandle::detached();
     tokio::spawn(drain(commands));
@@ -124,8 +126,7 @@ fn load_plugins(cfg: &Config, tokens: &Arc<godwinmix_protocol::scope::Tokens>, r
             warn!(plugin = installed.name(), "{problem}");
         }
     }
-    let minting = tokens.clone();
-    plugin::loader::set_token_minter(Box::new(move |plugin, instance| minting.mint_for_plugin(plugin, instance, None)));
+    crate::control::plugin_access::mint_from(tokens);
     plugin::loader::set_runtime_dir(runtime.join("station"));
 }
 
