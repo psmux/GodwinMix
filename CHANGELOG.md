@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.3.9 (unreleased)
+## 0.3.9 (2026-10-13)
 
 Fixes for tester issues 14 to 20, and a recording bug found while testing them.
 
