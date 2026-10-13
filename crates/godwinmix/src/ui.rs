@@ -101,6 +101,7 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/channels/art.js", include_str!("../../../ui/panels/channels/art.js")),
     ("panels/channels/brands.js", include_str!("../../../ui/panels/channels/brands.js")),
     ("panels/channels/bulk.js", include_str!("../../../ui/panels/channels/bulk.js")),
+    ("panels/channels/sends.js", include_str!("../../../ui/panels/channels/sends.js")),
     ("panels/channels/card.js", include_str!("../../../ui/panels/channels/card.js")),
     ("panels/channels/channels.css", include_str!("../../../ui/panels/channels/channels.css")),
     ("panels/channels/connect-key.js", include_str!("../../../ui/panels/channels/connect-key.js")),
@@ -473,6 +474,7 @@ const DEV_ASSETS: &[(&str, &str)] = &[
     // as a page to look at: /test/channels.html?scene=cards&theme=light.
     ("test/channels.js", include_str!("../../../ui/test/channels.js")),
     ("test/channels-stub.js", include_str!("../../../ui/test/channels-stub.js")),
+    ("test/channels-sends.js", include_str!("../../../ui/test/channels-sends.js")),
     ("test/channels-ways.js", include_str!("../../../ui/test/channels-ways.js")),
     ("test/channels-livebox.js", include_str!("../../../ui/test/channels-livebox.js")),
     ("test/channels-default.js", include_str!("../../../ui/test/channels-default.js")),
@@ -899,6 +901,9 @@ fn safe_relative(path: &str) -> Option<PathBuf> {
     }
     (!out.as_os_str().is_empty()).then_some(out)
 }
+
+#[cfg(test)]
+mod imports_tests;
 
 #[cfg(test)]
 mod tests {
