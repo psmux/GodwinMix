@@ -924,26 +924,54 @@ fn slug(text: &str) -> String {
 /// chunk of memory, not its whole size, and the process has a live programme
 /// in it. Written under a dotted `.part` name and published on success so a half
 /// uploaded file never appears in the listing and never gets taken to air.
-pub async fn store_upload(app: &AppState, name: &str, body: Body) -> Result<Value, RpcError> {
+pub async fn store_upload(app: &AppState, name: &str, into: &Placement, body: Body) -> Result<Value, RpcError> {
     if !app.library.cfg().allow_upload {
         return Err(RpcError::not_in_state(
-            "uploads are disabled on this server. Set `allow_upload = true` under [media] \
-             and restart, or put the file in the media directory yourself.",
+            "uploads are disabled on this server. Set `allow_upload = true` under [media]              and restart, or put the file in the media directory yourself.",
         ));
     }
     let name = godwinmix_core::media::safe_upload_name(name)
         .map_err(|e| RpcError::invalid_params(e.to_string()))?;
-    let dir = app.library.dir().to_path_buf();
+    let root = app.library.dir().to_path_buf();
+    let _ = app.library.ensure_dir();
+    let folder = match into.folder.as_deref().map(str::trim).filter(|f| !f.is_empty()) {
+        Some(f) => {
+            let (root, f) = (root.clone(), f.to_string());
+            methods::media_org::blocking(move || godwinmix_core::media_org::make_folder(&root, &f)).await?.0
+        }
+        None => String::new(),
+    };
+    let dir = godwinmix_core::media_org::plain(&root, &folder);
     let final_path = dir.join(&name);
     let written = upload::store(&dir, &name, body).await?;
+    let rel = godwinmix_core::media_org::join(&folder, &name);
+    if !into.tags.is_empty() {
+        let (root, list, tags) = (root.clone(), vec![rel.clone()], into.tags.clone());
+        methods::media_org::blocking(move || godwinmix_core::media_org::tag_files(&root, &list, None, &tags, &[])).await?;
+    }
 
-    info!(%name, bytes = written, "media uploaded");
-    app.mixer.emit(Event::MediaChanged { name: name.clone(), conversion: None });
+    info!(name = %rel, bytes = written, "media uploaded");
+    app.mixer.emit(Event::MediaChanged { name: rel.clone(), conversion: None });
     Ok(json!({
-        "name": name,
+        "name": rel,
         "path": final_path.display().to_string(),
         "size_bytes": written,
     }))
+}
+
+/// Where an upload goes besides its name: a folder in the library, made
+/// when missing, and tags to give it. Both from the query string.
+#[derive(Debug, Default, Deserialize)]
+pub struct Placement {
+    #[serde(default)]
+    pub folder: Option<String>,
+    #[serde(default, deserialize_with = "comma_tags")]
+    pub tags: Vec<String>,
+}
+
+fn comma_tags<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Vec<String>, D::Error> {
+    let raw: Option<String> = Option::deserialize(d)?;
+    Ok(godwinmix_protocol::media::tag_words(raw.map(Value::String).as_ref()))
 }
 
 /// One JPEG: the whole sheet, the programme, or a cell cut out of the mosaic.
@@ -1120,6 +1148,8 @@ async fn list_media(State(app): State<AppState>) -> Result<Json<MediaListing>, A
 #[derive(Debug, Deserialize)]
 struct UploadQuery {
     name: String,
+    #[serde(flatten)]
+    into: Placement,
 }
 
 async fn upload_media(
@@ -1127,7 +1157,7 @@ async fn upload_media(
     Query(q): Query<UploadQuery>,
     body: Body,
 ) -> Result<Json<Value>, ApiError> {
-    store_upload(&app, &q.name, body)
+    store_upload(&app, &q.name, &q.into, body)
         .await
         .map(Json)
         .map_err(|e| ApiError(anyhow::anyhow!("{}", e.message)))

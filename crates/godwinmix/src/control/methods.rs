@@ -33,7 +33,7 @@ pub mod lifecycle;
 pub mod network;
 mod media;
 mod media_folders;
-mod media_org;
+pub(crate) mod media_org;
 mod media_refs;
 mod media_refs_files;
 mod media_refs_map;

@@ -311,7 +311,7 @@ fn state_events() -> Vec<EventDef> {
         EventDef {
             name: "media.changed",
             since: "1",
-            summary: "A file in the library was uploaded, deleted, or its conversion moved on.",
+            summary: "A file in the library was uploaded, deleted, moved, renamed or tagged, or its conversion moved on. `name` is its path in the library, and empty when a folder was made, moved or removed.",
             ext: None,
             legacy: Some("media_changed"),
             payload: |_| {

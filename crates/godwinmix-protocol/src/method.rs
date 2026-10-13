@@ -274,6 +274,9 @@ const COLLECTIONS: &[&str] =
 const COLLECTION_LEVEL: &[&str] = &[
     // One certificate for the whole mixer, not one per channel.
     "channel.certificate",
+    // The media library's folders: named by a path in the params, which may
+    // hold slashes, so never in the URL.
+    "media.folder",
     "scene.transaction",
     "scene.history",
     "scene.edit",
@@ -452,6 +455,9 @@ mod tests {
         assert_eq!(at("media.list"), "GET /api/v1/media");
         assert_eq!(at("codec.list"), "GET /api/v1/codecs");
         assert_eq!(at("media.remove"), "DELETE /api/v1/media/{id}");
+        assert_eq!(at("media.folder.list"), "GET /api/v1/media/folder/list");
+        assert_eq!(at("media.folder.move"), "POST /api/v1/media/folder/move");
+        assert_eq!(at("media.move"), "POST /api/v1/media/{id}/move");
         // A bare word is not a method and gets no route.
         assert_eq!(rest_transform("ping"), None);
     }
