@@ -5704,9 +5704,12 @@ pub struct SnapshotRequest {
     pub force: Option<bool>,
     /// "sheet", "program", or a source id. A `.jpg` on the end is accepted.
     pub id: String,
-    /// Scale down to this many pixels across, keeping the aspect. Never
-    /// enlarges. Omit for the `[snapshot] default_width` of 320, which is
-    /// enough to see who is in shot; `width: 0` for the cell's own size.
+    /// This many pixels across, keeping the aspect. Never enlarges. The
+    /// programme is taken from itself, up to the canvas's width; a source is
+    /// cut from its multiview cell, which is held wider for the request up to
+    /// a 1920 wide mosaic. Omit for the `[snapshot] default_width` of 320,
+    /// which is enough to see who is in shot; `width: 0` for the cell's own
+    /// size, or the canvas's for the programme.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub width: Option<u32>,
 }
