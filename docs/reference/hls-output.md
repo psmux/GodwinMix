@@ -97,6 +97,15 @@ the longest segment there has been if a source's keyframes wandered; it grows
 and never shrinks. Segment numbers are consecutive, and the first is set from
 the running time, so every rung numbers the same seconds alike.
 
+The sound is cut where the top rung's picture is cut, so `audio/index.m3u8`
+has the same segment numbers as the picture for the same moments, each
+starting within 125 ms of the picture's (a part's half when parts are on),
+and both windows cover the same time. When the output is rebuilt, or the feed
+behind it stops and starts again, every rung and the sound get one
+`EXT-X-DISCONTINUITY` before the same segment number, and
+`EXT-X-DISCONTINUITY-SEQUENCE` counts those breaks. A muxer that writes a new
+header without a break gets a new `EXT-X-MAP` and no discontinuity.
+
 ### DASH
 
 `manifest.mpd` is a dynamic MPD (`isoff-live`) over the same CMAF files: one
@@ -107,7 +116,8 @@ whose `t` is each segment's `tfdt` and whose `d` is the gap to the next.
 media time, `suggestedPresentationDelay` three segments, and `UTCTiming` the
 server's clock. It lists whole segments only, so it plays at ordinary DASH
 latency (about three segments) whatever `low_latency` says. After a rebuild
-of the output it lists only the segments decoded by the newest init segment.
+of the output, or a restart of its feed, it lists only the segments since the
+newest break and decoded by the newest init segment.
 
 ## Who may read
 
