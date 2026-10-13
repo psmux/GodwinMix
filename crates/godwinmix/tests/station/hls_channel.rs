@@ -13,7 +13,7 @@ use std::path::Path;
 use std::time::{Duration, Instant};
 
 /// An encoder publishing 320x180 H.264 and AAC to `url`, as OBS would.
-fn encoder(url: &str) -> gstreamer::Pipeline {
+pub fn encoder(url: &str) -> gstreamer::Pipeline {
     gstreamer::init().unwrap();
     let line = format!(
         "videotestsrc is-live=true ! video/x-raw,width=320,height=180,framerate=30/1 ! x264enc tune=zerolatency key-int-max=30 bitrate=600 \
@@ -32,7 +32,7 @@ async fn destination(ws: &mut Ws, id: u64, dest: &str) -> Value {
     list.into_iter().find(|d| d["id"] == dest).unwrap_or_default()
 }
 
-async fn until(ws: &mut Ws, dest: &str, ok: impl Fn(&Value) -> bool, limit: Duration) -> Value {
+pub async fn until(ws: &mut Ws, dest: &str, ok: impl Fn(&Value) -> bool, limit: Duration) -> Value {
     let (until, mut id) = (Instant::now() + limit, 200);
     loop {
         id += 1;
