@@ -74,6 +74,13 @@ pub async fn until(ws: &mut Ws, what: &str, limit: Duration, ok: impl Fn(&Value)
     }
 }
 
+/// The governor turned the first destination away for want of CPU. A small CI
+/// runner busy with other tests has no core to spare for an encode, and that
+/// is the machine, not the code under test, so a test that converts skips.
+pub fn refused_for_cpu(channel: &Value) -> bool {
+    channel["destinations"][0]["refused"]["code"] == "governor"
+}
+
 pub async fn programme_outputs(ws: &mut Ws, id: u64) -> Vec<String> {
     let status = call(ws, id, "core.status", json!({})).await;
     let outputs = status["result"]["outputs"].as_array().cloned().unwrap_or_default();

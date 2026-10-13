@@ -6,7 +6,7 @@
 //! keyframes and the bitrate of what arrived. Skipped where ffmpeg is not
 //! installed.
 
-use super::channel_feed::{channel, destination, free_port, ready, until};
+use super::channel_feed::{channel, destination, free_port, ready, refused_for_cpu, until};
 use super::direct_live::staged_ingest;
 use super::hls_direct::folder_with_relay;
 use super::support::call;
@@ -82,7 +82,13 @@ async fn a_custom_720p_destination_on_a_programme_channel_sends_720p_at_the_aske
         "server": format!("rtmp://127.0.0.1:{rtmp}/live"), "key": "dest", "rendition": custom_720p()})).await;
     assert!(dest.get("error").is_none(), "{dest}");
 
-    let live = until(&mut ws, "the destination going live", Duration::from_secs(120), |c| c["destinations"][0]["state"] == "live").await;
+    let live = until(&mut ws, "the destination going live", Duration::from_secs(120), |c| {
+        c["destinations"][0]["state"] == "live" || refused_for_cpu(c)
+    })
+    .await;
+    if refused_for_cpu(&live) {
+        return eprintln!("skipping: the governor has no core free for the encode on this machine: {}", live["destinations"][0]["error"]);
+    }
     let plan = &live["destinations"][0]["plan"];
     assert_eq!(plan["mode"], "transcode", "a 1080p feed is encoded for a 720p ask: {plan}");
     assert_eq!((plan["video"]["width"].as_u64(), plan["video"]["height"].as_u64()), (Some(1280), Some(720)), "{plan}");

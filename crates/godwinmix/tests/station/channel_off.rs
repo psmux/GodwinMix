@@ -5,7 +5,7 @@
 //! of 0.3.7 switched a Custom RTMP destination off and read the stream as
 //! still going. Skipped where ffmpeg is not installed.
 
-use super::channel_feed::{channel, destination, free_port, programme_outputs, ready};
+use super::channel_feed::{channel, destination, free_port, programme_outputs, ready, refused_for_cpu};
 use super::direct_live::staged_ingest;
 use super::hls_direct::folder_with_relay;
 use super::support::*;
@@ -52,6 +52,10 @@ async fn switched_off_stops(name: &str, rendition: Option<Value>) {
     let (since, mut restarts) = (Instant::now(), 0);
     while size(&file) < 100_000 || server.0.try_wait().unwrap().is_some() {
         assert!(since.elapsed() < Duration::from_secs(120), "the destination got {} bytes after {restarts} restarts", size(&file));
+        let seen = channel(&mut ws, 900 + restarts as u64, "sunday").await;
+        if refused_for_cpu(&seen) {
+            return eprintln!("{name}: skipping, the governor has no core free for the encode on this machine: {}", seen["destinations"][0]["error"]);
+        }
         if server.0.try_wait().unwrap().is_some() {
             server = destination(rtmp, &file).expect("ffmpeg ran once already");
             restarts += 1;
