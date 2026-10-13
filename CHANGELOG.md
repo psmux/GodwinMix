@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.8 (unreleased)
+
+* A project saved with keys carries a pulled channel's whole address, and opening it pulls again with no address to type. Saved without keys it keeps the server alone and the summary names the channel as waiting for its address. A channel fed by the programme that arrives without its key gets a new one and is fed straight away; before, it had no key to publish with and stayed black.
+
 ## 0.3.7 (2026-10-13)
 
 * A destination never gets more than the bitrate it asked for. A stream already in the right codec was copied whenever its rate was within a quarter of the ask either way, so a Custom AAC 128 kbit/s destination on a channel fed at 160 kbit/s sent 160, which is what testers measured on Livebox. Now a copy may run at most 5 percent over the ask (the wobble of a measured rate); anything more is encoded at the asked rate. Under the ask the old quarter still holds.

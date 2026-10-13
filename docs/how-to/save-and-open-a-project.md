@@ -11,7 +11,8 @@ next person who runs the show.
 1. Open **File > Save project as** (or press `Ctrl+S`, `Cmd+S` on a Mac).
 2. Give it a name.
 3. Leave **Include stream keys and channel keys** off if the file is going to
-   someone else. Turn it on for a backup of your own.
+   someone else. Turn it on for a backup of your own. On, it also carries the
+   whole address a pulled channel reads, which can hold a key of its own.
 4. Leave **Include the clips themselves** off unless the media folder is
    small. Off, the file lists each clip by name and size.
 5. Press **Save**. The browser downloads `<name>.gmxproject`. In the desktop
@@ -32,8 +33,10 @@ next person who runs the show.
 4. Press **Open project**.
 
 When the file was saved without keys, destinations wait for their stream
-key and each channel gets a new key. The summary says which. Give the keys
-again in Outputs and Channels.
+key and each channel gets a new key. A pulled channel keeps its server
+(`rtmp://cdn.example:1935`) and waits for the whole address under **Fed by**.
+A channel fed by the programme is fed again straight away, with a new key of
+its own. The summary says which. Give the keys again in Outputs and Channels.
 
 Clips that were not in the file are listed with their size. Copy them into
 the mixer's media folder (Mixer settings shows where it is), or save the

@@ -137,6 +137,23 @@ impl Channels {
         matches!(r.feed, StoredFeed::Pull { .. }).then(|| self.secrets.get(&pull_scope(&r.id), "url")).flatten()
     }
 
+    /// Seal a pull's address that came in a project file.
+    pub(super) fn seal_pull(&self, id: &str, url: &str) -> Result<(), RpcError> {
+        let url = check_pull_url(url).map_err(|why| RpcError::invalid_params(format!("channel {id} in the file pulls from an address this mixer refuses: {why}.")))?;
+        self.secrets.set(&pull_scope(id), "url", &url).map_err(|e| RpcError::internal(format!("sealing the pull address: {e:#}")))
+    }
+
+    /// Whether this mixer holds a pull address for the channel.
+    pub(super) fn has_pull(&self, id: &str) -> bool {
+        self.secrets.get(&pull_scope(id), "url").is_some_and(|u| !u.is_empty())
+    }
+
+    /// A channel fed by the programme whose key did not come with it gets a
+    /// new one, or the programme would never reach it.
+    pub(super) fn programme_key_for(&self, id: &str) -> Result<String, RpcError> {
+        Ok(self.make_key(id, Some(KEY_LABEL.into()), None)?.id)
+    }
+
     /// Forget a removed channel's pull address.
     pub(super) fn forget_feed(&self, id: &str) {
         self.secrets.forget(&pull_scope(id));

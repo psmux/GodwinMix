@@ -174,8 +174,10 @@ How each works:
   held for ten seconds starts the waits again. An address with a scheme it
   does not take is refused with `data.field` set to `feed.url`. While an
   encoder is publishing `main` on the same channel the pull waits, and
-  `error` says so. A project file carries the feed but not a pull's sealed
-  address; pull it again after an import.
+  `error` says so. A project file saved with keys carries a pull's whole
+  address in the channel's `secrets.pull` and the import seals it again;
+  saved without, it carries only `uri_host`, and the import lists the
+  channel as waiting for its address.
 
 `event/channel.changed` carries the channel whenever its feed's state or
 error moves.

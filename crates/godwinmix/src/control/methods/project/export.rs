@@ -49,7 +49,8 @@ pub async fn build(call: &Call, ask: Ask) -> Result<Bundle, RpcError> {
     if !ask.secrets {
         for channel in &bundle.channels {
             let id = channel["id"].as_str().unwrap_or_default();
-            bundle.removed.push(format!("channel {id}: its keys and its destinations' addresses"));
+            let pull = if channel["feed"]["kind"] == "pull" { " and the address it pulls from" } else { "" };
+            bundle.removed.push(format!("channel {id}: its keys, its destinations' addresses{pull}"));
         }
     }
     bundle.scenes = serde_json::to_value(call.app.scenes.document()).map_err(encode)?;

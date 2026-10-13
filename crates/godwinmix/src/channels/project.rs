@@ -13,6 +13,7 @@ use godwinmix_protocol::error::RpcError;
 use serde_json::{json, Value};
 
 use super::keys::{self, free};
+use super::feed::StoredFeed;
 use super::store::Record;
 use super::Channels;
 
@@ -23,6 +24,8 @@ pub struct Incoming {
     pub keys: BTreeMap<String, String>,
     /// Destination id to address and key, when the file carried them.
     pub destinations: BTreeMap<String, (String, Option<String>)>,
+    /// The whole address a pulled channel reads, when the file carried it.
+    pub pull: Option<String>,
 }
 
 impl Channels {
@@ -55,7 +58,11 @@ impl Channels {
             .into_iter()
             .map(|d| (d.id.clone(), json!({"server": d.server, "key": d.key})))
             .collect();
-        json!({"keys": keys, "destinations": destinations})
+        let mut out = json!({"keys": keys, "destinations": destinations});
+        if let Some(url) = self.pull_url(r) {
+            out["pull"] = json!(url);
+        }
+        out
     }
 
     /// The ids and application names in use now.
@@ -90,7 +97,7 @@ impl Channels {
 
     /// One channel in, over an existing one of the same id or beside the rest.
     fn place(&self, one: Incoming) -> Result<Vec<String>, RpcError> {
-        let Incoming { mut record, keys: secrets, destinations } = one;
+        let Incoming { mut record, keys: secrets, destinations, pull } = one;
         let mut waiting = Vec::new();
         let before = self.records.lock().iter().find(|r| r.id == record.id).cloned();
         record.auto_sources.clear();
@@ -122,6 +129,7 @@ impl Channels {
                 }
             }
         }
+        waiting.extend(self.place_feed(&mut record, pull)?);
         let id = record.id.clone();
         let needs_key = record.keys.is_empty();
         {
@@ -129,6 +137,14 @@ impl Channels {
             records.retain(|r| r.id != id);
             records.push(record);
         }
+        let lost_programme_key = self.records.lock().iter().any(|r| r.id == id && matches!(&r.feed, StoredFeed::Programme { key, .. } if key.is_empty()));
+        if lost_programme_key {
+            let key = self.programme_key_for(&id)?;
+            if let Some(StoredFeed::Programme { key: k, .. }) = self.records.lock().iter_mut().find(|r| r.id == id).map(|r| &mut r.feed) {
+                *k = key;
+            }
+        }
+        let needs_key = needs_key && !lost_programme_key;
         if needs_key {
             let key = self.make_key(&id, Some("Key 1".into()), None)?;
             waiting.push(format!(
@@ -137,6 +153,29 @@ impl Channels {
             ));
         }
         Ok(waiting)
+    }
+
+    /// The feed's own secret: a pull's address sealed again, or a new key for
+    /// the programme when the file left its key out. Answers what is left to
+    /// do by hand.
+    fn place_feed(&self, record: &mut Record, pull: Option<String>) -> Result<Option<String>, RpcError> {
+        match &mut record.feed {
+            StoredFeed::Pull { uri_host } => match pull {
+                Some(url) => self.seal_pull(&record.id, &url).map(|_| None),
+                None if self.has_pull(&record.id) => Ok(None),
+                None => Ok(Some(format!(
+                    "channel {} pulls from {uri_host} once its whole address is given again in Channels, under Fed by",
+                    record.id
+                ))),
+            },
+            StoredFeed::Programme { key, .. } if !record.keys.iter().any(|k| &k.id == key) => {
+                // The key goes into the table first, so make it after the
+                // record is in place: here it is only named.
+                *key = String::new();
+                Ok(None)
+            }
+            _ => Ok(None),
+        }
     }
 }
 
@@ -167,5 +206,10 @@ pub fn read(value: &Value, taken: &dyn Fn(&str, &str) -> bool) -> Result<(Incomi
                 .collect()
         })
         .unwrap_or_default();
-    Ok((Incoming { record, keys, destinations }, renamed.then_some(was)))
+    let pull = secrets["pull"].as_str().map(str::to_string);
+    Ok((Incoming { record, keys, destinations, pull }, renamed.then_some(was)))
 }
+
+#[cfg(test)]
+#[path = "project_tests.rs"]
+mod tests;
