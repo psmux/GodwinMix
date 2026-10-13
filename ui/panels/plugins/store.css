@@ -35,8 +35,10 @@
 .pg-go[data-act="open"] { background: var(--ok); border-color: var(--ok); color: #06210f; }
 .pg-go.busy, .pg-go.busy:disabled {
   opacity: 1; color: var(--text); border-color: var(--accent); cursor: progress;
-  background: linear-gradient(to right, var(--select-fill) var(--pct, 0%), var(--panel2) var(--pct, 0%));
+  background: linear-gradient(to right, color-mix(in srgb, var(--accent) 55%, var(--panel2)) var(--pct, 0%), var(--panel2) var(--pct, 0%));
 }
+/* While it installs, the line about whether it runs here has done its job. */
+.pg-foot:has(.pg-go.busy) .pg-fit { display: none; }
 .pg-go.busy.unknown { background: linear-gradient(90deg, var(--panel2) 0%, var(--select-fill) 50%, var(--panel2) 100%); background-size: 200% 100%; animation: pg-wait 1.4s linear infinite; }
 @keyframes pg-wait { from { background-position: 100% 0; } to { background-position: -100% 0; } }
 @media (prefers-reduced-motion: reduce) { .pg-go.busy.unknown { animation: none; background: var(--select-fill); } }
@@ -50,7 +52,7 @@
 .pg-track { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; overscroll-behavior-x: contain; }
 .pg-track::-webkit-scrollbar { display: none; }
 .pg-track:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-.pg-slide { flex: 0 0 100%; scroll-snap-align: center; aspect-ratio: 16 / 9; display: flex; align-items: center; justify-content: center; position: relative; }
+.pg-slide { flex: 0 0 100%; scroll-snap-align: center; aspect-ratio: 16 / 9; max-height: 58vh; display: flex; align-items: center; justify-content: center; position: relative; }
 .pg-clip { width: 100%; height: 100%; object-fit: contain; display: block; }
 .pg-slide.waiting { cursor: pointer; }
 .pg-slide.waiting::after {
