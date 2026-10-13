@@ -2336,6 +2336,9 @@ pub struct GalleryEntry {
     pub description: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub downloads: Option<u64>,
+    /// The index put it in the Featured row.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub featured: Option<bool>,
     /// The card's word for that: "Runs here", "Not for Windows".
     pub fit: String,
     /// The sentence behind it.
@@ -2354,7 +2357,14 @@ pub struct GalleryEntry {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub license: Option<String>,
     pub marketplace: String,
+    /// Every picture and clip for the detail view's carousel, in order, each
+    /// with its type. Made from `screenshots` when the index has no `media`.
+    pub media: Vec<GalleryMedia>,
     pub name: String,
+    /// The first animation or video, which a card plays on hover. Empty when
+    /// there is none.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub preview: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub repository: Option<String>,
     /// Whether it runs on this machine at this mixer's protocol level.
@@ -2530,6 +2540,16 @@ pub struct GalleryMarketplace {
     pub source: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
+}
+
+/// One picture or clip in a plugin's gallery.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct GalleryMedia {
+    /// `image`, `animation` (a GIF or an animated WebP) or `video`.
+    #[serde(rename = "type")]
+    pub r#type: String,
+    pub url: String,
 }
 
 /// `gallery.place`: add an item to a scene in its zone. Hidden unless
@@ -4311,6 +4331,9 @@ pub struct PluginDescription {
     /// Why it is not loaded, when it is not.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub problem: Option<String>,
+    /// The kind of each of those, by id: `{"hls/player": "source"}`, so a
+    /// picker offers a source whose id is not `source`.
+    pub provide_kinds: BTreeMap<String, Value>,
     /// The type ids it contributes: what goes in `type` on a source, an output
     /// or a filter.
     pub provides: Vec<String>,
@@ -4368,6 +4391,9 @@ pub struct PluginRecord {
     /// Why it is not loaded, when it is not.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub problem: Option<String>,
+    /// The kind of each of those, by id: `{"hls/player": "source"}`, so a
+    /// picker offers a source whose id is not `source`.
+    pub provide_kinds: BTreeMap<String, Value>,
     /// The type ids it contributes: what goes in `type` on a source, an output
     /// or a filter.
     pub provides: Vec<String>,
@@ -5971,6 +5997,10 @@ pub struct TaskView {
     pub progress: Option<f64>,
     /// The body the method would have answered with, once it is done.
     pub result: Value,
+    /// What it is doing now, one word, where the work says: `downloading`,
+    /// `installing` and `starting` for `plugin.add`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stage: Option<String>,
     pub state: TaskState,
     pub task_id: String,
 }

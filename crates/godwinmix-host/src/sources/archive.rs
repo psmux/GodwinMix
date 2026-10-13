@@ -74,13 +74,27 @@ fn unzip(archive: &str, into: &Path) -> Result<()> {
 /// the file name. `gmx-ndi-1.2.0-linux-x86_64.tar.gz` is for `linux-x86_64`.
 /// Nothing is inferred from `amd64` or `x64`; the triples in `launch.rs` are
 /// the vocabulary, and the CI template writes them.
+///
+/// A release with no asset for this platform may still carry one for every
+/// platform, named with `any` where the triple would go:
+/// `gmx-scripture-1.0.0-any.zip`. That is what a pure Python plugin ships,
+/// since its asset holds source. A build for this platform wins over it.
 pub fn asset_for(names: &[String], platform: &str) -> Option<String> {
-    names
-        .iter()
-        .filter(|n| !is_signature(n))
-        .filter(|n| n.to_ascii_lowercase().contains(platform))
-        .min_by_key(|n| n.len())
-        .cloned()
+    let pick = |keep: &dyn Fn(&str) -> bool| {
+        names
+            .iter()
+            .filter(|n| !is_signature(n))
+            .filter(|n| keep(&n.to_ascii_lowercase()))
+            .min_by_key(|n| n.len())
+            .cloned()
+    };
+    pick(&|n| n.contains(platform)).or_else(|| pick(&is_for_any))
+}
+
+/// Whether an asset name says it is for every platform.
+pub fn is_for_any(name: &str) -> bool {
+    let lower = name.to_ascii_lowercase();
+    ["-any.", "-any-", "_any.", "_any-"].iter().any(|mark| lower.contains(mark))
 }
 
 /// Is this name a signature rather than an artefact?
@@ -136,6 +150,20 @@ mod tests {
             Some("gmx-ndi-1.2.0-windows-x86_64.zip")
         );
         assert_eq!(asset_for(&names(), "linux-armv7"), None);
+    }
+
+    #[test]
+    fn an_asset_for_any_platform_is_taken_when_there_is_none_for_this_one() {
+        let mut names = names();
+        names.push("gmx-ndi-1.2.0-any.zip".into());
+        names.push("gmx-ndi-1.2.0-any.zip.sigstore.json".into());
+        assert_eq!(asset_for(&names, "linux-armv7").as_deref(), Some("gmx-ndi-1.2.0-any.zip"));
+        assert_eq!(
+            asset_for(&names, "linux-x86_64").as_deref(),
+            Some("gmx-ndi-1.2.0-linux-x86_64.tar.gz"),
+            "a build for this platform wins"
+        );
+        assert!(!is_for_any("company-plugin-linux-x86_64.tar.gz"));
     }
 
     #[test]

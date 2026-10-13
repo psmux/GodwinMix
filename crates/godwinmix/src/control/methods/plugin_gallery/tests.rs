@@ -71,3 +71,31 @@ fn versions_compare_by_their_numbers() {
     assert!(!newer("1.0.0-beta", "1.0.0"));
     assert!(!newer("", "0.1.0"));
 }
+
+#[test]
+fn a_card_carries_its_clips_in_order_and_plays_the_first_that_moves() {
+    let docs = [market("m", serde_json::json!([
+        { "name": "scripture", "source": "psmux/godwinmix-scripture", "featured": true,
+          "screenshots": ["https://x/demo.gif", "https://x/screenshot-1.png"],
+          "media": [{ "url": "https://x/demo.gif", "type": "animation" },
+                    { "url": "https://x/screenshot-1.png", "type": "image" },
+                    { "url": "https://x/tour.mp4", "type": "video" },
+                    { "url": "https://x/odd.bin", "type": "hologram" }],
+          "versions": [{ "version": "1.0.0", "api": API, "platforms": ["any"] }] },
+        { "name": "old", "source": "psmux/old",
+          "screenshots": ["https://x/1.png", "https://x/move.GIF?raw=1"] }
+    ]))];
+    let shipped = |_: &str| false;
+    let cards = entries(&docs, &here(&[], &shipped));
+    let s = cards.iter().find(|c| c.name == "scripture").unwrap();
+    let kinds: Vec<&str> = s.media.iter().map(|m| m.kind.as_str()).collect();
+    assert_eq!(kinds, ["animation", "image", "video", "image"], "an unknown type is a picture");
+    assert_eq!(s.preview, "https://x/demo.gif");
+    assert!(s.featured);
+    assert!(s.runs_here, "one asset for any platform runs here: {}", s.fit_detail);
+    let old = cards.iter().find(|c| c.name == "old").unwrap();
+    let kinds: Vec<&str> = old.media.iter().map(|m| m.kind.as_str()).collect();
+    assert_eq!(kinds, ["image", "animation"], "an index with no media is read by extension");
+    assert_eq!(old.preview, "https://x/move.GIF?raw=1");
+    assert!(!old.featured);
+}

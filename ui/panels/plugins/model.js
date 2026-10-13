@@ -73,12 +73,14 @@ export function oneLine(text) {
 
 /**
  * The button a card or the detail view shows first, and what it does.
- * `act` is "add", "update", or null for a button that only says something.
+ * `act` is "add", "update", "open", or null for a button that only says
+ * something. `openable` says an installed plugin has a panel or a source
+ * form to open.
  */
-export function primary(p) {
+export function primary(p, openable = false) {
   if (!p.runs_here && !p.installed) return { label: p.fit || "Not for this computer", act: null };
   if (p.update) return { label: "Update", act: "update" };
-  if (p.installed) return { label: "Installed", act: null };
+  if (p.installed) return openable ? { label: "Open", act: "open" } : { label: "Installed", act: null };
   return { label: "Install", act: "add" };
 }
 

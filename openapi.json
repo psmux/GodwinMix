@@ -5315,6 +5315,11 @@
               "null"
             ]
           },
+          "featured": {
+            "default": false,
+            "description": "The index put it in the Featured row.",
+            "type": "boolean"
+          },
           "fit": {
             "description": "The card's word for that: \"Runs here\", \"Not for Windows\".",
             "type": "string"
@@ -5355,7 +5360,19 @@
           "marketplace": {
             "type": "string"
           },
+          "media": {
+            "default": [],
+            "description": "Every picture and clip for the detail view's carousel, in order, each\nwith its type. Made from `screenshots` when the index has no `media`.",
+            "items": {
+              "$ref": "#/components/schemas/GalleryMedia"
+            },
+            "type": "array"
+          },
           "name": {
+            "type": "string"
+          },
+          "preview": {
+            "description": "The first animation or video, which a card plays on hover. Empty when\nthere is none.",
             "type": "string"
           },
           "repository": {
@@ -5797,6 +5814,23 @@
           "name",
           "source",
           "fetched"
+        ],
+        "type": "object"
+      },
+      "GalleryMedia": {
+        "description": "One picture or clip in a plugin's gallery.",
+        "properties": {
+          "type": {
+            "description": "`image`, `animation` (a GIF or an animated WebP) or `video`.",
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "url",
+          "type"
         ],
         "type": "object"
       },
@@ -9536,6 +9570,13 @@
               "null"
             ]
           },
+          "provide_kinds": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "The kind of each of those, by id: `{\"hls/player\": \"source\"}`, so a\npicker offers a source whose id is not `source`.",
+            "type": "object"
+          },
           "provides": {
             "description": "The type ids it contributes: what goes in `type` on a source, an output\nor a filter.",
             "items": {
@@ -9660,6 +9701,13 @@
               "string",
               "null"
             ]
+          },
+          "provide_kinds": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "The kind of each of those, by id: `{\"hls/player\": \"source\"}`, so a\npicker offers a source whose id is not `source`.",
+            "type": "object"
           },
           "provides": {
             "description": "The type ids it contributes: what goes in `type` on a source, an output\nor a filter.",
@@ -13010,6 +13058,13 @@
           },
           "result": {
             "description": "The body the method would have answered with, once it is done."
+          },
+          "stage": {
+            "description": "What it is doing now, one word, where the work says: `downloading`,\n`installing` and `starting` for `plugin.add`.",
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "state": {
             "$ref": "#/components/schemas/TaskState"

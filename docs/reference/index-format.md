@@ -74,7 +74,20 @@ page draws a card from them; `gmx plugin add` reads none of them.
 | `title` | string | A human name for the card, "NDI" for `ndi`. The name is shown when there is none. |
 | `icon` | string | A square picture, a URL. |
 | `thumbnail` | string | The card's picture, a URL, 16 by 9. |
-| `screenshots` | array of string | Pictures for the detail view, URLs. |
+| `screenshots` | array of string | Pictures for the detail view, URLs. Anything an `<img>` shows, so an animated GIF or WebP is here and a video never is. A mixer from before 0.3.10 reads only this. |
+| `media` | array of object | Every picture and clip, in order, each `{"url": "...", "type": "image" \| "animation" \| "video"}`. The detail view's carousel. When it is missing the carousel is made from `screenshots`, a `.gif` read as an animation. |
+| `preview` | string | The first animation or video in `media`, which a card plays while a mouse is over it. |
+| `featured` | boolean | Put it in the Featured row at the top of the Plugins page. |
+| `mixer` | string | The oldest GodwinMix that runs it, `0.3.10`. An older mixer shows the card as `Needs a newer GodwinMix` and offers no Install. |
+
+### index.json and index2.json
+
+A marketplace repository may carry `index2.json` beside `index.json`. A mixer
+from 0.3.10 on tries `godwinmix-marketplace.json`, then `index2.json`, then
+`index.json`, and reads the first it finds. A mixer from before 0.3.10 never
+asks for `index2.json`. The community index uses that to keep plugins away
+from mixers that cannot run them: `index2.json` has every listing, and
+`index.json` leaves out every listing that names `mixer`.
 | `stars` | integer | The repository's GitHub stars. |
 | `downloads` | integer | Every download of every release asset, added together. |
 | `updated` | string | When it last changed, RFC 3339. |
@@ -85,8 +98,11 @@ page draws a card from them; `gmx plugin add` reads none of them.
 
 The pictures are loaded by the browser from where they are; the core never
 fetches one. The community index's workflow takes them from the plugin
-repository's `gallery/` folder (`icon.png`, `thumbnail.png`,
-`screenshot-*.png`) and falls back to the repository's social preview.
+repository's `gallery/` folder and falls back to the repository's social
+preview: `icon.*` is the icon, `thumbnail.*` the card, and every other `.png`,
+`.jpg`, `.jpeg`, `.gif`, `.webp`, `.mp4` or `.webm` goes into `media` in
+natural name order (`screenshot-2` before `screenshot-10`), so `demo.gif`
+comes first. A `.webp` is an animation only when it is animated.
 
 ### A version entry
 
@@ -94,7 +110,7 @@ repository's `gallery/` folder (`icon.png`, `thumbnail.png`,
 |---|---|---|---|
 | `version` | string | yes | Semver. |
 | `api` | integer | yes | The protocol level this version declares. The core picks the newest listed version whose `api` it can run, which is not always the newest version. |
-| `platforms` | array of string | no | The platform triples this version has assets for: `linux-x86_64`, `linux-aarch64`, `linux-armv7`, `macos-aarch64`, `macos-x86_64`, `windows-x86_64`, `windows-aarch64`. |
+| `platforms` | array of string | no | The platform triples this version has assets for: `linux-x86_64`, `linux-aarch64`, `linux-armv7`, `macos-aarch64`, `macos-x86_64`, `windows-x86_64`, `windows-aarch64`, and `any` when one asset runs on every computer (its name carries `-any`, `myplugin-1.0.0-any.zip`). A pure Python plugin ships that, since its asset holds source. A mixer from before 0.3.10 shows an `any` only release as not for this computer; per platform names work with every version. |
 | `signed` | boolean | no | Whether the CI signed the assets for this version. |
 | `harness` | array of string | no | What the conformance harness found, one line per platform, written by the index CI. This is what the tier checks read and what the compatibility dashboard prints. |
 

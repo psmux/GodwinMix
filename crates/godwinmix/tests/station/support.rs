@@ -108,18 +108,24 @@ pub fn folder(name: &str) -> (PathBuf, u16) {
 /// Start the binary on `dir`'s config with `extra` flags, and wait until it
 /// answers `core.status`.
 pub async fn start(dir: PathBuf, port: u16, extra: &[&str]) -> Running {
-    launch(dir, port, extra, Turn::shared()).await
+    launch(dir, port, extra, &[], Turn::shared()).await
+}
+
+/// [`start`], with these variables set for the station alone.
+pub async fn start_with_env(dir: PathBuf, port: u16, extra: &[&str], env: &[(&str, &str)]) -> Running {
+    launch(dir, port, extra, env, Turn::shared()).await
 }
 
 /// [`start`], with no other station running on the machine until it is
 /// dropped.
 pub async fn start_alone(dir: PathBuf, port: u16, extra: &[&str]) -> Running {
-    launch(dir, port, extra, Turn::alone()).await
+    launch(dir, port, extra, &[], Turn::alone()).await
 }
 
-async fn launch(dir: PathBuf, port: u16, extra: &[&str], turn: Turn) -> Running {
+async fn launch(dir: PathBuf, port: u16, extra: &[&str], env: &[(&str, &str)], turn: Turn) -> Running {
     let mut cmd = Command::new(BIN);
     cmd.arg("--config").arg(dir.join("godwinmix.toml")).args(extra).args(["--log-format", "json"]);
+    cmd.envs(env.iter().copied());
     cmd.env("GODWINMIX_RUNTIME_DIR", dir.join("runtime")).env_remove("GODWINMIX_TOKEN");
     // Its own secret store, so an output key a test seals stays in its folder.
     cmd.env("GODWINMIX_HOME", dir.join("home"));

@@ -17,6 +17,9 @@ use super::{add_within, load_store, Added, Listing};
 use std::sync::Mutex;
 use std::time::Duration;
 
+/// The platform word for a release with one asset for every computer: a
+/// pure Python plugin, say, whose asset holds source and no binary.
+pub const ANY: &str = "any";
 pub const DEFAULT_SOURCE: &str = "psmux/godwinmix-plugins";
 pub const DEFAULT_NAME: &str = "godwinmix-plugins";
 pub const DEFAULT_ENV: &str = "GMX_DEFAULT_MARKETPLACE";
@@ -138,6 +141,12 @@ pub fn fit(listing: &Listing, platform: &str, shipped: bool) -> Fit {
             no("Not in this copy".into(), "It comes with GodwinMix, but this copy of the mixer was built without it.".into())
         };
     }
+    if newer_than_this(&listing.display.mixer) {
+        return no(
+            "Needs a newer GodwinMix".into(),
+            format!("It needs GodwinMix {} or newer. Update GodwinMix first.", listing.display.mixer),
+        );
+    }
     if listing.versions.is_empty() {
         return yes("The listing names no versions, so the install checks the rest.");
     }
@@ -152,10 +161,35 @@ pub fn fit(listing: &Listing, platform: &str, shipped: bool) -> Fit {
     if version.platforms.is_empty() || version.platforms.iter().any(|p| p == platform) {
         return yes("There is a build of it for this computer.");
     }
+    if version.platforms.iter().any(|p| p == ANY) {
+        return yes("One download runs on every computer, so it installs here.");
+    }
     let system = os_name(platform);
     let same_os = version.platforms.iter().any(|p| os_name(p) == system);
     let label = if same_os { "Not for this computer".to_string() } else { format!("Not for {system}") };
     no(label, format!("It is built for {} only.", version.platforms.join(", ")))
+}
+
+/// Whether a version a listing asks for is newer than this GodwinMix.
+pub fn newer_than_this(wanted: &str) -> bool {
+    newer_than(wanted, env!("CARGO_PKG_VERSION"))
+}
+
+/// Whether version `a` is newer than `b`, number by number, ignoring
+/// anything after a `-` or a `+`. An empty `a` is never newer.
+pub fn newer_than(a: &str, b: &str) -> bool {
+    let parts = |v: &str| -> Vec<u64> {
+        let v = v.trim().trim_start_matches('v');
+        v.split(['-', '+']).next().unwrap_or("").split('.').map(|p| p.parse().unwrap_or(0)).collect()
+    };
+    if a.trim().is_empty() {
+        return false;
+    }
+    let (a, b) = (parts(a), parts(b));
+    (0..a.len().max(b.len()))
+        .map(|i| (a.get(i).copied().unwrap_or(0), b.get(i).copied().unwrap_or(0)))
+        .find(|(x, y)| x != y)
+        .is_some_and(|(x, y)| x > y)
 }
 
 /// "Windows" for `windows-x86_64`: the word on the card.

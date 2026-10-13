@@ -33,6 +33,10 @@ export class GalleryStub {
     this.fail = opts.fail || {};
     this.offline = !!opts.offline;
     this.tasks = new Map();
+    // What `task.get` answers while a task runs, one reading per call, before
+    // it answers done: `[{stage: "downloading", progress: 0.3}, ...]`.
+    this.stages = opts.stages || [];
+    this.steps = new Map();
     this.state = {};
   }
 
@@ -50,7 +54,14 @@ export class GalleryStub {
       Object.assign(p, { installed: false, update: false, installed_version: undefined });
       return { removed: p.name, provides: [], tools: [] };
     }
-    if (method === "task.get") return this.tasks.get(params.task_id);
+    if (method === "task.get") {
+      const steps = this.steps.get(params.task_id) || [];
+      if (steps.length) return { task_id: params.task_id, state: "running", ...steps.shift() };
+      return this.tasks.get(params.task_id);
+    }
+    if (method === "plugin.list") {
+      return { plugins: this.list.filter((p) => p.installed).map((p) => ({ name: p.name, provides: [`${p.name}/feed`], provide_kinds: { [`${p.name}/feed`]: "source" } })) };
+    }
     throw new RpcError(-32601, `no method ${method}`);
   }
 
@@ -62,6 +73,7 @@ export class GalleryStub {
 
   task(name, act) {
     const id = `t${this.tasks.size + 1}`;
+    this.steps.set(id, this.stages.map((s) => ({ ...s })));
     const why = this.fail[name];
     if (why) this.tasks.set(id, { task_id: id, state: "failed", error: why });
     else {

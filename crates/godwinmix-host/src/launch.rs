@@ -148,7 +148,9 @@ fn argv_for(manifest: &Manifest, run: &Run, root: &Path) -> anyhow::Result<(Runt
             // No venv: a plugin added by path in a checkout that manages its
             // own environment. Say which interpreter is being used rather than
             // silently picking a different one from the one `add` prepared.
-            std::env::var("GMX_PYTHON").unwrap_or_else(|_| "python3".into())
+            let mut argv = crate::python::interpreter();
+            argv.push(path_arg(root, entry));
+            return Ok((Runtime::Python, argv));
         };
         return Ok((Runtime::Python, vec![interpreter, path_arg(root, entry)]));
     }
@@ -201,25 +203,7 @@ pub fn preparation(manifest: &Manifest, root: &Path) -> Vec<Vec<String>> {
     let Some(run) = manifest.run.as_ref() else { return Vec::new() };
     let mut steps = Vec::new();
     if run.python.is_some() {
-        let python = std::env::var("GMX_PYTHON").unwrap_or_else(|_| "python3".into());
-        if which("uv").is_some() {
-            steps.push(vec!["uv".into(), "venv".into(), ".venv".into()]);
-        } else {
-            steps.push(vec![python, "-m".into(), "venv".into(), ".venv".into()]);
-        }
-        let pip = venv_python(root).to_string_lossy().into_owned();
-        if root.join("pyproject.toml").exists() {
-            steps.push(vec![pip, "-m".into(), "pip".into(), "install".into(), ".".into()]);
-        } else if root.join("requirements.txt").exists() {
-            steps.push(vec![
-                pip,
-                "-m".into(),
-                "pip".into(),
-                "install".into(),
-                "-r".into(),
-                "requirements.txt".into(),
-            ]);
-        }
+        steps.extend(crate::python::steps(root, which("uv").is_some()));
     }
     if run.node.is_some() {
         if root.join("package-lock.json").exists() {

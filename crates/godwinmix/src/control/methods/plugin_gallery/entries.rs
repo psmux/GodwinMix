@@ -2,7 +2,8 @@
 //! machine has installed and whether each one runs here. Pure: the handler
 //! hands it the documents and the facts about this machine.
 
-use super::types::GalleryEntry;
+use super::types::{GalleryEntry, GalleryMedia};
+use godwinmix_host::marketplace::{Display, Media};
 use godwinmix_host::marketplace::gallery::fit;
 use godwinmix_host::marketplace::{Listing, Marketplace};
 use std::cmp::Reverse;
@@ -56,6 +57,9 @@ fn entry(market: &Marketplace, listing: &Listing, here: &Here) -> GalleryEntry {
         icon: d.icon.clone(),
         thumbnail: d.thumbnail.clone(),
         screenshots: d.screenshots.clone(),
+        media: media_of(d),
+        preview: preview_of(d),
+        featured: d.featured,
         stars: d.stars,
         downloads: d.downloads,
         updated: d.updated.clone(),
@@ -73,6 +77,34 @@ fn entry(market: &Marketplace, listing: &Listing, here: &Here) -> GalleryEntry {
         fit: fits.label,
         fit_detail: fits.detail,
     }
+}
+
+/// The carousel: the index's `media`, or its `screenshots` read by extension
+/// for an index written before `media` existed. A kind this mixer does not
+/// know is shown as a picture.
+pub fn media_of(d: &Display) -> Vec<GalleryMedia> {
+    let listed: Vec<Media> = if d.media.is_empty() {
+        d.screenshots.iter().map(|u| Media::guess(u)).collect()
+    } else {
+        d.media.clone()
+    };
+    listed
+        .into_iter()
+        .filter(|m| !m.url.trim().is_empty())
+        .map(|m| {
+            let known = matches!(m.kind.as_str(), "image" | "animation" | "video");
+            GalleryMedia { kind: if known { m.kind } else { "image".into() }, url: m.url }
+        })
+        .collect()
+}
+
+/// What a card plays on hover: the index's `preview`, else the first thing
+/// in the carousel that moves.
+pub fn preview_of(d: &Display) -> String {
+    if !d.preview.is_empty() {
+        return d.preview.clone();
+    }
+    media_of(d).into_iter().find(|m| m.kind != "image").map(|m| m.url).unwrap_or_default()
 }
 
 /// Whether version `a` is newer than `b`, comparing the numbers in each part.

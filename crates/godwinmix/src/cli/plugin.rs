@@ -323,14 +323,18 @@ fn print_added(record: &Value) {
         for id in provides {
             println!("  provides {}", id.as_str().unwrap_or(""));
         }
-        if !provides.is_empty() {
-            println!(
-                "\nAdd one with:  gmx ctl source add <id> --type {}",
-                provides[0].as_str().unwrap_or("")
-            );
-        }
+    }
+    let next = hint::next_steps(record);
+    if !next.is_empty() {
+        println!();
+    }
+    for line in next {
+        println!("{line}");
     }
 }
+
+#[path = "plugin_hint.rs"]
+mod hint;
 
 fn print_list(listing: &Value) {
     let plugins = listing["plugins"].as_array().cloned().unwrap_or_default();

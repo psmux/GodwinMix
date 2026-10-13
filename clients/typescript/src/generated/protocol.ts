@@ -1280,6 +1280,7 @@ export interface GalleryEntry {
   bundled: boolean;
   description: string;
   downloads?: number | null;
+  featured?: boolean;
   fit: string;
   fit_detail: string;
   homepage?: string;
@@ -1290,7 +1291,9 @@ export interface GalleryEntry {
   kinds: string[];
   license?: string;
   marketplace: string;
+  media?: GalleryMedia[];
   name: string;
+  preview?: string;
   repository?: string;
   runs_here: boolean;
   screenshots?: string[];
@@ -1384,6 +1387,12 @@ export interface GalleryMarketplace {
   problem?: string | null;
   source: string;
   title?: string;
+}
+
+/** One picture or clip in a plugin's gallery. */
+export interface GalleryMedia {
+  type: string;
+  url: string;
 }
 
 /**
@@ -2373,6 +2382,7 @@ export interface PluginDescription {
   manifest: unknown;
   name: string;
   problem?: string | null;
+  provide_kinds?: Record<string, unknown>;
   provides: string[];
   root: string;
   schemas: Record<string, unknown>;
@@ -2409,6 +2419,7 @@ export interface PluginRecord {
   instances: InstanceRecord[];
   name: string;
   problem?: string | null;
+  provide_kinds?: Record<string, unknown>;
   provides: string[];
   root: string;
   source?: string;
@@ -3297,6 +3308,7 @@ export interface TaskView {
   poll_interval_ms?: number | null;
   progress?: number | null;
   result?: unknown;
+  stage?: string | null;
   state: TaskState;
   task_id: string;
 }

@@ -477,10 +477,11 @@ impl Manifest {
             ));
         }
         for (i, plat) in p.platforms.iter().enumerate() {
-            if !PLATFORMS.contains(&plat.as_str()) {
+            // `any`: one build for every computer, a pure Python plugin say.
+            if !PLATFORMS.contains(&plat.as_str()) && plat != "any" {
                 out.push(problem(
                     format!("plugin.platforms[{i}]"),
-                    format!("'{plat}' is not a platform triple. Known: {}.", PLATFORMS.join(", ")),
+                    format!("'{plat}' is not a platform triple. Known: {}, or any.", PLATFORMS.join(", ")),
                 ));
             }
         }

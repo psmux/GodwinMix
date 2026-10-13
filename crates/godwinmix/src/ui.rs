@@ -207,8 +207,14 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/plugins/act.js", include_str!("../../../ui/panels/plugins/act.js")),
     ("panels/plugins/card.js", include_str!("../../../ui/panels/plugins/card.js")),
     ("panels/plugins/detail.js", include_str!("../../../ui/panels/plugins/detail.js")),
+    ("panels/plugins/install.js", include_str!("../../../ui/panels/plugins/install.js")),
+    ("panels/plugins/media.js", include_str!("../../../ui/panels/plugins/media.js")),
     ("panels/plugins/model.js", include_str!("../../../ui/panels/plugins/model.js")),
     ("panels/plugins/plugins.css", include_str!("../../../ui/panels/plugins/plugins.css")),
+    ("panels/plugins/ready.js", include_str!("../../../ui/panels/plugins/ready.js")),
+    ("panels/plugins/rows.js", include_str!("../../../ui/panels/plugins/rows.js")),
+    ("panels/plugins/store.css", include_str!("../../../ui/panels/plugins/store.css")),
+    ("panels/plugins/store.js", include_str!("../../../ui/panels/plugins/store.js")),
     ("panels/plugins/view.js", include_str!("../../../ui/panels/plugins/view.js")),
     ("panels/routing/act.js", include_str!("../../../ui/panels/routing/act.js")),
     ("panels/routing/data.js", include_str!("../../../ui/panels/routing/data.js")),
@@ -765,6 +771,8 @@ fn content_type(path: &str) -> &'static str {
 /// `img-src` names the GitHub hosts the Plugins page's pictures come from, and
 /// only those: the browser loads them straight from GitHub, the core never
 /// fetches one, and a picture anywhere else shows as the kind's icon.
+/// `media-src` names the one host a plugin's clip comes from, for the same
+/// reason.
 const CSP: &str = concat!(
     "default-src 'self'; ",
     "script-src 'self'; ",
@@ -773,7 +781,7 @@ const CSP: &str = concat!(
     "style-src 'self' 'unsafe-inline'; ",
     "img-src 'self' data: blob: https://raw.githubusercontent.com https://opengraph.githubassets.com ",
     "https://repository-images.githubusercontent.com https://avatars.githubusercontent.com; ",
-    "media-src 'self' blob:; ",
+    "media-src 'self' blob: https://raw.githubusercontent.com; ",
     "font-src 'self' data:; ",
     "connect-src 'self' ws: wss:; ",
     "frame-src 'self'; ",
@@ -800,6 +808,8 @@ fn with_headers(kind: &'static str, body: Body, _path: &str) -> Response {
 }
 
 // ------------------------------------------------------------------ plugins
+
+mod panels;
 
 /// What panels are on disk, read at request time so a file dropped into
 /// `~/.godwinmix/plugins/x/ui/` appears on the next reload with no restart.
@@ -842,6 +852,9 @@ async fn plugin_index() -> Response {
             }));
         }
     }
+    let by_hand: Vec<String> =
+        found.iter().filter_map(|p| p["name"].as_str().map(str::to_string)).collect();
+    found.extend(panels::installed(root, &by_hand));
     found.sort_by(|a, b| a["name"].as_str().cmp(&b["name"].as_str()));
     let body = json!({ "plugins": found, "dir": root.display().to_string() });
     (
@@ -863,7 +876,12 @@ async fn plugin_file(UrlPath((name, path)): UrlPath<(String, String)>) -> Respon
     let Some(relative) = safe_relative(&path) else {
         return (StatusCode::NOT_FOUND, "that path is not inside the plugin's ui directory").into_response();
     };
-    let file = dirs().plugins.join(&name).join("ui").join(&relative);
+    let by_hand = dirs().plugins.join(&name).join("ui").join(&relative);
+    let file = if by_hand.is_file() {
+        by_hand
+    } else {
+        panels::file(&dirs().plugins, &name, &relative).unwrap_or(by_hand)
+    };
     match std::fs::read(&file) {
         Ok(body) => with_headers(content_type(&path), Body::from(body), &path),
         Err(_) => (

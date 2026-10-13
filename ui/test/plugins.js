@@ -89,25 +89,27 @@ export async function pluginGalleryTests(test, eq, ok) {
   chip(view, "All").click();
 
   cardOf(view, "clock").querySelector(".pg-foot button").click();
-  await until(() => cardOf(view, "clock")?.textContent.includes("Installed. Nothing restarted."));
-  test("plugins: one click installs by name and the card then says installed", () => {
+  await until(() => cardOf(view, "clock")?.textContent.includes("Ready."));
+  test("plugins: one click installs by name and the card then offers Open", () => {
     ok(stub.calls.some(([m, p]) => m === "plugin.add" && p.source === "clock"), JSON.stringify(stub.calls));
-    ok(cardOf(view, "clock").textContent.includes("Installed. Nothing restarted."));
-    eq(cardOf(view, "clock").querySelector(".pg-foot button").textContent, "Installed");
+    ok(cardOf(view, "clock").textContent.includes("Ready. Press Open to add it as a source."), cardOf(view, "clock").textContent);
+    eq(cardOf(view, "clock").querySelector(".pg-foot button").textContent, "Open");
   });
 
   stub.list.find((p) => p.name === "macfx").runs_here = true;
   await view.reload();
   cardOf(view, "macfx").querySelector(".pg-foot button").click();
   await until(() => cardOf(view, "macfx")?.querySelector(".pg-note.bad"));
-  test("plugins: a failed install says why in plain words on the card", () => {
-    eq(cardOf(view, "macfx").querySelector(".pg-note.bad")?.textContent, "It did not install: the download stopped halfway.");
+  test("plugins: a failed install says why in plain words on the card, and the next step", () => {
+    eq(cardOf(view, "macfx").querySelector(".pg-note.bad .pg-why")?.textContent, "It did not install: the download stopped halfway.");
+    ok(cardOf(view, "macfx").querySelector(".pg-note.bad .pg-next")?.textContent.includes("Try again"), "a next step");
+    eq(cardOf(view, "macfx").querySelector(".pg-foot button").textContent, "Try again");
   });
 
   cardOf(view, "ndi").querySelector(".pg-open").click();
   await settle();
   const dialog = document.querySelector(".dialog");
-  const button = (label) => [...document.querySelectorAll(".dialog footer button")].find((b) => b.textContent === label);
+  const button = (label) => [...document.querySelectorAll(".dialog button")].find((b) => b.textContent === label);
   test("plugins: the detail view has the facts, the source link and Update and Remove", () => {
     ok(dialog && dialog.textContent.includes("NDI in and out."));
     ok(button("Update") && button("Remove"), "both buttons");

@@ -833,11 +833,34 @@ pub struct InstallOptions {
     pub only: Vec<String>,
     /// Refuse anything that would touch the network.
     pub offline: bool,
+    /// Told what the install is doing, for a progress bar: `downloading`
+    /// with the fraction of the asset that has arrived when its size is
+    /// known, then `installing`.
+    pub report: Option<Reporter>,
+}
+
+/// What a [`Reporter`] calls: a stage, and how far through it when known.
+pub type Say = dyn Fn(&str, Option<f64>) + Send + Sync;
+
+/// A stage of an install, and how far through it when that is known.
+#[derive(Clone)]
+pub struct Reporter(pub std::sync::Arc<Say>);
+
+impl Reporter {
+    fn say(&self, stage: &str, fraction: Option<f64>) {
+        (self.0)(stage, fraction)
+    }
+}
+
+impl std::fmt::Debug for Reporter {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Reporter")
+    }
 }
 
 impl Default for InstallOptions {
     fn default() -> Self {
-        Self { allow_unsigned: true, only: Vec::new(), offline: false }
+        Self { allow_unsigned: true, only: Vec::new(), offline: false, report: None }
     }
 }
 
@@ -856,7 +879,23 @@ pub fn install(spec: &str, opts: &InstallOptions) -> Result<Installed> {
     );
     ctx.offline = opts.offline;
     ctx.identity = identity;
+    if let Some(report) = opts.report.clone().filter(|_| source.needs_network()) {
+        report.say("downloading", None);
+        // Once a percent, not once a read: a fast download reads thousands
+        // of times a second and nobody reads the task that often.
+        let last = std::sync::atomic::AtomicI64::new(-1);
+        ctx.progress = Some(godwinmix_host::sources::Progress(std::sync::Arc::new(move |done, size| {
+            let fraction = size.filter(|s| *s > 0).map(|s| done as f64 / s as f64);
+            let pct = fraction.map(|f| (f * 100.0) as i64).unwrap_or(0);
+            if last.swap(pct, std::sync::atomic::Ordering::Relaxed) != pct {
+                report.say("downloading", fraction);
+            }
+        })));
+    }
     let mut fetched = godwinmix_host::sources::fetch(&source, &ctx)?;
+    if let Some(report) = &opts.report {
+        report.say("installing", None);
+    }
     if godwinmix_host::sources::Source::parse(spec).is_err() && super::first_party::find(spec).is_some() {
         fetched.trust = godwinmix_host::verify::Trust::shipped_with(fetched.dir.display().to_string());
     }
@@ -886,7 +925,8 @@ fn place(fetched: &godwinmix_host::sources::Fetched, opts: &InstallOptions) -> R
         .map_err(|e| anyhow::anyhow!("{e}"))?;
     anyhow::ensure!(
         manifest.plugin.platforms.is_empty()
-            || manifest.plugin.platforms.iter().any(|p| p == launch::this_platform()),
+            || manifest.plugin.platforms.iter().any(|p| p == launch::this_platform())
+            || manifest.plugin.platforms.iter().any(|p| p == godwinmix_host::marketplace::gallery::ANY),
         "`{name}` has no asset for {}. It ships: {}. Install it from a git source with a \
          [build] section, or ask the author for this platform.",
         launch::this_platform(),

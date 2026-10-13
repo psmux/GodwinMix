@@ -115,3 +115,16 @@ fn a_bundled_listing_runs_when_this_copy_carries_it() {
     let missing = fit(&camera, "windows-x86_64", false);
     assert_eq!((missing.runs, missing.label.as_str()), (false, "Not in this copy"));
 }
+
+#[test]
+fn a_listing_for_a_newer_mixer_says_so_and_one_for_this_mixer_runs() {
+    let mine = env!("CARGO_PKG_VERSION");
+    let later = listing(serde_json::json!({ "name": "x", "source": "a/b", "mixer": "99.0.0" }));
+    let fits = fit(&later, "windows-x86_64", false);
+    assert!(!fits.runs);
+    assert_eq!(fits.label, "Needs a newer GodwinMix");
+    assert!(fits.detail.contains("99.0.0"), "{}", fits.detail);
+    let now = listing(serde_json::json!({ "name": "x", "source": "a/b", "mixer": mine }));
+    assert!(fit(&now, "windows-x86_64", false).runs);
+    assert!(newer_than("0.3.10", "0.3.9") && !newer_than("0.3.9", "0.3.10") && !newer_than("", "0.3.9"));
+}

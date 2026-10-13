@@ -217,6 +217,18 @@ pub struct FetchCtx {
     /// the identity is not pinned, which is what an unofficial marketplace
     /// gets.
     pub identity: Option<Identity>,
+    /// Told how much of the release asset has arrived, for a progress bar.
+    pub progress: Option<Progress>,
+}
+
+/// Bytes downloaded so far, and the size when the server said it.
+#[derive(Clone)]
+pub struct Progress(pub std::sync::Arc<dyn Fn(u64, Option<u64>) + Send + Sync>);
+
+impl std::fmt::Debug for Progress {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Progress")
+    }
 }
 
 impl FetchCtx {
@@ -227,6 +239,7 @@ impl FetchCtx {
             github_api: default_github_api(),
             offline: false,
             identity: None,
+            progress: None,
         }
     }
 }

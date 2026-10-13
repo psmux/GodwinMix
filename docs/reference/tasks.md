@@ -50,6 +50,7 @@ GET /api/v1/tasks/media-convert-3
 |---|---|
 | `state` | `running`, `completed`, `failed` or `cancelled` |
 | `progress` | 0 to 1, where the work can say. Absent where it cannot |
+| `stage` | what it is doing now, one word, where the work says. `plugin.add` goes `downloading` (a release asset, with `progress` from 0.05 to 0.8 as the bytes arrive when the size is known), `installing` (the copy, the venv or `npm ci`, 0.85) and `starting` (what it brings, 0.95) |
 | `result` | the body the method would have returned, once it is `completed` |
 | `error` | why it stopped, once it is `failed` |
 | `age_secs` | seconds since it started |

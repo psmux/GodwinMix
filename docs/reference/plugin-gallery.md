@@ -55,7 +55,10 @@ copy that is already on disk.
 | `kinds` | array | What it provides. |
 | `license`, `repository`, `homepage`, `author` | string | `author` falls back to the marketplace's `owner`. |
 | `icon`, `thumbnail` | string | Picture URLs, for the browser to load. |
-| `screenshots` | array | Picture URLs. |
+| `screenshots` | array | Picture URLs, GIFs and WebPs included. |
+| `media` | array | Every picture and clip in order, each `{"url", "type"}` with type `image`, `animation` or `video`. Made from `screenshots` by extension when the index has none. |
+| `preview` | string | The first animation or video, which a card plays on hover. Left out when there is none. |
+| `featured` | boolean | The index put it in the Featured row. |
 | `stars`, `downloads` | integer | GitHub stars, and every download of every release asset. Left out when the listing does not say. |
 | `updated` | string | RFC 3339. |
 | `tags` | array | |
@@ -75,8 +78,12 @@ copy that is already on disk.
 ## Installing from it
 
 `plugin.add {"source": <install>}`, then `task.get` on the task it answers
-with. `plugin.update {"id": <name>}` and `plugin.remove {"id": <name>}` work on
-an installed entry. The Plugins page does exactly this.
+with, whose `stage` and `progress` say how far it is (see
+[tasks](tasks.md)). When it completes, the plugin's services are running and
+its panels are in `/plugins/index.json`; nothing restarts. `plugin.update
+{"id": <name>}` and `plugin.remove {"id": <name>}` work on an installed entry.
+The Plugins page does exactly this, then reads `/plugins/index.json` again and
+opens the first panel the plugin brought.
 
 ## Pictures
 
@@ -84,10 +91,18 @@ The page loads `icon`, `thumbnail` and `screenshots` straight from where they
 are. The page's content security policy allows pictures from
 `raw.githubusercontent.com`, `opengraph.githubassets.com`,
 `repository-images.githubusercontent.com` and `avatars.githubusercontent.com`
-and nowhere else; a picture from another host shows as the kind's icon.
+and nowhere else; a picture from another host shows as the kind's icon. A
+video plays from `raw.githubusercontent.com` only.
+
+Nothing moves unless somebody is looking. A card fetches its `preview` only
+while a mouse is over it. In the carousel a GIF gets its address only while
+its slide is on screen, a video is muted, loops, loads nothing until its slide
+shows and pauses when it leaves, and with `prefers-reduced-motion` nothing
+plays until its Play button is pressed.
 
 ## See also
 
+* [Install a plugin from the gallery](../how-to/install-from-the-gallery.md)
 * [Install a plugin](../how-to/install-a-plugin.md#from-the-plugins-page)
 * [The index format](index-format.md), for the fields a listing carries
 * [Publish a plugin](../how-to/publish-a-plugin.md#3-get-it-listed)

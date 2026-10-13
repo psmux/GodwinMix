@@ -1,10 +1,12 @@
 // One plugin as a card: its picture, its name, one line about it, stars and
 // downloads, and the one button that matters. The picture is loaded by the
-// browser from GitHub; one that fails turns into the kind's icon.
+// browser from GitHub; one that fails turns into the kind's icon. A plugin
+// with a clip plays it while the mouse is over the card.
 
 import { el, svg } from "../../shell/dom.js";
 import { ICONS, KIND_COLOUR, kindOfSource } from "../../client/kind-look.js";
-import { numbers, tier, oneLine, kindWords, primary } from "./model.js";
+import { numbers, tier, oneLine, kindWords } from "./model.js";
+import { hoverPreview } from "./media.js";
 
 export const GLYPHS = {
   star: "M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z",
@@ -55,20 +57,12 @@ export function badges(p) {
 /**
  * @param {object} p        one entry of `plugin.gallery`
  * @param {(p) => void} open the detail view
- * @param {(p, act, button) => void} act Install or Update
+ * @param {(p) => HTMLElement} button the primary button, Install to Open
  */
-export function card(p, open, act) {
-  const go = primary(p);
-  const button = el(`button.btn${go.act ? ".primary" : ""}`, {
-    type: "button",
-    text: go.label,
-    disabled: !go.act,
-    title: go.act ? null : p.fit_detail || null,
-    onclick: (e) => { e.stopPropagation(); act(p, go.act, button); },
-  });
+export function card(p, open, button) {
   // The button already says why a plugin cannot run; the line says only yes.
-  const fits = p.runs_here ? el("span.pg-fit.yes", { text: p.fit, title: p.fit_detail }) : null;
-  return el("article.pg-card", { "data-name": p.name }, [
+  const fits = p.runs_here && !p.installed ? el("span.pg-fit.yes", { text: p.fit, title: p.fit_detail }) : null;
+  const node = el("article.pg-card", { "data-name": p.name }, [
     el("button.pg-open", { type: "button", "aria-label": `${p.title}: more about it`, onclick: () => open(p) }, [
       picture(p, p.thumbnail),
       el("div.pg-text", {}, [
@@ -77,6 +71,8 @@ export function card(p, open, act) {
         el("div.pg-meta", {}, [figures(p), el("span.pg-kinds", { text: kindWords(p).join(", ") })]),
       ]),
     ]),
-    el("div.pg-foot", {}, [el("span.pg-badges", {}, badges(p)), fits, el("span.grow"), button]),
+    el("div.pg-foot", {}, [el("span.pg-badges", {}, badges(p)), fits, el("span.grow"), button(p)]),
   ]);
+  hoverPreview(node, p);
+  return node;
 }

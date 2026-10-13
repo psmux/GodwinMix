@@ -31,12 +31,15 @@ use std::time::Duration;
 
 mod display;
 pub mod gallery;
-pub use display::Display;
+pub use display::{Display, Media};
 
-/// The two file names a marketplace repository may use. `index.json` is what
-/// the community index carries because it holds more than a listing; both are
+/// The file names a marketplace repository may use, tried in this order.
+/// `index.json` is what the community index carries because it holds more
+/// than a listing. `index2.json` is the same document with the listings that
+/// need GodwinMix 0.3.10 or newer as well: a mixer from before 0.3.10 never
+/// asks for it, so a plugin it cannot run never reaches its gallery. All are
 /// read with the same parser.
-pub const FILE_NAMES: &[&str] = &["godwinmix-marketplace.json", "index.json"];
+pub const FILE_NAMES: &[&str] = &["godwinmix-marketplace.json", "index2.json", "index.json"];
 
 /// One marketplace document.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
