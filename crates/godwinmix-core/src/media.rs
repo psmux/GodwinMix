@@ -68,11 +68,12 @@ pub struct MediaItem {
     /// this process's lifetime.
     #[serde(default)]
     pub conversion: Option<crate::convert::ConversionState>,
-    /// The folder it is in, absent when it is in All only. See
-    /// `media_labels`.
+    /// The folder it is in, `Sermons/2026`, absent at the top of the
+    /// library. See `media_org`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub folder: Option<String>,
-    /// Its tags, in the case each was first typed.
+    /// Its tags, in the case each was first typed. Kept in
+    /// `.godwinmix-media.json` beside the files.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tags: Vec<String>,
 }
@@ -88,7 +89,8 @@ pub struct MediaListing {
     /// client can say "made the media folder" once instead of nothing.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub created: bool,
-    /// Every folder in the library, in the order made, empty ones included.
+    /// Every folder in the library, `Sermons/2026` style, sorted, empty ones
+    /// included.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub folders: Vec<String>,
 }
@@ -220,12 +222,13 @@ impl MediaLibrary {
                 it.conversion = conv.state(&it.name);
             }
         }
-        let labels = crate::media_labels::load(&dir);
+        let tags = crate::media_org::load(&dir);
         for it in items.iter_mut() {
-            let label = labels.of(&it.name);
-            (it.folder, it.tags) = (label.folder, label.tags);
+            it.tags = tags.of(&it.name);
+            it.folder = Some(crate::media_org::parent_of(&it.name).to_string()).filter(|f| !f.is_empty());
         }
-        MediaListing { dir: dir.display().to_string(), items, error, created, folders: labels.folders }
+        let folders = crate::media_org::list_folders(&dir, self.cfg.max_depth);
+        MediaListing { dir: dir.display().to_string(), items, error, created, folders }
     }
 
     fn walk(
