@@ -16,7 +16,8 @@ paste one there, `D:\Recordings` for example, and press Enter or **Go**.
 Files and hidden folders are never listed. Each folder the mixer cannot write
 into is marked read only, and **Use this folder** stays off while you are in
 one. To make a new folder, type its name and press **New folder**. A script
-does the same with `path.list` and `path.create`, described in the
+does the same with `path.list` and `path.create`, both of which need a token
+with the operate scope, described in the
 [HTTP API reference](../reference/http-api.md).
 
 The output row shows the filename, status and amount of

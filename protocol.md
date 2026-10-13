@@ -131,7 +131,7 @@ Keys accepted on every method, handled before a method runs.
 | `output.start` | `POST /api/v1/outputs/{id}/start` | operate |  | 1 | Send to a stopped destination again, with the address and key it kept. |
 | `output.stop` | `POST /api/v1/outputs/{id}/stop` | operate |  | 1 | Stop sending the programme to one destination and keep it, address, key and all, for output.start. Viewers on that platform see the stream end. |
 | `path.create` | `POST /api/v1/path/create` | operate |  | 1 | Make one new folder inside a folder path.list shows, and list it. A folder that is already there is listed rather than refused. |
-| `path.list` | `GET /api/v1/path/list` | read |  | 1 | The folders in one folder on the mixer, on any drive, and whether each is writable, for a folder picker. The roots offer home, the mixer's own folders and each drive or mounted volume. Files and hidden folders are never shown. |
+| `path.list` | `GET /api/v1/path/list` | operate |  | 1 | The folders in one folder on the mixer, on any drive, and whether each is writable, for a folder picker. The roots offer home, the mixer's own folders and each drive or mounted volume. Files and hidden folders are never shown. |
 | `pipeline.clock` | `GET /api/v1/pipeline/clock` | read |  | 1 | The clock every pipeline is running against, and how far each one has got. |
 | `pipeline.dot` | `GET /api/v1/pipeline/dot` | read |  | 1 | One pipeline as a graphviz graph: every element, every pad and the caps negotiated between them. |
 | `pipeline.latency` | `GET /api/v1/pipeline/latency` | read |  | 1 | How much delay one pipeline is carrying, and which stage put it there. |

@@ -131,7 +131,7 @@ pub fn register(reg: &mut Registry<Call>) {
     reg.register(
         MethodDef::new(
             "path.list",
-            Scope::Read,
+            Scope::Operate,
             "The folders in one folder on the mixer, on any drive, and whether each is writable, \
              for a folder picker. The roots offer home, the mixer's own folders and each drive or \
              mounted volume. Files and hidden folders are never shown.",

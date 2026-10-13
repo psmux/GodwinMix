@@ -17997,7 +17997,7 @@
     },
     "/api/v1/path/list": {
       "get": {
-        "description": "JSON-RPC method `path.list`. Needs the `read` scope.",
+        "description": "JSON-RPC method `path.list`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
         "operationId": "path.list",
         "responses": {
           "200": {
@@ -18020,7 +18020,7 @@
         ],
         "x-destructive": false,
         "x-idempotent": true,
-        "x-scope": "read"
+        "x-scope": "operate"
       }
     },
     "/api/v1/pipeline/clock": {
