@@ -133,3 +133,7 @@ impl Mapping {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "media_refs_map_tests.rs"]
+mod tests;
