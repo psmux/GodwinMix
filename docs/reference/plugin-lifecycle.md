@@ -231,9 +231,17 @@ Every plugin process is given these, on top of everything the core inherited:
 | `GMX_INSTANCE` | the instance id, `cam1`. A device or service singleton is named after its provide |
 | `GMX_API_LEVEL` | the core's `api_level` |
 | `GMX_PLUGIN_ROOT` | the absolute path of the plugin's directory |
-| `GMX_TOKEN` | a token scoped `plugin:<name>`, for this instance and its tools |
-| `GMX_RPC` | the WebSocket URL of the core's `/rpc`, for a plugin that calls core methods outside its stdio channel. Empty on an embedded core with no server |
+| `GMX_TOKEN` | a token scoped `plugin:<name>`, for this instance and its tools. The control port accepts it whether or not the core has tokens of its own; it reaches `tool.call` for this plugin's tools and nothing else, so another method answers 403 naming the scope it needs |
+| `GMX_RPC` | the WebSocket URL of the core's `/rpc`, `ws://127.0.0.1:8080/rpc`, for a plugin that calls core methods outside its stdio channel. A bind on every interface is given as loopback. Under a station it is the show's own loopback port, because the show started the plugin and minted its token. Empty on an embedded core with no server |
 | `GMX_MEDIA` | after the handshake, the socket or FIFO address; empty in container mode |
+
+The same port answers plain HTTP, so `http://` and the host and port of
+`GMX_RPC` reach `/api/v1` as well.
+
+A `python` plugin also gets `PYTHONUTF8=1` and `PYTHONIOENCODING=utf-8`, so its
+pipes are UTF-8 on Windows, where Python otherwise writes the local code page
+and a curly quote in a reply is a byte the channel cannot read. Either one set
+in the core's own environment is left as it is.
 
 Three more are read by the core rather than set by it, when they are present:
 `GMX_PYTHON` and `GMX_NODE` name an interpreter to use instead of the one on
@@ -372,13 +380,27 @@ and the harness measures exactly that.
 `stop`, then `shutdown`, then the process group is killed after eight seconds.
 Every step is allowed to fail; the last one exists because the others can.
 
-All of that happens on a thread of its own and `plugin.remove` answers straight
-away. The caller is very often the mixer's own loop, because removing a source
-during a show reaches this from there, and ten seconds of the mixer loop is ten
-seconds of the mixer answering nothing. The instance is marked `stopped` the
-moment the decision is made, so `plugin.list` and `plugin.stats` tell you the
-truth immediately; the process behind it may take another few seconds to agree.
-A test that wants to see the pid go has to wait for it.
+All of that happens on a thread of its own, so stopping an instance answers
+straight away. The caller is very often the mixer's own loop, because removing
+a source during a show reaches this from there, and ten seconds of the mixer
+loop is ten seconds of the mixer answering nothing. The instance is marked
+`stopped` the moment the decision is made, so `plugin.list` and `plugin.stats`
+tell you the truth immediately; the process behind it may take another few
+seconds to agree. A test that wants to see the pid go has to wait for it.
+
+`plugin.remove`, and `plugin.add` or `plugin.update` of a plugin that is
+running, are the exception: they wait, on a blocking thread of the control
+server and never on the mixer's loop, until every process the host started for
+the plugin has exited, and only then touch its folder. The wait is by the pids
+the host recorded, for up to 13 seconds (the stop, the eight second grace and
+the kill). A plugin runs with its folder as its working directory, and on
+Windows a folder a running process has open cannot be deleted or replaced: the
+removal used to say "Access is denied" while a Python plugin was still
+answering its `shutdown`. A source or an output the operator added from the
+plugin is not the host's to stop, so `plugin.remove` names it and changes
+nothing until it is removed first. An install over a running copy stops the old
+copy before the new one starts, and starts whatever is installed at the end
+again if the install fails.
 
 The kill is to the process group, not to the process, because a plugin that
 started a helper leaves it orphaned otherwise. When the core is PID 1, as it is

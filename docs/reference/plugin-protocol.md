@@ -32,6 +32,13 @@ never knows which it is talking to.
 * UTF-8, one JSON object per line, terminated by `\n`. A message never contains
   a raw newline, because JSON escapes them. A `\r` before the newline is
   stripped, so a plugin driven from a Windows shell still parses.
+* A line that is not valid UTF-8 is read with the bad bytes replaced by U+FFFD,
+  and the core logs a warning naming the instance and the first bad byte. The
+  channel carries on, so the reply on that line still arrives, garbled where
+  the bytes were. Python on Windows writes the local code page unless told
+  otherwise, which is why the core starts a `python` plugin with
+  `PYTHONUTF8=1` and `PYTHONIOENCODING=utf-8`; see
+  [plugin-lifecycle.md](plugin-lifecycle.md#the-environment).
 * At most 4 MiB (4,194,304 bytes) per line. A line at exactly the limit is
   accepted; one byte more is error -32011, the channel closes and the instance
   goes to `failed`. The SDK refuses to send an over long line as well, rather
