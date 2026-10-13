@@ -1,13 +1,15 @@
 // Sources > More plugins, and More plugins in the add source picker: every
 // plugin the mixer's plugin lists know, as cards, over the page and under the
 // top bar. Nothing is fetched until it opens; then one `plugin.gallery`, and
-// the pictures come straight from GitHub.
+// the pictures come straight from GitHub. On All with no search, a Featured
+// row and a New and updated row come first, as an app store opens.
 
 import { el, clear } from "../../shell/dom.js";
 import { card } from "./card.js";
-import { openDetail } from "./detail.js";
-import { perform } from "./act.js";
+import { openDetail, closeDetail } from "./detail.js";
 import { FILTERS, visible, freshness } from "./model.js";
+import { featured, fresh, featureCard, row } from "./rows.js";
+import { makeStore } from "./store.js";
 
 let open = null;
 
@@ -21,15 +23,17 @@ export function toggleGallery(client) {
 function sheet() {
   if (document.getElementById("gmx-plugins-css")) return;
   document.head.append(el("link#gmx-plugins-css", { rel: "stylesheet", href: new URL("./plugins.css", import.meta.url).href }));
+  document.head.append(el("link#gmx-store-css", { rel: "stylesheet", href: new URL("./store.css", import.meta.url).href }));
 }
 
-export function openGallery(client) {
+export function openGallery(client, opts = {}) {
   sheet();
   const back = document.activeElement;
-  const state = { gallery: null, filter: "all", loading: true, error: "", notes: new Map() };
+  const state = { gallery: null, filter: "all", loading: true, error: "" };
   const search = el("input.pg-search", { type: "search", placeholder: "Search plugins", "aria-label": "Search plugins" });
   const chips = el("div.pg-chips", { role: "toolbar", "aria-label": "Show only" });
   const status = el("span.pg-dim", { role: "status" });
+  const rows = el("div.pg-rows");
   const grid = el("div.pg-grid");
   const root = el("section.plugins-page", { role: "region", "aria-label": "Plugins" }, [
     el("header.pg-top", {}, [
@@ -38,11 +42,13 @@ export function openGallery(client) {
       el("button.btn.icon", { type: "button", text: "×", title: "Close plugins (Escape)", "aria-label": "Close plugins", onclick: () => view.close() }),
     ]),
     chips,
-    el("div.pg-scroll", {}, [grid]),
+    el("div.pg-scroll", {}, [rows, el("h3.pg-all", { text: "All plugins" }), grid]),
   ]);
   const header = document.querySelector(".slot-header, gmx-header");
   root.style.top = `${header ? Math.round(header.getBoundingClientRect().bottom) : 44}px`;
   document.body.append(root);
+  const store = makeStore(client, { reload: () => load(false), leave: () => view.close(), arrive: opts.arrive });
+  const detail = (p) => openDetail(client, p, () => load(false), store);
 
   function draw() {
     clear(chips);
@@ -55,14 +61,26 @@ export function openGallery(client) {
     const all = (state.gallery && state.gallery.plugins) || [];
     status.textContent = state.loading && !state.gallery ? "Getting the list." : state.error ? "" : freshness(state.gallery);
     const shown = visible(all, state.filter, search.value);
+    drawRows(all);
     clear(grid);
     for (const p of shown) {
-      const node = card(p, (q) => openDetail(client, q, load), act);
-      const note = state.notes.get(p.name);
-      if (note) node.append(el(`p.pg-note${note.ok ? "" : ".bad"}`, { text: note.text }));
+      const node = card(p, detail, store.button);
+      const note = store.note(p.name);
+      if (note) node.append(note);
       grid.append(node);
     }
     if (!shown.length) grid.append(el("p.pg-empty", { text: empty(all) }));
+  }
+
+  function drawRows(all) {
+    clear(rows);
+    const browsing = state.filter === "all" && !search.value.trim();
+    root.classList.toggle("browsing", browsing);
+    if (!browsing) return;
+    const top = featured(all);
+    if (top.length) rows.append(row("Featured", top.map((p) => featureCard(p, detail, (q) => store.button(q, ".pg-big")))));
+    const recent = fresh(all);
+    if (recent.length) rows.append(row("New and updated", recent.map((p) => card(p, detail, store.button))));
   }
 
   function empty(all) {
@@ -74,7 +92,7 @@ export function openGallery(client) {
 
   async function load(force) {
     state.loading = true;
-    draw();
+    if (!state.gallery) draw();
     try {
       state.gallery = await client.call("plugin.gallery", force ? { refresh: true } : {});
       state.error = "";
@@ -86,13 +104,6 @@ export function openGallery(client) {
     return (state.gallery && state.gallery.plugins) || [];
   }
 
-  async function act(p, what, button) {
-    button.disabled = true;
-    const done = await perform(client, p, what, (text) => state.notes.set(p.name, { ok: true, text }) && draw());
-    state.notes.set(p.name, done);
-    await load();
-  }
-
   search.addEventListener("input", draw);
   const onKey = (e) => {
     if (e.key !== "Escape" || document.querySelector(".scrim")) return;
@@ -102,9 +113,11 @@ export function openGallery(client) {
   window.addEventListener("keydown", onKey);
   const view = {
     root,
+    store,
     reload: load,
     close() {
       window.removeEventListener("keydown", onKey);
+      closeDetail();
       root.remove();
       open = null;
       back?.focus?.();

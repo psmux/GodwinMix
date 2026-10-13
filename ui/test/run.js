@@ -8,6 +8,7 @@ import { liveDataTests } from "./live-data.js";
 import { graphicTests } from "./graphics.js";
 import { galleryTests } from "./gallery.js";
 import { pluginGalleryTests } from "./plugins.js";
+import { storeTests } from "./store.js";
 import { mediaTests } from "./media.js";
 import { studioTests } from "./studio.js";
 import { transitionTests } from "./transitions.js";
@@ -3077,6 +3078,7 @@ tileLevelTests(test, eq, ok)
   .then(() => graphicTests(test, eq, ok))
   .then(() => galleryTests(test, eq, ok))
   .then(() => pluginGalleryTests(test, eq, ok))
+  .then(() => storeTests(test, eq, ok))
   .then(() => mediaTests(test, eq, ok))
   .then(() => sourceFileTests(test, eq, ok))
   .then(() => errorActionTests(test, eq, ok))

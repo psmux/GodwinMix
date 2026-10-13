@@ -345,7 +345,7 @@ function pluginKinds(client, plugins, what, already) {
       const entry = typeof provide === "string" ? { id: provide } : provide || {};
       let id = String(entry.id || entry.type || "");
       if (id && !id.includes("/")) id = `${plugin.name}/${id}`;
-      const half = entry.kind || id.split("/")[1] || "";
+      const half = entry.kind || (plugin.provide_kinds || {})[id] || id.split("/")[1] || "";
       if (!id || half !== what || seen.has(id)) continue;
       seen.add(id);
       out.push({

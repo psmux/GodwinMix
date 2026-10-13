@@ -293,6 +293,10 @@ pub struct PluginRecord {
     /// The type ids it contributes: what goes in `type` on a source, an output
     /// or a filter.
     pub provides: Vec<String>,
+    /// The kind of each of those, by id: `{"hls/player": "source"}`, so a
+    /// picker offers a source whose id is not `source`.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub provide_kinds: std::collections::BTreeMap<String, String>,
     /// Its MCP tools, as `gmx_<plugin>_<tool>`. Reachable with `search_tools`;
     /// never in the hot list.
     pub tools: Vec<String>,
@@ -444,6 +448,7 @@ fn record(installed: &loader::Installed) -> PluginRecord {
         enabled: installed.enabled,
         root: installed.root.to_string_lossy().into_owned(),
         provides: installed.provides.clone(),
+        provide_kinds: kinds_of(&installed.manifest),
         tools: installed.tools.clone(),
         hooks: installed.hooks.clone(),
         problem: installed.problem.clone(),
@@ -498,6 +503,14 @@ fn remote_plugins() -> Vec<godwinmix_core::plugin::remote::Reachable> {
         .collect()
 }
 
+/// Each provide's kind, keyed by its full id.
+fn kinds_of(
+    manifest: &godwinmix_protocol::plugin::manifest::Manifest,
+) -> std::collections::BTreeMap<String, String> {
+    let name = &manifest.plugin.name;
+    manifest.provides.iter().map(|p| (format!("{name}/{}", p.id), p.kind.clone())).collect()
+}
+
 /// One reachable plugin, in the shape `plugin.list` answers with.
 fn remote_record(reachable: &godwinmix_core::plugin::remote::Reachable) -> PluginRecord {
     let manifest = &reachable.manifest;
@@ -516,6 +529,7 @@ fn remote_record(reachable: &godwinmix_core::plugin::remote::Reachable) -> Plugi
         enabled: true,
         root: format!("node:{}", reachable.node),
         provides,
+        provide_kinds: kinds_of(manifest),
         tools: manifest.tools.iter().map(|t| format!("gmx_{name}_{}", t.name)).collect(),
         hooks: Vec::new(),
         problem: None,

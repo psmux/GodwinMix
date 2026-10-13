@@ -1,11 +1,14 @@
-// One plugin in full: its pictures, what it does, who makes it, and Install,
-// Update and Remove. Opened from a card.
+// One plugin in full: a large carousel of its pictures and clips, what it
+// does, who makes it, and Install, Open, Update and Remove. Opened from a
+// card.
 
 import { el } from "../../shell/dom.js";
 import { modal, confirmModal } from "../../shell/modal.js";
 import { picture, figures, badges } from "./card.js";
-import { tier, kindWords, primary } from "./model.js";
-import { perform } from "./act.js";
+import { tier, kindWords } from "./model.js";
+import { carousel } from "./media.js";
+
+let current = null;
 
 /** "12 March 2026" from an RFC 3339 time, or "" for none. */
 export function when(stamp) {
@@ -29,17 +32,32 @@ export function facts(p) {
   return rows.filter(([, v]) => v);
 }
 
+/** Close the detail view, when one is open. */
+export function closeDetail() {
+  current?.close();
+  current = null;
+}
+
 /**
  * @param {() => Promise<object[]>} changed  read the gallery again after a
  *        change, answering its plugins, so the view opens again with the
  *        buttons the plugin now needs
+ * @param {object} store  the page's buttons and what they do (store.js)
  */
-export function openDetail(client, p, changed) {
-  const note = el("p.pg-note", { role: "status" });
-  const shots = (p.screenshots || []).length ? p.screenshots : [p.thumbnail];
-  const body = el("div.pg-detail", {}, [
-    el("div.pg-shots", {}, shots.map((url) => picture(p, url, "pg-shot"))),
+export function openDetail(client, p, changed, store) {
+  closeDetail();
+  const note = el("div.pg-note", { role: "status" });
+  const shown = store.note(p.name);
+  const hero = carousel(p);
+  const head = el("div.pg-head", {}, [
+    p.icon ? picture(p, p.icon, "pg-appicon") : null,
+    el("div", {}, [el("strong", { text: p.title }), el("span.pg-dim", { text: p.author || "" })]),
+    el("span.grow"),
+  ]);
+  const body = el("div.pg-detail", { "data-name": p.name }, [
+    hero,
     el("div.pg-about", {}, [
+      head,
       el("div.pg-badges", {}, [...badges(p), figures(p)]),
       el("p", { text: p.description || "No description yet." }),
       el("dl.pg-facts", {}, facts(p).flatMap(([k, v]) => [el("dt", { text: k }), el("dd", { text: v })])),
@@ -47,34 +65,35 @@ export function openDetail(client, p, changed) {
         p.repository ? el("a", { href: p.repository, target: "_blank", rel: "noopener", text: "Source code" }) : null,
         p.homepage ? el("a", { href: p.homepage, target: "_blank", rel: "noopener", text: "Website" }) : null,
       ]),
-      note,
+      shown || note,
     ]),
   ]);
-  const buttons = [];
-  const go = async (act, button) => {
-    if (act === "remove" && !(await confirmModal(`Remove ${p.title}? Anything using it stops.`, "Remove"))) return;
-    for (const b of buttons) b.disabled = true;
-    note.classList.remove("bad");
-    const done = await perform(client, p, act, (text) => (note.textContent = text));
-    note.textContent = done.text;
-    note.classList.toggle("bad", !done.ok);
-    if (!done.ok) {
-      for (const b of buttons) b.disabled = false;
-      return button.focus?.();
-    }
-    const now = (await changed()).find((q) => q.name === p.name);
-    if (!now) return;
-    m.close();
-    openDetail(client, now, changed).say(done.text);
+  // After a change the view opens again, with the buttons the plugin now needs.
+  const again = async (done, act) => {
+    if (!done || act === "open" || current !== m) return;
+    const now = (await changed()).find((q) => q.name === p.name) || { ...p, installed: false, update: false };
+    if (current === m) openDetail(client, now, changed, store);
   };
-  const first = primary(p);
-  if (first.act) buttons.push(el("button.btn.primary", { type: "button", text: first.label, onclick: (e) => go(first.act, e.currentTarget) }));
-  if (p.installed) buttons.push(el("button.btn.danger", { type: "button", text: "Remove", onclick: (e) => go("remove", e.currentTarget) }));
+  const go = store.button(p, ".pg-big", again);
+  head.append(go);
+  const remove = async () => {
+    if (!(await confirmModal(`Remove ${p.title}? Anything using it stops.`, "Remove"))) return;
+    again(await store.press(p, "remove"), "remove");
+  };
   const m = modal({
     title: p.title,
     body,
     wide: true,
-    footer: [el("span.grow.pg-dim", { text: first.act ? "" : first.label }), ...buttons, el("button.btn", { type: "button", text: "Close", onclick: () => m.close() })],
+    onClose: () => {
+      hero.stop();
+      if (current === m) current = null;
+    },
+    footer: [
+      el("span.grow.pg-dim", { text: go.dataset.act ? "" : go.textContent }),
+      p.installed ? el("button.btn.danger", { type: "button", text: "Remove", onclick: remove }) : null,
+      el("button.btn", { type: "button", text: "Close", onclick: () => m.close() }),
+    ],
   });
+  current = m;
   return { ...m, say: (text) => (note.textContent = text) };
 }

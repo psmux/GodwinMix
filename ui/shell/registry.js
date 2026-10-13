@@ -52,6 +52,11 @@ export function get(id) {
   return panels.get(id) || null;
 }
 
+/** The panels one plugin registered, in the order they arrived. */
+export function panelsOf(plugin) {
+  return list().filter((p) => p.plugin === plugin);
+}
+
 /** A trusted panel: a custom element class with `static get panel()`. */
 export function registerElement(Class, plugin) {
   const spec = Class.panel;
@@ -166,7 +171,10 @@ export async function discover(base) {
     try {
       if (p.tier === "trusted" && p.module) {
         // The module registers itself by pushing onto window.godwinmixPanels.
+        // What it registered is the plugin's, so the gallery can open it.
+        const before = new Set(panels.keys());
         await import(/* @vite-ignore */ p.module);
+        for (const [id, spec] of panels) if (!before.has(id)) spec.plugin = p.name;
         found.push(p.name);
       } else if (p.page) {
         registerSandboxed({
