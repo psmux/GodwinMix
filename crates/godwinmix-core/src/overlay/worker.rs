@@ -90,6 +90,10 @@ pub fn spawn<P: Send + 'static>(name: &str, first: P, layer: Arc<Layer>, carrier
             let started = Instant::now();
             let mut next = Some(first);
             while let Some(msg) = next.take() {
+                // New words go on at once: only sizes are waited on, because
+                // only a drag sends a stream of them. Whatever is already
+                // queued behind the words is still taken in the same render.
+                let mut settle = SETTLE;
                 match msg {
                     Msg::Set(p, restart) => {
                         state = p;
@@ -97,6 +101,7 @@ pub fn spawn<P: Send + 'static>(name: &str, first: P, layer: Arc<Layer>, carrier
                             layer.restart();
                         }
                         (dirty, content) = (true, true);
+                        settle = Duration::ZERO;
                     }
                     Msg::Drawn(size) => {
                         dirty |= drawn != Some(size);
@@ -105,7 +110,7 @@ pub fn spawn<P: Send + 'static>(name: &str, first: P, layer: Arc<Layer>, carrier
                     Msg::Stop => return,
                 }
                 let left = SETTLE_MAX.saturating_sub(started.elapsed());
-                next = match rx.recv_timeout(SETTLE.min(left)) {
+                next = match rx.recv_timeout(settle.min(left)) {
                     Ok(m) => Some(m),
                     Err(RecvTimeoutError::Timeout) => None,
                     Err(RecvTimeoutError::Disconnected) => return,
