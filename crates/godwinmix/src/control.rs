@@ -26,9 +26,11 @@ pub mod history;
 pub mod hls;
 pub mod hooks;
 pub mod methods;
+pub mod plugin_access;
 pub mod presence;
 pub mod push;
 pub mod rest;
+pub mod rest_limit;
 pub mod streams;
 mod upload;
 pub mod whep;
@@ -197,7 +199,7 @@ impl AppState {
         if !crate::station::show::under_station() {
             channels.run_programme_feeds(Arc::new(crate::channels::feed_loop::OwnMixer { mixer: mixer.clone() }));
         }
-        let tokens = crate::station::show::with_station_token(cfg.tokens(rehearsal))
+        let tokens = plugin_access::accepting_plugins(crate::station::show::with_station_token(cfg.tokens(rehearsal)))
             .with_devices(crate::devices::for_config(&cfg.source_path));
         let safety =
             godwinmix_core::safety::Guard::new(cfg.safety.clone(), cfg.canvas.fps.max(1) as u32);
@@ -1655,6 +1657,7 @@ pub async fn serve_with(
 ) -> Result<()> {
     if let Ok(addr) = listener.local_addr() {
         *BOUND.write() = Some(addr);
+        plugin_access::announce(addr);
     }
     let snapshots =
         Tracker::new(state.snapshot.clone(), state.multiview.clone(), state.mixer.clone());

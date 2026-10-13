@@ -56,6 +56,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tracing::{debug, info, warn};
 
+pub mod retire;
 mod routes;
 pub use routes::EventRoute;
 

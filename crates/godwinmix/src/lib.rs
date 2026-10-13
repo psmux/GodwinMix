@@ -830,11 +830,11 @@ pub async fn run() -> Result<()> {
     // plugin it belongs to. Without this the loader has nothing to mint with
     // and hands out an empty string, which is right for an embedded core with
     // no control server and wrong for this one.
-    {
-        let minting = tokens.clone();
-        plugin::loader::set_token_minter(Box::new(move |plugin, instance| {
-            minting.mint_for_plugin(plugin, instance, None)
-        }));
+    control::plugin_access::mint_from(&tokens);
+    // And where to reach the core, for the same plugins. A show under a
+    // station says so once its own port is bound, below.
+    if !station::show::under_station() {
+        control::plugin_access::announce_bind(&bind);
     }
     let cfg_media = cfg.media.clone();
     // Before any source is built: a graphic template finds library files and
@@ -927,6 +927,10 @@ pub async fn run() -> Result<()> {
         true => {
             let listener = tokio::net::TcpListener::bind(&bind).await.with_context(|| format!("binding {bind}"))?;
             let bound = listener.local_addr()?;
+            // Its plugins call this show on its own loopback port, with the
+            // tokens this show minted. The station's port would relay them to
+            // whichever show it names first.
+            control::plugin_access::announce(bound);
             Some((station::show::link(bound, &station, quit.clone())?, listener))
         }
         false => None,

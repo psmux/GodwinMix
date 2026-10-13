@@ -681,7 +681,17 @@ pub(crate) async fn install_and_start(
     let installed = tokio::task::spawn_blocking(move || loader::install(&spec, &opts))
         .await
         .map_err(|e| format!("the install task did not finish: {e}"))?
-        .map_err(|e| format!("{e:#}"))?;
+        .map_err(|e| format!("{e:#}"));
+    // A failed install may have stopped the copy that was running, to make
+    // room for this one: that copy starts again.
+    let installed = match installed {
+        Ok(installed) => installed,
+        Err(why) => {
+            let supervisor = app.plugins.clone();
+            let _ = tokio::task::spawn_blocking(move || crate::start_singletons(&supervisor)).await;
+            return Err(why);
+        }
+    };
     // The hook call site: take on whatever the new plugin asked for, and
     // tell everyone else it arrived.
     plugin_arrived(&app.hooks, &installed);
@@ -770,16 +780,22 @@ async fn update(call: Call, params: Value) -> Result<Value, RpcError> {
     }
     let name = req.id.clone();
     let opts = options(&call);
+    let supervisor = call.app.plugins.clone();
     Ok(super::tasks::spawn_task(
         &call.app.tasks,
         "plugin.update",
         Some(serde_json::json!({ "plugin": req.id, "source": spec })),
         move |_ctx| async move {
-            let updated =
-                tokio::task::spawn_blocking(move || loader::update(&name, &spec, &opts))
-                    .await
-                    .map_err(|e| format!("the update task did not finish: {e}"))?
-                    .map_err(|e| format!("{e:#}"))?;
+            // The old version was stopped to make way, so whichever version
+            // is installed at the end, new or rolled back, starts now.
+            let updated = tokio::task::spawn_blocking(move || {
+                let updated = loader::update(&name, &spec, &opts);
+                crate::start_singletons(&supervisor);
+                updated
+            })
+            .await
+            .map_err(|e| format!("the update task did not finish: {e}"))?
+            .map_err(|e| format!("{e:#}"))?;
             serde_json::to_value(PluginUpdated {
                 from: updated.from,
                 to: updated.to,
@@ -874,11 +890,19 @@ fn options(call: &Call) -> loader::InstallOptions {
 }
 
 fn options_of(app: &crate::control::AppState) -> loader::InstallOptions {
+    // An install or an update of a plugin that is running stops it and waits
+    // for its processes to exit before its folder is touched. With the folder
+    // itself about to go, a source or output still using it is a refusal.
+    let supervisor = app.plugins.clone();
+    let retire = loader::Retirer(std::sync::Arc::new(move |name: &str, folder: bool| {
+        supervisor.retire(name, "a new copy of the plugin is being installed", folder)
+    }));
     loader::InstallOptions {
         allow_unsigned: app.allow_unsigned,
         only: app.marketplaces_only.clone(),
         offline: false,
         report: None,
+        retire: Some(retire),
     }
 }
 
@@ -897,15 +921,16 @@ async fn remove(call: Call, params: Value) -> Result<Value, RpcError> {
             )],
         ));
     }
-    // Every process this plugin has running stops before its directory goes,
-    // or `plugin.add` then `plugin.remove` would leave a process holding a
-    // deleted binary. The leak test counts exactly that.
+    // Every process this plugin has running stops, and has exited, before its
+    // directory goes, or `plugin.add` then `plugin.remove` would leave a
+    // process holding a deleted binary (the leak test counts exactly that),
+    // and on Windows the delete is refused while one runs from the folder.
     let supervisor = call.app.plugins.clone();
     let name = req.id.clone();
-    let _ = tokio::task::spawn_blocking(move || {
-        supervisor.stop_plugin(&name, "the plugin was removed")
-    })
-    .await;
+    tokio::task::spawn_blocking(move || supervisor.retire(&name, "the plugin was removed", true))
+        .await
+        .map_err(|e| RpcError::new(ErrorCode::InternalError, format!("stopping the plugin did not finish: {e}")))?
+        .map_err(|e| RpcError::new(ErrorCode::NotInState, format!("{e:#}")).with("plugin", req.id.clone()))?;
     let gone = loader::uninstall(&req.id)
         .map_err(|e| RpcError::new(ErrorCode::NotInState, format!("{e:#}")))?;
     // Its credentials and its secrets go with it. A token minted for an

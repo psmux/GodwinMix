@@ -2027,8 +2027,8 @@ impl StderrReader {
         let stop = Arc::new(AtomicBool::new(false));
         let flag = stop.clone();
         let join = std::thread::Builder::new()
-            .name(name)
-            .spawn(move || drain_stderr(err, &flag, &mut on_line))
+            .name(name.clone())
+            .spawn(move || drain_stderr(&name, err, &flag, &mut on_line))
             .ok();
         Self { stop, join }
     }
@@ -2100,6 +2100,7 @@ const STOP_GRACE: Duration = Duration::from_secs(2);
 
 #[cfg(unix)]
 fn drain_stderr(
+    name: &str,
     mut err: std::process::ChildStderr,
     stop: &AtomicBool,
     on_line: &mut impl FnMut(&str),
@@ -2133,10 +2134,7 @@ fn drain_stderr(
             Ok(0) => break, // Every writer has let go.
             Ok(n) => {
                 pending.extend_from_slice(&buf[..n]);
-                while let Some(nl) = pending.iter().position(|b| *b == b'\n') {
-                    let line: Vec<u8> = pending.drain(..=nl).collect();
-                    on_line(String::from_utf8_lossy(&line[..nl]).trim_end());
-                }
+                crate::child_lines::split(name, &mut pending, on_line);
                 // A child writing megabytes without a newline must not grow
                 // this without bound. Nothing either caller reads is near it.
                 if pending.len() > 1 << 20 {
@@ -2152,7 +2150,7 @@ fn drain_stderr(
         }
     }
     if !pending.is_empty() {
-        on_line(String::from_utf8_lossy(&pending).trim_end());
+        crate::child_lines::deliver(name, &pending, on_line);
     }
     // `err` drops here, and with it the read end of the pipe.
 }
@@ -2173,14 +2171,12 @@ fn drain_stderr(
 /// records it.
 #[cfg(not(unix))]
 fn drain_stderr(
+    name: &str,
     err: std::process::ChildStderr,
     _stop: &AtomicBool,
     on_line: &mut impl FnMut(&str),
 ) {
-    use std::io::BufRead;
-    for line in std::io::BufReader::new(err).lines().map_while(Result::ok) {
-        on_line(&line);
-    }
+    crate::child_lines::read_all(name, err, on_line);
 }
 
 /// Reap orphans when this process is the container's init.

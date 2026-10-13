@@ -243,14 +243,15 @@ async fn generic(State(ctx): State<Ctx>, request: Request) -> Response {
     };
     let (route, captures) = route;
 
-    // A graphic saved or imported carries its picture or clip as base64 in
-    // the JSON, so those two take what an upload takes; everything else is
-    // a few hundred bytes and a megabyte is generous.
-    let limit = match route.method {
-        "gallery.save" | "gallery.import" => ctx.app.library.cfg().max_upload_bytes.saturating_mul(4) / 3 + 4096,
-        _ => 1 << 20,
+    let limit = super::rest_limit::for_method(route.method, ctx.app.library.cfg().max_upload_bytes);
+    let bytes = match super::rest_limit::read(&parts.headers, body, limit).await {
+        Ok(b) => b,
+        Err(super::rest_limit::Unread::TooLarge) => return super::rest_limit::too_large(route.method, limit, &trace_id),
+        Err(super::rest_limit::Unread::Failed(e)) => {
+            return error_response(&RpcError::invalid_params(format!("could not read the body: {e}")), &trace_id)
+        }
     };
-    let body = match read_json(body, limit).await {
+    let body = match parse_json(&bytes) {
         Ok(v) => v,
         Err(e) => return error_response(&e, &trace_id),
     };
@@ -289,14 +290,11 @@ async fn generic(State(ctx): State<Ctx>, request: Request) -> Response {
     }
 }
 
-async fn read_json(body: Body, limit: usize) -> Result<Value, RpcError> {
-    let bytes = axum::body::to_bytes(body, limit)
-        .await
-        .map_err(|e| RpcError::invalid_params(format!("could not read the body: {e}")))?;
+fn parse_json(bytes: &[u8]) -> Result<Value, RpcError> {
     if bytes.is_empty() {
         return Ok(Value::Null);
     }
-    serde_json::from_slice(&bytes).map_err(|e| {
+    serde_json::from_slice(bytes).map_err(|e| {
         RpcError::new(ErrorCode::ParseError, format!("the body is not JSON: {e}"))
     })
 }

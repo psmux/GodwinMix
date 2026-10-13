@@ -837,6 +837,33 @@ pub struct InstallOptions {
     /// with the fraction of the asset that has arrived when its size is
     /// known, then `installing`.
     pub report: Option<Reporter>,
+    /// Stops what is running of a plugin that is already installed, and
+    /// waits for it to exit, before its folder is replaced or a new version
+    /// takes over. Given the name and whether the same version's folder is
+    /// about to be replaced. See `supervisor::retire`.
+    pub retire: Option<Retirer>,
+}
+
+/// What a [`Retirer`] calls: the plugin's name, and whether its folder goes.
+pub type Retire = dyn Fn(&str, bool) -> Result<()> + Send + Sync;
+
+/// Stops a plugin's processes before an install touches it.
+#[derive(Clone)]
+pub struct Retirer(pub std::sync::Arc<Retire>);
+
+impl std::fmt::Debug for Retirer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Retirer")
+    }
+}
+
+/// Stop what runs of `name` when it is installed, through the caller's
+/// retirer. `folder` says the folder itself is about to go.
+fn retire_before(name: &str, folder: bool, opts: &InstallOptions) -> Result<()> {
+    match (&opts.retire, get(name)) {
+        (Some(retire), Some(_)) => (retire.0)(name, folder),
+        _ => Ok(()),
+    }
 }
 
 /// What a [`Reporter`] calls: a stage, and how far through it when known.
@@ -860,7 +887,7 @@ impl std::fmt::Debug for Reporter {
 
 impl Default for InstallOptions {
     fn default() -> Self {
-        Self { allow_unsigned: true, only: Vec::new(), offline: false, report: None }
+        Self { allow_unsigned: true, only: Vec::new(), offline: false, report: None, retire: None }
     }
 }
 
@@ -946,8 +973,12 @@ fn place(fetched: &godwinmix_host::sources::Fetched, opts: &InstallOptions) -> R
         );
     }
     let target = dir().join(&name).join(&version);
+    // A running copy of this plugin goes first: the same version's folder
+    // cannot be replaced under it on Windows, and an old version's singleton
+    // must not run on beside the new one.
+    retire_before(&name, target.exists(), opts)?;
     if target.exists() {
-        std::fs::remove_dir_all(&target)
+        super::supervisor::retire::remove_folder(&target)
             .with_context(|| format!("replacing {}", target.display()))?;
     }
     copy_tree(source, &target)?;
@@ -1190,6 +1221,9 @@ pub fn update(name: &str, spec: &str, opts: &InstallOptions) -> Result<Updated> 
     let old_root = old.root.clone();
     // A new version with the same number would land on top of the old one, so
     // the old one is moved out of the way first and moved back on a failure.
+    // Its processes stop first, since Windows will not move a folder a running
+    // process has open.
+    retire_before(name, true, opts)?;
     let backup = Backup::take(&old_root)?;
 
     let outcome = install(spec, opts).and_then(|installed| {
@@ -1363,7 +1397,7 @@ pub fn uninstall(name: &str) -> Result<Installed> {
     })?;
     let root = dir().join(name);
     if root.exists() {
-        std::fs::remove_dir_all(&root)
+        super::supervisor::retire::remove_folder(&root)
             .with_context(|| format!("removing {}", root.display()))?;
     }
     info!(plugin = %name, "removed a plugin");

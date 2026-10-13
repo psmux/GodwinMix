@@ -45,6 +45,7 @@
 pub mod armed;
 pub mod caps;
 pub mod catalogue;
+mod child_lines;
 pub mod config;
 pub mod convert;
 pub mod encoder;
