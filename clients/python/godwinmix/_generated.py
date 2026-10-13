@@ -2102,6 +2102,57 @@ class MarkRequest(TypedDict, total=False):
     label: Optional[str]
     # What to call the group of changes that follows. Omit it to end the group, so the next change is its own undo step.
 
+class MediaCount(TypedDict, total=False):
+    """One tag and how many files have it."""
+
+    count: int
+    name: str
+
+class MediaFolderAddRequest(TypedDict, total=False):
+    """`media.folder.add`: make a folder, and any above it that are missing."""
+
+    name: str
+    # `Sermons`, or `Sermons/2026` to make one inside another.
+
+class MediaFolderCount(TypedDict, total=False):
+    """One folder, as `media.folder.list` answers."""
+
+    files: int
+    # Files right in it.
+    path: str
+    # `Sermons/2026`.
+    total: int
+    # Files anywhere under it, its own included.
+
+class MediaFolderMoveRequest(TypedDict, total=False):
+    """`media.folder.move`: rename a folder, move it into another, or both."""
+
+    force: bool
+    # Move it even while a file in it is on programme.
+    into: Optional[str]
+    # The folder to put it in, `""` for the top. Left out, it stays where it is.
+    name: str
+    # The folder as it is now: `Sermons/2026`.
+    to: Optional[str]
+    # Its new name. Left out, it keeps its name.
+
+class MediaFolderRemoveRequest(TypedDict, total=False):
+    """`media.folder.remove`: what happens to what is inside is asked for, never assumed. No media file is ever deleted."""
+
+    contents: Optional[str]
+    # `up` moves its files and folders into the folder above it; `top` moves them to the top of the library.
+    force: bool
+    # Remove it even while a file in it is on programme.
+    name: str
+
+class MediaFolders(TypedDict, total=False):
+    """The answer to `media.folder.list`."""
+
+    folders: List[MediaFolderCount]
+    # Every folder, sorted by path, empty ones included.
+    tags: List[MediaCount]
+    # Every tag in use, the most used first.
+
 class MediaItem(TypedDict, total=False):
     audio_codec: Optional[str]
     conversion: Union[ConversionState, None]
@@ -2111,6 +2162,8 @@ class MediaItem(TypedDict, total=False):
     # None when the file could not be inspected; it is still listed, because an operator would rather see a clip they cannot read the length of than wonder why it is missing.
     faststart: Optional[bool]
     # The converted copy's absolute path when one exists on disk. This is what "add as source" should prefer over `path`. Whether the moov atom comes first (a player can start before the whole file arrives). None for a non-ISO container, never a reason to convert on its own. See `convert::moov_first`.
+    folder: Optional[str]
+    # The folder it is in, `Sermons/2026`, absent at the top of the library. See `media_org`.
     has_audio: bool
     has_video: bool
     height: Optional[int]
@@ -2121,11 +2174,25 @@ class MediaItem(TypedDict, total=False):
     reasons: List[str]
     # Why it is not, in words an operator can act on. Empty when it is.
     size_bytes: int
+    tags: List[str]
+    # Its tags, in the case each was first typed. Kept in `.godwinmix-media.json` beside the files.
     video_codec: Optional[str]
     # Short codec name of the first video stream ("h264", "vp9"), None when there is no video or it could not be inspected.
     web_safe: bool
     # True when the file needs no conversion to play in a browser: H.264 plus AAC (or no audio) in an MP4. See `convert::web_safety`.
     width: Optional[int]
+
+class MediaListRequest(TypedDict, total=False):
+    """`media.list`. Every filter is optional and they all have to match."""
+
+    folder: Optional[str]
+    # Only the files in this folder: `Sermons/2026`. `""` is the top of the library. Left out, every file in the tree.
+    query: Optional[str]
+    # Words that each have to appear in the file's path or its tags.
+    subfolders: bool
+    # With `folder`: the files in its subfolders too, any depth.
+    tag: Any
+    # Only the files with this tag, or with every one of these tags: `"easter"`, `["easter", "choir"]` or `"easter, choir"`.
 
 class MediaListing(TypedDict, total=False):
     created: bool
@@ -2133,7 +2200,56 @@ class MediaListing(TypedDict, total=False):
     dir: str
     error: Optional[str]
     # Set when the directory itself could not be read, so the UI can say why the list is empty instead of just showing nothing.
+    folders: List[str]
+    # Every folder in the library, `Sermons/2026` style, sorted, empty ones included.
     items: List[MediaItem]
+
+MediaMove = TypedDict("MediaMove", {
+    "from": "str",
+    "to": "str",
+}, total=False)
+
+class MediaMoveRequest(TypedDict, total=False):
+    """`media.move`: move files into a folder, rename one, or both. The files move on disk; sources that use them are pointed at the new place."""
+
+    folder: Optional[str]
+    # The folder to move them into: `Sermons/2026`, or `""` for the top. Left out, they stay in their folder.
+    force: bool
+    # Move a file even while it is on programme. The source playing it is pointed at the new place, which restarts it on air.
+    name: Optional[str]
+    # One file, by its path in `media.list`.
+    names: List[str]
+    # Several files at once.
+    new_name: Optional[str]
+    # A new file name, keeping a clip or picture extension. One file only.
+
+class MediaMoved(TypedDict, total=False):
+    """What moved, and what was changed to follow it."""
+
+    moved: List[MediaMove]
+    # Each move, old path to new, relative to the media folder.
+    updated: List[str]
+    # What was pointed at the new places, in words: `source intro`.
+
+class MediaTagRequest(TypedDict, total=False):
+    """`media.tag`: change the tags of one file or several. Only what is named changes."""
+
+    add_tags: Any
+    # Tags to add, keeping the ones they have.
+    name: Optional[str]
+    # One file, by its path in `media.list`.
+    names: List[str]
+    # Several files at once.
+    remove_tags: Any
+    # Tags to take off, keeping the rest.
+    tags: Any
+    # Their tags from now on, replacing the ones they have. `[]` clears them.
+
+class MediaTagged(TypedDict, total=False):
+    """One file and its tags, as `media.tag` answers."""
+
+    name: str
+    tags: List[str]
 
 class Meters(TypedDict, total=False):
     """`event/meters`: the programme bus and every source, in one message at 10 per second, rather than one message per meter as the legacy stream sends."""
@@ -4287,8 +4403,14 @@ METHODS = (
     {"name": "log.levels", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/log/levels"), "summary": 'Every log level override in force, and the GStreamer categories still raised.'},
     {"name": "log.set", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/log/set"), "summary": "Change one instance's or one module's log level while the mixer runs."},
     {"name": "media.convert", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/media/{id}/convert"), "summary": 'Transcode a library file to a web safe copy, in the background.'},
-    {"name": "media.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/media"), "summary": 'The clips in the library, with durations and whether each has audio.'},
+    {"name": "media.folder.add", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/media/folder/add"), "summary": 'Make a folder in the media library, inside another when the name has a / in it.'},
+    {"name": "media.folder.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/media/folder/list"), "summary": 'Every folder in the media library with how many files are in it, and every tag in use.'},
+    {"name": "media.folder.move", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/media/folder/move"), "summary": 'Rename a media folder, move it into another folder or to the top, or both. Sources using its files follow.'},
+    {"name": "media.folder.remove", "scope": "operate", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/media/folder/remove"), "summary": 'Remove a media folder, moving what is in it up a level or to the top first. No file is deleted.'},
+    {"name": "media.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/media"), "summary": 'The clips in the library, with durations, whether each has audio, its folder and its tags. Narrow it by folder, tag or words.'},
+    {"name": "media.move", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/media/{id}/move"), "summary": 'Move library files into another folder, or rename one, on disk. Sources using them follow.'},
     {"name": "media.remove", "scope": "operate", "mutating": True, "destructive": True, "rest": ("DELETE", "/api/v1/media/{id}"), "summary": 'Delete a library file and its converted copy. Refused while it is a live source.'},
+    {"name": "media.tag", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/media/{id}/tag"), "summary": 'Change the tags of one library file or several: replace them, add some, or take some off.'},
     {"name": "media.upload", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/media/upload"), "summary": 'Stream a file into the library. HTTP only: the body is the file.'},
     {"name": "network.share", "scope": "admin", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/network/share"), "summary": 'Let phones and other computers on the same network reach this mixer (enabled: true), or keep it to this computer (false). The address is fixed while the mixer runs, so this restarts it on the same port and the programme is off air for a few seconds: under the desktop app, or under a supervisor when the address comes from the config file. Otherwise it answers restarting: false and says why. Refused on a mixer with no control token.'},
     {"name": "node.discover", "scope": "read", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/nodes/{id}/discover"), "summary": 'Look for nodes on the local network over mDNS. A network without multicast finds nothing and the [nodes] table in the config is the way there.'},
@@ -5630,12 +5752,103 @@ class GeneratedMethods:
         params["name"] = name
         return await self._call("media.convert", params)
 
+    async def media_folder_add(
+        self,
+        *,
+        name: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Make a folder in the media library, inside another when the name has a / in it."""
+        params: Dict[str, Any] = {}
+        if name is not None:
+            params["name"] = name
+        return await self._call("media.folder.add", params)
+
+    async def media_folder_list(
+        self,
+    ) -> MediaFolders:
+        """Every folder in the media library with how many files are in it, and every tag in use."""
+        params: Dict[str, Any] = {}
+        return await self._call("media.folder.list", params)
+
+    async def media_folder_move(
+        self,
+        *,
+        force: Optional[bool] = None,
+        into: Optional[str] = None,
+        name: Optional[str] = None,
+        to: Optional[str] = None,
+    ) -> MediaMoved:
+        """Rename a media folder, move it into another folder or to the top, or both. Sources using its files follow."""
+        params: Dict[str, Any] = {}
+        if force is not None:
+            params["force"] = force
+        if into is not None:
+            params["into"] = into
+        if name is not None:
+            params["name"] = name
+        if to is not None:
+            params["to"] = to
+        return await self._call("media.folder.move", params)
+
+    async def media_folder_remove(
+        self,
+        *,
+        contents: Optional[str] = None,
+        force: Optional[bool] = None,
+        name: Optional[str] = None,
+    ) -> MediaMoved:
+        """Remove a media folder, moving what is in it up a level or to the top first. No file is deleted."""
+        params: Dict[str, Any] = {}
+        if contents is not None:
+            params["contents"] = contents
+        if force is not None:
+            params["force"] = force
+        if name is not None:
+            params["name"] = name
+        return await self._call("media.folder.remove", params)
+
     async def media_list(
         self,
+        *,
+        folder: Optional[str] = None,
+        query: Optional[str] = None,
+        subfolders: Optional[bool] = None,
+        tag: Any = None,
     ) -> MediaListing:
-        """The clips in the library, with durations and whether each has audio."""
+        """The clips in the library, with durations, whether each has audio, its folder and its tags. Narrow it by folder, tag or words."""
         params: Dict[str, Any] = {}
+        if folder is not None:
+            params["folder"] = folder
+        if query is not None:
+            params["query"] = query
+        if subfolders is not None:
+            params["subfolders"] = subfolders
+        if tag is not None:
+            params["tag"] = tag
         return await self._call("media.list", params)
+
+    async def media_move(
+        self,
+        *,
+        folder: Optional[str] = None,
+        force: Optional[bool] = None,
+        name: Optional[str] = None,
+        names: Optional[List[str]] = None,
+        new_name: Optional[str] = None,
+    ) -> MediaMoved:
+        """Move library files into another folder, or rename one, on disk. Sources using them follow."""
+        params: Dict[str, Any] = {}
+        if folder is not None:
+            params["folder"] = folder
+        if force is not None:
+            params["force"] = force
+        if name is not None:
+            params["name"] = name
+        if names is not None:
+            params["names"] = names
+        if new_name is not None:
+            params["new_name"] = new_name
+        return await self._call("media.move", params)
 
     async def media_remove(
         self,
@@ -5645,6 +5858,29 @@ class GeneratedMethods:
         params: Dict[str, Any] = {}
         params["name"] = name
         return await self._call("media.remove", params)
+
+    async def media_tag(
+        self,
+        *,
+        add_tags: Any = None,
+        name: Optional[str] = None,
+        names: Optional[List[str]] = None,
+        remove_tags: Any = None,
+        tags: Any = None,
+    ) -> List[MediaTagged]:
+        """Change the tags of one library file or several: replace them, add some, or take some off."""
+        params: Dict[str, Any] = {}
+        if add_tags is not None:
+            params["add_tags"] = add_tags
+        if name is not None:
+            params["name"] = name
+        if names is not None:
+            params["names"] = names
+        if remove_tags is not None:
+            params["remove_tags"] = remove_tags
+        if tags is not None:
+            params["tags"] = tags
+        return await self._call("media.tag", params)
 
     async def media_upload(
         self,

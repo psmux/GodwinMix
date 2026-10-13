@@ -7564,6 +7564,142 @@
         },
         "type": "object"
       },
+      "MediaCount": {
+        "description": "One tag and how many files have it.",
+        "properties": {
+          "count": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "count"
+        ],
+        "type": "object"
+      },
+      "MediaFolderAddRequest": {
+        "description": "`media.folder.add`: make a folder, and any above it that are missing.",
+        "properties": {
+          "name": {
+            "default": "",
+            "description": "`Sermons`, or `Sermons/2026` to make one inside another.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "MediaFolderCount": {
+        "description": "One folder, as `media.folder.list` answers.",
+        "properties": {
+          "files": {
+            "description": "Files right in it.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "path": {
+            "description": "`Sermons/2026`.",
+            "type": "string"
+          },
+          "total": {
+            "description": "Files anywhere under it, its own included.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "path",
+          "files",
+          "total"
+        ],
+        "type": "object"
+      },
+      "MediaFolderMoveRequest": {
+        "additionalProperties": false,
+        "description": "`media.folder.move`: rename a folder, move it into another, or both.",
+        "properties": {
+          "force": {
+            "default": false,
+            "description": "Move it even while a file in it is on programme.",
+            "type": "boolean"
+          },
+          "into": {
+            "default": null,
+            "description": "The folder to put it in, `\"\"` for the top. Left out, it stays where\nit is.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "default": "",
+            "description": "The folder as it is now: `Sermons/2026`.",
+            "type": "string"
+          },
+          "to": {
+            "default": null,
+            "description": "Its new name. Left out, it keeps its name.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "MediaFolderRemoveRequest": {
+        "description": "`media.folder.remove`: what happens to what is inside is asked for, never\nassumed. No media file is ever deleted.",
+        "properties": {
+          "contents": {
+            "default": null,
+            "description": "`up` moves its files and folders into the folder above it; `top`\nmoves them to the top of the library.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "force": {
+            "default": false,
+            "description": "Remove it even while a file in it is on programme.",
+            "type": "boolean"
+          },
+          "name": {
+            "default": "",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "MediaFolders": {
+        "description": "The answer to `media.folder.list`.",
+        "properties": {
+          "folders": {
+            "description": "Every folder, sorted by path, empty ones included.",
+            "items": {
+              "$ref": "#/components/schemas/MediaFolderCount"
+            },
+            "type": "array"
+          },
+          "tags": {
+            "description": "Every tag in use, the most used first.",
+            "items": {
+              "$ref": "#/components/schemas/MediaCount"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "folders",
+          "tags"
+        ],
+        "type": "object"
+      },
       "MediaItem": {
         "properties": {
           "audio_codec": {
@@ -7609,6 +7745,13 @@
               "null"
             ]
           },
+          "folder": {
+            "description": "The folder it is in, `Sermons/2026`, absent at the top of the\nlibrary. See `media_org`.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "has_audio": {
             "type": "boolean"
           },
@@ -7645,6 +7788,13 @@
             "minimum": 0,
             "type": "integer"
           },
+          "tags": {
+            "description": "Its tags, in the case each was first typed. Kept in\n`.godwinmix-media.json` beside the files.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "video_codec": {
             "default": null,
             "description": "Short codec name of the first video stream (\"h264\", \"vp9\"), None when\nthere is no video or it could not be inspected.",
@@ -7677,6 +7827,37 @@
         ],
         "type": "object"
       },
+      "MediaListRequest": {
+        "description": "`media.list`. Every filter is optional and they all have to match.",
+        "properties": {
+          "folder": {
+            "default": null,
+            "description": "Only the files in this folder: `Sermons/2026`. `\"\"` is the top of the\nlibrary. Left out, every file in the tree.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "query": {
+            "default": null,
+            "description": "Words that each have to appear in the file's path or its tags.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "subfolders": {
+            "default": false,
+            "description": "With `folder`: the files in its subfolders too, any depth.",
+            "type": "boolean"
+          },
+          "tag": {
+            "default": null,
+            "description": "Only the files with this tag, or with every one of these tags:\n`\"easter\"`, `[\"easter\", \"choir\"]` or `\"easter, choir\"`."
+          }
+        },
+        "type": "object"
+      },
       "MediaListing": {
         "properties": {
           "created": {
@@ -7693,6 +7874,13 @@
               "null"
             ]
           },
+          "folders": {
+            "description": "Every folder in the library, `Sermons/2026` style, sorted, empty ones\nincluded.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "items": {
             "items": {
               "$ref": "#/components/schemas/MediaItem"
@@ -7703,6 +7891,142 @@
         "required": [
           "dir",
           "items"
+        ],
+        "type": "object"
+      },
+      "MediaMove": {
+        "properties": {
+          "from": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "from",
+          "to"
+        ],
+        "type": "object"
+      },
+      "MediaMoveRequest": {
+        "additionalProperties": false,
+        "description": "`media.move`: move files into a folder, rename one, or both. The files\nmove on disk; sources that use them are pointed at the new place.",
+        "properties": {
+          "folder": {
+            "default": null,
+            "description": "The folder to move them into: `Sermons/2026`, or `\"\"` for the top.\nLeft out, they stay in their folder.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "force": {
+            "default": false,
+            "description": "Move a file even while it is on programme. The source playing it\nis pointed at the new place, which restarts it on air.",
+            "type": "boolean"
+          },
+          "name": {
+            "default": null,
+            "description": "One file, by its path in `media.list`.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "names": {
+            "default": [],
+            "description": "Several files at once.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "new_name": {
+            "default": null,
+            "description": "A new file name, keeping a clip or picture extension. One file only.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "MediaMoved": {
+        "description": "What moved, and what was changed to follow it.",
+        "properties": {
+          "moved": {
+            "description": "Each move, old path to new, relative to the media folder.",
+            "items": {
+              "$ref": "#/components/schemas/MediaMove"
+            },
+            "type": "array"
+          },
+          "updated": {
+            "description": "What was pointed at the new places, in words: `source intro`.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "moved"
+        ],
+        "type": "object"
+      },
+      "MediaTagRequest": {
+        "additionalProperties": false,
+        "description": "`media.tag`: change the tags of one file or several. Only what is named\nchanges.",
+        "properties": {
+          "add_tags": {
+            "default": null,
+            "description": "Tags to add, keeping the ones they have."
+          },
+          "name": {
+            "default": null,
+            "description": "One file, by its path in `media.list`.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "names": {
+            "default": [],
+            "description": "Several files at once.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "remove_tags": {
+            "default": null,
+            "description": "Tags to take off, keeping the rest."
+          },
+          "tags": {
+            "default": null,
+            "description": "Their tags from now on, replacing the ones they have. `[]` clears them."
+          }
+        },
+        "type": "object"
+      },
+      "MediaTagged": {
+        "description": "One file and its tags, as `media.tag` answers.",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "name",
+          "tags"
         ],
         "type": "object"
       },
@@ -16404,13 +16728,155 @@
             "$ref": "#/components/responses/Error"
           }
         },
-        "summary": "The clips in the library, with durations and whether each has audio.",
+        "summary": "The clips in the library, with durations, whether each has audio, its folder and its tags.              Narrow it by folder, tag or words.",
         "tags": [
           "media"
         ],
         "x-destructive": false,
         "x-idempotent": true,
         "x-scope": "read"
+      }
+    },
+    "/api/v1/media/folder/add": {
+      "post": {
+        "description": "JSON-RPC method `media.folder.add`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "media.folder.add",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MediaFolderAddRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Make a folder in the media library, inside another when the name has a / in it.",
+        "tags": [
+          "media"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/media/folder/list": {
+      "get": {
+        "description": "JSON-RPC method `media.folder.list`. Needs the `read` scope.",
+        "operationId": "media.folder.list",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MediaFolders"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Every folder in the media library with how many files are in it, and every tag in use.",
+        "tags": [
+          "media"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
+    "/api/v1/media/folder/move": {
+      "post": {
+        "description": "JSON-RPC method `media.folder.move`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "media.folder.move",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MediaFolderMoveRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MediaMoved"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Rename a media folder, move it into another folder or to the top, or both. Sources using its files follow.",
+        "tags": [
+          "media"
+        ],
+        "x-destructive": false,
+        "x-idempotent": false,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/media/folder/remove": {
+      "post": {
+        "description": "JSON-RPC method `media.folder.remove`. Needs the `operate` scope. Destructive: accepts `dry_run: true`, and on a token whose policy is `confirm = required` it is refused once with -32020 and a confirm token. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "media.folder.remove",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MediaFolderRemoveRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MediaMoved"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Remove a media folder, moving what is in it up a level or to the top first. No file is deleted.",
+        "tags": [
+          "media"
+        ],
+        "x-destructive": true,
+        "x-idempotent": true,
+        "x-scope": "operate"
       }
     },
     "/api/v1/media/upload": {
@@ -16543,6 +17009,107 @@
           }
         },
         "summary": "Transcode a library file to a web safe copy, in the background.",
+        "tags": [
+          "media"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/media/{id}/move": {
+      "post": {
+        "description": "JSON-RPC method `media.move`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "media.move",
+        "parameters": [
+          {
+            "description": "The id, as listed by the matching list call.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MediaMoveRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MediaMoved"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Move library files into another folder, or rename one, on disk. Sources using them follow.",
+        "tags": [
+          "media"
+        ],
+        "x-destructive": false,
+        "x-idempotent": false,
+        "x-scope": "operate"
+      }
+    },
+    "/api/v1/media/{id}/tag": {
+      "post": {
+        "description": "JSON-RPC method `media.tag`. Needs the `operate` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "media.tag",
+        "parameters": [
+          {
+            "description": "The id, as listed by the matching list call.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MediaTagRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/MediaTagged"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Change the tags of one library file or several: replace them, add some, or take some off.",
         "tags": [
           "media"
         ],

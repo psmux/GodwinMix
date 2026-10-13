@@ -3365,6 +3365,80 @@ pub struct MarkRequest {
     pub label: Option<String>,
 }
 
+/// One tag and how many files have it.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct MediaCount {
+    pub count: i64,
+    pub name: String,
+}
+
+/// `media.folder.add`: make a folder, and any above it that are missing.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct MediaFolderAddRequest {
+    /// `Sermons`, or `Sermons/2026` to make one inside another.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+}
+
+/// One folder, as `media.folder.list` answers.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct MediaFolderCount {
+    /// Files right in it.
+    pub files: i64,
+    /// `Sermons/2026`.
+    pub path: String,
+    /// Files anywhere under it, its own included.
+    pub total: i64,
+}
+
+/// `media.folder.move`: rename a folder, move it into another, or both.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct MediaFolderMoveRequest {
+    /// Move it even while a file in it is on programme.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub force: Option<bool>,
+    /// The folder to put it in, `""` for the top. Left out, it stays where
+    /// it is.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub into: Option<String>,
+    /// The folder as it is now: `Sermons/2026`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// Its new name. Left out, it keeps its name.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub to: Option<String>,
+}
+
+/// `media.folder.remove`: what happens to what is inside is asked for, never
+/// assumed. No media file is ever deleted.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct MediaFolderRemoveRequest {
+    /// `up` moves its files and folders into the folder above it; `top`
+    /// moves them to the top of the library.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub contents: Option<String>,
+    /// Remove it even while a file in it is on programme.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub force: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+}
+
+/// The answer to `media.folder.list`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct MediaFolders {
+    /// Every folder, sorted by path, empty ones included.
+    pub folders: Vec<MediaFolderCount>,
+    /// Every tag in use, the most used first.
+    pub tags: Vec<MediaCount>,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct MediaItem {
@@ -3388,6 +3462,10 @@ pub struct MediaItem {
     /// on its own. See `convert::moov_first`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub faststart: Option<bool>,
+    /// The folder it is in, `Sermons/2026`, absent at the top of the
+    /// library. See `media_org`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub folder: Option<String>,
     pub has_audio: bool,
     pub has_video: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -3399,6 +3477,9 @@ pub struct MediaItem {
     /// Why it is not, in words an operator can act on. Empty when it is.
     pub reasons: Vec<String>,
     pub size_bytes: u64,
+    /// Its tags, in the case each was first typed. Kept in
+    /// `.godwinmix-media.json` beside the files.
+    pub tags: Vec<String>,
     /// Short codec name of the first video stream ("h264", "vp9"), None when
     /// there is no video or it could not be inspected.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -3409,6 +3490,25 @@ pub struct MediaItem {
     pub web_safe: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub width: Option<u32>,
+}
+
+/// `media.list`. Every filter is optional and they all have to match.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct MediaListRequest {
+    /// Only the files in this folder: `Sermons/2026`. `""` is the top of the
+    /// library. Left out, every file in the tree.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub folder: Option<String>,
+    /// Words that each have to appear in the file's path or its tags.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub query: Option<String>,
+    /// With `folder`: the files in its subfolders too, any depth.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub subfolders: Option<bool>,
+    /// Only the files with this tag, or with every one of these tags:
+    /// `"easter"`, `["easter", "choir"]` or `"easter, choir"`.
+    pub tag: Value,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -3423,7 +3523,76 @@ pub struct MediaListing {
     /// the list is empty instead of just showing nothing.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+    /// Every folder in the library, `Sermons/2026` style, sorted, empty ones
+    /// included.
+    pub folders: Vec<String>,
     pub items: Vec<MediaItem>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct MediaMove {
+    pub from: String,
+    pub to: String,
+}
+
+/// `media.move`: move files into a folder, rename one, or both. The files
+/// move on disk; sources that use them are pointed at the new place.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct MediaMoveRequest {
+    /// The folder to move them into: `Sermons/2026`, or `""` for the top.
+    /// Left out, they stay in their folder.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub folder: Option<String>,
+    /// Move a file even while it is on programme. The source playing it
+    /// is pointed at the new place, which restarts it on air.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub force: Option<bool>,
+    /// One file, by its path in `media.list`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// Several files at once.
+    pub names: Vec<String>,
+    /// A new file name, keeping a clip or picture extension. One file only.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub new_name: Option<String>,
+}
+
+/// What moved, and what was changed to follow it.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct MediaMoved {
+    /// Each move, old path to new, relative to the media folder.
+    pub moved: Vec<MediaMove>,
+    /// What was pointed at the new places, in words: `source intro`.
+    pub updated: Vec<String>,
+}
+
+/// `media.tag`: change the tags of one file or several. Only what is named
+/// changes.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct MediaTagRequest {
+    /// Tags to add, keeping the ones they have.
+    pub add_tags: Value,
+    /// One file, by its path in `media.list`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// Several files at once.
+    pub names: Vec<String>,
+    /// Tags to take off, keeping the rest.
+    pub remove_tags: Value,
+    /// Their tags from now on, replacing the ones they have. `[]` clears them.
+    pub tags: Value,
+}
+
+/// One file and its tags, as `media.tag` answers.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct MediaTagged {
+    pub name: String,
+    pub tags: Vec<String>,
 }
 
 /// `event/meters`: the programme bus and every source, in one message at 10
@@ -6518,7 +6687,7 @@ pub struct MethodInfo {
     pub rest: Option<(&'static str, &'static str)>,
 }
 
-pub const METHODS: [MethodInfo; 224] = [
+pub const METHODS: [MethodInfo; 230] = [
     MethodInfo { name: "adbreak.end", summary: "Cut a running ad short, or disarm one that is scheduled.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/end")) },
     MethodInfo { name: "adbreak.start", summary: "Interrupt the programme with a clip, then rejoin live when it ends.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/start")) },
     MethodInfo { name: "agent.setup", summary: "Set an AI agent tool up to use this mixer: its MCP config gets one entry, godwinmix, that runs this mixer's own executable, and its skills folder gets the GodwinMix skills. Other entries are kept and a changed file is copied aside first. dry_run answers every file it would write. The answer says how to start the tool and a first thing to ask it.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/agent/setup")) },
@@ -6592,8 +6761,14 @@ pub const METHODS: [MethodInfo; 224] = [
     MethodInfo { name: "log.levels", summary: "Every log level override in force, and the GStreamer categories still raised.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/log/levels")) },
     MethodInfo { name: "log.set", summary: "Change one instance's or one module's log level while the mixer runs.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/log/set")) },
     MethodInfo { name: "media.convert", summary: "Transcode a library file to a web safe copy, in the background.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/media/{id}/convert")) },
-    MethodInfo { name: "media.list", summary: "The clips in the library, with durations and whether each has audio.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/media")) },
+    MethodInfo { name: "media.folder.add", summary: "Make a folder in the media library, inside another when the name has a / in it.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/media/folder/add")) },
+    MethodInfo { name: "media.folder.list", summary: "Every folder in the media library with how many files are in it, and every tag in use.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/media/folder/list")) },
+    MethodInfo { name: "media.folder.move", summary: "Rename a media folder, move it into another folder or to the top, or both. Sources using its files follow.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/media/folder/move")) },
+    MethodInfo { name: "media.folder.remove", summary: "Remove a media folder, moving what is in it up a level or to the top first. No file is deleted.", scope: "operate", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/media/folder/remove")) },
+    MethodInfo { name: "media.list", summary: "The clips in the library, with durations, whether each has audio, its folder and its tags. Narrow it by folder, tag or words.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/media")) },
+    MethodInfo { name: "media.move", summary: "Move library files into another folder, or rename one, on disk. Sources using them follow.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/media/{id}/move")) },
     MethodInfo { name: "media.remove", summary: "Delete a library file and its converted copy. Refused while it is a live source.", scope: "operate", mutating: true, destructive: true, rest: Some(("DELETE", "/api/v1/media/{id}")) },
+    MethodInfo { name: "media.tag", summary: "Change the tags of one library file or several: replace them, add some, or take some off.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/media/{id}/tag")) },
     MethodInfo { name: "media.upload", summary: "Stream a file into the library. HTTP only: the body is the file.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/media/upload")) },
     MethodInfo { name: "network.share", summary: "Let phones and other computers on the same network reach this mixer (enabled: true), or keep it to this computer (false). The address is fixed while the mixer runs, so this restarts it on the same port and the programme is off air for a few seconds: under the desktop app, or under a supervisor when the address comes from the config file. Otherwise it answers restarting: false and says why. Refused on a mixer with no control token.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/network/share")) },
     MethodInfo { name: "node.discover", summary: "Look for nodes on the local network over mDNS. A network without multicast finds nothing and the [nodes] table in the config is the way there.", scope: "read", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/nodes/{id}/discover")) },
@@ -6828,7 +7003,7 @@ pub enum Event {
     UiChanged(UiChangedEvent),
     /// A hook did not get its say: it did not answer inside its timeout, or the thing behind it could not be reached. Whatever the hook was attached to went ahead anyway, which is the rule that keeps a slow hook off the frame path. See 03 section 8.
     HookBlocked(HookBlockedEvent),
-    /// A file in the library was uploaded, deleted, or its conversion moved on.
+    /// A file in the library was uploaded, deleted, moved, renamed or tagged, or its conversion moved on. `name` is its path in the library, and empty when a folder was made, moved or removed.
     MediaChanged(MediaChangedEvent),
     /// A channel changed: made, renamed, switched on or off, a key made or taken back, a stream went live, learned its codecs or left. Carries the whole channel, keys as hints only.
     ChannelChanged(ChannelChangedEvent),
@@ -7443,14 +7618,44 @@ impl Client {
         self.call("media.convert", params).await
     }
 
-    /// The clips in the library, with durations and whether each has audio.
-    pub async fn media_list(&self) -> Result<MediaListing> {
-        self.call("media.list", &serde_json::json!({})).await
+    /// Make a folder in the media library, inside another when the name has a / in it.
+    pub async fn media_folder_add(&self, params: &MediaFolderAddRequest) -> Result<BTreeMap<String, Value>> {
+        self.call("media.folder.add", params).await
+    }
+
+    /// Every folder in the media library with how many files are in it, and every tag in use.
+    pub async fn media_folder_list(&self) -> Result<MediaFolders> {
+        self.call("media.folder.list", &serde_json::json!({})).await
+    }
+
+    /// Rename a media folder, move it into another folder or to the top, or both. Sources using its files follow.
+    pub async fn media_folder_move(&self, params: &MediaFolderMoveRequest) -> Result<MediaMoved> {
+        self.call("media.folder.move", params).await
+    }
+
+    /// Remove a media folder, moving what is in it up a level or to the top first. No file is deleted.
+    pub async fn media_folder_remove(&self, params: &MediaFolderRemoveRequest) -> Result<MediaMoved> {
+        self.call("media.folder.remove", params).await
+    }
+
+    /// The clips in the library, with durations, whether each has audio, its folder and its tags. Narrow it by folder, tag or words.
+    pub async fn media_list(&self, params: &MediaListRequest) -> Result<MediaListing> {
+        self.call("media.list", params).await
+    }
+
+    /// Move library files into another folder, or rename one, on disk. Sources using them follow.
+    pub async fn media_move(&self, params: &MediaMoveRequest) -> Result<MediaMoved> {
+        self.call("media.move", params).await
     }
 
     /// Delete a library file and its converted copy. Refused while it is a live source.
     pub async fn media_remove(&self, params: &NameRequest) -> Result<BTreeMap<String, Value>> {
         self.call("media.remove", params).await
+    }
+
+    /// Change the tags of one library file or several: replace them, add some, or take some off.
+    pub async fn media_tag(&self, params: &MediaTagRequest) -> Result<Vec<MediaTagged>> {
+        self.call("media.tag", params).await
     }
 
     /// Stream a file into the library. HTTP only: the body is the file.

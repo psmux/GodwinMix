@@ -107,8 +107,14 @@ Keys accepted on every method, handled before a method runs.
 | `log.levels` | `GET /api/v1/log/levels` | read |  | 1 | Every log level override in force, and the GStreamer categories still raised. |
 | `log.set` | `POST /api/v1/log/set` | admin |  | 1 | Change one instance's or one module's log level while the mixer runs. |
 | `media.convert` | `POST /api/v1/media/{id}/convert` | operate |  | 1 | Transcode a library file to a web safe copy, in the background. |
-| `media.list` | `GET /api/v1/media` | read |  | 1 | The clips in the library, with durations and whether each has audio. |
+| `media.folder.add` | `POST /api/v1/media/folder/add` | operate |  | 1 | Make a folder in the media library, inside another when the name has a / in it. |
+| `media.folder.list` | `GET /api/v1/media/folder/list` | read |  | 1 | Every folder in the media library with how many files are in it, and every tag in use. |
+| `media.folder.move` | `POST /api/v1/media/folder/move` | operate |  | 1 | Rename a media folder, move it into another folder or to the top, or both. Sources using its files follow. |
+| `media.folder.remove` | `POST /api/v1/media/folder/remove` | operate | yes | 1 | Remove a media folder, moving what is in it up a level or to the top first. No file is deleted. |
+| `media.list` | `GET /api/v1/media` | read |  | 1 | The clips in the library, with durations, whether each has audio, its folder and its tags.              Narrow it by folder, tag or words. |
+| `media.move` | `POST /api/v1/media/{id}/move` | operate |  | 1 | Move library files into another folder, or rename one, on disk. Sources using them follow. |
 | `media.remove` | `DELETE /api/v1/media/{id}` | operate | yes | 1 | Delete a library file and its converted copy. Refused while it is a live source. |
+| `media.tag` | `POST /api/v1/media/{id}/tag` | operate |  | 1 | Change the tags of one library file or several: replace them, add some, or take some off. |
 | `media.upload` | `POST /api/v1/media/upload` | operate |  | 1 | Stream a file into the library. HTTP only: the body is the file. |
 | `network.share` | `POST /api/v1/network/share` | admin | yes | 1 | Let phones and other computers on the same network reach this mixer (enabled: true), or keep it to this computer (false). The address is fixed while the mixer runs, so this restarts it on the same port and the programme is off air for a few seconds: under the desktop app, or under a supervisor when the address comes from the config file. Otherwise it answers restarting: false and says why. Refused on a mixer with no control token. |
 | `node.discover` | `POST /api/v1/nodes/{id}/discover` | read |  | 1 | Look for nodes on the local network over mDNS. A network without multicast finds nothing and the [nodes] table in the config is the way there. |
@@ -1487,11 +1493,28 @@ MCP tool `convert_media` in the `search` profile: readOnlyHint false, destructiv
 }
 ```
 
-#### `media.list`
+#### `media.folder.add`
 
-The clips in the library, with durations and whether each has audio.
+Make a folder in the media library, inside another when the name has a / in it.
 
-MCP tool `list_media` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+MCP tool `add_media_folder` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/MediaFolderAddRequest"
+  },
+  "result": {
+    "type": "object"
+  }
+}
+```
+
+#### `media.folder.list`
+
+Every folder in the media library with how many files are in it, and every tag in use.
+
+MCP tool `list_media_folders` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
 
 ```json
 {
@@ -1501,7 +1524,75 @@ MCP tool `list_media` in the `search` profile: readOnlyHint true, destructiveHin
     "type": "object"
   },
   "result": {
+    "$ref": "#/$defs/MediaFolders"
+  }
+}
+```
+
+#### `media.folder.move`
+
+Rename a media folder, move it into another folder or to the top, or both. Sources using its files follow.
+
+MCP tool `move_media_folder` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint false.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/MediaFolderMoveRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/MediaMoved"
+  }
+}
+```
+
+#### `media.folder.remove`
+
+Remove a media folder, moving what is in it up a level or to the top first. No file is deleted.
+
+MCP tool `remove_media_folder` in the `search` profile: readOnlyHint false, destructiveHint true, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/MediaFolderRemoveRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/MediaMoved"
+  }
+}
+```
+
+#### `media.list`
+
+The clips in the library, with durations, whether each has audio, its folder and its tags.              Narrow it by folder, tag or words.
+
+MCP tool `list_media` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/MediaListRequest"
+  },
+  "result": {
     "$ref": "#/$defs/MediaListing"
+  }
+}
+```
+
+#### `media.move`
+
+Move library files into another folder, or rename one, on disk. Sources using them follow.
+
+MCP tool `move_media` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint false.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/MediaMoveRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/MediaMoved"
   }
 }
 ```
@@ -1519,6 +1610,26 @@ MCP tool `remove_media` in the `search` profile: readOnlyHint false, destructive
   },
   "result": {
     "type": "object"
+  }
+}
+```
+
+#### `media.tag`
+
+Change the tags of one library file or several: replace them, add some, or take some off.
+
+MCP tool `tag_media` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/MediaTagRequest"
+  },
+  "result": {
+    "items": {
+      "$ref": "#/$defs/MediaTagged"
+    },
+    "type": "array"
   }
 }
 ```
@@ -3991,7 +4102,7 @@ Subscribe with `core.subscribe`. Patterns match the part after `event/`, so `pro
 | `event/adbreak.changed` |  | `ad_break_changed` | An ad break was armed, went on air, or ended. |
 | `event/ui.changed` |  |  | The surface defaults changed: a preset was applied, or an operator set the layout, theme or gallery mode by hand. Nothing on air moves. |
 | `event/hook.blocked` |  |  | A hook did not get its say: it did not answer inside its timeout, or the thing behind it could not be reached. Whatever the hook was attached to went ahead anyway, which is the rule that keeps a slow hook off the frame path. See 03 section 8. |
-| `event/media.changed` |  | `media_changed` | A file in the library was uploaded, deleted, or its conversion moved on. |
+| `event/media.changed` |  | `media_changed` | A file in the library was uploaded, deleted, moved, renamed or tagged, or its conversion moved on. `name` is its path in the library, and empty when a folder was made, moved or removed. |
 | `event/channel.changed` |  |  | A channel changed: made, renamed, switched on or off, a key made or taken back, a stream went live, learned its codecs or left. Carries the whole channel, keys as hints only. |
 | `event/channel.removed` |  |  | A channel was removed. Its publishers were turned away and its keys forgotten. |
 | `event/channel.refused` |  |  | A publisher was turned away: no key, a wrong key, a channel switched off, or a name somebody else is already publishing. why is the sentence the encoder was sent. A key is never in it. |

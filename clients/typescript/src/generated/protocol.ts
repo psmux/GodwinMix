@@ -1846,12 +1846,55 @@ export interface MarkRequest {
   label?: string | null;
 }
 
+/** One tag and how many files have it. */
+export interface MediaCount {
+  count: number;
+  name: string;
+}
+
+/** `media.folder.add`: make a folder, and any above it that are missing. */
+export interface MediaFolderAddRequest {
+  name?: string;
+}
+
+/** One folder, as `media.folder.list` answers. */
+export interface MediaFolderCount {
+  files: number;
+  path: string;
+  total: number;
+}
+
+/** `media.folder.move`: rename a folder, move it into another, or both. */
+export interface MediaFolderMoveRequest {
+  force?: boolean;
+  into?: string | null;
+  name?: string;
+  to?: string | null;
+}
+
+/**
+ * `media.folder.remove`: what happens to what is inside is asked for, never
+ * assumed. No media file is ever deleted.
+ */
+export interface MediaFolderRemoveRequest {
+  contents?: string | null;
+  force?: boolean;
+  name?: string;
+}
+
+/** The answer to `media.folder.list`. */
+export interface MediaFolders {
+  folders: MediaFolderCount[];
+  tags: MediaCount[];
+}
+
 export interface MediaItem {
   audio_codec?: string | null;
   conversion?: ConversionState | null;
   converted_path?: string | null;
   duration_ms?: number | null;
   faststart?: boolean | null;
+  folder?: string | null;
   has_audio: boolean;
   has_video: boolean;
   height?: number | null;
@@ -1859,16 +1902,67 @@ export interface MediaItem {
   path: string;
   reasons?: string[];
   size_bytes: number;
+  tags?: string[];
   video_codec?: string | null;
   web_safe?: boolean;
   width?: number | null;
+}
+
+/** `media.list`. Every filter is optional and they all have to match. */
+export interface MediaListRequest {
+  folder?: string | null;
+  query?: string | null;
+  subfolders?: boolean;
+  tag?: unknown;
 }
 
 export interface MediaListing {
   created?: boolean;
   dir: string;
   error?: string | null;
+  folders?: string[];
   items: MediaItem[];
+}
+
+export interface MediaMove {
+  from: string;
+  to: string;
+}
+
+/**
+ * `media.move`: move files into a folder, rename one, or both. The files
+ * move on disk; sources that use them are pointed at the new place.
+ */
+export interface MediaMoveRequest {
+  folder?: string | null;
+  force?: boolean;
+  name?: string | null;
+  names?: string[];
+  new_name?: string | null;
+}
+
+/** What moved, and what was changed to follow it. */
+export interface MediaMoved {
+  moved: MediaMove[];
+  updated?: string[];
+}
+
+/**
+ * `media.tag`: change the tags of one file or several. Only what is named
+ * changes.
+ */
+export interface MediaTagRequest {
+  add_tags?: unknown;
+  name?: string | null;
+  names?: string[];
+  remove_tags?: unknown;
+  tags?: unknown;
+}
+
+/** One file and its tags, as `media.tag` answers. */
+export interface MediaTagged {
+  name: string;
+  tags: string[];
 }
 
 /**
@@ -3687,8 +3781,14 @@ export interface MethodParams {
   "log.levels": Record<string, never>;
   "log.set": LogSetRequest;
   "media.convert": NameRequest;
-  "media.list": Record<string, never>;
+  "media.folder.add": MediaFolderAddRequest;
+  "media.folder.list": Record<string, never>;
+  "media.folder.move": MediaFolderMoveRequest;
+  "media.folder.remove": MediaFolderRemoveRequest;
+  "media.list": MediaListRequest;
+  "media.move": MediaMoveRequest;
   "media.remove": NameRequest;
+  "media.tag": MediaTagRequest;
   "media.upload": Record<string, never>;
   "network.share": NetworkShareRequest;
   "node.discover": DiscoverRequest2;
@@ -3915,8 +4015,14 @@ export interface MethodResults {
   "log.levels": Record<string, unknown>;
   "log.set": Record<string, unknown>;
   "media.convert": ConversionState;
+  "media.folder.add": Record<string, unknown>;
+  "media.folder.list": MediaFolders;
+  "media.folder.move": MediaMoved;
+  "media.folder.remove": MediaMoved;
   "media.list": MediaListing;
+  "media.move": MediaMoved;
   "media.remove": Record<string, unknown>;
+  "media.tag": MediaTagged[];
   "media.upload": Record<string, unknown>;
   "network.share": RestartAnswer;
   "node.discover": DiscoverAnswer;
@@ -4197,8 +4303,14 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "log.levels", summary: "Every log level override in force, and the GStreamer categories still raised.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/log/levels" } },
   { name: "log.set", summary: "Change one instance's or one module's log level while the mixer runs.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/log/set" } },
   { name: "media.convert", summary: "Transcode a library file to a web safe copy, in the background.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/media/{id}/convert" } },
-  { name: "media.list", summary: "The clips in the library, with durations and whether each has audio.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/media" } },
+  { name: "media.folder.add", summary: "Make a folder in the media library, inside another when the name has a / in it.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/media/folder/add" } },
+  { name: "media.folder.list", summary: "Every folder in the media library with how many files are in it, and every tag in use.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/media/folder/list" } },
+  { name: "media.folder.move", summary: "Rename a media folder, move it into another folder or to the top, or both. Sources using its files follow.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/media/folder/move" } },
+  { name: "media.folder.remove", summary: "Remove a media folder, moving what is in it up a level or to the top first. No file is deleted.", scope: "operate", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/media/folder/remove" } },
+  { name: "media.list", summary: "The clips in the library, with durations, whether each has audio, its folder and its tags.              Narrow it by folder, tag or words.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/media" } },
+  { name: "media.move", summary: "Move library files into another folder, or rename one, on disk. Sources using them follow.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/media/{id}/move" } },
   { name: "media.remove", summary: "Delete a library file and its converted copy. Refused while it is a live source.", scope: "operate", mutating: true, destructive: true, rest: { method: "DELETE", path: "/api/v1/media/{id}" } },
+  { name: "media.tag", summary: "Change the tags of one library file or several: replace them, add some, or take some off.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/media/{id}/tag" } },
   { name: "media.upload", summary: "Stream a file into the library. HTTP only: the body is the file.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/media/upload" } },
   { name: "network.share", summary: "Let phones and other computers on the same network reach this mixer (enabled: true), or keep it to this computer (false). The address is fixed while the mixer runs, so this restarts it on the same port and the programme is off air for a few seconds: under the desktop app, or under a supervisor when the address comes from the config file. Otherwise it answers restarting: false and says why. Refused on a mixer with no control token.", scope: "admin", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/network/share" } },
   { name: "node.discover", summary: "Look for nodes on the local network over mDNS. A network without multicast finds nothing and the [nodes] table in the config is the way there.", scope: "read", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/nodes/{id}/discover" } },
@@ -4780,14 +4892,44 @@ export class GeneratedMethods {
     return this._call("media.convert", params as unknown as Record<string, unknown>) as Promise<ConversionState>;
   }
 
-  /** The clips in the library, with durations and whether each has audio. */
-  mediaList(): Promise<MediaListing> {
-    return this._call("media.list", {}) as Promise<MediaListing>;
+  /** Make a folder in the media library, inside another when the name has a / in it. */
+  mediaFolderAdd(params: MediaFolderAddRequest = {}): Promise<Record<string, unknown>> {
+    return this._call("media.folder.add", params as unknown as Record<string, unknown>) as Promise<Record<string, unknown>>;
+  }
+
+  /** Every folder in the media library with how many files are in it, and every tag in use. */
+  mediaFolderList(): Promise<MediaFolders> {
+    return this._call("media.folder.list", {}) as Promise<MediaFolders>;
+  }
+
+  /** Rename a media folder, move it into another folder or to the top, or both. Sources using its files follow. */
+  mediaFolderMove(params: MediaFolderMoveRequest = {}): Promise<MediaMoved> {
+    return this._call("media.folder.move", params as unknown as Record<string, unknown>) as Promise<MediaMoved>;
+  }
+
+  /** Remove a media folder, moving what is in it up a level or to the top first. No file is deleted. */
+  mediaFolderRemove(params: MediaFolderRemoveRequest = {}): Promise<MediaMoved> {
+    return this._call("media.folder.remove", params as unknown as Record<string, unknown>) as Promise<MediaMoved>;
+  }
+
+  /** The clips in the library, with durations, whether each has audio, its folder and its tags.              Narrow it by folder, tag or words. */
+  mediaList(params: MediaListRequest = {}): Promise<MediaListing> {
+    return this._call("media.list", params as unknown as Record<string, unknown>) as Promise<MediaListing>;
+  }
+
+  /** Move library files into another folder, or rename one, on disk. Sources using them follow. */
+  mediaMove(params: MediaMoveRequest = {}): Promise<MediaMoved> {
+    return this._call("media.move", params as unknown as Record<string, unknown>) as Promise<MediaMoved>;
   }
 
   /** Delete a library file and its converted copy. Refused while it is a live source. */
   mediaRemove(params: NameRequest): Promise<Record<string, unknown>> {
     return this._call("media.remove", params as unknown as Record<string, unknown>) as Promise<Record<string, unknown>>;
+  }
+
+  /** Change the tags of one library file or several: replace them, add some, or take some off. */
+  mediaTag(params: MediaTagRequest = {}): Promise<MediaTagged[]> {
+    return this._call("media.tag", params as unknown as Record<string, unknown>) as Promise<MediaTagged[]>;
   }
 
   /** Stream a file into the library. HTTP only: the body is the file. */
