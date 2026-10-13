@@ -138,6 +138,9 @@ pub struct Tracker {
     /// `latest` was drawn with every tile in it, and so is every frame after
     /// it until a tile is added. Set after `latest` is written.
     settled: AtomicBool,
+    /// Where a still of the programme comes from at the size asked for. See
+    /// `programme`.
+    programme: std::sync::OnceLock<crate::preview::PreviewHandle>,
 }
 
 impl Tracker {
@@ -158,7 +161,27 @@ impl Tracker {
             last_served: Mutex::new(HashMap::new()),
             starts: AtomicU64::new(0),
             settled: AtomicBool::new(false),
+            programme: std::sync::OnceLock::new(),
         })
+    }
+
+    /// Take stills of the programme from its own branch on the raw programme
+    /// tee rather than from its cell on the mosaic.
+    ///
+    /// The cell is as wide as the mosaic's layout makes it, 320 pixels with
+    /// three columns on the default 960 wide mosaic, so a snapshot of the
+    /// programme was 320 wide whatever `width` asked for. The branch scales the
+    /// programme itself, up to the canvas, and needs no mosaic.
+    pub fn see_programme_through(&self, preview: crate::preview::PreviewHandle) {
+        let _ = self.programme.set(preview);
+    }
+
+    /// A JPEG of the programme `width` wide (`None`: the canvas's own width),
+    /// or `None` with no branch to take it from or no frame yet.
+    pub async fn programme(&self, width: Option<u32>) -> Option<Vec<u8>> {
+        let preview = self.programme.get()?;
+        let picture = preview.programme_picture(width.unwrap_or(u32::MAX)).await.ok()??;
+        Some(picture.jpeg.to_vec())
     }
 
     /// A tracker with nothing behind it, for tests.

@@ -87,6 +87,8 @@ pub struct ProgrammeThumb {
     frames: AtomicU64,
     /// `gmx_stream_clients{kind="thumbnail"}` is 1 while the branch is on.
     counted: Mutex<Option<super::ClientGuard>>,
+    /// How wide the branch scales to: 320, or wider for a snapshot.
+    size: super::thumb_size::Size,
 }
 
 /// Puts the branch on the tee (`true`) or takes it off (`false`). A send on
@@ -154,6 +156,7 @@ impl ProgrammeThumb {
             drop(until);
             *self.latest.lock() = None;
             *self.encoded.lock() = None;
+            self.size.reset();
             debug!("nobody asked for the programme thumbnail lately, taking its branch off");
             return;
         }
@@ -173,10 +176,24 @@ impl ProgrammeThumb {
     /// The newest picture at `width` (16 to [`BRANCH_WIDTH`], even), or
     /// `None` while the first frame has not arrived within [`FIRST_WAIT`].
     pub async fn picture(self: &Arc<Self>, width: u32) -> Option<Thumb> {
-        let width = width.clamp(16, BRANCH_WIDTH) & !1;
-        let deadline = Instant::now() + FIRST_WAIT;
+        self.picture_at(width.clamp(16, BRANCH_WIDTH) & !1, 16, FIRST_WAIT).await
+    }
+
+    /// The same up to the canvas's width, for a snapshot. The branch widens
+    /// for the next frame, which is at most a second away.
+    pub async fn large(self: &Arc<Self>, width: u32) -> Option<Thumb> {
+        let width = width.clamp(16, self.size.ceiling()) & !1;
+        let scaled = self.size.widen(width);
+        self.picture_at(width, width.min(scaled), FIRST_WAIT + Duration::from_secs(1)).await
+    }
+
+    /// A picture `width` wide from a frame at least `least` wide, waiting up
+    /// to `wait` for one; after that, whatever frame there is.
+    async fn picture_at(self: &Arc<Self>, width: u32, least: u32, wait: Duration) -> Option<Thumb> {
+        let deadline = Instant::now() + wait;
         let frame = loop {
-            if let Some(f) = self.latest.lock().clone() {
+            let kept = self.latest.lock().clone();
+            if let Some(f) = kept.filter(|f| f.width >= least || Instant::now() >= deadline) {
                 break f;
             }
             if Instant::now() >= deadline {
@@ -243,14 +260,9 @@ impl Branch {
         chain.extend(bridge);
         chain.push(make("videoscale", "pgm-t-scale")?);
         chain.push(make("videoconvert", "pgm-t-rgb")?);
-        let height = (i64::from(BRANCH_WIDTH) * i64::from(canvas.1.max(2)) / i64::from(canvas.0.max(2))).max(2) as i32 & !1;
-        let caps = gst::Caps::builder("video/x-raw")
-            .field("format", "RGB")
-            .field("width", BRANCH_WIDTH as i32)
-            .field("height", height)
-            .field("pixel-aspect-ratio", gst::Fraction::new(1, 1))
-            .build();
-        chain.push(gstutil::capsfilter("pgm-t-caps", &caps)?);
+        let filter = gstutil::capsfilter("pgm-t-caps", &super::thumb_size::caps(BRANCH_WIDTH, canvas))?;
+        shared.size.hold(filter.clone(), canvas);
+        chain.push(filter);
         chain.push(sink(shared));
         pipeline.add_many(&chain).context("adding the programme thumbnail branch")?;
         gst::Element::link_many(&chain).context("linking the programme thumbnail branch")?;

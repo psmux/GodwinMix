@@ -96,6 +96,16 @@ impl PreviewHandle {
         Ok(self.thumb.picture(width).await)
     }
 
+    /// The programme as a snapshot, `width` pixels across up to the canvas's
+    /// own width, from the same branch. `Ok(None)` while no frame has come.
+    pub async fn programme_picture(&self, width: u32) -> Result<Option<Thumb>, String> {
+        let Some(sink) = self.demand.clone() else {
+            return Err("this core has no mixer, so there is no programme to take a picture of".into());
+        };
+        self.thumb.want(Arc::new(move |on| sink(PreviewDemand::Thumb(on))), &self.clients);
+        Ok(self.thumb.large(width).await)
+    }
+
     pub fn clients(&self) -> Arc<StreamClients> {
         self.clients.clone()
     }

@@ -1023,6 +1023,13 @@ pub async fn snapshot_bytes(
                 .with("retry_after_ms", wait));
         }
     };
+    // The programme comes from its own branch, at the width asked for, and
+    // builds no mosaic. The mosaic cell is the fallback for a core with none.
+    if pick == Pick::Program {
+        if let Some(jpeg) = snapshots.programme(width).await {
+            return Ok(jpeg);
+        }
+    }
     // Asking is what starts the tracker and, through it, the mosaic. The first
     // request after a quiet spell pays for the build; the rest are free.
     let Some(latest) = snapshots.latest_wanted(Duration::from_secs(3)).await else {
@@ -1661,6 +1668,7 @@ pub async fn serve_with(
     }
     let snapshots =
         Tracker::new(state.snapshot.clone(), state.multiview.clone(), state.mixer.clone());
+    snapshots.see_programme_through(state.preview.clone());
     spawn_background(state.clone());
     clip_leave::spawn(state.clone(), snapshots.clone());
     state.feeds.start(crate::feeds::Ctx { app: state.clone(), snapshots: snapshots.clone() });
