@@ -73,6 +73,8 @@ export async function runningTests(test, eq, ok) {
     eq(ingest.since_secs, 90);
     eq(ingest.stop, { method: "channel.set", params: { id: "church", enabled: false } });
     eq(runningThings({ outputs: [] }, []), []);
+    const fed = { id: "to-channel-church", type: "rtmp/output", state: "live", uri_host: "rtmp://127.0.0.1:1935", live_secs: 60 };
+    eq(runningThings({ outputs: [fed] }, []), [], "the programme into a channel is not something sent anywhere");
   });
 
   test("a platform is named from its address, and anything else by its own name", () => {

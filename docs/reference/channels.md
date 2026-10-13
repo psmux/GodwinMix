@@ -747,7 +747,9 @@ instead" under a channel no encoder is sending to.
 | `platform` | the platform id |
 | `label` | |
 | `uri_host` | scheme, host and port, as `rtmps://live-api-s.facebook.com:443`. Never the path or the query, since either can carry a key |
+| `server` | the server as it was given, without its query or a user and password, for an edit form. Only when the key is kept apart from the address; absent for a whole address with no key, whose path may be the key |
 | `has_key` | false while a platform that needs a key has none |
+| `key_hint` | the key's last four characters, like a channel key's `hint`. Absent when there is no separate key or it is shorter than eight characters. No method answers with the key itself |
 | `stream` | the stream it sends, or `*` |
 | `enabled` | |
 | `state` | `off`, `waiting`, `connecting`, `live`, `reconnecting` or `failed` |

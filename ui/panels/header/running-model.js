@@ -7,6 +7,8 @@
 // and found no way to stop the stream. Every item here carries the one call
 // that stops it and, when it is live, the sentence that asks first.
 
+import { feedsAChannel } from "./destinations.js";
+
 const PLATFORMS = [
   [/youtube/i, "YouTube"],
   [/facebook|fbcdn/i, "Facebook"],
@@ -25,9 +27,11 @@ export function platformName(host, fallback) {
 
 const dialling = (o) => (o.state === "connecting" || o.state === "reconnecting") && o.has_key !== false;
 
-/** One programme output, or nothing when it is stopped or never dialled. */
+/** One programme output, or nothing when it is stopped or never dialled.
+ * The programme fed into a channel is the channel's, and shows as that
+ * channel receiving. */
 function fromOutput(o, rates) {
-  if (o.state === "stopped") return null;
+  if (o.state === "stopped" || feedsAChannel(o)) return null;
   const kind = o.type === "record/output" ? "recording" : o.type === "hls/output" ? "watch" : "output";
   if (kind === "output" && o.state !== "live" && !dialling(o)) return null;
   const live = o.state === "live";

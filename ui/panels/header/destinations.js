@@ -9,11 +9,19 @@
 import { failureOf } from "../outputs/failure.js";
 
 /**
+ * The output that sends the programme into one of this mixer's channels.
+ * It never leaves the machine, so it is not a destination. Testers of 0.3.7
+ * switched a channel's only destination off and the pill still said
+ * "1 destination live": it was counting this.
+ */
+export const feedsAChannel = (o) => /^to-channel-/.test(String((o && o.id) || ""));
+
+/**
  * @param {object[]} outputs  the status's outputs
  * @returns {{text: string, title: string, kind: "none"|"live"|"failed"|"connecting"|"key"}}
  */
 export function destinationsPill(outputs) {
-  const all = (outputs || []).filter((o) => o.type !== "record/output");
+  const all = (outputs || []).filter((o) => o.type !== "record/output" && !feedsAChannel(o));
   // A destination a person stopped is not connecting and is not failing.
   const streams = all.filter((o) => o.state !== "stopped");
   if (!streams.length && all.length) {
