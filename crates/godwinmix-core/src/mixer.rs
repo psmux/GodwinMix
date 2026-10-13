@@ -2212,7 +2212,7 @@ impl Mixer {
             cfg,
             &self.canvas,
             &self.backends,
-            self.cfg.multiview.fps.max(1),
+            self.mosaic_fps(),
             self.origin,
             self.cfg.security.allow_exec_sources,
             &self.cfg.browser,
@@ -5152,6 +5152,7 @@ impl Mixer {
         if self.return_pad.is_some() {
             return Ok(());
         }
+        self.fit_programme_return();
         let head = self.return_chain.first().context("the return branch has no head")?;
         let sink = head.static_pad("sink").context("the return branch head has no sink pad")?;
         // States first, on this thread, while the branch is still fed by
@@ -5168,6 +5169,28 @@ impl Mixer {
         self.return_pad = Some(pad);
         debug!("programme return branch attached for the mosaic");
         Ok(())
+    }
+
+    /// The rate a thumbnail is made at: the mosaic's own, which is what the
+    /// page asked for, or the configured rate while there is none.
+    ///
+    /// The configured rate is 8. A source added while the page was open, and
+    /// the programme tile, were made at that while the mosaic around them ran
+    /// at the 25 the page asks for on a machine with eight threads or more, so
+    /// they moved at a third of the rate of everything else.
+    fn mosaic_fps(&self) -> i32 {
+        self.multiview.as_ref().map_or(self.cfg.multiview.fps, |mv| mv.shape().fps).max(1)
+    }
+
+    /// Give the programme return the mosaic's rate. Only while it is off the
+    /// tee, so no frame is ever in it when its caps change.
+    fn fit_programme_return(&self) {
+        let fps = gst::Fraction::new(self.mosaic_fps(), 1);
+        let Some(caps) = self.return_chain.iter().find(|el| el.name() == "pgm-v-caps") else { return };
+        let wanted = CanvasCaps::video_at(crate::input::THUMB_WIDTH, crate::input::THUMB_HEIGHT, fps);
+        if caps.property::<gst::Caps>("caps") != wanted {
+            caps.set_property("caps", &wanted);
+        }
     }
 
     /// Take the return branch back off the tee, so the programme fans out to
