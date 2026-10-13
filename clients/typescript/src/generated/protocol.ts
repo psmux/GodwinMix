@@ -710,6 +710,7 @@ export interface Destination {
   has_key: boolean;
   id: string;
   kbps: number;
+  key_hint?: string | null;
   label: string;
   plan?: DestinationPlan | null;
   platform: string;
@@ -717,6 +718,7 @@ export interface Destination {
   reconnects: number;
   refused?: DestinationRefusal | null;
   rendition?: RenditionChoice | null;
+  server?: string | null;
   since_ms: number;
   state: DestinationState;
   stream: string;

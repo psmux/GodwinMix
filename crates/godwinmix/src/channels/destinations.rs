@@ -123,10 +123,15 @@ impl Channels {
 
     /// A channel's destinations as a client sees them, each with what the
     /// listener last said about it, and what its rendition was planned to.
+    ///
+    /// The server an edit form shows and the key's last four are read from
+    /// what is sealed, as the listener's table is. The key never leaves.
     pub(super) fn destination_views(&self, r: &Record) -> Vec<Destination> {
+        let sealed = self.stored(r);
         r.destinations
             .iter()
             .map(|d| {
+                let kept = sealed.iter().find(|s| s.id == d.id);
                 let (mut live, playback) = match d.platform.as_str() {
                     local::HLS => self.watch_view(&r.id, d),
                     _ => (self.sending_view(&r.id, &d.id, d.enabled), None),
@@ -145,7 +150,9 @@ impl Channels {
                     platform: d.platform.clone(),
                     label: d.label.clone(),
                     uri_host: d.uri_host.clone(),
+                    server: kept.and_then(StoredDestination::server_shown),
                     has_key: d.has_key,
+                    key_hint: kept.and_then(StoredDestination::key_hint),
                     stream: d.stream.clone(),
                     enabled: d.enabled,
                     live,

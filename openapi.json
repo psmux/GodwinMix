@@ -2988,6 +2988,13 @@
             "minimum": 0,
             "type": "integer"
           },
+          "key_hint": {
+            "description": "The key's last four characters, as a channel key's `hint`, so a person\ncan see which key is saved. Left out for a key under eight characters,\nwhere four would be half of it. Never the key itself.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "label": {
             "type": "string"
           },
@@ -3044,6 +3051,13 @@
               }
             ],
             "description": "What it asked to be converted to. Absent: sent as it arrives."
+          },
+          "server": {
+            "description": "The server as it was given, without its query or a user and password,\nfor an edit form to show. Only for a destination whose key is kept\napart from the address; left out where the key may be the address's\nown path, as on a whole address pasted with no key.",
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "since_ms": {
             "description": "Milliseconds since `state` last changed.",

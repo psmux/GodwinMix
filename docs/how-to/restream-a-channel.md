@@ -48,7 +48,8 @@ an `srt://` address and no key.
 which one to send. Left alone it sends the stream that has been live longest,
 and if that one stops while another is still live, it moves on to that one.
 
-The key is never shown again after it is saved.
+The key is never shown again after it is saved. Its last four characters are,
+so you can tell which key a destination has.
 
 Livebox and similar servers call these push destinations, and the strip says
 so in small letters under its heading.
@@ -172,8 +173,12 @@ first when any destination is live, saying how many. One that could not be
 switched is named in a message, and the rest are still done.
 
 Press the tile itself to rename it, change which stream it sends, give it
-another server, replace its key or **Remove** it. Leave the key box alone and
-the key in use is kept, even when the server changes. **Save** applies it.
+another server, replace its key or **Remove** it. The Server box holds the
+server in use, and the key box says `Saved, ends in` and the key's last four
+characters (just `Saved` for a key shorter than eight). A whole address pasted
+into the Server box with no key shows only its host, since the rest of it is
+the key. Leave the key box alone and the key in use is kept, even when the
+server changes. **Save** applies it.
 Remove asks once, then stops that destination and forgets its key; the
 channel and its other destinations are not touched.
 

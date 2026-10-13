@@ -976,6 +976,9 @@ test("the header pill says a destination is not sending, and why on hover", () =
   eq(destinationsPill([refused({ state: "connecting", reconnects: 0, error: null })]).text, "Destinations connecting");
   eq(destinationsPill([refused({ has_key: false, error: null })]).text, "Destinations need a key");
   eq(destinationsPill([{ id: "rec", type: "record/output", state: "live" }]).text, "No destinations");
+  // The programme fed into a channel stays on this machine: with the
+  // channel's only destination off, nothing is live anywhere.
+  eq(destinationsPill([{ id: "to-channel-live", type: "rtmp/output", state: "live" }]).text, "No destinations");
 });
 
 test("after an add, the page says so when the destination goes live, and once", () => {
