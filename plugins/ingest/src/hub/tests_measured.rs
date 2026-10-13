@@ -6,11 +6,19 @@ use super::*;
 use crate::media_tag::{MediaTag, TagKind};
 use std::time::Duration;
 
-fn audio(header: bool, size: usize) -> MediaTag {
+fn tag(kind: TagKind, header: bool, size: usize) -> MediaTag {
     let mut body = vec![0u8; size.max(4)];
-    body[0] = 0xaf;
+    body[0] = if kind == TagKind::Audio { 0xaf } else { 0x17 };
     body[1] = if header { 0 } else { 1 };
-    MediaTag { kind: TagKind::Audio, timestamp_ms: 0, keyframe: false, sequence_header: header, payload: Arc::from(body) }
+    MediaTag { kind, timestamp_ms: 0, keyframe: kind == TagKind::Video, sequence_header: header, payload: Arc::from(body) }
+}
+
+fn audio(header: bool, size: usize) -> MediaTag {
+    tag(TagKind::Audio, header, size)
+}
+
+fn second() {
+    std::thread::sleep(Duration::from_millis(1050));
 }
 
 #[test]
@@ -18,11 +26,14 @@ fn a_stream_says_once_its_rates_are_measured_and_the_first_rates_are_news() {
     let hub = Hub::new();
     let p = hub.publish("church", "radio", "x", None).unwrap();
     p.push(audio(true, 4));
-    p.push(audio(false, 400));
+    // The programme's sound arrived more than a second after it connected,
+    // and that empty second was taken for a measured 0.
+    second();
+    assert!(!p.push(audio(false, 400)), "a first frame late is not a measured second");
     let first = hub.stream("church", "radio").unwrap();
     assert_eq!(first["measured"], false, "{first}");
     assert_eq!(first["audio"]["kbps"], 0, "{first}");
-    std::thread::sleep(Duration::from_millis(1050));
+    second();
     // A stream with no video never has a frame rate to move, so the first
     // rates have to be news by themselves for the core to hear of them.
     assert!(p.push(audio(false, 400)), "the first measured rates are worth an event");
@@ -30,4 +41,21 @@ fn a_stream_says_once_its_rates_are_measured_and_the_first_rates_are_news() {
     assert_eq!(measured["measured"], true, "{measured}");
     assert!(measured["audio"]["kbps"].as_u64().unwrap() > 0, "{measured}");
     assert!(!p.push(audio(false, 400)), "and only once");
+}
+
+#[test]
+fn a_track_that_never_sends_holds_the_rates_back_three_seconds_and_no_longer() {
+    let hub = Hub::new();
+    let p = hub.publish("church", "silent", "x", None).unwrap();
+    p.push(tag(TagKind::Video, true, 30));
+    p.push(audio(true, 4));
+    p.push(tag(TagKind::Video, false, 20_000));
+    for _ in 0..2 {
+        second();
+        p.push(tag(TagKind::Video, false, 20_000));
+        assert_eq!(hub.stream("church", "silent").unwrap()["measured"], false, "sound announced and none sent yet");
+    }
+    second();
+    p.push(tag(TagKind::Video, false, 20_000));
+    assert_eq!(hub.stream("church", "silent").unwrap()["measured"], true, "planned at last, with the sound at 0");
 }
