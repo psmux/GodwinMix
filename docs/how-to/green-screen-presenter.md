@@ -125,10 +125,11 @@ where the presenter stands) is in
 
 ## When it does not look right
 
-* **The presenter is on black.** The programme is composited on a GPU
-  graphics entry, which this key does not draw on yet. It falls back to the
-  old behaviour, keyed areas black. Use the software graphics entry for a
-  keyed scene.
+* **The key is refused, naming `hardware.graphics`.** The mixer is pinned
+  to a GPU graphics entry, which has no overlay board to draw a key on. Set
+  `[hardware] graphics` back to `auto` and restart. A virtual set made with
+  `scene.create_from` on such a mixer is not refused; its presenter stands on
+  black until you do the same.
 * **The whole camera shows, green and all.** The key has not found a colour
   yet: the camera may have been black when it looked. Press **Find** or
   **Pick** once the camera shows the screen.

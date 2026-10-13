@@ -55,11 +55,21 @@ opacity the scene gives the item, the same as a text or a transparent PNG. So
 a picture behind the presenter stays behind, and a transparent picture above
 the presenter in the scene, such as a desk, stays in front.
 
+The compositor's output stays I420 with or without a key. GStreamer's
+`compositor` refuses a pad with alpha when its output has none (an AYUV or
+BGRA input into an I420 output does not negotiate on 1.28), and compositing
+the whole programme in AYUV costs 2.6 times the CPU at 1080p30. The board
+needs neither: adding or removing a key changes nothing downstream of the
+compositor, and the programme does not renegotiate.
+
 Where nothing can draw it, it flattens the key into the frame over black:
 
 * On a source's input side (`filter.add` with `side = "input"`).
 * On the programme itself (`attach = { programme = true }`).
-* On a programme composited on a GPU graphics entry.
+* On a programme composited on a GPU graphics entry. There
+  `scene.item.filter.add` refuses a key with `data.field` set to
+  `hardware.graphics` and `data.next` saying to set it to `auto` and restart,
+  because a key that can only stand on black is not worth adding.
 
 A key on a source's programme side (`side = "programme"`) draws on the board
 wherever the scene puts that source.
