@@ -152,12 +152,14 @@ export async function sceneFixLoadTests(test, eq, ok) {
   const started = sc.start();
   await new Promise((r) => setTimeout(r, 20));
   test("no scene list is drawn as empty before the socket opens", () => eq(lists, 0));
+  test("the scenes count as not read yet before the socket opens", () => eq(sc.loaded, false));
   open = true;
   listeners.get("open")();
   await started;
   test("the scene list is read once the socket opens", () => {
     eq(sc.scenes().map((s) => s.name), ["A"]);
     eq(lists, 1);
+    eq(sc.loaded, true, "and count as read");
   });
   open = false;
   await sc.refresh();

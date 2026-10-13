@@ -1465,6 +1465,7 @@ async function scopedSourcesSuite() {
     scopedTo: SourcesPanel.prototype.scopedTo,
     focusedSummary: SourcesPanel.prototype.focusedSummary,
     sceneClient: SourcesPanel.prototype.sceneClient,
+    readingScenes: SourcesPanel.prototype.readingScenes,
     untouchedScene: SourcesPanel.prototype.untouchedScene,
     place: SourcesPanel.prototype.place,
     askBeforeTake: SourcesPanel.prototype.askBeforeTake,
@@ -1502,6 +1503,27 @@ async function scopedSourcesSuite() {
     summaries = [];
     setFocusedScene("wide");
     eq(shown(), ["cam1", "cam2", "slides"]);
+  });
+
+  // Issue 15: after a reload the tray showed every source in the mixer until
+  // the scene list arrived, which read as removed sources coming back.
+  test("scenes not read yet show nothing rather than every source", () => {
+    summaries = [];
+    node.scenes.loaded = false;
+    eq(shown(), []);
+    node.scenes.loaded = true;
+    eq(shown(), ["cam1", "cam2", "slides"]);
+    delete node.scenes.loaded;
+  });
+
+  test("an emptied scene stays empty once the scenes are read", () => {
+    summaries = [{ id: "default", name: "Default scene", items: 0, sources: [] }];
+    setFocusedScene("default");
+    node.scenes.loaded = true;
+    eq(shown(), []);
+    delete node.scenes.loaded;
+    summaries = [];
+    setFocusedScene("wide");
   });
 
   // ---------------------------------------------- adding from inside a scope

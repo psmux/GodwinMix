@@ -248,6 +248,13 @@ text box. File > Save project as asks where with the system's own save
 dialog. A mixer too old to serve `menus.json` leaves the app's own menu as it
 was and the page's menu bar on screen.
 
+A right click opens the page's own menu where it has one, on a tile or a scene
+tab. Anywhere else nothing opens: the window's browser menu (Back, Refresh,
+Save as, Print) is turned off, except in text boxes, which keep Cut, Copy and
+Paste. A build with debug assertions keeps the browser menu, for Inspect.
+`Ctrl+R` still reloads the page, and a reload reads everything again from the
+mixer, so nothing removed comes back.
+
 ## The content security policy
 
 `app.security.csp` in `tauri.conf.json` is no longer `null`. It applies to the
