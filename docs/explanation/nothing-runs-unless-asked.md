@@ -102,7 +102,10 @@ So every preview branch starts with a queue that is a second deep and **leaky
 downstream**: the thumbnail ends, the programme return, the mosaic's own tile and
 encoder queues, and every audio monitoring branch. A preview client that stops
 reading loses frames. That is the correct outcome, and it is the only one that
-keeps the rule at the top of the README true.
+keeps the rule at the top of the README true. The queue in front of a source's
+mosaic tile holds five seconds rather than one, because a clip's frames arrive
+there seconds before they are due (see
+[How late the picture is](how-late-the-picture-is.md)); it leaks all the same.
 
 The same reasoning produces the deadline on every socket write. A client that
 stops reading is disconnected after five seconds, because the task writing to it

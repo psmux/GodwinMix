@@ -50,6 +50,7 @@
 
 mod arrival;
 mod drawn;
+mod early;
 pub mod preview;
 mod transparent;
 
@@ -882,7 +883,13 @@ impl Multiview {
                 arrival::stamp_on_arrival(&pad);
             }
         }
-        let queue = gstutil::queue_preview(&format!("mv-q-{tag}"))?;
+        // A source's frames may come most of a second early, and are held
+        // until they are due rather than thinned to one per wait (`early`).
+        // The programme tile is stamped on arrival, so never early.
+        let queue = match source {
+            Some(_) => early::tile_queue(&format!("mv-q-{tag}"))?,
+            None => gstutil::queue_preview(&format!("mv-q-{tag}"))?,
+        };
         // The mosaic is a compositor too, and its tiles are scaled on its pads.
         gstutil::stop_flushes_here(&queue)?;
         // No `videorate` here. Every tile arrives at the mosaic's rate

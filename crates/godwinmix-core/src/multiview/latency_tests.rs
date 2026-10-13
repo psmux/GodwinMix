@@ -25,6 +25,7 @@ use crate::mixer::Command;
 use std::time::Duration;
 
 mod barcode;
+mod clip_rate;
 
 const ID: &str = "lat-cam";
 /// What each picture may add, median over two seconds of frames.
@@ -109,11 +110,16 @@ async fn the_preview_path_adds_no_more_than_its_budget() {
 }
 
 async fn wait_for_source(within: Duration) -> gst::Pipeline {
-    let name = format!("input-{ID}");
+    wait_for_pipeline(ID, within).await
+}
+
+/// The input pipeline of source `id`, once its video tee is in it.
+async fn wait_for_pipeline(id: &str, within: Duration) -> gst::Pipeline {
+    let name = format!("input-{id}");
     let end = Instant::now() + within;
     loop {
         let found = crate::observe::introspect::pipeline(&name)
-            .filter(|p| p.by_name(&format!("{ID}-vtee")).is_some());
+            .filter(|p| p.by_name(&format!("{id}-vtee")).is_some());
         if let Some(p) = found {
             return p;
         }

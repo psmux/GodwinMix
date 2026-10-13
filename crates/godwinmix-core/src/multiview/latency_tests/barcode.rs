@@ -53,6 +53,23 @@ pub fn stamp_frames_at(source: &gst::Pipeline, tee: &str) {
     });
 }
 
+/// Stamp every frame leaving the normaliser of `source` with its own
+/// timestamp, so two pictures showing the same frame carry the same stamp
+/// however late either was drawn.
+pub fn stamp_pts_at(source: &gst::Pipeline, tee: &str) {
+    let tee = source.by_name(tee).expect("the source's video tee");
+    let pad = tee.static_pad("sink").unwrap();
+    pad.add_probe(gst::PadProbeType::BUFFER, move |pad, info| {
+        let video = pad.current_caps().and_then(|c| gst_video::VideoInfo::from_caps(&c).ok());
+        if let (Some(video), Some(buffer)) = (video, info.buffer_mut()) {
+            if let Some(pts) = buffer.pts() {
+                stamp(buffer.make_mut(), &video, pts.mseconds() as i64);
+            }
+        }
+        gst::PadProbeReturn::Ok
+    });
+}
+
 /// The stamp in a picture, read from the middle of each block.
 pub fn read(img: &image::RgbImage) -> Option<i64> {
     let (w, h) = img.dimensions();

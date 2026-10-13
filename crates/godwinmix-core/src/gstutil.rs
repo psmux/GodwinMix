@@ -235,6 +235,14 @@ pub fn queue_preview(name: &str) -> Result<gst::Element> {
     Ok(queue)
 }
 
+/// A preview queue that holds `seconds` rather than two frames: leaky like
+/// [`queue_preview`], so it never blocks the tee above it, with the byte and
+/// buffer backstop sized for that time. For thumbnails already scaled down,
+/// whose frames may arrive well before they are due (`multiview::early`).
+pub fn queue_preview_holding(name: &str, seconds: f64) -> Result<gst::Element> {
+    timed_queue(name, seconds, true)
+}
+
 /// Current fill level of a queue, in seconds.
 pub fn queue_level_secs(q: &gst::Element) -> f64 {
     q.property::<u64>("current-level-time") as f64 / 1e9
