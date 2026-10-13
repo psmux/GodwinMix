@@ -19,9 +19,10 @@ pub fn register(reg: &mut Registry<Call>) {
         MethodDef::new(
             "channel.list",
             Scope::Read,
-            "Every channel with its keys (as hints), the address to publish to over each \
-             protocol it has on, and what is live on it; and which ingest ports are open \
-             and for which channels.",
+            "Every channel with its keys (as hints), what feeds it (this mixer's programme, \
+             an encoder, or an address it pulls) and how that is going, the address to \
+             publish to over each protocol it has on, and what is live on it; and which \
+             ingest ports are open and for which channels.",
             handler(|call: Call, _| async move { run(&call, |c| Ok(c.list())).await }),
         )
         .params(no_params)
@@ -29,8 +30,9 @@ pub fn register(reg: &mut Registry<Call>) {
         .tool(
             "list_channels",
             Tier::Search,
-            "The channels encoders publish to on this mixer (by RTMP, RTMPS, SRT or WHIP), \
-             each live stream on them with its protocol, codec, size, frame rate, bit rate \
+            "The channels on this mixer, each fed by this mixer's programme, by an encoder \
+             publishing to it (by RTMP, RTMPS, SRT or WHIP) or by an address it pulls, with \
+             how its feed is doing, each live stream on them with its protocol, codec, size, frame rate, bit rate \
              and the mixer source it feeds, and which ports are open and why. Keys are \
              never shown, only their last four characters.",
         ),
@@ -63,7 +65,9 @@ pub fn register(reg: &mut Registry<Call>) {
             "channel.add",
             Scope::Admin,
             "Make a channel and its first key, which is in this answer. channel.key.reveal \
-             reads it again later.",
+             reads it again later. `feed` says what gives it its picture: {\"kind\": \
+             \"programme\"} for this mixer's programme, {\"kind\": \"pull\", \"url\": ...} \
+             for a stream it pulls, or an encoder publishing to it when left out.",
             handler(add),
         )
         .params(schema_of::<ChannelAddRequest>)
@@ -76,8 +80,10 @@ pub fn register(reg: &mut Registry<Call>) {
             Scope::Admin,
             "Rename a channel, switch it on or off, or change its application name, \
              whether its streams become sources, how its key is given, which protocols it \
-             takes (rtmp, srt, whip) or RTMPS and its port. A port opens when the first \
-             channel needs it and closes when the last one stops. Only what is named moves.",
+             takes (rtmp, srt, whip) or RTMPS and its port, or what feeds it (`feed`: \
+             programme, encoder, or pull with a url that is never read back). A port opens \
+             when the first channel needs it and closes when the last one stops. Only what \
+             is named moves.",
             handler(set),
         )
         .params(schema_of::<ChannelSetRequest>)
