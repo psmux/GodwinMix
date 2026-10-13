@@ -2578,7 +2578,7 @@ class PathExample(TypedDict, total=False):
 
 class PathListRequest(TypedDict, total=False):
     path: Optional[str]
-    # The folder to list. Absent, empty or `~` is the mixer's home folder; a relative path is taken from there.
+    # The folder to list. Absent, empty or `~` is the mixer's home folder; a relative path is taken from there, and a bare drive letter such as `D:` is the top of that drive.
 
 class PathListing(TypedDict, total=False):
     """What `path.list` and `path.create` answer with."""
@@ -2586,9 +2586,9 @@ class PathListing(TypedDict, total=False):
     dirs: List[PathEntry]
     # The folders in it, sorted by name. Files are never listed.
     parent: Optional[str]
-    # One level up, or null at the top of a root.
+    # One level up, or null at the top of a drive or of `/`.
     path: str
-    # The folder listed, absolute and with links resolved.
+    # The folder listed, absolute and with links resolved, written the way a person types it (`D:\Recordings`, never `\\?\D:\Recordings`).
     roots: List[PathRoot]
     truncated: bool
     # True when there were more than 500 and the rest were left out.
@@ -2599,7 +2599,7 @@ class PathRoot(TypedDict, total=False):
     """A place the picker may start from."""
 
     label: str
-    # `Home`, `Media folder` or `Config folder`.
+    # `Home`, `Media folder` and `Config folder`, then on Windows each drive as `C:`, `D:`, and on Linux and macOS `Computer` for `/` and each volume mounted under `/Volumes`, `/media`, `/run/media` or `/mnt` by its folder name.
     path: str
 
 class PauseRequest(TypedDict, total=False):
@@ -4502,7 +4502,7 @@ METHODS = (
     {"name": "output.start", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/outputs/{id}/start"), "summary": 'Send to a stopped destination again, with the address and key it kept.'},
     {"name": "output.stop", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/outputs/{id}/stop"), "summary": 'Stop sending the programme to one destination and keep it, address, key and all, for output.start. Viewers on that platform see the stream end.'},
     {"name": "path.create", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/path/create"), "summary": 'Make one new folder inside a folder path.list shows, and list it. A folder that is already there is listed rather than refused.'},
-    {"name": "path.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/path/list"), "summary": "The folders in one folder on the mixer, and whether each is writable, for a folder picker. Only the home folder and the mixer's own folders are shown; files never are."},
+    {"name": "path.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/path/list"), "summary": "The folders in one folder on the mixer, on any drive, and whether each is writable, for a folder picker. The roots offer home, the mixer's own folders and each drive or mounted volume. Files and hidden folders are never shown."},
     {"name": "pipeline.clock", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/pipeline/clock"), "summary": 'The clock every pipeline is running against, and how far each one has got.'},
     {"name": "pipeline.dot", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/pipeline/dot"), "summary": 'One pipeline as a graphviz graph: every element, every pad and the caps negotiated between them.'},
     {"name": "pipeline.latency", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/pipeline/latency"), "summary": 'How much delay one pipeline is carrying, and which stage put it there.'},
@@ -6139,7 +6139,7 @@ class GeneratedMethods:
         *,
         path: Optional[str] = None,
     ) -> PathListing:
-        """The folders in one folder on the mixer, and whether each is writable, for a folder picker. Only the home folder and the mixer's own folders are shown; files never are."""
+        """The folders in one folder on the mixer, on any drive, and whether each is writable, for a folder picker. The roots offer home, the mixer's own folders and each drive or mounted volume. Files and hidden folders are never shown."""
         params: Dict[str, Any] = {}
         if path is not None:
             params["path"] = path

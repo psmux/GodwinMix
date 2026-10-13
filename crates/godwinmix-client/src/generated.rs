@@ -4142,7 +4142,8 @@ pub struct PathExample {
 #[serde(default)]
 pub struct PathListRequest {
     /// The folder to list. Absent, empty or `~` is the mixer's home folder; a
-    /// relative path is taken from there.
+    /// relative path is taken from there, and a bare drive letter such as `D:`
+    /// is the top of that drive.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub path: Option<String>,
 }
@@ -4153,10 +4154,11 @@ pub struct PathListRequest {
 pub struct PathListing {
     /// The folders in it, sorted by name. Files are never listed.
     pub dirs: Vec<PathEntry>,
-    /// One level up, or null at the top of a root.
+    /// One level up, or null at the top of a drive or of `/`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parent: Option<String>,
-    /// The folder listed, absolute and with links resolved.
+    /// The folder listed, absolute and with links resolved, written the way a
+    /// person types it (`D:\Recordings`, never `\\?\D:\Recordings`).
     pub path: String,
     pub roots: Vec<PathRoot>,
     /// True when there were more than 500 and the rest were left out.
@@ -4169,7 +4171,10 @@ pub struct PathListing {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct PathRoot {
-    /// `Home`, `Media folder` or `Config folder`.
+    /// `Home`, `Media folder` and `Config folder`, then on Windows each drive
+    /// as `C:`, `D:`, and on Linux and macOS `Computer` for `/` and each
+    /// volume mounted under `/Volumes`, `/media`, `/run/media` or `/mnt` by
+    /// its folder name.
     pub label: String,
     pub path: String,
 }
@@ -6884,7 +6889,7 @@ pub const METHODS: [MethodInfo; 231] = [
     MethodInfo { name: "output.start", summary: "Send to a stopped destination again, with the address and key it kept.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/outputs/{id}/start")) },
     MethodInfo { name: "output.stop", summary: "Stop sending the programme to one destination and keep it, address, key and all, for output.start. Viewers on that platform see the stream end.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/outputs/{id}/stop")) },
     MethodInfo { name: "path.create", summary: "Make one new folder inside a folder path.list shows, and list it. A folder that is already there is listed rather than refused.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/path/create")) },
-    MethodInfo { name: "path.list", summary: "The folders in one folder on the mixer, and whether each is writable, for a folder picker. Only the home folder and the mixer's own folders are shown; files never are.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/path/list")) },
+    MethodInfo { name: "path.list", summary: "The folders in one folder on the mixer, on any drive, and whether each is writable, for a folder picker. The roots offer home, the mixer's own folders and each drive or mounted volume. Files and hidden folders are never shown.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/path/list")) },
     MethodInfo { name: "pipeline.clock", summary: "The clock every pipeline is running against, and how far each one has got.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/pipeline/clock")) },
     MethodInfo { name: "pipeline.dot", summary: "One pipeline as a graphviz graph: every element, every pad and the caps negotiated between them.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/pipeline/dot")) },
     MethodInfo { name: "pipeline.latency", summary: "How much delay one pipeline is carrying, and which stage put it there.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/pipeline/latency")) },
@@ -7838,7 +7843,7 @@ impl Client {
         self.call("path.create", params).await
     }
 
-    /// The folders in one folder on the mixer, and whether each is writable, for a folder picker. Only the home folder and the mixer's own folders are shown; files never are.
+    /// The folders in one folder on the mixer, on any drive, and whether each is writable, for a folder picker. The roots offer home, the mixer's own folders and each drive or mounted volume. Files and hidden folders are never shown.
     pub async fn path_list(&self, params: &PathListRequest) -> Result<PathListing> {
         self.call("path.list", params).await
     }

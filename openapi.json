@@ -9209,7 +9209,7 @@
         "properties": {
           "path": {
             "default": null,
-            "description": "The folder to list. Absent, empty or `~` is the mixer's home folder; a\nrelative path is taken from there.",
+            "description": "The folder to list. Absent, empty or `~` is the mixer's home folder; a\nrelative path is taken from there, and a bare drive letter such as `D:`\nis the top of that drive.",
             "type": [
               "string",
               "null"
@@ -9229,14 +9229,14 @@
             "type": "array"
           },
           "parent": {
-            "description": "One level up, or null at the top of a root.",
+            "description": "One level up, or null at the top of a drive or of `/`.",
             "type": [
               "string",
               "null"
             ]
           },
           "path": {
-            "description": "The folder listed, absolute and with links resolved.",
+            "description": "The folder listed, absolute and with links resolved, written the way a\nperson types it (`D:\\Recordings`, never `\\\\?\\D:\\Recordings`).",
             "type": "string"
           },
           "roots": {
@@ -9267,7 +9267,7 @@
         "description": "A place the picker may start from.",
         "properties": {
           "label": {
-            "description": "`Home`, `Media folder` or `Config folder`.",
+            "description": "`Home`, `Media folder` and `Config folder`, then on Windows each drive\nas `C:`, `D:`, and on Linux and macOS `Computer` for `/` and each\nvolume mounted under `/Volumes`, `/media`, `/run/media` or `/mnt` by\nits folder name.",
             "type": "string"
           },
           "path": {
@@ -18000,7 +18000,7 @@
             "$ref": "#/components/responses/Error"
           }
         },
-        "summary": "The folders in one folder on the mixer, and whether each is writable, for a folder picker. Only the home folder and the mixer's own folders are shown; files never are.",
+        "summary": "The folders in one folder on the mixer, on any drive, and whether each is writable, for a folder picker. The roots offer home, the mixer's own folders and each drive or mounted volume. Files and hidden folders are never shown.",
         "tags": [
           "path"
         ],

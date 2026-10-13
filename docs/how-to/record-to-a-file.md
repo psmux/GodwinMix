@@ -6,8 +6,14 @@ another computer. The dialog opens with the default filled in, `Videos/GodwinMix
 in the mixer's home folder, so Start recording works on the first press.
 
 To record somewhere else, press **Choose** beside the folder. That walks the
-folders on the mixer: its home folder, its media folder and the folder its
-config is in, and nothing outside them. Each folder the mixer cannot write
+folders on the mixer, on any of its drives. The buttons across the top go
+straight to its home folder, its media folder, the folder its config is in and
+each drive (`C:`, `D:` on Windows; `Computer` for `/` and each mounted volume
+on Linux and macOS). **Up one level** from the top of a drive lists the drives
+and those folders, so on Windows a second disk is two presses away from the
+first. The line beside it shows the folder you are in, and you can type or
+paste one there, `D:\Recordings` for example, and press Enter or **Go**.
+Files and hidden folders are never listed. Each folder the mixer cannot write
 into is marked read only, and **Use this folder** stays off while you are in
 one. To make a new folder, type its name and press **New folder**. A script
 does the same with `path.list` and `path.create`, described in the

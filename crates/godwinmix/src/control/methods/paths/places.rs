@@ -11,6 +11,7 @@ use std::path::{Path, PathBuf};
 
 /// The most mounted volumes offered as places. A machine with more is
 /// still walked from `/`.
+#[cfg_attr(windows, allow(dead_code))]
 const MAX_VOLUMES: usize = 32;
 
 /// A path as a person reads and types it.
@@ -90,7 +91,8 @@ pub fn system() -> Vec<(String, PathBuf)> {
 
 /// The folders directly inside each of `bases`, labelled by name, leaving out
 /// hidden ones and the bases themselves (`/media/show` is a base, not a
-/// volume). At most [`MAX_VOLUMES`].
+/// volume). At most [`MAX_VOLUMES`]. Windows has drive letters instead.
+#[cfg_attr(windows, allow(dead_code))]
 pub fn mounted(bases: &[PathBuf]) -> Vec<(String, PathBuf)> {
     let mut out = Vec::new();
     for base in bases {
