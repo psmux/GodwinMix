@@ -617,6 +617,20 @@ impl MultiviewSubscription {
         self.frames.len()
     }
 
+    /// Skip to the newest frame already published, if any is waiting. For a
+    /// reader slower than the mosaic, which wants the picture as it is now
+    /// rather than every picture there was.
+    pub fn newest(&mut self) -> Option<Arc<[u8]>> {
+        let mut newest = None;
+        loop {
+            match self.frames.try_recv() {
+                Ok(frame) => newest = Some(frame),
+                Err(broadcast::error::TryRecvError::Lagged(_)) => continue,
+                Err(_) => return newest,
+            }
+        }
+    }
+
     /// Whether this subscription can ever produce a frame.
     pub fn active(&self) -> bool {
         self.shared.cfg.enabled
@@ -1233,6 +1247,20 @@ mod tests {
             MultiviewConfig::default(),
             tokio::runtime::Handle::current(),
         )
+    }
+
+    /// A reader that fell behind skips straight to the newest frame, so the
+    /// snapshot tracker can tell a drawn frame from one queued before it.
+    #[tokio::test]
+    async fn a_slow_reader_skips_to_the_newest_frame() {
+        let h = handle();
+        let mut sub = h.subscribe(MultiviewRequest::configured());
+        assert!(sub.newest().is_none());
+        for n in 1u8..=3 {
+            h.publisher().publish(Arc::from(vec![n]));
+        }
+        assert_eq!(sub.newest().as_deref(), Some(&[3u8][..]));
+        assert_eq!(sub.pending(), 0);
     }
 
     fn default_shape(h: &MultiviewHandle) -> MultiviewShape {

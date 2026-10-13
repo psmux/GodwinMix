@@ -41,6 +41,8 @@ use std::time::{Duration, Instant};
 use tokio::sync::broadcast;
 use tracing::{debug, info, warn};
 
+pub mod wide;
+
 /// Quality for the JPEGs this module encodes itself. The mosaic arrives at
 /// the operator's configured quality; cropping and re-encoding at a lower one
 /// would throw away detail twice, so this sits a little above the default.
@@ -141,6 +143,8 @@ pub struct Tracker {
     /// Where a still of the programme comes from at the size asked for. See
     /// `programme`.
     programme: std::sync::OnceLock<crate::preview::PreviewHandle>,
+    /// The mosaic held wider for a source's still. See `wide`.
+    wide: wide::Held,
 }
 
 impl Tracker {
@@ -162,6 +166,7 @@ impl Tracker {
             starts: AtomicU64::new(0),
             settled: AtomicBool::new(false),
             programme: std::sync::OnceLock::new(),
+            wide: Default::default(),
         })
     }
 
@@ -381,6 +386,13 @@ impl Tracker {
                 }
                 Ok(Err(broadcast::error::RecvError::Closed)) => break,
             };
+            // Behind the mosaic, score the newest frame and skip the rest. A
+            // tracker that decoded every frame in turn on a busy machine (or
+            // in a debug build) never caught up, so `pending` below was never
+            // zero, no frame was ever counted as drawn, and every still waited
+            // out its three seconds and was served whatever frame was there:
+            // after a rebuild, a black one.
+            let jpeg = sub.newest().unwrap_or(jpeg);
             // This frame was drawn whole if a drawn frame had gone out and
             // nothing is waiting behind this one, read in that order: the
             // drawn frame is then this one or one before it. Every frame
@@ -455,6 +467,7 @@ impl Tracker {
     fn clear(&self) {
         self.settled.store(false, Ordering::Release);
         *self.latest.write() = None;
+        self.wide.lock().take();
     }
 }
 

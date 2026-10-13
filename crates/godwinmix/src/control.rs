@@ -1040,6 +1040,9 @@ pub async fn snapshot_bytes(
     if pick == Pick::Sheet && width.is_none() {
         return Ok(latest.jpeg.to_vec());
     }
+    // A source's cell narrower than the width asked for: the mosaic is held
+    // wider, up to 1920, and the still is cut from a frame drawn at that size.
+    let latest = snapshots.wide_enough(&pick, width, latest).await;
     let cell = match &pick {
         Pick::Sheet => None,
         _ => match snapshot::find_cell(&latest.cells, &pick) {
