@@ -124,12 +124,9 @@
           "maxLength": 64
         },
         "source": {
-          "description": "Where to get it, in one of the forms Source::parse accepts: owner/repo optionally @version, a git URL ending in .git, cargo:name, npm:@scope/name, pypi:name or oci:ref. A path is a form the core parses but the index refuses, because a path on your machine resolves to nothing on anyone else's.",
+          "description": "Where to get it, in one of the forms Source::parse accepts: owner/repo optionally @version, a git URL ending in .git, cargo:name, npm:@scope/name, pypi:name or oci:ref. A path is refused unless the listing is `bundled`: a path on your machine resolves to nothing on anyone else's, and a bundled plugin is installed from the copy that ships beside the mixer.",
           "type": "string",
-          "minLength": 1,
-          "not": {
-            "pattern": "^(\\.\\.?([/\\\\]|$)|[/~]|[A-Za-z]:[/\\\\])"
-          }
+          "minLength": 1
         },
         "description": {
           "description": "One sentence saying what the plugin does. It is what a person and a model both read first.",
@@ -227,6 +224,77 @@
           "type": "array",
           "items": {
             "$ref": "#/$defs/version"
+          }
+        },
+        "title": {
+          "type": "string",
+          "description": "A human name for the gallery card, \"NDI\" for ndi. The name is shown when there is none."
+        },
+        "icon": {
+          "type": "string",
+          "format": "uri",
+          "description": "A square picture, a URL the browser loads. The index workflow takes gallery/icon.png from the plugin's repository."
+        },
+        "thumbnail": {
+          "type": "string",
+          "format": "uri",
+          "description": "The card's picture, a URL. gallery/thumbnail.png, else the first screenshot, else the repository's social preview for a plugin that has a repository of its own."
+        },
+        "screenshots": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "uri"
+          },
+          "description": "Pictures of it working, URLs: gallery/screenshot-*.png in name order."
+        },
+        "stars": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "The repository's GitHub stars when the workflow last looked."
+        },
+        "downloads": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Every download of every release asset, added together. The install count a gallery shows."
+        },
+        "updated": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When it last changed, RFC 3339: the newest release, else the last push."
+        },
+        "author": {
+          "type": "string",
+          "description": "Who makes it: the repository owner unless the listing says otherwise."
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Words to search by, from the repository's topics."
+        },
+        "bundled": {
+          "type": "boolean",
+          "description": "It ships with GodwinMix, so installing it needs no download. A gallery marks it as included with the mixer."
+        }
+      },
+      "if": {
+        "properties": {
+          "bundled": {
+            "const": true
+          }
+        },
+        "required": [
+          "bundled"
+        ]
+      },
+      "else": {
+        "properties": {
+          "source": {
+            "not": {
+              "pattern": "^(\\.\\.?([/\\\\]|$)|[/~]|[A-Za-z]:[/\\\\])"
+            }
           }
         }
       }

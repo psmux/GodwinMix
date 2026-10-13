@@ -193,6 +193,12 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/outputs/panel.js", include_str!("../../../ui/panels/outputs/panel.js")),
     ("panels/outputs/views.js", include_str!("../../../ui/panels/outputs/views.js")),
 ("panels/renditions/bars.js", include_str!("../../../ui/panels/renditions/bars.js")),
+    ("panels/plugins/act.js", include_str!("../../../ui/panels/plugins/act.js")),
+    ("panels/plugins/card.js", include_str!("../../../ui/panels/plugins/card.js")),
+    ("panels/plugins/detail.js", include_str!("../../../ui/panels/plugins/detail.js")),
+    ("panels/plugins/model.js", include_str!("../../../ui/panels/plugins/model.js")),
+    ("panels/plugins/plugins.css", include_str!("../../../ui/panels/plugins/plugins.css")),
+    ("panels/plugins/view.js", include_str!("../../../ui/panels/plugins/view.js")),
     ("panels/routing/act.js", include_str!("../../../ui/panels/routing/act.js")),
     ("panels/routing/data.js", include_str!("../../../ui/panels/routing/data.js")),
     ("panels/routing/grid.js", include_str!("../../../ui/panels/routing/grid.js")),
@@ -443,6 +449,8 @@ const DEV_ASSETS: &[(&str, &str)] = &[
     ("test/phone-hands.js", include_str!("../../../ui/test/phone-hands.js")),
     // Install app on More, and which requests the service worker answers.
     ("test/install.js", include_str!("../../../ui/test/install.js")),
+    ("test/plugins.js", include_str!("../../../ui/test/plugins.js")),
+    ("test/plugins-stub.js", include_str!("../../../ui/test/plugins-stub.js")),
     ("test/presence.js", include_str!("../../../ui/test/presence.js")),
     ("test/touch-tray.js", include_str!("../../../ui/test/touch-tray.js")),
     ("test/tile-levels.js", include_str!("../../../ui/test/tile-levels.js")),
@@ -741,13 +749,17 @@ fn content_type(path: &str) -> &'static str {
 /// is the half of the policy that stops an injected string from running.
 /// `worker-src` and `manifest-src` say outright what `default-src` already
 /// allowed: the service worker and the app manifest, from this origin only.
+/// `img-src` names the GitHub hosts the Plugins page's pictures come from, and
+/// only those: the browser loads them straight from GitHub, the core never
+/// fetches one, and a picture anywhere else shows as the kind's icon.
 const CSP: &str = concat!(
     "default-src 'self'; ",
     "script-src 'self'; ",
     "worker-src 'self'; ",
     "manifest-src 'self'; ",
     "style-src 'self' 'unsafe-inline'; ",
-    "img-src 'self' data: blob:; ",
+    "img-src 'self' data: blob: https://raw.githubusercontent.com https://opengraph.githubassets.com ",
+    "https://repository-images.githubusercontent.com https://avatars.githubusercontent.com; ",
     "media-src 'self' blob:; ",
     "font-src 'self' data:; ",
     "connect-src 'self' ws: wss:; ",
@@ -1165,6 +1177,8 @@ mod tests {
         reachable.extend(closure_of("shell/show-file.js"));
         // View > Routing, and what its cells open.
         reachable.extend(closure_of("panels/routing/view.js"));
+        // Sources > More plugins, or More plugins in the add source picker.
+        reachable.extend(closure_of("panels/plugins/view.js"));
         // View > Monitoring wall, and what it opens: Add shows and a show's detail.
         reachable.extend(closure_of("panels/wall/view.js"));
         reachable.extend(closure_of("panels/wall/bulk.js"));
@@ -1285,6 +1299,8 @@ mod tests {
             ("shell/show-file.js", "New show or Switch show"),
             ("shell/restart-bar.js", "a setting waiting for a restart"),
             ("panels/routing/view.js", "View > Routing"),
+            ("panels/plugins/view.js", "Sources > More plugins"),
+            ("panels/plugins/card.js", "Sources > More plugins"),
             ("panels/routing/data.js", "View > Routing"),
             ("panels/routing/model.js", "View > Routing"),
             ("panels/wall/view.js", "View > Monitoring wall"),

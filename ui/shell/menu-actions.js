@@ -48,6 +48,7 @@ const ACTIONS = {
   "show.new": (client) => shows().then((m) => m.newShow(client)),
   "show.switch": (client, id) => shows().then((m) => m.switchShow(client, id)),
   "view.routing": (client) => import("../panels/routing/view.js").then((m) => m.toggleRouting(client)),
+  "view.plugins": (client) => import("../panels/plugins/view.js").then((m) => m.toggleGallery(client)),
   "view.wall": (client) => import("../panels/wall/view.js").then((m) => m.toggleWall(client)),
   "show.add-many": (client) => import("../panels/wall/bulk.js").then((m) => m.bulkAdd(client)),
   "edit.delete": () => {

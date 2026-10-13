@@ -135,7 +135,11 @@ function openSourcePicker(client, kinds, plugins, opts) {
     title: opts.title || "Add a source",
     body,
     onClose: () => { closed = true; files.destroy(); opts.existing?.deactivate(); opts.onClose?.(); },
-    footer: [el("button.btn", { text: "Close", onclick: () => m.close() })],
+    footer: [
+      el("button.btn", { text: "More plugins", title: "Find more kinds of source to install", onclick: () => { m.close(); import("../panels/plugins/view.js").then((v) => v.toggleGallery(client)); } }),
+      el("span.grow"),
+      el("button.btn", { text: "Close", onclick: () => m.close() }),
+    ],
     wide: true,
   });
 

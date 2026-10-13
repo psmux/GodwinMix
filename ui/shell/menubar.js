@@ -114,6 +114,7 @@ function commands(client) {
     cmd("show.switch", "Switch show", "Show"),
     cmd("view.routing", "Routing", "View"),
     cmd("view.wall", "Monitoring wall", "View"),
+    cmd("view.plugins", "More plugins", "Sources"),
     cmd("edit.delete", "Delete the selection", "Edit"),
     cmd("view.panel", "Show or hide a panel", "View", "", true),
     cmd("view.studio", "Studio mode on or off", "View"),

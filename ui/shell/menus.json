@@ -240,6 +240,13 @@
         {
           "command": "data.open",
           "title": "Live data…"
+        },
+        {
+          "separator": true
+        },
+        {
+          "command": "view.plugins",
+          "title": "More plugins…"
         }
       ]
     },

@@ -1,0 +1,116 @@
+// Sources > More plugins, and More plugins in the add source picker: every
+// plugin the mixer's plugin lists know, as cards, over the page and under the
+// top bar. Nothing is fetched until it opens; then one `plugin.gallery`, and
+// the pictures come straight from GitHub.
+
+import { el, clear } from "../../shell/dom.js";
+import { card } from "./card.js";
+import { openDetail } from "./detail.js";
+import { perform } from "./act.js";
+import { FILTERS, visible, freshness } from "./model.js";
+
+let open = null;
+
+/** Open the page, or close it when it is open. */
+export function toggleGallery(client) {
+  if (open) return open.close();
+  open = openGallery(client);
+  return open;
+}
+
+function sheet() {
+  if (document.getElementById("gmx-plugins-css")) return;
+  document.head.append(el("link#gmx-plugins-css", { rel: "stylesheet", href: new URL("./plugins.css", import.meta.url).href }));
+}
+
+export function openGallery(client) {
+  sheet();
+  const back = document.activeElement;
+  const state = { gallery: null, filter: "all", loading: true, error: "", notes: new Map() };
+  const search = el("input.pg-search", { type: "search", placeholder: "Search plugins", "aria-label": "Search plugins" });
+  const chips = el("div.pg-chips", { role: "toolbar", "aria-label": "Show only" });
+  const status = el("span.pg-dim", { role: "status" });
+  const grid = el("div.pg-grid");
+  const root = el("section.plugins-page", { role: "region", "aria-label": "Plugins" }, [
+    el("header.pg-top", {}, [
+      el("h2", { text: "Plugins" }), status, el("span.grow"), search,
+      el("button.btn", { type: "button", text: "Check again", title: "Fetch the plugin list again", onclick: () => load(true) }),
+      el("button.btn.icon", { type: "button", text: "×", title: "Close plugins (Escape)", "aria-label": "Close plugins", onclick: () => view.close() }),
+    ]),
+    chips,
+    el("div.pg-scroll", {}, [grid]),
+  ]);
+  const header = document.querySelector(".slot-header, gmx-header");
+  root.style.top = `${header ? Math.round(header.getBoundingClientRect().bottom) : 44}px`;
+  document.body.append(root);
+
+  function draw() {
+    clear(chips);
+    for (const f of FILTERS) {
+      chips.append(el("button.btn.pg-chip", {
+        type: "button", text: f.label, "aria-pressed": String(state.filter === f.id),
+        onclick: () => { state.filter = f.id; draw(); },
+      }));
+    }
+    const all = (state.gallery && state.gallery.plugins) || [];
+    status.textContent = state.loading && !state.gallery ? "Getting the list." : state.error ? "" : freshness(state.gallery);
+    const shown = visible(all, state.filter, search.value);
+    clear(grid);
+    for (const p of shown) {
+      const node = card(p, (q) => openDetail(client, q, load), act);
+      const note = state.notes.get(p.name);
+      if (note) node.append(el(`p.pg-note${note.ok ? "" : ".bad"}`, { text: note.text }));
+      grid.append(node);
+    }
+    if (!shown.length) grid.append(el("p.pg-empty", { text: empty(all) }));
+  }
+
+  function empty(all) {
+    if (state.error) return `The plugin list did not load: ${state.error}`;
+    if (state.loading) return "Getting the list of plugins.";
+    if (!all.length) return freshness(state.gallery);
+    return search.value ? "No plugin matches that search." : "None of these yet.";
+  }
+
+  async function load(force) {
+    state.loading = true;
+    draw();
+    try {
+      state.gallery = await client.call("plugin.gallery", force ? { refresh: true } : {});
+      state.error = "";
+    } catch (e) {
+      state.error = (e && e.message) || String(e);
+    }
+    state.loading = false;
+    draw();
+    return (state.gallery && state.gallery.plugins) || [];
+  }
+
+  async function act(p, what, button) {
+    button.disabled = true;
+    const done = await perform(client, p, what, (text) => state.notes.set(p.name, { ok: true, text }) && draw());
+    state.notes.set(p.name, done);
+    await load();
+  }
+
+  search.addEventListener("input", draw);
+  const onKey = (e) => {
+    if (e.key !== "Escape" || document.querySelector(".scrim")) return;
+    if (e.target === search && search.value) return;
+    view.close();
+  };
+  window.addEventListener("keydown", onKey);
+  const view = {
+    root,
+    reload: load,
+    close() {
+      window.removeEventListener("keydown", onKey);
+      root.remove();
+      open = null;
+      back?.focus?.();
+    },
+  };
+  load(false);
+  search.focus();
+  return view;
+}
