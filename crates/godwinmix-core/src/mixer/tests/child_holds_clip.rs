@@ -1,7 +1,8 @@
 //! A process the mixer starts while a clip plays must not keep the clip.
 //!
 //! On Windows a child inherits every inheritable handle, and a clip opened by
-//! `filesrc` is one. The camera and screen plugins start with the show, a
+//! `filesrc` is one. On Linux a descriptor `filesrc` opens is not close on
+//! exec, so a child keeps it the same way. The camera and screen plugins start with the show, a
 //! moment after the sources in the config, so the clips there stayed open in
 //! the plugins after `source.remove` and could not be renamed until the show
 //! ended. A source added later, with no process starting beside it, was fine.
