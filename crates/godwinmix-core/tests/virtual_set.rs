@@ -141,3 +141,4 @@ fn programme_format(pipeline: &gst::Pipeline) -> Option<String> {
     let caps = pipeline.by_name("vmix-caps")?.static_pad("src")?.current_caps()?;
     caps.structure(0)?.get::<String>("format").ok()
 }
+

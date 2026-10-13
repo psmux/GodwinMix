@@ -105,7 +105,7 @@ fn studio_png(w: u32, h: u32) -> String {
     }
     let pipe = gst::parse::launch(&format!(
         "appsrc name=s caps=video/x-raw,format=RGB,width={w},height={h},framerate=1/1 ! videoconvert ! pngenc ! filesink location=\"{}\"",
-        path.display()
+        path.display().to_string().replace('\\', "/")
     ))
     .unwrap()
     .downcast::<gst::Pipeline>()
