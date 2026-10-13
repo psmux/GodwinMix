@@ -12,12 +12,16 @@ use std::time::Duration;
 
 /// How long any one request may take before it is given up on. A release asset
 /// on a slow link is the long case; ten minutes is generous and finite.
-const TIMEOUT: Duration = Duration::from_secs(600);
+pub const TIMEOUT: Duration = Duration::from_secs(600);
 
 fn client() -> Result<reqwest::blocking::Client> {
+    client_within(TIMEOUT)
+}
+
+fn client_within(timeout: Duration) -> Result<reqwest::blocking::Client> {
     let mut builder = reqwest::blocking::Client::builder()
         .user_agent(concat!("godwinmix/", env!("CARGO_PKG_VERSION")))
-        .timeout(TIMEOUT);
+        .timeout(timeout);
     // An operator behind a proxy that only speaks HTTP/1.1 is common enough on
     // a broadcast network to be worth not surprising.
     builder = builder.redirect(reqwest::redirect::Policy::limited(10));
@@ -39,7 +43,13 @@ fn github_token() -> Option<String> {
 
 /// GET a JSON document.
 pub fn get_json(url: &str) -> Result<serde_json::Value> {
-    let mut request = client()?.get(url).header("Accept", "application/vnd.github+json");
+    get_json_within(url, TIMEOUT)
+}
+
+/// GET a JSON document, giving up after `timeout`. The gallery asks with a
+/// few seconds, because a person is looking at the page while it waits.
+pub fn get_json_within(url: &str, timeout: Duration) -> Result<serde_json::Value> {
+    let mut request = client_within(timeout)?.get(url).header("Accept", "application/vnd.github+json");
     if url.contains("github") {
         if let Some(token) = github_token() {
             request = request.bearer_auth(token);

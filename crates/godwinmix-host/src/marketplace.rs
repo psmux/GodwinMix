@@ -27,6 +27,11 @@ use crate::sources::{http, Source};
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
+use std::time::Duration;
+
+mod display;
+pub mod gallery;
+pub use display::Display;
 
 /// The two file names a marketplace repository may use. `index.json` is what
 /// the community index carries because it holds more than a listing; both are
@@ -95,6 +100,10 @@ pub struct Listing {
     pub license: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub repository: String,
+    /// What a gallery shows: a title, pictures, stars and downloads. All
+    /// optional, so a document written before they existed reads the same.
+    #[serde(flatten)]
+    pub display: Display,
     /// Anything the index CI adds that this core does not read.
     #[serde(flatten, default, skip_serializing_if = "serde_json::Map::is_empty")]
     pub extra: serde_json::Map<String, serde_json::Value>,
@@ -243,6 +252,10 @@ pub struct Added {
 pub struct Store {
     #[serde(default)]
     pub marketplaces: Vec<Added>,
+    /// Default marketplaces the operator removed, so the gallery does not put
+    /// them back the next time it opens.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub declined: Vec<String>,
 }
 
 /// `~/.godwinmix` unless `GODWINMIX_HOME` says otherwise. The answer is
@@ -280,7 +293,12 @@ pub fn save_store(store: &Store) -> Result<()> {
 
 /// Add a marketplace: fetch it, check it, cache it, and record it.
 pub fn add(spec: &str) -> Result<Added> {
-    let (url, doc) = fetch_document(spec)?;
+    add_within(spec, http::TIMEOUT)
+}
+
+/// [`add`], giving up on each request after `timeout`.
+pub fn add_within(spec: &str, timeout: Duration) -> Result<Added> {
+    let (url, doc) = fetch_document(spec, timeout)?;
     let cache = cache_path(&doc.name);
     if let Some(parent) = cache.parent() {
         std::fs::create_dir_all(parent)
@@ -296,6 +314,7 @@ pub fn add(spec: &str) -> Result<Added> {
         plugins: doc.plugins.len(),
     };
     let mut store = load_store();
+    store.declined.retain(|d| d != &entry.name && d != spec);
     store.marketplaces.retain(|m| m.name != entry.name);
     store.marketplaces.push(entry.clone());
     store.marketplaces.sort_by(|a, b| a.name.cmp(&b.name));
@@ -329,6 +348,9 @@ pub fn remove(name: &str) -> Result<Added> {
             )
         })?;
     let gone = store.marketplaces.remove(found);
+    if gallery::is_default(&gone) {
+        store.declined.push(gone.name.clone());
+    }
     save_store(&store)?;
     let _ = std::fs::remove_file(cache_path(name));
     Ok(gone)
@@ -379,7 +401,7 @@ pub fn search(term: &str, only: &[String]) -> Vec<(String, Listing)> {
 }
 
 /// Read a marketplace document from wherever `spec` points.
-fn fetch_document(spec: &str) -> Result<(String, Marketplace)> {
+fn fetch_document(spec: &str, timeout: Duration) -> Result<(String, Marketplace)> {
     let spec = spec.trim();
     // A local path, which is how the official marketplace in this repository
     // is added and how a test adds one.
@@ -407,7 +429,7 @@ fn fetch_document(spec: &str) -> Result<(String, Marketplace)> {
     let urls = candidate_urls(spec)?;
     let mut last = String::new();
     for url in &urls {
-        match http::get_json(url) {
+        match http::get_json_within(url, timeout) {
             Ok(value) => {
                 let doc = Marketplace::parse(&value.to_string())
                     .with_context(|| format!("reading {url}"))?;

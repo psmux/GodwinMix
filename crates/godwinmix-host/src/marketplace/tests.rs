@@ -4,13 +4,13 @@ use super::*;
 /// in turn. Everything else here is pure and runs in parallel.
 static HOME: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
-struct Home {
-    dir: PathBuf,
+pub(crate) struct Home {
+    pub(crate) dir: PathBuf,
     _guard: std::sync::MutexGuard<'static, ()>,
 }
 
 impl Home {
-    fn new(name: &str) -> Self {
+    pub(crate) fn new(name: &str) -> Self {
         let guard = HOME.lock().unwrap_or_else(|e| e.into_inner());
         let dir = std::env::temp_dir().join(format!("gmx-market-{}-{name}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
@@ -38,7 +38,7 @@ fn document(name: &str, plugins: serde_json::Value) -> String {
     .to_string()
 }
 
-fn write_market(at: &Path, name: &str, plugins: serde_json::Value) -> PathBuf {
+pub(crate) fn write_market(at: &Path, name: &str, plugins: serde_json::Value) -> PathBuf {
     std::fs::create_dir_all(at).expect("a directory");
     let file = at.join("godwinmix-marketplace.json");
     std::fs::write(&file, document(name, plugins)).expect("a document");
