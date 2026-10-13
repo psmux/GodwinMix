@@ -440,6 +440,10 @@ const LEGACY: &str = include_str!("../../../ui/legacy/index.html");
 const DEV_ASSETS: &[(&str, &str)] = &[
     ("test/index.html", include_str!("../../../ui/test/index.html")),
     ("test/run.js", include_str!("../../../ui/test/run.js")),
+    ("test/store.js", include_str!("../../../ui/test/store.js")),
+    ("test/store-media.js", include_str!("../../../ui/test/store-media.js")),
+    ("test/store-run.js", include_str!("../../../ui/test/store-run.js")),
+    ("test/store.html", include_str!("../../../ui/test/store.html")),
     ("test/source-files.js", include_str!("../../../ui/test/source-files.js")),
     ("test/mixer-settings.js", include_str!("../../../ui/test/mixer-settings.js")),
     ("test/error-actions.js", include_str!("../../../ui/test/error-actions.js")),
