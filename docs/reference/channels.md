@@ -576,7 +576,9 @@ stream}` with the whole address. The plugin raises `event/channel.stream` (a
 stream went live, learned its codecs, or left), `event/channel.refused`, and
 `event/channel.destination` (`{channel, destination, state, since_ms, kbps,
 reconnects, error}`) when a destination's state, error or reconnect count
-moves. It answers the `streams` tool with every live stream measured and each
+moves. The first rates of a stream, a second in, are news too, and until then
+the core plans no converting destination for it. It answers the `streams`
+tool with every live stream measured and each
 destination's `kbps` under `destinations`. It runs one restream per
 destination, each reading the hub through a bounded queue of its own. A mixer source reads its stream from the listener over
 loopback on the RTMP port number, which stays open on `127.0.0.1` while any
@@ -752,7 +754,7 @@ instead" under a channel no encoder is sending to.
 | `enabled` | |
 | `state` | `off`, `waiting`, `connecting`, `live`, `reconnecting` or `failed` |
 | `since_ms` | how long it has been in that state, in milliseconds. A stream's `since_ms` is a time of day instead, in milliseconds since 1970 |
-| `kbps` | what is going out, over the last second |
+| `kbps` | what is going out, sound and container included, averaged over the last four seconds (two keyframe intervals at 2 s) |
 | `reconnects` | connections lost and made again since it was switched on |
 | `error` | the last thing that went wrong, in words, or `null` |
 | `rendition` | what it asked to be converted to; absent for a plain copy |

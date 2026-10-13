@@ -136,6 +136,21 @@ The tile then says what was done under its state:
 | CPU encode | converted in software, because this machine has no hardware encoder or it is full |
 | …, shared | another destination asked for the same format, and both get the one encoder's output |
 
+While it is live, the tile also says what it sends, such as
+`1280×720 30 fps H.264`. That is the destination's own picture, which can
+differ from the channel's line above it: a channel fed at 1920x1080 and 6 Mb/s
+reads `Coming in: Video 1920x1080 6.0 Mb/s` while its 720p destination reads
+`1280×720 30 fps H.264`. Hover over the tile, or open it, for the whole
+sentence: `Sends: 1280×720 30 fps H.264, video at 3.0 Mb/s; AAC 128 kb/s.
+Measured going out: 3.1 Mb/s`. The rate on the tile is what left this
+machine over the last four seconds, sound included, so a 3000 kb/s video with
+128 kb/s sound reads about 3.1 Mb/s.
+
+A destination that asked for a bitrate never gets a copy running more than 5
+percent over it, for the sound as well as the picture. The plan waits until a
+whole second of the stream has been measured, which is why a converting
+destination starts a second or so after the channel goes live.
+
 The stream is decoded once however many destinations convert it, and every
 destination that asks for the same format shares one encoder, so three
 destinations at 720p cost about what one does. A destination left on Same as
