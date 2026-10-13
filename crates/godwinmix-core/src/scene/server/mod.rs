@@ -31,6 +31,7 @@ pub mod graphics;
 pub mod ops;
 pub mod patch;
 mod refused;
+mod seed;
 pub mod store;
 mod transaction;
 mod undo;
