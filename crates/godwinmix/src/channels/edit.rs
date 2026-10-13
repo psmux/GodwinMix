@@ -18,6 +18,7 @@ impl Channels {
     /// `channel.add`: a channel and its first key.
     pub fn add(&self, req: ChannelAddRequest) -> Result<ChannelAdded, RpcError> {
         let name = req.name.trim().to_string();
+        let feed = req.feed.clone();
         let base = slug(&name);
         if base.is_empty() {
             return Err(RpcError::invalid_params(
@@ -48,12 +49,20 @@ impl Channels {
                 auto_sources: Vec::new(),
                 auto_rules: Default::default(),
                 destinations: Vec::new(),
+                feed: Default::default(),
                 extra: Default::default(),
             };
             records.push(record.clone());
             record
         };
         let key = self.make_key(&record.id, None, typed)?;
+        let fed = feed.map(|f| self.take_feed(&record.id, f)).transpose();
+        if fed.is_err() {
+            // A feed it cannot have leaves no half made channel behind.
+            self.records.lock().retain(|r| r.id != record.id);
+            self.secrets.forget(&keys::scope(&record.id));
+        }
+        fed?;
         self.commit(Some(&record.id))?;
         Ok(ChannelAdded { channel: self.channel(&record.id).expect("just made"), key })
     }
@@ -95,7 +104,10 @@ impl Channels {
             record.protocols = protocols;
             record.rtmps = rtmps;
         }
+        // The rest of the change is kept even when the feed is refused.
+        let fed = req.feed.clone().map(|f| self.take_feed(&req.id, f)).transpose();
         self.commit(Some(&req.id))?;
+        fed?;
         if req.auto_source == Some(true) {
             self.adopt_live(&req.id);
         }
@@ -105,9 +117,12 @@ impl Channels {
     /// Streams already live when `auto_source` is switched on become
     /// sources now, rather than at their next reconnect.
     fn adopt_live(&self, id: &str) {
-        let Some(record) = self.records.lock().iter().find(|r| r.id == id && r.enabled).cloned() else {
+        let Some(record) = self.records.lock().iter().find(|r| r.id == id).cloned() else {
             return;
         };
+        if !self.adoptable(&record) {
+            return;
+        }
         let waiting: Vec<(String, String)> = self
             .live
             .lock()
@@ -132,6 +147,7 @@ impl Channels {
         let Some(gone) = gone else { return Err(self.not_found(id)) };
         self.secrets.forget(&keys::scope(id));
         self.forget_channel_sending(id);
+        self.forget_feed(id);
         let streams: Vec<super::Live> = {
             let mut live = self.live.lock();
             let (mine, rest): (Vec<_>, Vec<_>) = live.drain(..).partition(|l| l.channel == id);

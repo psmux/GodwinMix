@@ -44,6 +44,7 @@ impl Channels {
             publish: ChannelPublish { server, example, addresses },
             streams,
             destinations: self.destination_views(r),
+            feed: self.feed_view(r),
         }
     }
 

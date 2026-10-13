@@ -46,6 +46,7 @@ pub mod destination;
 pub mod devices;
 pub mod rendition;
 pub mod channels;
+pub mod channel_feed;
 pub mod channel_ingest;
 pub mod error;
 pub mod feeds;

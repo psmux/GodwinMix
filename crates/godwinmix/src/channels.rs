@@ -30,6 +30,7 @@ mod default;
 mod destinations;
 mod edit;
 mod events;
+pub mod feed;
 mod guard;
 mod handover;
 pub mod hooks;
@@ -93,6 +94,8 @@ pub struct Channels {
     live: Lock<Vec<Live>>,
     /// What the listener last said about each destination.
     sending: Lock<Vec<sending::Sending>>,
+    /// What each feed last said. See `feed.rs`.
+    feeds: Lock<Vec<feed::Seen>>,
     /// Destination edits, one at a time, so two cannot seal over each other.
     edits: Mutex<()>,
     port: AtomicU16,
@@ -156,6 +159,7 @@ impl Channels {
             listeners: Lock::new("listeners", Vec::new()),
             live: Lock::new("live", Vec::new()),
             sending: Lock::new("sending", Vec::new()),
+            feeds: Lock::new("feeds", Vec::new()),
             edits: Mutex::new(()),
             port: AtomicU16::new(ports.rtmp),
             transcode: transcode::Transcode::new(data_dir),

@@ -28,6 +28,7 @@ fn channel(id: &str) -> Channel {
         auto_sources: Vec::new(),
         auto_rules: BTreeMap::new(),
         destinations: Vec::new(),
+        feed: Default::default(),
         extra: BTreeMap::new(),
     }
 }

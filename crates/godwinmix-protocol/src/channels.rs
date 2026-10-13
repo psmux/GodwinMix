@@ -15,6 +15,7 @@ pub use crate::channel_ingest::{
 };
 use crate::channel_ingest::rtmp_only;
 pub use crate::destination::Destination;
+pub use crate::channel_feed::{ChannelFeed, FeedKind, FeedRequest, FeedState};
 
 /// How a publisher gives its key.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -57,6 +58,10 @@ pub struct Channel {
     /// Changed by `channel.destination.*`.
     #[serde(default)]
     pub destinations: Vec<Destination>,
+    /// What gives the channel its picture, and how that is going. A channel
+    /// made before feeds existed is fed by an encoder.
+    #[serde(default)]
+    pub feed: ChannelFeed,
 }
 
 /// One key, as a list shows it.
@@ -113,7 +118,8 @@ pub struct ChannelStream {
     pub from: String,
     /// The id of the key that let it in.
     pub key: Option<String>,
-    /// How it arrived: `rtmp`, `rtmps`, `srt` or `whip`.
+    /// How it arrived: `rtmp`, `rtmps`, `srt`, `whip`, or `pull` for a
+    /// stream the channel pulled itself.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub protocol: Option<String>,
     pub video: Option<StreamVideo>,
@@ -205,6 +211,9 @@ pub struct ChannelAddRequest {
     /// spaces between them. Left out, the mixer makes one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub secret: Option<String>,
+    /// What feeds it. An encoder when left out.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub feed: Option<FeedRequest>,
 }
 
 /// What `channel.add` answers: the channel and its first key.
@@ -234,6 +243,9 @@ pub struct ChannelSetRequest {
     /// RTMPS on or off, and its port.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rtmps: Option<Rtmps>,
+    /// What feeds it: this mixer's programme, an encoder, or a pull.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub feed: Option<FeedRequest>,
 }
 
 /// `channel.key.add`.

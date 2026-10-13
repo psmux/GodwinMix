@@ -18,14 +18,14 @@ use super::super::{Channels, Ports};
 
 const FILE: &str = "[canvas]\nwidth = 320\nheight = 180\nfps = 30\n\n[multiview]\nenabled = false\n";
 
-fn scratch(name: &str) -> PathBuf {
+pub(crate) fn scratch(name: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("gmx-typed-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     dir
 }
 
-fn open(dir: &Path) -> Arc<Channels> {
+pub(crate) fn open(dir: &Path) -> Arc<Channels> {
     let _ = gstreamer::init();
     let path = dir.join("godwinmix.toml");
     std::fs::write(&path, FILE).unwrap();
@@ -43,7 +43,7 @@ fn open(dir: &Path) -> Arc<Channels> {
     )
 }
 
-fn add(value: serde_json::Value) -> ChannelAddRequest {
+pub(crate) fn add(value: serde_json::Value) -> ChannelAddRequest {
     serde_json::from_value(value).unwrap()
 }
 

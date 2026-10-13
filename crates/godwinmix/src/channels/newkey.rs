@@ -135,4 +135,4 @@ mod tests {
 
 #[cfg(test)]
 #[path = "typed_tests.rs"]
-mod typed_tests;
+pub(super) mod typed_tests;

@@ -95,6 +95,7 @@ fn record() -> Record {
         auto_sources: Vec::new(),
         auto_rules: Default::default(),
         destinations: Vec::new(),
+        feed: Default::default(),
         extra: Default::default(),
     }
 }

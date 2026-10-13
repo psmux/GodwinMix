@@ -47,6 +47,9 @@ pub struct Record {
     /// sealed in the secret store; only what a list shows is here.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub destinations: Vec<DestinationRecord>,
+    /// What feeds it. Left out for an encoder, as before feeds existed.
+    #[serde(default, skip_serializing_if = "super::feed::StoredFeed::is_encoder")]
+    pub feed: super::feed::StoredFeed,
     /// Anything another part of the core keeps on a channel, such as its
     /// destinations, carried through untouched.
     #[serde(default, flatten)]
@@ -196,6 +199,7 @@ mod tests {
                 enabled: true,
                 rendition: Some(RenditionChoice::Preset(godwinmix_protocol::rendition::PresetRef { preset: "youtube-720p30".into() })),
             }],
+            feed: super::super::feed::StoredFeed::Programme { show: Some("main".into()), key: "programme".into() },
             extra: BTreeMap::new(),
         };
         record.extra.insert("later".into(), toml::Value::Array(vec![]));
@@ -217,6 +221,7 @@ mod tests {
         let old = load(&path).unwrap();
         assert_eq!(old.channels[0].protocols, vec![ChannelProtocol::Rtmp], "a channel from before protocols is RTMP");
         assert!(!old.channels[0].rtmps.enabled);
+        assert!(old.channels[0].feed.is_encoder(), "a channel from before feeds is fed by an encoder");
         std::fs::write(&path, "channels = 7").unwrap();
         assert!(load(&path).is_err());
         std::fs::remove_dir_all(&dir).ok();

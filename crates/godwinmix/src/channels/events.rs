@@ -31,6 +31,7 @@ pub fn start(channels: &Arc<Channels>) {
                 "channel.stream" => me.went_live(&params),
                 "channel.refused" => me.refused(&params),
                 "channel.destination" => me.destination_report(&params),
+                "channel.pull" => me.pull_report(&params),
                 other => debug!(event = other, "a channel event nothing acts on"),
             }
         }
@@ -76,7 +77,7 @@ impl Channels {
         if fresh {
             info!(channel = %record.id, stream = %incoming.name, from = %incoming.from, "a stream went live");
             self.hook_stream(&record.id, &incoming.name, "live", Some(&incoming));
-            if record.auto_source && record.enabled {
+            if self.adoptable(&record) {
                 self.adopt(&record, &incoming.name, &incoming.relay);
             }
         }

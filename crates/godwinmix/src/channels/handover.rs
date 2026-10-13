@@ -104,6 +104,9 @@ impl Channels {
         if r.rtmps.enabled {
             row["rtmps_port"] = json!(r.rtmps.port);
         }
+        if let Some(url) = self.pull_url(r).filter(|_| r.enabled) {
+            row["pull"] = json!(url);
+        }
         if let Some(streams) = self.transcode.streams(&r.id) {
             row["transcode"] = streams;
         }
