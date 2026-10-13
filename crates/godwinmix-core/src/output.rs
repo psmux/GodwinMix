@@ -47,6 +47,7 @@ mod deadline;
 mod deadline_tests;
 pub mod failure;
 mod flow;
+pub mod origin;
 pub mod retire;
 mod since;
 mod teardown;

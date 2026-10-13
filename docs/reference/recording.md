@@ -33,6 +33,13 @@ The page stops a recording through the same `output.remove`, from the
 Outputs panel's row, from the header's REC button and from
 **Outputs > Stop recording**. The last two ask first.
 
+A file's timestamps start at zero when it starts, however long the mixer has
+been running, so a player shows the length that was recorded. The first
+picture is the file's zero. Sound from before that picture is left out, usually
+less than one frame of it, and sound and picture keep the distance they had in
+the programme. An output plugin that reads the programme, `file-record/output`
+among them, gets its stream from zero in the same way.
+
 Recording has the programme's resolution, codec, bitrate and audio mix.
 Independent recording quality, separate audio tracks and replay buffers are
 not provided by this output. A full disk can fail the recorder; other outputs
