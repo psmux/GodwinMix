@@ -8,7 +8,8 @@
 //! leaves the frame alone. That picture, outline and shadow included, is what
 //! comes back from here.
 //!
-//! The pipeline is built, run for one buffer and taken down each time. That
+//! The pipeline is built, run for one buffer and taken down each time, around
+//! the one `textoverlay` this thread keeps (`overlay_cache`). That
 //! is a few milliseconds on a worker thread, once per change of the words or
 //! the look, and nothing at all between changes.
 
@@ -66,7 +67,7 @@ fn run(ask: &Ask<'_>, width: u32, height: u32) -> Result<Option<Glyphs>> {
         gst_video::CAPS_FEATURE_META_GST_VIDEO_OVERLAY_COMPOSITION,
     ])));
     let src = gst_app::AppSrc::builder().caps(&caps).format(gst::Format::Time).build();
-    let overlay = crate::gstutil::make("textoverlay", "text-render")?;
+    let overlay = super::overlay_cache::take()?;
     configure(&overlay, ask);
     let sink = gst_app::AppSink::builder().caps(&caps).sync(false).build();
     let pipeline = gst::Pipeline::new();
@@ -79,6 +80,7 @@ fn run(ask: &Ask<'_>, width: u32, height: u32) -> Result<Option<Glyphs>> {
     let _ = src.end_of_stream();
     let sample = sink.try_pull_sample(gst::ClockTime::from_seconds(5));
     let _ = pipeline.set_state(gst::State::Null);
+    super::overlay_cache::give_back(&pipeline, overlay);
     let sample = sample.context("textoverlay rendered nothing in five seconds")?;
     let buffer = sample.buffer().context("textoverlay sent a sample with no buffer")?;
     picture(buffer)
