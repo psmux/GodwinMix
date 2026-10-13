@@ -59,12 +59,16 @@ pub async fn build(call: &Call, ask: Ask) -> Result<Bundle, RpcError> {
     let dir = call.app.library.dir().to_path_buf();
     let depth = call.app.library.cfg().max_depth;
     let with_bytes = ask.media;
-    bundle.media = tokio::task::spawn_blocking(move || {
+    (bundle.media, bundle.media_folders) = tokio::task::spawn_blocking(move || {
         let mut found = media::list(&dir, depth);
+        let tags = godwinmix_core::media_org::load(&dir);
+        for entry in found.iter_mut() {
+            entry.tags = tags.of(&entry.name);
+        }
         if with_bytes {
             media::include(&dir, &mut found)?;
         }
-        Ok::<_, RpcError>(found)
+        Ok::<_, RpcError>((found, godwinmix_core::media_org::list_folders(&dir, depth)))
     })
     .await
     .map_err(|e| RpcError::internal(format!("listing the media folder stopped: {e}")))??;

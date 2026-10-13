@@ -450,7 +450,11 @@ async fn upload(
             &trace_id,
         );
     };
-    match crate::control::store_upload(&ctx.app, name, body).await {
+    let into = crate::control::Placement {
+        folder: q.get("folder").cloned(),
+        tags: godwinmix_protocol::media::tag_words(q.get("tags").map(|t| Value::String(t.clone())).as_ref()),
+    };
+    match crate::control::store_upload(&ctx.app, name, &into, body).await {
         Ok(value) => (
             StatusCode::OK,
             [(header::HeaderName::from_static("x-trace-id"), trace_id.clone())],

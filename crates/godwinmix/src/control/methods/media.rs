@@ -16,25 +16,15 @@ pub fn register(reg: &mut Registry<Call>) {
         MethodDef::new(
             "media.list",
             Scope::Read,
-            "The clips in the library, with durations and whether each has audio.",
-            handler(|call: Call, _| async move {
-                let library = call.app.library.clone();
-                let converter = call.app.converter.clone();
-                let listing =
-                    tokio::task::spawn_blocking(move || library.list_with(Some(&converter)))
-                        .await
-                        .map_err(|e| RpcError::internal(format!("media scan failed: {e}")))?;
-                body(listing)
-            }),
+            "The clips in the library, with durations, whether each has audio, its folder and its tags.              Narrow it by folder, tag or words.",
+            handler(list),
         )
+        .params(schema_of::<godwinmix_protocol::media::MediaListRequest>)
         .result(schema_of::<godwinmix_core::media::MediaListing>)
         .tool(
             "list_media",
             Tier::Search,
-            "The clips in the mixer's media library: each one's name, absolute path, \
-             duration in milliseconds and whether it has an audio track. Use it to find a \
-             uri for `ad_break`. If the library directory is not configured or not \
-             readable the answer carries an `error` field saying why.",
+            "The clips in the mixer's media library: each one's path in the library (`Sermons/easter.mp4`),              absolute path, duration in milliseconds, whether it has an audio track, its folder and its tags,              and every folder there is. Give `folder` (with `subfolders` true for everything under it), `tag`              or `query` words to narrow it. Use it to find a uri for `ad_break`. If the library directory is              not configured or not readable the answer carries an `error` field saying why.",
         ),
     );
 
@@ -254,6 +244,28 @@ async fn snapshot(call: Call, params: Value) -> Result<Value, RpcError> {
     }))
 }
 
+/// `media.list`: the whole tree, or the part a filter keeps.
+async fn list(call: Call, params: Value) -> Result<Value, RpcError> {
+    let req: godwinmix_protocol::media::MediaListRequest = if params.is_null() { Default::default() } else { call.params(&params)? };
+    let folder = match req.folder.as_deref() {
+        Some(f) => Some(godwinmix_core::media_org::rel_path(f, "folder").map_err(super::media_org::refused)?),
+        None => None,
+    };
+    let filter = godwinmix_core::media_org::Filter {
+        folder,
+        subfolders: req.subfolders,
+        tags: godwinmix_protocol::media::tag_words(req.tag.as_ref()),
+        query: req.query.filter(|q| !q.trim().is_empty()),
+    };
+    let library = call.app.library.clone();
+    let converter = call.app.converter.clone();
+    let mut listing = tokio::task::spawn_blocking(move || library.list_with(Some(&converter)))
+        .await
+        .map_err(|e| RpcError::internal(format!("media scan failed: {e}")))?;
+    filter.apply(&mut listing.items);
+    body(listing)
+}
+
 async fn remove_media(call: Call, params: Value) -> Result<Value, RpcError> {
     let req: NameRequest = call.params(&params)?;
     let path = call.app.library.resolve(&req.name).map_err(|e| {
@@ -284,6 +296,7 @@ async fn remove_media(call: Call, params: Value) -> Result<Value, RpcError> {
             removed.push(p.clone());
         }
     }
+    godwinmix_core::media_org::forget(call.app.library.dir(), &req.name);
     call.app
         .mixer
         .emit(Event::MediaChanged { name: req.name.clone(), conversion: None });

@@ -393,8 +393,9 @@ pub enum Event {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         action: Option<Box<crate::action::ErrorAction>>,
     },
-    /// A file in the media library changed: uploaded, deleted, or its
-    /// conversion moved on. The UI refetches the media listing rather than
+    /// A file in the media library changed: uploaded, deleted, moved,
+    /// renamed, tagged, or its conversion moved on. `name` is empty when a
+    /// folder was made, moved or removed. The UI refetches the media listing rather than
     /// being sent the whole item, because the listing is the one place a
     /// converted copy gets folded onto its original.
     MediaChanged { name: String, conversion: Option<ConversionState> },

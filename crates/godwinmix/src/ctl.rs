@@ -12,7 +12,6 @@ use godwinmix_protocol::{
     AddOutputRequest, AddSourceRequest, AdBreakRequest, CoreInfo, GoLiveRequest, GoLiveResult,
     ProgramState, TakeRecord, TakeRequest,
 };
-use godwinmix_core::media::MediaListing;
 use anyhow::{bail, Context, Result};
 use clap::Subcommand;
 
@@ -22,6 +21,8 @@ mod params;
 mod ctl_rpc;
 #[path = "ctl_template.rs"]
 mod ctl_template;
+#[path = "ctl_media.rs"]
+mod ctl_media;
 #[path = "ctl_backup.rs"]
 mod ctl_backup;
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
@@ -118,8 +119,9 @@ pub enum Ctl {
     },
     /// Cut the current ad short.
     EndAd,
-    /// List the clips available in the media library.
-    Media,
+    /// The media library: list the clips, or organise them into folders
+    /// and tag them (`gmx ctl media folders`, `move`, `tag`, `mkdir`).
+    Media(ctl_media::MediaArgs),
     /// Put a file in the media library: a picture, a clip, an SVG template or
     /// a logo, for a source or a graphic to use. Answers the name it has there.
     Upload {
@@ -128,6 +130,12 @@ pub enum Ctl {
         /// The name in the library. The file's own name when left out.
         #[arg(long)]
         name: Option<String>,
+        /// The folder to put it in, `Sermons/2026`, made when missing.
+        #[arg(long)]
+        folder: Option<String>,
+        /// A tag to give it. Repeat for more.
+        #[arg(long = "tag")]
+        tags: Vec<String>,
     },
     /// Put a web page on air in one go: add it as a source, add the RTMP
     /// destination if given, and take it to programme once it renders.
@@ -469,30 +477,16 @@ pub async fn run(base: &str, token: Option<&str>, cmd: Ctl) -> Result<()> {
                 }
             );
         }
-        Ctl::Upload { file, name } => {
+        Ctl::Upload { file, name, folder, tags } => {
             let name = match name {
                 Some(n) => n,
                 None => file.file_name().map(|n| n.to_string_lossy().into_owned()).context("the file has no name; pass --name")?,
             };
             let bytes = std::fs::read(&file).with_context(|| format!("reading {}", file.display()))?;
-            let answer = api.upload(&name, bytes).await?;
+            let answer = api.upload(&name, folder.as_deref(), &tags, bytes).await?;
             println!("{}", answer.get("name").and_then(Value::as_str).unwrap_or(&name));
         }
-        Ctl::Media => {
-            let listing: MediaListing = api.get("media.list", None, &[]).await?;
-            if let Some(err) = listing.error {
-                bail!("{}: {err}", listing.dir);
-            }
-            for i in listing.items {
-                let secs = i.duration_ms.map(|m| m as f64 / 1000.0);
-                println!(
-                    "{:<28} {:>7} {}",
-                    i.name,
-                    secs.map(|s| format!("{s:.1}s")).unwrap_or_else(|| "?".into()),
-                    if i.has_audio { "" } else { "(no audio)" }
-                );
-            }
-        }
+        Ctl::Media(args) => ctl_media::run(api, args).await?,
     }
     Ok(())
 }
@@ -739,12 +733,19 @@ impl Api {
 
     /// A file into the media library, as `POST /api/v1/media/upload` takes it:
     /// the bytes as the body, the name in the query.
-    pub async fn upload(&self, name: &str, bytes: Vec<u8>) -> Result<Value> {
+    pub async fn upload(&self, name: &str, folder: Option<&str>, tags: &[String], bytes: Vec<u8>) -> Result<Value> {
         let url = format!("{}/api/v1/media/upload", self.base);
+        let mut query = vec![("name", name.to_string())];
+        if let Some(f) = folder {
+            query.push(("folder", f.to_string()));
+        }
+        if !tags.is_empty() {
+            query.push(("tags", tags.join(",")));
+        }
         let r = self
             .client
             .post(&url)
-            .query(&[("name", name)])
+            .query(&query)
             .body(bytes)
             .send()
             .await
