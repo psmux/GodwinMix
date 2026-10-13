@@ -30,7 +30,9 @@ impl Channels {
         } else if live {
             view.state = FeedState::Live;
         } else if let Some(s) = seen {
-            view.state = s.state;
+            // Live is a live stream on the channel; until it is there the
+            // pull is still connecting, whatever the listener last said.
+            view.state = if s.state == FeedState::Live { FeedState::Connecting } else { s.state };
             view.error = s.error;
             view.retry_in_ms = s.retry_at.map(|at| at.saturating_duration_since(Instant::now()).as_millis() as u64);
         }

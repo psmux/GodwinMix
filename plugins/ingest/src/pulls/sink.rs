@@ -130,7 +130,14 @@ impl TagSink for ToChannel {
     /// On the input's own thread, about once a second.
     fn stats(&mut self, stats: &InputStats) {
         let refused = lock(&self.refused).take();
-        if stats.state == State::Live {
+        // The input's meter outlives a connection, so the first second of a
+        // new one can read as live from the last one's frames. Live is a
+        // stream on the hub, nothing less.
+        let state = match stats.state {
+            State::Live if lock(&self.publication).is_none() => State::Connecting,
+            other => other,
+        };
+        if state == State::Live {
             self.announce();
         } else {
             self.end();
@@ -139,7 +146,7 @@ impl TagSink for ToChannel {
             Some(why) => Some(format!("somebody else is publishing to the channel, so the pull waits: {why}")),
             None => stats.error.as_deref().map(|e| self.clean(e)),
         };
-        self.say(stats.state, error, stats.retry_ms);
+        self.say(state, error, stats.retry_ms);
     }
 }
 
