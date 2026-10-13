@@ -24,7 +24,7 @@ export async function channelTests(test, eq, ok) {
   const model = await import("../panels/channels/model.js");
   const { qrMatrix } = await import("../panels/channels/qr.js");
   const { platformOfHost, platform } = await import("../client/destinations.js");
-  const { addParams } = await import("../panels/channels/destination-form.js");
+  const { addParams, editParams, savedKeyWords } = await import("../panels/channels/destination-form.js");
   const { settingsParams } = await import("../panels/channels/edit.js");
   const { mount, addChannel } = await import("../panels/channels/panel.js");
 
@@ -66,6 +66,17 @@ export async function channelTests(test, eq, ok) {
     eq(addParams(platform("youtube"), ch, {}).field, "key");
     eq(addParams(platform("youtube"), ch, { key: " abc \n" }).params, { id: "sun", platform: "youtube", server: "rtmp://a.rtmp.youtube.com/live2", enabled: true, key: "abc" });
     eq(addParams(platform("custom"), ch, { server: "rtmp://relay/live" }).params.key, undefined, "a custom server may have no key");
+  });
+
+  test("an edit shows the saved server and says the key is saved, and Save sends neither back", () => {
+    const ch = { id: "sun" };
+    const dest = { id: "custom", label: "Custom RTMP", stream: "*", has_key: true, key_hint: "abcd", server: "rtmp://streaming.example.com:1935/live", uri_host: "rtmp://streaming.example.com:1935" };
+    eq(savedKeyWords(dest), "Saved, ends in abcd");
+    eq(savedKeyWords({ has_key: true }), "Saved");
+    eq(savedKeyWords({ has_key: false }), "No key saved");
+    eq(editParams(ch, dest, { label: "Custom RTMP", server: dest.server, key: "" }), { id: "sun", destination: "custom" }, "the server shown is not a change");
+    eq(editParams(ch, dest, { server: " rtmp://other:1935/live " }).server, "rtmp://other:1935/live");
+    eq(editParams(ch, { ...dest, server: undefined }, { server: "" }).server, undefined, "left empty, the one in use is kept");
   });
 
   test("saving settings sends only what changed", () => {

@@ -7,6 +7,16 @@
 
 import { slugify } from "../panels/channels/model.js";
 
+/** What the core shows of a destination's address and key: the server
+ * without its query when the key is kept apart, and the key's last four. */
+function shown(server, key) {
+  if (!key || !String(key).trim()) return {};
+  const k = String(key).trim();
+  const out = { server: String(server || "").replace(/[?#].*$/, "").replace(/\/\/[^/@]*@/, "//") };
+  if (k.length >= 8) out.key_hint = k.slice(-4);
+  return out;
+}
+
 export class ChannelStub {
   constructor(opts = {}) {
     this.channels = new Map();
@@ -179,6 +189,7 @@ const METHODS = {
       has_key: !!p.key || p.platform === "srt" || p.platform === "file" || p.platform === "hls" || (p.platform === "custom" && /^\w+:\/\/[^/]+\/[^/]+\/./.test(p.server || "")), stream: p.stream || "*", enabled: p.enabled !== false, state: p.enabled === false ? "off" : "waiting",
       since_ms: 0, kbps: 0, reconnects: 0, error: null,
       ...(p.rendition ? { rendition: p.rendition } : {}),
+      ...shown(p.server, p.key),
     });
     this.changed(c.id);
     return c;
@@ -192,6 +203,8 @@ const METHODS = {
       d.state = p.enabled ? "waiting" : "off";
     }
     if (p.key) d.has_key = true;
+    if (p.key) Object.assign(d, shown(p.server || d.server || d.uri_host, p.key));
+    else if (p.server && d.server) d.server = shown(p.server, "k").server;
     if (p.label !== undefined) d.label = p.label;
     if (p.stream !== undefined) d.stream = p.stream;
     this.changed(c.id);

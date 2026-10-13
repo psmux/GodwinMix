@@ -138,22 +138,40 @@ function addForm(view, channel, p) {
   return m;
 }
 
-/** What an edit changed, and nothing else. */
+/** What an edit changed, and nothing else. The server shown is not a change. */
 export function editParams(channel, dest, v) {
   const params = { id: channel.id, destination: dest.id };
   if (v.label !== undefined && v.label.trim() !== (dest.label || "")) params.label = v.label.trim();
   if (v.stream !== undefined && v.stream !== (dest.stream || "*")) params.stream = v.stream;
   if (v.key && v.key.trim()) params.key = v.key.trim();
-  if (v.server && v.server.trim()) params.server = v.server.trim();
+  if (v.server && v.server.trim() && v.server.trim() !== (dest.server || "")) params.server = v.server.trim();
   return params;
+}
+
+/**
+ * What the key box says before Replace key. Testers reopened a Custom RTMP
+ * destination, saw an empty box and took the key for lost. The key itself
+ * is never sent back, so the box says it is saved and how it ends.
+ */
+export function savedKeyWords(dest) {
+  if (!dest.has_key) return "No key saved";
+  return dest.key_hint ? `Saved, ends in ${dest.key_hint}` : "Saved";
+}
+
+/** The server box: the address in use when the core can show it. */
+function serverField(p, dest) {
+  if (p.fixed) return null;
+  if (dest.server) return field("Server", { value: dest.server, mono: true, note: "The address in use. Change it to send somewhere else." });
+  const why = dest.has_key ? " Only its host is shown, since the address carries the key." : "";
+  return field("Server", { placeholder: dest.uri_host || p.example || "", mono: true, note: `Left empty, the one in use is kept.${why}` });
 }
 
 export function editDestination(view, channel, dest) {
   const p = platform(dest.platform) || platform("custom");
   const label = field("Name on the tile", { value: dest.label || "", placeholder: p.title });
   const stream = streamChoice(channel, dest.stream || "*");
-  const server = p.fixed ? null : field("Server", { placeholder: dest.uri_host || p.example || "", mono: true, note: "Left empty, the one in use is kept." });
-  const key = p.key ? keyField("Stream key", "kept", true) : null;
+  const server = serverField(p, dest);
+  const key = p.key ? keyField("Stream key", savedKeyWords(dest), true) : null;
   const format = formatStep(view.client, { platform: p.id, platformTitle: p.title, shape: channelShape(channel), current: dest.rendition || { preset: "copy" }, id: () => dest.id });
   const refused = el("div", { hidden: true });
   const status = el("div.chn-dstatus", { "data-state": dest.state }, [el("strong", { text: tileState(dest) }), dest.error ? el("span", { text: dest.error }) : null]);

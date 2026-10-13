@@ -47,7 +47,18 @@ pub struct Destination {
     pub label: String,
     /// The scheme, host and port, and nothing that could carry a key.
     pub uri_host: String,
+    /// The server as it was given, without its query or a user and password,
+    /// for an edit form to show. Only for a destination whose key is kept
+    /// apart from the address; left out where the key may be the address's
+    /// own path, as on a whole address pasted with no key.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub server: Option<String>,
     pub has_key: bool,
+    /// The key's last four characters, as a channel key's `hint`, so a person
+    /// can see which key is saved. Left out for a key under eight characters,
+    /// where four would be half of it. Never the key itself.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key_hint: Option<String>,
     /// Which of the channel's streams to send. `*` is the first live one.
     pub stream: String,
     pub enabled: bool,
@@ -152,6 +163,27 @@ impl StoredDestination {
         }
     }
 
+    /// The key kept apart from the address, when there is one.
+    fn separate_key(&self) -> Option<&str> {
+        self.key.as_deref().map(str::trim).filter(|k| !k.is_empty())
+    }
+
+    /// The server for an edit form: see [`Destination::server`].
+    pub fn server_shown(&self) -> Option<String> {
+        self.separate_key()?;
+        let (scheme, rest) = self.server.trim().split_once("://")?;
+        let rest = rest.split(['?', '#']).next().unwrap_or(rest);
+        let (authority, path) = rest.split_at(rest.find('/').unwrap_or(rest.len()));
+        let host = authority.rsplit('@').next().unwrap_or(authority);
+        Some(format!("{}://{host}{path}", scheme.to_lowercase()))
+    }
+
+    /// The key's last four characters: see [`Destination::key_hint`].
+    pub fn key_hint(&self) -> Option<String> {
+        let key: Vec<char> = self.separate_key()?.chars().collect();
+        (key.len() >= 8).then(|| key[key.len() - 4..].iter().collect())
+    }
+
     /// The client's view, with what the restreamer last reported.
     pub fn view(&self, live: DestinationLive) -> Destination {
         Destination {
@@ -159,7 +191,9 @@ impl StoredDestination {
             platform: self.platform.clone(),
             label: self.label.clone(),
             uri_host: uri_host(&self.server),
+            server: self.server_shown(),
             has_key: self.has_key(),
+            key_hint: self.key_hint(),
             stream: self.stream.clone(),
             enabled: self.enabled,
             live,
@@ -214,6 +248,21 @@ mod tests {
         let json = serde_json::to_string(&yt.view(DestinationLive::default())).unwrap();
         assert!(!json.contains("abcd"), "{json}");
         assert!(json.contains("\"state\":\"off\""), "{json}");
+    }
+
+    #[test]
+    fn the_view_shows_the_server_and_the_key_hint_only_when_the_key_is_apart() {
+        let d = stored("custom", "rtmp://bob:pw@streaming.example.com:1935/live?token=t0k3n", Some("live-key-abcd"));
+        let v = d.view(DestinationLive::default());
+        assert_eq!(v.server.as_deref(), Some("rtmp://streaming.example.com:1935/live"));
+        assert_eq!(v.key_hint.as_deref(), Some("abcd"));
+        let json = serde_json::to_string(&v).unwrap();
+        assert!(!json.contains("live-key") && !json.contains("t0k3n") && !json.contains("pw@"), "{json}");
+        let whole = stored("custom", "rtmp://host/app/the-stream-key", None).view(DestinationLive::default());
+        assert_eq!((whole.server, whole.key_hint), (None, None), "a whole address may end in its key");
+        let short = stored("custom", "rtmp://host/app", Some("abc12")).view(DestinationLive::default());
+        assert_eq!(short.key_hint, None, "four of five characters would be most of the key");
+        assert_eq!(short.server.as_deref(), Some("rtmp://host/app"));
     }
 
     #[test]
