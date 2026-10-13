@@ -9,6 +9,7 @@ mod channel_off;
 mod direct;
 mod direct_live;
 mod direct_restart;
+mod gallery_install;
 mod health_main;
 mod hls_channel;
 mod hls_direct;

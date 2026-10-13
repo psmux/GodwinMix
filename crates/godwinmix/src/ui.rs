@@ -852,7 +852,7 @@ async fn plugin_index() -> Response {
     }
     let by_hand: Vec<String> =
         found.iter().filter_map(|p| p["name"].as_str().map(str::to_string)).collect();
-    found.extend(panels::installed(&by_hand));
+    found.extend(panels::installed(root, &by_hand));
     found.sort_by(|a, b| a["name"].as_str().cmp(&b["name"].as_str()));
     let body = json!({ "plugins": found, "dir": root.display().to_string() });
     (
@@ -878,7 +878,7 @@ async fn plugin_file(UrlPath((name, path)): UrlPath<(String, String)>) -> Respon
     let file = if by_hand.is_file() {
         by_hand
     } else {
-        panels::file(&name, &relative).unwrap_or(by_hand)
+        panels::file(&dirs().plugins, &name, &relative).unwrap_or(by_hand)
     };
     match std::fs::read(&file) {
         Ok(body) => with_headers(content_type(&path), Body::from(body), &path),
