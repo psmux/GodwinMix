@@ -35,6 +35,10 @@ pub struct Meter {
     /// where the measured one is only near: 29.97 and 30 look alike over a
     /// second of frames.
     declared_fps: Option<f64>,
+    /// Whether a whole window has been measured, so the bit rates mean
+    /// something. A plan made before then took an unknown rate for one that
+    /// fits, and copied 160 kbit/s sound to a destination that asked for 128.
+    measured: bool,
     pub total_bytes: u64,
 }
 
@@ -59,6 +63,7 @@ impl Meter {
             fps: 0.0,
             told_fps: 0.0,
             declared_fps: None,
+            measured: false,
             total_bytes: 0,
         }
     }
@@ -109,6 +114,10 @@ impl Meter {
             self.video_bytes = 0;
             self.audio_bytes = 0;
             self.frames = 0;
+            // The first rates are news of their own, for a stream with no
+            // video whose frame rate never moves.
+            news |= !self.measured;
+            self.measured = true;
             news |= self.rate_moved();
         }
         news
@@ -144,6 +153,11 @@ impl Meter {
     /// sends a keyframe, and a reader must not wait for one.
     pub fn has_video(&self) -> bool {
         self.video.is_some() || self.frames > 0 || self.video_kbps > 0
+    }
+
+    /// Whether the bit rates have been measured over a whole window yet.
+    pub fn measured(&self) -> bool {
+        self.measured
     }
 
     /// The `video` and `audio` members of the contract's Stream shape.

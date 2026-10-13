@@ -131,6 +131,7 @@ impl Channels {
                 source: Some(source.clone()),
                 relay: String::new(),
                 declared_fps: None,
+                measured: None,
                 source_error: None,
             });
         }

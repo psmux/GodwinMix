@@ -1,10 +1,15 @@
 //! What a destination reports, written by its sender thread and read by
 //! anyone. The lock is held for a field assignment and never across I/O.
 
+use std::collections::VecDeque;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use godwinmix_protocol::destination::{DestinationLive, DestinationState, RecordingFile};
+
+/// One second windows `kbps` is averaged over: two GOPs at the 2 s
+/// keyframe interval the platforms ask for.
+const RATE_WINDOWS: usize = 4;
 
 pub struct Board {
     inner: Mutex<Inner>,
@@ -16,6 +21,8 @@ struct Inner {
     bytes: u64,
     window_start: Instant,
     window_bytes: u64,
+    /// The last few whole windows, bytes and milliseconds, oldest first.
+    windows: VecDeque<(u64, u64)>,
     /// The file a recording is writing, and when it was opened.
     file: Option<(RecordingFile, Instant)>,
 }
@@ -30,6 +37,7 @@ impl Board {
                 bytes: 0,
                 window_start: now,
                 window_bytes: 0,
+                windows: VecDeque::new(),
                 file: None,
             }),
         }
@@ -48,6 +56,7 @@ impl Board {
             }
             if state != DestinationState::Live {
                 b.live.kbps = 0;
+                b.windows.clear();
             }
         })
     }
@@ -77,8 +86,11 @@ impl Board {
         })
     }
 
-    /// Count bytes sent. Once a second the rate is worked out again from
-    /// the last window, which is what `kbps` reports.
+    /// Count bytes sent. Once a second the rate is worked out again over the
+    /// last few one second windows, which is what `kbps` reports. One second
+    /// alone swung from 2.1 to 3.5 Mbit/s on a 3000 kbit/s encode, by
+    /// whether it held a keyframe, and testers read the high one as the
+    /// encoder going over what they asked.
     pub fn sent(&self, n: usize) {
         self.with(|b| {
             b.bytes += n as u64;
@@ -88,7 +100,12 @@ impl Board {
             }
             let elapsed = b.window_start.elapsed();
             if elapsed >= Duration::from_secs(1) {
-                b.live.kbps = (b.window_bytes * 8 / elapsed.as_millis().max(1) as u64) as u32;
+                if b.windows.len() == RATE_WINDOWS {
+                    b.windows.pop_front();
+                }
+                b.windows.push_back((b.window_bytes, elapsed.as_millis().max(1) as u64));
+                let (bytes, ms) = b.windows.iter().fold((0, 0), |(a, t), (n, m)| (a + n, t + m));
+                b.live.kbps = (bytes * 8 / ms.max(1)) as u32;
                 b.window_start = Instant::now();
                 b.window_bytes = 0;
             }

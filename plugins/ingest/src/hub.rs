@@ -172,6 +172,7 @@ fn describe(slot: &Slot) -> Option<Value> {
         "protocol": session.via,
         "video": video,
         "audio": audio,
+        "measured": session.meter.measured(),
         "readers": state.readers.len(),
         "dropped_gops": dropped,
         "bytes": session.meter.total_bytes,
@@ -181,3 +182,6 @@ fn describe(slot: &Slot) -> Option<Value> {
 #[cfg(test)]
 #[path = "hub/tests.rs"]
 mod tests;
+#[cfg(test)]
+#[path = "hub/tests_measured.rs"]
+mod tests_measured;

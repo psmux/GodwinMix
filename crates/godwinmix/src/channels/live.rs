@@ -25,6 +25,11 @@ pub struct Live {
     /// The frame rate the publisher's `onMetaData` states, exact where the
     /// measured `fps` is only near. A converting destination plans from it.
     pub declared_fps: Option<f64>,
+    /// Whether the listener has measured the bit rates over a whole second
+    /// of this session yet. `Some(false)` holds a converting destination's
+    /// plan back, since a rate of 0 then means not known rather than nothing
+    /// sent. `None` from a listener that does not say: planned at once.
+    pub measured: Option<bool>,
     /// Why the mixer refused to make this stream a source, until it takes it.
     pub source_error: Option<String>,
 }
@@ -61,6 +66,7 @@ impl Live {
             source: None,
             relay: text(v, "relay"),
             declared_fps: None,
+            measured: None,
             source_error: None,
         };
         live.absorb(v);
@@ -87,6 +93,7 @@ impl Live {
             self.relay = relay;
         }
         self.declared_fps = v["video"]["frame_rate"].as_f64().or(self.declared_fps);
+        self.measured = v["measured"].as_bool().or(self.measured);
         self.video = video(&v["video"]).or(self.video.take());
         self.audio = audio(&v["audio"]).or(self.audio.take());
         self.dropped_gops = number(v, "dropped_gops");
