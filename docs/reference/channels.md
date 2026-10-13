@@ -824,6 +824,17 @@ players that fetched something in the last two windows. A request with a
 wrong key is answered 401; one for a link the channel does not have, 404
 with the links it has.
 
+When the stream stops and starts again (an encoder reconnecting, or the
+programme feed's output rebuilt), the link stays the same and carries on
+numbering. The picture's playlist and the sound's both get one
+`EXT-X-DISCONTINUITY` before the same segment number, and the sound's
+segments start where the picture's do, so the two always agree on
+`EXT-X-MEDIA-SEQUENCE` and `EXT-X-DISCONTINUITY-SEQUENCE` for the same
+window. A player that was watching rebuffers for as long as the stream was
+gone and plays on. Before 0.3.10 the sound was cut on its own clock, and
+after a restart its playlist could be a discontinuity ahead of the
+picture's, which left a new hls.js viewer with nothing.
+
 HLS carries H.264 or HEVC and AAC. A stream with other sound or picture is
 `failed` with an `error` that names the codec and says to change the encoder,
 since the link converts nothing. Under a single process core with no station,

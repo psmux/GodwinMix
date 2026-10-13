@@ -9,6 +9,9 @@
 
 pub use super::registry::{egress_kbps, get, ids, publish, withdraw};
 
+#[path = "stream_align.rs"]
+mod align;
+
 use super::playlist::{self, Report, Variant};
 use super::track::{Track, TrackKind};
 use super::viewers::Viewers;
@@ -66,6 +69,7 @@ impl Stream {
         }
         tracks.retain(|t| t.id != id);
         let track = Arc::new(Track::new(id, kind, self.params, declared_kbps));
+        track.join(align::current_disc(&tracks));
         tracks.push(track.clone());
         track
     }

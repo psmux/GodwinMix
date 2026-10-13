@@ -41,6 +41,8 @@ pub struct View {
 #[derive(Debug, Clone)]
 pub struct SegmentView {
     pub msn: u64,
+    pub start_ns: u64,
+    pub disc: u32,
     pub pdt_ms: i64,
     pub init: u32,
     pub decode_time: Option<u64>,

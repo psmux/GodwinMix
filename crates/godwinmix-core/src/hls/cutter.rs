@@ -14,6 +14,7 @@
 //! than by flags alone, so a muxer that flags differently fails loudly in the
 //! tests rather than quietly writing a broken playlist.
 
+use super::follow::Follow;
 use super::ring::Part;
 use super::track::Track;
 use bytes::Bytes;
@@ -41,11 +42,19 @@ pub struct Cutter {
     /// end of its segment and it can be closed at once.
     whole_fragments: bool,
     pending: Option<(Vec<u8>, u64, bool)>,
+    /// Sound beside a picture: every fragment goes to [`Follow`], which
+    /// cuts the sound where the picture is cut.
+    follow: Option<Follow>,
 }
 
 impl Cutter {
     pub fn new(track: Arc<Track>, all_independent: bool, whole_fragments: bool) -> Cutter {
-        Cutter { track, all_independent, whole_fragments, pending: None }
+        Cutter { track, all_independent, whole_fragments, pending: None, follow: None }
+    }
+
+    /// A cutter for sound that follows the picture's segments.
+    pub fn follower(follow: Follow, track: Arc<Track>) -> Cutter {
+        Cutter { track, all_independent: true, whole_fragments: false, pending: None, follow: Some(follow) }
     }
 
     pub fn push(&mut self, data: &[u8], piece: Piece) {
@@ -53,9 +62,13 @@ impl Cutter {
             (true, Some(b"ftyp")) => self.track.set_init(Bytes::copy_from_slice(data)),
             (true, Some(b"moof" | b"styp")) => {
                 self.finish_part();
-                if !piece.delta {
-                    let decode_time = super::boxes::decode_time(data);
-                    self.track.begin(piece.running_ns.unwrap_or(0), piece.wall_ms, decode_time);
+                let decode_time = (!piece.delta).then(|| super::boxes::decode_time(data)).flatten();
+                match self.follow.as_mut() {
+                    Some(f) => f.start(piece.running_ns.unwrap_or(0), piece.wall_ms, decode_time),
+                    None if !piece.delta => {
+                        self.track.begin(piece.running_ns.unwrap_or(0), piece.wall_ms, decode_time);
+                    }
+                    None => {}
                 }
                 let independent = !piece.delta || self.all_independent;
                 let mut bytes = Vec::with_capacity(data.len() + 16 * 1024);
@@ -80,7 +93,10 @@ impl Cutter {
     /// segment.
     pub fn eos(&mut self) {
         self.finish_part();
-        self.track.close();
+        match self.follow.as_mut() {
+            Some(f) => f.eos(),
+            None => self.track.close(),
+        }
     }
 
     fn finish_part(&mut self) {
@@ -88,7 +104,12 @@ impl Cutter {
             // Held for the whole window, so give back what the growing left
             // spare: a part is kept at its size, not its capacity.
             bytes.shrink_to_fit();
-            self.track.push_part(Part { bytes: Bytes::from(bytes), duration_ns, independent });
+            match self.follow.as_mut() {
+                Some(f) => f.push(Bytes::from(bytes), duration_ns),
+                None => {
+                    self.track.push_part(Part { bytes: Bytes::from(bytes), duration_ns, independent });
+                }
+            }
         }
     }
 }

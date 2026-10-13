@@ -35,6 +35,8 @@
 //! # The parts
 //!
 //! * [`package`]: pad in, `cmafmux`, appsink, [`cutter`] out.
+//! * [`follow`]: the sound cut where the picture is cut, so both playlists
+//!   give the same moment the same number and the same discontinuity.
 //! * [`ring`]: the segments and parts one rung keeps, as `Bytes` every viewer
 //!   shares.
 //! * [`track`]: a ring behind a mutex held for microseconds, and a `watch`
@@ -50,6 +52,7 @@
 pub mod boxes;
 pub mod cutter;
 pub mod dash;
+pub mod follow;
 pub mod key;
 #[cfg(test)]
 mod ladder;

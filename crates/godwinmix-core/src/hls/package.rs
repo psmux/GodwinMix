@@ -12,8 +12,11 @@
 //! encoders are shared and keeping a ladder's keyframes aligned is the
 //! encoders' job. The appsink's callback copies each buffer once into the
 //! part being built and returns: nothing on this thread waits for a viewer.
+//! Sound is muxed in short fragments instead and cut where the stream's
+//! picture is cut (`follow.rs`), so its segments match the picture's.
 
 use super::cutter::{Cutter, Piece};
+use super::follow::{Follow, FRAGMENT_NS};
 use super::stream::Stream;
 use super::parse::{link_parser_on_caps, watch_caps};
 use super::track::TrackKind;
@@ -54,9 +57,16 @@ pub fn attach(pipeline: &gst::Pipeline, stream: &Arc<Stream>, input: Input<'_>) 
     let queue = gstutil::queue_time(&format!("{tag}-q"), 2.0, true)?;
     let mux = make("cmafmux", &format!("{tag}-mux"))?;
     let (fragment, chunk) = p.mux_durations();
-    mux.set_property("fragment-duration", gst::ClockTime::from_nseconds(fragment));
-    if let Some(chunk) = chunk {
-        mux.set_property("chunk-duration", gst::ClockTime::from_nseconds(chunk));
+    let sound = input.kind == TrackKind::Audio;
+    if sound {
+        // Short whole fragments, which `Follow` gathers into the picture's
+        // segments: a part each when parts are on.
+        mux.set_property("fragment-duration", gst::ClockTime::from_nseconds(chunk.unwrap_or(FRAGMENT_NS)));
+    } else {
+        mux.set_property("fragment-duration", gst::ClockTime::from_nseconds(fragment));
+        if let Some(chunk) = chunk {
+            mux.set_property("chunk-duration", gst::ClockTime::from_nseconds(chunk));
+        }
     }
     mux.set_property("send-force-keyunit", false);
     let sink = make("appsink", &format!("{tag}-sink"))?;
@@ -64,7 +74,10 @@ pub fn attach(pipeline: &gst::Pipeline, stream: &Arc<Stream>, input: Input<'_>) 
     appsink.set_sync(false);
     appsink.set_async(false);
     appsink.set_property("enable-last-sample", false);
-    let cutter = Cutter::new(track.clone(), input.kind == TrackKind::Audio, !p.low_latency());
+    let cutter = match sound {
+        true => Cutter::follower(Follow::new(stream, track.clone()), track.clone()),
+        false => Cutter::new(track.clone(), false, !p.low_latency()),
+    };
     appsink.set_callbacks(callbacks(cutter));
 
     pipeline.add_many([&queue, &mux, &sink]).context("adding the HLS packager")?;

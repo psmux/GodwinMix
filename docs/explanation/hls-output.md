@@ -9,7 +9,9 @@ it is, and what it costs. `docs/reference/hls-output.md` is the surface.
 ```
 encoded rung ─▶ leaky queue ─▶ parser ─▶ cmafmux ─▶ appsink ─▶ cutter ─▶ ring ─▶ /hls/ routes
    (x N, and the audio)                    fragments every segment_ms,
-                                           chunks every part_ms
+                                           chunks every part_ms; the audio
+                                           in 250 ms fragments, cut beside
+                                           the top rung
 ```
 
 One packager per rung. Each writes into its own ring of segments in memory,
@@ -60,6 +62,33 @@ the problem, which is why it hid until the default third of a second.
 One track per muxer is the CMAF rule, and it suits a ladder: the sound is
 encoded once and packaged once as its own rung, `audio`, and every video rung
 points at it with `EXT-X-MEDIA`. Nothing is muxed twice.
+
+## Why the sound is cut where the picture is cut
+
+The picture can only be cut at a keyframe, and an encoder left at its
+defaults may send one every eight seconds. The sound can be cut anywhere. Up
+to 0.3.9 each was cut on its own: the picture at the first keyframe after
+`segment_ms`, the sound every `segment_ms`. Measured on a watch link with one
+second segments and a keyframe every two seconds, the picture had segment 18
+at 20:26:30 and the sound had segment 39 at 20:26:31. Each window held eight
+segments, so the sound's covered eight seconds and the picture's sixteen.
+After the encoder reconnected, the sound's window had already let go of the
+old discontinuity while the picture's still listed it: the sound said
+`EXT-X-DISCONTINUITY-SEQUENCE:1` and the picture said 0 with one
+`EXT-X-DISCONTINUITY` tag. hls.js lines the sound up by discontinuity, and a
+new viewer got nothing.
+
+So the sound's muxer now writes fragments of 250 ms (a part each with
+LL-HLS), and `follow.rs` gathers them into segments by the picture's: each
+fragment goes into the segment of the top rung its middle falls in. A
+fragment the picture has not cut far enough to place waits in the cutter,
+never on a lock, for a window at most. A break is counted by the stream, not
+by each track's init segments, and marked on every track at once when the
+pipeline is built again (`Stream::restart`). Measured again, with a keyframe
+every four seconds and a reconnect: the picture and the sound both listed
+segments 2 to 9, each pair starting within 120 ms of each other, with one
+discontinuity before segment 6 on both, and hls.js in headless Chrome played
+the link as a new viewer.
 
 `send-force-keyunit` is off. A rung's encoder may be shared by other outputs,
 and a muxer asking it for keyframes would put extra ones into every other

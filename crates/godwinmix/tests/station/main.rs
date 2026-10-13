@@ -12,6 +12,7 @@ mod direct_restart;
 mod gallery_install;
 mod health_main;
 mod hls_channel;
+mod hls_channel_restart;
 mod hls_direct;
 #[cfg(unix)]
 mod hls_isolation;

@@ -43,6 +43,9 @@ impl Session {
     /// Build and start the pipeline, the first frame at `base`. With no
     /// sound caps the output is the picture alone.
     pub fn start(stream: &Arc<Stream>, video: &gst::Caps, audio: Option<&gst::Caps>, base: u32) -> Result<Session, String> {
+        // The connection before this one is gone with its pipeline, so the
+        // timestamps start again: every track marks the break alike.
+        stream.restart();
         let pipeline = gst::Pipeline::with_name(&format!("hls-{}", stream.id));
         let vsrc = appsrc(video);
         let asrc = audio.map(appsrc);
