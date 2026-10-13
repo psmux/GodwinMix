@@ -32,14 +32,14 @@ Claims addresses starting `text:`. The rest of the address is the words when
 | `valign` | string | `middle` | `top`, `middle` or `bottom`, in a box taller than the words |
 
 Every param changes in place through `source.set`: the source is not rebuilt.
-New words are rendered as soon as they arrive, on the source's own thread,
-which keeps one `textoverlay` for every render after its first. Measured on a
-Windows laptop with a quarter of its cores busy, an optimized build, words
-300 pixels high drawn full screen at 1080p, watched through `/mjpeg/program`:
-133 ms median from `source.set` to the new words on the programme picture (90
-to 197 ms over 16 changes), against 54 ms for a cut between two test sources
-watched the same way. The first render of a source pays about 0.6 s more to
-make its `textoverlay`.
+New words are rendered on the source's own thread, 60 ms after the last change
+arrives, with the one `textoverlay` that thread keeps for every render after
+its first. Measured on a Windows laptop with a quarter of its cores busy, an
+optimized build, words 300 pixels high drawn full screen at 1080p, watched
+through `/mjpeg/program`: 168 ms median from `source.set` to the new words on
+the programme picture (160 to 201 ms over 16 changes), against 57 ms for a cut
+between two test sources watched the same way. The first render of a source
+pays about 0.6 s more to make its `textoverlay`.
 
 ## `ticker/source`
 
