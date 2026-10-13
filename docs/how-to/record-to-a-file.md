@@ -24,7 +24,8 @@ muxed data. Choose **Stop recording** when the programme is finished.
 
 This built in recording path works on Windows, macOS and Linux without a
 plugin or restart. It keeps the same quality and audio mix as the stream.
-MP4 is fragmented. Matroska is also available. Each start creates a new file.
+MP4 is fragmented. Matroska is also available. Each start creates a new file,
+and the file starts at 0:00 however long the show has been running.
 Allow up to five seconds after stopping for the file to finish.
 
 The public API is in [Recording outputs](../reference/recording.md).
