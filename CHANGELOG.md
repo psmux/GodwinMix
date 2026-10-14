@@ -1,7 +1,12 @@
 # Changelog
 
-## 0.3.11 (unreleased)
+## 0.3.11 (2026-10-14)
 
+Fixes from the first hour of testing 0.3.10 in the desktop app: menus that did nothing, and monitors that froze and jumped.
+
+* The desktop app's menu bar works. Every click ran its item twice, because the tray icon's handler is told about every menu click in the app, the menu bar's too, and the app already had one handler for all of them. An item that opens something, such as Help > About, opened it twice on top of itself and looked fine; every item that toggles, which is most of View (each panel, Studio mode, Routing, the monitoring wall) and Sources > More plugins, opened and closed again at once and seemed dead. This was so in every desktop build until now.
+* Outputs > Add destination, Scenes > New scene, Take and Cut, and Outputs > Add channel work from the desktop app's menu when their panel is closed or behind another tab. Those commands belong to their panel and exist only while it is drawn; the page's own menu bar opened the panel first, and the desktop app's native menu did not. Both now go the same way.
+* Sources > Live data opens the live data dialog. Its item was in the menu but its command was never registered, so it did nothing in the page or in the desktop app.
 * Preview and Programme move smoothly in the desktop app. They froze, moved and froze again because the page, not the mixer, was losing the frames. The mixer sent 25 a second, but each decoded frame was drawn on its own, outside the screen's refresh, and Chromium (WebView2 is Chromium) answers a canvas drawn faster than the screen shows it by making the page wait until the GPU has finished everything it was given. On a laptop whose GPU was also busy with a screen capture source, each wait was 100 to 400 ms. The page now paints the monitors once a refresh, from the newest frame, and a tile already showing the newest picture is not drawn again. The page also rendered every panel again on each meters update, about 40 times a second, rewriting the same words into the page and restyling it whole each time; it now renders only when something changed. The wordmark's colour sweep runs three times when the page opens instead of for ever, since it repainted the header every refresh. Measured on that laptop against its own live mixer, in Chrome at the desktop window's size: Programme went from 9.5 new pictures a second to 18.3 with the page never held up (2.0 s of every 10 before), and from 3.2 to 11.6 on a second test mixer running beside it. What is left is the GPU: with a screen capture and the app sharing one integrated GPU, it was 99 percent busy before and after.
 
 ## 0.3.10 (2026-10-14)
