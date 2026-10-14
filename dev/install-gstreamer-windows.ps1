@@ -16,8 +16,20 @@ $ProgressPreference = "SilentlyContinue"
 
 $url = "https://gstreamer.freedesktop.org/data/pkg/windows/$Version/msvc/gstreamer-1.0-msvc-x86_64-$Version.exe"
 $exe = Join-Path ([IO.Path]::GetTempPath()) "gstreamer-$Version.exe"
-Write-Host "downloading $url"
-Invoke-WebRequest -Uri $url -OutFile $exe
+# The file is half a gigabyte, and freedesktop.org has ended the response
+# part way through it twice in a row on a runner, so a cut download is tried
+# again rather than failing the job.
+for ($try = 1; ; $try++) {
+    Write-Host "downloading $url (try $try)"
+    try {
+        Invoke-WebRequest -Uri $url -OutFile $exe
+        break
+    } catch {
+        if ($try -ge 5) { throw }
+        Write-Host "::warning::the download failed: $($_.Exception.Message); trying again"
+        Start-Sleep -Seconds (15 * $try)
+    }
+}
 $p = Start-Process -FilePath $exe -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/TYPE=full" -Wait -PassThru
 if ($p.ExitCode -ne 0) { throw "the GStreamer installer exited with $($p.ExitCode)" }
 
