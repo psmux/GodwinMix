@@ -32,7 +32,7 @@ $exe = Join-Path ([IO.Path]::GetTempPath()) "gstreamer-$Version.exe"
 #
 # Every copy has to match the SHA256 known for its version.
 $known = @{
-    "1.28.6" = "SHA256_1_28_6"
+    "1.28.6" = "059251444d1267b486eba390b18d25fed87e10315e72f757ec6c7e912fa746b5"
 }
 $sources = @(
     "https://github.com/psmux/godwinmix-ci-deps/releases/download/gstreamer-$Version/$name",
