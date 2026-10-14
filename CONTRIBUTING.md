@@ -38,6 +38,13 @@ administrator PowerShell:
 .\gstreamer-1.0-msvc-x86_64-1.28.6.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /TYPE=full
 ```
 
+If gstreamer.freedesktop.org is slow or answers 503, the same file is at
+`https://origin.gstreamer.freedesktop.org/data/pkg/windows/1.28.6/msvc/` and
+as a release asset of [psmux/godwinmix-ci-deps](https://github.com/psmux/godwinmix-ci-deps/releases),
+which is where CI fetches it from. Before CI moves to a new GStreamer version,
+run that repository's "mirror GStreamer for Windows" workflow for it and add
+the installer's SHA256 to `dev/install-gstreamer-windows.ps1`.
+
 It sets `GSTREAMER_1_0_ROOT_MSVC_X86_64` and nothing else. Add the other two
 yourself, once:
 

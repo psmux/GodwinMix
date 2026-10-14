@@ -14,37 +14,83 @@ param([string]$Version = "1.28.6")
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
 
-$url = "https://gstreamer.freedesktop.org/data/pkg/windows/$Version/msvc/gstreamer-1.0-msvc-x86_64-$Version.exe"
+$name = "gstreamer-1.0-msvc-x86_64-$Version.exe"
+$path = "data/pkg/windows/$Version/msvc/$name"
 $exe = Join-Path ([IO.Path]::GetTempPath()) "gstreamer-$Version.exe"
-# The file is half a gigabyte, and freedesktop.org ends a response part way,
-# to a runner and to a desk alike: five fresh tries in a row were each cut
-# short, and one here stopped after 6 MB. curl carries on from where the last
-# try stopped, so every try adds to the file. It also answered 503 to ten
-# tries over four minutes in the middle of one, so the loop waits up to about
-# twenty minutes of tries that add nothing before it gives up.
-# The server also answers 503 now and then, so asking the size is tried again too.
-for ($try = 1; ; $try++) {
-    try {
-        $size = [int64](Invoke-WebRequest -Uri $url -Method Head).Headers["Content-Length"][0]
-        break
-    } catch {
-        if ($try -ge 10) { throw }
-        Write-Host "::warning::asking the size of $url failed: $($_.Exception.Message); trying again"
-        Start-Sleep -Seconds (5 * $try)
+
+# Three places have the same file, tried in this order:
+#
+# 1. A release asset of psmux/godwinmix-ci-deps, served by GitHub. Through
+#    the whole of the 0.3.11 release freedesktop.org cut this half gigabyte
+#    short and answered 503 for hours, and failed the Windows installer build
+#    four times, so the unmodified file is kept there too. A new GStreamer
+#    version is put there by that repository's "mirror GStreamer for Windows"
+#    workflow before this script's default version moves to it.
+# 2. origin.gstreamer.freedesktop.org, the server behind freedesktop.org's
+#    CDN. The 503s came from the CDN's cache, not from the server.
+# 3. gstreamer.freedesktop.org, the CDN itself.
+#
+# Every copy has to match the SHA256 known for its version.
+$known = @{
+    "1.28.6" = "SHA256_1_28_6"
+}
+$sources = @(
+    "https://github.com/psmux/godwinmix-ci-deps/releases/download/gstreamer-$Version/$name",
+    "https://origin.gstreamer.freedesktop.org/$path",
+    "https://gstreamer.freedesktop.org/$path"
+)
+
+function Test-Installer {
+    if (-not (Test-Path $exe)) { return $false }
+    if (-not $known.ContainsKey($Version)) {
+        Write-Host "::warning::no SHA256 is known for GStreamer $Version; add it to this script"
+        return $true
     }
+    return (Get-FileHash -Algorithm SHA256 $exe).Hash -eq $known[$Version].ToUpper()
 }
-Remove-Item $exe -ErrorAction SilentlyContinue
-$have = 0
-$stuck = 0
-for ($try = 1; $have -lt $size; $try++) {
-    Write-Host "downloading $url (try $try, $have of $size bytes)"
-    curl.exe --location --fail --silent --show-error --continue-at - --output $exe $url
-    $now = if (Test-Path $exe) { (Get-Item $exe).Length } else { 0 }
-    $stuck = if ($now -gt $have) { 0 } else { $stuck + 1 }
-    $have = $now
-    if ($stuck -ge 25) { throw "the GStreamer download stopped at $have of $size bytes; download it by hand from $url" }
-    if ($stuck -gt 0) { Start-Sleep -Seconds ([math]::Min(60, 5 * $stuck)) }
+
+# One source. A server that ends a response part way is carried on from where
+# the last try stopped, so every try adds to the file, and the source is given
+# up when ten tries in a row have added nothing.
+function Get-From([string]$url) {
+    $size = $null
+    for ($try = 1; $try -le 5 -and -not $size; $try++) {
+        try {
+            $size = [int64](Invoke-WebRequest -Uri $url -Method Head -TimeoutSec 60).Headers["Content-Length"][0]
+        } catch {
+            Write-Host "::warning::asking the size of $url failed: $($_.Exception.Message)"
+            Start-Sleep -Seconds (5 * $try)
+        }
+    }
+    if (-not $size) { return $false }
+    Remove-Item $exe -ErrorAction SilentlyContinue
+    $have = 0
+    $stuck = 0
+    for ($try = 1; $have -lt $size; $try++) {
+        Write-Host "downloading $url (try $try, $have of $size bytes)"
+        curl.exe --location --fail --silent --show-error --continue-at - --speed-limit 100000 --speed-time 60 --output $exe $url
+        $now = if (Test-Path $exe) { (Get-Item $exe).Length } else { 0 }
+        $stuck = if ($now -gt $have) { 0 } else { $stuck + 1 }
+        $have = $now
+        if ($stuck -ge 10) {
+            Write-Host "::warning::$url stopped at $have of $size bytes"
+            return $false
+        }
+        if ($stuck -gt 0) { Start-Sleep -Seconds ([math]::Min(60, 5 * $stuck)) }
+    }
+    return $true
 }
+
+$got = $false
+foreach ($url in $sources) {
+    if ((Get-From $url) -and (Test-Installer)) {
+        Write-Host "the copy from $url matches its SHA256"
+        $got = $true
+        break
+    }
+    Write-Host "::warning::no good copy of $name from $url; trying the next place"
+}
+if (-not $got) { throw "no source gave a GStreamer $Version installer matching its SHA256: $($sources -join ', ')" }
 $p = Start-Process -FilePath $exe -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/TYPE=full" -Wait -PassThru
 if ($p.ExitCode -ne 0) { throw "the GStreamer installer exited with $($p.ExitCode)" }
 
