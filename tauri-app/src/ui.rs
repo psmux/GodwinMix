@@ -166,11 +166,14 @@ pub fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     let browser = MenuItemBuilder::with_id(crate::browser::MENU_ID, crate::browser::MENU_TITLE).build(app)?;
     let quit = MenuItemBuilder::with_id("quit", "Quit").build(app)?;
     let menu = MenuBuilder::new(app).items(&[&show, &connect, &browser, &quit]).build()?;
+    // No `on_menu_event` here. A tray's handler is called for every menu
+    // event in the app, the menu bar's too, and `main` already sends them
+    // all to `on_menu`, so a second one ran each menu bar item twice: every
+    // toggle in View and Sources opened and closed again, and seemed dead.
     let mut tray = TrayIconBuilder::with_id("main")
         .tooltip("GodwinMix")
         .menu(&menu)
-        .show_menu_on_left_click(true)
-        .on_menu_event(|app, event| on_menu(app, event.id().as_ref()));
+        .show_menu_on_left_click(true);
     if let Some(icon) = app.default_window_icon().cloned() {
         tray = tray.icon(icon);
     }
