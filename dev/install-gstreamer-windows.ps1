@@ -19,8 +19,9 @@ $exe = Join-Path ([IO.Path]::GetTempPath()) "gstreamer-$Version.exe"
 # The file is half a gigabyte, and freedesktop.org ends a response part way,
 # to a runner and to a desk alike: five fresh tries in a row were each cut
 # short, and one here stopped after 6 MB. curl carries on from where the last
-# try stopped, so every try adds to the file, and the loop gives up only when
-# ten tries in a row have added nothing.
+# try stopped, so every try adds to the file. It also answered 503 to ten
+# tries over four minutes in the middle of one, so the loop waits up to about
+# twenty minutes of tries that add nothing before it gives up.
 # The server also answers 503 now and then, so asking the size is tried again too.
 for ($try = 1; ; $try++) {
     try {
@@ -41,8 +42,8 @@ for ($try = 1; $have -lt $size; $try++) {
     $now = if (Test-Path $exe) { (Get-Item $exe).Length } else { 0 }
     $stuck = if ($now -gt $have) { 0 } else { $stuck + 1 }
     $have = $now
-    if ($stuck -ge 10) { throw "the GStreamer download stopped at $have of $size bytes; download it by hand from $url" }
-    if ($stuck -gt 0) { Start-Sleep -Seconds (5 * $stuck) }
+    if ($stuck -ge 25) { throw "the GStreamer download stopped at $have of $size bytes; download it by hand from $url" }
+    if ($stuck -gt 0) { Start-Sleep -Seconds ([math]::Min(60, 5 * $stuck)) }
 }
 $p = Start-Process -FilePath $exe -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/TYPE=full" -Wait -PassThru
 if ($p.ExitCode -ne 0) { throw "the GStreamer installer exited with $($p.ExitCode)" }
