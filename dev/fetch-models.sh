@@ -6,7 +6,7 @@
 #   dev/fetch-models.sh                          models/ and target/onnxruntime/
 #   dev/fetch-models.sh --models DIR --runtime DIR [--platform NAME]
 #
-# NAME is windows, macos, linux-x86_64 or linux-aarch64; it defaults to this
+# NAME is windows, macos, macos-x86_64, linux-x86_64 or linux-aarch64; it defaults to this
 # machine. Downloads are kept in ~/.cache/gmx-models and checked against the
 # SHA-256 below every time, so a changed file upstream fails here and not on
 # somebody's air.
@@ -39,6 +39,7 @@ done
 if [[ -z "$PLATFORM" ]]; then
     case "$(uname -s)-$(uname -m)" in
         MINGW*|MSYS*|CYGWIN*) PLATFORM=windows ;;
+        Darwin-x86_64) PLATFORM=macos-x86_64 ;;
         Darwin-*) PLATFORM=macos ;;
         Linux-aarch64|Linux-arm64) PLATFORM=linux-aarch64 ;;
         Linux-*) PLATFORM=linux-x86_64 ;;
@@ -52,6 +53,9 @@ PY="$(command -v python3 || command -v python)"
 "$PY" -c '' 2>/dev/null || PY="$(command -v python)"
 
 ORT=https://github.com/microsoft/onnxruntime/releases/download/v1.30.0
+# 1.23.2 was the last release built for Intel Macs. The cutout needs 1.20 or
+# later, so an Intel Mac carries that one and every other platform 1.30.
+ORT_INTEL=https://github.com/microsoft/onnxruntime/releases/download/v1.23.2
 HF=https://huggingface.co
 
 # name | url | sha256
@@ -61,6 +65,7 @@ modnet.onnx|$HF/Xenova/modnet/resolve/fa2fa546052fba4c08921230a26cc69a333fca12/o
 ort-dml.nupkg|https://www.nuget.org/api/v2/package/Microsoft.ML.OnnxRuntime.DirectML/1.24.4|57e9f11b73437bef7a309496135d4c1f96b1a8e9ddba60013fa27bfc1d788681
 directml.nupkg|https://www.nuget.org/api/v2/package/Microsoft.AI.DirectML/1.15.4|4e7cb7ddce8cf837a7a75dc029209b520ca0101470fcdf275c1f49736a3615b9
 ort-osx-arm64.tgz|$ORT/onnxruntime-osx-arm64-1.30.0.tgz|6ebb5062a934537c352937821f9fe9718e7de1a2db1122a93dd363ffd53a7012
+ort-osx-x86_64.tgz|$ORT_INTEL/onnxruntime-osx-x86_64-1.23.2.tgz|d10359e16347b57d9959f7e80a225a5b4a66ed7d7e007274a15cae86836485a6
 ort-linux-x64.tgz|$ORT/onnxruntime-linux-x64-1.30.0.tgz|a5ed5a3cac51fbb2e90da632ae43d19212faaa20e76484e62bcb7c23ddb3b3fd
 ort-linux-aarch64.tgz|$ORT/onnxruntime-linux-aarch64-1.30.0.tgz|e16a27a8ed330bbc698df7330b0cf56e722f354e3bcc92118682c74ef3c3e3da
 "
@@ -143,6 +148,11 @@ case "$PLATFORM" in
         extract "$(fetch ort-osx-arm64.tgz)" "$RUNTIME" \
             lib/libonnxruntime.1.30.0.dylib libonnxruntime.dylib \
             1.30.0/LICENSE ONNXRUNTIME-LICENSE.txt ThirdPartyNotices.txt ONNXRUNTIME-ThirdPartyNotices.txt
+        ;;
+    macos-x86_64)
+        extract "$(fetch ort-osx-x86_64.tgz)" "$RUNTIME" \
+            lib/libonnxruntime.1.23.2.dylib libonnxruntime.dylib \
+            1.23.2/LICENSE ONNXRUNTIME-LICENSE.txt ThirdPartyNotices.txt ONNXRUNTIME-ThirdPartyNotices.txt
         ;;
     linux-x86_64|linux-aarch64)
         arch="${PLATFORM#linux-}"; [[ "$arch" == x86_64 ]] && arch=x64

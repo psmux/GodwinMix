@@ -5,7 +5,8 @@
 #
 #   CEF_PATH=~/.cache/gmx-cef dev/mac-bundle.sh
 set -e
-export PATH="$HOME/.cargo/bin:/opt/homebrew/bin:/usr/bin:/bin"
+# /usr/local/bin is where Homebrew puts cmake and ninja on an Intel Mac.
+export PATH="$HOME/.cargo/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
 cd "$(dirname "$0")/.."
 : "${CEF_PATH:=$HOME/.cache/gmx-cef}"
 export CEF_PATH

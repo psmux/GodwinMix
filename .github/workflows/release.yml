@@ -47,6 +47,11 @@ jobs:
           - os: macos-latest
             target: aarch64-apple-darwin
             archive: tar.gz
+          # Intel Macs. GitHub's last Intel runner image; Homebrew there lives
+          # in /usr/local and builds x86_64, so the same steps make the build.
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+            archive: tar.gz
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             archive: zip
@@ -195,6 +200,11 @@ jobs:
             bundles: deb,appimage
           - os: macos-latest
             platform: macos
+            bundles: app
+          # Intel Macs, so a church on a 2020 iMac can install the app instead
+          # of building it. Tauri names the disk image _x64.dmg on its own.
+          - os: macos-15-intel
+            platform: macos-intel
             bundles: app
           - os: windows-latest
             platform: windows
@@ -502,7 +512,10 @@ jobs:
             # could not create a file in a directory that does not exist.
             version="${GITHUB_REF_NAME#v}"
             [ "$version" = "$GITHUB_REF_NAME" ] && version="$(git rev-parse --short HEAD)"
-            (cd tauri-app/target/release/bundle/macos && tar czf "$GITHUB_WORKSPACE/bundles/GodwinMix-${version}-macos.app.tar.gz" GodwinMix.app)
+            # Named for the architecture, since an Apple silicon and an Intel
+            # job each make one and publish copies both into one directory.
+            arch=$(uname -m); [ "$arch" = arm64 ] && arch=aarch64
+            (cd tauri-app/target/release/bundle/macos && tar czf "$GITHUB_WORKSPACE/bundles/GodwinMix-${version}-macos-${arch}.app.tar.gz" GodwinMix.app)
           fi
           ls -la bundles
 
@@ -614,7 +627,8 @@ jobs:
                 docker run -d --name godwinmix -p 127.0.0.1:8080:8080 \
                   -e GODWINMIX_TOKEN=change-me ${{ steps.image.outputs.name }}:${{ steps.image.outputs.tag }}
 
-            Desktop: the `.dmg` on macOS; the `-setup.exe` or the `.msi` on
+            Desktop: the `.dmg` on macOS (`_aarch64` for Apple silicon, `_x64`
+            for Intel); the `-setup.exe` or the `.msi` on
             Windows; the `.deb` on Debian and Ubuntu, or the `.AppImage` on any
             other Linux. Each carries its own trimmed GStreamer, so nothing
             else needs installing (see the README, Platforms).

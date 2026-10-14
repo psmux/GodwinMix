@@ -57,7 +57,7 @@ TLS, and the firewall, before that port is reachable from anywhere else.
 ### The desktop app
 
 Download it from the [latest release](https://github.com/psmux/GodwinMix/releases/latest): the setup `.exe` or the
-`.msi` on Windows, the `.dmg` on Apple Silicon Macs, the `.deb` on Debian and
+`.msi` on Windows, the `.dmg` on Macs (Apple silicon and Intel), the `.deb` on Debian and
 Ubuntu, and the `.AppImage` on any other Linux. To build it yourself, see
 [CONTRIBUTING.md](../CONTRIBUTING.md).
 

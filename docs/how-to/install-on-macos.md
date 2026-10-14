@@ -1,8 +1,9 @@
 # Install on macOS
 
-Download the `.dmg` from the [latest release](https://github.com/psmux/GodwinMix/releases/latest). It is built for Apple
-Silicon; on an Intel Mac, build from source with
-[CONTRIBUTING.md](../../CONTRIBUTING.md).
+Download the `.dmg` from the [latest release](https://github.com/psmux/GodwinMix/releases/latest). There is one for Apple
+silicon (`_aarch64.dmg`) and one for Intel Macs (`_x64.dmg`). Apple menu >
+About This Mac says which you have: a Chip line names Apple silicon, a
+Processor line naming Intel means the `_x64` one.
 
 From a source checkout, `cargo run --release -- --config
 godwinmix.example.toml` is complete. The web page renderer and the first party
@@ -30,8 +31,15 @@ From the [releases page](https://github.com/psmux/GodwinMix/releases):
 | File | What it does |
 |---|---|
 | `GodwinMix_<version>_aarch64.dmg` | the app, for Apple silicon |
-| `GodwinMix-<version>-macos.app.tar.gz` | the same app, as an archive |
-| `godwinmix-<version>-aarch64-apple-darwin.tar.gz` | the mixer and `gmx` on their own, no app, no GStreamer |
+| `GodwinMix_<version>_x64.dmg` | the app, for an Intel Mac |
+| `GodwinMix-<version>-macos-aarch64.app.tar.gz`, `-macos-x86_64.app.tar.gz` | the same app, as an archive |
+| `godwinmix-<version>-aarch64-apple-darwin.tar.gz`, `-x86_64-apple-darwin.tar.gz` | the mixer and `gmx` on their own, no app, no GStreamer |
+
+Releases up to 0.3.11 had no Intel build, and their app archive was named
+`GodwinMix-<version>-macos.app.tar.gz`.
+
+On an Intel Mac the person cutout runs on ONNX Runtime 1.23.2, the last
+version Microsoft built for Intel Macs, where Apple silicon gets 1.30.
 
 Check what you downloaded against `SHA256SUMS` in the same release:
 
