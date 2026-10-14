@@ -47,8 +47,8 @@ jobs:
           - os: macos-latest
             target: aarch64-apple-darwin
             archive: tar.gz
-          # Intel Macs. GitHub's last Intel runner image; Homebrew there lives
-          # in /usr/local and builds x86_64, so the same steps make the build.
+          # Intel Macs, on GitHub's last Intel runner image. GStreamer comes
+          # from its official packages there, since Homebrew dropped Intel.
           - os: macos-15-intel
             target: x86_64-apple-darwin
             archive: tar.gz
@@ -70,10 +70,17 @@ jobs:
             libgstreamer-plugins-bad1.0-dev libgstrtspserver-1.0-dev
 
       - name: GStreamer (macOS)
-        if: runner.os == 'macOS'
+        if: runner.os == 'macOS' && matrix.os != 'macos-15-intel'
         run: |
           brew install gstreamer
           echo "PKG_CONFIG_PATH=$(brew --prefix gstreamer)/lib/pkgconfig:$(brew --prefix)/lib/pkgconfig" >> "$GITHUB_ENV"
+
+      # Homebrew has dropped Intel Macs, so the Intel leg installs GStreamer's
+      # own universal packages, from the GitHub mirror first. See the script.
+      - name: GStreamer (Intel Mac)
+        if: matrix.os == 'macos-15-intel'
+        timeout-minutes: 30
+        run: ./dev/install-gstreamer-macos.sh
 
       # The official full installer, not chocolatey's package: that one is
       # 1.26 with the typical feature set, which has no SRT, and the
@@ -201,8 +208,8 @@ jobs:
           - os: macos-latest
             platform: macos
             bundles: app
-          # Intel Macs, so a church on a 2020 iMac can install the app instead
-          # of building it. Tauri names the disk image _x64.dmg on its own.
+          # Intel Macs, so an Intel Mac owner can install the app instead of
+          # building it. Tauri names the disk image _x64.dmg on its own.
           - os: macos-15-intel
             platform: macos-intel
             bundles: app
@@ -270,10 +277,18 @@ jobs:
 
       # libnice-gstreamer is the same plugin as a Homebrew formula of its own.
       - name: GStreamer (macOS)
-        if: runner.os == 'macOS'
+        if: runner.os == 'macOS' && matrix.os != 'macos-15-intel'
         run: |
           brew install gstreamer libnice-gstreamer
           echo "PKG_CONFIG_PATH=$(brew --prefix gstreamer)/lib/pkgconfig:$(brew --prefix)/lib/pkgconfig" >> "$GITHUB_ENV"
+
+      # The official universal packages on the Intel leg, which carry libnice's
+      # plugin already. bundle-gstreamer.sh trims from the framework they
+      # install, since it looks there before it looks for Homebrew.
+      - name: GStreamer (Intel Mac)
+        if: matrix.os == 'macos-15-intel'
+        timeout-minutes: 30
+        run: ./dev/install-gstreamer-macos.sh
 
       # The official full installer, not chocolatey's package: that one is
       # 1.26 with the typical feature set, which has no SRT, and the
