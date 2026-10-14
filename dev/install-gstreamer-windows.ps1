@@ -16,19 +16,33 @@ $ProgressPreference = "SilentlyContinue"
 
 $url = "https://gstreamer.freedesktop.org/data/pkg/windows/$Version/msvc/gstreamer-1.0-msvc-x86_64-$Version.exe"
 $exe = Join-Path ([IO.Path]::GetTempPath()) "gstreamer-$Version.exe"
-# The file is half a gigabyte, and freedesktop.org has ended the response
-# part way through it twice in a row on a runner, so a cut download is tried
-# again rather than failing the job.
+# The file is half a gigabyte, and freedesktop.org ends a response part way,
+# to a runner and to a desk alike: five fresh tries in a row were each cut
+# short, and one here stopped after 6 MB. curl carries on from where the last
+# try stopped, so every try adds to the file, and the loop gives up only when
+# ten tries in a row have added nothing.
+# The server also answers 503 now and then, so asking the size is tried again too.
 for ($try = 1; ; $try++) {
-    Write-Host "downloading $url (try $try)"
     try {
-        Invoke-WebRequest -Uri $url -OutFile $exe
+        $size = [int64](Invoke-WebRequest -Uri $url -Method Head).Headers["Content-Length"][0]
         break
     } catch {
-        if ($try -ge 5) { throw }
-        Write-Host "::warning::the download failed: $($_.Exception.Message); trying again"
-        Start-Sleep -Seconds (15 * $try)
+        if ($try -ge 10) { throw }
+        Write-Host "::warning::asking the size of $url failed: $($_.Exception.Message); trying again"
+        Start-Sleep -Seconds (5 * $try)
     }
+}
+Remove-Item $exe -ErrorAction SilentlyContinue
+$have = 0
+$stuck = 0
+for ($try = 1; $have -lt $size; $try++) {
+    Write-Host "downloading $url (try $try, $have of $size bytes)"
+    curl.exe --location --fail --silent --show-error --continue-at - --output $exe $url
+    $now = if (Test-Path $exe) { (Get-Item $exe).Length } else { 0 }
+    $stuck = if ($now -gt $have) { 0 } else { $stuck + 1 }
+    $have = $now
+    if ($stuck -ge 10) { throw "the GStreamer download stopped at $have of $size bytes; download it by hand from $url" }
+    if ($stuck -gt 0) { Start-Sleep -Seconds (5 * $stuck) }
 }
 $p = Start-Process -FilePath $exe -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/TYPE=full" -Wait -PassThru
 if ($p.ExitCode -ne 0) { throw "the GStreamer installer exited with $($p.ExitCode)" }
