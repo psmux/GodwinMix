@@ -54,6 +54,10 @@ impl Gl {
     /// Build the pipeline and start it. Called off every streaming thread,
     /// because building it loads the GL plugin.
     pub fn start(fragment: &str, size: (i32, i32)) -> Result<Gl> {
+        // Every caller asks the probe first; this keeps a new one honest.
+        if !super::gate::allowed() {
+            anyhow::bail!("{}", super::gate::reason());
+        }
         gst::init().context("GStreamer would not start")?;
         let stacked = gst_video::VideoInfo::builder(gst_video::VideoFormat::I420, size.0 as u32, size.1 as u32 * 2)
             .fps(gst::Fraction::new(30, 1))

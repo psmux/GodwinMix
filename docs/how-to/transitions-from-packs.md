@@ -134,6 +134,12 @@ Raspberry Pi or a server with no display it runs its software version if it
 has one (the two shipped shaders do) and as a dissolve if it does not.
 `fx.list` says which in `runs`.
 
+Windows runs shaders that way too, GPU or not, because the Intel GL driver
+took the show down beside the hardware video decoder. To try the GPU on a
+Windows machine anyway, start the mixer with `GODWINMIX_FX_GL=on` in its
+environment and watch the log; if the show is ever started again with an
+access violation, take the switch back out.
+
 ## See also
 
 * [the fx reference](../reference/fx.md): formats, the folder, every method
