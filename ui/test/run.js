@@ -2659,9 +2659,13 @@ async function liveSuite() {
   addButton.click();
   // The item lands in the mirror before the chooser has finished its own
   // awaits and redrawn the row, so wait for the row as well.
+  // A miss here is one failed check, not the end of the live suite: every
+  // suite after this one used to be skipped whenever it timed out.
   await waitFor(() => panel.scenes.mirror.items(addCheck.id).length === 2 &&
-    choose.el.querySelector(`[aria-label="Already in scene: ${nameOf(nextSource)}"]`), 3000, "the chooser to add an existing source");
+    choose.el.querySelector(`[aria-label="Already in scene: ${nameOf(nextSource)}"]`), 3000, "the chooser to add an existing source").catch(() => {});
   test("the scene chooser reuses an existing source through scene.item.add", () => {
+    ok(choose.el.querySelector(`[aria-label="Already in scene: ${nameOf(nextSource)}"]`),
+      `the row still reads ${JSON.stringify(choose.el.querySelector(`[aria-label$="${nameOf(nextSource)}"].primary`)?.textContent)} with ${panel.scenes.mirror.items(addCheck.id).length} items in the scene`);
     eq(panel.scenes.mirror.items(addCheck.id).length, 2);
     eq(panel.scenes.summary(addCheck.id).sources.slice().sort(), sources.slice().sort());
     ok(choose.el.querySelector(`[aria-label="Already in scene: ${nameOf(nextSource)}"]`).disabled);

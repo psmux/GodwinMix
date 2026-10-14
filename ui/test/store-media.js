@@ -64,14 +64,14 @@ export async function carouselTests(test, eq, ok) {
   const calm = motion(true);
   const still = carousel(shiny()[0]);
   box.append(still);
-  await settle(150);
   const first = still.querySelector(".pg-slide");
+  await until(() => first.classList.contains("waiting"));
   test("store: with reduced motion nothing plays until Play is pressed", () => {
     ok(!first.querySelector("img").hasAttribute("src"), "no GIF by itself");
     ok(first.classList.contains("waiting"), "a Play button over it");
   });
   first.click();
-  await settle(30);
+  await until(() => first.querySelector("img").getAttribute("src") === GIF);
   test("store: pressing Play plays that one", () => {
     eq(first.querySelector("img").getAttribute("src"), GIF);
   });
