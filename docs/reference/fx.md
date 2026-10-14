@@ -204,7 +204,22 @@ The programme's thread never waits for the GPU: it draws the newest answer,
 which is the previous frame's, so during a shader the new scene is one frame
 behind. Where GL does not run, the two shipped shaders have software
 versions (`ripple`, `glitch-slice`), and any other shader runs as a dissolve.
-`fx.list` says which as `runs`: `gpu`, `cpu` or `fade`. Whether GL runs is
+`fx.list` says which as `runs`: `gpu`, `cpu` or `fade`.
+
+On Windows the mixer does not start GStreamer GL at all, and every shader
+runs its software version or a dissolve, so `fx.list` answers `gpu: false`
+there. On an Intel laptop the GL driver crashed the show twice
+(`igxelpgicd64.dll`, an access violation at offset `0xd3c80`) when GL started
+in a process that also decoded on D3D12 or encoded through Media Foundation,
+which a show always does. A test that started GL beside them crashed the
+same way, and the same test with no GL never did. `GODWINMIX_FX_GL=on` in
+the mixer's environment asks for the GPU anyway, on a machine whose driver
+you trust; `off` keeps GL out on any platform. The mixer's log says which at
+the first `fx.list`. `cargo test -p godwinmix-core --test
+gl_beside_hardware_video -- --ignored` reruns the crash after a driver
+update.
+
+Whether GL runs is
 asked once, the first time something wants to know: two frames of a plain
 mix must come back as asked. Each shader is then asked once more, at the
 canvas size, before its first take on the GPU, and one that draws only the

@@ -403,6 +403,7 @@ harder version. See [run a marketplace](../how-to/run-a-marketplace.md).
 | `GODWINMIX_PLUGINS_DIR` | where plugins are installed and read, when `[control] plugins_dir` does not say. Default `plugins` under `GODWINMIX_HOME` |
 | `GMX_GITHUB_TOKEN` | a token for the GitHub API, so a CI runner installing plugins is not rate limited. `GITHUB_TOKEN` and `GH_TOKEN` are read too |
 | `GMX_CODEC_CHANNEL` | where `gmx codec update` fetches from. Default is the project's own release channel |
+| `GODWINMIX_FX_GL` | `on` runs shader transitions on the GPU through GStreamer GL on Windows, where they run the software way by default; `off` keeps GL out of the mixer on any platform. See [the fx reference](fx.md) |
 | `GMX_NO_COSIGN` | set to anything to skip the cosign check even where cosign is installed. For testing the fallback path |
 
 The `LIVEBOXMIX_` spellings of the first two are read for one release and warn.

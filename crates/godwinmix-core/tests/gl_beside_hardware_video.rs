@@ -45,7 +45,7 @@ mod fault {
 #[test]
 #[ignore]
 fn gl_started_beside_hardware_video_survives() {
-    use godwinmix_core::fx::shader::{fragment, gate, gl::Gl};
+    use godwinmix_core::fx::shader::{fragment, gate, gl::Gl, probe};
     use gstreamer::prelude::*;
     use std::time::{Duration, Instant};
     #[cfg(windows)]
@@ -59,11 +59,14 @@ fn gl_started_beside_hardware_video_survives() {
     std::thread::sleep(Duration::from_secs(3));
     let t0 = Instant::now();
     // As `fx.list` does it: on a worker thread that then ends.
+    // The probe sends frames, which is what makes the GL context; a pipeline
+    // that is started and closed with nothing sent never reaches the driver.
     std::thread::spawn(|| {
+        eprintln!("the probe says GL runs: {}", probe::available());
         let frag = fragment("vec4 transition(vec2 uv) { return mix(getFromColor(uv), getToColor(uv), progress); }").unwrap();
         for _ in 0..3 {
-            let gl = Gl::start(&frag, (128, 72)).unwrap();
-            std::thread::sleep(Duration::from_millis(300));
+            let gl = Gl::start(&frag, (64, 36)).unwrap();
+            let _ = probe::moves(&gl, (64, 36));
             gl.close();
         }
     })
