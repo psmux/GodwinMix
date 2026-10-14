@@ -11,6 +11,7 @@ import { pluginGalleryTests } from "./plugins.js";
 import { storeTests } from "./store.js";
 import { mediaTests } from "./media.js";
 import { studioTests } from "./studio.js";
+import { monitorPaintTests } from "./monitor-paint.js";
 import { transitionTests } from "./transitions.js";
 import { studioNextTests } from "./studio-next.js";
 import { sceneFixTests, sceneFixLoadTests } from "./scene-fix.js";
@@ -2930,6 +2931,7 @@ tileLevelTests(test, eq, ok)
     console.error(e);
   })
   .then(() => studioTests(test, eq, ok))
+  .then(() => monitorPaintTests(test, eq, ok))
   .then(() => transitionTests(test, eq, ok))
   .then(() => studioNextTests(test, eq, ok))
   .then(() => sceneFixTests(test, eq, ok))

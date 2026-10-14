@@ -307,7 +307,13 @@ export class Client {
         if (params.state.multiview) this.sheet.setLayout(params.state.multiview);
         break;
       case "flush":
-        s.patch({ seq: params.seq ?? s.state.seq });
+        // The number moves on without marking the state changed. The core
+        // ends every batch with a flush, a batch of meters alone included,
+        // and meters come about forty times a second: marking it changed
+        // made every panel render again each time, rewriting the same text
+        // into the DOM, and the page restyled and repainted itself whole
+        // while the monitors waited. Only a change renders now.
+        s.state.seq = params.seq ?? s.state.seq;
         s.flush();
         break;
       case "resync":

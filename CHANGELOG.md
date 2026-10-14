@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.11 (unreleased)
+
+* Preview and Programme move smoothly in the desktop app. They froze, moved and froze again because the page, not the mixer, was losing the frames. The mixer sent 25 a second, but each decoded frame was drawn on its own, outside the screen's refresh, and Chromium (WebView2 is Chromium) answers a canvas drawn faster than the screen shows it by making the page wait until the GPU has finished everything it was given. On a laptop whose GPU was also busy with a screen capture source, each wait was 100 to 400 ms. The page now paints the monitors once a refresh, from the newest frame, and a tile already showing the newest picture is not drawn again. The page also rendered every panel again on each meters update, about 40 times a second, rewriting the same words into the page and restyling it whole each time; it now renders only when something changed. The wordmark's colour sweep runs three times when the page opens instead of for ever, since it repainted the header every refresh. Measured on that laptop against its own live mixer, in Chrome at the desktop window's size: Programme went from 9.5 new pictures a second to 18.3 with the page never held up (2.0 s of every 10 before), and from 3.2 to 11.6 on a second test mixer running beside it. What is left is the GPU: with a screen capture and the app sharing one integrated GPU, it was 99 percent busy before and after.
+
 ## 0.3.10 (2026-10-14)
 
 A frame rate menu on the monitors, the Plugins page as an app store, a watch link that survives a feed restart, and fixes to the plugin host found while building three new plugins.
