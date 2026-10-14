@@ -89,6 +89,26 @@ export function act(client, id, arg) {
   return fn ? fn(client, arg) : undefined;
 }
 
+/** Run a menu item. A command a panel registers exists only once that panel
+ * is drawn, so the item's panel is shown first and given a moment to say it. */
+export async function runItem(client, it) {
+  if (!get(it.command) && it.panel) {
+    await show(it.panel);
+    for (let i = 0; i < 40 && !get(it.command); i++) await new Promise((r) => setTimeout(r, 50));
+  }
+  return run(it.command, it.arg);
+}
+
+let items = null;
+
+/** The desktop app's native menu sends a command and its argument; find the
+ * item they came from in menus.json, for its panel. */
+export async function runNative(client, command, arg) {
+  items ||= fetch(new URL("./menus.json", import.meta.url)).then((r) => r.json()).then((d) => d.menus.flatMap((m) => m.items)).catch(() => []);
+  const same = (it) => it.command === command && JSON.stringify(it.arg ?? null) === JSON.stringify(arg ?? null);
+  return runItem(client, (await items).find(same) || { command, arg });
+}
+
 async function about(client) {
   const info = await client.call("core.info", {}).catch(() => ({}));
   const canvas = info.canvas ? `${info.canvas.width}×${info.canvas.height} at ${info.canvas.fps} fps` : "";

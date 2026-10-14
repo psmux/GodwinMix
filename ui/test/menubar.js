@@ -2,7 +2,7 @@
 // and back in as a dry run.
 
 import { menubar } from "../shell/menubar.js";
-import { get as command } from "../shell/commands.js";
+import { get as command, registerAll } from "../shell/commands.js";
 import { fileName, pageState } from "../shell/project.js";
 import { connect } from "../client/index.js";
 
@@ -38,7 +38,25 @@ export async function menubarTests(test, eq, ok) {
     eq(bar.getAttribute("role"), "menubar");
     for (const id of ["project.new", "project.open", "project.save", "view.studio", "output.record", "output.stop-recording", "help.about"]) ok(command(id), `${id} is registered`);
     ok(typeof window.gmxMenu.run === "function", "the desktop app has a way in");
+    ok(command("data.open"), "Live data is registered, so its item does something");
   });
+
+  const defs = await (await fetch(new URL("../shell/menus.json", import.meta.url))).json();
+  const items = defs.menus.flatMap((m) => m.items);
+  test("an item whose command a panel registers names that panel", () => {
+    const owners = { "tray.add": "core/sources", "scenes.new": "core/scenes", "program.take-armed": "core/program", "program.cut-armed": "core/program", "output.add-destination": "core/outputs", "channel.add": "core/channels" };
+    for (const [id, panel] of Object.entries(owners)) eq(items.find((it) => it.command === id)?.panel, panel, id);
+  });
+  const { runItem, runNative } = await import("../shell/menu-actions.js");
+  let ran = null;
+  setTimeout(() => registerAll([{ id: "test.late-panel", title: "Late", run: (arg) => { ran = arg; } }]), 150);
+  const late = await runItem(stub, { command: "test.late-panel", arg: 7, panel: "core/none" });
+  test("an item waits for its panel to register the command, then runs it once", () => {
+    eq(late, true);
+    eq(ran, 7);
+  });
+  const unknown = await runNative(stub, "test.no-such-command", null);
+  test("the native menu runs an unknown command as nothing, without throwing", () => eq(unknown, false));
 
   key(window, "F10");
   test("F10 puts the keyboard on File", () => eq(document.activeElement, titles[0]));

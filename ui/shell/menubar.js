@@ -4,7 +4,7 @@
 // the palette's registry, so menu, palette and keys cannot disagree.
 
 import { el } from "./dom.js";
-import { registerAll, run } from "./commands.js";
+import { registerAll } from "./commands.js";
 
 const TITLES = [["file", "File"], ["edit", "Edit"], ["view", "View"], ["sources", "Sources"], ["scenes", "Scenes"], ["outputs", "Outputs"], ["help", "Help"]];
 
@@ -115,6 +115,7 @@ function commands(client) {
     cmd("view.routing", "Routing", "View"),
     cmd("view.wall", "Monitoring wall", "View"),
     cmd("view.plugins", "More plugins", "Sources"),
+    cmd("data.open", "Live data", "Sources"),
     cmd("edit.delete", "Delete the selection", "Edit"),
     cmd("view.panel", "Show or hide a panel", "View", "", true),
     cmd("view.studio", "Studio mode on or off", "View"),
@@ -131,8 +132,9 @@ function commands(client) {
     cmd("help.about", "About GodwinMix", "Help"),
   ]);
   // The desktop app's native menu runs these in the window: its one way in.
+  // Through the menu's own path, so an item a panel owns finds its panel.
   window.gmxMenu = {
-    run: (id, arg) => run(id, arg),
+    run: (id, arg) => import("./menu-actions.js").then((m) => m.runNative(client, id, arg)),
     native: (on) => document.documentElement.toggleAttribute("data-native-menu", !!on),
   };
 }

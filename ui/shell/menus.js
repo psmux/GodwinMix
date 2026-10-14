@@ -2,11 +2,11 @@
 // the keyboard the way a desktop menu is. Loaded the first time a menu opens.
 
 import { el, on } from "./dom.js";
-import { get as command, run } from "./commands.js";
+import { get as command } from "./commands.js";
 import { shell } from "./shell.js";
 import { focusTitle } from "./menubar.js";
 import { list as panels } from "./registry.js";
-import { checked, act as doAct } from "./menu-actions.js";
+import { checked, act as doAct, runItem } from "./menu-actions.js";
 
 let definition = null;
 let opened = null;
@@ -114,8 +114,7 @@ async function choose(it, bar) {
   close(false);
   const title = bar.querySelector("[data-menu][tabindex='0']");
   if (title) title.blur();
-  if (!command(it.command) && it.panel) await doAct(shell.client, "view.show", it.panel);
-  await run(it.command, it.arg);
+  await runItem(shell.client, it);
 }
 
 function first(node) {

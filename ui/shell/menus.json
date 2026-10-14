@@ -264,11 +264,13 @@
         },
         {
           "command": "program.take-armed",
-          "title": "Take"
+          "title": "Take",
+          "panel": "core/program"
         },
         {
           "command": "program.cut-armed",
-          "title": "Cut"
+          "title": "Cut",
+          "panel": "core/program"
         },
         {
           "command": "program.black",
@@ -287,7 +289,8 @@
         },
         {
           "command": "channel.add",
-          "title": "Add channel…"
+          "title": "Add channel…",
+          "panel": "core/channels"
         },
         {
           "separator": true
