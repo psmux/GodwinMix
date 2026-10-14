@@ -62,7 +62,9 @@ class ProgramPanel extends HTMLElement {
       on(document, "visibilitychange", () => this.retune()),
       this.client.on("frame", () => {
         this.lastFrameAt = Date.now();
-        this.streamState.textContent = "Preview live";
+        // Once, not on every frame: writing the same words replaces the text
+        // node, and that relaid and restyled the page 25 times a second.
+        if (this.streamState.textContent !== "Preview live") this.streamState.textContent = "Preview live";
       }),
       onSettingsChanged(() => this.applyMode()),
     ];

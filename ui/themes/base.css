@@ -168,12 +168,16 @@ label { display: block; }
 /* ---------------------------------------------------------------- header */
 
 /* The wordmark: Godwin in a moving blue gradient, Mix in white. The sweep is
-   slow and stops for anyone who asked for less motion. */
+   slow, runs three times when the page opens, and stops for anyone who asked
+   for less motion. It used to run for ever, and a background moving under
+   clipped text is painted on the page's main thread every screen refresh: on
+   a laptop with a busy GPU that halved the rate the page could put monitor
+   frames on screen (43 refreshes a second with it, 77 without). */
 .wordmark { font-size: 18px; font-weight: 800; letter-spacing: 0.01em; white-space: nowrap; }
 .wm-godwin {
   background: linear-gradient(100deg, #1a5cff, #38a4ff 35%, #c8ecff 50%, #38a4ff 65%, #1a5cff);
   background-size: 250% 100%; -webkit-background-clip: text; background-clip: text; color: transparent;
-  animation: wm-sweep 4s ease-in-out infinite;
+  animation: wm-sweep 4s ease-in-out 3;
 }
 .wm-mix { color: #fff; }
 :root[data-theme="light"] .wm-mix { color: var(--text); }
