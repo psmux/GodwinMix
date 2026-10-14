@@ -21,6 +21,12 @@ use std::time::{Duration, Instant};
 pub fn available() -> bool {
     static ANSWER: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     *ANSWER.get_or_init(|| {
+        // Asked before anything loads the GL plugin: on Windows the driver
+        // it brings in can take the show down. See `gate`.
+        if !super::gate::allowed() {
+            tracing::info!("{}", super::gate::reason());
+            return false;
+        }
         // Asked from an import as well as from a running core, so it may be
         // the first thing in the process to touch GStreamer.
         if gstreamer::init().is_err() {

@@ -13,6 +13,7 @@
 //! that, and any other runs as a dissolve and `fx.list` says so.
 
 pub mod cpu;
+pub mod gate;
 pub mod gl;
 pub mod probe;
 
