@@ -237,8 +237,9 @@ license = "LGPL-2.1-or-later"
 container = ["flv", "mpegts", "mp4", "matroska"]
 keyframe = { property = "max-keyframe-interval", unit = "frames" }
 verified = []
-comment = "Apple silicon and Intel Macs. `vtenc_h264_hw` fails to load rather than falling back to software, which is what we want from a hardware entry; the software VideoToolbox encoder is a separate entry below."
+comment = "Apple silicon and Intel Macs. `vtenc_h264_hw` fails to load rather than falling back to software, which is what we want from a hardware entry; the software VideoToolbox encoder is a separate entry below. Intel Macs have no constant bitrate mode: asked for one, a 2020 iMac (i9, Radeon Pro 5700 XT, T2) sent 1.0 Mbit/s for 6 and the round trip scored 23.9 dB, so there it runs average bitrate, which sent 6.07 and scored 34.2."
 properties = { bitrate = { unit = "kbit", from = "video.bitrate_kbps" }, realtime = true, "allow-frame-reordering" = false, "rate-control" = "cbr" }
+arch_properties = { x86_64 = { "rate-control" = "abr" } }
 
 [[video]]
 id = "h265-videotoolbox"
@@ -253,7 +254,9 @@ license = "LGPL-2.1-or-later"
 container = ["mpegts", "mp4", "matroska"]
 keyframe = { property = "max-keyframe-interval", unit = "frames" }
 verified = []
+comment = "Average bitrate on Intel Macs, which have no constant bitrate mode; see h264-videotoolbox."
 properties = { bitrate = { unit = "kbit", from = "video.bitrate_kbps" }, realtime = true, "allow-frame-reordering" = false, "rate-control" = "cbr" }
+arch_properties = { x86_64 = { "rate-control" = "abr" } }
 
 [[video]]
 id = "h264-videotoolbox-any"

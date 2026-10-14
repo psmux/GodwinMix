@@ -110,6 +110,13 @@ pub struct VideoEntry {
     pub requires: Vec<String>,
     #[serde(default)]
     pub properties: BTreeMap<String, PropValue>,
+    /// Properties for one CPU architecture, laid over `properties` when the
+    /// catalogue is loaded, keyed by Rust's name for it (`x86_64`,
+    /// `aarch64`). For an element that behaves differently on two kinds of
+    /// the same platform: VideoToolbox on an Intel Mac has no constant
+    /// bitrate mode, and asked for one it ignores the bitrate altogether.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub arch_properties: BTreeMap<String, BTreeMap<String, PropValue>>,
     #[serde(default)]
     pub keyframe: Option<Keyframe>,
     #[serde(default)]
@@ -124,6 +131,21 @@ pub struct VideoEntry {
     /// having to restate it.
     #[serde(default)]
     pub disabled: bool,
+}
+
+/// The architectures an `arch_properties` table may name.
+pub const ARCHES: &[&str] = &["x86_64", "aarch64"];
+
+impl VideoEntry {
+    /// Lay this machine's `arch_properties` over `properties`. Running it
+    /// twice changes nothing, so every catalogue that is loaded can run it.
+    pub fn resolve_arch(&mut self, arch: &str) {
+        if let Some(over) = self.arch_properties.get(arch) {
+            for (name, value) in over {
+                self.properties.insert(name.clone(), value.clone());
+            }
+        }
+    }
 }
 
 fn software() -> String {
