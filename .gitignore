@@ -105,3 +105,8 @@ ui/test/vendor/
 # The cutout models and runtime the release step stages for the app are
 # ignored by tauri-app/models/.gitignore and tauri-app/onnxruntime/.gitignore,
 # which are committed so the two folders exist for a build that has none.
+
+# A local run writes its control certificate beside the example config, and a
+# plugin build leaves its log. Both belong to the machine, not the repository.
+godwinmix.example.control.crt
+plugins/*/.build.log
