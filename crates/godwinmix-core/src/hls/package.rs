@@ -132,22 +132,17 @@ fn piece_of(sink: &gst_app::AppSink, sample: &gst::Sample, buf: &gst::BufferRef)
         .and_then(|s| s.downcast_ref::<gst::format::Time>())
         .and_then(|s| buf.pts().or(buf.dts()).and_then(|t| s.to_running_time(t)))
         .map(|t| t.nseconds());
-    // The wall clock at this buffer's running time: now, less however long
-    // ago the pipeline says that was.
     let now_ms = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis() as i64)
         .unwrap_or(0);
-    let behind_ms = match (sink.current_running_time(), running) {
-        (Some(now), Some(at)) => (now.nseconds().saturating_sub(at) / 1_000_000) as i64,
-        _ => 0,
-    };
+    let clock_ns = sink.current_running_time().map(|t| t.nseconds());
     Piece {
         header: flags.contains(gst::BufferFlags::HEADER),
         delta: flags.contains(gst::BufferFlags::DELTA_UNIT),
         marker: flags.contains(gst::BufferFlags::MARKER),
         running_ns: running,
         duration_ns: buf.duration().map(|d| d.nseconds()),
-        wall_ms: now_ms - behind_ms,
+        wall_ms: super::cutter::wall_ms(now_ms, clock_ns, running),
     }
 }

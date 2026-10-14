@@ -33,6 +33,24 @@ pub struct Piece {
     pub wall_ms: i64,
 }
 
+/// The wall clock at running time `at_ns`, given the wall clock and the
+/// pipeline's running time now: now, less however long ago the pipeline
+/// says that was.
+///
+/// A buffer can be ahead of the clock (a pipeline that took a second to
+/// start, fed timestamps from before it did), and is then later than now
+/// by as much. Kept signed, every buffer of a pipeline is on one line from
+/// running time to wall clock, so a segment's time agrees with its length
+/// and the picture's with the sound's. Clamped at now, as it once was, a
+/// short fragment of sound got the moment it arrived while a long one of
+/// picture did not, and on a slow machine their times drifted apart.
+pub fn wall_ms(now_ms: i64, clock_ns: Option<u64>, at_ns: Option<u64>) -> i64 {
+    match (clock_ns, at_ns) {
+        (Some(now), Some(at)) => now_ms - (now as i64 - at as i64) / 1_000_000,
+        _ => now_ms,
+    }
+}
+
 pub struct Cutter {
     track: Arc<Track>,
     /// Every part starts a new decodable run: audio, where every sample is a

@@ -46,7 +46,16 @@ impl Session {
         // The connection before this one is gone with its pipeline, so the
         // timestamps start again: every track marks the break alike.
         stream.restart();
+        // Zero on this pipeline's clock is now, when the first tag came, and
+        // not whenever the pipeline gets to playing: building it can take a
+        // second on a busy machine, and every frame would then be that much
+        // ahead of the clock.
+        let clock = gst::SystemClock::obtain();
+        let zero = clock.time();
         let pipeline = gst::Pipeline::with_name(&format!("hls-{}", stream.id));
+        pipeline.use_clock(Some(&clock));
+        pipeline.set_start_time(gst::ClockTime::NONE);
+        pipeline.set_base_time(zero);
         let vsrc = appsrc(video);
         let asrc = audio.map(appsrc);
         let add = |src: &AppSrc, id: &str, kind: TrackKind| -> Result<(), String> {

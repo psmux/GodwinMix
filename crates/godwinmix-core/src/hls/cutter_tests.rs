@@ -79,3 +79,12 @@ fn audio_parts_are_all_independent() {
     c.push(&[1; 10], LAST);
     assert!(t.view().segments[0].parts.iter().all(|(_, i)| *i));
 }
+
+#[test]
+fn a_buffer_ahead_of_the_clock_is_on_the_same_line_as_one_behind() {
+    // Running time 10 s now, at wall clock 100 000 ms: running time zero
+    // was at 90 000 ms, whichever side of now the buffer is.
+    assert_eq!(wall_ms(100_000, Some(10_000_000_000), Some(8_000_000_000)), 98_000);
+    assert_eq!(wall_ms(100_000, Some(10_000_000_000), Some(10_850_000_000)), 100_850);
+    assert_eq!(wall_ms(100_000, None, Some(10_850_000_000)), 100_000);
+}
