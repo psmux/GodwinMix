@@ -416,6 +416,22 @@ jobs:
           done
           codesign --force --sign - "$bin"
           otool -L "$bin" | grep -c "@executable_path"             || { echo "::error::nothing in the mixer pointed at the runtime in the app" >&2; exit 1; }
+          # The web page renderer links GStreamer too, and was left pointing at
+          # the build machine's copy: it ran only because the mixer starts it
+          # with DYLD_LIBRARY_PATH. From its executable, Contents/MacOS inside
+          # godwinmix-browser.app inside Resources/browser, the app's runtime
+          # is four folders up.
+          app=tauri-app/browser/godwinmix-browser.app
+          renderer="$app/Contents/MacOS/godwinmix-browser"
+          otool -L "$renderer" | awk 'NR>1 {print $1}' | while read -r dep; do
+            leaf="${dep##*/}"
+            if [ -f "$lib/$leaf" ]; then
+              install_name_tool -change "$dep" "@executable_path/../../../../gstreamer/macos/lib/$leaf" "$renderer"
+            fi
+          done
+          codesign --force --deep --sign - "$app"
+          otool -L "$renderer" | grep -c "@executable_path/../../../../gstreamer" \
+            || { echo "::error::nothing in the renderer pointed at the runtime in the app" >&2; exit 1; }
 
       # The person cutout: its two Apache 2.0 models and ONNX Runtime for this
       # platform (DirectML inside on Windows, CoreML on macOS), pinned and
