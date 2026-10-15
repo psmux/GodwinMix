@@ -107,7 +107,8 @@ function addressBar(client, id, before) {
   const back = el("button.btn.icon", { text: "←", title: "Back", "aria-label": "Back", onclick: () => go("back") });
   const forward = el("button.btn.icon", { text: "→", title: "Forward", "aria-label": "Forward", onclick: () => go("forward") });
   const reload = el("button.btn.icon", { text: "⟳", title: "Reload", "aria-label": "Reload", onclick: () => go("reload") });
-  const url = el("input.grow.page-url", { type: "url", inputmode: "url", "aria-label": "Address", placeholder: "https://", enterkeyhint: "go" });
+  // Text, not url: a person types example.com, which a url field refuses.
+  const url = el("input.grow.page-url", { type: "text", inputmode: "url", "aria-label": "Address", placeholder: "https://", enterkeyhint: "go" });
   const form = el("form.row.page-bar", {
     onsubmit: async (e) => {
       e.preventDefault();
@@ -156,7 +157,11 @@ function pointer(surface, img, keys, send) {
     const p = at(e);
     if (!p.inside) return;
     e.preventDefault();
-    surface.setPointerCapture(e.pointerId);
+    try {
+      surface.setPointerCapture(e.pointerId);
+    } catch {
+      /* a pointer the browser no longer tracks: the press still counts */
+    }
     if (e.pointerType === "touch") {
       touch = { x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, p, scrolling: false };
       return;

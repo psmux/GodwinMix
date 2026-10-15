@@ -70,7 +70,8 @@ export async function pageInteractTests(test, eq, ok) {
   try {
     const img = dialog.el.querySelector(".page-picture");
     const surface = dialog.el.querySelector(".page-surface");
-    surface.style.width = "320px";
+    // Sized here: the view's stylesheet may not have arrived yet.
+    Object.assign(img.style, { width: "320px", height: "180px", display: "block" });
     img.removeAttribute("src");
     await tick(20);
     const r = img.getBoundingClientRect();
