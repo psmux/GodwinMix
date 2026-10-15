@@ -44,6 +44,13 @@ reqwest = { version = "0.13", default-features = false, features = ["json", "rus
 # new tree.
 getrandom = "0.3"
 
+# What permissions.rs asks macOS: AVCaptureDevice for the camera and the
+# microphone. Both crates are already in the tree under Tauri, at these
+# versions; the screen needs only two CoreGraphics functions.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSString"] }
+
 [profile.release]
 opt-level = "s"
 lto = true

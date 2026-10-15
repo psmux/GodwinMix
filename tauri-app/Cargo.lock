@@ -1515,6 +1515,8 @@ name = "godwinmix-desktop"
 version = "0.3.13"
 dependencies = [
  "getrandom 0.3.4",
+ "objc2",
+ "objc2-foundation",
  "reqwest",
  "serde",
  "serde_json",
