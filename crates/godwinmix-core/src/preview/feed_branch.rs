@@ -47,7 +47,7 @@ impl FeedBranch {
         let mut chain = vec![gstutil::queue_preview("pgm-f-q")?, rate.clone()];
         chain.extend(bridge);
         chain.push(make("videoscale", "pgm-f-scale")?);
-        chain.push(make("videoconvert", "pgm-f-conv")?);
+        chain.push(make("videoconvert", "pgm-f-yuv")?);
         chain.push(filter.clone());
         chain.push(enc);
         chain.push(sink(shared));
