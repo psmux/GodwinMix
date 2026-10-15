@@ -6,12 +6,23 @@
 // unmute button is pressed once; the browser runs with autoplay allowed, so
 // sound needs no gesture beyond that. Idempotent per load, and it tries
 // again for a while, because players are created after the page has loaded.
+//
+// It stops for good the moment somebody uses the page from the mixer's
+// Interact view. From then on the sound is theirs: a mute or a volume they
+// set in the page's own player is what goes to the mixer, and pressing
+// "Unmute" behind their back a second later would undo it.
 (() => {
   if (window.__gmxUnmuteInstalled) return;
   window.__gmxUnmuteInstalled = true;
+  let handsOn = false;
+  const stop = () => {
+    handsOn = true;
+  };
+  for (const ev of ["pointerdown", "keydown", "wheel"]) addEventListener(ev, stop, { capture: true, once: true });
   const LABEL = /enable sound|unmute|sound on|tap for sound|turn on sound|click for sound/i;
   const pressed = new WeakSet();
   const pass = () => {
+    if (handsOn) return;
     for (const el of document.querySelectorAll("video, audio")) {
       if (el.muted || el.volume === 0) {
         el.muted = false;
@@ -32,6 +43,6 @@
   let runs = 0;
   const timer = setInterval(() => {
     pass();
-    if (++runs >= 60) clearInterval(timer);
+    if (handsOn || ++runs >= 60) clearInterval(timer);
   }, 1000);
 })();

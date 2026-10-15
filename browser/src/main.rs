@@ -21,7 +21,10 @@ mod area;
 mod control;
 mod graphic;
 mod mux;
+mod page;
+mod page_cef;
 mod pixels;
+mod web;
 
 use cef::{args::Args, *};
 use mux::Muxer;
@@ -61,6 +64,9 @@ struct Opts {
     offline: bool,
     /// The page covers the picture: send it whole as I420, not as AYUV boxes.
     opaque: bool,
+    /// Read pointer, key and navigation lines on stdin, so an operator can
+    /// use the page from the mixer's interface. See `page.rs`.
+    control: bool,
     /// Device pixels to a CSS pixel. A graphic designed on a 1920 wide page
     /// is drawn on a 1280 wide canvas at 0.6667, laid out exactly as it was
     /// designed and painted at the canvas's own size.
@@ -98,6 +104,7 @@ fn opts() -> Opts {
         gpu: false,
         offline: false,
         opaque: false,
+        control: false,
         scale: 1.0,
     };
     let mut it = std::env::args().skip(1);
@@ -122,6 +129,7 @@ fn opts() -> Opts {
             "--gpu" => o.gpu = true,
             "--offline" => o.offline = true,
             "--opaque" => o.opaque = true,
+            "--control" => o.control = true,
             "--scale" => o.scale = val().parse::<f64>().ok().filter(|s| *s > 0.1 && *s <= 4.0).unwrap_or(1.0),
             _ => {} // Chromium's own switches pass through untouched.
         }
@@ -330,6 +338,16 @@ wrap_load_handler! {
     }
 
     impl LoadHandler {
+        fn on_loading_state_change(
+            &self,
+            _browser: Option<&mut Browser>,
+            is_loading: ::std::os::raw::c_int,
+            can_go_back: ::std::os::raw::c_int,
+            can_go_forward: ::std::os::raw::c_int,
+        ) {
+            page_cef::on_loading(is_loading == 1, can_go_back == 1, can_go_forward == 1);
+        }
+
         fn on_load_start(
             &self,
             _browser: Option<&mut Browser>,
@@ -409,6 +427,14 @@ wrap_display_handler! {
     struct Console;
 
     impl DisplayHandler {
+        fn on_address_change(&self, _browser: Option<&mut Browser>, frame: Option<&mut Frame>, url: Option<&CefString>) {
+            if let (Some(f), Some(u)) = (frame, url) {
+                if f.is_main() == 1 {
+                    page_cef::on_address(&u.to_string());
+                }
+            }
+        }
+
         /// The injected detector reports here. The console is what carries it
         /// out of the renderer process; everything else on it is the page's own
         /// noise and is dropped.
@@ -465,6 +491,9 @@ wrap_client! {
         fn life_span_handler(&self) -> Option<LifeSpanHandler> {
             Some(LifeSpan::new(self.state.clone()))
         }
+        fn request_handler(&self) -> Option<RequestHandler> {
+            Some(web::Requests::new())
+        }
         fn load_handler(&self) -> Option<LoadHandler> {
             Some(Load::new(self.state.clone(), self.detect_media, self.transparent))
         }
@@ -504,7 +533,8 @@ wrap_browser_process_handler! {
             };
             let mut client =
                 SourceClient::new(self.state.clone(), self.detect_media, self.transparent);
-            let url = CefString::from(self.url.as_str());
+            // An embedded player has to start by itself. See `web.rs`.
+            let url = CefString::from(web::autoplaying(&self.url).as_str());
             let ok = browser_host_create_browser(
                 Some(&window_info),
                 Some(&mut client),
@@ -590,15 +620,7 @@ wrap_app! {
                 Some(&CefString::from("autoplay-policy")),
                 Some(&CefString::from("no-user-gesture-required")),
             );
-            // Say who we are. A page can tell a broadcast capture from a
-            // viewer by the user agent and start with sound (a page that plays a
-            // stream can), instead of waiting for a click nobody will make.
-            cl.append_switch_with_value(
-                Some(&CefString::from("user-agent-product")),
-                Some(&CefString::from(
-                    concat!("GodwinMix/", env!("CARGO_PKG_VERSION")).to_string().as_str(),
-                )),
-            );
+            // Who we are is in `Settings::user_agent`; see `web::user_agent`.
             // Extra Chromium switches from the operator, comma separated,
             // without the leading dashes: GMX_BROWSER_SWITCHES="enable-gpu,foo=bar".
             if let Ok(extra) = std::env::var("GMX_BROWSER_SWITCHES") {
@@ -748,6 +770,10 @@ fn main() {
         log_severity: LogSeverity::from(sys::cef_log_severity_t::LOGSEVERITY_WARNING),
         resources_dir_path: CefString::from(o.resources_dir.as_deref().unwrap_or("")),
         locales_dir_path: CefString::from(o.locales_dir.as_deref().unwrap_or("")),
+        // Chrome's agent with ours on the end: a page can still tell a
+        // broadcast capture from a viewer and start with sound, and a site
+        // that checks for a browser it knows sees Chrome. See `web.rs`.
+        user_agent: CefString::from(web::user_agent().as_str()),
         ..Default::default()
     };
     let ok = initialize(Some(args.as_main_args()), Some(&settings), Some(&mut app), std::ptr::null_mut());
@@ -768,6 +794,10 @@ fn main() {
         control::listen();
         None
     } else {
+        if o.control {
+            let view = ((o.width as f64 / o.scale).round() as i32, (o.height as f64 / o.scale).round() as i32);
+            page_cef::listen(view);
+        }
         match Muxer::new(o.width, o.height, o.fps, 2, 48000, 1, o.audio_offset_ms, o.transparent) {
             Ok(m) => Some(m),
             Err(e) => {

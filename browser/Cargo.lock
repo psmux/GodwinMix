@@ -607,6 +607,8 @@ dependencies = [
  "libc",
  "objc2",
  "objc2-app-kit",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
