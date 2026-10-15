@@ -276,8 +276,22 @@ Which it can, and the mixer's page cannot. `capabilities/desktop-shell.json`
 lists what the shell's own page may ask for, and no remote origin is named
 there or in `tauri.conf.json`, so a page served over http gets no IPC at all.
 It cannot spawn the sidecar, read a path or ask for an update. The one channel
-it has is a navigation to `godwinmix://quit` or `godwinmix://quit-all`, which
-the shell answers and which carries nothing but its own name.
+it has is a navigation to a `godwinmix://` address, which the shell answers
+and which carries nothing but its own name:
+
+| Address | What the shell does |
+|---|---|
+| `godwinmix://quit`, `godwinmix://quit-all` | quit, or quit and stop the mixer, asking first while anything runs |
+| `godwinmix://restart` | restart the mixer on this computer |
+| `godwinmix://save-project` | ask where, then save the project there |
+| `godwinmix://fullscreen?on=1`, `?on=0` | make the window full screen with no menu bar, or put it back |
+| `godwinmix://programme-output` | show the menu of displays for the programme output |
+| `godwinmix://programme-output-close` | close the programme output and forget that it was open |
+
+The programme output itself is described in
+[Show the programme on a projector](show-the-programme-on-a-projector.md); the
+display it was on is kept in `programme-output.json` in the app's data
+folder.
 (`liveboxmix://` is answered too, until 0.3, for a page cached from before the
 rename.)
 

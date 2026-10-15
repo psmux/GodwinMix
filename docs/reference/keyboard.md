@@ -101,6 +101,7 @@ the web UI has a pointer, a tray and a scene composer and this has a keyboard.
 | `1` to `9` | take the nth scene, or the nth input when there are no scenes |
 | `0` | cut to the slate |
 | `Space` | in Studio mode, take Preview to Programme with the chosen transition |
+| `F` | the programme full screen on this screen; `Esc` or a double click leaves |
 | `Ctrl+K` | the command palette |
 | `Ctrl+N` | add an input |
 | `Ctrl+F` | filter the tray |
