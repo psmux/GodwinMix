@@ -20,11 +20,6 @@ pub struct Engine {
     pub version: String,
 }
 
-/// The CDN the build itself downloads from, unless `CEF_DOWNLOAD_URL` says.
-fn cdn() -> String {
-    std::env::var("CEF_DOWNLOAD_URL").unwrap_or_else(|_| "https://cef-builds.spotifycdn.com".into())
-}
-
 /// This machine as the engine's index names it, and as its folder does.
 pub fn platform() -> Option<(&'static str, String)> {
     use std::env::consts::{ARCH, OS};
@@ -71,14 +66,14 @@ impl Engine {
     pub async fn fetch(&self, progress: &Progress, log: &Path) -> Result<(), Failure> {
         progress.say("Setting up web pages: downloading the page engine. This happens once.", Some(0.0));
         let client = download::client().map_err(|e| not_downloaded(json!({ "error": e })))?;
-        let file = self.find(&client).await?;
+        let (cdn, file) = self.find(&client).await?;
         let name = file["name"].as_str().unwrap_or_default().to_string();
         let size = file["size"].as_u64().unwrap_or(0);
         let sha1 = file["sha1"].as_str().unwrap_or_default().to_string();
         let versioned = self.root.join(&self.version);
         std::fs::create_dir_all(&versioned).map_err(|e| not_downloaded(json!({ "error": e.to_string() })))?;
         let part = versioned.join(format!("{name}.part"));
-        let url = format!("{}/{name}", cdn());
+        let url = format!("{cdn}/{name}");
         let mb = |b: u64| b / 1_000_000;
         let say = |got: u64| {
             let text = format!(
@@ -106,22 +101,11 @@ impl Engine {
         unpacked.map_err(|e| super::build::failed(&super::super::log_path("web"), "unpack", e))
     }
 
-    /// The minimal archive for this version and machine, from the index.
-    async fn find(&self, client: &reqwest::Client) -> Result<Value, Failure> {
+    /// The minimal archive for this version and machine, and the first
+    /// place whose index has it.
+    async fn find(&self, client: &reqwest::Client) -> Result<(String, Value), Failure> {
         let (key, _) = platform().ok_or_else(|| not_downloaded(json!({ "error": "no engine for this machine" })))?;
-        let url = format!("{}/index.json", cdn());
-        let index = download::json(client, &url).await.map_err(|e| not_downloaded(json!({ "url": url, "error": e })))?;
-        let prefix = format!("{}+", self.version);
-        let found = index[key]["versions"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter(|v| v["cef_version"].as_str().is_some_and(|c| c.starts_with(&prefix)))
-            .flat_map(|v| v["files"].as_array().cloned().unwrap_or_default())
-            .find(|f| f["type"] == "minimal");
-        found.ok_or_else(|| {
-            not_downloaded(json!({ "url": url, "error": format!("no minimal {} for {key} in the index", self.version) }))
-        })
+        super::cdn::find(client, key, &self.version).await.map_err(|tried| not_downloaded(json!({ "tried": tried })))
     }
 }
 

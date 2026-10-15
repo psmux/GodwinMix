@@ -14,6 +14,7 @@
 //! here. See `godwinmix_core::setup::web` for where it is looked for.
 
 mod build;
+mod cdn;
 mod cef;
 mod check;
 mod download;
