@@ -32,6 +32,8 @@ async function main() {
   takeTokenFromAddress(location, history);
   const client = await connect({ token: storedToken() });
   await client.opened();
+  // The same handle the operator page has, for a console or a test.
+  window.gmxClient = client;
   const hint = DESKTOP ? "Esc closes this output" : "Double click or F for full screen, Esc to close";
   const view = programmeView(client, { hint, hintAtStart: false });
   document.body.appendChild(view.root);

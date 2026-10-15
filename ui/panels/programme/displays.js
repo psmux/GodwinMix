@@ -48,22 +48,27 @@ export async function displays() {
 /** View > Programme on a display, and the button on the Programme monitor. */
 export async function chooseDisplay() {
   if (DESKTOP) return shell("programme-output");
-  let list = null;
-  let why = "";
-  try {
-    list = await displays();
-  } catch (e) {
-    why = e && e.name === "NotAllowedError"
-      ? "The browser was not allowed to list the displays. Allow window management for this page in the site settings, then try again."
-      : `The browser could not list the displays: ${e && e.message ? e.message : e}.`;
-  }
-  const box = el("div.programme-displays");
+  // Up at once: the first time, the browser asks the operator whether this
+  // page may see the displays, and the dialog says so while it waits.
+  const box = el("div.programme-displays", {}, [
+    el("p.dim", { text: "Looking for displays. If the browser asks whether this page may manage windows on all your displays, answer Allow." }),
+  ]);
   const dialog = modal({ title: "Programme on a display", body: box });
   const open = (item) => {
     dialog.close();
     openOutput(item && item.scr);
     if (item) localStorage.setItem(KEY, item.key);
   };
+  let list = null;
+  let why = "";
+  try {
+    list = await displays();
+  } catch (e) {
+    why = e && e.name === "NotAllowedError"
+      ? "The browser was not allowed to list the displays. Allow window management for this page in the site settings, then try again, or use a window you drag there yourself."
+      : `The browser could not list the displays: ${e && e.message ? e.message : e}.`;
+  }
+  box.replaceChildren();
   if (list && list.length) {
     box.append(el("p.dim", { text: "Choose the projector or monitor. The programme fills it with nothing else on it." }));
     for (const item of list) box.append(el("button.btn", { type: "button", text: item.text, onclick: () => open(item) }));

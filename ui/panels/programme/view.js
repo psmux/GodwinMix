@@ -37,17 +37,20 @@ export function displayWidth(scr, dpr) {
  * Hide the cursor and the hint after `ms` of no movement. Returns the
  * release function. `now` and `timers` are for the tests.
  */
-export function idleCursor(root, ms = IDLE_MS, timers = { set: setTimeout, clear: clearTimeout }) {
+export function idleCursor(root, ms = IDLE_MS, timers = {}) {
+  // Called bare, never as a method: `clearTimeout` on another object throws.
+  const set = timers.set || ((fn, wait) => setTimeout(fn, wait));
+  const clear = timers.clear || ((id) => clearTimeout(id));
   let timer = null;
   const wake = () => {
     root.classList.remove("idle");
-    timers.clear(timer);
-    timer = timers.set(() => root.classList.add("idle"), ms);
+    clear(timer);
+    timer = set(() => root.classList.add("idle"), ms);
   };
   const offs = ["pointermove", "pointerdown", "keydown"].map((type) => on(root.ownerDocument || document, type, wake));
   wake();
   return () => {
-    timers.clear(timer);
+    clear(timer);
     offs.forEach((off) => off());
   };
 }
