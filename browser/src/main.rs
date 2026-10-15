@@ -690,6 +690,28 @@ mod mac {
         }
     );
 
+    /// This renderer's own bundle and the framework inside it, for CEF's
+    /// `main_bundle_path` and `framework_dir_path`.
+    ///
+    /// Left to itself CEF takes the outermost `.app` around the executable,
+    /// and in the desktop app that is GodwinMix.app, not this one, which
+    /// lives in its Resources. It then asked for a framework in
+    /// GodwinMix.app/Contents/Frameworks that is not there and stopped on a
+    /// CHECK in `SetOverrideFrameworkBundlePath`: every web page source on a
+    /// 2020 iMac with macOS 15 crashed at start. macOS 26 happened to answer
+    /// with the inner bundle. Said outright, it is right on both. Empty when
+    /// the layout is not a bundle, which leaves CEF to find its own way.
+    pub fn bundle_paths() -> (String, String) {
+        let exe = std::env::current_exe().unwrap_or_default();
+        let bundle = exe.ancestors().nth(3).map(std::path::Path::to_path_buf).unwrap_or_default();
+        let framework = bundle.join("Contents/Frameworks/Chromium Embedded Framework.framework");
+        if bundle.extension().is_some_and(|e| e == "app") && framework.is_dir() {
+            (framework.to_string_lossy().into_owned(), bundle.to_string_lossy().into_owned())
+        } else {
+            (String::new(), String::new())
+        }
+    }
+
     pub fn load_framework() -> cef::library_loader::LibraryLoader {
         let exe = std::env::current_exe().expect("own path");
         let loader = cef::library_loader::LibraryLoader::new(&exe, false);
@@ -740,7 +762,8 @@ fn main() {
         SourceApp::new(state.clone(), o.url.clone(), o.fps, o.detect_media, o.transparent);
     let _ = std::fs::create_dir_all(&o.cache_dir);
     let cache = o.cache_dir.to_string_lossy().to_string();
-    let settings = Settings {
+    #[allow(unused_mut)]
+    let mut settings = Settings {
         windowless_rendering_enabled: 1,
         no_sandbox: 1,
         root_cache_path: CefString::from(cache.as_str()),
@@ -750,6 +773,12 @@ fn main() {
         locales_dir_path: CefString::from(o.locales_dir.as_deref().unwrap_or("")),
         ..Default::default()
     };
+    #[cfg(target_os = "macos")]
+    {
+        let (framework, bundle) = mac::bundle_paths();
+        settings.framework_dir_path = CefString::from(framework.as_str());
+        settings.main_bundle_path = CefString::from(bundle.as_str());
+    }
     let ok = initialize(Some(args.as_main_args()), Some(&settings), Some(&mut app), std::ptr::null_mut());
     if ok != 1 {
         eprintln!("[browser] cef initialize failed");
