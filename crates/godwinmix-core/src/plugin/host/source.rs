@@ -27,6 +27,10 @@ use serde_json::{json, Value};
 use std::path::PathBuf;
 use tracing::{debug, warn};
 
+/// How long `start` waits for a capture plugin to bind its sockets. A camera
+/// that has to be found and opened took up to a second on an Intel iMac.
+const SOCKETS_WITHIN: std::time::Duration = std::time::Duration::from_secs(10);
+
 /// Everything a sidecar kind needs that the core's own kinds get from a
 /// `BuildCtx`, plus the plugin's own manifest and where it is installed.
 pub struct SidecarSpec {
@@ -414,7 +418,34 @@ impl Source for SidecarSource {
             }
         }
         self.call_start()?;
+        if let Wire::Socket { video, audio } = &wire {
+            self.wait_for_sockets(video.is_some(), audio.is_some());
+        }
         Ok(ends)
+    }
+
+    /// Hold the caller until the plugin has bound the sockets it is about to
+    /// be read from; see `transport::wait_for_sockets` for the race this
+    /// closes. One that never appears is left to fail the way it always has,
+    /// with the plugin's own health saying why.
+    fn wait_for_sockets(&self, video: bool, audio: bool) {
+        let Some(media) = self.media.as_ref() else { return };
+        let mut paths = Vec::new();
+        if video {
+            paths.push(media.video());
+        }
+        if audio {
+            paths.push(media.audio());
+        }
+        let missing = transport::wait_for_sockets(&paths, SOCKETS_WITHIN);
+        if !missing.is_empty() {
+            warn!(
+                source = %self.build.id,
+                missing = %missing.join(", "),
+                "the plugin has not bound its media sockets after {} s; connecting anyway",
+                SOCKETS_WITHIN.as_secs()
+            );
+        }
     }
 
     fn stop(&mut self) -> Result<()> {
