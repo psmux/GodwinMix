@@ -1184,6 +1184,9 @@ pub struct Mixer {
     preview: crate::preview::PreviewHandle,
     /// The programme thumbnail branch, on the raw tee only while asked for.
     thumb_branch: crate::preview::thumb::Branch,
+    /// The full quality programme feed for a full screen output, on the raw
+    /// tee only while somebody holds `ext.programme`.
+    feed_branch: crate::preview::feed_branch::FeedBranch,
     /// Where preview sockets live, from `persist_runtime_to`'s neighbour.
     runtime_dir: Option<std::path::PathBuf>,
     program_source: Option<SourceId>,
@@ -1905,6 +1908,17 @@ impl Mixer {
         )
         .context("building the programme thumbnail branch")?;
 
+        // The programme at full quality for a projector, asleep until a full
+        // screen output asks. See `preview/feed.rs`.
+        let feed_branch = crate::preview::feed_branch::FeedBranch::build(
+            &program,
+            &vraw_tee,
+            download_bridge(&sel.graphics, "pgm-f")?,
+            (canvas.width, canvas.height),
+            &preview.feed(),
+        )
+        .context("building the programme feed branch")?;
+
         // Where the compositor has got to, so a transition can be written in
         // the picture's timeline rather than the clock's. Two relaxed atomic
         // stores per frame on a thread that is already carrying the programme,
@@ -1952,6 +1966,7 @@ impl Mixer {
             local_previews: HashMap::new(),
             preview,
             thumb_branch,
+            feed_branch,
             runtime_dir: None,
             program_source: None,
             ad: None,
@@ -5463,6 +5478,12 @@ impl Mixer {
                 }
             }
             P::Thumb(false) => self.thumb_branch.detach(),
+            P::Feed(Some(shape)) => {
+                if let Err(e) = self.feed_branch.apply(shape) {
+                    warn!(?e, "the programme feed branch could not be attached");
+                }
+            }
+            P::Feed(None) => self.feed_branch.detach(),
         }
     }
 
@@ -5601,6 +5622,7 @@ impl Mixer {
         self.drop_mosaic();
         self.detach_programme_return();
         self.thumb_branch.detach();
+        self.feed_branch.detach();
         self.pool.teardown();
         self.audio_taps.clear();
         #[cfg(unix)]

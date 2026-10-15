@@ -65,6 +65,9 @@ pub fn build_window(app: &AppHandle) -> tauri::Result<WebviewWindow> {
         .on_page_load(|window, payload| {
             if payload.event() == PageLoadEvent::Finished {
                 crate::page_menu::mark_page(window.app_handle());
+                // The core's page is up, so an output left open last time
+                // can come back on its display.
+                crate::output::restore(window.app_handle(), payload.url());
             }
         })
         .build()?;
@@ -89,6 +92,9 @@ fn on_navigation(app: &AppHandle, url: &Url) -> bool {
         "quit-all" => crate::close::request(app, true),
         "restart" => crate::restart::from_page(app),
         "save-project" => crate::page_menu::save_project(app, url),
+        "fullscreen" => crate::output::main_fullscreen(app, url),
+        "programme-output" => crate::output::menu(app),
+        "programme-output-close" => crate::output::stop(app),
         _ => {}
     }
     false
@@ -184,7 +190,7 @@ pub fn build_tray(app: &AppHandle) -> tauri::Result<()> {
 /// One handler for the menu bar and the tray, since the items mean the same
 /// thing in both.
 pub fn on_menu(app: &AppHandle, id: &str) {
-    if crate::page_menu::on_menu(app, id) {
+    if crate::page_menu::on_menu(app, id) || crate::output::on_menu(app, id) {
         return;
     }
     match id {

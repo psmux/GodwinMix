@@ -166,6 +166,13 @@ export class PicturePainter {
   }
 
   _paintOne(canvas) {
+    // A canvas marked `data-natural` takes the picture's own size, so a full
+    // screen output draws the programme pixel for pixel and the browser does
+    // the one scale, to the display, with CSS letterboxing it.
+    if (this.bitmap && canvas.dataset && "natural" in canvas.dataset) {
+      if (canvas.width !== this.bitmap.width) canvas.width = this.bitmap.width;
+      if (canvas.height !== this.bitmap.height) canvas.height = this.bitmap.height;
+    }
     const w = canvas.width;
     const h = canvas.height;
     const stamp = `${this.pictures}/${w}x${h}`;

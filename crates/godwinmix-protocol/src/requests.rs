@@ -602,6 +602,11 @@ pub struct Ext {
     /// subscribed. See 11 section 3.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub preview: Option<PreviewExt>,
+    /// The programme itself at full quality, for a full screen output on a
+    /// projector or a second monitor: one JPEG per programme frame, at up to
+    /// the canvas's size, off the raw programme tee while subscribed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub programme: Option<ProgrammeExt>,
     /// `event/telemetry`: a line of numbers per tick, at 1 to 10 per second.
     /// This is what turns the probes on; nothing measures until it is here.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -648,6 +653,40 @@ impl PreviewExt {
     /// Whether this asks for the expensive full resolution compositor.
     pub fn is_full(&self) -> bool {
         matches!(self, Self::Full(s) if s == "full")
+    }
+}
+
+/// `ext.programme`. `true`, `false`, or an object.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(untagged)]
+pub enum ProgrammeExt {
+    /// `"programme": true` for the programme's own size and rate, `false`
+    /// for nothing.
+    Off(bool),
+    On {
+        /// The most frames a second this client wants. Omitted or 0 is the
+        /// programme's own rate.
+        #[serde(default)]
+        fps: Option<u32>,
+        /// The widest picture this client can show, in device pixels, which
+        /// is the display's width. Omitted or 0 is the canvas's width; the
+        /// core never scales up.
+        #[serde(default)]
+        width: Option<u32>,
+    },
+}
+
+impl ProgrammeExt {
+    pub fn wanted(&self) -> bool {
+        !matches!(self, Self::Off(false))
+    }
+
+    /// `(width, fps)`, zero meaning the programme's own.
+    pub fn ask(&self) -> (u32, u32) {
+        match self {
+            Self::On { fps, width } => (width.unwrap_or(0), fps.unwrap_or(0)),
+            Self::Off(_) => (0, 0),
+        }
     }
 }
 
@@ -721,6 +760,11 @@ impl Ext {
     /// mosaic built underneath it and does not have to know that.
     pub fn wants_preview(&self) -> bool {
         self.preview.as_ref().is_some_and(|p| p.wanted())
+    }
+
+    /// Whether the full quality programme feed was asked for.
+    pub fn wants_programme(&self) -> bool {
+        self.programme.as_ref().is_some_and(|p| p.wanted())
     }
 
     /// Whether the full resolution preview compositor was asked for.

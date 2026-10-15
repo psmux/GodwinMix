@@ -17,6 +17,11 @@ import { errorToast } from "../../shell/toast.js";
 import { mosaicWanted } from "./wanted.js";
 import { lazyBanner } from "../sources/backup-slot.js";
 import { attachCell, monitorFps, mosaicRate, rateMenu } from "./monitor-rate.js";
+import { register } from "../../shell/commands.js";
+
+// Full screen and a display of its own, loaded the first time either is used.
+const fullscreen = () => import("../programme/fullscreen.js");
+const displays = () => import("../programme/displays.js");
 
 class ProgramPanel extends HTMLElement {
   static get panel() {
@@ -43,7 +48,19 @@ class ProgramPanel extends HTMLElement {
     this.programName = el("span.ellipsis", { text: "Black" });
     const monitor = el("div.program.monitor-pane", {}, [el("div.monitor-label", {}, [
       el("strong", { text: "PROGRAMME" }), this.programName, rateMenu("programme", "Programme"),
+      el("button.btn.icon.sm", {
+        type: "button", text: "⛶", "aria-label": "Full screen programme",
+        title: "Full screen programme (F). Esc or a double click leaves.",
+        onclick: () => fullscreen().then((m) => m.toggleFullscreen(this.client)),
+      }),
+      el("button.btn.sm", {
+        type: "button", text: "Display", "aria-label": "Programme on a display",
+        title: "Show the programme on a projector or another monitor",
+        onclick: () => displays().then((m) => m.chooseDisplay()),
+      }),
     ]), this.canvas, this.still, this.note]);
+    // A double click on the picture is full screen, as in any video player.
+    this.canvas.addEventListener("dblclick", () => fullscreen().then((m) => m.toggleFullscreen(this.client)));
     this.row = el("div.monitor-stage", {}, [monitor]);
     this.studioButton = el("button.btn", { text: "Studio mode", onclick: () => setSetting("producer", !settings().producer) });
     this.streamState = el("span.sm.dim", { text: "Waiting for preview frames", role: "status" });
@@ -67,6 +84,27 @@ class ProgramPanel extends HTMLElement {
         if (this.streamState.textContent !== "Preview live") this.streamState.textContent = "Preview live";
       }),
       onSettingsChanged(() => this.applyMode()),
+      register({
+        id: "program.fullscreen",
+        title: "Full screen programme",
+        group: "Programme",
+        key: "F",
+        keywords: ["projector", "presentation", "fullscreen"],
+        run: () => fullscreen().then((m) => m.toggleFullscreen(this.client)),
+      }),
+      register({
+        id: "program.output",
+        title: "Programme on a display",
+        group: "Programme",
+        keywords: ["projector", "second screen", "HDMI", "monitor"],
+        run: () => displays().then((m) => m.chooseDisplay()),
+      }),
+      register({
+        id: "program.output-close",
+        title: "Close the programme output",
+        group: "Programme",
+        run: () => displays().then((m) => m.closeOutput()),
+      }),
     ];
 
     this.frameTimer = setInterval(() => {

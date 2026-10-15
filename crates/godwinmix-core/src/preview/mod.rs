@@ -23,6 +23,7 @@
 //! | `/opus/*` | the same, plus an Opus encoder at 64 kbit/s |
 //! | `/whep/*` | one video encoder and one audio encoder per session, and a programme encoder lease |
 //! | `preview.open` | a `unixfdsink`, which copies no pixels at all |
+//! | `ext.programme` | one scale and one JPEG encode per programme frame, at up to the canvas's size, on the branch's own thread |
 //! | `program.thumbnail` | one frame a second scaled to 320 wide, and a small JPEG per ask |
 //!
 //! The picture streams are fed from the mosaic pipeline, never from the
@@ -33,6 +34,8 @@
 //! costs more than the picture is worth on a station of fifty shows.
 
 pub mod audio;
+pub mod feed;
+pub mod feed_branch;
 pub mod hub;
 pub mod local;
 pub mod mjpeg;
@@ -50,7 +53,8 @@ use std::sync::Arc;
 /// How many clients each kind of stream has, for `gmx_stream_clients{kind}`.
 ///
 /// Kinds are the words a person would use: `mjpeg`, `pcm`, `opus`, `whep`,
-/// `unixfd`, `preview`, and `thumbnail`, which is 1 while the programme
+/// `unixfd`, `preview`, `programme`, which is 1 while the full quality
+/// programme feed is on, and `thumbnail`, which is 1 while the programme
 /// thumbnail branch is on however many ask for it.
 #[derive(Default)]
 pub struct StreamClients {
@@ -119,7 +123,7 @@ impl Drop for ClientGuard {
 /// The kinds `/metrics` declares up front, so a scrape of an idle core lists
 /// them all at zero and a dashboard does not break when the first client
 /// arrives.
-pub const STREAM_KINDS: &[&str] = &["mjpeg", "pcm", "opus", "whep", "unixfd", "preview", "thumbnail"];
+pub const STREAM_KINDS: &[&str] = &["mjpeg", "pcm", "opus", "whep", "unixfd", "preview", "programme", "thumbnail"];
 
 #[cfg(test)]
 mod tests {
