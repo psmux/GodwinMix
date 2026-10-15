@@ -46,6 +46,9 @@ export class Client {
     // The armed scene, which arrives on the same socket as the mosaic and is
     // one whole picture rather than a sheet of cells.
     this.preview = new PicturePainter();
+    // The programme at full quality, for a full screen output. Painted only
+    // while something asked for `ext.programme` (see panels/programme/).
+    this.programme = new PicturePainter();
     this.listeners = new Map();
     this._ext = new Map(); // key -> Map(holder id -> request)
     this._holder = 0;
@@ -379,6 +382,11 @@ export class Client {
   handleFrame(frame) {
     // Two pictures, one socket. The mosaic keeps the name it had, so a panel
     // watching for programme frames is not woken by the preview.
+    if (frame.programme) {
+      this.programme.push(frame);
+      this.emit("programme-frame", frame);
+      return;
+    }
     if (frame.preview) {
       this.preview.push(frame);
       this.emit("preview-frame", frame);
@@ -392,6 +400,7 @@ export class Client {
     this.transport.close();
     this.sheet.destroy();
     this.preview.destroy();
+    this.programme.destroy();
   }
 }
 

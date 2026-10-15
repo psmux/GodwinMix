@@ -283,3 +283,47 @@ async fn an_empty_source_is_black_and_a_take_leaves_the_preview_armed() {
     assert_eq!(taken["preview"], json!("ball shot"), "the take cleared the preview: {taken}");
     assert_eq!(taken["program"], json!("ball"), "{taken}");
 }
+
+/// `ext.programme`: the programme itself, whole, at the width asked for and
+/// at the programme's rate rather than the mosaic's, on the same socket, and
+/// nothing once the client stops asking.
+#[tokio::test(flavor = "multi_thread")]
+async fn the_programme_feed_reaches_a_client_at_its_own_rate_and_stops_when_released() {
+    let (url, _quit) = serve().await;
+    let mut client = Client::open(&url).await;
+    client
+        .call("core.subscribe", json!({ "events": ["flush"], "ext": { "programme": { "width": 320 } } }))
+        .await
+        .expect("subscribing with ext.programme");
+
+    let (mut programme, mut other, mut first) = (0usize, 0usize, None);
+    let started = tokio::time::Instant::now();
+    while started.elapsed() < Duration::from_secs(6) {
+        let Ok(Some(Ok(message))) = tokio::time::timeout(Duration::from_secs(5), client.socket.next()).await else { break };
+        let Message::Binary(bytes) = message else { continue };
+        let (seq, layout, _) = read_frame_header(&bytes).expect("every binary frame has a header");
+        if godwinmix_protocol::rpc::is_programme_frame(seq, layout) {
+            programme += 1;
+            first.get_or_insert_with(|| bytes[16..].to_vec());
+        } else {
+            other += 1;
+        }
+    }
+    let jpeg = first.expect("a client that asked for ext.programme was sent no programme frames");
+    let img = godwinmix_core::snapshot::decode_jpeg(&jpeg).expect("a JPEG");
+    assert_eq!((img.width(), img.height()), (320, 180), "the width asked for, at the canvas's shape");
+    // Six seconds at the programme's 30 fps, less the start; the mosaic runs at 8.
+    assert!(programme >= 100, "only {programme} programme frames in six seconds");
+    assert_eq!(other, 0, "nothing else was asked for, so nothing else came");
+
+    client.call("core.subscribe", json!({ "events": ["flush"] })).await.expect("subscribing without it");
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    let mut late = 0;
+    while let Ok(Some(Ok(message))) = tokio::time::timeout(Duration::from_secs(2), client.socket.next()).await {
+        if let Message::Binary(bytes) = message {
+            let (seq, layout, _) = read_frame_header(&bytes).unwrap();
+            late += usize::from(godwinmix_protocol::rpc::is_programme_frame(seq, layout));
+        }
+    }
+    assert!(late <= 2, "{late} programme frames kept coming after the client stopped asking");
+}

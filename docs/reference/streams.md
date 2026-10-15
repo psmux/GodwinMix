@@ -268,11 +268,52 @@ anything.
 
 ---
 
+## `ext.programme`
+
+The programme itself at full quality, for a full screen output. Asked for in
+`core.subscribe` on `/rpc` like the mosaic, and sent on the same socket. The
+web UI's full screen view and its `/programme/` page use it; see
+[Show the programme on a projector](../how-to/show-the-programme-on-a-projector.md).
+
+```json
+{"jsonrpc": "2.0", "id": 1, "method": "core.subscribe",
+ "params": {"events": ["flush"], "ext": {"programme": {"width": 1920}}}}
+```
+
+| Value | Meaning |
+|---|---|
+| `true` | the canvas's own size at the programme's own rate |
+| `{"width": w, "fps": f}` | at most `w` pixels wide (the display's width in device pixels) and at most `f` frames a second. Either may be left out or 0 for the programme's own. The core never scales up |
+| `false` or left out | nothing |
+
+Each frame is a binary WebSocket message: the 16 byte header every picture on
+`/rpc` has, then one JPEG.
+
+| Offset | Field | For a programme frame |
+|---|---|---|
+| 0 | `u32` seq, little endian | the top bit set (a single picture); the low 31 bits count programme frames on this connection |
+| 4 | `u32` layout id | `1`, which names the programme. The armed scene's frames have `0` here |
+| 8 | `u64` running time in ms | the programme clock when the frame was sent |
+| 16 | JPEG | the picture, quality 85, square pixels, the canvas's shape |
+
+How it is made: a branch on the raw programme tee, behind a leaky queue of two
+frames, then `videorate`, `videoscale`, `videoconvert` and `jpegenc`, all on
+the branch's own thread. It is built with the programme and linked to nothing
+until the first subscriber, and taken off the tee when the last one goes.
+Several clients share one encode at the widest and fastest any of them asked
+for. A slow client skips to the newest frame.
+
+Cost while on: one JPEG encode per programme frame, about half a CPU core for
+1080p30 on a laptop with no GPU, and 5 to 9 MB/s to each client at 1080p30.
+`gmx_stream_clients{kind="programme"}` is 1 while the branch runs.
+
+---
+
 ## Metrics
 
 | Metric | Type | Labels | Meaning |
 |---|---|---|---|
-| `gmx_stream_clients` | gauge | `kind` | Clients on each stream. `mjpeg`, `pcm`, `opus`, `whep`, `unixfd`, `preview`, and `thumbnail`, which is 1 while the programme thumbnail branch runs for `program.thumbnail` |
+| `gmx_stream_clients` | gauge | `kind` | Clients on each stream. `mjpeg`, `pcm`, `opus`, `whep`, `unixfd`, `preview`, `programme`, which is 1 while the full quality programme feed runs for `ext.programme`, and `thumbnail`, which is 1 while the programme thumbnail branch runs for `program.thumbnail` |
 | `gmx_multiview_subscribers` | gauge | | Clients holding the mosaic up, including every MJPEG stream |
 | `gmx_multiview_fps` | gauge | | The mosaic's measured rate, zero when there is none |
 | `gmx_encoder_running` | gauge | | 1 while the programme encode chain is attached |

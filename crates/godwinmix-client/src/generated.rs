@@ -1698,6 +1698,11 @@ pub struct Ext {
     /// subscribed. See 11 section 3.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub preview: Option<PreviewExt>,
+    /// The programme itself at full quality, for a full screen output on a
+    /// projector or a second monitor: one JPEG per programme frame, at up to
+    /// the canvas's size, off the raw programme tee while subscribed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub programme: Option<ProgrammeExt>,
     /// `event/tally`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tally: Option<bool>,
@@ -4590,6 +4595,9 @@ pub struct ProgramState {
     pub scene: Option<String>,
 }
 
+/// `ext.programme`. `true`, `false`, or an object.
+pub type ProgrammeExt = Value;
+
 /// Where an encoder is pointed for one protocol.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -7071,7 +7079,7 @@ pub const METHODS: [MethodInfo; 231] = [
     MethodInfo { name: "vitals.set", summary: "Change the alarm thresholds, or whether a mosaic is kept up for the black and freeze checks while nobody is looking. Fields left out keep their defaults; a duration of 0 switches that check off. Applies within a second.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/vitals/set")) },
 ];
 
-pub const EVENT_NAMES: [&str; 37] = [
+pub const EVENT_NAMES: [&str; 38] = [
     "snapshot",
     "program.took",
     "scene.patch",
@@ -7097,6 +7105,7 @@ pub const EVENT_NAMES: [&str; 37] = [
     "multiview.layout",
     "multiview.frame",
     "preview.frame",
+    "programme.frame",
     "setup.changed",
     "resync",
     "flush",
@@ -7111,13 +7120,14 @@ pub const EVENT_NAMES: [&str; 37] = [
     "health",
 ];
 
-pub const EXT_KEYS: [&str; 8] = [
+pub const EXT_KEYS: [&str; 9] = [
     "multiview",
     "meters",
     "tally",
     "positions",
     "thumb",
     "preview",
+    "programme",
     "telemetry",
     "agent",
 ];
@@ -7178,6 +7188,8 @@ pub enum Event {
     MultiviewFrame(crate::frames::Frame),
     /// 16 byte header then JPEG, decoded by [`crate::frames::parse_frame`].
     PreviewFrame(crate::frames::Frame),
+    /// 16 byte header then JPEG, decoded by [`crate::frames::parse_frame`].
+    ProgrammeFrame(crate::frames::Frame),
     /// A piece the mixer sets up on first use moved on: the browser renderer or a first party plugin started setting up, got further through its download, became ready or stopped. `message` is for a person; `detail` names paths and commands for a developer.
     SetupChanged(SetupChangedEvent),
     /// This client fell behind and events were dropped. Re-subscribe for a fresh snapshot; nothing between from_seq and the new snapshot arrives.
@@ -7384,6 +7396,7 @@ impl Event {
             Event::MultiviewLayout(_) => "multiview.layout",
             Event::MultiviewFrame(_) => "multiview.frame",
             Event::PreviewFrame(_) => "preview.frame",
+            Event::ProgrammeFrame(_) => "programme.frame",
             Event::SetupChanged(_) => "setup.changed",
             Event::Resync(_) => "resync",
             Event::Flush(_) => "flush",

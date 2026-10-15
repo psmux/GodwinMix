@@ -1040,6 +1040,8 @@ class Ext(TypedDict, total=False):
     # `event/source.position` for seekable sources.
     preview: Union[PreviewExt, None]
     # The preview scene, composited in the multiview pipeline at mosaic size, or `"full"` for a full resolution preview compositor built while subscribed. See 11 section 3.
+    programme: Union[ProgrammeExt, None]
+    # The programme itself at full quality, for a full screen output on a projector or a second monitor: one JPEG per programme frame, at up to the canvas's size, off the raw programme tee while subscribed.
     tally: bool
     # `event/tally`.
     telemetry: Union[TelemetryExt, None]
@@ -4372,6 +4374,9 @@ Place = str
 # `ext.preview`. Either `"full"`, `false`, or an object.
 PreviewExt = Union[str, bool, Dict[str, Any]]
 
+# `ext.programme`. `true`, `false`, or an object.
+ProgrammeExt = Union[bool, Dict[str, Any]]
+
 # What an output asks for: a whole request, or a preset by id. A request's `id` is replaced by the output's own id (a ladder's rungs get `<output>-<rung>`), so a client may send any slug there.
 RenditionChoice = Union[PresetRef, LadderRef, RenditionRequest]
 
@@ -4687,6 +4692,7 @@ EVENT_NAMES = (
     "multiview.layout",
     "multiview.frame",
     "preview.frame",
+    "programme.frame",
     "setup.changed",
     "resync",
     "flush",
@@ -4708,6 +4714,7 @@ EXT_KEYS = {
     "positions": {"value": 'true', "implemented": True},
     "thumb": {"value": '{fps}', "implemented": False},
     "preview": {"value": '{fps, width} or "full"', "implemented": True},
+    "programme": {"value": '{fps, width} or true', "implemented": True},
     "telemetry": {"value": '{hz: 1..10}', "implemented": False},
     "agent": {"value": 'true or thresholds', "implemented": False},
 }

@@ -895,6 +895,7 @@ export interface Ext {
   multiview?: MultiviewExt | null;
   positions?: boolean;
   preview?: PreviewExt | null;
+  programme?: ProgrammeExt | null;
   tally?: boolean;
   telemetry?: TelemetryExt | null;
   [key: string]: unknown;
@@ -2529,6 +2530,12 @@ export interface ProgramState {
   running_time_ms: number;
   scene?: string | null;
 }
+
+/** `ext.programme`. `true`, `false`, or an object. */
+export type ProgrammeExt = boolean | {
+  fps?: number | null;
+  width?: number | null;
+};
 
 /** Where an encoder is pointed for one protocol. */
 export interface PublishAddress {
@@ -4273,6 +4280,7 @@ export interface EventPayloads {
   "multiview.layout": MultiviewLayout;
   "multiview.frame": Uint8Array;
   "preview.frame": Uint8Array;
+  "programme.frame": Uint8Array;
   "setup.changed": SetupChangedEvent;
   "resync": Resync;
   "flush": Flush;
@@ -4541,6 +4549,7 @@ export const EXT_KEYS: Readonly<Record<string, { value: string; implemented: boo
   "positions": { value: "true", implemented: true },
   "thumb": { value: "{fps}", implemented: false },
   "preview": { value: "{fps, width} or \"full\"", implemented: true },
+  "programme": { value: "{fps, width} or true", implemented: true },
   "telemetry": { value: "{hz: 1..10}", implemented: false },
   "agent": { value: "true or thresholds", implemented: false },
 };
@@ -4571,6 +4580,7 @@ export const EVENT_NAMES: readonly EventName[] = [
   "multiview.layout",
   "multiview.frame",
   "preview.frame",
+  "programme.frame",
   "setup.changed",
   "resync",
   "flush",

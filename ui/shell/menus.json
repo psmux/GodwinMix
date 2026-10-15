@@ -162,6 +162,19 @@
           "separator": true
         },
         {
+          "command": "program.fullscreen",
+          "title": "Full screen programme",
+          "panel": "core/program"
+        },
+        {
+          "command": "program.output",
+          "title": "Programme on a display…",
+          "panel": "core/program"
+        },
+        {
+          "separator": true
+        },
+        {
           "command": "view.theme",
           "arg": "dark",
           "title": "Dark theme",

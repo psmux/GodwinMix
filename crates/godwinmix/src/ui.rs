@@ -78,6 +78,14 @@ const ASSETS: &[(&str, &str)] = &[
     ("join/name-field.js", include_str!("../../../ui/join/name-field.js")),
     ("join/wake.js", include_str!("../../../ui/join/wake.js")),
     ("join/flip.js", include_str!("../../../ui/join/flip.js")),
+    // The programme alone, for a projector or a second monitor: the page at
+    // /programme/ and the view it shares with the full screen button.
+    ("programme/index.html", include_str!("../../../ui/programme/index.html")),
+    ("programme/page.js", include_str!("../../../ui/programme/page.js")),
+    ("panels/programme/view.js", include_str!("../../../ui/panels/programme/view.js")),
+    ("panels/programme/fullscreen.js", include_str!("../../../ui/panels/programme/fullscreen.js")),
+    ("panels/programme/displays.js", include_str!("../../../ui/panels/programme/displays.js")),
+    ("panels/programme/programme.css", include_str!("../../../ui/panels/programme/programme.css")),
     ("join/shape.js", include_str!("../../../ui/join/shape.js")),
     ("join/shaper.js", include_str!("../../../ui/join/shaper.js")),
     ("join/shape-controls.js", include_str!("../../../ui/join/shape-controls.js")),
@@ -467,6 +475,7 @@ const DEV_ASSETS: &[(&str, &str)] = &[
     ("test/monitor-resize.js", include_str!("../../../ui/test/monitor-resize.js")),
     ("test/monitor-paint.js", include_str!("../../../ui/test/monitor-paint.js")),
     ("test/monitor-rate.js", include_str!("../../../ui/test/monitor-rate.js")),
+    ("test/programme-output.js", include_str!("../../../ui/test/programme-output.js")),
     ("test/dock.js", include_str!("../../../ui/test/dock.js")),
     ("test/welcome.js", include_str!("../../../ui/test/welcome.js")),
     ("test/menubar.js", include_str!("../../../ui/test/menubar.js")),
@@ -601,6 +610,10 @@ where
         // The publisher page, by the directory URL a person types or is sent.
         .route("/join", get(|| async { asset("join/index.html") }))
         .route("/join/", get(|| async { asset("join/index.html") }))
+        // The programme output page. Its scripts are relative to the folder,
+        // so the bare name is sent on to it.
+        .route("/programme", get(|| async { axum::response::Redirect::permanent("programme/") }))
+        .route("/programme/", get(|| async { asset("programme/index.html") }))
         .route("/plugins/index.json", get(plugin_index))
         .route("/plugins/{name}/ui/{*path}", get(plugin_file))
         // A preset's own theme, read out of the preset it was applied from, so
@@ -1260,6 +1273,12 @@ mod tests {
         // and the picker fetch browser-device.js when this browser's camera
         // is asked for.
         reachable.extend(closure_of("join/page.js"));
+        // The programme alone on a display: /programme/ loads page.js, and the
+        // Programme monitor fetches full screen and the display list when
+        // first used.
+        for entry in ["programme/page.js", "panels/programme/fullscreen.js", "panels/programme/displays.js"] {
+            reachable.extend(closure_of(entry));
+        }
         reachable.extend(closure_of("panels/sources/browser-device.js"));
         // A phone's camera: the code and the link, when that row is pressed.
         reachable.extend(closure_of("panels/sources/phone-camera.js"));
