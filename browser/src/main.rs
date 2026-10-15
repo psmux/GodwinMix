@@ -325,6 +325,11 @@ wrap_life_span_handler! {
 const DETECT_MEDIA_JS: &str = include_str!("detect-media.js");
 /// Presses the page's own "Enable Sound" for it. See `unmute.js`.
 const UNMUTE_JS: &str = include_str!("unmute.js");
+/// Says when the page could not play a video for want of a codec. See
+/// `codec-watch.js`.
+const CODEC_WATCH_JS: &str = include_str!("codec-watch.js");
+/// Prefix on that script's console line.
+const NOTICE_TAG: &str = "GMX_NOTICE ";
 
 /// Prefix the injected script puts on its console line, so the page's own
 /// logging is not mistaken for a report.
@@ -383,6 +388,11 @@ wrap_load_handler! {
                     f.execute_java_script(
                         Some(&UNMUTE_JS.into()),
                         Some(&"gmx://unmute.js".into()),
+                        0,
+                    );
+                    f.execute_java_script(
+                        Some(&CODEC_WATCH_JS.into()),
+                        Some(&"gmx://codec-watch.js".into()),
                         0,
                     );
                 }
@@ -454,6 +464,10 @@ wrap_display_handler! {
                 if graphic_mode() && severe {
                     let at = source.map(|s| s.to_string()).unwrap_or_default();
                     eprintln!("[browser] page: {m} ({}:{line})", at.rsplit('/').next().unwrap_or_default());
+                    return 1;
+                }
+                if let Some(notice) = m.strip_prefix(NOTICE_TAG) {
+                    page_cef::on_notice(notice);
                     return 1;
                 }
                 if let Some(report) = m.strip_prefix(MEDIA_TAG) {

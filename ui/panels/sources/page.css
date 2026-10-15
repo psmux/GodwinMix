@@ -27,3 +27,4 @@ body:has(> gmx-shell.phone) .page-dialog { max-width: 100vw; }
 body:has(> gmx-shell.phone) .page-surface { max-height: calc(100dvh - 190px); }
 body:has(> gmx-shell.phone) .page-bar .btn.icon { min-width: 40px; min-height: 40px; }
 body:has(> gmx-shell.phone) .page-bar .page-url { width: auto; flex: 1 1 0; font-size: 16px; }
+.page-notice { border-left: 3px solid var(--warn); padding: 4px 8px; background: var(--panel2); }

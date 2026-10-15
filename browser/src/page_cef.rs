@@ -174,32 +174,57 @@ fn key(host: &BrowserHost, kind: sys::cef_key_event_type_t, code: i32, c: u16, m
 }
 
 /// Where the page is, for the mixer. Only written when it changed.
-static STATE: Mutex<(String, bool, bool, bool)> = Mutex::new((String::new(), false, false, false));
+#[derive(Clone, Default, PartialEq)]
+struct Where {
+    url: String,
+    back: bool,
+    forward: bool,
+    loading: bool,
+    /// Why the page cannot play what it shows, when it has said.
+    notice: String,
+}
 
-fn report(change: impl FnOnce(&mut (String, bool, bool, bool))) {
-    let mut s = STATE.lock().unwrap();
+static STATE: Mutex<Option<Where>> = Mutex::new(None);
+
+fn report(change: impl FnOnce(&mut Where)) {
+    let mut guard = STATE.lock().unwrap();
+    let s = guard.get_or_insert_with(Where::default);
     let before = s.clone();
-    change(&mut s);
+    change(s);
     if *s == before {
         return;
     }
-    let url = serde_json::to_string(&s.0).unwrap_or_else(|_| "\"\"".into());
-    eprintln!("[browser] page {{\"url\":{url},\"can_back\":{},\"can_forward\":{},\"loading\":{}}}", s.1, s.2, s.3);
+    let line = serde_json::json!({
+        "url": s.url, "can_back": s.back, "can_forward": s.forward, "loading": s.loading,
+        "notice": (!s.notice.is_empty()).then_some(&s.notice),
+    });
+    eprintln!("[browser] page {line}");
 }
 
 /// The main frame's address changed: a link, a redirect, back or forward.
+/// A notice about the last page goes with it.
 pub fn on_address(url: &str) {
     if url == "about:blank" {
         return;
     }
-    report(|s| s.0 = url.to_string());
+    report(|s| {
+        if s.url != url {
+            s.notice.clear();
+        }
+        s.url = url.to_string();
+    });
 }
 
 /// The page started or stopped loading.
 pub fn on_loading(loading: bool, back: bool, forward: bool) {
     report(|s| {
-        s.1 = back;
-        s.2 = forward;
-        s.3 = loading;
+        s.back = back;
+        s.forward = forward;
+        s.loading = loading;
     });
+}
+
+/// The page said why it cannot play something. See `codec-watch.js`.
+pub fn on_notice(text: &str) {
+    report(|s| s.notice = text.chars().take(300).collect());
 }

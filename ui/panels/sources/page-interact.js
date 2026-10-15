@@ -28,6 +28,14 @@ export function openInteract(client, source) {
   const surface = el("div.page-surface", { tabindex: "-1" }, [img, keys]);
   const bar = addressBar(client, id, () => send.flushNow());
   const note = el("div.sm.dim", { text: "Click, scroll and type on the picture. It is the page as it goes to air." });
+  // Why the page shows an error instead of a video, when the renderer knows.
+  const notice = el("div.sm.page-notice", { hidden: true, role: "status" });
+  const sync = (src) => {
+    bar.sync(src);
+    const said = src && src.page && src.page.notice;
+    notice.hidden = !said;
+    if (said) notice.textContent = noticeText(said);
+  };
 
   // The picture is a cell of the multiview, and the width asked for is the
   // whole mosaic's. The widest there is, so the page's text can be read.
@@ -40,16 +48,16 @@ export function openInteract(client, source) {
   typing(keys, send);
 
   const keyboard = el("button.btn", { text: "Keyboard", title: "Type into the page", onclick: () => keys.focus() });
-  const off = client.onRender(() => bar.sync(client.store.source(id)));
+  const off = client.onRender(() => sync(client.store.source(id)));
   // A link followed on the page changes nothing the mixer broadcasts, so
   // while this view is open it asks where the page is, once a second.
   const poll = setInterval(() => {
-    client.call("source.get", { id }).then((s) => bar.sync(s)).catch(() => {});
+    client.call("source.get", { id }).then(sync).catch(() => {});
   }, 1000);
   const dialog = modal({
     title: `Interact: ${source.name || id}`,
     wide: true,
-    body: el("div.page-view", {}, [bar.node, surface, note]),
+    body: el("div.page-view", {}, [bar.node, notice, surface, note]),
     footer: [keyboard, el("button.btn.primary", { text: "Done", onclick: () => dialog.close() })],
     onClose: () => {
       off();
@@ -62,6 +70,13 @@ export function openInteract(client, source) {
   dialog.el.classList.add("page-dialog");
   if (!coarse()) surface.focus({ preventScroll: true });
   return dialog;
+}
+
+/** The renderer's notice, said to a person. */
+export function noticeText(notice) {
+  if (!notice.startsWith("codecs:")) return notice;
+  return "This video is offered only in H.264 or AAC, and this mixer's browser cannot play those, so the page shows an error. " +
+    "YouTube live streams are often like this. Try a recording of the stream, or another site, or see Web page sources in the docs.";
 }
 
 function streamUrl(client, path) {

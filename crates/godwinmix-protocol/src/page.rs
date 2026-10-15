@@ -208,6 +208,11 @@ pub struct PageState {
     pub can_forward: bool,
     #[serde(default)]
     pub loading: bool,
+    /// Why the page cannot play what it is showing, in a sentence, when the
+    /// renderer has seen it: a video only offered in H.264 or AAC, which the
+    /// renderer's Chromium may not carry. Gone when the page changes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub notice: Option<String>,
 }
 
 /// What `source.page.navigate` answers with.
