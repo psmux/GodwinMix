@@ -9284,6 +9284,362 @@
       },
       "type": "object"
     },
+    "PageAction": {
+      "description": "Where `source.page.navigate` goes.",
+      "oneOf": [
+        {
+          "enum": [
+            "back",
+            "forward",
+            "reload"
+          ],
+          "type": "string"
+        },
+        {
+          "const": "go",
+          "description": "To `url`. Kept as the source's address, so a saved project opens it.",
+          "type": "string"
+        }
+      ]
+    },
+    "PageButton": {
+      "description": "A mouse button.",
+      "enum": [
+        "left",
+        "middle",
+        "right"
+      ],
+      "type": "string"
+    },
+    "PageEvent": {
+      "description": "One thing the operator did to the page.",
+      "oneOf": [
+        {
+          "description": "The pointer moved to a point. Moves while a button is held are drags.",
+          "properties": {
+            "alt": {
+              "type": "boolean"
+            },
+            "ctrl": {
+              "type": "boolean"
+            },
+            "meta": {
+              "description": "Command on a Mac, the Windows key elsewhere.",
+              "type": "boolean"
+            },
+            "shift": {
+              "type": "boolean"
+            },
+            "type": {
+              "const": "move",
+              "type": "string"
+            },
+            "x": {
+              "format": "double",
+              "type": "number"
+            },
+            "y": {
+              "format": "double",
+              "type": "number"
+            }
+          },
+          "required": [
+            "type",
+            "x",
+            "y"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A button went down at a point. `count` is 2 for the second press of a\ndouble click.",
+          "properties": {
+            "alt": {
+              "type": "boolean"
+            },
+            "button": {
+              "$ref": "#/$defs/PageButton",
+              "default": "left"
+            },
+            "count": {
+              "default": 1,
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "ctrl": {
+              "type": "boolean"
+            },
+            "meta": {
+              "description": "Command on a Mac, the Windows key elsewhere.",
+              "type": "boolean"
+            },
+            "shift": {
+              "type": "boolean"
+            },
+            "type": {
+              "const": "down",
+              "type": "string"
+            },
+            "x": {
+              "format": "double",
+              "type": "number"
+            },
+            "y": {
+              "format": "double",
+              "type": "number"
+            }
+          },
+          "required": [
+            "type",
+            "x",
+            "y"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A button came up at a point.",
+          "properties": {
+            "alt": {
+              "type": "boolean"
+            },
+            "button": {
+              "$ref": "#/$defs/PageButton",
+              "default": "left"
+            },
+            "count": {
+              "default": 1,
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "ctrl": {
+              "type": "boolean"
+            },
+            "meta": {
+              "description": "Command on a Mac, the Windows key elsewhere.",
+              "type": "boolean"
+            },
+            "shift": {
+              "type": "boolean"
+            },
+            "type": {
+              "const": "up",
+              "type": "string"
+            },
+            "x": {
+              "format": "double",
+              "type": "number"
+            },
+            "y": {
+              "format": "double",
+              "type": "number"
+            }
+          },
+          "required": [
+            "type",
+            "x",
+            "y"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A scroll at a point, in CSS pixels the way a browser's `wheel` event\ngives them: a positive `dy` scrolls down the page.",
+          "properties": {
+            "dx": {
+              "default": 0.0,
+              "format": "double",
+              "type": "number"
+            },
+            "dy": {
+              "default": 0.0,
+              "format": "double",
+              "type": "number"
+            },
+            "type": {
+              "const": "wheel",
+              "type": "string"
+            },
+            "x": {
+              "format": "double",
+              "type": "number"
+            },
+            "y": {
+              "format": "double",
+              "type": "number"
+            }
+          },
+          "required": [
+            "type",
+            "x",
+            "y"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The pointer left the picture.",
+          "properties": {
+            "type": {
+              "const": "leave",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A key pressed and let go. `code` is the key code a browser's\n`keydown` gives as `keyCode` (13 for Enter, 37 for the left arrow, 65\nfor A). `key` is the character it typed, when it typed one.",
+          "properties": {
+            "alt": {
+              "type": "boolean"
+            },
+            "code": {
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "ctrl": {
+              "type": "boolean"
+            },
+            "key": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "meta": {
+              "description": "Command on a Mac, the Windows key elsewhere.",
+              "type": "boolean"
+            },
+            "shift": {
+              "type": "boolean"
+            },
+            "type": {
+              "const": "key",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "code"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Text typed into whatever has focus on the page, as one piece. What a\nphone keyboard or an input method hands over.",
+          "properties": {
+            "text": {
+              "type": "string"
+            },
+            "type": {
+              "const": "text",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "text"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "PageInputRequest": {
+      "description": "`source.page.input`.",
+      "properties": {
+        "events": {
+          "description": "What the operator did, oldest first.",
+          "items": {
+            "$ref": "#/$defs/PageEvent"
+          },
+          "type": "array"
+        },
+        "id": {
+          "description": "Source id. A web page source drawn by the browser renderer.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "events"
+      ],
+      "type": "object"
+    },
+    "PageInputResult": {
+      "description": "What `source.page.input` answers with.",
+      "properties": {
+        "dropped": {
+          "description": "Events dropped because the renderer was not keeping up. Pointer moves\nare the usual ones, and the next move puts the pointer right.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "id": {
+          "type": "string"
+        },
+        "sent": {
+          "description": "Events handed to the renderer.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "sent",
+        "dropped"
+      ],
+      "type": "object"
+    },
+    "PageNavigateRequest": {
+      "description": "`source.page.navigate`.",
+      "properties": {
+        "action": {
+          "$ref": "#/$defs/PageAction",
+          "default": "go"
+        },
+        "id": {
+          "description": "Source id.",
+          "type": "string"
+        },
+        "url": {
+          "description": "The address for `go`: http or https. A bare host such as\n`example.com` is taken as https.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "type": "object"
+    },
+    "PageNavigateResult": {
+      "description": "What `source.page.navigate` answers with.",
+      "properties": {
+        "action": {
+          "$ref": "#/$defs/PageAction"
+        },
+        "id": {
+          "type": "string"
+        },
+        "url": {
+          "description": "The address the source keeps. For `go` the new one; otherwise the one\nit had, since back, forward and reload are not saved.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "action",
+        "url"
+      ],
+      "type": "object"
+    },
     "ParamsRequest": {
       "description": "`scene.params.set`.",
       "properties": {
@@ -21343,6 +21699,58 @@
       "scope": "operate",
       "since": "1",
       "summary": "Give a source a backup: another source drawn in its place, wherever it appears, once it has had no picture for after_secs, and taken off again when it is back. Only the fields named change; a source with no backup yet needs `backup`."
+    },
+    {
+      "destructive": false,
+      "idempotent": false,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "use_web_page"
+      },
+      "mutating": true,
+      "name": "source.page.input",
+      "params": {
+        "$ref": "#/$defs/PageInputRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/sources/{id}/page/input"
+      },
+      "result": {
+        "$ref": "#/$defs/PageInputResult"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "Click, scroll and type into a web page source, as a person would in a browser. Points are shares of the page from 0.0 to 1.0. Nothing waits on the page: events the renderer cannot keep up with are dropped and counted."
+    },
+    {
+      "destructive": false,
+      "idempotent": false,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "navigate_web_page"
+      },
+      "mutating": true,
+      "name": "source.page.navigate",
+      "params": {
+        "$ref": "#/$defs/PageNavigateRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/sources/{id}/page/navigate"
+      },
+      "result": {
+        "$ref": "#/$defs/PageNavigateResult"
+      },
+      "scope": "operate",
+      "since": "1",
+      "summary": "Take a web page source to another address, or back, forward or reload. A new address is kept as the source's own, so a saved project opens it there."
     },
     {
       "destructive": true,

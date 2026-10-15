@@ -246,6 +246,8 @@ Keys accepted on every method, handled before a method runs.
 | `source.missing` | `POST /api/v1/sources/{id}/missing` | read |  | 1 | Sources that are not running, and why: failed, could not be started (with the error and the action that fixes it), removed, or unknown. Pass the ids a scene draws, or none for every one the mixer knows about. |
 | `source.on_loss.clear` | `POST /api/v1/sources/{id}/on_loss/clear` | operate |  | 1 | Take a source's backup away. If the backup is on now, the source is drawn as itself again at once. |
 | `source.on_loss.set` | `POST /api/v1/sources/{id}/on_loss` | operate |  | 1 | Give a source a backup: another source drawn in its place, wherever it appears, once it has had no picture for after_secs, and taken off again when it is back. Only the fields named change; a source with no backup yet needs `backup`. |
+| `source.page.input` | `POST /api/v1/sources/{id}/page/input` | operate |  | 1 | Click, scroll and type into a web page source, as a person would in a browser. Points are shares of the page from 0.0 to 1.0. Nothing waits on the page: events the renderer cannot keep up with are dropped and counted. |
+| `source.page.navigate` | `POST /api/v1/sources/{id}/page/navigate` | operate |  | 1 | Take a web page source to another address, or back, forward or reload. A new address is kept as the source's own, so a saved project opens it there. |
 | `source.remove` | `DELETE /api/v1/sources/{id}` | operate | yes | 1 | Remove a source. If it is on programme the mixer cuts to the slate first. |
 | `source.restart` | `POST /api/v1/sources/{id}/restart` | operate |  | 1 | Build a source's pipeline again now, rather than waiting for its next retry. For a source that could not be started or was removed, use source.restore. |
 | `source.restore` | `POST /api/v1/sources/{id}/restore` | operate |  | 1 | Put back a source that source.remove took away, as it was: same id, address, settings, fader and mute. The mixer remembers the last sixteen it removed, until it restarts. |
@@ -3779,6 +3781,40 @@ MCP tool `set_source_backup` in the `search` profile: readOnlyHint false, destru
   },
   "result": {
     "$ref": "#/$defs/SourceStatus"
+  }
+}
+```
+
+#### `source.page.input`
+
+Click, scroll and type into a web page source, as a person would in a browser. Points are shares of the page from 0.0 to 1.0. Nothing waits on the page: events the renderer cannot keep up with are dropped and counted.
+
+MCP tool `use_web_page` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint false.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/PageInputRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/PageInputResult"
+  }
+}
+```
+
+#### `source.page.navigate`
+
+Take a web page source to another address, or back, forward or reload. A new address is kept as the source's own, so a saved project opens it there.
+
+MCP tool `navigate_web_page` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint false.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/PageNavigateRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/PageNavigateResult"
   }
 }
 ```

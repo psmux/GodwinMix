@@ -14,7 +14,7 @@ use super::{assemble, BuildCtx, Ingest, KindParts, Wiring};
 use crate::caps::CanvasCaps;
 use crate::config::Params;
 use crate::gstutil::make;
-use crate::input::{attach_exec_stdout, make_exec_source, spawn_exec, ExecChild, ExecSpec};
+use crate::input::{attach_exec_stdout, make_exec_source_with, spawn_exec_with, ExecChild, ExecSpec, LineHook};
 use crate::plugin::source::{unknown_method, Provide, Source, SourceRequest};
 use crate::plugin::{
     Capability, CapabilitySet, Configure, Health, Hello, Manifest, MediaDecl, MediaEnds,
@@ -66,17 +66,20 @@ pub struct ExecProcess {
     pub spec: ExecSpec,
     pub child: Option<ExecChild>,
     pub src: Option<gst::Element>,
+    /// Reads the process's stderr lines as well as the log, every time it is
+    /// started. See `page_control`.
+    pub on_line: Option<LineHook>,
 }
 
 impl ExecProcess {
     pub fn new(spec: ExecSpec) -> Self {
-        Self { spec, child: None, src: None }
+        Self { spec, child: None, src: None, on_line: None }
     }
 
     /// Build the `fdsrc` (or, on Windows, the reader thread's `appsrc`) and
     /// spawn the process behind it.
     pub fn build_src(&mut self, id: &str) -> Result<gst::Element> {
-        let (el, child) = make_exec_source(id, &self.spec)?;
+        let (el, child) = make_exec_source_with(id, &self.spec, self.on_line.clone())?;
         self.child = Some(child);
         self.src = Some(el.clone());
         Ok(el)
@@ -104,7 +107,7 @@ impl ExecProcess {
             anyhow::bail!("{id} has no source element to hand a new pipe to; build it first");
         };
         self.kill(id);
-        match spawn_exec(id, &self.spec) {
+        match spawn_exec_with(id, &self.spec, self.on_line.clone()) {
             Ok((out, child, stderr)) => {
                 let stdout = attach_exec_stdout(id, &src, out);
                 self.child = Some(ExecChild::new(child, self.spec.env.clone(), stdout, stderr));
