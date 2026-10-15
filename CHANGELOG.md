@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.13 (2026-10-15)
+
+The camera, the microphone, the screen and web pages work in the Intel Mac app. 0.3.12 was the first Intel build and none of them did; each was tried on a 2020 iMac with macOS 15.7.9 before this went out.
+
+* A camera that takes a moment to open now opens. A capture plugin answers `start` straight away and opens its device on a thread of its own, binding its socket only once the device is open, and the mixer connected to that socket about 100 ms after `start`. A camera slower than that failed with "Failed to connect socket: No such file or directory", the mixer stopped the plugin and tried again two seconds later, and on the iMac the built in camera lost that race 216 times in a row without macOS ever being asked for it. The mixer now waits up to 10 s for a plugin's sockets before reading them. This was so on every platform; a fast camera that had permission already usually won the race.
+* Every program in the Mac app carries a signature. Apple's linker signs each Apple silicon binary by itself and the Intel linker signs nothing, so in the Intel app the shell, the camera, microphone and screen plugins and the mixer's helpers had no signature at all. macOS refused them the camera, the microphone and the screen with no prompt. The app is now signed ad hoc as a whole (`signingIdentity` is `-`), each plugin is signed as it is staged, and a release whose Mac app has an unsigned binary in it fails before it publishes. A camera prompt now appears the first time a camera is added.
+* Web page sources work in the Mac app on macOS 15. CEF looks for its framework in the outermost app around it, which in the desktop app is GodwinMix.app rather than the renderer's own bundle inside it, and stopped on a check in `SetOverrideFrameworkBundlePath`: every web page source on the iMac crashed as it started. The renderer now tells CEF where its bundle and framework are. macOS 26 had happened to answer with the inner bundle, which is why it was not seen on Apple silicon.
+* The Mac web page renderer loads the GStreamer inside the app. It was left pointing at the build machine's copy and worked only because the mixer starts it with `DYLD_LIBRARY_PATH`.
+* `gmx ctl take <name>` takes the scene of that name when no source has it, as its help says. It was refused with "there is no source", and only `--scene` worked.
+
 ## 0.3.12 (2026-10-15)
 
 Intel Macs get a build of their own, and a broadcast from one goes out at the bitrate it was set to.

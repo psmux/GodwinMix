@@ -205,6 +205,10 @@ Privacy and Security, Camera. The app that has to be allowed is GodwinMix,
 even though it is a plugin process two levels below the window doing the
 capture: the permission belongs to the app at the top of the tree.
 
+The Intel app in 0.3.12 never asked: it went out unsigned, and macOS refuses a
+camera to a program it cannot identify without showing a prompt. Install 0.3.13
+or later.
+
 Finding cameras is not the same as opening one, and it needs no permission.
 If the add source list is empty rather than unauthorised, the plugins did not
 load. `--headless-check` says which of the three the mixer has, and the app's
