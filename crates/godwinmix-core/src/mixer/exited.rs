@@ -21,6 +21,25 @@ use std::time::Instant;
 use tracing::warn;
 
 impl Mixer {
+    /// What source plugins logged since the last tick, into the core's log
+    /// with the source named. A source plugin's `log` lines used to be
+    /// queued and never read, so a playlist that skipped a broken file said
+    /// so to nobody.
+    pub(super) fn relay_plugin_logs(&mut self) {
+        use godwinmix_protocol::plugin::wire::LogLevel;
+        for s in &self.sources {
+            for (level, message) in s.input.kind_logs() {
+                let source = s.input.id.as_str();
+                match level {
+                    LogLevel::Error => tracing::error!(%source, "{message}"),
+                    LogLevel::Warn => tracing::warn!(%source, "{message}"),
+                    LogLevel::Info => tracing::info!(%source, "{message}"),
+                    LogLevel::Debug | LogLevel::Trace => tracing::debug!(%source, "{message}"),
+                }
+            }
+        }
+    }
+
     /// One pass over the sources: any whose process exited is restarted.
     /// Costs one `try_wait` per sidecar source per tick and nothing for the
     /// built in kinds.

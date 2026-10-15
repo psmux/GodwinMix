@@ -4516,6 +4516,7 @@ impl Mixer {
         // A plugin process that died by itself is restarted now rather than
         // when the stall timer gives up on it. See `mixer::exited`.
         self.restart_the_exited();
+        self.relay_plugin_logs();
 
         // A line in the log every five minutes with the mixer's own size, and
         // every five seconds a look at whether it is past its guard.
