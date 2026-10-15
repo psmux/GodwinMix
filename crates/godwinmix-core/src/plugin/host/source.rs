@@ -197,6 +197,30 @@ impl SidecarSource {
     }
 
     /// Tell the plugin to start producing, once the pipeline is built.
+    /// Hold the caller until the plugin has bound the sockets it is about to
+    /// be read from; see `transport::wait_for_sockets` for the race this
+    /// closes. One that never appears is left to fail the way it always has,
+    /// with the plugin's own health saying why.
+    fn wait_for_sockets(&self, video: bool, audio: bool) {
+        let Some(media) = self.media.as_ref() else { return };
+        let mut paths = Vec::new();
+        if video {
+            paths.push(media.video());
+        }
+        if audio {
+            paths.push(media.audio());
+        }
+        let missing = transport::wait_for_sockets(&paths, SOCKETS_WITHIN);
+        if !missing.is_empty() {
+            warn!(
+                source = %self.build.id,
+                missing = %missing.join(", "),
+                "the plugin has not bound its media sockets after {} s; connecting anyway",
+                SOCKETS_WITHIN.as_secs()
+            );
+        }
+    }
+
     fn call_start(&mut self) -> Result<()> {
         let (transport, media) = {
             let child = self.child.as_ref().context("the plugin is not running")?;
@@ -424,29 +448,6 @@ impl Source for SidecarSource {
         Ok(ends)
     }
 
-    /// Hold the caller until the plugin has bound the sockets it is about to
-    /// be read from; see `transport::wait_for_sockets` for the race this
-    /// closes. One that never appears is left to fail the way it always has,
-    /// with the plugin's own health saying why.
-    fn wait_for_sockets(&self, video: bool, audio: bool) {
-        let Some(media) = self.media.as_ref() else { return };
-        let mut paths = Vec::new();
-        if video {
-            paths.push(media.video());
-        }
-        if audio {
-            paths.push(media.audio());
-        }
-        let missing = transport::wait_for_sockets(&paths, SOCKETS_WITHIN);
-        if !missing.is_empty() {
-            warn!(
-                source = %self.build.id,
-                missing = %missing.join(", "),
-                "the plugin has not bound its media sockets after {} s; connecting anyway",
-                SOCKETS_WITHIN.as_secs()
-            );
-        }
-    }
 
     fn stop(&mut self) -> Result<()> {
         self.started = false;
