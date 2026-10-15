@@ -53,7 +53,7 @@ same thing without a mixer. The ones the how to pages reach for:
 | `POST /api/v1/outputs/{id}/set` | `output.set`: `{"uri","policy","queue_secs"}`, naming only what moves. `uri` is write only and an absent one keeps the address in force, which is how a stream key is replaced without anything ever reading it back. See [stream to a platform](../how-to/stream-to-a-platform.md) |
 | `POST /api/v1/outputs/{id}/stop` | `output.stop`: no body. Stops sending to one destination and keeps it, address, key and all; its state reads `stopped` until `output.start`. See [stop streaming and quit](../how-to/stop-streaming-and-quit.md) |
 | `POST /api/v1/outputs/{id}/start` | `output.start`: no body. Sends to a stopped destination again with the address and key it kept |
-| `POST /api/v1/tool/call` | `tool.call`: `{"name","arguments"}`, the name being `<plugin>/<tool>`. The body may be up to 4 MiB, the length of one line to a plugin |
+| `POST /api/v1/tool/call` | `tool.call`: `{"name","arguments"}`, the name being `<plugin>/<tool>`, and `source` to send it to the plugin process behind one source. The body may be up to 4 MiB, the length of one line to a plugin |
 | `GET /api/v1/plugins/{id}/settings` | a plugin's settings, and `POST` with `{"settings":{...}}` changes the keys it names |
 | `GET /api/v1/channels` | `channel.list`: every RTMP channel with its keys as hints, its streams and its destinations, and the port they share. See [channels.md](channels.md) |
 | `POST /api/v1/channels` | `channel.add`: `{"name","app","auto_source","key_mode"}`, only `name` required. The answer carries the first key; `channel.key.reveal` reads it again |

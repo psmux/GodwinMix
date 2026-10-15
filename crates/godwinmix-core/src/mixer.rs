@@ -432,6 +432,8 @@ pub(crate) mod offload;
 mod patience;
 mod rendered;
 mod reported;
+mod source_call;
+pub use source_call::SourceToolOutcome;
 mod supervise;
 pub mod slots;
 mod slot_guard;
@@ -567,6 +569,12 @@ pub enum Command {
         source: SourceId,
         position_ms: u64,
         reply: oneshot::Sender<SeekOutcome>,
+    },
+    /// The pipeline behind one source, for a call that must not run on the
+    /// mixer thread. See `mixer::source_call`.
+    SourceInput {
+        source: SourceId,
+        reply: oneshot::Sender<Option<Arc<InputPipeline>>>,
     },
     /// New params for a running source, handed to its kind. Answers whether
     /// the kind took them in place; a kind that cannot is left as it was, and
@@ -4177,6 +4185,7 @@ impl Mixer {
             Command::ClipEnded(..) => "source.clip_ended",
             Command::SetAudio { .. } => "source.audio.set",
             Command::Seek { .. } => "source.seek",
+            Command::SourceInput { .. } => "source tool call",
             Command::ConfigureSource { .. } => "source.set",
             Command::Page { call: PageCall::Lines(_), .. } => "source.page.input",
             Command::Page { .. } => "source.page.navigate",
@@ -4320,6 +4329,9 @@ impl Mixer {
             }
             Command::Seek { source, position_ms, reply } => {
                 let _ = reply.send(self.seek(&source, position_ms));
+            }
+            Command::SourceInput { source, reply } => {
+                let _ = reply.send(self.sources.iter().find(|s| s.input.id == source).map(|s| s.input.clone()));
             }
             Command::Page { source, call, reply } => {
                 let _ = reply.send(self.page(&source, call));
@@ -4540,6 +4552,7 @@ impl Mixer {
         // A plugin process that died by itself is restarted now rather than
         // when the stall timer gives up on it. See `mixer::exited`.
         self.restart_the_exited();
+        self.relay_plugin_logs();
 
         // A line in the log every five minutes with the mixer's own size, and
         // every five seconds a look at whether it is past its guard.

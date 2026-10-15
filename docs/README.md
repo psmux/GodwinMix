@@ -76,6 +76,7 @@ Start here if you have never run it.
 * [Install a plugin from the gallery](how-to/install-from-the-gallery.md)
 * [Add a second machine](how-to/add-a-node.md)
 * [Test a plugin](how-to/test-a-plugin.md)
+* [Control one source of a plugin](how-to/control-one-source-of-a-plugin.md)
 * [Publish a plugin](how-to/publish-a-plugin.md)
 * [Run a marketplace](how-to/run-a-marketplace.md)
 * [Receive a phone or an OBS stream](how-to/receive-a-phone-or-obs-stream.md)

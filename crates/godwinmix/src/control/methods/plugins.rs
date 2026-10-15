@@ -238,6 +238,11 @@ pub struct ToolCallRequest {
     /// The tool's own arguments, as its input schema describes them.
     #[serde(default)]
     pub arguments: Value,
+    /// A source id, for a tool of a source plugin. A source plugin runs one
+    /// process per source, and this says which one answers: `skip` on the
+    /// playlist called `lobby`, not on every playlist.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
 }
 
 /// `device.discover`.
@@ -1076,13 +1081,75 @@ async fn tool_call(call: Call, params: Value) -> Result<Value, RpcError> {
             ));
         }
     }
+    if let Some(source) = req.source.clone() {
+        return source_tool_call(&call, source, &name, req.arguments.clone()).await;
+    }
     let arguments = req.arguments.clone();
-    let answered = tokio::task::spawn_blocking(move || supervisor.tool_call(&name, arguments))
+    let asked = name.clone();
+    let answered = tokio::task::spawn_blocking(move || supervisor.tool_call(&asked, arguments))
         .await
         .map_err(|e| RpcError::new(ErrorCode::InternalError, format!("the tool call panicked: {e}")))?;
-    match answered {
-        Ok(value) => body(value),
-        Err(e) => Err(RpcError::new(ErrorCode::NotFound, format!("{e:#}"))),
+    let refused = match answered {
+        Ok(value) => return body(value),
+        Err(e) => RpcError::new(ErrorCode::NotFound, format!("{e:#}")),
+    };
+    // No singleton has the tool. A source plugin's tool whose input schema
+    // carries `source`, called through MCP or the CLI with the source among
+    // the arguments, goes to that source's process. Anything that fails that
+    // way too keeps the first refusal, which names the tools that do exist.
+    match req.arguments.get("source").and_then(Value::as_str) {
+        Some(source) => match source_tool_call(&call, source.to_string(), &name, req.arguments.clone()).await {
+            Err(e) if e.code == ErrorCode::NotFound.number() || e.code == ErrorCode::InvalidParams.number() => Err(refused),
+            other => other,
+        },
+        None => Err(refused),
+    }
+}
+
+/// `tool.call` with a `source`: the plugin process behind that one source
+/// answers. See `godwinmix_core::mixer::source_call`.
+async fn source_tool_call(call: &Call, source: String, name: &str, arguments: Value) -> Result<Value, RpcError> {
+    use godwinmix_core::mixer::SourceToolOutcome;
+    let (plugin, tool) = match name.split_once('/') {
+        Some((plugin, tool)) => (Some(plugin.to_string()), tool.to_string()),
+        None => (None, name.to_string()),
+    };
+    // A plugin's own token reaches its own sources' tools and nothing else.
+    let plugin = match (call.token.plugin.clone(), plugin) {
+        (Some(mine), Some(named)) if mine != named => {
+            return Err(RpcError::new(
+                ErrorCode::Scope,
+                format!("this token belongs to the plugin `{mine}`, and `{name}` is a tool of `{named}`"),
+            ));
+        }
+        (Some(mine), _) => Some(mine),
+        (None, named) => named,
+    };
+    let outcome = call
+        .app
+        .mixer
+        .source_tool_call(source.clone(), plugin.clone(), tool.clone(), arguments)
+        .await
+        .map_err(|e| call.mixer_error(e))?;
+    match outcome {
+        SourceToolOutcome::Answered(value) => body(value),
+        SourceToolOutcome::NoSuchSource => {
+            Err(RpcError::not_found("source", &source, &call.source_ids().await?))
+        }
+        SourceToolOutcome::OtherPlugin(owner) => Err(RpcError::new(
+            ErrorCode::InvalidParams,
+            format!(
+                "source `{source}` is a `{owner}` source, not a `{}` one, so `{tool}` cannot go                  to it. Call tool.call with a source of that plugin, or name the tool as                  `{owner}/<tool>`.",
+                plugin.unwrap_or_default()
+            ),
+        )
+        .with("plugin", json!(owner))),
+        SourceToolOutcome::Failed(why) => Err(RpcError::new(
+            ErrorCode::NotInState,
+            format!("source `{source}` did not answer `{tool}`: {why}. source.get says whether it is running."),
+        )
+        .with("source", json!(source))
+        .with("retryable", json!(true))),
     }
 }
 
