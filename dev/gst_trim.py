@@ -452,6 +452,14 @@ def resolve(name: str, dirs: list[Path]) -> Path | None:
             # Keep the loader's requested name, such as libfoo.so.1, rather
             # than replacing it with the symlink target libfoo.so.1.2.3.
             return candidate.absolute()
+    # The official macOS framework keeps one library in a folder of its own:
+    # libproxy imports `@rpath/libproxy/libpxbackend-1.0.dylib`. The copy goes
+    # beside the others in the tree, and relocation finds it there by leaf.
+    if name.startswith("@rpath/") and "/" in name[len("@rpath/"):]:
+        for d in dirs:
+            candidate = d / name[len("@rpath/"):]
+            if candidate.is_file():
+                return candidate.absolute()
     # Some macOS imports are absolute and outside the prefix entirely, which is
     # what a Homebrew cellar looks like from inside another cellar.
     if name.startswith("/") and Path(name).is_file():
@@ -547,6 +555,55 @@ def relocate_macos(out: Path) -> list[str]:
         subprocess.run(["codesign", "--force", "--sign", "-", str(path)],
                        capture_output=True)
     return outside_the_tree(files)
+
+
+def thin_macos(out: Path, arch: str) -> int:
+    """Keep only `arch` in every universal Mach-O in the tree.
+
+    GStreamer's official framework carries Intel and Apple silicon code in each
+    file, and the mixer beside it is built for one of them, so the other half
+    is never loaded. On the Intel build it was 316 MB against a 160 MB budget.
+    Runs before relocation, which signs every file again. Answers how many
+    files it thinned.
+    """
+    thinned = 0
+    for path in out.rglob("*"):
+        if not path.is_file() or path.is_symlink():
+            continue
+        with path.open("rb") as f:
+            if f.read(4) != b"\xca\xfe\xba\xbe":
+                continue
+        archs = subprocess.run(["lipo", "-archs", str(path)], capture_output=True,
+                               text=True).stdout.split()
+        if arch not in archs or len(archs) < 2:
+            continue
+        done = subprocess.run(["lipo", "-thin", arch, str(path), "-output", str(path)],
+                              capture_output=True, text=True, encoding="utf-8", errors="replace")
+        if done.returncode:
+            warn(f"lipo on {path.name}: {done.stderr.strip()}")
+        else:
+            thinned += 1
+    return thinned
+
+
+def strip_locals_macos(out: Path) -> float:
+    """Drop local symbols from every Mach-O in the tree, keeping the exported
+    ones a plugin is loaded by. The official framework ships them: 37 MB of
+    the 165 MB Intel tree, 7 of it in rswebrtc alone. Runs before relocation,
+    which signs every file again. Answers the megabytes saved.
+    """
+    before = megabytes(out)
+    for path in out.rglob("*"):
+        if not path.is_file() or path.is_symlink():
+            continue
+        with path.open("rb") as f:
+            if f.read(4) not in (b"\xcf\xfa\xed\xfe", b"\xca\xfe\xba\xbe"):
+                continue
+        done = subprocess.run(["strip", "-x", str(path)], capture_output=True,
+                              text=True, encoding="utf-8", errors="replace")
+        if done.returncode:
+            warn(f"strip on {path.name}: {done.stderr.strip()}")
+    return before - megabytes(out)
 
 
 def outside_the_tree(files: list[Path]) -> list[str]:
@@ -781,6 +838,9 @@ def build(args: argparse.Namespace) -> int:
             path.rmdir()
 
     if platform == "macos":
+        if args.thin:
+            print(f"thinned {thin_macos(out, args.thin)} universal files to {args.thin}")
+        print(f"stripped local symbols, {strip_locals_macos(out):.1f} MB")
         left = relocate_macos(out)
         for line in left:
             print(f"still outside the tree: {line}", file=sys.stderr)
@@ -835,6 +895,9 @@ def main() -> int:
                         "prefix's own; may be given more than once")
     p.add_argument("--budget-mb", type=float, default=0,
                    help="fail if the tree is bigger than this")
+    p.add_argument("--thin", metavar="ARCH",
+                   help="macOS: keep only this architecture (x86_64 or arm64) "
+                        "in universal files, to match the mixer beside them")
     p.add_argument("--exclude-gpl", action="store_true",
                    help="leave out plugins whose licence is GPL (x264, x265, "
                         "faad). Note that this drops plugins, not libraries: a "

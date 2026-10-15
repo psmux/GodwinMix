@@ -9,7 +9,9 @@ announcement slides exported as images: each is a picture source.
 2. Press **Add sources**, choose **Video and images**, and pick it.
 
 PNG, JPEG, BMP, WebP, TIFF and SVG work, from this machine or from an
-`https://` address. The picture is decoded once and held on screen for as long
+`https://` address. WebP is the exception in the Windows app and the Intel Mac
+app: the GStreamer they carry has no WebP decoder, so save the picture as a PNG
+there. The picture is decoded once and held on screen for as long
 as the source exists; it never runs out the way a clip does. Its sound is
 silence.
 
