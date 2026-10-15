@@ -174,6 +174,13 @@ for i in "${!WANTED[@]}"; do
     cp "$manifest" "$dest/gmx-plugin.toml"
     cp "$built" "$dest/bin/$binary"
     chmod +x "$dest/bin/$binary"
+    # An ad hoc signature on macOS. Apple's linker gives every arm64 binary
+    # one and the Intel linker gives none, and a process macOS cannot identify
+    # is refused the camera, the microphone and the screen without a prompt.
+    # The Intel app's camera plugin was exactly that.
+    if [[ "$PLATFORM" == macos ]]; then
+        codesign --force --sign - "$dest/bin/$binary"
+    fi
     # NDI's runtime travels with its plugin, as the NDI SDK licence lets an
     # application ship it: in the application's own folder, never a system
     # one, with Vizrt's third party licences beside it. From the SDK the

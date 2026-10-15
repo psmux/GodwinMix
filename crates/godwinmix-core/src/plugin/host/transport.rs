@@ -148,6 +148,28 @@ impl Drop for MediaDir {
     }
 }
 
+/// Wait for a plugin's sockets to exist, for at most `within`, and answer the
+/// ones that never appeared.
+///
+/// A capture plugin answers `start` at once and opens its device on a thread
+/// of its own, so its socket is bound only once the device has opened. A
+/// `unixfdsrc` or `shmsrc` that connects before that fails outright with "No
+/// such file or directory". On a 2020 Intel iMac the built in camera lost
+/// that race every time: the mixer connected about 100 ms after `start` and
+/// tore the plugin down, every two seconds, so the camera never opened and
+/// macOS never got as far as asking for permission to use it.
+pub fn wait_for_sockets(paths: &[String], within: std::time::Duration) -> Vec<String> {
+    let until = std::time::Instant::now() + within;
+    loop {
+        let missing: Vec<String> =
+            paths.iter().filter(|p| !Path::new(p).exists()).cloned().collect();
+        if missing.is_empty() || std::time::Instant::now() >= until {
+            return missing;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+}
+
 /// Can this build carry that transport, with the elements it actually has?
 ///
 /// `Transport::available_here` answers for the platform; this answers for the
@@ -254,6 +276,30 @@ pub fn decoder(id: &str) -> Result<gst::Element> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_socket_bound_late_is_waited_for_and_one_never_bound_is_named() {
+        let dir = std::env::temp_dir().join(format!("gmx-wait-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let late = dir.join("media.video").to_string_lossy().into_owned();
+        let never = dir.join("media.audio").to_string_lossy().into_owned();
+        let bind = late.clone();
+        let binder = std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(150));
+            std::fs::write(&bind, b"").unwrap();
+        });
+        let started = std::time::Instant::now();
+        let missing = super::wait_for_sockets(&[late.clone()], std::time::Duration::from_secs(5));
+        binder.join().unwrap();
+        assert!(missing.is_empty(), "{missing:?}");
+        assert!(started.elapsed() < std::time::Duration::from_secs(2));
+        let missing = super::wait_for_sockets(
+            &[late, never.clone()],
+            std::time::Duration::from_millis(100),
+        );
+        assert_eq!(missing, vec![never]);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     use super::*;
 
     #[test]
