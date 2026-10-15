@@ -304,6 +304,10 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/sources/text-presets.js", include_str!("../../../ui/panels/sources/text-presets.js")),
     ("panels/sources/text-fields.js", include_str!("../../../ui/panels/sources/text-fields.js")),
     ("panels/sources/text-editor.js", include_str!("../../../ui/panels/sources/text-editor.js")),
+    // Interact: a web page source used by hand, fetched on its first use.
+    ("panels/sources/page-interact.js", include_str!("../../../ui/panels/sources/page-interact.js")),
+    ("panels/sources/page-geometry.js", include_str!("../../../ui/panels/sources/page-geometry.js")),
+    ("panels/sources/page.css", include_str!("../../../ui/panels/sources/page.css")),
     // Live data: the feeds and their bindings, opened from Sources or a text's editor.
     ("panels/data/dialog.js", include_str!("../../../ui/panels/data/dialog.js")),
     ("panels/data/feed-list.js", include_str!("../../../ui/panels/data/feed-list.js")),
@@ -473,6 +477,7 @@ const DEV_ASSETS: &[(&str, &str)] = &[
     ("test/recording-stop.js", include_str!("../../../ui/test/recording-stop.js")),
     ("test/running.js", include_str!("../../../ui/test/running.js")),
     ("test/touch.js", include_str!("../../../ui/test/touch.js")),
+    ("test/page-interact.js", include_str!("../../../ui/test/page-interact.js")),
     ("test/phone.js", include_str!("../../../ui/test/phone.js")),
     ("test/phone-reach.js", include_str!("../../../ui/test/phone-reach.js")),
     ("test/phone-hands.js", include_str!("../../../ui/test/phone-hands.js")),
@@ -1174,6 +1179,8 @@ mod tests {
         reachable.extend(closure_of("panels/sources/drawer.js"));
         // The text and ticker editor, which the drawer fetches for one of those.
         reachable.extend(closure_of("panels/sources/text-editor.js"));
+        // Interact, which a page source's tile, menu or drawer fetches.
+        reachable.extend(closure_of("panels/sources/page-interact.js"));
         // The welcome tiles, made by Settings when asked, and the token prompt,
         // fetched only by a mixer that answers 401. Neither is on the page a
         // person opens.
@@ -1376,6 +1383,7 @@ mod tests {
             ("panels/sources/backup-line.js", "a source that goes down or has a backup"),
             ("panels/multiview/backup-banner.js", "a source on its backup"),
             ("panels/sources/backup-form.js", "the settings drawer"),
+            ("panels/sources/page-interact.js", "Interact on a web page source"),
             ("join/publisher.js", "this browser's camera opened, or /join/"),
         ] {
             assert!(known(path).is_some(), "{path} is not served at all");

@@ -81,6 +81,7 @@ export async function openSourceDrawer(panel, source, section) {
     el("div.pad.col", {}, [
       el("div.row", {}, [el("strong.grow", { text: nameOf(source) }), el("button.btn.icon", { text: "×", onclick: () => shell.drawer(null) })]),
       addressRow(client, source),
+      source.page ? el("div.row", {}, [el("button.btn", { text: "Interact with the page", onclick: () => panel.interact(id) }), el("span.sm.dim.grow", { text: "Click, type and change its address by hand." })]) : null,
       form.el,
       el("div.row", {}, [apply]),
       backup.node,
