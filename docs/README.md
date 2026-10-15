@@ -34,6 +34,7 @@ Start here if you have never run it.
   [Linux](how-to/install-on-linux.md)
 * [Start the mixer for the first time](how-to/first-run.md)
 * [Add a source](how-to/add-a-source.md): cameras, screens, microphones, files, pages and feeds
+* [Use a web page source by hand](how-to/use-a-web-page-by-hand.md): click, type, scroll and change its address from the desk
 * [Run it on a headless server](how-to/headless-server.md)
 * [Restart the mixer from the page](how-to/restart-the-mixer.md)
 * [Serve the control port over HTTPS](how-to/serve-https.md)

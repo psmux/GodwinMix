@@ -23,6 +23,7 @@
 //!   rpc.rs          JSON-RPC framing, subscriptions, frame headers
 //!   scope.rs        tokens, scopes, confirmation, rehearsal
 //!   setup.rs        pieces set up on first use: the browser, first party plugins
+//!   page.rs         a web page source driven by hand: pointer, keys, navigation
 //!   shows.rs        the station's show.* methods and events
 //!   graphics.rs     graphic templates and their fields
 //!   fx.rs           transitions and effects imported from packs
@@ -62,6 +63,7 @@ pub mod mcp_tools;
 pub mod method;
 pub mod openapi;
 pub mod output_error;
+pub mod page;
 pub mod plugin;
 pub mod presence;
 pub mod protocol;

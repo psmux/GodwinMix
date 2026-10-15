@@ -1,0 +1,30 @@
+/* Interact: a web page source in a dialog, with an address bar over its live
+   picture. The picture takes all the room the dialog has and keeps the
+   page's shape; the bars either side of it are the dialog's own colour. */
+.page-dialog { max-width: min(1280px, 96vw); }
+.page-dialog > .body { padding: 0; display: flex; min-height: 0; }
+.page-view { display: flex; flex-direction: column; gap: 6px; padding: var(--pad); width: 100%; min-height: 0; }
+.page-bar { display: flex; align-items: center; gap: 4px; flex-wrap: nowrap; }
+.page-bar .btn.icon { min-width: 32px; }
+.page-bar .btn.icon:disabled { opacity: 0.35; }
+.page-bar .spin { animation: page-spin 1s linear infinite; }
+@keyframes page-spin { to { transform: rotate(360deg); } }
+.page-url { min-width: 0; font-family: var(--num); font-size: var(--fs-sm); }
+.page-surface {
+  position: relative; background: #000; border-radius: var(--radius-sm); overflow: hidden;
+  aspect-ratio: 16 / 9; max-height: calc(92vh - 170px); width: 100%; margin: 0 auto;
+  touch-action: none; user-select: none; -webkit-user-select: none; cursor: default; outline: none;
+}
+.page-surface:focus-within { box-shadow: 0 0 0 2px var(--accent); }
+.page-picture { width: 100%; height: 100%; object-fit: contain; display: block; pointer-events: none; }
+/* Where keys and a phone's keyboard land. Not seen, never in the way of a
+   click, and 16 px so iOS does not zoom the page when it takes focus. */
+.page-keys {
+  position: absolute; left: 0; bottom: 0; width: 1px; height: 1px; opacity: 0; border: 0; padding: 0;
+  resize: none; font-size: 16px; pointer-events: none;
+}
+body:has(> gmx-shell.phone) .page-dialog { max-width: 100vw; }
+body:has(> gmx-shell.phone) .page-surface { max-height: calc(100dvh - 190px); }
+body:has(> gmx-shell.phone) .page-bar .btn.icon { min-width: 40px; min-height: 40px; }
+body:has(> gmx-shell.phone) .page-bar .page-url { width: auto; flex: 1 1 0; font-size: 16px; }
+.page-notice { border-left: 3px solid var(--warn); padding: 4px 8px; background: var(--panel2); }

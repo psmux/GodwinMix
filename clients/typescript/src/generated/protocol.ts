@@ -2246,6 +2246,89 @@ export interface Override {
   visible?: boolean | null;
 }
 
+/** Where `source.page.navigate` goes. */
+export type PageAction = "back" | "forward" | "reload" | "go";
+
+/** A mouse button. */
+export type PageButton = "left" | "middle" | "right";
+
+/** One thing the operator did to the page. */
+export type PageEvent = {
+  alt?: boolean;
+  ctrl?: boolean;
+  meta?: boolean;
+  shift?: boolean;
+  type: "move";
+  x: number;
+  y: number;
+} | {
+  alt?: boolean;
+  button?: PageButton;
+  count?: number;
+  ctrl?: boolean;
+  meta?: boolean;
+  shift?: boolean;
+  type: "down";
+  x: number;
+  y: number;
+} | {
+  alt?: boolean;
+  button?: PageButton;
+  count?: number;
+  ctrl?: boolean;
+  meta?: boolean;
+  shift?: boolean;
+  type: "up";
+  x: number;
+  y: number;
+} | {
+  dx?: number;
+  dy?: number;
+  type: "wheel";
+  x: number;
+  y: number;
+} | {
+  type: "leave";
+} | {
+  alt?: boolean;
+  code: number;
+  ctrl?: boolean;
+  key?: string | null;
+  meta?: boolean;
+  shift?: boolean;
+  type: "key";
+} | {
+  text: string;
+  type: "text";
+};
+
+/** `source.page.input`. */
+export interface PageInputRequest {
+  events: PageEvent[];
+  id: string;
+}
+
+/** What `source.page.input` answers with. */
+export interface PageInputResult {
+  dropped: number;
+  id: string;
+  sent: number;
+}
+
+/** `source.page.navigate`. */
+export interface PageNavigateRequest {
+  action?: PageAction;
+  id: string;
+  url?: string | null;
+}
+
+/** What `source.page.navigate` answers with. */
+export interface PageNavigateResult {
+  action: PageAction;
+  id: string;
+  url: string;
+}
+
 /** `scene.params.set`. */
 export interface ParamsRequest {
   scene?: string | null;
@@ -3995,6 +4078,8 @@ export interface MethodParams {
   "source.missing": MissingRequest;
   "source.on_loss.clear": IdRequest;
   "source.on_loss.set": SetOnLossRequest;
+  "source.page.input": PageInputRequest;
+  "source.page.navigate": PageNavigateRequest;
   "source.remove": IdRequest;
   "source.restart": IdRequest;
   "source.restore": IdRequest;
@@ -4230,6 +4315,8 @@ export interface MethodResults {
   "source.missing": MissingSource[];
   "source.on_loss.clear": SourceStatus;
   "source.on_loss.set": SourceStatus;
+  "source.page.input": PageInputResult;
+  "source.page.navigate": PageNavigateResult;
   "source.remove": Record<string, unknown>;
   "source.restart": SourceStatus;
   "source.restore": SourceStatus;
@@ -4520,6 +4607,8 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "source.missing", summary: "Sources that are not running, and why: failed, could not be started (with the error and the action that fixes it), removed, or unknown. Pass the ids a scene draws, or none for every one the mixer knows about.", scope: "read", mutating: false, destructive: false, rest: { method: "POST", path: "/api/v1/sources/{id}/missing" } },
   { name: "source.on_loss.clear", summary: "Take a source's backup away. If the backup is on now, the source is drawn as itself again at once.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/sources/{id}/on_loss/clear" } },
   { name: "source.on_loss.set", summary: "Give a source a backup: another source drawn in its place, wherever it appears, once it has had no picture for after_secs, and taken off again when it is back. Only the fields named change; a source with no backup yet needs `backup`.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/sources/{id}/on_loss" } },
+  { name: "source.page.input", summary: "Click, scroll and type into a web page source, as a person would in a browser. Points are shares of the page from 0.0 to 1.0. Nothing waits on the page: events the renderer cannot keep up with are dropped and counted.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/sources/{id}/page/input" } },
+  { name: "source.page.navigate", summary: "Take a web page source to another address, or back, forward or reload. A new address is kept as the source's own, so a saved project opens it there.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/sources/{id}/page/navigate" } },
   { name: "source.remove", summary: "Remove a source. If it is on programme the mixer cuts to the slate first.", scope: "operate", mutating: true, destructive: true, rest: { method: "DELETE", path: "/api/v1/sources/{id}" } },
   { name: "source.restart", summary: "Build a source's pipeline again now, rather than waiting for its next retry. For a source that could not be started or was removed, use source.restore.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/sources/{id}/restart" } },
   { name: "source.restore", summary: "Put back a source that source.remove took away, as it was: same id, address, settings, fader and mute. The mixer remembers the last sixteen it removed, until it restarts.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/sources/{id}/restore" } },
@@ -5666,6 +5755,16 @@ export class GeneratedMethods {
   /** Give a source a backup: another source drawn in its place, wherever it appears, once it has had no picture for after_secs, and taken off again when it is back. Only the fields named change; a source with no backup yet needs `backup`. */
   sourceOnLossSet(params: SetOnLossRequest): Promise<SourceStatus> {
     return this._call("source.on_loss.set", params as unknown as Record<string, unknown>) as Promise<SourceStatus>;
+  }
+
+  /** Click, scroll and type into a web page source, as a person would in a browser. Points are shares of the page from 0.0 to 1.0. Nothing waits on the page: events the renderer cannot keep up with are dropped and counted. */
+  sourcePageInput(params: PageInputRequest): Promise<PageInputResult> {
+    return this._call("source.page.input", params as unknown as Record<string, unknown>) as Promise<PageInputResult>;
+  }
+
+  /** Take a web page source to another address, or back, forward or reload. A new address is kept as the source's own, so a saved project opens it there. */
+  sourcePageNavigate(params: PageNavigateRequest): Promise<PageNavigateResult> {
+    return this._call("source.page.navigate", params as unknown as Record<string, unknown>) as Promise<PageNavigateResult>;
   }
 
   /** Remove a source. If it is on programme the mixer cuts to the slate first. */

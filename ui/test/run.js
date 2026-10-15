@@ -25,6 +25,7 @@ import { liveboxTests } from "./channels-livebox.js";
 import { renditionTests } from "./renditions.js";
 import { menubarTests } from "./menubar.js";
 import { touchTests } from "./touch.js";
+import { pageInteractTests } from "./page-interact.js";
 import { phoneTests } from "./phone.js";
 import { phoneReachTests } from "./phone-reach.js";
 import { phoneHandsTests } from "./phone-hands.js";
@@ -2984,6 +2985,12 @@ tileLevelTests(test, eq, ok)
   .catch((e) => {
     failed += 1;
     line("fail", "the touch suite threw: " + e.message);
+    console.error(e);
+  })
+  .then(() => pageInteractTests(test, eq, ok))
+  .catch((e) => {
+    failed += 1;
+    line("fail", "the Interact suite threw: " + e.message);
     console.error(e);
   })
   .then(() => phoneTests(test, eq, ok))

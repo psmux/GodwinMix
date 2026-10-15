@@ -8,6 +8,7 @@
 //! normaliser can touch them.
 
 use super::exec::ExecProcess;
+use super::page_control::PageControl;
 use super::{assemble, BuildCtx, Ingest, KindParts, Wiring};
 use crate::caps::CanvasCaps;
 use crate::config::Params;
@@ -59,17 +60,26 @@ fn new(req: SourceRequest<'_>) -> Result<Box<dyn Source>> {
         return Ok(Box::new(super::html::page::TransparentPage::new(req.ctx(), url)));
     }
     let sidecar = ExecSpec::browser(req.cfg.uri.as_str(), req.canvas, req.browser)?;
-    Ok(Box::new(BrowserSource {
-        ctx: req.ctx(),
-        process: sidecar.map(ExecProcess::new),
-        running: false,
-    }))
+    let page = PageControl::default();
+    let process = sidecar.map(|mut spec| {
+        // A control line, so the operator can use the page from the mixer's
+        // interface. Nothing is written on it until somebody does.
+        spec.pipe_stdin = true;
+        spec.argv.insert(1, "--control".into());
+        let mut process = ExecProcess::new(spec);
+        process.on_line = Some(page.watch());
+        process
+    });
+    Ok(Box::new(BrowserSource { ctx: req.ctx(), process, page, running: false }))
 }
 
 pub struct BrowserSource {
     ctx: BuildCtx,
     /// Some when a sidecar renders the page. None falls back to `wpesrc`.
     process: Option<ExecProcess>,
+    /// The operator's clicks and keys on the way down, and where the page is
+    /// on the way up. See `page_control`.
+    page: PageControl,
     running: bool,
 }
 
@@ -83,6 +93,7 @@ impl BrowserSource {
         let id = self.ctx.id.clone();
         let process = self.process.as_mut().expect("checked by the caller");
         let src = process.build_src(&id)?;
+        self.page.attach(process.child.as_mut().and_then(|c| c.take_stdin()));
         let decode = ExecProcess::decoder(&id)?;
         assemble(
             &self.ctx,
@@ -184,18 +195,57 @@ impl Source for BrowserSource {
         Health::of(if self.running { PluginState::Running } else { PluginState::Starting })
     }
 
-    fn call(&mut self, method: &str, _params: Value) -> Result<Value> {
+    fn call(&mut self, method: &str, params: Value) -> Result<Value> {
         match method {
             "restart" => match &mut self.process {
                 Some(p) => {
                     p.respawn(&self.ctx.id)?;
+                    self.page.attach(p.child.as_mut().and_then(|c| c.take_stdin()));
                     Ok(json!({ "respawned": true }))
                 }
                 None => Ok(Value::Null),
             },
             "sidecar" => Ok(json!({ "sidecar": self.sidecar() })),
-            other => Err(unknown_method(&MANIFEST, other, &["restart", "sidecar"])),
+            "page.state" => Ok(serde_json::to_value(self.page.state())?),
+            "page" => self.page_lines(params),
+            "page.go" => self.page_go(params),
+            other => Err(unknown_method(&MANIFEST, other, &["restart", "sidecar", "page", "page.go", "page.state"])),
         }
+    }
+}
+
+impl BrowserSource {
+    fn page_process(&self) -> Result<()> {
+        anyhow::ensure!(
+            self.process.is_some(),
+            "this page is drawn by GStreamer's own web renderer, which takes no clicks or keys.              Install the browser renderer (Settings, Web pages) and add the page again to use it"
+        );
+        Ok(())
+    }
+
+    /// `{"lines": [...]}`: control lines for the renderer, already checked.
+    fn page_lines(&mut self, params: Value) -> Result<Value> {
+        self.page_process()?;
+        let lines: Vec<String> = serde_json::from_value(params.get("lines").cloned().unwrap_or_default())?;
+        let (sent, dropped) = self.page.send(&self.ctx.id, lines)?;
+        Ok(json!({ "sent": sent, "dropped": dropped }))
+    }
+
+    /// `{"url": ...}`: go there now, and come back there after a restart.
+    fn page_go(&mut self, params: Value) -> Result<Value> {
+        self.page_process()?;
+        let url = params.get("url").and_then(Value::as_str).context("page.go needs a url")?.to_string();
+        let line = godwinmix_protocol::page::navigate_line(godwinmix_protocol::page::PageAction::Go, Some(&url));
+        self.page.send(&self.ctx.id, vec![line])?;
+        if let Some(p) = &mut self.process {
+            if let Some(i) = p.spec.argv.iter().position(|a| a == "--url") {
+                if let Some(v) = p.spec.argv.get_mut(i + 1) {
+                    *v = url.clone();
+                }
+            }
+        }
+        self.page.going_to(&url);
+        Ok(json!({ "url": url }))
     }
 }
 

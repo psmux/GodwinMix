@@ -280,6 +280,7 @@ class SourcesPanel extends HTMLElement {
         audio: this.audio,
         scrub: this.scrub,
         onGear: (id, section) => this.openDrawer(id, section),
+        onInteract: (id) => this.interact(id),
         onBackup: (method, id) => this.client.call(method, { id }).catch((e) => errorToast(e, "Backup")),
         onMute: (id, muted) => this.audio.setMuted(id, muted).catch((e) => errorToast(e, "Mute")),
         meters: settings().meters,
@@ -553,6 +554,14 @@ class SourcesPanel extends HTMLElement {
     if (id) this.activate(id);
   }
 
+  /** Interact, fetched the first time somebody uses a page by hand. */
+  async interact(id) {
+    const source = this.client.store.source(id);
+    if (!source) return;
+    const { openInteract } = await import("./page-interact.js");
+    return openInteract(this.client, source);
+  }
+
   /** The settings drawer, fetched on the first gear click and not before. */
   async openDrawer(id, section) {
     const source = this.client.store.source(id);
@@ -592,6 +601,7 @@ class SourcesPanel extends HTMLElement {
       id && { label: "Rename", key: key("tray.rename") || "F2", disabled: many, run: () => this.beginRename(id) },
       id && { kind: "colours", onColour: (colour) => this.setColour(ids, colour) },
       id && { label: "Settings", run: () => this.openDrawer(id) },
+      id && !many && this.client.store.source(id)?.page && { label: "Interact with the page", run: () => this.interact(id) },
       ...look,
       id && { kind: "separator" },
       // Here as well as on Ctrl+C and Ctrl+V, for a phone that has neither.
