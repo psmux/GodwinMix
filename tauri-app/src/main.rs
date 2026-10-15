@@ -36,6 +36,7 @@ mod core_link;
 mod lan;
 mod lan_menu;
 mod page_menu;
+mod permissions;
 mod plugins;
 mod restart;
 mod revive;
@@ -165,6 +166,19 @@ pub fn quit(app: &AppHandle, stop_core: bool) {
         // the run loop is not going to end: this leaves at once instead.
         let _ = app.save_window_state(StateFlags::POSITION | StateFlags::SIZE | StateFlags::MAXIMIZED);
         std::process::exit(code);
+    });
+}
+
+/// Stop the mixer this app started and start the app again, which is how a
+/// permission granted in System Settings reaches the plugins. Tauri's own
+/// restart leaves without the Exit event that stops the mixer, so it is wound
+/// down here first.
+pub fn relaunch(app: &AppHandle) {
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        wind_down(&app, false).await;
+        let _ = app.save_window_state(StateFlags::POSITION | StateFlags::SIZE | StateFlags::MAXIMIZED);
+        app.restart();
     });
 }
 
