@@ -29,8 +29,9 @@ export function openInteract(client, source) {
   const bar = addressBar(client, id, () => send.flushNow());
   const note = el("div.sm.dim", { text: "Click, scroll and type on the picture. It is the page as it goes to air." });
 
-  const width = Math.min(1920, Math.ceil(Math.min(window.innerWidth, 1100) * (window.devicePixelRatio || 1) / 16) * 16);
-  img.src = streamUrl(client, `/mjpeg/${encodeURIComponent(id)}?width=${width}&fps=30`);
+  // The picture is a cell of the multiview, and the width asked for is the
+  // whole mosaic's. The widest there is, so the page's text can be read.
+  img.src = streamUrl(client, `/mjpeg/${encodeURIComponent(id)}?width=1920&fps=30`);
   img.onerror = () => {
     note.textContent = "No live picture: the multiview is switched off in Settings. Clicks and keys still reach the page.";
   };
@@ -40,6 +41,11 @@ export function openInteract(client, source) {
 
   const keyboard = el("button.btn", { text: "Keyboard", title: "Type into the page", onclick: () => keys.focus() });
   const off = client.onRender(() => bar.sync(client.store.source(id)));
+  // A link followed on the page changes nothing the mixer broadcasts, so
+  // while this view is open it asks where the page is, once a second.
+  const poll = setInterval(() => {
+    client.call("source.get", { id }).then((s) => bar.sync(s)).catch(() => {});
+  }, 1000);
   const dialog = modal({
     title: `Interact: ${source.name || id}`,
     wide: true,
@@ -47,6 +53,7 @@ export function openInteract(client, source) {
     footer: [keyboard, el("button.btn.primary", { text: "Done", onclick: () => dialog.close() })],
     onClose: () => {
       off();
+      clearInterval(poll);
       send.stop();
       // Dropping the address ends the stream, and the multiview cell with it.
       img.removeAttribute("src");
@@ -104,9 +111,10 @@ function addressBar(client, id, before) {
     before();
     return client.call("source.page.navigate", url ? { id, action, url } : { id, action }).catch((e) => errorToast(e, "Go"));
   };
-  const back = el("button.btn.icon", { text: "←", title: "Back", "aria-label": "Back", onclick: () => go("back") });
-  const forward = el("button.btn.icon", { text: "→", title: "Forward", "aria-label": "Forward", onclick: () => go("forward") });
-  const reload = el("button.btn.icon", { text: "⟳", title: "Reload", "aria-label": "Reload", onclick: () => go("reload") });
+  // type=button: in the form, a plain button would also submit the address.
+  const back = el("button.btn.icon", { type: "button", text: "←", title: "Back", "aria-label": "Back", onclick: () => go("back") });
+  const forward = el("button.btn.icon", { type: "button", text: "→", title: "Forward", "aria-label": "Forward", onclick: () => go("forward") });
+  const reload = el("button.btn.icon", { type: "button", text: "⟳", title: "Reload", "aria-label": "Reload", onclick: () => go("reload") });
   // Text, not url: a person types example.com, which a url field refuses.
   const url = el("input.grow.page-url", { type: "text", inputmode: "url", "aria-label": "Address", placeholder: "https://", enterkeyhint: "go" });
   const form = el("form.row.page-bar", {

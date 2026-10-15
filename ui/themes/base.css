@@ -267,8 +267,12 @@ label { display: block; }
   position: absolute; top: 5px; left: 5px; font-size: var(--fs-sm);
   background: var(--overlay); border-radius: 3px; padding: 0 5px;
 }
+/* Every tile has a line under its name ("Clip", "Continuous live source"),
+   and the hover strip has to clear it as well as the name, or it sits on
+   the name's buttons and they cannot be pressed. */
+.tile { --under-bar: calc(6px + var(--lh) * var(--fs-sm)); }
 .tile .strip {
-  position: absolute; left: 0; right: 0; bottom: 26px; padding: 4px 6px;
+  position: absolute; left: 0; right: 0; bottom: calc(26px + var(--under-bar)); padding: 4px 6px;
   background: var(--overlay); opacity: 0; transition: opacity var(--anim);
   display: flex; align-items: center; gap: 6px;
 }
@@ -277,7 +281,7 @@ label { display: block; }
    name, in every gallery mode, so a glance says which inputs are making a
    sound. The hover strip moves up by the bar's height to stay clear of it. */
 .tile .meter.level { height: 6px; padding: 1px 6px; gap: 1px; background: var(--panel); }
-.tile.metered .strip { bottom: 32px; }
+.tile.metered .strip { bottom: calc(32px + var(--under-bar)); }
 /* A source with sound and no picture shows that, not a black box that reads as
    a camera that failed, and its level is the widest thing on it. */
 .tile .soundface {
@@ -288,7 +292,7 @@ label { display: block; }
 .tile .soundface svg { width: 30%; max-width: 40px; color: var(--tile-color, var(--kind-other)); }
 .tile .soundface .row { display: flex; gap: 8px; align-items: baseline; }
 .tile.sound .meter.level { height: 14px; }
-.tile.sound.metered .strip { bottom: 40px; }
+.tile.sound.metered .strip { bottom: calc(40px + var(--under-bar)); }
 .tile.mode-label .soundface { display: none; }
 .tile input[type=range] { width: 100%; accent-color: var(--accent); }
 

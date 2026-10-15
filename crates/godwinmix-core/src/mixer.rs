@@ -5002,10 +5002,16 @@ impl Mixer {
                 // Asked once and used twice: each of these is a query on the
                 // source's own pipeline, and the snapshot is polled.
                 let at = s.position();
+                // A page the operator took somewhere else says where it is now.
+                let page = s.input.page_state();
+                let uri = match &page {
+                    Some(p) if p.url.starts_with("http") => crate::input::as_web_uri(&p.url),
+                    _ => s.input.config.display_uri(),
+                };
                 let mut status = SourceStatus {
                     id: s.input.id.clone(),
                     name: s.input.display_name(),
-                    uri: safe_uri_label(&s.input.config.display_uri()),
+                    uri: safe_uri_label(&uri),
                     state: s.input.observed_state(),
                     has_video: s.input.has_video(),
                     has_audio: s.input.has_audio(),
@@ -5055,7 +5061,7 @@ impl Mixer {
                 }
                 // A page drawn by the renderer says where it is, for the
                 // address bar of the Interact view.
-                if let Some(page) = s.input.page_state() {
+                if let Some(page) = page {
                     status.put_extra("page", page);
                 }
                 // A clip says what it does at its end, and whether it is
