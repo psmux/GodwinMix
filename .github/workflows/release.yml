@@ -484,6 +484,17 @@ jobs:
           # will not go live and a log that stops mid sentence.
           grep -q NSCameraUsageDescription "$app/Contents/Info.plist" \
             || { echo "::error::tauri-app/Info.plist was not merged into $app" >&2; exit 1; }
+          # Every program in the app carries a signature, ad hoc at least.
+          # macOS refuses the camera, the microphone and the screen, with no
+          # prompt, to a process it cannot identify, and the Intel linker
+          # signs nothing by itself: the 0.3.12 Intel app's camera never
+          # opened for that reason.
+          codesign --verify --deep --strict "$app" \
+            || { echo "::error::$app does not verify as signed" >&2; exit 1; }
+          find "$app/Contents" -type f -perm -u+x -print0 | while IFS= read -r -d '' f; do
+            case "$(head -c 4 "$f" | xxd -p)" in cffaedfe|cafebabe|feedfacf) ;; *) continue ;; esac
+            codesign -v "$f" 2>/dev/null || { echo "::error::$f is not signed" >&2; exit 1; }
+          done
           # --headless-check asks the mixer it starts whether it loaded each
           # of them, which is the claim that matters.
           ./"$app"/Contents/MacOS/godwinmix-desktop --headless-check
