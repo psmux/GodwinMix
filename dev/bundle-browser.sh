@@ -5,7 +5,11 @@
 #
 # Builds browser/ (which downloads CEF the first time, into CEF_PATH or
 # ~/.cache/gmx-cef) and stages the result in tauri-app/browser/, which
-# tauri.conf.json lists under bundle.resources:
+# tauri.conf.json lists under bundle.resources. The CEF is GodwinMix's own
+# build with H.264 and AAC, from the psmux/godwinmix-cef release for the
+# version browser/Cargo.lock pins (dev/cef-codecs.sh); with no build there for
+# this platform it stops and says how to make one. CEF_CODECS=off builds
+# against the official CEF instead, which has neither codec.
 #
 #   macOS    tauri-app/browser/godwinmix-browser.app   (dev/mac-bundle.sh)
 #   Linux    tauri-app/browser/godwinmix-browser, libcef.so and CEF's resources
@@ -25,6 +29,8 @@ OUT="$REPO/tauri-app/browser"
 [[ "${1:-}" == "--out" ]] && OUT="$2"
 export CEF_PATH="${CEF_PATH:-$HOME/.cache/gmx-cef}"
 export CARGO_NET_RETRY=10
+source "$REPO/dev/cef-codecs.sh"
+[[ "${CEF_CODECS:-on}" == off ]] || use_cef_codecs
 REL="$REPO/browser/target/release"
 
 mkdir -p "$OUT"
@@ -59,4 +65,5 @@ case "$(uname -s)" in
         ;;
     *) echo "unknown platform: $(uname -s)" >&2; exit 1 ;;
 esac
+[[ "${CEF_CODECS:-on}" == off ]] || check_cef_codecs
 echo "browser renderer staged in $OUT ($(du -sh "$OUT" | cut -f1))"
