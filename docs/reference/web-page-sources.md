@@ -40,10 +40,25 @@ curl -X POST localhost:8080/api/sources -H 'content-type: application/json' \
 `kind: "web"` (or `--web`) says "this is a website"; `id` may be omitted and
 is then derived from the name or host, made unique with a suffix. The
 `web+https://…` form still works everywhere and is what the mixer stores.
-Two things about sites: players that autoplay start on their own (the
-browser is told no gesture is needed); a player that waits for a click shows
-its poster. And YouTube's `/embed/` URLs refuse to load as a top level page
-(Error 153); paste the normal `/watch?v=` address.
+Players that autoplay start on their own (the browser is told no gesture is
+needed); a player that waits for a click shows its poster until somebody
+clicks it from [Interact](#driving-a-page-by-hand). A YouTube `/embed/`
+address works too: the renderer adds `autoplay=1` when the address says
+nothing about autoplay, and sends the navigation with the referrer
+`https://mix.godwin.desktop/`, the app identifier YouTube asks an embedding
+app for. Without a referrer YouTube refuses the embed with "Video player
+configuration error, Error 153".
+
+The renderer's user agent is Chrome's, with `GodwinMix/<version>` on the end:
+
+```
+Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36 GodwinMix/0.2.0
+```
+
+The platform part is the one Chrome sends on each system. It used to be
+Chromium's default with `Chrome/150...` replaced by `GodwinMix/...`, and sites
+that look for a browser they know took that for an unknown one. A page that
+wants to know it is being captured can still look for `GodwinMix/`.
 
 `superimpose` is described further down. It is `"off"` unless you ask for it,
 and a source that is not a website accepts the field and never looks at it.
@@ -223,7 +238,9 @@ Runs with or without a GPU. Chromium rasterises in software by default here
 (`--disable-gpu`); the switches Chromium is started with can be extended
 with `GMX_BROWSER_SWITCHES="a,b=c"` in the sidecar's environment.
 
-**Codecs.** Everything Chromium does: WebAudio, WebGL, canvas, HTML5 video
+#### Codecs
+
+Everything Chromium does: WebAudio, WebGL, canvas, HTML5 video
 in VP8, VP9, AV1 and Opus. H.264 and AAC depend on which CEF binary sits
 next to the sidecar. The official CEF binaries the crate downloads are built
 without them, for patent licensing reasons, and a `<video>` with an H.264
@@ -286,7 +303,8 @@ has them:
   machine, and with a GPU Chromium can be given hardware decoding
   (`GMX_BROWSER_SWITCHES="enable-features=VaapiVideoDecoder"` without
   `disable-gpu`, untested here). On a Mac, the native codec-less `.app` plays
-  YouTube smoothly, because YouTube does not need H.264. Verified the
+  YouTube recordings smoothly, because YouTube sends those in VP9 or AV1
+  (a live stream with AAC only sound does not play; see below). Verified the
   same way: the H.264/AAC page on air through the mixer at 30.0 fps, six of six
   flashes and beeps, audio +17 ms, black 16, white 235. It is more moving
   parts than the drop-in distribution, and its `libcef.so` links Arch's
@@ -297,6 +315,24 @@ has them:
   It is a Chromium build: hours, 100 GB of disk. Until then a workstation
   runs the containerised Linux sidecar through Docker, which is what the Arch
   route above was measured with, from this Mac.
+
+**What the released app carries.** The desktop app and the release archives
+are built by `dev/bundle-browser.sh` on each platform's own runner, which lets
+the `cef` crate download the official CEF 150.0.10 minimal distribution. So
+on Windows, macOS and Linux alike the renderer that ships has VP8, VP9, AV1,
+Opus, Vorbis and FLAC, and no H.264 and no AAC. Most of YouTube plays, because
+YouTube offers VP9 or AV1 with Opus to a browser that asks for them. What does
+not: a video offered only in H.264, and very often a YouTube live stream,
+whose sound is only offered in AAC. The page then shows "Your browser can't
+play this video", and the source's status carries `page.notice` saying so
+(see [driving a page by hand](#driving-a-page-by-hand)). Measured on Windows
+on 2026-10-15: `MediaSource.isTypeSupported` answered false for
+`avc1.4d401f` and `mp4a.40.2` and true for VP9, AV1 and Opus; two YouTube
+recordings played with sound, and a news live stream, whose formats list held
+VP9 video and only `audio/mp4` sound, showed the error. Getting the live
+streams to play means shipping a CEF built with `proprietary_codecs=true`:
+the Karere distributions above for Linux, and a Chromium build of our own for
+Windows and macOS.
 
 Shipping a software H.264 or AAC decoder is what the licensing is about;
 that is a decision for whoever distributes the build, not something the code
@@ -343,6 +379,70 @@ Shutdown is clean: on `source remove` the mixer signals the process group,
 the sidecar quits its message loop, and no Chromium process is left behind
 (checked on both platforms). The sidecar also stops itself when the mixer
 goes away and its stdout closes.
+
+### Driving a page by hand
+
+An operator can use a page as they would in a browser: the **Interact** view
+in the Sources panel ([how to](../how-to/use-a-web-page-by-hand.md)), or these
+two methods from any client. Both need the `operate` scope, and both refuse a
+source that is not a page drawn by the renderer, naming its type.
+
+| Method | REST | MCP tool | What it does |
+|---|---|---|---|
+| `source.page.input` | `POST /api/v1/sources/{id}/page/input` | `use_web_page` | Pointer, wheel and key events, oldest first, at most 64 a call |
+| `source.page.navigate` | `POST /api/v1/sources/{id}/page/navigate` | `navigate_web_page` | `go` to a `url`, `back`, `forward` or `reload` |
+
+`source.page.input` takes `{"id", "events": [...]}`. Each event has a `type`:
+
+| `type` | Fields | |
+|---|---|---|
+| `move` | `x`, `y` | The pointer moved. With a button held it is a drag |
+| `down`, `up` | `x`, `y`, `button` (`left`, `middle`, `right`; default left), `count` (2 for a double click; default 1) | A button pressed or let go |
+| `wheel` | `x`, `y`, `dx`, `dy` | A scroll in CSS pixels; a positive `dy` scrolls down, as a browser's `wheel` event has it |
+| `leave` | | The pointer left the picture |
+| `key` | `code`, `key` | A key pressed and let go. `code` is the browser's `keyCode` (13 Enter, 8 Backspace, 37 to 40 the arrows); `key` is the character it typed, when it typed one |
+| `text` | `text` | Text typed into the focused field as one piece, up to 2000 characters: what a phone keyboard or an input method hands over |
+
+`x` and `y` are shares of the page, 0.0 at the left or top and 1.0 at the
+right or bottom, measured on the picture and not on any border around it. A
+point outside that range is refused with the rule. `move`, `down`, `up` and
+`key` also take `shift`, `ctrl`, `alt` and `meta`, true when held.
+
+The answer is `{"id", "sent", "dropped"}`. Nothing waits on the page: the
+events go into a queue of 256 that a thread of the source's own writes to the
+renderer, and an event that finds the queue full is dropped and counted. A
+call while the source's renderer is restarting is refused with "try again".
+
+`source.page.navigate` takes `{"id", "action", "url"}`. `action` is `go`
+(the default), `back`, `forward` or `reload`. For `go`, `url` is an http or
+https address, and a bare host such as `example.com` is taken as https; any
+other scheme (`file:`, `javascript:`, `data:`) is refused, since an address
+typed into a shared desk is otherwise a way into the mixer's machine. The new
+address is kept as the source's own: the runtime store and a saved project
+open it. The answer is `{"id", "action", "url"}`, with the address the source
+keeps.
+
+Every page source drawn by the renderer carries `page` in its status:
+
+```json
+"page": {"url": "https://www.youtube.com/watch?v=aqz-KE-bpKQ", "can_back": true,
+         "can_forward": false, "loading": false}
+```
+
+`url` follows the page, links and redirects included, and is what the source
+is saved with. `notice`, when present, says in a sentence why the page cannot
+play what it is showing; today that is only the codecs below, and it starts
+with `codecs:`. It goes away when the page changes. The status is not pushed
+when only `page` changes, so a client showing it while somebody uses the page
+asks `source.get` again (the Interact view does once a second while open).
+
+Underneath, the renderer runs with `--control` and reads one JSON line per
+event on its stdin, exactly as the protocol serialises them, plus
+`{"type":"go","url":...}`, `{"type":"back"}`, `{"type":"forward"}` and
+`{"type":"reload"}`. It writes `[browser] page {json}` on stderr when the
+address, the loading state or the notice changes. Nothing is written to the
+renderer until somebody touches the page; the mixer holds the pipe and starts
+the writing thread on the first event.
 
 ### Transparent pages
 

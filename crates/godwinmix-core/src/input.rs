@@ -939,6 +939,27 @@ impl InputPipeline {
         self.kind.lock().call(method, params)
     }
 
+    /// Ask the source for something without waiting for it. `None` when the
+    /// kind is busy, in a restart or another call, which the caller turns
+    /// into "try again" rather than holding the mixer thread on it.
+    pub fn try_call(&self, method: &str, params: serde_json::Value) -> Option<Result<serde_json::Value>> {
+        self.kind.try_lock().map(|mut kind| kind.call(method, params))
+    }
+
+    /// Where a web page source's page is now, as its renderer last said,
+    /// for a kind that draws one. `None` for every other kind, or when the
+    /// kind is busy.
+    pub fn page_state(&self) -> Option<godwinmix_protocol::page::PageState> {
+        // Asked of the browser kind only. Another kind's `call` may be a
+        // round trip to a plugin process, which this must never wait on.
+        let browser = &crate::plugin::kinds::browser::MANIFEST;
+        if (self.manifest.plugin, self.manifest.id) != (browser.plugin, browser.id) {
+            return None;
+        }
+        let state = self.try_call("page.state", serde_json::Value::Null)?.ok()?;
+        serde_json::from_value(state).ok()
+    }
+
     /// Tell a source that plays its own way in and out whether the programme
     /// shows it. Never waits: a kind busy in a restart or a call holds its
     /// lock, and false says it was not told and should be told again. A
@@ -979,6 +1000,13 @@ impl InputPipeline {
         }
         if let Some(params) = self.reconfigured.lock().clone() {
             cfg.params = params;
+        }
+        // A page the operator has taken somewhere else, by the address bar or
+        // by a link, is kept where they left it.
+        if let Some(page) = self.page_state().filter(|p| p.url.starts_with("http")) {
+            if web_url(&cfg.uri).as_deref() != Some(page.url.as_str()) {
+                cfg.uri = as_web_uri(&page.url);
+            }
         }
         cfg
     }
@@ -2301,6 +2329,11 @@ pub struct ExecChild {
 }
 
 impl ExecChild {
+    /// The child's stdin, when it was given one and nobody has taken it yet.
+    pub fn take_stdin(&mut self) -> Option<std::process::ChildStdin> {
+        self.child.as_mut()?.stdin.take()
+    }
+
     /// Has it finished? One non blocking wait, and the status is collected
     /// here rather than left for the drop, which is what makes a plugin that
     /// exits on `shutdown` stop being waited for straight away.
@@ -2436,11 +2469,28 @@ pub enum ExecStdout {
 /// this machine has, so an exec source is accelerated on a GPU box and falls
 /// back to software on one without, exactly like every other source.
 pub fn spawn_exec(id: &str, spec: &ExecSpec) -> Result<(ExecStdout, std::process::Child, Option<StderrReader>)> {
+    spawn_exec_with(id, spec, None)
+}
+
+/// Something that reads a child's stderr lines as well as the log: the page
+/// source keeping up with where its page is. Runs on the stderr thread, so it
+/// must not wait on anything.
+pub type LineHook = Arc<dyn Fn(&str) + Send + Sync>;
+
+/// `spawn_exec`, with every stderr line also handed to `hook`.
+pub fn spawn_exec_with(
+    id: &str,
+    spec: &ExecSpec,
+    hook: Option<LineHook>,
+) -> Result<(ExecStdout, std::process::Child, Option<StderrReader>)> {
     let mut child = exec_process(spec, std::process::Stdio::piped())?;
 
     let stderr = child.stderr.take().map(|err| {
         let name = id.to_string();
         StderrReader::spawn(format!("exec-stderr-{id}"), err, move |line| {
+            if let Some(hook) = &hook {
+                hook(line);
+            }
             // Inside the instance's span, so `log.set {instance, level}`
             // reaches a sidecar's own output. See `observe::in_instance`.
             crate::observe::in_instance(&name, || debug!(source = %name, "{line}"));
@@ -2622,7 +2672,12 @@ pub fn process_alive(pid: u32) -> bool {
 }
 
 pub fn make_exec_source(id: &str, spec: &ExecSpec) -> Result<(gst::Element, ExecChild)> {
-    let (out, child, stderr) = spawn_exec(id, spec)?;
+    make_exec_source_with(id, spec, None)
+}
+
+/// `make_exec_source`, with the child's stderr lines also handed to `hook`.
+pub fn make_exec_source_with(id: &str, spec: &ExecSpec, hook: Option<LineHook>) -> Result<(gst::Element, ExecChild)> {
+    let (out, child, stderr) = spawn_exec_with(id, spec, hook)?;
     // Owned from here on, so that a failure below takes the process with it.
     let mut held =
         ExecChild::new(child, spec.env.clone(), None, stderr);

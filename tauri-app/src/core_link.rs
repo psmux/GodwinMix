@@ -223,7 +223,7 @@ fn plain(e: &reqwest::Error) -> String {
 
 /// Percent encoding for the one place the shell needs it. A token is hex
 /// today, but a remote core's token is whatever its operator typed.
-fn urlencode(s: &str) -> String {
+pub(crate) fn urlencode(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for b in s.bytes() {
         match b {

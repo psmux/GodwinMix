@@ -1698,6 +1698,11 @@ pub struct Ext {
     /// subscribed. See 11 section 3.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub preview: Option<PreviewExt>,
+    /// The programme itself at full quality, for a full screen output on a
+    /// projector or a second monitor: one JPEG per programme frame, at up to
+    /// the canvas's size, off the raw programme tee while subscribed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub programme: Option<ProgrammeExt>,
     /// `event/tally`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tally: Option<bool>,
@@ -4099,6 +4104,66 @@ pub struct Override {
     pub visible: Option<bool>,
 }
 
+/// Where `source.page.navigate` goes.
+pub type PageAction = String;
+/// The values api_level 1 knows for [`PageAction`].
+pub const PAGE_ACTION_VALUES: &[&str] = &["go", "back", "forward", "reload"];
+
+/// A mouse button.
+pub type PageButton = String;
+/// The values api_level 1 knows for [`PageButton`].
+pub const PAGE_BUTTON_VALUES: &[&str] = &["left", "middle", "right"];
+
+/// One thing the operator did to the page.
+pub type PageEvent = Value;
+
+/// `source.page.input`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PageInputRequest {
+    /// What the operator did, oldest first.
+    pub events: Vec<PageEvent>,
+    /// Source id. A web page source drawn by the browser renderer.
+    pub id: String,
+}
+
+/// What `source.page.input` answers with.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PageInputResult {
+    /// Events dropped because the renderer was not keeping up. Pointer moves
+    /// are the usual ones, and the next move puts the pointer right.
+    pub dropped: i64,
+    pub id: String,
+    /// Events handed to the renderer.
+    pub sent: i64,
+}
+
+/// `source.page.navigate`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PageNavigateRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub action: Option<PageAction>,
+    /// Source id.
+    pub id: String,
+    /// The address for `go`: http or https. A bare host such as
+    /// `example.com` is taken as https.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+}
+
+/// What `source.page.navigate` answers with.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PageNavigateResult {
+    pub action: PageAction,
+    pub id: String,
+    /// The address the source keeps. For `go` the new one; otherwise the one
+    /// it had, since back, forward and reload are not saved.
+    pub url: String,
+}
+
 /// `scene.params.set`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -4589,6 +4654,9 @@ pub struct ProgramState {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub scene: Option<String>,
 }
+
+/// `ext.programme`. `true`, `false`, or an object.
+pub type ProgrammeExt = Value;
 
 /// Where an encoder is pointed for one protocol.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -6837,7 +6905,7 @@ pub struct MethodInfo {
     pub rest: Option<(&'static str, &'static str)>,
 }
 
-pub const METHODS: [MethodInfo; 231] = [
+pub const METHODS: [MethodInfo; 233] = [
     MethodInfo { name: "adbreak.end", summary: "Cut a running ad short, or disarm one that is scheduled.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/end")) },
     MethodInfo { name: "adbreak.start", summary: "Interrupt the programme with a clip, then rejoin live when it ends.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/start")) },
     MethodInfo { name: "agent.setup", summary: "Set an AI agent tool up to use this mixer: its MCP config gets one entry, godwinmix, that runs this mixer's own executable, and its skills folder gets the GodwinMix skills. Other entries are kept and a changed file is copied aside first. dry_run answers every file it would write. The answer says how to start the tool and a first thing to ask it.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/agent/setup")) },
@@ -7050,6 +7118,8 @@ pub const METHODS: [MethodInfo; 231] = [
     MethodInfo { name: "source.missing", summary: "Sources that are not running, and why: failed, could not be started (with the error and the action that fixes it), removed, or unknown. Pass the ids a scene draws, or none for every one the mixer knows about.", scope: "read", mutating: false, destructive: false, rest: Some(("POST", "/api/v1/sources/{id}/missing")) },
     MethodInfo { name: "source.on_loss.clear", summary: "Take a source's backup away. If the backup is on now, the source is drawn as itself again at once.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/sources/{id}/on_loss/clear")) },
     MethodInfo { name: "source.on_loss.set", summary: "Give a source a backup: another source drawn in its place, wherever it appears, once it has had no picture for after_secs, and taken off again when it is back. Only the fields named change; a source with no backup yet needs `backup`.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/sources/{id}/on_loss")) },
+    MethodInfo { name: "source.page.input", summary: "Click, scroll and type into a web page source, as a person would in a browser. Points are shares of the page from 0.0 to 1.0. Nothing waits on the page: events the renderer cannot keep up with are dropped and counted.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/sources/{id}/page/input")) },
+    MethodInfo { name: "source.page.navigate", summary: "Take a web page source to another address, or back, forward or reload. A new address is kept as the source's own, so a saved project opens it there.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/sources/{id}/page/navigate")) },
     MethodInfo { name: "source.remove", summary: "Remove a source. If it is on programme the mixer cuts to the slate first.", scope: "operate", mutating: true, destructive: true, rest: Some(("DELETE", "/api/v1/sources/{id}")) },
     MethodInfo { name: "source.restart", summary: "Build a source's pipeline again now, rather than waiting for its next retry. For a source that could not be started or was removed, use source.restore.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/sources/{id}/restart")) },
     MethodInfo { name: "source.restore", summary: "Put back a source that source.remove took away, as it was: same id, address, settings, fader and mute. The mixer remembers the last sixteen it removed, until it restarts.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/sources/{id}/restore")) },
@@ -7071,7 +7141,7 @@ pub const METHODS: [MethodInfo; 231] = [
     MethodInfo { name: "vitals.set", summary: "Change the alarm thresholds, or whether a mosaic is kept up for the black and freeze checks while nobody is looking. Fields left out keep their defaults; a duration of 0 switches that check off. Applies within a second.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/vitals/set")) },
 ];
 
-pub const EVENT_NAMES: [&str; 37] = [
+pub const EVENT_NAMES: [&str; 38] = [
     "snapshot",
     "program.took",
     "scene.patch",
@@ -7097,6 +7167,7 @@ pub const EVENT_NAMES: [&str; 37] = [
     "multiview.layout",
     "multiview.frame",
     "preview.frame",
+    "programme.frame",
     "setup.changed",
     "resync",
     "flush",
@@ -7111,13 +7182,14 @@ pub const EVENT_NAMES: [&str; 37] = [
     "health",
 ];
 
-pub const EXT_KEYS: [&str; 8] = [
+pub const EXT_KEYS: [&str; 9] = [
     "multiview",
     "meters",
     "tally",
     "positions",
     "thumb",
     "preview",
+    "programme",
     "telemetry",
     "agent",
 ];
@@ -7178,6 +7250,8 @@ pub enum Event {
     MultiviewFrame(crate::frames::Frame),
     /// 16 byte header then JPEG, decoded by [`crate::frames::parse_frame`].
     PreviewFrame(crate::frames::Frame),
+    /// 16 byte header then JPEG, decoded by [`crate::frames::parse_frame`].
+    ProgrammeFrame(crate::frames::Frame),
     /// A piece the mixer sets up on first use moved on: the browser renderer or a first party plugin started setting up, got further through its download, became ready or stopped. `message` is for a person; `detail` names paths and commands for a developer.
     SetupChanged(SetupChangedEvent),
     /// This client fell behind and events were dropped. Re-subscribe for a fresh snapshot; nothing between from_seq and the new snapshot arrives.
@@ -7384,6 +7458,7 @@ impl Event {
             Event::MultiviewLayout(_) => "multiview.layout",
             Event::MultiviewFrame(_) => "multiview.frame",
             Event::PreviewFrame(_) => "preview.frame",
+            Event::ProgrammeFrame(_) => "programme.frame",
             Event::SetupChanged(_) => "setup.changed",
             Event::Resync(_) => "resync",
             Event::Flush(_) => "flush",
@@ -8462,6 +8537,16 @@ impl Client {
     /// Give a source a backup: another source drawn in its place, wherever it appears, once it has had no picture for after_secs, and taken off again when it is back. Only the fields named change; a source with no backup yet needs `backup`.
     pub async fn source_on_loss_set(&self, params: &SetOnLossRequest) -> Result<SourceStatus> {
         self.call("source.on_loss.set", params).await
+    }
+
+    /// Click, scroll and type into a web page source, as a person would in a browser. Points are shares of the page from 0.0 to 1.0. Nothing waits on the page: events the renderer cannot keep up with are dropped and counted.
+    pub async fn source_page_input(&self, params: &PageInputRequest) -> Result<PageInputResult> {
+        self.call("source.page.input", params).await
+    }
+
+    /// Take a web page source to another address, or back, forward or reload. A new address is kept as the source's own, so a saved project opens it there.
+    pub async fn source_page_navigate(&self, params: &PageNavigateRequest) -> Result<PageNavigateResult> {
+        self.call("source.page.navigate", params).await
     }
 
     /// Remove a source. If it is on programme the mixer cuts to the slate first.

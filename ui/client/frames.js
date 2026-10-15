@@ -13,13 +13,16 @@
 // hands frames here with `bare: true` and the layout the status document
 // carries.
 //
-// One socket carries two pictures: the mosaic, and the armed scene for the
-// pane beside the programme. The top bit of the sequence number says which,
-// because the header had no spare field. A preview frame is one whole picture
-// and names no grid.
+// One socket carries up to three pictures: the mosaic, the armed scene for
+// the pane beside the programme, and the programme itself at full quality for
+// a full screen output (`ext.programme`). The top bit of the sequence number
+// marks a single picture, because the header had no spare field; a single
+// picture names no grid, so its layout field says which one it is: 0 the
+// armed scene, 1 the programme.
 
 export const HEADER_BYTES = 16;
 export const PREVIEW_STREAM = 0x80000000;
+export const PROGRAMME_PICTURE = 1;
 
 /** Split one binary frame into its header and its JPEG. */
 export function parseFrame(buffer) {
@@ -27,10 +30,14 @@ export function parseFrame(buffer) {
   if (bytes.length <= HEADER_BYTES) return null;
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const seq = view.getUint32(0, true);
+  const single = (seq & PREVIEW_STREAM) !== 0;
+  const layout = view.getUint32(4, true);
+  const programme = single && layout === PROGRAMME_PICTURE;
   return {
     seq: seq & ~PREVIEW_STREAM,
-    preview: (seq & PREVIEW_STREAM) !== 0,
-    layout: view.getUint32(4, true),
+    preview: single && !programme,
+    programme,
+    layout,
     runningTimeMs: view.getBigUint64(8, true),
     jpeg: bytes.subarray(HEADER_BYTES),
   };
@@ -40,7 +47,7 @@ export function parseFrame(buffer) {
 export function bareFrame(buffer, layout) {
   const bytes = buffer instanceof ArrayBuffer ? new Uint8Array(buffer) : buffer;
   // The legacy stream is the mosaic and only ever was.
-  return { seq: 0, preview: false, layout: layout || 0, runningTimeMs: 0n, jpeg: bytes };
+  return { seq: 0, preview: false, programme: false, layout: layout || 0, runningTimeMs: 0n, jpeg: bytes };
 }
 
 // The painters are in painters.js, and are exported from here as they always were.

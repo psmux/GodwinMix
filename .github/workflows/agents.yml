@@ -48,9 +48,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-        with:
-          key: agents-${{ matrix.name }}
 
       - name: GStreamer (Linux)
         if: runner.os == 'Linux'
@@ -67,6 +64,12 @@ jobs:
         run: |
           brew install gstreamer
           echo "PKG_CONFIG_PATH=$(brew --prefix gstreamer)/lib/pkgconfig:$(brew --prefix)/lib/pkgconfig" >> "$GITHUB_ENV"
+          echo "GST_CACHE_KEY=$(brew list --versions gstreamer | tr ' ' -)" >> "$GITHUB_ENV"
+      # After the toolchain, keyed by the GStreamer Homebrew poured: a cache built
+      # against another Cellar version links to paths that are not there.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: agents-${{ matrix.name }}-${{ env.GST_CACHE_KEY }}
 
       - name: GStreamer (Windows)
         if: runner.os == 'Windows'

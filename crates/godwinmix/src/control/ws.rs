@@ -11,6 +11,7 @@
 //! not, there were no sequence numbers, and a client that fell behind was
 //! told nothing.
 
+mod programme;
 mod who;
 
 pub use who::Who;
@@ -91,6 +92,10 @@ struct Connection {
     /// The same, counted apart for the preview: the two pictures are numbered
     /// per stream, so a gap in one says nothing about the other.
     preview_no: u32,
+    /// And for the full quality programme (`ws/programme.rs`).
+    programme_no: u32,
+    /// What this client asked the full quality programme feed for, or None.
+    wants_programme: Option<godwinmix_core::preview::feed::FeedAsk>,
     /// What this client asked the mosaic for, or None when it asked for no
     /// mosaic at all. `serve_rpc` turns a change here into a subscription.
     wants_mosaic: Option<MultiviewRequest>,
@@ -134,6 +139,8 @@ pub async fn serve_rpc(socket: WebSocket, ctx: Ctx, token: Token, who: Who) {
         clock: RunningTime::default(),
         frame_no: 0,
         preview_no: 0,
+        programme_no: 0,
+        wants_programme: None,
         wants_mosaic: None,
         wants_preview: None,
         push: crate::control::push::Push::none(),
@@ -149,6 +156,9 @@ pub async fn serve_rpc(socket: WebSocket, ctx: Ctx, token: Token, who: Who) {
     // arm's body writes to the client.
     let mut preview: Option<PreviewSubscription> = None;
     let mut asked_preview: Option<PreviewRequest> = None;
+    // The full quality programme feed's hold, for a full screen output.
+    let mut feed: Option<godwinmix_core::preview::feed::FeedSubscription> = None;
+    let mut asked_feed = None;
     // The scene document's own change stream. Taken for every connection,
     // whether or not it has subscribed yet: the channel is a broadcast and a
     // receiver that nobody reads from costs one slot, while starting it later
@@ -187,6 +197,12 @@ pub async fn serve_rpc(socket: WebSocket, ctx: Ctx, token: Token, who: Who) {
                         asked_preview = conn.wants_preview;
                         preview = asked_preview
                             .map(|req| conn.ctx.app.multiview.subscribe_preview(req));
+                    }
+                    // The programme feed the same way: the new hold is taken
+                    // before the old one drops, so a resize never stops it.
+                    if conn.wants_programme != asked_feed {
+                        asked_feed = conn.wants_programme;
+                        feed = asked_feed.and_then(|ask| conn.ctx.app.preview.programme_feed(ask).ok());
                     }
                     if conn.wants_presence() != presence.is_some() {
                         presence = conn.wants_presence().then(|| conn.ctx.app.presence.subscribe());
@@ -327,6 +343,25 @@ pub async fn serve_rpc(socket: WebSocket, ctx: Ctx, token: Token, who: Who) {
                     debug!(skipped = n, "rpc client fell behind on preview frames");
                 }
                 Err(broadcast::error::RecvError::Closed) => break 'client "the preview stopped",
+            },
+            // The programme at full quality, for a full screen output. A
+            // lagged reader skips to the newest picture, which is what a
+            // projector wants.
+            frame = async {
+                match feed.as_mut() {
+                    Some(f) => f.recv().await,
+                    None => std::future::pending().await,
+                }
+            } => match frame {
+                Ok(jpeg) => {
+                    if conn.send_programme_frame(&jpeg).await.is_err() {
+                        break 'client "a programme frame could not be written";
+                    }
+                }
+                Err(broadcast::error::RecvError::Lagged(n)) => {
+                    debug!(skipped = n, "rpc client fell behind on programme frames");
+                }
+                Err(broadcast::error::RecvError::Closed) => break 'client "the programme feed stopped",
             },
         }
     };
@@ -471,6 +506,7 @@ impl Connection {
             }
             false => None,
         };
+        self.wants_programme = programme::feed_ask(&request.ext);
         // What the mosaic is asked to run at. Zero on either means "whatever
         // is configured", which is what the clamp in multiview.rs reads it as.
         self.wants_mosaic = match (&request.ext.multiview, wants_multiview) {

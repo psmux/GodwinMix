@@ -507,6 +507,20 @@ fn stream_events() -> Vec<EventDef> {
             },
         },
         EventDef {
+            name: "programme.frame",
+            since: "1",
+            summary: "The programme itself at full quality, for a full screen output on a                       projector or a second monitor: one JPEG per programme frame, at the                       canvas's size or the width asked for if smaller, in the same 16 byte                       header as a mosaic frame with the top bit of seq set and the layout                       id 1. One picture per frame: draw it whole.",
+            ext: Some("programme"),
+            legacy: None,
+            payload: |_| {
+                inline(json!({
+                    "type": "string",
+                    "contentEncoding": "binary",
+                    "description": "16 byte header then JPEG. Not a JSON message."
+                }))
+            },
+        },
+        EventDef {
             name: "setup.changed",
             since: "1",
             summary: "A piece the mixer sets up on first use moved on: the browser renderer \
@@ -566,6 +580,12 @@ pub fn ext_table() -> Vec<(&'static str, &'static str, &'static str, bool)> {
              /mjpeg/preview, to scene.preview.frame and to its own cell on the mosaic. \
              \"full\" composites it at the canvas's own size while a client is subscribed, \
              so a designer's handles land on real coordinates",
+            true,
+        ),
+        (
+            "programme",
+            "{fps, width} or true",
+            "event/programme.frame: the programme at full quality, off the raw programme              tee behind a leaky queue, encoded as JPEG at the canvas's size (or `width` if              smaller) and the programme's rate (or `fps` if lower) while a client is              subscribed. For a full screen output; it costs one JPEG encode per frame",
             true,
         ),
         ("telemetry", "{hz: 1..10}", "event/telemetry", false),
@@ -1021,14 +1041,15 @@ mod tests {
     fn the_published_ext_table_matches_what_the_subscription_struct_reads() {
         let implemented: Vec<&str> =
             ext_table().into_iter().filter(|(_, _, _, yes)| *yes).map(|(k, _, _, _)| k).collect();
-        assert_eq!(implemented, vec!["multiview", "meters", "tally", "positions", "preview"]);
+        assert_eq!(implemented, vec!["multiview", "meters", "tally", "positions", "preview", "programme"]);
         // And every implemented key is one `Ext` has a field for.
         let ext: requests::Ext = serde_json::from_value(json!({
             "multiview": false, "meters": true, "tally": true, "positions": true,
-            "preview": {"fps": 8, "width": 480}
+            "preview": {"fps": 8, "width": 480}, "programme": {"width": 1920}
         }))
         .unwrap();
         assert!(ext.unsupported().is_empty(), "a published key landed in `other`");
         assert!(ext.wants_preview(), "the preview key has to turn the preview on");
+        assert!(ext.wants_programme(), "the programme key has to turn the programme feed on");
     }
 }

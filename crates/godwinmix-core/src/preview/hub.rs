@@ -13,6 +13,7 @@
 //! count reaches zero.
 
 use super::audio::{AudioRequest, Frame};
+use super::feed::{FeedAsk, FeedShape, FeedSubscription, ProgrammeFeed};
 use super::thumb::{ProgrammeThumb, Thumb};
 use super::{ClientGuard, StreamClients};
 use std::sync::Arc;
@@ -40,6 +41,10 @@ pub enum PreviewDemand {
     /// Sent by [`super::thumb::ProgrammeThumb`] on the first ask after a
     /// quiet spell and when asks stop.
     Thumb(bool),
+    /// Put the full quality programme feed on the raw tee at this shape, or
+    /// take it off with `None`. Sent by [`super::feed::ProgrammeFeed`] when
+    /// the shape that serves every subscriber changes.
+    Feed(Option<FeedShape>),
 }
 
 impl std::fmt::Debug for PreviewDemand {
@@ -53,6 +58,7 @@ impl std::fmt::Debug for PreviewDemand {
             Self::CloseLocal { target } => write!(f, "CloseLocal({target})"),
             Self::Scene { cells } => write!(f, "Scene({} items)", cells.len()),
             Self::Thumb(on) => write!(f, "Thumb({on})"),
+            Self::Feed(shape) => write!(f, "Feed({shape:?})"),
         }
     }
 }
@@ -66,23 +72,39 @@ pub struct PreviewHandle {
     clients: Arc<StreamClients>,
     demand: Option<DemandSink>,
     thumb: Arc<ProgrammeThumb>,
+    feed: Arc<ProgrammeFeed>,
 }
 
 impl PreviewHandle {
     pub fn new(clients: Arc<StreamClients>, demand: DemandSink) -> Self {
-        Self { clients, demand: Some(demand), thumb: ProgrammeThumb::new() }
+        Self { clients, demand: Some(demand), thumb: ProgrammeThumb::new(), feed: ProgrammeFeed::new() }
     }
 
     /// A handle attached to nothing: it counts clients and refuses to open
     /// anything. For tests and for a core with no mixer thread.
     pub fn detached() -> Self {
-        Self { clients: StreamClients::new(), demand: None, thumb: ProgrammeThumb::new() }
+        Self { clients: StreamClients::new(), demand: None, thumb: ProgrammeThumb::new(), feed: ProgrammeFeed::new() }
     }
 
     /// What the programme thumbnail branch keeps its frames in. The mixer
     /// hands it to the branch it builds; a test reads its counters.
     pub fn thumb(&self) -> Arc<ProgrammeThumb> {
         self.thumb.clone()
+    }
+
+    /// What the full quality programme feed publishes into. The mixer hands
+    /// it to the branch it builds; a test reads its counters.
+    pub fn feed(&self) -> Arc<ProgrammeFeed> {
+        self.feed.clone()
+    }
+
+    /// Hold the full quality programme feed (`ext.programme`) for as long as
+    /// the subscription lives. See `feed.rs`.
+    pub fn programme_feed(&self, ask: FeedAsk) -> Result<FeedSubscription, String> {
+        let Some(sink) = self.demand.clone() else {
+            return Err("this core has no mixer, so there is no programme to show".into());
+        };
+        Ok(self.feed.subscribe(ask, Arc::new(move |shape| sink(PreviewDemand::Feed(shape))), &self.clients))
     }
 
     /// The programme as a small picture, `width` pixels across (16 to 320),

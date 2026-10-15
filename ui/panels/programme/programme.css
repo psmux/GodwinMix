@@ -1,0 +1,53 @@
+/* The programme alone on a display. See view.js. */
+
+.programme-full {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  background: #000;
+  overflow: hidden;
+}
+
+.programme-full.idle {
+  cursor: none;
+}
+
+/* The canvas holds the picture at its own size; object-fit letterboxes it at
+   the programme's shape on any display. */
+.programme-full .programme-picture {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+}
+
+.programme-full .programme-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 32px;
+  transform: translateX(-50%);
+  padding: 8px 14px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.72);
+  color: #e6e6e6;
+  font: 14px/1.4 system-ui, sans-serif;
+  pointer-events: none;
+  transition: opacity 0.4s;
+}
+
+.programme-full.idle .programme-hint {
+  opacity: 0;
+}
+
+.programme-displays {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: min(420px, 90vw);
+}
+
+.programme-displays .btn {
+  justify-content: flex-start;
+  text-align: left;
+}

@@ -33,6 +33,15 @@ pub fn remember(browser: &Browser) {
     BROWSER.with(|b| *b.borrow_mut() = Some(browser.clone()));
 }
 
+/// Run `f` with the browser, on the UI thread, once there is one.
+pub fn with_browser(f: impl FnOnce(&Browser)) {
+    BROWSER.with(|b| {
+        if let Some(browser) = b.borrow().as_ref() {
+            f(browser);
+        }
+    });
+}
+
 /// Read stdin until it closes, passing each state on to the page.
 pub fn listen() {
     std::thread::Builder::new()

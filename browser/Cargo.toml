@@ -18,6 +18,9 @@ cef-dll-sys = "=150.0.0"
 # Only for muxing raw frames and PCM into Matroska on stdout; no codecs here.
 gstreamer = "0.24"
 gstreamer-app = "0.24"
+# The control lines an operator's clicks and keys arrive as. See src/page.rs.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 # Signal handling only.
 libc = "0.2"
 

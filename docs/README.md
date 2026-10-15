@@ -34,6 +34,7 @@ Start here if you have never run it.
   [Linux](how-to/install-on-linux.md)
 * [Start the mixer for the first time](how-to/first-run.md)
 * [Add a source](how-to/add-a-source.md): cameras, screens, microphones, files, pages and feeds
+* [Use a web page source by hand](how-to/use-a-web-page-by-hand.md): click, type, scroll and change its address from the desk
 * [Run it on a headless server](how-to/headless-server.md)
 * [Restart the mixer from the page](how-to/restart-the-mixer.md)
 * [Serve the control port over HTTPS](how-to/serve-https.md)
@@ -50,6 +51,7 @@ Start here if you have never run it.
 * [Make your plugin editable in every designer](how-to/extend-the-designer.md)
 * [Roll an ad break](how-to/ad-breaks.md)
 * [See and hear the mixer from anywhere](how-to/preview-and-audio.md)
+* [Show the programme on a projector or a second screen](how-to/show-the-programme-on-a-projector.md)
 * [Run the terminal UI](how-to/terminal-ui.md)
 * [Put GodwinMix on a hardware panel](how-to/companion-and-streamdeck.md),
   Bitfocus Companion and Elgato Stream Deck
@@ -221,6 +223,7 @@ Start here if you have never run it.
 
 * [Why the programme never stops](explanation/why-the-programme-never-stops.md)
 * [Nothing runs unless asked](explanation/nothing-runs-unless-asked.md)
+* [Why the full screen output is a page and not a video sink](explanation/full-screen-output.md)
 * [Why the planner copies first and shares every encoder](explanation/rendition-planner.md)
 * [How the HLS output cuts, keeps and serves segments, and what it costs](explanation/hls-output.md)
 * [Why plugins are processes](explanation/why-plugins-are-processes.md)

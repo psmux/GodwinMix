@@ -426,6 +426,8 @@ pub mod memguard;
 mod memwatch;
 mod motion;
 mod on_time;
+mod page;
+pub use page::PageCall;
 pub(crate) mod offload;
 mod patience;
 mod rendered;
@@ -581,6 +583,13 @@ pub enum Command {
         source: SourceId,
         params: crate::config::Params,
         reply: oneshot::Sender<Result<crate::plugin::Configure>>,
+    },
+    /// Something for a web page source's page: the operator's clicks and
+    /// keys, or a new address. See `mixer::page`.
+    Page {
+        source: SourceId,
+        call: PageCall,
+        reply: oneshot::Sender<Result<serde_json::Value>>,
     },
     /// Put a filter on a source or on the programme, while live. The insert is
     /// under a pad block, so the programme loses at most the one frame the
@@ -815,6 +824,13 @@ impl MixerHandle {
     pub async fn configure_source(&self, source: SourceId, params: crate::config::Params) -> Result<crate::plugin::Configure> {
         let (tx, rx) = oneshot::channel();
         self.ask(Command::ConfigureSource { source, params, reply: tx }, rx).await?
+    }
+
+    /// Hand a web page source's page the operator's events or a new
+    /// address. Never waits on the page: see `mixer::page`.
+    pub async fn page(&self, source: SourceId, call: PageCall) -> Result<serde_json::Value> {
+        let (tx, rx) = oneshot::channel();
+        self.ask(Command::Page { source, call, reply: tx }, rx).await?
     }
 
     /// Put a filter on a source or on the programme, live.
@@ -1192,6 +1208,9 @@ pub struct Mixer {
     preview: crate::preview::PreviewHandle,
     /// The programme thumbnail branch, on the raw tee only while asked for.
     thumb_branch: crate::preview::thumb::Branch,
+    /// The full quality programme feed for a full screen output, on the raw
+    /// tee only while somebody holds `ext.programme`.
+    feed_branch: crate::preview::feed_branch::FeedBranch,
     /// Where preview sockets live, from `persist_runtime_to`'s neighbour.
     runtime_dir: Option<std::path::PathBuf>,
     program_source: Option<SourceId>,
@@ -1913,6 +1932,17 @@ impl Mixer {
         )
         .context("building the programme thumbnail branch")?;
 
+        // The programme at full quality for a projector, asleep until a full
+        // screen output asks. See `preview/feed.rs`.
+        let feed_branch = crate::preview::feed_branch::FeedBranch::build(
+            &program,
+            &vraw_tee,
+            download_bridge(&sel.graphics, "pgm-f")?,
+            (canvas.width, canvas.height),
+            &preview.feed(),
+        )
+        .context("building the programme feed branch")?;
+
         // Where the compositor has got to, so a transition can be written in
         // the picture's timeline rather than the clock's. Two relaxed atomic
         // stores per frame on a thread that is already carrying the programme,
@@ -1960,6 +1990,7 @@ impl Mixer {
             local_previews: HashMap::new(),
             preview,
             thumb_branch,
+            feed_branch,
             runtime_dir: None,
             program_source: None,
             ad: None,
@@ -4156,6 +4187,8 @@ impl Mixer {
             Command::Seek { .. } => "source.seek",
             Command::SourceInput { .. } => "source tool call",
             Command::ConfigureSource { .. } => "source.set",
+            Command::Page { call: PageCall::Lines(_), .. } => "source.page.input",
+            Command::Page { .. } => "source.page.navigate",
             Command::AddFilter(..) => "filter.add",
             Command::SetFilter { .. } => "filter.set",
             Command::RemoveFilter(..) => "filter.remove",
@@ -4299,6 +4332,9 @@ impl Mixer {
             }
             Command::SourceInput { source, reply } => {
                 let _ = reply.send(self.sources.iter().find(|s| s.input.id == source).map(|s| s.input.clone()));
+            }
+            Command::Page { source, call, reply } => {
+                let _ = reply.send(self.page(&source, call));
             }
             Command::ConfigureSource { source, params, reply } => {
                 let r = match self.sources.iter().find(|s| s.input.id == source) {
@@ -4994,10 +5030,16 @@ impl Mixer {
                 // Asked once and used twice: each of these is a query on the
                 // source's own pipeline, and the snapshot is polled.
                 let at = s.position();
+                // A page the operator took somewhere else says where it is now.
+                let page = s.input.page_state();
+                let uri = match &page {
+                    Some(p) if p.url.starts_with("http") => crate::input::as_web_uri(&p.url),
+                    _ => s.input.config.display_uri(),
+                };
                 let mut status = SourceStatus {
                     id: s.input.id.clone(),
                     name: s.input.display_name(),
-                    uri: safe_uri_label(&s.input.config.display_uri()),
+                    uri: safe_uri_label(&uri),
                     state: s.input.observed_state(),
                     has_video: s.input.has_video(),
                     has_audio: s.input.has_audio(),
@@ -5044,6 +5086,11 @@ impl Mixer {
                 }
                 if s.input.superimposed() {
                     status.put_extra("superimposed", true);
+                }
+                // A page drawn by the renderer says where it is, for the
+                // address bar of the Interact view.
+                if let Some(page) = page {
+                    status.put_extra("page", page);
                 }
                 // A clip says what it does at its end, and whether it is
                 // there now, holding its last frame.
@@ -5476,6 +5523,12 @@ impl Mixer {
                 }
             }
             P::Thumb(false) => self.thumb_branch.detach(),
+            P::Feed(Some(shape)) => {
+                if let Err(e) = self.feed_branch.apply(shape) {
+                    warn!(?e, "the programme feed branch could not be attached");
+                }
+            }
+            P::Feed(None) => self.feed_branch.detach(),
         }
     }
 
@@ -5614,6 +5667,7 @@ impl Mixer {
         self.drop_mosaic();
         self.detach_programme_return();
         self.thumb_branch.detach();
+        self.feed_branch.detach();
         self.pool.teardown();
         self.audio_taps.clear();
         #[cfg(unix)]

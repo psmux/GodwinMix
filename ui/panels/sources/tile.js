@@ -15,9 +15,12 @@ import { playbackText } from "./clip-end.js";
 import { lazyLine } from "./backup-slot.js";
 import { buildStrip, syncStrip } from "./tile-strip.js";
 
+/** A pointer, for Interact. */
+const POINTER = "M6 3l12 7-5 1.5 3.5 6-2.5 1.5-3.5-6L7 17z";
+
 /**
  * @param {object} source   a SourceStatus
- * @param {object} deps     {audio, scrub, onTake, onRename, onGear, onMute, onRepeat, onBackup, meters}
+ * @param {object} deps     {audio, scrub, onTake, onRename, onGear, onInteract, onMute, onRepeat, onBackup, meters}
  */
 export function buildTile(source, deps) {
   const kind = kindOfSource(source);
@@ -33,7 +36,12 @@ export function buildTile(source, deps) {
   const name = el("span.name.grow.ellipsis", { text: nameOf(source) });
   const dot = el("span.dot");
   const gear = el("button.gear", { text: "⚙", title: "Settings", "aria-label": "Settings", "data-nodrag": "" });
-  const bar = el("div.bar", {}, [dragHandle(), dot, name, gear]);
+  // A page drawn by the renderer can be used by hand. Shown once it says
+  // where it is, which only a page with the renderer's control line does.
+  const interact = source.type === "browser/source"
+    ? el("button.gear.interact", { title: "Interact with the page", "aria-label": "Interact", "data-nodrag": "", hidden: !source.page }, [svg(POINTER, 14)])
+    : null;
+  const bar = el("div.bar", {}, [dragHandle(), dot, name, interact, gear].filter(Boolean));
 
   const playback = el("div.playback", { text: playbackText(source) });
   const level = levelParts(source, kind, deps.meters);
@@ -48,6 +56,12 @@ export function buildTile(source, deps) {
     e.stopPropagation();
     deps.onGear(source.id);
   };
+  if (interact) {
+    interact.onclick = (e) => {
+      e.stopPropagation();
+      deps.onInteract(source.id);
+    };
+  }
 
   return {
     ...controls,
@@ -60,6 +74,7 @@ export function buildTile(source, deps) {
     strip,
     name,
     dot,
+    interact,
     meter: level.meter,
     readout: level.readout,
     note: level.note,
@@ -78,6 +93,7 @@ export function syncTile(tile, source, view) {
   tile.node.style.setProperty("--tile-color", colourOf(source, KIND_COLOUR[tile.kind] || "var(--kind-other)"));
   tile.dot.className = "dot " + (source.state || "");
   tile.dot.title = source.state || "";
+  if (tile.interact) tile.interact.hidden = !source.page;
 
   tile.node.classList.toggle("program", view.tally === "program");
   tile.node.classList.toggle("armed", view.tally === "preview");

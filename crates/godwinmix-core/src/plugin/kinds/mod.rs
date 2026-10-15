@@ -23,6 +23,7 @@ pub mod live;
 pub mod livesync_clock;
 pub mod rendered;
 pub mod normalise;
+pub mod page_control;
 #[cfg(test)]
 mod quiet_tests;
 pub mod rtmp;

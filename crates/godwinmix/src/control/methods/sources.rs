@@ -16,10 +16,12 @@ mod in_place;
 mod merge;
 mod missing;
 mod one_camera;
+mod page;
 
 pub fn register(reg: &mut Registry<Call>) {
     missing::register(reg);
     backup::register(reg);
+    page::register(reg);
     reg.register(
         MethodDef::new(
             "source.list",

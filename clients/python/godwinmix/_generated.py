@@ -1040,6 +1040,8 @@ class Ext(TypedDict, total=False):
     # `event/source.position` for seekable sources.
     preview: Union[PreviewExt, None]
     # The preview scene, composited in the multiview pipeline at mosaic size, or `"full"` for a full resolution preview compositor built while subscribed. See 11 section 3.
+    programme: Union[ProgrammeExt, None]
+    # The programme itself at full quality, for a full screen output on a projector or a second monitor: one JPEG per programme frame, at up to the canvas's size, off the raw programme tee while subscribed.
     tally: bool
     # `event/tally`.
     telemetry: Union[TelemetryExt, None]
@@ -2546,6 +2548,40 @@ class Override(TypedDict, total=False):
     params: Any
     transform: Union[Transform, None]
     visible: Optional[bool]
+
+class PageInputRequest(TypedDict, total=False):
+    """`source.page.input`."""
+
+    events: List[PageEvent]
+    # What the operator did, oldest first.
+    id: str
+    # Source id. A web page source drawn by the browser renderer.
+
+class PageInputResult(TypedDict, total=False):
+    """What `source.page.input` answers with."""
+
+    dropped: int
+    # Events dropped because the renderer was not keeping up. Pointer moves are the usual ones, and the next move puts the pointer right.
+    id: str
+    sent: int
+    # Events handed to the renderer.
+
+class PageNavigateRequest(TypedDict, total=False):
+    """`source.page.navigate`."""
+
+    action: PageAction
+    id: str
+    # Source id.
+    url: Optional[str]
+    # The address for `go`: http or https. A bare host such as `example.com` is taken as https.
+
+class PageNavigateResult(TypedDict, total=False):
+    """What `source.page.navigate` answers with."""
+
+    action: PageAction
+    id: str
+    url: str
+    # The address the source keeps. For `go` the new one; otherwise the one it had, since back, forward and reload are not saved.
 
 class ParamsRequest(TypedDict, total=False):
     """`scene.params.set`."""
@@ -4366,11 +4402,23 @@ OutputErrorReason = Literal['refused', 'unreachable', 'timed-out', 'not-found', 
 
 OutputState = Union[Literal['connecting', 'live', 'reconnecting', 'failed'], Literal['stopped']]
 
+# Where `source.page.navigate` goes.
+PageAction = Union[Literal['back', 'forward', 'reload'], Literal['go']]
+
+# A mouse button.
+PageButton = Literal['left', 'middle', 'right']
+
+# One thing the operator did to the page.
+PageEvent = Dict[str, Any]
+
 # Where an instance runs: core, in-process, sidecar, or node:<name>.
 Place = str
 
 # `ext.preview`. Either `"full"`, `false`, or an object.
 PreviewExt = Union[str, bool, Dict[str, Any]]
+
+# `ext.programme`. `true`, `false`, or an object.
+ProgrammeExt = Union[bool, Dict[str, Any]]
 
 # What an output asks for: a whole request, or a preset by id. A request's `id` is replaced by the output's own id (a ladder's rungs get `<output>-<rung>`), so a client may send any slug there.
 RenditionChoice = Union[PresetRef, LadderRef, RenditionRequest]
@@ -4640,6 +4688,8 @@ METHODS = (
     {"name": "source.missing", "scope": "read", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/sources/{id}/missing"), "summary": 'Sources that are not running, and why: failed, could not be started (with the error and the action that fixes it), removed, or unknown. Pass the ids a scene draws, or none for every one the mixer knows about.'},
     {"name": "source.on_loss.clear", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/sources/{id}/on_loss/clear"), "summary": "Take a source's backup away. If the backup is on now, the source is drawn as itself again at once."},
     {"name": "source.on_loss.set", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/sources/{id}/on_loss"), "summary": 'Give a source a backup: another source drawn in its place, wherever it appears, once it has had no picture for after_secs, and taken off again when it is back. Only the fields named change; a source with no backup yet needs `backup`.'},
+    {"name": "source.page.input", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/sources/{id}/page/input"), "summary": 'Click, scroll and type into a web page source, as a person would in a browser. Points are shares of the page from 0.0 to 1.0. Nothing waits on the page: events the renderer cannot keep up with are dropped and counted.'},
+    {"name": "source.page.navigate", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/sources/{id}/page/navigate"), "summary": "Take a web page source to another address, or back, forward or reload. A new address is kept as the source's own, so a saved project opens it there."},
     {"name": "source.remove", "scope": "operate", "mutating": True, "destructive": True, "rest": ("DELETE", "/api/v1/sources/{id}"), "summary": 'Remove a source. If it is on programme the mixer cuts to the slate first.'},
     {"name": "source.restart", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/sources/{id}/restart"), "summary": "Build a source's pipeline again now, rather than waiting for its next retry. For a source that could not be started or was removed, use source.restore."},
     {"name": "source.restore", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/sources/{id}/restore"), "summary": 'Put back a source that source.remove took away, as it was: same id, address, settings, fader and mute. The mixer remembers the last sixteen it removed, until it restarts.'},
@@ -4687,6 +4737,7 @@ EVENT_NAMES = (
     "multiview.layout",
     "multiview.frame",
     "preview.frame",
+    "programme.frame",
     "setup.changed",
     "resync",
     "flush",
@@ -4708,6 +4759,7 @@ EXT_KEYS = {
     "positions": {"value": 'true', "implemented": True},
     "thumb": {"value": '{fps}', "implemented": False},
     "preview": {"value": '{fps, width} or "full"', "implemented": True},
+    "programme": {"value": '{fps, width} or true', "implemented": True},
     "telemetry": {"value": '{hz: 1..10}', "implemented": False},
     "agent": {"value": 'true or thresholds', "implemented": False},
 }
@@ -7846,6 +7898,33 @@ class GeneratedMethods:
         if transition is not None:
             params["transition"] = transition
         return await self._call("source.on_loss.set", params)
+
+    async def source_page_input(
+        self,
+        events: List[PageEvent],
+        id: str,
+    ) -> PageInputResult:
+        """Click, scroll and type into a web page source, as a person would in a browser. Points are shares of the page from 0.0 to 1.0. Nothing waits on the page: events the renderer cannot keep up with are dropped and counted."""
+        params: Dict[str, Any] = {}
+        params["events"] = events
+        params["id"] = id
+        return await self._call("source.page.input", params)
+
+    async def source_page_navigate(
+        self,
+        id: str,
+        *,
+        action: Optional[PageAction] = None,
+        url: Optional[str] = None,
+    ) -> PageNavigateResult:
+        """Take a web page source to another address, or back, forward or reload. A new address is kept as the source's own, so a saved project opens it there."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        if action is not None:
+            params["action"] = action
+        if url is not None:
+            params["url"] = url
+        return await self._call("source.page.navigate", params)
 
     async def source_remove(
         self,

@@ -11,6 +11,7 @@ import { pluginGalleryTests } from "./plugins.js";
 import { storeTests } from "./store.js";
 import { mediaTests } from "./media.js";
 import { studioTests } from "./studio.js";
+import { programmeOutputTests } from "./programme-output.js";
 import { monitorPaintTests } from "./monitor-paint.js";
 import { transitionTests } from "./transitions.js";
 import { studioNextTests } from "./studio-next.js";
@@ -24,6 +25,7 @@ import { liveboxTests } from "./channels-livebox.js";
 import { renditionTests } from "./renditions.js";
 import { menubarTests } from "./menubar.js";
 import { touchTests } from "./touch.js";
+import { pageInteractTests } from "./page-interact.js";
 import { phoneTests } from "./phone.js";
 import { phoneReachTests } from "./phone-reach.js";
 import { phoneHandsTests } from "./phone-hands.js";
@@ -2935,6 +2937,7 @@ tileLevelTests(test, eq, ok)
     console.error(e);
   })
   .then(() => studioTests(test, eq, ok))
+  .then(() => programmeOutputTests(test, eq, ok))
   .then(() => monitorPaintTests(test, eq, ok))
   .then(() => transitionTests(test, eq, ok))
   .then(() => studioNextTests(test, eq, ok))
@@ -2982,6 +2985,12 @@ tileLevelTests(test, eq, ok)
   .catch((e) => {
     failed += 1;
     line("fail", "the touch suite threw: " + e.message);
+    console.error(e);
+  })
+  .then(() => pageInteractTests(test, eq, ok))
+  .catch((e) => {
+    failed += 1;
+    line("fail", "the Interact suite threw: " + e.message);
     console.error(e);
   })
   .then(() => phoneTests(test, eq, ok))

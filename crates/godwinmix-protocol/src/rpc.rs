@@ -156,6 +156,7 @@ impl Subscription {
             // `preview_empty` says whether a picture is coming at all.
             "multiview.layout" => self.ext.wants_multiview() || self.ext.wants_preview(),
             "preview.frame" => self.ext.wants_preview(),
+            "programme.frame" => self.ext.wants_programme(),
             // The stream's own bookkeeping is never filtered out: a client
             // that missed a flush would never render.
             "snapshot" | "flush" | "resync" => true,
@@ -366,6 +367,26 @@ pub fn frame_header(seq: u32, layout: u32, running_time_ms: u64) -> [u8; FRAME_H
 /// cutting tiles out of it.
 pub fn preview_frame_header(seq: u32, running_time_ms: u64) -> [u8; FRAME_HEADER_BYTES] {
     write_header(frame_seq(seq) | PREVIEW_STREAM, 0, running_time_ms)
+}
+
+/// The layout id a single picture frame carries when it is the programme
+/// rather than the armed scene.
+///
+/// A preview frame has the stream bit set and layout id zero. The full
+/// quality programme (`ext.programme`) is the other single picture, so it
+/// sets the same bit and names itself in the layout field, which a picture
+/// with no grid has spare. A client that never asked for `ext.programme` is
+/// never sent one, so nothing written before this needs to know.
+pub const PROGRAMME_PICTURE: u32 = 1;
+
+/// The header in front of a full quality programme JPEG.
+pub fn programme_frame_header(seq: u32, running_time_ms: u64) -> [u8; FRAME_HEADER_BYTES] {
+    write_header(frame_seq(seq) | PREVIEW_STREAM, PROGRAMME_PICTURE, running_time_ms)
+}
+
+/// Whether a header names a full quality programme frame.
+pub fn is_programme_frame(seq: u32, layout: u32) -> bool {
+    is_preview_frame(seq) && layout == PROGRAMME_PICTURE
 }
 
 fn write_header(seq: u32, layout: u32, running_time_ms: u64) -> [u8; FRAME_HEADER_BYTES] {
@@ -619,6 +640,26 @@ mod tests {
         // as a preview.
         let (high, _, _) = read_frame_header(&frame_header(u32::MAX, 7, 0)).unwrap();
         assert!(!is_preview_frame(high));
+    }
+
+    #[test]
+    fn a_programme_frame_is_a_single_picture_naming_itself_in_the_layout_field() {
+        let header = programme_frame_header(3, 40);
+        let (seq, layout, time) = read_frame_header(&header).unwrap();
+        assert!(is_programme_frame(seq, layout));
+        assert_eq!((frame_seq(seq), time), (3, 40));
+        let preview = preview_frame_header(3, 40);
+        let (seq, layout, _) = read_frame_header(&preview).unwrap();
+        assert!(!is_programme_frame(seq, layout), "the armed scene is not the programme");
+        let on = Subscription {
+            patterns: vec!["*".into()],
+            ext: serde_json::from_value(json!({ "programme": { "width": 1920 } })).unwrap(),
+        };
+        assert!(on.wants("programme.frame"));
+        assert_eq!(on.ext.programme.unwrap().ask(), (1920, 0));
+        assert!(!on.wants("multiview.frame"), "the programme feed builds no mosaic");
+        let off = Subscription { patterns: vec!["*".into()], ext: serde_json::from_value(json!({ "programme": false })).unwrap() };
+        assert!(!off.wants("programme.frame"));
     }
 
     /// The expensive streams are governed by their `ext` key alone, and the
