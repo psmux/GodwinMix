@@ -59,8 +59,8 @@ trap cleanup EXIT
 
 # --- where the runtime comes from -------------------------------------------
 
-# The official macOS package. It carries both architectures, so the trimmed
-# tree is universal too and one .app runs on Intel and on Apple silicon.
+# The official macOS package. It carries both architectures; the trim keeps
+# only this machine's, since the mixer it travels with is built for that one.
 download_macos() {
     local version="$1"
     WORK="$(mktemp -d "${TMPDIR:-/tmp}/gmx-gst.XXXXXX")"
@@ -108,10 +108,16 @@ echo "platform: $PLATFORM"
 echo "out:      $OUT"
 echo
 
+# A universal framework is cut to this machine's architecture, the one the
+# mixer was just built for. Homebrew's single architecture tree is untouched.
+THIN=""
+[[ "$PLATFORM" == "macos" ]] && THIN="$(uname -m)"
+
 python3 "$REPO/dev/gst_trim.py" \
     --from "$FROM" --out "$OUT" --platform "$PLATFORM" \
     --codecs "$REPO/codecs.toml" --budget-mb "$BUDGET" \
-    ${EXTRA_PLUGINS:+--extra-plugins "$EXTRA_PLUGINS"}
+    ${EXTRA_PLUGINS:+--extra-plugins "$EXTRA_PLUGINS"} \
+    ${THIN:+--thin "$THIN"}
 
 # --- prove it loads ---------------------------------------------------------
 #
@@ -147,6 +153,13 @@ REQUIRED="compositor videoflip videocrop videoscale audiomixer proxysink
     opusdec vp8dec vp9dec
     pngdec jpegdec webpdec rsvgdec gdkpixbufdec imagefreeze
     glupload glcolorconvert glshader gldownload"
+# GStreamer's official macOS framework, which the Intel Mac build uses since
+# Homebrew dropped Intel, has no WebP decoder at all, neither webpdec nor
+# avdec_webp, the same as the official Windows runtime. A WebP picture does not
+# open there; dev/bundle-gstreamer.ps1 leaves it out for the same reason.
+if [[ "$FROM" == *GStreamer.framework* ]]; then
+    REQUIRED="${REQUIRED/webpdec /}"
+fi
 
 echo
 FAILED=0

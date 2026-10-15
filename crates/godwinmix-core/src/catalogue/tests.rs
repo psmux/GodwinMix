@@ -64,6 +64,32 @@ fn the_shipped_catalogue_parses() {
     assert!(!cat.container.is_empty());
 }
 
+/// VideoToolbox on an Intel Mac has no constant bitrate mode and, asked for
+/// one, ignores the bitrate. Each machine gets its own rate control, and
+/// resolving twice, which `load` does after `parse`, changes nothing.
+#[test]
+fn videotoolbox_runs_average_bitrate_on_an_intel_mac() {
+    let text = include_str!("../../../../codecs.toml");
+    for (arch, want) in [("x86_64", "abr"), ("aarch64", "cbr")] {
+        let mut cat: Catalogue = toml::from_str(text).unwrap();
+        cat.resolve_arch(arch);
+        cat.resolve_arch(arch);
+        for id in ["h264-videotoolbox", "h265-videotoolbox"] {
+            let e = cat.video_entry(id).unwrap();
+            assert_eq!(e.properties.get("rate-control"), Some(&PropValue::Text(want.into())), "{id} on {arch}");
+            assert!(e.properties.contains_key("bitrate"), "{id} on {arch} keeps its bitrate");
+        }
+    }
+}
+
+#[test]
+fn an_unknown_architecture_is_a_validation_problem() {
+    let mut cat = Catalogue::shipped().unwrap();
+    let e = cat.video.iter_mut().find(|e| e.id() == "h264-videotoolbox").unwrap();
+    e.arch_properties.insert("sparc".into(), Default::default());
+    assert!(cat.validate().iter().any(|p| p.contains("\"sparc\"")));
+}
+
 /// The whole CI safe validation in one place: ids unique, every entry
 /// licensed, every element name plausible, every derived property carrying a
 /// unit that can actually convert.

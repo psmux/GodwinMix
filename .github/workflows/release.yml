@@ -47,6 +47,11 @@ jobs:
           - os: macos-latest
             target: aarch64-apple-darwin
             archive: tar.gz
+          # Intel Macs, on GitHub's last Intel runner image. GStreamer comes
+          # from its official packages there, since Homebrew dropped Intel.
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+            archive: tar.gz
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             archive: zip
@@ -65,10 +70,17 @@ jobs:
             libgstreamer-plugins-bad1.0-dev libgstrtspserver-1.0-dev
 
       - name: GStreamer (macOS)
-        if: runner.os == 'macOS'
+        if: runner.os == 'macOS' && matrix.os != 'macos-15-intel'
         run: |
           brew install gstreamer
           echo "PKG_CONFIG_PATH=$(brew --prefix gstreamer)/lib/pkgconfig:$(brew --prefix)/lib/pkgconfig" >> "$GITHUB_ENV"
+
+      # Homebrew has dropped Intel Macs, so the Intel leg installs GStreamer's
+      # own universal packages, from the GitHub mirror first. See the script.
+      - name: GStreamer (Intel Mac)
+        if: matrix.os == 'macos-15-intel'
+        timeout-minutes: 30
+        run: ./dev/install-gstreamer-macos.sh
 
       # The official full installer, not chocolatey's package: that one is
       # 1.26 with the typical feature set, which has no SRT, and the
@@ -196,6 +208,11 @@ jobs:
           - os: macos-latest
             platform: macos
             bundles: app
+          # Intel Macs, so an Intel Mac owner can install the app instead of
+          # building it. Tauri names the disk image _x64.dmg on its own.
+          - os: macos-15-intel
+            platform: macos-intel
+            bundles: app
           - os: windows-latest
             platform: windows
             bundles: msi,nsis
@@ -260,10 +277,18 @@ jobs:
 
       # libnice-gstreamer is the same plugin as a Homebrew formula of its own.
       - name: GStreamer (macOS)
-        if: runner.os == 'macOS'
+        if: runner.os == 'macOS' && matrix.os != 'macos-15-intel'
         run: |
           brew install gstreamer libnice-gstreamer
           echo "PKG_CONFIG_PATH=$(brew --prefix gstreamer)/lib/pkgconfig:$(brew --prefix)/lib/pkgconfig" >> "$GITHUB_ENV"
+
+      # The official universal packages on the Intel leg, which carry libnice's
+      # plugin already. bundle-gstreamer.sh trims from the framework they
+      # install, since it looks there before it looks for Homebrew.
+      - name: GStreamer (Intel Mac)
+        if: matrix.os == 'macos-15-intel'
+        timeout-minutes: 30
+        run: ./dev/install-gstreamer-macos.sh
 
       # The official full installer, not chocolatey's package: that one is
       # 1.26 with the typical feature set, which has no SRT, and the
@@ -502,7 +527,10 @@ jobs:
             # could not create a file in a directory that does not exist.
             version="${GITHUB_REF_NAME#v}"
             [ "$version" = "$GITHUB_REF_NAME" ] && version="$(git rev-parse --short HEAD)"
-            (cd tauri-app/target/release/bundle/macos && tar czf "$GITHUB_WORKSPACE/bundles/GodwinMix-${version}-macos.app.tar.gz" GodwinMix.app)
+            # Named for the architecture, since an Apple silicon and an Intel
+            # job each make one and publish copies both into one directory.
+            arch=$(uname -m); [ "$arch" = arm64 ] && arch=aarch64
+            (cd tauri-app/target/release/bundle/macos && tar czf "$GITHUB_WORKSPACE/bundles/GodwinMix-${version}-macos-${arch}.app.tar.gz" GodwinMix.app)
           fi
           ls -la bundles
 
@@ -614,7 +642,8 @@ jobs:
                 docker run -d --name godwinmix -p 127.0.0.1:8080:8080 \
                   -e GODWINMIX_TOKEN=change-me ${{ steps.image.outputs.name }}:${{ steps.image.outputs.tag }}
 
-            Desktop: the `.dmg` on macOS; the `-setup.exe` or the `.msi` on
+            Desktop: the `.dmg` on macOS (`_aarch64` for Apple silicon, `_x64`
+            for Intel); the `-setup.exe` or the `.msi` on
             Windows; the `.deb` on Debian and Ubuntu, or the `.AppImage` on any
             other Linux. Each carries its own trimmed GStreamer, so nothing
             else needs installing (see the README, Platforms).

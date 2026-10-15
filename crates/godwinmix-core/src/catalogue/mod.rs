@@ -70,7 +70,18 @@ impl Catalogue {
     }
 
     pub fn parse(text: &str) -> Result<Self> {
-        Ok(toml::from_str(text)?)
+        let mut cat: Self = toml::from_str(text)?;
+        cat.resolve_arch(std::env::consts::ARCH);
+        Ok(cat)
+    }
+
+    /// Lay each video entry's properties for `arch` over its own. `parse`
+    /// does it for this machine; `load` does it again after the operator's
+    /// `[codecs]`, which arrives through the config rather than `parse`.
+    pub fn resolve_arch(&mut self, arch: &str) {
+        for e in &mut self.video {
+            e.resolve_arch(arch);
+        }
     }
 
     pub fn read(path: &Path) -> Result<Self> {
@@ -225,6 +236,7 @@ pub fn load(cfg: Option<&Config>, extra: Option<&Path>) -> Result<Catalogue> {
     if let Some(path) = extra {
         cat.overlay(Catalogue::read(path)?);
     }
+    cat.resolve_arch(std::env::consts::ARCH);
     cat.apply_env();
     for problem in cat.validate() {
         warn!(%problem, "catalogue entry is not well formed and may not behave");
@@ -325,6 +337,12 @@ impl Catalogue {
             names.extend(e.parser.clone());
             check_names(&mut out, &id, &names);
             check_props(&mut out, &id, &e.properties);
+            for (arch, props) in &e.arch_properties {
+                if !model::ARCHES.contains(&arch.as_str()) {
+                    out.push(format!("{id}: arch_properties names {arch:?}; known: {}", model::ARCHES.join(", ")));
+                }
+                check_props(&mut out, &id, props);
+            }
             if let Some(kf) = &e.keyframe {
                 if !matches!(kf.unit.as_str(), "frames" | "seconds") {
                     out.push(format!("{id}: keyframe unit {:?} is not frames or seconds", kf.unit));

@@ -83,6 +83,7 @@ That is the whole change. No rebuild, no core release.
 | `license` | Required on every entry. `gmx build` refuses to bundle a copyleft entry into a custom build. |
 | `keyframe` | The property that carries the keyframe interval, and its unit. |
 | `properties` | Everything else to set on the encoder. |
+| `arch_properties` | Properties for one CPU architecture, laid over `properties`. Video entries only. See below. |
 | `verified` | Reports from people who ran `gmx codec test` on real hardware. |
 | `comment` | Anything the next person needs to know. Write one. |
 | `disabled` | Takes a shipped entry out of selection without restating it. |
@@ -136,6 +137,22 @@ keyframe = { property = "key-int-max", unit = "frames" }   # x264enc
 keyframe = { property = "gop-size", unit = "frames" }      # nvh264enc
 keyframe = { property = "max-keyframe-interval", unit = "frames" }  # vtenc
 ```
+
+### One architecture differs
+
+Some encoders take different settings on two kinds of the same platform.
+`arch_properties` lays a table over `properties` on one CPU architecture,
+named the way Rust names it, `x86_64` or `aarch64`:
+
+```toml
+properties = { bitrate = { unit = "kbit", from = "video.bitrate_kbps" }, "rate-control" = "cbr" }
+arch_properties = { x86_64 = { "rate-control" = "abr" } }
+```
+
+That is the shipped VideoToolbox entry. Intel Macs have no constant bitrate
+mode, and asked for one the encoder ignored the bitrate: a 2020 iMac sent 1.0
+Mbit/s when the programme said 6. Any other architecture name is refused by
+the validation that runs in CI.
 
 ### Nothing here can crash the mixer
 
