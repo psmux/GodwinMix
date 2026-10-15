@@ -1041,14 +1041,15 @@ mod tests {
     fn the_published_ext_table_matches_what_the_subscription_struct_reads() {
         let implemented: Vec<&str> =
             ext_table().into_iter().filter(|(_, _, _, yes)| *yes).map(|(k, _, _, _)| k).collect();
-        assert_eq!(implemented, vec!["multiview", "meters", "tally", "positions", "preview"]);
+        assert_eq!(implemented, vec!["multiview", "meters", "tally", "positions", "preview", "programme"]);
         // And every implemented key is one `Ext` has a field for.
         let ext: requests::Ext = serde_json::from_value(json!({
             "multiview": false, "meters": true, "tally": true, "positions": true,
-            "preview": {"fps": 8, "width": 480}
+            "preview": {"fps": 8, "width": 480}, "programme": {"width": 1920}
         }))
         .unwrap();
         assert!(ext.unsupported().is_empty(), "a published key landed in `other`");
         assert!(ext.wants_preview(), "the preview key has to turn the preview on");
+        assert!(ext.wants_programme(), "the programme key has to turn the programme feed on");
     }
 }

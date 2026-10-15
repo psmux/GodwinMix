@@ -1272,6 +1272,12 @@ mod tests {
         // and the picker fetch browser-device.js when this browser's camera
         // is asked for.
         reachable.extend(closure_of("join/page.js"));
+        // The programme alone on a display: /programme/ loads page.js, and the
+        // Programme monitor fetches full screen and the display list when
+        // first used.
+        for entry in ["programme/page.js", "panels/programme/fullscreen.js", "panels/programme/displays.js"] {
+            reachable.extend(closure_of(entry));
+        }
         reachable.extend(closure_of("panels/sources/browser-device.js"));
         // A phone's camera: the code and the link, when that row is pressed.
         reachable.extend(closure_of("panels/sources/phone-camera.js"));
