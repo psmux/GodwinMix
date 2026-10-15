@@ -99,6 +99,9 @@ pub fn main_fullscreen(app: &AppHandle, url: &Url) {
     let on = url.query_pairs().any(|(k, v)| k == "on" && v == "1");
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.set_fullscreen(on);
+        // On Windows and Linux the menu bar belongs to the window and stays
+        // over a full screen one unless it is hidden too.
+        let _ = if on { window.hide_menu() } else { window.show_menu() };
     }
 }
 
@@ -146,18 +149,29 @@ fn open_on(app: &AppHandle, d: &Display) -> tauri::Result<()> {
     let target = app.state::<Shell>().target.lock().unwrap().clone();
     let Some(target) = target else { return Ok(()) };
     let url = Url::parse(&programme_url(&target.base, &target.token)).map_err(|e| tauri::Error::Anyhow(e.into()))?;
+    // From the main window's own config, so the two webviews share one set of
+    // browser arguments: WebView2 refuses a second webview whose arguments
+    // differ from the first one's in the same profile.
+    let mut config = app.config().app.windows[0].clone();
+    config.label = LABEL.into();
+    config.url = WebviewUrl::External(url);
+    config.title = "GodwinMix programme".into();
+    config.decorations = false;
+    config.visible = false;
+    config.focus = false;
+    config.min_width = None;
+    config.min_height = None;
     let handle = app.clone();
-    let window = WebviewWindowBuilder::new(app, LABEL, WebviewUrl::External(url))
-        .title("GodwinMix programme")
+    let window = WebviewWindowBuilder::from_config(app, &config)?
         .user_agent(crate::USER_AGENT)
-        .decorations(false)
-        .visible(false)
-        .focused(false)
         .on_navigation(move |url| on_navigation(&handle, url))
         .build()?;
     window.set_position(tauri::PhysicalPosition::new(d.x, d.y))?;
     window.set_size(tauri::PhysicalSize::new(d.width, d.height))?;
     window.set_fullscreen(true)?;
+    // The app's menu bar lands on every window on Windows and Linux; a
+    // projector shows the programme and nothing else.
+    let _ = window.hide_menu();
     window.show()?;
     Ok(())
 }
