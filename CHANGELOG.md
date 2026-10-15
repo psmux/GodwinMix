@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.12 (2026-10-15)
+
+Intel Macs get a build of their own, and a broadcast from one goes out at the bitrate it was set to.
+
+* There is a desktop app and a core archive for Intel Macs in every release: `GodwinMix_<version>_x64.dmg` and `godwinmix-<version>-x86_64-apple-darwin.tar.gz`. Until now the only Mac build was for Apple silicon, and an Intel Mac had to build from source. The app archive is now named for its architecture, `GodwinMix-<version>-macos-aarch64.app.tar.gz` and `-macos-x86_64.app.tar.gz`, since the two would otherwise overwrite each other.
+* A broadcast from an Intel Mac went out at about a sixth of its bitrate. The programme asks VideoToolbox for constant bitrate, which Intel Macs do not have; asked for it, the hardware encoder ignored the bitrate and chose its own. On a 2020 iMac (i9, Radeon Pro 5700 XT, T2) a programme set to 6000 kbit/s went out at 1032, and `gmx codec test h264-videotoolbox` scored 23.9 dB against its 30 dB floor. The H.265 entry hung its test outright. Both now run average bitrate on Intel Macs: the same iMac sent 6033 kbit/s of 1080p30 over RTMP for 6000 asked, the H.264 test scored 34.2 dB and the H.265 one 32.6. Apple silicon keeps constant bitrate. This comes from a new `arch_properties` table in `codecs.toml`, which lays properties over an entry's own on one CPU architecture; see [Add or override a codec entry](docs/how-to/add-a-codec-entry.md#one-architecture-differs).
+* The person cutout on an Intel Mac runs on ONNX Runtime 1.23.2, the last version Microsoft built for Intel Macs. Every other platform keeps 1.30.
+* `dev/install-gstreamer-macos.sh` installs GStreamer's own universal packages, runtime and devel, for building on a Mac without Homebrew, which has dropped Intel Macs and refuses to install on one. It fetches from a GitHub mirror first (psmux/godwinmix-ci-deps), then freedesktop.org's origin server, then its CDN, resumes a cut transfer, and checks every copy against a pinned SHA256. It builds pkgconf when the machine has no pkg-config. The Intel release jobs use it.
+
 ## 0.3.11 (2026-10-14)
 
 Fixes from the first hour of testing 0.3.10 in the desktop app: menus that did nothing, monitors that froze and jumped, and a show that crashed on Windows.
