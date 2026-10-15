@@ -47,7 +47,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
 
       - name: GStreamer (Linux)
         if: runner.os == 'Linux'
@@ -62,6 +61,12 @@ jobs:
         run: |
           brew install gstreamer
           echo "PKG_CONFIG_PATH=$(brew --prefix gstreamer)/lib/pkgconfig:$(brew --prefix)/lib/pkgconfig" >> "$GITHUB_ENV"
+          echo "GST_CACHE_KEY=$(brew list --versions gstreamer | tr ' ' -)" >> "$GITHUB_ENV"
+      # After the toolchain, keyed by the GStreamer Homebrew poured: a cache built
+      # against another Cellar version links to paths that are not there.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ env.GST_CACHE_KEY }}
 
       # Windows has no package of the MSVC runtime that cargo can find on its
       # own. The script installs the official 1.28 installer, full type, under
