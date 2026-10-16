@@ -2893,11 +2893,11 @@ impl Mixer {
                         warn!(source = %cfg.id, ?e, "rebuilt source could not be put back on programme");
                     }
                 }
-                // After the take, never before it. The held frame is what is on
-                // air until the replacement's own pad is drawn, and releasing it
-                // first is the black frame this whole arrangement exists to
-                // avoid.
-                self.release_retired(Some(&cfg.id));
+                // Not here. The held frame stays on air until the replacement
+                // has a picture of its own, and the supervisor tick lets it go
+                // when that arrives (`first_picture`). Letting it go now
+                // would show the slate for as long as the new source takes to
+                // produce a frame. If no picture ever comes, the hold runs out.
             }
             Err(e) => {
                 // Try again, and keep trying: a browser that will not start now
@@ -4637,6 +4637,8 @@ impl Mixer {
             self.swap_client_off_thread(&id);
         }
         for id in first_picture {
+            // The rebuilt source draws now, so the frame held for it is done.
+            self.release_retired(Some(&id));
             self.log_timeline(&id, "first picture", false);
         }
         for id in judged_stalled {
@@ -5918,6 +5920,7 @@ mod tests {
     mod full_pool;
     mod full_pool_draw;
     mod odd_segment;
+    mod rebuild_hold;
     mod recording_store;
     mod restart;
     mod rtsp_live;
@@ -5976,21 +5979,21 @@ mod tests {
     fn a_meter_is_attributed_by_whole_name_not_by_splitting_it() {
         let ids = ["cam", "cam-1", "cam-1-backup", "feed-a-b-c"];
         for id in ids {
-            let posted = meter_name(id);
+            let posted = meter_name(id, 0);
             let matched: Vec<&str> =
-                ids.iter().copied().filter(|candidate| meter_name(candidate) == posted).collect();
+                ids.iter().copied().filter(|candidate| meter_name(candidate, 0) == posted).collect();
             assert_eq!(matched, vec![id], "{posted} was attributed to {matched:?}");
         }
 
         // The mistake this guards against, spelled out.
-        let posted = meter_name("cam-1-backup");
+        let posted = meter_name("cam-1-backup", 0);
         let naive = posted.strip_prefix("pgm-alevel-").unwrap().split('-').next().unwrap();
         assert_eq!(naive, "cam", "the naive read really does go wrong");
         assert_ne!(naive, "cam-1-backup");
 
         // And the programme's own meter can never be read as a source's, which
         // is what keeps the program bar and the per-source bars apart.
-        assert!(ids.iter().all(|id| meter_name(id) != "pgm-level"));
+        assert!(ids.iter().all(|id| meter_name(id, 0) != "pgm-level"));
     }
 
     /// The fader and the mute are elements this mixer owns, one pair per source,

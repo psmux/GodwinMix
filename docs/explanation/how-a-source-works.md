@@ -185,6 +185,13 @@ matched by element name, but whole, never split: a source id may contain a
 hyphen, and `pgm-alevel-cam-1` split on one names `cam`, which may well be a
 different source that exists.
 
+Every element of a source's programme side branch also carries the number of the
+branch after an `@`, as in `pgm-vq-cam-1@7`, with a new number for each branch
+built. A rebuilt source keeps its old branch in the programme, holding the last
+frame, until the new source has a picture of its own, and GStreamer will not add
+a second element under a name the programme already has. Nothing the operator
+sees carries the number: ids, metrics and events stay keyed by the source id.
+
 ## Filters
 
 Four insertion points, all of them between two elements that already speak the

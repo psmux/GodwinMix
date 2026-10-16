@@ -53,8 +53,8 @@ pub fn fullest_queues() -> Vec<Held> {
 /// The source a queue belongs to, if it belongs to one.
 ///
 /// A source's own pipeline is called `input-<id>`. In the programme, its
-/// branch begins at `pgm-vsrc-<id>` and `pgm-asrc-<id>`, through `pgm-vq-<id>`
-/// and `pgm-vtee-<id>`, and a slot's queue hangs off that tee through its
+/// branch begins at `pgm-vsrc-<id>@N` and `pgm-asrc-<id>@N`, through `pgm-vq-<id>@N`
+/// and `pgm-vtee-<id>@N`, and a slot's queue hangs off that tee through its
 /// gate; so the chain above a queue is walked a few elements up until one of
 /// those names, or a proxy source's own inner queue's parent, says whose it is.
 pub fn source_of(pipeline: &str, queue: &gst::Element) -> Option<String> {
@@ -80,10 +80,6 @@ pub fn source_of(pipeline: &str, queue: &gst::Element) -> Option<String> {
 
 /// The source id in the name of an element of a source's programme branch.
 fn branch_id(name: &str) -> Option<String> {
-    ["pgm-vq-", "pgm-aq-", "pgm-vtee-", "pgm-vsrc-", "pgm-asrc-"]
-        .iter()
-        .find_map(|prefix| name.strip_prefix(prefix))
-        .filter(|id| !id.is_empty())
-        .map(str::to_string)
+    crate::plugin::branch::id_in_element_name(name, &["vq", "aq", "vtee", "vsrc", "asrc"]).map(str::to_string)
 }
 

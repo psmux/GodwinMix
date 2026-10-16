@@ -7,10 +7,13 @@
 //!
 //! ```text
 //!   input pipeline            programme pipeline
-//!   {id}-vproxy  ===>  pgm-vsrc-{id} -> pgm-vq-{id} -> pgm-vtee-{id} =|=> slot, slot, ...
-//!   {id}-aproxy  ===>  pgm-asrc-{id} -> pgm-aq-{id} -> pgm-again
+//!   {id}-vproxy  ===>  pgm-vsrc-{id}@N -> pgm-vq-{id}@N -> pgm-vtee-{id}@N =|=> slot, ...
+//!   {id}-aproxy  ===>  pgm-asrc-{id}@N -> pgm-aq-{id}@N -> pgm-again
 //!                                        -> pgm-alevel -> pgm-amute -> amix:sink_%u
 //! ```
+//!
+//! `N` is the number of the branch, new for every one built, so that a held
+//! branch and the one that replaces it never share an element name.
 //!
 //! The video ends at a `tee` with `allow-not-linked`, not at a compositor pad.
 //! A scene may place one source twice (a wide shot and a cut out of the same
@@ -31,17 +34,44 @@ use crate::state::SourceId;
 use anyhow::{Context, Result};
 use gstreamer as gst;
 use gstreamer::prelude::*;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+
+/// Counts the branches built, so that no two share an element name.
+///
+/// A rebuilt source keeps its old branch in the programme pipeline, holding
+/// the last frame, while the new one is built beside it. GStreamer refuses a
+/// second element with a name the bin already has, so each branch carries a
+/// number of its own in every name. Everything the operator sees stays keyed
+/// by source id; only element names carry this.
+static BRANCHES_BUILT: AtomicU64 = AtomicU64::new(0);
+
+/// The marker between a source id and a branch's number in an element name.
+/// An id is a slug and cannot hold it.
+pub const GENERATION_MARK: char = '@';
+
+/// The name of one of a branch's elements: `pgm-vq-cam@3`.
+fn element_name(kind: &str, id: &str, generation: u64) -> String {
+    format!("pgm-{kind}-{id}{GENERATION_MARK}{generation}")
+}
+
+/// The source id in a branch element's name, whichever branch it is, or None
+/// when `name` is not one of `kinds` of a branch.
+pub fn id_in_element_name<'a>(name: &'a str, kinds: &[&str]) -> Option<&'a str> {
+    let rest = kinds.iter().find_map(|k| name.strip_prefix("pgm-")?.strip_prefix(k)?.strip_prefix('-'))?;
+    let id = rest.rsplit_once(GENERATION_MARK).map_or(rest, |(id, _)| id);
+    (!id.is_empty()).then_some(id)
+}
 
 /// The loudest a fader can be set to. Matches the ceiling the control plane
 /// clamps to, so a request that arrives from somewhere else cannot push a
 /// volume element past what the API would have allowed.
 pub const MAX_SOURCE_GAIN: f64 = 10.0;
 
-/// The name of a source's meter element. Level messages carry only the name of
+/// The name of a branch's meter element. Level messages carry only the name of
 /// the element that posted them, so this is how one is attributed back.
-pub fn meter_name(id: &str) -> String {
-    format!("pgm-alevel-{id}")
+pub fn meter_name(id: &str, generation: u64) -> String {
+    element_name("alevel", id, generation)
 }
 
 /// Every compositor pad drawing one source, and the shift that puts that
@@ -145,9 +175,9 @@ pub struct ProgrammeBranch {
     pub vtee: gst::Element,
     /// Every compositor pad drawing this source, and their shared offset.
     pub pads: Arc<VideoPads>,
-    /// The operator's fader, `pgm-again-{id}`.
+    /// The operator's fader, `pgm-again-{id}@N`.
     pub again: gst::Element,
-    /// The operator's mute, `pgm-amute-{id}`. Muted through its `mute`
+    /// The operator's mute, `pgm-amute-{id}@N`. Muted through its `mute`
     /// property rather than by zeroing its volume, so the two controls never
     /// overwrite each other's value.
     pub amute: gst::Element,
@@ -176,20 +206,21 @@ impl ProgrammeBranch {
         gain: f64,
         muted: bool,
     ) -> Result<Self> {
-        let vsrc = make("proxysrc", &format!("pgm-vsrc-{id}"))?;
+        let generation = BRANCHES_BUILT.fetch_add(1, Ordering::Relaxed);
+        let vsrc = make("proxysrc", &element_name("vsrc", id, generation))?;
         vsrc.set_property("proxysink", video_proxy);
-        let vq = gstutil::queue_thread(&format!("pgm-vq-{id}"))?;
+        let vq = gstutil::queue_thread(&element_name("vq", id, generation))?;
         // A flush from the source's pipeline ends here and not at a
         // compositor pad.
         gstutil::stop_flushes_here(&vq)?;
         // `allow-not-linked` is what makes a source in no scene free and a
         // source in two scenes one more slot. Without it, a tee with no branch
         // errors the pipeline the moment the first frame arrives.
-        let vtee = make("tee", &format!("pgm-vtee-{id}"))?;
+        let vtee = make("tee", &element_name("vtee", id, generation))?;
         vtee.set_property("allow-not-linked", true);
-        let asrc = make("proxysrc", &format!("pgm-asrc-{id}"))?;
+        let asrc = make("proxysrc", &element_name("asrc", id, generation))?;
         asrc.set_property("proxysink", audio_proxy);
-        let aq = gstutil::queue_thread(&format!("pgm-aq-{id}"))?;
+        let aq = gstutil::queue_thread(&element_name("aq", id, generation))?;
         // The programme's latency must not depend on the state of a source's
         // own pipeline. See `answer_latency_here`.
         gstutil::answer_latency_here(&vsrc)?;
@@ -205,13 +236,13 @@ impl ProgrammeBranch {
         // audio branch at a capsfilter on the canvas format, so what arrives
         // through the proxy is already what the audiomixer wants, and both
         // `volume` and `level` take it as it is.
-        let again = make("volume", &format!("pgm-again-{id}"))?;
+        let again = make("volume", &element_name("again", id, generation))?;
         again.set_property("volume", gain.clamp(0.0, MAX_SOURCE_GAIN));
-        let meter = meter_name(id);
+        let meter = meter_name(id, generation);
         let alevel = make("level", &meter)?;
         crate::probe::set_bool(&alevel, "post-messages", true);
         crate::probe::set_int(&alevel, "interval", 100_000_000);
-        let amute = make("volume", &format!("pgm-amute-{id}"))?;
+        let amute = make("volume", &element_name("amute", id, generation))?;
         amute.set_property("mute", muted);
 
         let elements = vec![
