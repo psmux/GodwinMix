@@ -6,9 +6,10 @@
 #   dev/install-cef-dist.sh <cef_binary_*.zip|.tar.bz2> [CEF_PATH]
 #
 # The archive's CEF version must be the one the crate binds (see browser/Cargo.toml,
-# `cef = "=<crate version>"`, and the +metadata of that crate version). Karere's
-# releases (https://github.com/tobagin/karere/releases) are such archives with
-# H.264 and AAC built in, for linux64 and linuxarm64.
+# `cef = "=<crate version>"`, and the +metadata of that crate version). The
+# archives build.sh in https://github.com/psmux/godwinmix-cef makes, with
+# H.264 and AAC built in, are such archives; this is how to try one before
+# it is published.
 set -e
 ARCHIVE="$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
 CEF_PATH="${2:-${CEF_PATH:-$HOME/.cache/gmx-cef}}"

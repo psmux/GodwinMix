@@ -61,9 +61,10 @@ longer stops at "Error 153".
 
 Some YouTube videos still will not play, and the page says "Your browser
 can't play this video". That happens when YouTube offers the video only in
-H.264 or its sound only in AAC, which is common for live streams. The browser
-inside this build of the mixer carries no H.264 and no AAC decoder (VP9, AV1
-and Opus all play). When the renderer sees that error, the Interact dialog
+H.264 or its sound only in AAC, which is common for live streams. On Windows
+and Linux the browser inside the mixer plays both, so this does not happen
+there. On macOS it carries no H.264 and no AAC decoder yet (VP9, AV1 and Opus
+all play). When the renderer sees that error, the Interact dialog
 says so in a line above the picture, and the source's status has it under
 `page.notice`. A recording of the same stream, once YouTube has processed it,
 usually plays. See [web page sources](../reference/web-page-sources.md#codecs)

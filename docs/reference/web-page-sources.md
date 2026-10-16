@@ -245,94 +245,78 @@ in VP8, VP9, AV1 and Opus. H.264 and AAC depend on which CEF binary sits
 next to the sidecar. The official CEF binaries the crate downloads are built
 without them, for patent licensing reasons, and a `<video>` with an H.264
 file then reports `MEDIA_ERR_SRC_NOT_SUPPORTED` (checked with
-`browser/test/video-mp4.html`). So the sidecar is built against a CEF that
-has them:
+`browser/test/video-mp4.html`). So GodwinMix builds CEF itself, with `proprietary_codecs=true
+ffmpeg_branding=Chrome`, and the sidecar is built against that.
 
-* **Linux, x86_64 and arm64: a prebuilt distribution with codecs.** The
-  [Karere](https://github.com/tobagin/karere/releases) project publishes
-  standard CEF minimal distributions built with `proprietary_codecs=true`,
-  for `linux64` and `linuxarm64`, and the `cef` crate has a release for the
-  same CEF version. `browser/Cargo.toml` pins both `cef` and `cef-dll-sys` to
-  `=150.0.0`, which is CEF 150.0.10; `browser/dev/install-cef-dist.sh` puts
-  the downloaded archive where the crate looks, in the layout the crate's own
-  downloader produces, and `cargo build` then links against it instead of
-  fetching the official one. Nothing else changes: same binary layout, same
-  Debian based image, same `exec:` source.
+**Where the build comes from.** The scripts in
+[psmux/godwinmix-cef](https://github.com/psmux/godwinmix-cef) run CEF's own
+automated build pinned to the exact commit the `cef` crate binds, and publish
+one release per CEF version, `cef-150.0.10` today, with the minimal archives
+named and laid out like the official ones, their `.sha1` and `.sha256`, and
+an `index.json` in the official format. The crate's own downloader takes
+that release through `CEF_DOWNLOAD_URL` with no other change.
+`browser/Cargo.toml` pins both `cef` and `cef-dll-sys` to `=150.0.0`, which
+is CEF 150.0.10: the sys crate is the one that downloads and checks the
+distribution, and with only `cef` pinned, cargo once picked a newer sys crate
+and quietly fetched the codec less 150.0.14.
+[Build the web page engine](../how-to/build-the-web-page-engine.md) says how
+to make the build for a new version.
 
-  ```sh
-  gh release download cef-150.0.10-proprietary-codecs -R tobagin/karere --pattern '*linux64*'
-  browser/dev/install-cef-dist.sh cef_binary_150.0.10+*_linux64_minimal.zip ~/.cache/gmx-cef
-  cd browser && CEF_PATH=~/.cache/gmx-cef cargo build --release
-  ```
+| Platform | CEF in the released app | H.264 and AAC |
+|---|---|---|
+| Windows x86_64 (`windows64`) | ours | yes |
+| Linux x86_64 (`linux64`) | ours | yes |
+| Linux arm64 (`linuxarm64`) | ours | yes |
+| macOS, Apple silicon and Intel | official | no: no Mac has built ours yet |
 
-  Verified on the plain Debian image (arm64): the H.264/AAC `<video>` page
-  plays, six flashes and five beeps found in a 12 s capture, audio +29 ms
-  (+18 to +38), and the other pages unchanged (WebAudio +9 ms, VP9 video
-  −3 ms). Shutdown on SIGTERM still 500 ms with nothing left behind.
+`dev/bundle-browser.sh`, which the release workflow runs, fetches ours for
+the platforms in `CEF_CODECS_PLATFORMS` in `dev/cef-codecs.sh` and fails if
+one of them is missing from the release; for macOS it builds against the
+official CEF and says so. A mixer run from a checkout asks our release
+first and the official CDN second.
 
-  Both crates are pinned because the sys crate is the one that downloads and
-  checks the distribution, and its own version metadata names the CEF
-  version; with only `cef` pinned, cargo picked a newer sys crate and quietly
-  fetched the codec-less 150.0.14.
-* **Linux x86_64, alternative: Arch Linux's `cef` package**, also built with
-  proprietary codecs. `browser/dev/Dockerfile.arch` and
-  `browser/dev/linux-arch-codecs.sh` build against it, and
-  `Dockerfile.arch-runtime` plus `sidecar-docker.sh` package the result as a
-  container the mixer runs through Docker (the wrapper forwards the stop
-  signal; the container is gone 0.9 s after `source remove`;
-  `GMX_SIDECAR_LOG=<file>` in `browser.env` keeps the sidecar's log). The
-  wrapper runs the container with `--log-driver none`, and that is not
-  optional: Docker's default log driver copies everything a container writes
-  to stdout into a JSON file on disk, so each sidecar's 41 MB/s of raw video
-  was also being written to the VM's disk. It filled 30 GB in minutes, the
-  players inside stalled on the full disk, and the symptom on air was a frozen
-  picture with silent audio and a container using a fifth of a core. With the
-  driver off the same two sites play with sound, zero dropouts, 65 percent of
-  a core each.
-  `browser/dev/Dockerfile.runtime` builds the same kind of container from the
-  drop-in distribution above, which is what a macOS workstation uses to get
-  the codecs today. Give the Linux VM CPU: on this laptop a 4 vCPU VM starved
-  the sidecar under a 720p30 H.264 page (irregular frames, 21 audio dropouts
-  in 15 s); with 8 vCPUs the same page went to air clean, six of six flashes
-  and beeps, audio −28 ms, no dropouts. The sidecar logs every dropout as
-  `audio re-anchored`, so a starved box shows itself. It also shows the
-  ceiling of a VM on a laptop: the YouTube watch page (VP9 or AV1 at 60 fps,
-  decoded in software) rendered and played with sound in that 8 vCPU VM, but
-  with 32 dropouts in 25 s and a stuttering picture. That is CPU, not the
-  sidecar: the same page on a Linux server runs natively with the whole
-  machine, and with a GPU Chromium can be given hardware decoding
-  (`GMX_BROWSER_SWITCHES="enable-features=VaapiVideoDecoder"` without
-  `disable-gpu`, untested here). On a Mac, the native codec-less `.app` plays
-  YouTube recordings smoothly, because YouTube sends those in VP9 or AV1
-  (a live stream with AAC only sound does not play; see below). Verified the
-  same way: the H.264/AAC page on air through the mixer at 30.0 fps, six of six
-  flashes and beeps, audio +17 ms, black 16, white 235. It is more moving
-  parts than the drop-in distribution, and its `libcef.so` links Arch's
-  system libraries, so it only runs in an Arch based image.
-* **macOS and Windows: build CEF with codecs.** Nobody publishes those.
-  `browser/dev/build-cef-codecs.sh` is CEF's own automated build pinned to the
-  crate's exact commit with `proprietary_codecs=true ffmpeg_branding=Chrome`.
-  It is a Chromium build: hours, 100 GB of disk. Until then a workstation
-  runs the containerised Linux sidecar through Docker, which is what the Arch
-  route above was measured with, from this Mac.
+**Measured.** On Windows on 2026-10-16, with the sidecar built against our
+`windows64` archive: `MediaSource.isTypeSupported` answered true for
+`avc1.4d401f`, `avc1.64002a` and `mp4a.40.2` as well as VP9, AV1 and Opus,
+where the official build answers false for the first three. The Al Jazeera
+English YouTube live stream, which shows "Your browser can't play this
+video" with the official build, played on programme in a real core: no
+`page.notice`, the picture changing from snapshot to snapshot, and the
+source's meter at a median of -15 dBFS (peak -9.6) over 15 seconds, where
+the official build left programme audio at silence.
+LINUX_RESULT
 
-**What the released app carries.** The desktop app and the release archives
-are built by `dev/bundle-browser.sh` on each platform's own runner, which lets
-the `cef` crate download the official CEF 150.0.10 minimal distribution. So
-on Windows, macOS and Linux alike the renderer that ships has VP8, VP9, AV1,
-Opus, Vorbis and FLAC, and no H.264 and no AAC. Most of YouTube plays, because
-YouTube offers VP9 or AV1 with Opus to a browser that asks for them. What does
-not: a video offered only in H.264, and very often a YouTube live stream,
-whose sound is only offered in AAC. The page then shows "Your browser can't
-play this video", and the source's status carries `page.notice` saying so
-(see [driving a page by hand](#driving-a-page-by-hand)). Measured on Windows
-on 2026-10-15: `MediaSource.isTypeSupported` answered false for
-`avc1.4d401f` and `mp4a.40.2` and true for VP9, AV1 and Opus; two YouTube
-recordings played with sound, and a news live stream, whose formats list held
-VP9 video and only `audio/mp4` sound, showed the error. Getting the live
-streams to play means shipping a CEF built with `proprietary_codecs=true`:
-the Karere distributions above for Linux, and a Chromium build of our own for
-Windows and macOS.
+**Before our build, for the record.** With the official CEF on Windows on
+2026-10-15, `avc1.4d401f` and `mp4a.40.2` were not supported; two YouTube
+recordings played with sound, because YouTube offers VP9 or AV1 with Opus to
+a browser that asks for them, and a news live stream whose formats list held
+VP9 video and only `audio/mp4` sound showed the error. That is still what
+the macOS app does.
+
+**Containers, for a Mac that needs the codecs today.** Arch Linux's `cef`
+package is also built with proprietary codecs. `browser/dev/Dockerfile.arch`
+and `browser/dev/linux-arch-codecs.sh` build against it, and
+`Dockerfile.arch-runtime` plus `sidecar-docker.sh` package the result as a
+container the mixer runs through Docker (the wrapper forwards the stop
+signal; the container is gone 0.9 s after `source remove`;
+`GMX_SIDECAR_LOG=<file>` in `browser.env` keeps the sidecar's log).
+`browser/dev/Dockerfile.runtime` builds the same kind of container from any
+Linux minimal distribution, ours included. The wrapper runs the container
+with `--log-driver none`, and that is not optional: Docker's default log
+driver copies everything a container writes to stdout into a JSON file on
+disk, so each sidecar's 41 MB/s of raw video was also being written to the
+VM's disk. It filled 30 GB in minutes, the players inside stalled on the
+full disk, and the symptom on air was a frozen picture with silent audio.
+Give the Linux VM CPU: on this laptop a 4 vCPU VM starved the sidecar under
+a 720p30 H.264 page (irregular frames, 21 audio dropouts in 15 s); with 8
+vCPUs the same page went to air clean, six of six flashes and beeps, audio
+-28 ms, no dropouts. The sidecar logs every dropout as `audio re-anchored`,
+so a starved box shows itself.
+
+**Why not Karere's Linux builds.** Karere publishes CEF 150.0.10 for Linux
+with the same codec flags, and an earlier version of this page used them.
+They carry Karere's own patch to Chromium's GLib message pump, which lives
+in a GPL 3.0 repository with no licence of its own, so they are not used.
 
 Shipping a software H.264 or AAC decoder is what the licensing is about;
 that is a decision for whoever distributes the build, not something the code
