@@ -76,7 +76,8 @@ HEVC (H.265) plays only with hardware video decoding, which is off for a web
 page source unless you turn it on. When a page's video will not play and
 HEVC is the likely reason, the Interact dialog says so and names the setting.
 Open the source's settings, tick Hardware video decoding and Apply. The page
-reloads in a second or so and the source stays on programme if it was there.
+reloads in a second or so; if the source is on programme, its last picture
+stays up until the page is back.
 From the CLI:
 
 ```sh

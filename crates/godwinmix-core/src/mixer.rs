@@ -510,7 +510,8 @@ pub enum Command {
     /// when it was on air.
     RenameSource(SourceId, String, Option<Ack>),
     /// Build a running source again from nothing with new params, the way a
-    /// stalled one is rebuilt, and put it back on programme if it was there.
+    /// stalled one is rebuilt: on programme its last frame is held until the
+    /// new instance draws, and it is put back on programme.
     /// For params its kind cannot take in place, such as a page's `gpu`.
     RebuildSource(Box<SourceConfig>, Option<Ack>),
     /// Set or clear a source's backup, return to it, or stay on the backup.
