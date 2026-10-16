@@ -1,0 +1,57 @@
+<!doctype html><html><body style="background:#222;color:#fff"><script>
+// Prints, as console warnings the sidecar logs in --graphic mode and as text
+// on the page, what this engine says it can play, then whether two real files
+// play. The files are made with GStreamer, beside this page:
+//   gst-launch-1.0 videotestsrc num-buffers=150 pattern=ball ! video/x-raw,width=1280,height=720,framerate=30/1 ! videoconvert ! x265enc speed-preset=ultrafast ! h265parse ! video/x-h265,stream-format=hvc1 ! mp4mux faststart=true ! filesink location=media/hevc.mp4
+//   gst-launch-1.0 videotestsrc num-buffers=150 pattern=ball ! video/x-raw,width=1280,height=720,framerate=30/1 ! videoconvert ! video/x-raw,format=I420 ! svtav1enc preset=12 ! av1parse ! mp4mux faststart=true ! filesink location=media/av1.mp4
+//   godwinmix-browser --graphic [--gpu] --url file:///<path>/codec-matrix.html --seconds 20 > /dev/null
+const V = [
+ ['avc1.42E01E','video/mp4'],['avc1.4d401f','video/mp4'],['avc1.64002a','video/mp4'],
+ ['hvc1.1.6.L93.B0','video/mp4'],['hev1.1.6.L93.B0','video/mp4'],
+ ['vp8','video/webm'],['vp09.00.10.08','video/webm'],['vp09.00.10.08','video/mp4'],
+ ['vp09.02.10.10.01.09.16.09.01','video/mp4'],
+ ['av01.0.05M.08','video/mp4'],['av01.0.13M.10','video/mp4'],['av02.0.05M.08','video/mp4'],
+];
+const A = [
+ ['mp4a.40.2','audio/mp4'],['mp4a.40.5','audio/mp4'],['mp4a.69','audio/mp4'],['mp4a.6B','audio/mp4'],['mp3','audio/mp4'],['mp3','audio/mpeg'],
+ ['opus','audio/webm'],['opus','audio/mp4'],['vorbis','audio/webm'],['flac','audio/mp4'],['flac','audio/flac'],
+ ['','audio/mpeg'],['','audio/aac'],['ac-3','audio/mp4'],['ec-3','audio/mp4'],
+];
+const pre = document.createElement('pre'); document.body.appendChild(pre);
+const out = (s) => { console.warn('MATRIX ' + s); pre.textContent += 'MATRIX ' + s + String.fromCharCode(10); };
+const v = document.createElement('video');
+async function caps(kind, codec, ctype) {
+  const t = codec ? `${ctype}; codecs="${codec}"` : ctype;
+  const mse = window.MediaSource ? MediaSource.isTypeSupported(t) : 'n/a';
+  const cpt = v.canPlayType(t) || 'no';
+  let mc = '';
+  try {
+    const cfg = kind === 'video'
+      ? { type: 'media-source', video: { contentType: t, width: 1920, height: 1080, bitrate: 5e6, framerate: 30 } }
+      : { type: 'media-source', audio: { contentType: t, channels: 2, bitrate: 128000, samplerate: 48000 } };
+    const r = await navigator.mediaCapabilities.decodingInfo(cfg);
+    mc = `supported=${r.supported} smooth=${r.smooth} powerEfficient=${r.powerEfficient}`;
+  } catch (e) { mc = 'error ' + e.name; }
+  out(`${t} | MSE=${mse} | canPlayType=${cpt} | ${mc}`);
+}
+function play(file) {
+  return new Promise((done) => {
+    const el = document.createElement('video');
+    el.muted = true; el.autoplay = true; el.src = 'media/' + file; el.width = 320;
+    document.body.appendChild(el);
+    el.play().catch(() => {});
+    setTimeout(() => {
+      const q = el.getVideoPlaybackQuality ? el.getVideoPlaybackQuality() : {};
+      out(`PLAY ${file} | error=${el.error ? el.error.code + ' ' + el.error.message : 'none'} | size=${el.videoWidth}x${el.videoHeight} | time=${el.currentTime.toFixed(2)} | frames=${q.totalVideoFrames} dropped=${q.droppedVideoFrames}`);
+      done();
+    }, 4000);
+  });
+}
+(async () => {
+  for (const [c, t] of V) await caps('video', c, t);
+  for (const [c, t] of A) await caps('audio', c, t);
+  await play('hevc.mp4');
+  await play('av1.mp4');
+  out('END');
+})();
+</script></body></html>

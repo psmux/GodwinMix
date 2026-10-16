@@ -284,6 +284,65 @@ video" with the official build, played on programme in a real core: no
 `page.notice`, the picture changing from snapshot to snapshot, and the
 source's meter at a median of -15 dBFS (peak -9.6) over 15 seconds, where
 the official build left programme audio at silence.
+**Against Google Chrome.** `browser/test/codec-matrix.html` asks
+`MediaSource.isTypeSupported` and `canPlayType` for each type below, then
+plays a real HEVC MP4 and a real AV1 MP4. Measured on Windows on 2026-10-16
+(Intel Core Ultra 9 285H with its integrated GPU) with our `windows64` build,
+once as the mixer runs the sidecar (software: `disable-gpu`,
+`disable-gpu-compositing`, SwiftShader) and once with the sidecar's `--gpu`
+switch, against Google Chrome 155 on the same machine. Each cell is MSE,
+then `canPlayType`.
+
+| Type | Ours, as the mixer runs it | Ours with `--gpu` | Chrome 155 |
+|---|---|---|---|
+| `video/mp4; codecs="avc1.42E01E"` | yes, probably | yes, probably | yes, probably |
+| `video/mp4; codecs="avc1.4d401f"` | yes, probably | yes, probably | yes, probably |
+| `video/mp4; codecs="avc1.64002a"` | yes, probably | yes, probably | yes, probably |
+| `video/mp4; codecs="hvc1.1.6.L93.B0"` | no, no | yes, probably | yes, probably |
+| `video/mp4; codecs="hev1.1.6.L93.B0"` | no, no | yes, probably | yes, probably |
+| `video/webm; codecs="vp8"` | yes, probably | yes, probably | yes, probably |
+| `video/webm; codecs="vp09.00.10.08"` | yes, probably | yes, probably | yes, probably |
+| `video/mp4; codecs="vp09.00.10.08"` | yes, probably | yes, probably | yes, probably |
+| `video/mp4; codecs="vp09.02.10.10.01.09.16.09.01"` | yes, probably | yes, probably | yes, probably |
+| `video/mp4; codecs="av01.0.05M.08"` | yes, probably | yes, probably | yes, probably |
+| `video/mp4; codecs="av01.0.13M.10"` | yes, probably | yes, probably | yes, probably |
+| `video/mp4; codecs="av02.0.05M.08"` | no, no | no, no | no, no |
+| `audio/mp4; codecs="mp4a.40.2"` | yes, probably | yes, probably | yes, probably |
+| `audio/mp4; codecs="mp4a.40.5"` | yes, probably | yes, probably | yes, probably |
+| `audio/mp4; codecs="mp4a.69"` | no, probably | no, probably | no, probably |
+| `audio/mp4; codecs="mp4a.6B"` | no, probably | no, probably | no, probably |
+| `audio/mp4; codecs="mp3"` | no, probably | no, probably | no, probably |
+| `audio/mpeg; codecs="mp3"` | no, probably | no, probably | no, probably |
+| `audio/webm; codecs="opus"` | yes, probably | yes, probably | yes, probably |
+| `audio/mp4; codecs="opus"` | yes, probably | yes, probably | yes, probably |
+| `audio/webm; codecs="vorbis"` | yes, probably | yes, probably | yes, probably |
+| `audio/mp4; codecs="flac"` | yes, probably | yes, probably | yes, probably |
+| `audio/flac; codecs="flac"` | no, no | no, no | no, no |
+| `audio/mpeg` | yes, probably | yes, probably | yes, probably |
+| `audio/aac` | yes, probably | yes, probably | yes, probably |
+| `audio/mp4; codecs="ac-3"` | no, no | no, no | no, no |
+| `audio/mp4; codecs="ec-3"` | no, no | no, no | no, no |
+| Play `hevc.mp4` (1280x720) | fails, `MEDIA_ERR_SRC_NOT_SUPPORTED` | plays | plays |
+| Play `av1.mp4` (1280x720) | plays | plays | plays |
+
+With `--gpu` our build answered exactly as Chrome on every row. The one
+difference the mixer sees today is HEVC: Chromium has no software HEVC
+decoder and plays it only through the GPU's, so with the GPU switched off
+HEVC is not offered at all. No codec string exists for AV2 yet; the one
+tried is refused everywhere. MP3 is accepted by MSE only as plain
+`audio/mpeg` and by `canPlayType` in every form, which is how Chrome answers
+too. AC-3 and E-AC-3 are not in
+Chrome either.
+
+CPU for a 1080p video on programme: the YouTube embed of Big Buck Bunny,
+which YouTube served as AV1 1920x1080 at 60 fps with Opus, in a 1920x1080
+core, measured over 30 s after 45 s of play, two runs each. The renderer's
+processes used 95 and 123 percent of one core in software and 112 and 101
+percent with `--gpu`; the core itself used 24 percent either way. On this
+machine hardware decoding did not lower the renderer's CPU beyond run to run
+noise, as far as these runs show; the frames still come back to the CPU to
+reach the mixer.
+
 LINUX_RESULT
 
 **Before our build, for the record.** With the official CEF on Windows on
