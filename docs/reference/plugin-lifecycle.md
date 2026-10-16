@@ -119,6 +119,26 @@ it, or `<plugin>/<provide>/<tool>` when a plugin has two instances that both
 answer and you mean a particular one. Tools are declared once per plugin, so
 the service takes the call by default.
 
+### A source's tools
+
+A source plugin runs one process per source, so its tools are answered per
+source. `tool.call` takes the source id as `source`, and the call goes to the
+process behind that source and nowhere else:
+
+```bash
+curl -s -X POST localhost:8080/api/v1/tool/call   -H 'content-type: application/json'   -d '{"name":"playout/next","source":"lobby","arguments":{"source":"lobby"}}'
+```
+
+The tool name's plugin, when it has one, must be the source's plugin; a
+mismatch is -32602 with `data.plugin` naming the source's. An unknown source
+is -32004 naming the sources there are. A source whose process refuses or is
+not running is -32001 with its reason. When `source` is left out and no
+service or device has the tool, `arguments.source` is used instead, which is
+how an MCP client, which only sends arguments, reaches a source's tools.
+
+What a source plugin logs (`log` notifications) is written to the core's log
+with the source id, at the level the plugin gave.
+
 ### A device
 
 Finds things the core could add as sources, and says when they arrive and

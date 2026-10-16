@@ -4002,6 +4002,8 @@ class ToolCallRequest(TypedDict, total=False):
     # The tool's own arguments, as its input schema describes them.
     name: str
     # `<plugin>/<tool>`, or the bare tool name when only one plugin has it.
+    source: Optional[str]
+    # A source id, for a tool of a source plugin. A source plugin runs one process per source, and this says which one answers: `skip` on the playlist called `lobby`, not on every playlist.
 
 class Transform(TypedDict, total=False):
     """Where an item sits and how it is sized."""
@@ -8116,12 +8118,15 @@ class GeneratedMethods:
         name: str,
         *,
         arguments: Any = None,
+        source: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Call one of a plugin's tools, in MCP's shape. The name is `<plugin>/<tool>`, or the bare tool name when only one plugin has it."""
         params: Dict[str, Any] = {}
         params["name"] = name
         if arguments is not None:
             params["arguments"] = arguments
+        if source is not None:
+            params["source"] = source
         return await self._call("tool.call", params)
 
     async def vitals_get(

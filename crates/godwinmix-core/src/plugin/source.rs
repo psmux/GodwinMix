@@ -54,6 +54,13 @@ pub trait Source: Send {
     fn exited(&mut self) -> Option<String> {
         None
     }
+
+    /// The `log` lines the process behind this source has sent since the
+    /// last ask, for the core's own log. Polled by the mixer's tick, so it
+    /// must not wait: a kind with no process keeps this default.
+    fn drain_logs(&mut self) -> Vec<(godwinmix_protocol::plugin::wire::LogLevel, String)> {
+        Vec::new()
+    }
 }
 
 /// The default answer for a source with nothing to say.

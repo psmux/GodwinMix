@@ -512,6 +512,19 @@ impl Source for SidecarSource {
     fn exited(&mut self) -> Option<String> {
         self.plugin_exited()
     }
+
+    fn drain_logs(&mut self) -> Vec<(godwinmix_protocol::plugin::wire::LogLevel, String)> {
+        // Everything else a source plugin says is not read by anything yet,
+        // and the queue is bounded, so draining it here loses nothing that
+        // was being kept.
+        self.notices()
+            .into_iter()
+            .filter_map(|n| match n {
+                Notice::Log { level, message } => Some((level, message)),
+                _ => None,
+            })
+            .collect()
+    }
 }
 
 impl SidecarSource {

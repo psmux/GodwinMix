@@ -3592,6 +3592,7 @@ export interface TokenRevoked {
 export interface ToolCallRequest {
   arguments?: unknown;
   name: string;
+  source?: string | null;
 }
 
 /** Where an item sits and how it is sized. */

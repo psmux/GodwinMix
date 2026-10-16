@@ -927,6 +927,12 @@ impl InputPipeline {
         self.kind.try_lock()?.exited()
     }
 
+    /// The log lines the plugin behind this source sent since the last ask.
+    /// Never waits, for the same reason as `kind_exited`.
+    pub fn kind_logs(&self) -> Vec<(godwinmix_protocol::plugin::wire::LogLevel, String)> {
+        self.kind.try_lock().map(|mut k| k.drain_logs()).unwrap_or_default()
+    }
+
     /// Ask the source for something the core does not model: a restart, a
     /// client swap, a tool a plugin contributes.
     pub fn call(&self, method: &str, params: serde_json::Value) -> Result<serde_json::Value> {
