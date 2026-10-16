@@ -352,10 +352,12 @@ jobs:
       # nothing built on the operator's machine. On every platform: on Windows
       # too since the renderer carries the manifest Chromium needs there, and
       # the budget above was measured with it in. The CEF inside is GodwinMix's
-      # own build with H.264 and AAC, from the psmux/godwinmix-cef release for
-      # the pinned version, checked by SHA-1 and SHA-256. A platform with no
-      # build there fails this step with the command that makes one
-      # (docs/how-to/build-the-web-page-engine.md).
+      # own build with H.264 and AAC on Windows and Linux, from the
+      # psmux/godwinmix-cef release for the pinned version, checked by SHA-1
+      # and SHA-256. Either of those with no build there fails this step with
+      # the command that makes one (docs/how-to/build-the-web-page-engine.md).
+      # macOS keeps the official CEF, without either codec, until a Mac has
+      # built ours.
       - name: The browser renderer, inside the app
         shell: bash
         run: |

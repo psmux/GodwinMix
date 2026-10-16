@@ -7,9 +7,10 @@
 # ~/.cache/gmx-cef) and stages the result in tauri-app/browser/, which
 # tauri.conf.json lists under bundle.resources. The CEF is GodwinMix's own
 # build with H.264 and AAC, from the psmux/godwinmix-cef release for the
-# version browser/Cargo.lock pins (dev/cef-codecs.sh); with no build there for
-# this platform it stops and says how to make one. CEF_CODECS=off builds
-# against the official CEF instead, which has neither codec.
+# version browser/Cargo.lock pins (dev/cef-codecs.sh), on Windows and Linux;
+# with no build there for one of those it stops and says how to make one.
+# macOS has no build of ours yet and gets the official CEF, which has neither
+# codec. CEF_CODECS=off builds against the official CEF everywhere.
 #
 #   macOS    tauri-app/browser/godwinmix-browser.app   (dev/mac-bundle.sh)
 #   Linux    tauri-app/browser/godwinmix-browser, libcef.so and CEF's resources

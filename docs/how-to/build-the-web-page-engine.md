@@ -8,11 +8,15 @@ its own build of CEF instead, made by the scripts in
 codec flags on. This page is for whoever looks after a release: how to make
 that build for a new CEF version, and how to check it before it ships.
 
+Our build exists for Windows (`windows64`) and Linux (`linux64`,
+`linuxarm64`). There is no Mac build of ours yet, so the macOS app ships the
+official CEF and does not play H.264 or AAC.
+
 You need this when `browser/Cargo.toml` moves to a new `cef` crate, or when a
 release stops with
 
 ```
-GodwinMix's CEF 150.0.10 with H.264 and AAC has no macosarm64 build yet
+GodwinMix's CEF 150.0.10 with H.264 and AAC has no linuxarm64 build yet
 ```
 
 ## Which version
@@ -57,6 +61,14 @@ watch it: the picture moves, the source's meter shows sound, and
 official build fails that same test with "Your browser can't play this
 video".
 
+## Add macOS
+
+On an Apple silicon Mac with Xcode, run `./build.sh 150.0.10`, then
+`PLATFORM=macosx64 ./build.sh 150.0.10` for Intel Macs from the same
+checkout, check both as above, and publish them. Then add `macosarm64
+macosx64` to `CEF_CODECS_PLATFORMS` in `dev/cef-codecs.sh`, so a release
+fails rather than quietly shipping the official CEF on a Mac.
+
 ## Publish it
 
 ```sh
@@ -72,9 +84,12 @@ them on the command line.
 
 * `dev/bundle-browser.sh`, which the release workflow runs, points the `cef`
   crate at that release (`CEF_DOWNLOAD_URL`), lets the crate check the SHA-1,
-  and checks the SHA-256 itself afterwards. A platform missing from the
-  release stops it with the message above. `CEF_CODECS=off` builds against the
-  official CEF instead, for a developer who does not need the codecs.
+  and checks the SHA-256 itself afterwards. A platform listed in
+  `CEF_CODECS_PLATFORMS` in `dev/cef-codecs.sh` (today `windows64 linux64
+  linuxarm64`) that is missing from the release stops it with the message
+  above. Any other platform, which today means macOS, builds against the
+  official CEF and prints a line saying so. `CEF_CODECS=off` builds against
+  the official CEF everywhere, for a developer who does not need the codecs.
 * A mixer run from a checkout sets web pages up by itself and looks in that
   release first, then at the official CDN for a platform the release does not
   have yet.

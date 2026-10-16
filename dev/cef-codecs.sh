@@ -7,11 +7,17 @@
 # use_cef_codecs      before the build: finds this platform's archive in the
 #                     release for the CEF version browser/Cargo.lock pins, or
 #                     fails naming the version and how to build it; removes
-#                     an engine in CEF_PATH that is not that archive
+#                     an engine in CEF_PATH that is not that archive. A
+#                     platform not in CEF_CODECS_PLATFORMS keeps the official
+#                     CEF, without H.264 and AAC, and says so.
 # check_cef_codecs    after the build: the archive the crate downloaded has
 #                     the SHA-256 the release publishes
 
 CEF_CODECS_REPO="${CEF_CODECS_REPO:-psmux/godwinmix-cef}"
+# The platforms we publish a build for. macOS is not among them yet: no Mac
+# has built one. Add macosarm64 and macosx64 once their archives are in the
+# release (docs/how-to/build-the-web-page-engine.md).
+CEF_CODECS_PLATFORMS="${CEF_CODECS_PLATFORMS:-windows64 linux64 linuxarm64}"
 
 # The CEF version browser/ pins: the +metadata of cef-dll-sys in its lock file.
 cef_codecs_version() {
@@ -35,6 +41,12 @@ use_cef_codecs() {
     version="$(cef_codecs_version)"
     [[ -n "$version" ]] || { echo "no cef-dll-sys with a +version in browser/Cargo.lock" >&2; return 1; }
     read -r platform os_arch < <(cef_codecs_platform) || return 1
+    if [[ " $CEF_CODECS_PLATFORMS " != *" $platform "* ]]; then
+        echo "GodwinMix publishes no CEF with H.264 and AAC for $platform yet; building against"
+        echo "the official CEF $version, which plays neither (CEF_CODECS_PLATFORMS=\"$CEF_CODECS_PLATFORMS\")."
+        CEF_CODECS_ARCHIVE=""
+        return 0
+    fi
     local base="https://github.com/$CEF_CODECS_REPO/releases/download/cef-$version"
     local index; index="$(curl -fsSL --retry 5 "$base/index.json" 2>/dev/null || true)"
     CEF_CODECS_ARCHIVE="$(grep -o "cef_binary_$version+[^\"]*_${platform}_minimal\.tar\.bz2" <<<"$index" | head -1)"
@@ -59,6 +71,7 @@ use_cef_codecs() {
 }
 
 check_cef_codecs() {
+    [[ -n "${CEF_CODECS_ARCHIVE:-}" ]] || return 0
     local archive="$CEF_CODECS_DIR/$CEF_CODECS_ARCHIVE" got
     [[ -f "$archive" ]] || { echo "the build did not leave $archive" >&2; return 1; }
     if command -v sha256sum >/dev/null; then got="$(sha256sum "$archive")"; else got="$(shasum -a 256 "$archive")"; fi
