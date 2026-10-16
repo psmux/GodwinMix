@@ -509,6 +509,12 @@ async fn set(call: Call, params: Value) -> Result<Value, RpcError> {
         if let in_place::Offered::Applied = in_place::offer(&call, &req.id, &wanted, req.name.clone()).await? {
             return body(find(&call, &req.id).await?);
         }
+        // Not in place, so built again: on programme it holds its last frame
+        // and comes back on air, where removing and adding it left the
+        // programme on the slate.
+        if in_place::rebuild(&call, &wanted).await {
+            return body(find(&call, &req.id).await?);
+        }
     }
     if !moving && req.params.is_none() && req.name.is_none() {
         // A colour alone is already on the document; answer with the source.

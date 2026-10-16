@@ -44,3 +44,11 @@ pub(super) async fn offer(call: &Call, id: &str, wanted: &SourceConfig, name: Op
         )),
     }
 }
+
+/// Build the running source `wanted.id` again with `wanted`'s params, in the
+/// mixer, keeping its place on programme. False when the mixer is not running
+/// it, which the caller answers by adding it the old way.
+pub(super) async fn rebuild(call: &Call, wanted: &SourceConfig) -> bool {
+    let cfg = Box::new(wanted.clone());
+    call.app.mixer.request(|ack| Command::RebuildSource(cfg, Some(ack))).await.is_ok()
+}

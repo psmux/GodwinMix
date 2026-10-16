@@ -507,6 +507,11 @@ pub enum Command {
     /// used to remove and add the source, which put a gap in the programme
     /// when it was on air.
     RenameSource(SourceId, String, Option<Ack>),
+    /// Build a running source again from nothing with new params, the way a
+    /// stalled one is rebuilt: on programme it holds its last frame until the
+    /// new instance draws, and it comes back on programme. For params its
+    /// kind cannot take in place, such as a page's `gpu`.
+    RebuildSource(Box<SourceConfig>, Option<Ack>),
     /// Set or clear a source's backup, return to it, or stay on the backup.
     /// See `mixer::failover`.
     Backup(BackupCommand, Option<Ack>),
@@ -2671,8 +2676,13 @@ impl Mixer {
     /// programme if it was there; the programme shows the slate meanwhile, as
     /// for any dead source.
     fn rebuild_source(&mut self, id: &SourceId) {
+        self.rebuild_source_as(id, None);
+    }
+
+    /// `rebuild_source` with a new config in place of the one it runs with.
+    fn rebuild_source_as(&mut self, id: &SourceId, wanted: Option<SourceConfig>) {
         let Some(slot) = self.sources.iter().find(|s| &s.input.id == id) else { return };
-        let mut cfg = slot.input.current_config();
+        let mut cfg = wanted.unwrap_or_else(|| slot.input.current_config());
         // Carry the desk across. The config this source was built with holds the
         // fader it started at, and a source that comes back an hour later at
         // that value rather than at the one the operator set would jump in level
@@ -2735,7 +2745,7 @@ impl Mixer {
             has_picture,
             handed_over = ?handed_over,
             failures,
-            "building the superimposed source again from scratch"
+            "building the source again from scratch"
         );
         self.rebuilding.insert(id.clone(), was_program);
         if let Err(e) = self.begin_add_source(cfg, None) {
@@ -4159,7 +4169,7 @@ impl Mixer {
             Command::EndAdBreak(_) => "adbreak.end",
             Command::AddSource(..) | Command::AddSourceProbed(..) => "source.add",
             Command::RemoveSource(..) => "source.remove",
-            Command::RenameSource(..) => "source.set",
+            Command::RenameSource(..) | Command::RebuildSource(..) => "source.set",
             Command::Backup(cmd, _) => cmd.label(),
             Command::ReconnectOutput(..) => "output.reconnect",
             Command::AddOutput(..) => "output.add",
@@ -4282,6 +4292,17 @@ impl Mixer {
                         Ok(())
                     }
                     None => Err(anyhow::anyhow!("there is no source '{id}' to rename")),
+                };
+                reply(ack, &r);
+                r?;
+            }
+            Command::RebuildSource(cfg, ack) => {
+                let id = cfg.id.clone();
+                let r = if self.sources.iter().any(|s| s.input.id == id) {
+                    self.rebuild_source_as(&id, Some(*cfg));
+                    Ok(())
+                } else {
+                    Err(anyhow::anyhow!("there is no source '{id}' running to build again"))
                 };
                 reply(ack, &r);
                 r?;
