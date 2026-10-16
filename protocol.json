@@ -16347,6 +16347,19 @@
       {
         "description": "A web page rendered as a live source, by the sidecar or by wpesrc",
         "id": "browser/source",
+        "params": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "properties": {
+            "gpu": {
+              "default": false,
+              "description": "Lets this page's renderer use the GPU. HEVC (H.265) video plays only this way, because Chromium has no software HEVC decoder. Off by default: on a machine with no usable GPU it gains nothing, and on a 1080p YouTube video it measured no CPU saving. Changing it restarts this source's renderer, which reloads the page.",
+              "title": "Hardware video decoding",
+              "type": "boolean"
+            }
+          },
+          "title": "browser/source params",
+          "type": "object"
+        },
         "schemes": [
           "web://",
           "web+http://",
