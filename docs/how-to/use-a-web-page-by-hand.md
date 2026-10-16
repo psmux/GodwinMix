@@ -70,6 +70,21 @@ says so in a line above the picture, and the source's status has it under
 usually plays. See [web page sources](../reference/web-page-sources.md#codecs)
 for which builds have the codecs.
 
+## A video in HEVC
+
+HEVC (H.265) plays only with hardware video decoding, which is off for a web
+page source unless you turn it on. When a page's video will not play and
+HEVC is the likely reason, the Interact dialog says so and names the setting.
+Open the source's settings, tick Hardware video decoding and Apply. The page
+reloads in a second or so and the source stays on programme if it was there.
+From the CLI:
+
+```sh
+gmx ctl rpc source.set '{"id": "promo", "params": {"gpu": true}}'
+```
+
+It needs a GPU that decodes HEVC; on a machine without one the notice says so.
+
 ## From the API, the CLI or an agent
 
 The dialog uses two methods any client can call:

@@ -344,6 +344,25 @@ machine hardware decoding did not lower the renderer's CPU beyond run to run
 noise, as far as these runs show; the frames still come back to the CPU to
 reach the mixer.
 
+**Hardware decoding, `params.gpu`.** A web page source takes one param of
+its own, `gpu`, false unless set. True starts that source's renderer with
+`--gpu`, so Chromium may use the GPU, which is the only way it plays HEVC.
+Set it when adding the source (`{"uri": "web+https://...", "gpu": true}` to
+`source.add`) or later (`{"id": "<source>", "params": {"gpu": true}}` to
+`source.set`); the web page form calls it Hardware video decoding. The
+source's status carries `gpu`, so a client shows what it has. Changing it
+builds that one source again: its renderer restarts and reloads the page,
+and nothing else in the mixer is touched. A source on programme comes back
+on programme by itself; measured on Windows on 2026-10-16 with an HEVC clip,
+the programme kept running (the core answered `core.status` 268 times in
+75 s, never more than a second apart) and showed the slate for under a
+second while the renderer restarted. With `gpu` off, a page whose video
+fails to play while HEVC is not offered says so in `page.notice`, naming
+`params.gpu`. On a machine whose GPU cannot decode HEVC the switch changes
+nothing for HEVC, and the notice says that instead. It is off by default
+because it bought no CPU on the 1080p run above, and a Raspberry Pi or a
+laptop with no usable GPU gains nothing from it.
+
 LINUX_RESULT
 
 **Before our build, for the record.** With the official CEF on Windows on
