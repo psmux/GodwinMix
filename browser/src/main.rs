@@ -390,8 +390,12 @@ wrap_load_handler! {
                         Some(&"gmx://unmute.js".into()),
                         0,
                     );
+                    // The script says what to do about an HEVC video, which
+                    // depends on whether this renderer has the GPU.
+                    let gpu = GPU.load(std::sync::atomic::Ordering::Relaxed);
+                    let watch = format!("window.__gmxGpu = {gpu};\n{CODEC_WATCH_JS}");
                     f.execute_java_script(
-                        Some(&CODEC_WATCH_JS.into()),
+                        Some(&watch.as_str().into()),
                         Some(&"gmx://codec-watch.js".into()),
                         0,
                     );

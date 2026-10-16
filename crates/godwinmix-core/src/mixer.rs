@@ -5079,6 +5079,12 @@ impl Mixer {
                 if let Some(page) = page {
                     status.put_extra("page", page);
                 }
+                // A page says whether its renderer has the GPU, so its
+                // settings open on what it has rather than on the default.
+                if s.input.type_id() == "browser/source" {
+                    let gpu = crate::plugin::kinds::browser::wants_gpu(&s.input.current_config().effective_params());
+                    status.put_extra("gpu", gpu);
+                }
                 // A clip says what it does at its end, and whether it is
                 // there now, holding its last frame.
                 Self::clip_status(s, &mut status);

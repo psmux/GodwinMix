@@ -39,6 +39,8 @@ export async function openSourceDrawer(panel, source, section) {
   // A clip says what it does at its end in its status, so that one box opens
   // on the clip's own choice rather than the default.
   const known = source.at_end ? { name: nameOf(source), at_end: source.at_end } : { name: nameOf(source) };
+  // A page says whether its renderer has the GPU, so the switch opens on that.
+  if (typeof source.gpu === "boolean") known.gpu = source.gpu;
   const form = new SchemaForm(settableOnly(schema), known);
   // What the form says before anybody has touched it. Only what differs
   // from this is sent. The mixer does not publish a source's settings, so

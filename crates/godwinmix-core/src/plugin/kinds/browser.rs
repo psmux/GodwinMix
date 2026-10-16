@@ -60,12 +60,16 @@ fn new(req: SourceRequest<'_>) -> Result<Box<dyn Source>> {
         return Ok(Box::new(super::html::page::TransparentPage::new(req.ctx(), url)));
     }
     let sidecar = ExecSpec::browser(req.cfg.uri.as_str(), req.canvas, req.browser)?;
+    let gpu = wants_gpu(&req.cfg.effective_params());
     let page = PageControl::default();
     let process = sidecar.map(|mut spec| {
         // A control line, so the operator can use the page from the mixer's
         // interface. Nothing is written on it until somebody does.
         spec.pipe_stdin = true;
         spec.argv.insert(1, "--control".into());
+        if gpu {
+            spec.argv.insert(1, "--gpu".into());
+        }
         let mut process = ExecProcess::new(spec);
         process.on_line = Some(page.watch());
         process
@@ -249,14 +253,20 @@ impl BrowserSource {
     }
 }
 
+/// `params.gpu`: the renderer may use the GPU, which is the only way it
+/// plays HEVC. Off unless asked, like everything else the mixer could run.
+pub fn wants_gpu(params: &Params) -> bool {
+    params.get("gpu").and_then(|v| v.as_bool()).unwrap_or(false)
+}
+
 pub fn validate(params: &Params) -> Result<()> {
     for (key, value) in params {
         match key.as_str() {
             "uri" | "url" => {
                 anyhow::ensure!(value.is_str(), "browser/source params.{key} must be a string");
             }
-            "transparent" => {
-                anyhow::ensure!(value.is_bool(), "browser/source params.transparent is true or false");
+            "transparent" | "gpu" => {
+                anyhow::ensure!(value.is_bool(), "browser/source params.{key} is true or false");
             }
             "superimpose" => {
                 let s = value.as_str().unwrap_or_default();
@@ -270,3 +280,7 @@ pub fn validate(params: &Params) -> Result<()> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "browser_tests.rs"]
+mod tests;

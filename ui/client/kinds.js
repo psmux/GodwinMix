@@ -54,9 +54,15 @@ export const SOURCE_KINDS = [
           "x-gmx-basic": true,
           description: "Superimpose is sharper and cheaper when the page is mostly one video, such as a stream with a scoreboard over it. It does not work on pages that protect their video (DRM) or feed it in pieces (MSE, which YouTube is); those fall back to the browser and say so.",
         },
+        gpu: {
+          type: "boolean",
+          title: "Hardware video decoding",
+          default: false,
+          description: "Lets the page's renderer use the GPU. HEVC (H.265) video plays only this way. It saved no CPU on a 1080p YouTube video when measured, and does nothing on a machine without a usable GPU. Changing it reloads the page.",
+        },
       },
     },
-    build: (v) => ({ uri: v.uri, name: v.name || null, kind: "web", superimpose: v.superimpose || "off" }),
+    build: (v) => ({ uri: v.uri, name: v.name || null, kind: "web", superimpose: v.superimpose || "off", ...(v.gpu ? { gpu: true } : {}) }),
   },
   {
     id: "stream",

@@ -1663,6 +1663,18 @@ test("what the drawer sends is split the way source.set reads it", () => {
   ok(!("uri" in req), "an undefined value is left out");
 });
 
+test("a web page's hardware decoding switch goes to params.gpu, and only when it is on", async () => {
+  const { SOURCE_KINDS } = await import("../client/kinds.js");
+  const page = SOURCE_KINDS.find((k) => k.id === "page");
+  eq(page.schema.properties.gpu.type, "boolean");
+  eq(page.schema.properties.gpu.default, false);
+  eq(page.build({ uri: "https://example.org", gpu: true }).gpu, true);
+  ok(!("gpu" in page.build({ uri: "https://example.org", gpu: false })), "off is the default and is not sent");
+  const req = setRequest("yt", { gpu: true });
+  eq(req.params.gpu, true);
+  ok(!("gpu" in req), "it is a param of the page, not a field of source.set");
+});
+
 // -------------------------------------------------- producer preview
 
 test("the stream bit tells the armed scene from the mosaic", () => {

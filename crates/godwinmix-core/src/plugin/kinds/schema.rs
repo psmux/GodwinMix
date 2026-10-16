@@ -13,6 +13,7 @@ pub fn params(type_id: &str) -> Option<Value> {
         "image/source" => Some(image()),
         "file/source" => Some(file()),
         "hls/source" => Some(live()),
+        "browser/source" => Some(page()),
         _ => None,
     }
 }
@@ -60,6 +61,27 @@ fn file() -> Value {
                 "enum": ["repeat", "hold", "leave"],
                 "x-gmx-labels": ["Repeat", "Hold the last frame", "Leave the scene"],
                 "default": "hold"
+            }
+        }
+    })
+}
+
+/// One setting: whether the page's renderer may use the GPU. See
+/// `kinds::browser`.
+fn page() -> Value {
+    json!({
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "browser/source params",
+        "type": "object",
+        "properties": {
+            "gpu": {
+                "title": "Hardware video decoding",
+                "description": "Lets this page's renderer use the GPU. HEVC (H.265) video plays only this way, \
+                                because Chromium has no software HEVC decoder. Off by default: on a machine with \
+                                no usable GPU it gains nothing, and on a 1080p YouTube video it measured no CPU \
+                                saving. Changing it restarts this source's renderer, which reloads the page.",
+                "type": "boolean",
+                "default": false
             }
         }
     })
