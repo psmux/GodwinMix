@@ -14,7 +14,7 @@ set -e
 ARCHIVE="$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
 CEF_PATH="${2:-${CEF_PATH:-$HOME/.cache/gmx-cef}}"
 NAME="$(basename "$ARCHIVE")"; NAME="${NAME%.zip}"; NAME="${NAME%.tar.bz2}"
-# cef_binary_150.0.10+g8042e43+chromium-150.0.7871.101_linux64_minimal
+# cef_binary_154.0.34+g14c5a08+chromium-154.0.8037.98_linux64_minimal
 VERSION="$(echo "$NAME" | sed -E 's/^cef_binary_([^+]+)\+.*/\1/')"
 PLATFORM="$(echo "$NAME" | sed -E 's/.*_(linux64|linuxarm64|macosx64|macosarm64|windows64|windowsarm64)_minimal$/\1/')"
 case "$PLATFORM" in

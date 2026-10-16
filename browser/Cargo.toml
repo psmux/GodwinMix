@@ -11,10 +11,10 @@ description = "Headless Chromium (CEF) rendering a page as a raw video and audio
 [dependencies]
 # Pinned to the exact CEF version that has builds with H.264 and AAC available
 # (see README, Codecs). The +metadata of this crate version is the CEF version.
-cef = "=150.0.0"
+cef = "=154.5.0"
 # The sys crate is what downloads and checks the distribution, and its own
 # +metadata names the CEF version; it must be pinned to the same one.
-cef-dll-sys = "=150.0.0"
+cef-dll-sys = "=154.5.0"
 # Only for muxing raw frames and PCM into Matroska on stdout; no codecs here.
 gstreamer = "0.24"
 gstreamer-app = "0.24"

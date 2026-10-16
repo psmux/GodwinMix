@@ -16,7 +16,7 @@ use std::path::{Path, PathBuf};
 pub struct Engine {
     /// `CEF_PATH`, else `~/.cache/gmx-cef`: the place `browser/dev` uses.
     pub root: PathBuf,
-    /// `150.0.10`: the `+metadata` of the `cef-dll-sys` the checkout pins.
+    /// `154.0.34`: the `+metadata` of the `cef-dll-sys` the checkout pins.
     pub version: String,
 }
 

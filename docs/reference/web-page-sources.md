@@ -52,7 +52,7 @@ configuration error, Error 153".
 The renderer's user agent is Chrome's, with `GodwinMix/<version>` on the end:
 
 ```
-Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36 GodwinMix/0.2.0
+Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36 GodwinMix/0.2.0
 ```
 
 The platform part is the one Chrome sends on each system. It used to be
@@ -251,14 +251,14 @@ ffmpeg_branding=Chrome`, and the sidecar is built against that.
 **Where the build comes from.** The scripts in
 [psmux/godwinmix-cef](https://github.com/psmux/godwinmix-cef) run CEF's own
 automated build pinned to the exact commit the `cef` crate binds, and publish
-one release per CEF version, `cef-150.0.10` today, with the minimal archives
+one release per CEF version, `cef-154.0.34` today, with the minimal archives
 named and laid out like the official ones, their `.sha1` and `.sha256`, and
 an `index.json` in the official format. The crate's own downloader takes
 that release through `CEF_DOWNLOAD_URL` with no other change.
-`browser/Cargo.toml` pins both `cef` and `cef-dll-sys` to `=150.0.0`, which
-is CEF 150.0.10: the sys crate is the one that downloads and checks the
+`browser/Cargo.toml` pins both `cef` and `cef-dll-sys` to `=154.5.0`, which
+is CEF 154.0.34: the sys crate is the one that downloads and checks the
 distribution, and with only `cef` pinned, cargo once picked a newer sys crate
-and quietly fetched the codec less 150.0.14.
+and quietly fetched a newer CEF than the one built.
 [Build the web page engine](../how-to/build-the-web-page-engine.md) says how
 to make the build for a new version.
 
@@ -276,7 +276,7 @@ official CEF and says so. A mixer run from a checkout asks our release
 first and the official CDN second.
 
 **Measured.** On Windows on 2026-10-16, with the sidecar built against our
-`windows64` archive: `MediaSource.isTypeSupported` answered true for
+`windows64` archive of CEF 150.0.10, the version pinned before 154.0.34: `MediaSource.isTypeSupported` answered true for
 `avc1.4d401f`, `avc1.64002a` and `mp4a.40.2` as well as VP9, AV1 and Opus,
 where the official build answers false for the first three. The Al Jazeera
 English YouTube live stream, which shows "Your browser can't play this
@@ -287,7 +287,8 @@ the official build left programme audio at silence.
 **Against Google Chrome.** `browser/test/codec-matrix.html` asks
 `MediaSource.isTypeSupported` and `canPlayType` for each type below, then
 plays a real HEVC MP4 and a real AV1 MP4. Measured on Windows on 2026-10-16
-(Intel Core Ultra 9 285H with its integrated GPU) with our `windows64` build,
+(Intel Core Ultra 9 285H with its integrated GPU) with our `windows64` build
+of CEF 150.0.10,
 once as the mixer runs the sidecar (software: `disable-gpu`,
 `disable-gpu-compositing`, SwiftShader) and once with the sidecar's `--gpu`
 switch, against Google Chrome 155 on the same machine. Each cell is MSE,

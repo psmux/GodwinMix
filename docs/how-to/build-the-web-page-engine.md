@@ -16,7 +16,7 @@ You need this when `browser/Cargo.toml` moves to a new `cef` crate, or when a
 release stops with
 
 ```
-GodwinMix's CEF 150.0.10 with H.264 and AAC has no linuxarm64 build yet
+GodwinMix's CEF 154.0.34 with H.264 and AAC has no linuxarm64 build yet
 ```
 
 ## Which version
@@ -25,7 +25,7 @@ The version is the `+metadata` of `cef-dll-sys` in `browser/Cargo.lock`:
 
 ```sh
 grep -A1 '^name = "cef-dll-sys"$' browser/Cargo.lock
-# version = "150.0.0+150.0.10"   means CEF 150.0.10
+# version = "154.5.0+154.0.34"   means CEF 154.0.34
 ```
 
 ## Build it
@@ -36,7 +36,7 @@ platforms), with about 100 GB free and most of a day:
 ```sh
 git clone https://github.com/psmux/godwinmix-cef.git
 cd godwinmix-cef
-./build.sh 150.0.10
+./build.sh 154.0.34
 ```
 
 The repository's README has the prerequisites per platform, the time and
@@ -47,11 +47,11 @@ same command again; it carries on from where it was.
 ## Check it before publishing
 
 Build the renderer against the new archive and ask it what it can play. The
-archive is in `~/cef-build/out/cef-150.0.10/` (`C:/cef-build/out/cef-150.0.10/`
+archive is in `~/cef-build/out/cef-154.0.34/` (`C:/cef-build/out/cef-154.0.34/`
 on Windows):
 
 ```sh
-browser/dev/install-cef-dist.sh ~/cef-build/out/cef-150.0.10/cef_binary_150.0.10+*_minimal.tar.bz2 /tmp/cef-new
+browser/dev/install-cef-dist.sh ~/cef-build/out/cef-154.0.34/cef_binary_154.0.34+*_minimal.tar.bz2 /tmp/cef-new
 cd browser && CEF_PATH=/tmp/cef-new cargo build --release
 ```
 
@@ -63,8 +63,8 @@ video".
 
 ## Add macOS
 
-On an Apple silicon Mac with Xcode, run `./build.sh 150.0.10`, then
-`PLATFORM=macosx64 ./build.sh 150.0.10` for Intel Macs from the same
+On an Apple silicon Mac with Xcode, run `./build.sh 154.0.34`, then
+`PLATFORM=macosx64 ./build.sh 154.0.34` for Intel Macs from the same
 checkout, check both as above, and publish them. Then add `macosarm64
 macosx64` to `CEF_CODECS_PLATFORMS` in `dev/cef-codecs.sh`, so a release
 fails rather than quietly shipping the official CEF on a Mac.
@@ -72,11 +72,11 @@ fails rather than quietly shipping the official CEF on a Mac.
 ## Publish it
 
 ```sh
-./publish.sh 150.0.10
+./publish.sh 154.0.34
 ```
 
 That uploads the archive with its `.sha1` and `.sha256` to the release
-`cef-150.0.10` and rewrites the release's `index.json`. Run it on each
+`cef-154.0.34` and rewrites the release's `index.json`. Run it on each
 machine that built a platform, or copy the archives to one machine and name
 them on the command line.
 
