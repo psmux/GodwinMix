@@ -509,9 +509,9 @@ async fn set(call: Call, params: Value) -> Result<Value, RpcError> {
         if let in_place::Offered::Applied = in_place::offer(&call, &req.id, &wanted, req.name.clone()).await? {
             return body(find(&call, &req.id).await?);
         }
-        // Not in place, so built again: on programme it holds its last frame
-        // and comes back on air, where removing and adding it left the
-        // programme on the slate.
+        // Not in place, so built again by the mixer, which puts it back on
+        // programme once it draws. Removing and adding it left the programme
+        // on the slate for good.
         if in_place::rebuild(&call, &wanted).await {
             return body(find(&call, &req.id).await?);
         }

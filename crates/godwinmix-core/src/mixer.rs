@@ -508,9 +508,8 @@ pub enum Command {
     /// when it was on air.
     RenameSource(SourceId, String, Option<Ack>),
     /// Build a running source again from nothing with new params, the way a
-    /// stalled one is rebuilt: on programme it holds its last frame until the
-    /// new instance draws, and it comes back on programme. For params its
-    /// kind cannot take in place, such as a page's `gpu`.
+    /// stalled one is rebuilt, and put it back on programme if it was there.
+    /// For params its kind cannot take in place, such as a page's `gpu`.
     RebuildSource(Box<SourceConfig>, Option<Ack>),
     /// Set or clear a source's backup, return to it, or stay on the backup.
     /// See `mixer::failover`.
@@ -2676,12 +2675,18 @@ impl Mixer {
     /// programme if it was there; the programme shows the slate meanwhile, as
     /// for any dead source.
     fn rebuild_source(&mut self, id: &SourceId) {
-        self.rebuild_source_as(id, None);
+        self.rebuild_source_as(id, None, None);
     }
 
     /// `rebuild_source` with a new config in place of the one it runs with.
-    fn rebuild_source_as(&mut self, id: &SourceId, wanted: Option<SourceConfig>) {
+    fn rebuild_source_as(&mut self, id: &SourceId, wanted: Option<SourceConfig>, ack: Option<Ack>) {
         let Some(slot) = self.sources.iter().find(|s| &s.input.id == id) else { return };
+        // New params from the operator: the old branch is taken out rather
+        // than held, because the new one is built under the same element
+        // names and the pipeline refuses a second set while the first is
+        // there. The programme shows the slate until the new instance draws,
+        // and the source comes back on it.
+        let operator = wanted.is_some();
         let mut cfg = wanted.unwrap_or_else(|| slot.input.current_config());
         // Carry the desk across. The config this source was built with holds the
         // fader it started at, and a source that comes back an hour later at
@@ -2706,7 +2711,7 @@ impl Mixer {
         // thread that pushes this source's frames into the programme; stop the
         // branch while that thread is still pushing and the two wait on each
         // other.
-        let held = was_program && self.cfg.stall.hold_last_frame && has_picture;
+        let held = was_program && self.cfg.stall.hold_last_frame && has_picture && !operator;
         // The removal forgets everything kept under the id, which is right for
         // a source somebody removed and wrong for this one: its strikes are
         // what stop the next stall rebuilding it at once. Put back below.
@@ -2748,7 +2753,7 @@ impl Mixer {
             "building the source again from scratch"
         );
         self.rebuilding.insert(id.clone(), was_program);
-        if let Err(e) = self.begin_add_source(cfg, None) {
+        if let Err(e) = self.begin_add_source(cfg, ack) {
             error!(source = %id, ?e, "could not begin building the source again");
             self.rebuilding.remove(id);
         }
@@ -4298,14 +4303,15 @@ impl Mixer {
             }
             Command::RebuildSource(cfg, ack) => {
                 let id = cfg.id.clone();
-                let r = if self.sources.iter().any(|s| s.input.id == id) {
-                    self.rebuild_source_as(&id, Some(*cfg));
-                    Ok(())
+                // Answered when the new instance is added, as `AddSource` is,
+                // so the caller reads the source back rather than a gap.
+                if self.sources.iter().any(|s| s.input.id == id) {
+                    self.rebuild_source_as(&id, Some(*cfg), ack);
                 } else {
-                    Err(anyhow::anyhow!("there is no source '{id}' running to build again"))
-                };
-                reply(ack, &r);
-                r?;
+                    let r = Err(anyhow::anyhow!("there is no source '{id}' running to build again"));
+                    reply(ack, &r);
+                    r?;
+                }
             }
             Command::Backup(cmd, ack) => {
                 let r = self.backup_command(cmd);
