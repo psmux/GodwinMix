@@ -46,9 +46,15 @@ pub(super) async fn offer(call: &Call, id: &str, wanted: &SourceConfig, name: Op
 }
 
 /// Build the running source `wanted.id` again with `wanted`'s params, in the
-/// mixer, keeping its place on programme. False when the mixer is not running
-/// it, which the caller answers by adding it the old way.
-pub(super) async fn rebuild(call: &Call, wanted: &SourceConfig) -> bool {
+/// mixer, keeping its place on programme. Ok(false) when the mixer is not
+/// running it, which the caller answers by adding it the old way. Any other
+/// failure, a busy mixer above all, is passed on: removing and adding the
+/// source on top of a rebuild still under way would take it off programme.
+pub(super) async fn rebuild(call: &Call, wanted: &SourceConfig) -> Result<bool, RpcError> {
     let cfg = Box::new(wanted.clone());
-    call.app.mixer.request(|ack| Command::RebuildSource(cfg, Some(ack))).await.is_ok()
+    match call.app.mixer.request(|ack| Command::RebuildSource(cfg, Some(ack))).await {
+        Ok(()) => Ok(true),
+        Err(e) if e.to_string().contains("running to build again") => Ok(false),
+        Err(e) => Err(call.mixer_error(e)),
+    }
 }
