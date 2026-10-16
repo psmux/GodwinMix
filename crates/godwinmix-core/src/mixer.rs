@@ -2689,12 +2689,6 @@ impl Mixer {
     /// `rebuild_source` with a new config in place of the one it runs with.
     fn rebuild_source_as(&mut self, id: &SourceId, wanted: Option<SourceConfig>, ack: Option<Ack>) {
         let Some(slot) = self.sources.iter().find(|s| &s.input.id == id) else { return };
-        // New params from the operator: the old branch is taken out rather
-        // than held, because the new one is built under the same element
-        // names and the pipeline refuses a second set while the first is
-        // there. The programme shows the slate until the new instance draws,
-        // and the source comes back on it.
-        let operator = wanted.is_some();
         let mut cfg = wanted.unwrap_or_else(|| slot.input.current_config());
         // Carry the desk across. The config this source was built with holds the
         // fader it started at, and a source that comes back an hour later at
@@ -2719,7 +2713,7 @@ impl Mixer {
         // thread that pushes this source's frames into the programme; stop the
         // branch while that thread is still pushing and the two wait on each
         // other.
-        let held = was_program && self.cfg.stall.hold_last_frame && has_picture && !operator;
+        let held = was_program && self.cfg.stall.hold_last_frame && has_picture;
         // The removal forgets everything kept under the id, which is right for
         // a source somebody removed and wrong for this one: its strikes are
         // what stop the next stall rebuilding it at once. Put back below.
