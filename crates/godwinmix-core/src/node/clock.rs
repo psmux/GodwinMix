@@ -16,6 +16,7 @@ use gstreamer as gst;
 use gstreamer::prelude::*;
 use gstreamer_net as gst_net;
 use parking_lot::Mutex;
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -174,13 +175,28 @@ impl Follower {
     }
 }
 
+/// One client clock per core address, for the life of the process.
+///
+/// A `GstNetClientClock` is never freed here. GStreamer's thread behind it
+/// tells each client clock about a change of `synced` through a plain pointer
+/// to the clock, and a clock freed while that thread is in the middle of
+/// telling it is a read of freed memory: an intermittent 0xc0000005 on
+/// Windows, in the thread `gstnet` starts, with this file nowhere on the
+/// stack. Every reconnect of a node used to free one. Following the same
+/// address again reuses its clock, which is also what GStreamer shares
+/// underneath anyway, so the cost is one small object per core address a
+/// node has ever followed.
 fn net_clock(host: &str, port: i32) -> Result<gst::Clock> {
     anyhow::ensure!(
         !host.is_empty(),
         "a node needs the core's address to follow its clock, and none was given"
     );
-    let clock = gst_net::NetClientClock::new(Some("gmx-node-clock"), host, port, gst::ClockTime::ZERO);
-    Ok(clock.upcast())
+    static CLOCKS: std::sync::OnceLock<Mutex<HashMap<(String, i32), gst::Clock>>> = std::sync::OnceLock::new();
+    let mut clocks = CLOCKS.get_or_init(Mutex::default).lock();
+    let clock = clocks.entry((host.to_string(), port)).or_insert_with(|| {
+        gst_net::NetClientClock::new(Some("gmx-node-clock"), host, port, gst::ClockTime::ZERO).upcast()
+    });
+    Ok(clock.clone())
 }
 
 fn ptp_clock() -> Result<gst::Clock> {
@@ -231,6 +247,27 @@ mod tests {
             "two clocks on one machine must not be a second apart, got {offset} ms"
         );
         assert!(jitter >= 0.0);
+    }
+
+    /// A reconnecting node follows the same address again. The client clock
+    /// must outlive the follower that asked for it, or GStreamer's own thread
+    /// can tell a freed clock about a change of `synced` (see `net_clock`).
+    #[test]
+    fn a_client_clock_outlives_its_follower_and_is_reused() {
+        gst::init().unwrap();
+        let provider = Provider::publish(&gst::SystemClock::obtain(), 0).unwrap();
+        let first = Follower::follow("127.0.0.1", provider.port(), Kind::Net).unwrap();
+        let weak = first.clock().downgrade();
+        drop(first);
+        let again = Follower::follow("127.0.0.1", provider.port(), Kind::Net).unwrap();
+        assert_eq!(
+            weak.upgrade().as_ref(),
+            Some(again.clock()),
+            "following the same core again must reuse the clock, not make and free one"
+        );
+        let other = Provider::publish(&gst::SystemClock::obtain(), 0).unwrap();
+        let apart = Follower::follow("127.0.0.1", other.port(), Kind::Net).unwrap();
+        assert_ne!(apart.clock(), again.clock(), "a different core is a different clock");
     }
 
     #[test]
