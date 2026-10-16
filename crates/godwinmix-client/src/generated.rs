@@ -6402,6 +6402,11 @@ pub struct ToolCallRequest {
     pub arguments: Value,
     /// `<plugin>/<tool>`, or the bare tool name when only one plugin has it.
     pub name: String,
+    /// A source id, for a tool of a source plugin. A source plugin runs one
+    /// process per source, and this says which one answers: `skip` on the
+    /// playlist called `lobby`, not on every playlist.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
 }
 
 /// Where an item sits and how it is sized.

@@ -14075,6 +14075,13 @@
           "name": {
             "description": "`<plugin>/<tool>`, or the bare tool name when only one plugin has it.",
             "type": "string"
+          },
+          "source": {
+            "description": "A source id, for a tool of a source plugin. A source plugin runs one\nprocess per source, and this says which one answers: `skip` on the\nplaylist called `lobby`, not on every playlist.",
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
