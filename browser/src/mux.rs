@@ -67,6 +67,9 @@ pub struct Muxer {
     start: std::time::Instant,
     /// Unix time of `start`, in nanoseconds, to map Chromium's timestamps.
     start_unix_ns: i64,
+    /// What to add to Chromium's audio timestamps to make them Unix time. See
+    /// `PtsEpoch`.
+    pts_epoch: Mutex<PtsEpoch>,
     audio_offset_ns: i64,
     channels: i32,
     rate: i32,
@@ -87,6 +90,42 @@ const KEY_B: i32 = 254;
 const SPILL_MIN: i32 = 12;
 /// Coverage below which a pixel over the key is simply the key: alpha zero.
 const COVER_MIN: i32 = 10;
+
+/// Chromium's audio timestamps are documented as Unix milliseconds. CEF 154
+/// on Windows gives milliseconds on a monotonic clock that starts near boot
+/// instead (593555958 on a laptop up for 6.9 days), at the right rate but on
+/// the wrong epoch. Read as Unix
+/// time, every packet looked 56 years early, the sample count was pulled
+/// back to zero on each one, and the mixer judged the source stalled about
+/// every three minutes. A timestamp more than a day from now is taken to be
+/// on such a clock, and is mapped onto Unix time by where the first one
+/// landed.
+#[derive(Default)]
+struct PtsEpoch {
+    offset_ms: Option<i64>,
+}
+
+impl PtsEpoch {
+    const DAY_MS: i64 = 86_400_000;
+
+    /// `pts` as Unix milliseconds, or 0 when Chromium gave none.
+    fn to_unix_ms(&mut self, pts: i64, now_unix_ms: i64) -> i64 {
+        if pts <= 0 {
+            return 0;
+        }
+        if (pts - now_unix_ms).abs() < Self::DAY_MS {
+            return pts;
+        }
+        pts + *self.offset_ms.get_or_insert(now_unix_ms - pts)
+    }
+}
+
+fn unix_now_ns() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos() as i64)
+        .unwrap_or(0)
+}
 
 /// How far the sample count may run from the wall clock before audio is
 /// re-anchored. Two video frames at 30 fps.
@@ -199,10 +238,8 @@ impl Muxer {
             latest: Arc::new(Mutex::new(None)),
             audio_clock: Mutex::new(None),
             start: std::time::Instant::now(),
-            start_unix_ns: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.as_nanos() as i64)
-                .unwrap_or(0),
+            start_unix_ns: unix_now_ns(),
+            pts_epoch: Mutex::new(PtsEpoch::default()),
             audio_offset_ns: audio_offset_ms * 1_000_000,
             channels,
             rate,
@@ -276,7 +313,8 @@ impl Muxer {
     }
 
     /// Interleaved float PCM straight from the browser, with the presentation
-    /// time Chromium gave it (milliseconds since the Unix epoch; 0 if none).
+    /// time Chromium gave it (milliseconds, Unix or monotonic: see `PtsEpoch`;
+    /// 0 if none).
     /// Whether `src` already holds more than `limit` bytes the reader has not
     /// taken, in which case the next push is dropped rather than queued.
     ///
@@ -304,6 +342,8 @@ impl Muxer {
         let dur_ns = frames * 1_000_000_000 / rate;
         // Chromium's time for this packet on our clock, or, without one, the
         // interval that just ended.
+        let now_unix_ms = unix_now_ns() / 1_000_000;
+        let pts_unix_ms = self.pts_epoch.lock().unwrap().to_unix_ms(pts_unix_ms, now_unix_ms);
         let theirs = if pts_unix_ms > 0 {
             pts_unix_ms * 1_000_000 - self.start_unix_ns
         } else {
@@ -412,5 +452,34 @@ impl Muxer {
         // Give the muxer a moment to flush the tail before the pipe closes.
         std::thread::sleep(Duration::from_millis(300));
         let _ = self.pipeline.set_state(gst::State::Null);
+    }
+}
+
+#[cfg(test)]
+mod pts_epoch_tests {
+    use super::PtsEpoch;
+
+    const NOW: i64 = 1_792_243_156_077;
+
+    #[test]
+    fn unix_timestamps_pass_through() {
+        let mut e = PtsEpoch::default();
+        assert_eq!(e.to_unix_ms(NOW - 40, NOW), NOW - 40);
+        assert_eq!(e.to_unix_ms(NOW + 500, NOW), NOW + 500);
+    }
+
+    #[test]
+    fn none_stays_none() {
+        assert_eq!(PtsEpoch::default().to_unix_ms(0, NOW), 0);
+    }
+
+    /// What CEF 154 gave on Windows: milliseconds since about boot.
+    #[test]
+    fn a_boot_clock_is_mapped_by_its_first_timestamp_and_keeps_its_rate() {
+        let mut e = PtsEpoch::default();
+        assert_eq!(e.to_unix_ms(593_555_958, NOW), NOW);
+        // 17 s later by Chromium's clock, whatever the wall clock says now.
+        assert_eq!(e.to_unix_ms(593_572_958, NOW + 17_090), NOW + 17_000);
+        assert_eq!(e.to_unix_ms(593_555_958 + 300_000, NOW + 300_050), NOW + 300_000);
     }
 }
