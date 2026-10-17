@@ -14,10 +14,9 @@
 #                     the SHA-256 the release publishes
 
 CEF_CODECS_REPO="${CEF_CODECS_REPO:-psmux/godwinmix-cef}"
-# The platforms we publish a build for. macOS is not among them yet: no Mac
-# has built one. Add macosarm64 and macosx64 once their archives are in the
-# release (docs/how-to/build-the-web-page-engine.md).
-CEF_CODECS_PLATFORMS="${CEF_CODECS_PLATFORMS:-windows64 linux64 linuxarm64}"
+# The platforms we publish a build for: all six that CEF ships
+# (docs/how-to/build-the-web-page-engine.md).
+CEF_CODECS_PLATFORMS="${CEF_CODECS_PLATFORMS:-windows64 windowsarm64 linux64 linuxarm64 macosarm64 macosx64}"
 
 # The CEF version browser/ pins: the +metadata of cef-dll-sys in its lock file.
 cef_codecs_version() {
@@ -32,6 +31,7 @@ cef_codecs_platform() {
         Linux/x86_64) echo "linux64 cef_linux_x86_64" ;;
         Linux/aarch64) echo "linuxarm64 cef_linux_aarch64" ;;
         MINGW*/x86_64|MSYS*/x86_64|CYGWIN*/x86_64) echo "windows64 cef_windows_x86_64" ;;
+        MINGW*/aarch64|MSYS*/aarch64|MINGW*/arm64|MSYS*/arm64) echo "windowsarm64 cef_windows_aarch64" ;;
         *) echo "no CEF platform for $(uname -s) on $(uname -m)" >&2; return 1 ;;
     esac
 }
@@ -47,7 +47,9 @@ use_cef_codecs() {
         CEF_CODECS_ARCHIVE=""
         return 0
     fi
-    local base="https://github.com/$CEF_CODECS_REPO/releases/download/cef-$version"
+    # CEF_CODECS_BASE points at another copy of the release, such as a folder
+    # served over HTTP, to try a draft before it is published.
+    local base="${CEF_CODECS_BASE:-https://github.com/$CEF_CODECS_REPO/releases/download/cef-$version}"
     local index; index="$(curl -fsSL --retry 5 "$base/index.json" 2>/dev/null || true)"
     CEF_CODECS_ARCHIVE="$(grep -o "cef_binary_$version+[^\"]*_${platform}_minimal\.tar\.bz2" <<<"$index" | head -1)"
     if [[ -z "$CEF_CODECS_ARCHIVE" ]]; then

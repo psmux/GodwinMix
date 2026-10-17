@@ -267,12 +267,15 @@ to make the build for a new version.
 | Windows x86_64 (`windows64`) | ours | yes |
 | Linux x86_64 (`linux64`) | ours | yes |
 | Linux arm64 (`linuxarm64`) | ours | yes |
-| macOS, Apple silicon and Intel | official | no: no Mac has built ours yet |
+| Windows arm64 (`windowsarm64`) | ours | yes |
+| macOS, Apple silicon (`macosarm64`) | ours | yes |
+| macOS, Intel (`macosx64`) | ours | yes |
 
 `dev/bundle-browser.sh`, which the release workflow runs, fetches ours for
 the platforms in `CEF_CODECS_PLATFORMS` in `dev/cef-codecs.sh` and fails if
-one of them is missing from the release; for macOS it builds against the
-official CEF and says so. A mixer run from a checkout asks our release
+one of them is missing from the release. `CEF_CODECS_BASE` points it at
+another copy of the release, such as a folder served over HTTP, to try a
+draft before it is published. A mixer run from a checkout asks our release
 first and the official CDN second.
 
 **Measured.** On Windows on 2026-10-16, with the sidecar built against our
