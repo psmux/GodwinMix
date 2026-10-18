@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.14 (2026-10-18)
+
+Web page sources play H.264 and AAC, so YouTube live streams and H.264 only videos play where they said "Your browser can't play this video".
+
+* The browser renderer now runs on GodwinMix's own build of CEF 154.0.34 (Chromium 154), made with Chromium's codec flags on, from a new repository, [psmux/godwinmix-cef](https://github.com/psmux/godwinmix-cef). The Windows, Linux and both macOS apps carry it, checked by SHA-1 and SHA-256 when the release is built. Measured on Windows against Google Chrome 155 on the same machine, the renderer answered every codec question the way Chrome does: H.264, AAC, VP9, AV1 and Opus. HEVC is the one difference, because Chromium decodes HEVC only on the GPU. A YouTube video that YouTube served as H.264 with AAC played on programme with its sound. The official CEF builds, which every earlier release shipped, carry neither codec.
+* A web page source takes `params.gpu`, off by default. On, its renderer may use the GPU, which is the only way it plays HEVC. Set it in the web page form (Hardware video decoding), with `source.add` or later with `source.set`. A page whose video fails while HEVC is not offered says so in `page.notice` and names the field. It is off by default because it bought no CPU on a 1080p run, and a machine with no usable GPU gains nothing from it.
+* `source.set` with params a source cannot take in place now builds that one source again in the mixer. A source on programme stays on programme and holds its last frame until the new one has a picture. Before, it left programme. Each programme branch has element names of its own for this, so the new branch can be built beside the one still holding its frame. A busy mixer's answer to `source.set` reaches the caller instead of the source being removed and added.
+* On Windows a YouTube source on programme restarted every few minutes. CEF 154 there stamps a page's sound with milliseconds since about boot, not the Unix time its header says, and the renderer read that as a clock running 56 years behind, so its audio fell behind the mixer until the mixer judged it stalled. The renderer now recognises a boot clock and maps it onto real time. In a 10 minute run on air the source never stalled.
+* A checkout fetches the web page engine from our release first and from the official CDN for a platform we have not published, and `CEF_CODECS_BASE` points the build at another copy of the release, to try a draft before it goes out. Linux arm64 is the one platform still on the official CEF; its build is under way and joins the release when it is done. [Build the web page engine](docs/how-to/build-the-web-page-engine.md) says how to make the build for a new CEF version.
+
 ## 0.3.13 (2026-10-16)
 
 From tester issues 21 to 23: the programme full screen and on a projector, web pages you can use by hand, and a playout plugin in the gallery.

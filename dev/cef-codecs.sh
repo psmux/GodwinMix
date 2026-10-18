@@ -14,9 +14,10 @@
 #                     the SHA-256 the release publishes
 
 CEF_CODECS_REPO="${CEF_CODECS_REPO:-psmux/godwinmix-cef}"
-# The platforms we publish a build for: all six that CEF ships
-# (docs/how-to/build-the-web-page-engine.md).
-CEF_CODECS_PLATFORMS="${CEF_CODECS_PLATFORMS:-windows64 windowsarm64 linux64 linuxarm64 macosarm64 macosx64}"
+# The platforms we publish a build for (docs/how-to/build-the-web-page-engine.md).
+# linuxarm64 joins when its build is in the cef-154.0.34 release; until then
+# a Linux arm64 checkout keeps the official CEF instead of stopping.
+CEF_CODECS_PLATFORMS="${CEF_CODECS_PLATFORMS:-windows64 windowsarm64 linux64 macosarm64 macosx64}"
 
 # The CEF version browser/ pins: the +metadata of cef-dll-sys in its lock file.
 cef_codecs_version() {

@@ -266,7 +266,7 @@ to make the build for a new version.
 |---|---|---|
 | Windows x86_64 (`windows64`) | ours | yes |
 | Linux x86_64 (`linux64`) | ours | yes |
-| Linux arm64 (`linuxarm64`) | ours | yes |
+| Linux arm64 (`linuxarm64`) | official, until ours is published | no |
 | Windows arm64 (`windowsarm64`) | ours | yes |
 | macOS, Apple silicon (`macosarm64`) | ours | yes |
 | macOS, Intel (`macosx64`) | ours | yes |
@@ -367,16 +367,16 @@ nothing for HEVC, and the notice says that instead. It is off by default
 because it bought no CPU on the 1080p run above, and a Raspberry Pi or a
 laptop with no usable GPU gains nothing from it.
 
-LINUX_RESULT
+The codec table has not been measured on Linux or macOS this way yet.
 
 **Before our build, for the record.** With the official CEF on Windows on
 2026-10-15, `avc1.4d401f` and `mp4a.40.2` were not supported; two YouTube
 recordings played with sound, because YouTube offers VP9 or AV1 with Opus to
 a browser that asks for them, and a news live stream whose formats list held
 VP9 video and only `audio/mp4` sound showed the error. That is still what
-the macOS app does.
+a Linux arm64 checkout does until our build for it is published.
 
-**Containers, for a Mac that needs the codecs today.** Arch Linux's `cef`
+**Containers, the older route to the codecs.** Arch Linux's `cef`
 package is also built with proprietary codecs. `browser/dev/Dockerfile.arch`
 and `browser/dev/linux-arch-codecs.sh` build against it, and
 `Dockerfile.arch-runtime` plus `sidecar-docker.sh` package the result as a
