@@ -56,6 +56,7 @@ pub fn drive_top(text: &str) -> Option<String> {
 }
 
 /// The drive letters set in a `GetLogicalDrives` mask, as `C:\`.
+#[cfg_attr(not(windows), allow(dead_code))]
 pub fn letters(mask: u32) -> Vec<String> {
     (0..26u8).filter(|i| mask & (1 << i) != 0).map(|i| format!("{}:\\", (b'A' + i) as char)).collect()
 }
