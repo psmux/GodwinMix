@@ -266,7 +266,7 @@ to make the build for a new version.
 |---|---|---|
 | Windows x86_64 (`windows64`) | ours | yes |
 | Linux x86_64 (`linux64`) | ours | yes |
-| Linux arm64 (`linuxarm64`) | official, until ours is published | no |
+| Linux arm64 (`linuxarm64`) | ours | yes |
 | Windows arm64 (`windowsarm64`) | ours | yes |
 | macOS, Apple silicon (`macosarm64`) | ours | yes |
 | macOS, Intel (`macosx64`) | ours | yes |
@@ -373,8 +373,7 @@ The codec table has not been measured on Linux or macOS this way yet.
 2026-10-15, `avc1.4d401f` and `mp4a.40.2` were not supported; two YouTube
 recordings played with sound, because YouTube offers VP9 or AV1 with Opus to
 a browser that asks for them, and a news live stream whose formats list held
-VP9 video and only `audio/mp4` sound showed the error. That is still what
-a Linux arm64 checkout does until our build for it is published.
+VP9 video and only `audio/mp4` sound showed the error.
 
 **Containers, the older route to the codecs.** Arch Linux's `cef`
 package is also built with proprietary codecs. `browser/dev/Dockerfile.arch`

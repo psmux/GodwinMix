@@ -8,10 +8,9 @@ its own build of CEF instead, made by the scripts in
 codec flags on. This page is for whoever looks after a release: how to make
 that build for a new CEF version, and how to check it before it ships.
 
-Our build exists for Windows (`windows64`, `windowsarm64`), Linux x86_64
-(`linux64`) and both Macs (`macosx64`, `macosarm64`). The Linux arm64 build
-is not published yet, so a Linux arm64 checkout uses the official CEF and
-does not play H.264 or AAC.
+Our build exists for all six platforms CEF ships: Windows (`windows64`,
+`windowsarm64`), Linux (`linux64`, `linuxarm64`) and both Macs (`macosx64`,
+`macosarm64`).
 
 You need this when `browser/Cargo.toml` moves to a new `cef` crate, or when a
 release stops with
@@ -86,10 +85,10 @@ them on the command line.
 * `dev/bundle-browser.sh`, which the release workflow runs, points the `cef`
   crate at that release (`CEF_DOWNLOAD_URL`), lets the crate check the SHA-1,
   and checks the SHA-256 itself afterwards. A platform listed in
-  `CEF_CODECS_PLATFORMS` in `dev/cef-codecs.sh` (today `windows64
-  windowsarm64 linux64 macosarm64 macosx64`) that is missing from the release
-  stops it with the message above. Any other platform, which today means
-  Linux arm64, builds against the official CEF and prints a line saying so. `CEF_CODECS=off` builds against
+  `CEF_CODECS_PLATFORMS` in `dev/cef-codecs.sh` (today all six) that is
+  missing from the release stops it with the message above. A platform taken
+  out of that list builds against the official CEF and prints a line saying
+  so. `CEF_CODECS=off` builds against
   the official CEF everywhere, for a developer who does not need the codecs.
 * A mixer run from a checkout sets web pages up by itself and looks in that
   release first, then at the official CDN for a platform the release does not
