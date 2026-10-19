@@ -2,7 +2,7 @@
 
 ## 0.3.15 (2026-10-19)
 
-Linux arm64 joins the other five platforms on our own CEF, so a web page source plays H.264 and AAC on a Raspberry Pi or another arm64 Linux machine too.
+Linux arm64 joins the other five platforms on our own CEF, so the browser renderer built on a Raspberry Pi or another arm64 Linux machine plays H.264 and AAC too. The release has no arm64 Linux desktop download yet, so this reaches you when you build from a checkout.
 
 * The Linux arm64 build of CEF 154.0.34 with H.264 and AAC is published in [psmux/godwinmix-cef](https://github.com/psmux/godwinmix-cef/releases/tag/cef-154.0.34), next to the Windows, Windows arm64, Linux and both macOS builds, and a checkout fetches it from there with its checksums. Nothing comes from the official CDN any more for the six platforms CEF ships.
 * The web page source reference lists all six platforms as ours, and [Build the web page engine](docs/how-to/build-the-web-page-engine.md) says so too.
