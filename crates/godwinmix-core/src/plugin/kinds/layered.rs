@@ -101,7 +101,7 @@ pub struct LayeredSource {
     process: ExecProcess,
     report: MediaReport,
     /// Local copies of the page's videos, removed when the source stops.
-    cache: Vec<std::path::PathBuf>,
+    cache: Vec<Arc<ClipCopy>>,
     levels: Option<AudioLevels>,
     running: bool,
 }
@@ -169,9 +169,7 @@ impl Source for LayeredSource {
 
     fn stop(&mut self) -> Result<()> {
         self.process.kill(&self.ctx.id);
-        for f in &self.cache {
-            let _ = std::fs::remove_file(f);
-        }
+        // Dropping the handles deletes any copy no other build still holds.
         self.cache.clear();
         self.running = false;
         Ok(())
@@ -307,9 +305,36 @@ pub enum Fetched {
     /// A stream: nothing to fetch, play it from the address.
     Stream,
     /// A clip, now on disk, and `src` points at the copy.
-    Copy(std::path::PathBuf),
+    Copy(Arc<ClipCopy>),
     /// Neither: the address could not be read at all.
     Failed,
+}
+
+/// A clip fetched to disk by `cache_media`, shared by every source build that
+/// plays the same address. The file is deleted when the last holder drops it:
+/// a source that stops, a probe whose result is never built, a build that
+/// fails half way. Nothing has to remember to clean up.
+#[derive(Debug)]
+pub struct ClipCopy {
+    key: String,
+    path: std::path::PathBuf,
+}
+
+/// The copies alive right now, by the address they were fetched from.
+static CLIPS: Mutex<std::collections::BTreeMap<String, std::sync::Weak<ClipCopy>>> =
+    parking_lot::const_mutex(std::collections::BTreeMap::new());
+
+impl Drop for ClipCopy {
+    fn drop(&mut self) {
+        let mut clips = CLIPS.lock();
+        // Only this copy's own entry. A second fetch of the same address that
+        // raced this one may have registered a different file under the key.
+        if clips.get(&self.key).is_some_and(|w| w.strong_count() == 0) {
+            clips.remove(&self.key);
+        }
+        drop(clips);
+        let _ = std::fs::remove_file(&self.path);
+    }
 }
 
 pub fn cache_media(id: &SourceId, src: &mut String) -> Fetched {
@@ -317,6 +342,17 @@ pub fn cache_media(id: &SourceId, src: &mut String) -> Fetched {
     if path_part.ends_with(".m3u8") || path_part.ends_with(".mpd") {
         debug!(source = %id, "the page's video is a stream; playing it from its address");
         return Fetched::Stream;
+    }
+    // One copy per address for the whole process. A stalled source is rebuilt
+    // every few seconds, and fetching its clip again each time once filled a
+    // 915 GB disk with 17,000 copies of the same 44 MB file: copies made for a
+    // build that never ran were attached to no source, so no stop deleted them.
+    if let Some(copy) = CLIPS.lock().get(src.as_str()).and_then(|w| w.upgrade()) {
+        if copy.path.exists() {
+            debug!(source = %id, "the page's video is already on disk; sharing that copy");
+            *src = file_uri(&copy.path);
+            return Fetched::Copy(copy);
+        }
     }
     let Some(factory) = ["souphttpsrc", "curlhttpsrc"]
         .into_iter()
@@ -363,8 +399,10 @@ pub fn cache_media(id: &SourceId, src: &mut String) -> Fetched {
                 secs = started.elapsed().as_secs_f64(),
                 "fetched the page's video once, to loop it from disk"
             );
-            *src = file_uri(&file);
-            Fetched::Copy(file)
+            let copy = Arc::new(ClipCopy { key: src.clone(), path: file });
+            CLIPS.lock().insert(src.clone(), Arc::downgrade(&copy));
+            *src = file_uri(&copy.path);
+            Fetched::Copy(copy)
         }
         Err(e) => {
             warn!(source = %id, src = %src, ?e, "could not fetch the page's video; leaving it to the browser");
@@ -1383,5 +1421,33 @@ impl AudioLevels {
     /// remembered, so a clamped request reports the gain that took effect.
     pub fn report(&self) -> SourceAudio {
         SourceAudio { page: self.page_gain(), media: self.media_gains() }
+    }
+}
+
+#[cfg(test)]
+mod clip_copy_tests {
+    use super::*;
+
+    #[test]
+    fn builds_of_one_clip_share_a_copy_and_the_last_one_out_deletes_it() {
+        let file = std::env::temp_dir().join(format!("gmx-media-test-{}-0-a.mp4", std::process::id()));
+        std::fs::write(&file, b"clip").unwrap();
+        let url = format!("http://clips.invalid/{}/a.mp4", std::process::id());
+        let first = Arc::new(ClipCopy { key: url.clone(), path: file.clone() });
+        CLIPS.lock().insert(url.clone(), Arc::downgrade(&first));
+
+        // A rebuild of the same page gets the same file, not a fresh fetch.
+        let mut src = url.clone();
+        let Fetched::Copy(second) = cache_media(&"event-a".into(), &mut src) else {
+            panic!("the copy on disk was not reused");
+        };
+        assert!(Arc::ptr_eq(&first, &second));
+        assert_eq!(src, file_uri(&file));
+
+        drop(first);
+        assert!(file.exists(), "still held by the second build");
+        drop(second);
+        assert!(!file.exists(), "the last holder deletes the copy");
+        assert!(!CLIPS.lock().contains_key(&url), "and its entry");
     }
 }
