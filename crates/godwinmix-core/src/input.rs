@@ -470,9 +470,10 @@ pub struct MediaItem {
     #[serde(default)]
     pub viewport: MediaSize,
     /// A local copy of a finite clip, when one was fetched. See `cache_media`.
-    /// Deleted when the source stops.
+    /// Shared with every other build playing the same address, and deleted
+    /// when the last of them lets go.
     #[serde(skip)]
-    pub cache: Option<std::path::PathBuf>,
+    pub cache: Option<std::sync::Arc<crate::plugin::kinds::layered::ClipCopy>>,
 }
 
 #[derive(Debug, Clone, Copy, Default, Deserialize)]
@@ -714,7 +715,7 @@ pub fn probe_page_media(id: &SourceId, spec: &ExecSpec, timeout: Duration) -> Op
         items.retain(|m| m.usable);
         for m in items.iter_mut() {
             match cache_media(id, &mut m.src) {
-                Fetched::Copy(path) => m.cache = Some(path),
+                Fetched::Copy(copy) => m.cache = Some(copy),
                 Fetched::Stream => {}
                 Fetched::Failed => m.usable = false,
             }
