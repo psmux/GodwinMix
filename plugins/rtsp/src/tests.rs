@@ -151,19 +151,51 @@ fn ffmpeg_pulls_over_udp_as_well() {
 /// same element here, decoding what this output serves.
 #[test]
 fn uridecodebin_decodes_it_as_the_cores_own_rtsp_source_would() {
-    let pull = |url: &str, out: &Path| {
+    let err = std::env::temp_dir().join(format!("gmx-rtsp-uridecode-{}.err", std::process::id()));
+    let err_at = err.clone();
+    let pull = move |url: &str, out: &Path| {
         let line = format!("uridecodebin uri={url} caps=video/x-raw(ANY) ! fakesink silent=false");
         Command::new("gst-launch-1.0")
             .arg("-v")
             .args(line.split_whitespace())
+            .env("GST_DEBUG", "2,decodebin*:4,rtspsrc:3")
             .stdout(std::fs::File::create(out).unwrap())
-            .stderr(Stdio::null())
+            .stderr(std::fs::File::create(&err_at).unwrap())
             .spawn()
             .unwrap()
     };
     let Some((_, got)) = serve_and_pull("uridecode", pull) else { return };
+    let said = std::fs::read_to_string(&err).unwrap_or_default();
+    let _ = std::fs::remove_file(&err);
     let frames = got.lines().filter(|l| l.contains("last-message = chain")).count();
-    assert!(frames >= 60, "uridecodebin decoded {frames} frames from the RTSP output; wanted 60");
+    let used = decoders(&got);
+    eprintln!("uridecodebin decoded {frames} frames with {used:?}");
+    assert!(
+        frames >= 60,
+        "uridecodebin decoded {frames} frames from the RTSP output with {used:?}; wanted 60.
+         Its log, last lines:
+{}",
+        tail(&said, 40)
+    );
+}
+
+/// The decoders `gst-launch-1.0 -v` named while it ran, such as `GstVtdecHw`
+/// or `GstAvDec_h264`.
+fn decoders(verbose: &str) -> Vec<String> {
+    let mut out: Vec<String> = verbose
+        .split(['/', ':', ' '])
+        .filter(|w| w.starts_with("Gst") && w.to_ascii_lowercase().contains("dec") && !w.contains("DecodeBin"))
+        .map(str::to_string)
+        .collect();
+    out.sort();
+    out.dedup();
+    out
+}
+
+fn tail(text: &str, lines: usize) -> String {
+    let all: Vec<&str> = text.lines().collect();
+    all[all.len().saturating_sub(lines)..].join("
+")
 }
 
 #[test]
