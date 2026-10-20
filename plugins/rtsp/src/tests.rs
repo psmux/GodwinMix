@@ -161,7 +161,8 @@ fn uridecodebin_decodes_it_as_the_cores_own_rtsp_source_would() {
     let err_at = err.clone();
     let pull = move |url: &str, out: &Path| {
         let line = format!(
-            "uridecodebin name=d uri={url} d. ! video/x-raw(ANY) ! queue ! fakesink name=v silent=false \n             d. ! audio/x-raw ! queue ! fakesink name=a sync=false"
+            "uridecodebin name=d uri={url} d. ! video/x-raw(ANY) ! queue ! fakesink name=v silent=false \
+             d. ! audio/x-raw ! queue ! fakesink name=a sync=false"
         );
         Command::new("gst-launch-1.0")
             .arg("-v")
