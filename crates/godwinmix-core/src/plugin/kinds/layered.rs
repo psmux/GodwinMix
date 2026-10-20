@@ -349,7 +349,7 @@ fn sweep_old_copies(dir: &std::path::Path) {
     let (mut files, mut bytes) = (0u64, 0u64);
     for entry in entries.flatten() {
         let path = entry.path();
-        let ours = entry.file_name().to_string_lossy().starts_with("gmx-media-");
+        let ours = is_clip_copy_name(&entry.file_name().to_string_lossy(), "gmx-media-");
         if !ours || held.contains(&path) || !entry.file_type().is_ok_and(|t| t.is_file()) {
             continue;
         }
@@ -362,6 +362,21 @@ fn sweep_old_copies(dir: &std::path::Path) {
     if files > 0 {
         info!(files, bytes, "deleted the clip copies an earlier run left behind");
     }
+}
+
+/// Whether `name` is a clip copy's name, `{prefix}{source}-{pid}-{n}-{clip}`
+/// as `cache_media` makes it. Other things in the temp folder start with the
+/// prefix too, a test's scratch file or folder among them, and none of those
+/// has two numbers and a clip name at its end.
+fn is_clip_copy_name(name: &str, prefix: &str) -> bool {
+    let Some(rest) = name.strip_prefix(prefix) else { return false };
+    let mut parts = rest.rsplitn(4, '-');
+    let (Some(clip), Some(n), Some(pid), Some(id)) = (parts.next(), parts.next(), parts.next(), parts.next()) else {
+        return false;
+    };
+    let number = |s: &str| !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit());
+    let clip_ok = !clip.is_empty() && clip.chars().all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '_');
+    !id.is_empty() && number(pid) && number(n) && clip_ok
 }
 
 pub fn cache_media(id: &SourceId, src: &mut String) -> Fetched {
@@ -1485,13 +1500,25 @@ mod clip_copy_tests {
     }
 
     #[test]
+    fn only_a_name_cache_media_makes_counts_as_a_copy() {
+        assert!(is_clip_copy_name("gmx-media-event-a-7-12-hbtv_ai_cloud_gaming.mp4", "gmx-media-"));
+        assert!(is_clip_copy_name("gmx-media-cam-31244-0-clip", "gmx-media-"));
+        assert!(!is_clip_copy_name("gmx-media-not-a-dir-7", "gmx-media-"));
+        assert!(!is_clip_copy_name("gmx-media-31244", "gmx-media-"));
+        assert!(!is_clip_copy_name("gmx-media-made-31244", "gmx-media-"));
+        assert!(!is_clip_copy_name("gmx-media-event-a-7-12-", "gmx-media-"));
+        assert!(!is_clip_copy_name("other-event-a-7-12-clip.mp4", "gmx-media-"));
+    }
+
+    #[test]
     fn a_sweep_deletes_the_copies_an_earlier_run_left_and_nothing_else() {
         let dir = std::env::temp_dir().join(format!("gmx-sweep-test-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let left = dir.join("gmx-media-event-a-7-12-clip.mp4");
         let held = dir.join("gmx-media-event-b-7-13-clip.mp4");
         let other = dir.join("notes.txt");
-        for f in [&left, &held, &other] {
+        let lookalike = dir.join("gmx-media-not-a-dir-7");
+        for f in [&left, &held, &other, &lookalike] {
             std::fs::write(f, b"x").unwrap();
         }
         let url = format!("http://clips.invalid/{}/held.mp4", std::process::id());
@@ -1502,6 +1529,7 @@ mod clip_copy_tests {
         assert!(!left.exists(), "a copy nothing holds is deleted");
         assert!(held.exists(), "a copy this process holds stays");
         assert!(other.exists(), "a file that is not a copy stays");
+        assert!(lookalike.exists(), "a file that only starts like a copy stays");
 
         drop(copy);
         let _ = std::fs::remove_dir_all(&dir);
