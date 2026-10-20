@@ -16,6 +16,8 @@ use super::audio::{AudioRequest, Frame};
 use super::feed::{FeedAsk, FeedShape, FeedSubscription, ProgrammeFeed};
 use super::thumb::{ProgrammeThumb, Thumb};
 use super::{ClientGuard, StreamClients};
+use parking_lot::Mutex;
+use std::collections::BTreeMap;
 use std::sync::Arc;
 use tokio::sync::{broadcast, oneshot};
 
@@ -45,6 +47,12 @@ pub enum PreviewDemand {
     /// take it off with `None`. Sent by [`super::feed::ProgrammeFeed`] when
     /// the shape that serves every subscriber changes.
     Feed(Option<FeedShape>),
+    /// Whether a source called `id` is here, so a stream on one that is not
+    /// is refused with the names of those that are.
+    HasSource { id: String, reply: oneshot::Sender<Result<(), String>> },
+    /// Put one source's full size feed on that source's own tee at this
+    /// shape, or take it off with `None`.
+    SourceFeed { id: String, feed: Arc<ProgrammeFeed>, shape: Option<FeedShape> },
 }
 
 impl std::fmt::Debug for PreviewDemand {
@@ -59,6 +67,8 @@ impl std::fmt::Debug for PreviewDemand {
             Self::Scene { cells } => write!(f, "Scene({} items)", cells.len()),
             Self::Thumb(on) => write!(f, "Thumb({on})"),
             Self::Feed(shape) => write!(f, "Feed({shape:?})"),
+            Self::HasSource { id, .. } => write!(f, "HasSource({id})"),
+            Self::SourceFeed { id, shape, .. } => write!(f, "SourceFeed({id}, {shape:?})"),
         }
     }
 }
@@ -73,17 +83,25 @@ pub struct PreviewHandle {
     demand: Option<DemandSink>,
     thumb: Arc<ProgrammeThumb>,
     feed: Arc<ProgrammeFeed>,
+    /// One full size feed per source somebody has watched that way.
+    sources: Arc<Mutex<BTreeMap<String, Arc<ProgrammeFeed>>>>,
 }
 
 impl PreviewHandle {
     pub fn new(clients: Arc<StreamClients>, demand: DemandSink) -> Self {
-        Self { clients, demand: Some(demand), thumb: ProgrammeThumb::new(), feed: ProgrammeFeed::new() }
+        Self { clients, demand: Some(demand), thumb: ProgrammeThumb::new(), feed: ProgrammeFeed::new(), sources: Arc::default() }
     }
 
     /// A handle attached to nothing: it counts clients and refuses to open
     /// anything. For tests and for a core with no mixer thread.
     pub fn detached() -> Self {
-        Self { clients: StreamClients::new(), demand: None, thumb: ProgrammeThumb::new(), feed: ProgrammeFeed::new() }
+        Self {
+            clients: StreamClients::new(),
+            demand: None,
+            thumb: ProgrammeThumb::new(),
+            feed: ProgrammeFeed::new(),
+            sources: Arc::default(),
+        }
     }
 
     /// What the programme thumbnail branch keeps its frames in. The mixer
@@ -105,6 +123,27 @@ impl PreviewHandle {
             return Err("this core has no mixer, so there is no programme to show".into());
         };
         Ok(self.feed.subscribe(ask, Arc::new(move |shape| sink(PreviewDemand::Feed(shape))), &self.clients))
+    }
+
+    /// Hold one source at full size (`/mjpeg/{source}?full=1`) for as long
+    /// as the subscription lives: the same branch as the programme feed, on
+    /// the source's own tee. Refused, naming the sources, for one not here.
+    pub async fn source_feed(&self, id: &str, ask: FeedAsk) -> Result<FeedSubscription, String> {
+        let Some(sink) = self.demand.clone() else {
+            return Err("this core has no mixer, so there are no sources to show".into());
+        };
+        let (tx, rx) = oneshot::channel();
+        sink(PreviewDemand::HasSource { id: id.to_string(), reply: tx });
+        rx.await.map_err(|_| "the mixer did not answer a source picture request".to_string())??;
+        let feed = {
+            let mut feeds = self.sources.lock();
+            // A feed nobody holds is forgotten, so a removed source leaves nothing.
+            feeds.retain(|k, f| k == id || f.shape().is_some());
+            feeds.entry(id.to_string()).or_insert_with(|| ProgrammeFeed::counted_as("source")).clone()
+        };
+        let (key, held) = (id.to_string(), feed.clone());
+        let switch = Arc::new(move |shape| sink(PreviewDemand::SourceFeed { id: key.clone(), feed: held.clone(), shape }));
+        Ok(feed.subscribe(ask, switch, &self.clients))
     }
 
     /// The programme as a small picture, `width` pixels across (16 to 320),
