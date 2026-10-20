@@ -158,7 +158,7 @@ fn uridecodebin_decodes_it_as_the_cores_own_rtsp_source_would() {
         Command::new("gst-launch-1.0")
             .arg("-v")
             .args(line.split_whitespace())
-            .env("GST_DEBUG", "2,decodebin*:4,rtspsrc:3")
+            .env("GST_DEBUG", "2,rtspsrc:4,rtspconnection:4")
             .stdout(std::fs::File::create(out).unwrap())
             .stderr(std::fs::File::create(&err_at).unwrap())
             .spawn()
@@ -174,8 +174,11 @@ fn uridecodebin_decodes_it_as_the_cores_own_rtsp_source_would() {
         frames >= 60,
         "uridecodebin decoded {frames} frames from the RTSP output with {used:?}; wanted 60.
          Its log, last lines:
+{}
+What it printed, last lines:
 {}",
-        tail(&said, 40)
+        tail(&said, 40),
+        tail(&got, 15)
     );
 }
 

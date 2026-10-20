@@ -17,21 +17,16 @@ jobs:
         run: gst-inspect-1.0 | grep -iE 'h264|vtdec' || true
       - name: Build
         run: cargo test --profile ci -p gmx-rtsp --no-run
-      - name: Loop, as CI runs it
-        env:
-          GST_GL_DISABLED: 1
-          LIBGL_ALWAYS_SOFTWARE: 1
-          RUST_TEST_THREADS: 2
-        run: |
-          for i in $(seq 1 12); do
-            cargo test --profile ci -p gmx-rtsp -- --nocapture tests::uridecodebin 2>&1 | grep -E 'uridecodebin decoded|test result|panicked' | sed "s/^/run $i: /"
-          done
-      - name: Loop with VideoToolbox decoding off
+      - name: Loop, keep every failure whole
         env:
           GST_GL_DISABLED: 1
           RUST_TEST_THREADS: 2
-          GST_PLUGIN_FEATURE_RANK: vtdec:NONE,vtdec_hw:NONE
         run: |
-          for i in $(seq 1 6); do
-            cargo test --profile ci -p gmx-rtsp -- --nocapture tests::uridecodebin 2>&1 | grep -E 'uridecodebin decoded|test result|panicked' | sed "s/^/off $i: /"
+          for i in $(seq 1 30); do
+            start=$(date +%s)
+            if cargo test --profile ci -p gmx-rtsp -- --nocapture tests::uridecodebin > run.log 2>&1; then
+              echo "run $i ok in $(( $(date +%s) - start )) s: $(grep 'uridecodebin decoded' run.log)"
+            else
+              echo "run $i FAILED in $(( $(date +%s) - start )) s"; cat run.log
+            fi
           done
