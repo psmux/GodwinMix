@@ -4,8 +4,8 @@
 // (`/mjpeg/{source}?full=1`), made only while this view is open. A multiview
 // cell is a fraction of a 1920 pixel sheet, which left a page's text and a
 // video player's menus too blurred to read. A click, a scroll or a key on it
-// goes to the page through `source.page.input`; the address bar, Back, Forward and Reload go
-// through `source.page.navigate`. One call is in flight at a time and moves
+// goes to the page through `source.page.input`; the address bar, Back,
+// Forward and Reload go through `source.page.navigate`. One call is in flight at a time and moves
 // that pile up behind it are kept as the newest, so a slow link never queues
 // a second of stale pointer behind the operator's hand.
 //
