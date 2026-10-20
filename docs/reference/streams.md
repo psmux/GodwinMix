@@ -37,14 +37,16 @@ the default and is right for a mixer on a LAN nobody else is on.
 * **Dropping, not queueing.** A client that falls behind loses frames rather
   than accumulating them. A late preview frame is worth nothing.
 * **A preview never reaches air.** Picture streams are fed from the multiview
-  pipeline, never the programme one. Audio branches hang off a raw tee behind a
-  leaky queue, so they cannot apply backpressure to the encoder.
+  pipeline, never the programme one. Audio branches, and a source shown at
+  full size (`?full=1`), hang off a raw tee behind a leaky queue, so they
+  cannot apply backpressure to the encoder.
 
 ---
 
 ## `GET /mjpeg/{target}`
 
-`multipart/x-mixed-replace`, one JPEG per part, fed from the mosaic.
+`multipart/x-mixed-replace`, one JPEG per part, fed from the mosaic. A source
+with `?full=1` is fed from that source instead; see below.
 
 ### Targets
 
@@ -63,6 +65,32 @@ the default and is right for a mixer on a LAN nobody else is on.
 | `fps` | integer, 1 to 30 | `[multiview] fps` | The rate the mosaic runs at while this client is on it |
 
 Both are clamped: the mosaic is 160 to 1920 wide and at most 30 fps.
+
+### One source at full size: `?full=1`
+
+| Name | Type | Default | Meaning |
+|---|---|---|---|
+| `full` | `1` | off | The source alone at the canvas size, not its cell of the mosaic. Anything but `0` or `false` turns it on |
+| `width` | integer | the canvas's own | The widest picture wanted, at the canvas's shape. Never wider than the canvas |
+| `fps` | integer | the canvas's own | The most frames a second wanted |
+
+This is what Interact shows. A cell is a fraction of a sheet at most 1920
+pixels wide, which is too small to read a web page by. With `full`, a JPEG
+branch goes onto the source's own tee when the first client asks and comes off
+when the last one leaves, so it costs one scale and one JPEG encode per frame
+while it is open and nothing otherwise. Clients of one source share the branch,
+at the widest and fastest any of them asked for. It needs no multiview, so it
+works with `[multiview] enabled = false`.
+
+A source that is rebuilt while a client watches (a new address, new params, a
+restart) gets the branch again on its new pipeline and the stream carries on.
+If the source sends nothing for five seconds the stream ends, and a client
+asks again. `gmx_stream_clients{kind="source"}` counts the sources shown this
+way.
+
+`program`, `sheet` and `item` ignore `full`. On `preview` it asks for the armed
+scene at up to the canvas's size rather than the mosaic's, for a client
+showing it large.
 
 ### Response
 
@@ -90,7 +118,7 @@ boundary. A JPEG can contain the boundary bytes by chance.
 | 200 | The stream is open. Parts follow until one side hangs up |
 | 401 | No token, or one this core does not know |
 | 403 | A token without the `read` scope |
-| 404 | `[multiview] enabled = false`, so there is no picture to preview |
+| 404 | `[multiview] enabled = false`, so there is no picture to preview. With `?full=1`, no source has that id; the message names the ones that do |
 
 A cell that is not on the mosaic yet is not an error. The stream waits, because
 a source that is still connecting will appear. The stream ends on its own if no
@@ -313,7 +341,7 @@ Cost while on: one JPEG encode per programme frame, about half a CPU core for
 
 | Metric | Type | Labels | Meaning |
 |---|---|---|---|
-| `gmx_stream_clients` | gauge | `kind` | Clients on each stream. `mjpeg`, `pcm`, `opus`, `whep`, `unixfd`, `preview`, `programme`, which is 1 while the full quality programme feed runs for `ext.programme`, and `thumbnail`, which is 1 while the programme thumbnail branch runs for `program.thumbnail` |
+| `gmx_stream_clients` | gauge | `kind` | Clients on each stream. `mjpeg`, `pcm`, `opus`, `whep`, `unixfd`, `preview`, `programme`, which is 1 while the full quality programme feed runs for `ext.programme`, `source`, the number of sources shown at full size for `/mjpeg/{source}?full=1`, and `thumbnail`, which is 1 while the programme thumbnail branch runs for `program.thumbnail` |
 | `gmx_multiview_subscribers` | gauge | | Clients holding the mosaic up, including every MJPEG stream |
 | `gmx_multiview_fps` | gauge | | The mosaic's measured rate, zero when there is none |
 | `gmx_encoder_running` | gauge | | 1 while the programme encode chain is attached |

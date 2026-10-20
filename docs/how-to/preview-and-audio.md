@@ -88,6 +88,20 @@ that makes six people watching six cameras cost one encoder rather than six. For
 picking a camera or drawing designer handles the default is plenty; ask for more
 only when you need it.
 
+### One source, whole
+
+`?full=1` on a source is that source on its own at the canvas size, made from
+the source itself rather than cut out of the mosaic. It is what Interact shows,
+because a cell is too small to read a web page by:
+
+```bash
+curl -sN -H "Authorization: Bearer $TOKEN" "http://localhost:8080/mjpeg/cam1?full=1&fps=15" > cam1.mjpeg
+```
+
+Here `width` is the widest picture you want and never widens anything for
+anybody else. It works with the multiview switched off. See
+[streams](../reference/streams.md#one-source-at-full-size-full1).
+
 ## Sound in fifteen lines
 
 `/pcm/...` is a WebSocket that sends raw audio: 48 kHz stereo, 32 bit float,
@@ -238,6 +252,7 @@ will not.
 |---|---|---|
 | `/mjpeg/sheet` | nothing beyond the mosaic it holds up | nothing |
 | `/mjpeg/{cell}` | one decode, one crop and one encode per frame | nothing |
+| `/mjpeg/{source}?full=1` | one scale and one JPEG encode per frame of that source, shared by its viewers | nothing: the branch is taken off |
 | the mosaic itself | about 0.025 of a core at 8 fps, 1280 wide | nothing: no pipeline exists |
 | `/pcm/*` | a leaky queue, a convert and a resample | nothing |
 | `/opus/*` | the same plus an Opus encoder | nothing |
