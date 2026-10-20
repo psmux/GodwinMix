@@ -1,6 +1,10 @@
 //! The GStreamer half of the full quality programme feed (`feed.rs`): built
 //! once with the programme, asleep and unlinked until somebody asks.
 //!
+//! One source at full size (`/mjpeg/{source}?full=1`, what Interact shows) is
+//! the same chain on that source's own tee, built in the source's pipeline
+//! when the first viewer comes and taken out of it when the last one goes.
+//!
 //! Everything after the leaky queue runs on that queue's own streaming
 //! thread: the rate, the scale, the convert and the JPEG encode. The tee the
 //! programme encoder hangs off only ever hands the queue a reference to a
@@ -30,29 +34,31 @@ pub struct FeedBranch {
 
 impl FeedBranch {
     /// Build the chain in `pipeline` behind `bridge` (what brings a GPU frame
-    /// to system memory, empty on the CPU).
+    /// to system memory, empty on the CPU). Every element is named `{tag}-*`:
+    /// `pgm-f` for the programme, `{source}-f` for one source.
     pub fn build(
         pipeline: &gst::Pipeline,
         tee: &gst::Element,
         bridge: Vec<gst::Element>,
         canvas: (i32, i32),
         shared: &Arc<ProgrammeFeed>,
+        tag: &str,
     ) -> Result<Self> {
-        let rate = make("videorate", "pgm-f-rate")?;
+        let rate = make("videorate", &format!("{tag}-rate"))?;
         crate::probe::set_bool(&rate, "drop-only", true);
         crate::probe::set_bool(&rate, "skip-to-first", true);
-        let filter = gstutil::capsfilter("pgm-f-caps", &caps(0, canvas))?;
-        let enc = make("jpegenc", "pgm-f-jpeg")?;
+        let filter = gstutil::capsfilter(&format!("{tag}-caps"), &caps(0, canvas))?;
+        let enc = make("jpegenc", &format!("{tag}-jpeg"))?;
         enc.set_property("quality", QUALITY);
-        let mut chain = vec![gstutil::queue_preview("pgm-f-q")?, rate.clone()];
+        let mut chain = vec![gstutil::queue_preview(&format!("{tag}-q"))?, rate.clone()];
         chain.extend(bridge);
-        chain.push(make("videoscale", "pgm-f-scale")?);
-        chain.push(make("videoconvert", "pgm-f-yuv")?);
+        chain.push(make("videoscale", &format!("{tag}-scale"))?);
+        chain.push(make("videoconvert", &format!("{tag}-yuv"))?);
         chain.push(filter.clone());
         chain.push(enc);
-        chain.push(sink(shared));
-        pipeline.add_many(&chain).context("adding the programme feed branch")?;
-        gst::Element::link_many(&chain).context("linking the programme feed branch")?;
+        chain.push(sink(shared, tag));
+        pipeline.add_many(&chain).context("adding a full quality feed branch")?;
+        gst::Element::link_many(&chain).context("linking a full quality feed branch")?;
         for el in &chain {
             el.set_locked_state(true);
         }
@@ -101,6 +107,17 @@ impl FeedBranch {
         }
         debug!("programme feed branch detached: nobody is watching");
     }
+
+    /// Detach, then take every element out of its pipeline. For a branch
+    /// built on demand, which is built again from nothing next time.
+    pub fn dismantle(mut self) {
+        self.detach();
+        for el in &self.chain {
+            if let Some(bin) = el.parent().and_then(|p| p.downcast::<gst::Bin>().ok()) {
+                let _ = bin.remove(el);
+            }
+        }
+    }
 }
 
 /// The picture the encoder is handed: `width` wide at the canvas's shape, or
@@ -117,8 +134,8 @@ pub fn caps(width: u32, canvas: (i32, i32)) -> gst::Caps {
 }
 
 /// The newest JPEG only, never a clock wait, never a preroll.
-fn sink(shared: &Arc<ProgrammeFeed>) -> gst::Element {
-    let sink = gst_app::AppSink::builder().name("pgm-f-sink").max_buffers(1).drop(true).sync(false).build();
+fn sink(shared: &Arc<ProgrammeFeed>, tag: &str) -> gst::Element {
+    let sink = gst_app::AppSink::builder().name(format!("{tag}-sink")).max_buffers(1).drop(true).sync(false).build();
     sink.set_property("async", false);
     let shared = shared.clone();
     sink.set_callbacks(
@@ -166,7 +183,7 @@ mod tests {
         pipeline.add_many([&src, &capsf, &tee]).unwrap();
         gst::Element::link_many([&src, &capsf, &tee]).unwrap();
         let feed = ProgrammeFeed::new();
-        let mut branch = FeedBranch::build(&pipeline, &tee, Vec::new(), (1920, 1080), &feed).unwrap();
+        let mut branch = FeedBranch::build(&pipeline, &tee, Vec::new(), (1920, 1080), &feed, "pgm-f").unwrap();
         pipeline.set_state(gst::State::Playing).unwrap();
         std::thread::sleep(std::time::Duration::from_millis(300));
         assert_eq!(feed.frames(), 0, "nothing is encoded before anybody asks");

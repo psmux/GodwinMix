@@ -7,6 +7,7 @@
 //! |---|---|
 //! | `GET /mjpeg/sheet?width=` | `multipart/x-mixed-replace`, the whole mosaic |
 //! | `GET /mjpeg/{source}`, `/mjpeg/program` | the same, one cell |
+//! | `GET /mjpeg/{source}?full=1` | that source alone at the canvas size, off its own tee; no multiview needed |
 //! | `GET /mjpeg/preview` | the armed scene; the programme tile until the scene server lands |
 //! | `GET /mjpeg/item/{id}` | one scene item as a projector; 501 until the scene server lands |
 //! | `GET /pcm/{target}` | WebSocket, F32LE 48 kHz stereo, 10 ms a frame |
@@ -121,12 +122,20 @@ async fn mjpeg_stream(
     mjpeg_for(ctx, target, q).await
 }
 
+/// `?full=1`, or anything but `0` and `false`.
+fn flag(q: &HashMap<String, String>, key: &str) -> bool {
+    q.get(key).is_some_and(|v| v != "0" && v != "false")
+}
+
 /// One MJPEG stream, whatever named it.
 async fn mjpeg_for(
     ctx: Ctx,
     target: mjpeg::Target,
     q: HashMap<String, String>,
 ) -> Response {
+    if let (mjpeg::Target::Source(id), true) = (&target, flag(&q, "full")) {
+        return mjpeg_source_full(ctx, id.clone(), q).await;
+    }
     if !ctx.app.multiview.enabled() {
         let why = snapshot::multiview_switched_off("there is no picture to preview: the multiview is switched off");
         return (
@@ -156,7 +165,7 @@ async fn mjpeg_for(
             godwinmix_core::multiview::PreviewRequest {
                 fps: number(&q, "fps").unwrap_or(0),
                 width: width.unwrap_or(0) as i32,
-                full: q.get("full").is_some_and(|v| v != "0" && v != "false"),
+                full: flag(&q, "full"),
             },
         ))
     } else {
@@ -169,6 +178,27 @@ async fn mjpeg_for(
         _counted: ctx.app.preview.count("mjpeg"),
         ctx,
     };
+    respond(state)
+}
+
+/// One source at full size: the source's own picture at the canvas size, not
+/// a cell of the mosaic, so it needs no multiview. `width` and `fps` cap it,
+/// and the branch makes it at that size, so nothing is decoded here.
+async fn mjpeg_source_full(ctx: Ctx, id: String, q: HashMap<String, String>) -> Response {
+    let ask = godwinmix_core::preview::feed::FeedAsk {
+        width: number(&q, "width").filter(|w| *w > 0).unwrap_or(0) as u32,
+        fps: number(&q, "fps").filter(|f| *f > 0).unwrap_or(0) as u32,
+    };
+    let feed = match ctx.app.preview.source_feed(&id, ask).await {
+        Ok(sub) => Feed::Source(sub),
+        Err(message) => return refuse(StatusCode::NOT_FOUND, &message),
+    };
+    let state = MjpegState { pick: None, width: None, feed, _counted: ctx.app.preview.count("mjpeg"), ctx };
+    respond(state)
+}
+
+/// The multipart response that carries `state`'s frames until the client goes.
+fn respond(state: MjpegState) -> Response {
     let stream = futures_util::stream::unfold(state, |mut state| async move {
         next_part(&mut state).await.map(|part| (Ok::<_, std::io::Error>(part), state))
     });
@@ -190,6 +220,8 @@ async fn mjpeg_for(
 enum Feed {
     Mosaic(MultiviewSubscription),
     Preview(godwinmix_core::multiview::PreviewSubscription),
+    /// One source at full size, off its own tee. See `mixer/source_feed.rs`.
+    Source(godwinmix_core::preview::feed::FeedSubscription),
 }
 
 impl Feed {
@@ -197,6 +229,7 @@ impl Feed {
         match self {
             Feed::Mosaic(sub) => sub.recv().await,
             Feed::Preview(sub) => sub.recv().await,
+            Feed::Source(sub) => sub.recv().await,
         }
     }
 
