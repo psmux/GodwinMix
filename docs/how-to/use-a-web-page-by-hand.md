@@ -12,7 +12,8 @@ button beside its gear. Press it. The same thing is in the tile's menu (right
 click, or a long press on a phone) as **Interact with the page**, and in the
 source's settings drawer.
 
-The dialog shows the page live, with an address bar over it. Press **Done**,
+The dialog shows the page live, at the size it goes to air, with an address
+bar over it. Press **Done**,
 the cross, or Escape to leave. The live picture stops when the dialog closes,
 and nothing about the page costs anything while nobody has it open.
 
@@ -112,8 +113,10 @@ the size the page is drawn at. An agent has the same two as the tools
 * **No pointer button on the tile.** The page is not drawn by the browser
   renderer: it is a transparent overlay, a superimposed page, or a mixer that
   fell back to GStreamer's `wpesrc`. Those take no clicks.
-* **No live picture in the dialog.** The picture is the source's cell of the
-  multiview, and the multiview is switched off in Settings. Clicks and keys
-  still reach the page.
+* **No live picture in the dialog.** The source is sending no picture, or it
+  is restarting. The dialog asks again every two seconds while it is open.
+  Clicks and keys still reach the page. The picture is the source itself
+  (`/mjpeg/{source}?full=1`), not its cell of the multiview, so it does not
+  need the multiview switched on.
 * **"is starting again and cannot take events this moment".** The page's
   renderer is being restarted. Wait a second and try again.
