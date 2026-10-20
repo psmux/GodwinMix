@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.16 (2026-10-21)
+
+From tester issue 24: Interact shows a web page sharp enough to read, so YouTube's quality can be picked there. And a page with a looping clip can no longer fill the disk.
+
+* Interact showed a web page source as its cell of the multiview, a fraction of a 1920 pixel sheet stretched to the dialog, so the page's text and a video player's menus were too blurred to read. It now shows the page at the canvas size, made from the source itself only while Interact is open, and it works with the multiview switched off. On the tester's YouTube page (a live news stream) the gear menu, Quality and 1080p were all readable and clickable, and the menu then read Quality 1080p HD; YouTube had picked Auto (720p) on its own. See [Use a web page by hand](docs/how-to/use-a-web-page-by-hand.md).
+* `/mjpeg/{source}?full=1` is that picture for any client: one source at the canvas size, off the source's own tee, behind a leaky queue so it cannot slow the programme. `width` and `fps` cap it. It is counted under `gmx_stream_clients{kind="source"}`. See [Streams](docs/reference/streams.md).
+* A web page with a video on it (a superimposed source) fetched its clip to the temp folder on every build of the source, and a copy made for a build that never ran was never deleted. A box whose source was rebuilt every few minutes filled a 915 GB disk with 18,820 copies of one 44 MB clip. Every build of the same clip now shares one copy, deleted when the last one lets go, and before its first fetch a process deletes the copies an earlier run left behind (a crash, a kill, a container restart). Only files named the way a copy is named are touched.
+* Two tests that failed now and then for reasons outside the code they test: the RTSP output's `uridecodebin` test asked for video alone, so the decoded sound counted as an unknown type and ended the player with nothing decoded about one run in fifteen on macOS; it now takes sound and picture as the core does, and passed 40 runs of 40 there. The restart leak test now waits for the last restart's worker to let go instead of a fixed second.
+
 ## 0.3.15 (2026-10-19)
 
 Linux arm64 joins the other five platforms on our own CEF, so the browser renderer built on a Raspberry Pi or another arm64 Linux machine plays H.264 and AAC too. The release has no arm64 Linux desktop download yet, so this reaches you when you build from a checkout.
