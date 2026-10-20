@@ -74,12 +74,12 @@ where GitHub records them and they are not argued about here.
 | Metric | Now | Target |
 |---|---|---|
 | Median time to first response (30 days) | no data | under 48 h |
-| Items opened in the window | 4 | |
-| Of those, still with no reply | 4 | 0 |
+| Items opened in the window | 5 | |
+| Of those, still with no reply | 5 | 0 |
 | Open items waiting longer than 48 h | 0 | 0 |
 | New contributors (first merged PR, 30 days) | 1 | |
 
-_Last updated 2026-10-19 by `.github/workflows/first-response.yml`._
+_Last updated 2026-10-20 by `.github/workflows/first-response.yml`._
 
 <!-- metrics:end -->
 
