@@ -337,6 +337,33 @@ impl Drop for ClipCopy {
     }
 }
 
+/// Deletes the clip copies in `dir` that no copy in this process holds. Run
+/// before this process has fetched anything, they are all left from an
+/// earlier run. Another mixer on the machine loses nothing it is playing: on
+/// Linux and macOS an open file plays on after it is deleted, and its next
+/// build fetches the clip again, and on Windows an open file is not deleted.
+fn sweep_old_copies(dir: &std::path::Path) {
+    let Ok(entries) = std::fs::read_dir(dir) else { return };
+    let held: Vec<std::path::PathBuf> =
+        CLIPS.lock().values().filter_map(|w| w.upgrade()).map(|c| c.path.clone()).collect();
+    let (mut files, mut bytes) = (0u64, 0u64);
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let ours = entry.file_name().to_string_lossy().starts_with("gmx-media-");
+        if !ours || held.contains(&path) || !entry.file_type().is_ok_and(|t| t.is_file()) {
+            continue;
+        }
+        let len = entry.metadata().map(|m| m.len()).unwrap_or(0);
+        if std::fs::remove_file(&path).is_ok() {
+            files += 1;
+            bytes += len;
+        }
+    }
+    if files > 0 {
+        info!(files, bytes, "deleted the clip copies an earlier run left behind");
+    }
+}
+
 pub fn cache_media(id: &SourceId, src: &mut String) -> Fetched {
     let path_part = src.split(['?', '#']).next().unwrap_or("").to_ascii_lowercase();
     if path_part.ends_with(".m3u8") || path_part.ends_with(".mpd") {
@@ -360,6 +387,11 @@ pub fn cache_media(id: &SourceId, src: &mut String) -> Fetched {
     else {
         return Fetched::Stream;
     };
+    // Once per process, before its first fetch: the copies a process that
+    // crashed, was killed or lost its container left behind. In a container
+    // the process id repeats, so the name cannot tell them apart.
+    static SWEPT: std::sync::Once = std::sync::Once::new();
+    SWEPT.call_once(|| sweep_old_copies(&std::env::temp_dir()));
     let stem = path_part.rsplit('/').next().unwrap_or("clip").replace(|c: char| !c.is_ascii_alphanumeric() && c != '.', "_");
     // Numbered per fetch, not only per process: a source rebuilt after its
     // browser died fetches its clips again while the old pipeline, torn down
@@ -1430,7 +1462,8 @@ mod clip_copy_tests {
 
     #[test]
     fn builds_of_one_clip_share_a_copy_and_the_last_one_out_deletes_it() {
-        let file = std::env::temp_dir().join(format!("gmx-media-test-{}-0-a.mp4", std::process::id()));
+        // Not named like a real copy, so a sweep in another test leaves it.
+        let file = std::env::temp_dir().join(format!("gmx-cliptest-{}-0-a.mp4", std::process::id()));
         std::fs::write(&file, b"clip").unwrap();
         let url = format!("http://clips.invalid/{}/a.mp4", std::process::id());
         let first = Arc::new(ClipCopy { key: url.clone(), path: file.clone() });
@@ -1449,5 +1482,28 @@ mod clip_copy_tests {
         drop(second);
         assert!(!file.exists(), "the last holder deletes the copy");
         assert!(!CLIPS.lock().contains_key(&url), "and its entry");
+    }
+
+    #[test]
+    fn a_sweep_deletes_the_copies_an_earlier_run_left_and_nothing_else() {
+        let dir = std::env::temp_dir().join(format!("gmx-sweep-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let left = dir.join("gmx-media-event-a-7-12-clip.mp4");
+        let held = dir.join("gmx-media-event-b-7-13-clip.mp4");
+        let other = dir.join("notes.txt");
+        for f in [&left, &held, &other] {
+            std::fs::write(f, b"x").unwrap();
+        }
+        let url = format!("http://clips.invalid/{}/held.mp4", std::process::id());
+        let copy = Arc::new(ClipCopy { key: url.clone(), path: held.clone() });
+        CLIPS.lock().insert(url, Arc::downgrade(&copy));
+
+        sweep_old_copies(&dir);
+        assert!(!left.exists(), "a copy nothing holds is deleted");
+        assert!(held.exists(), "a copy this process holds stays");
+        assert!(other.exists(), "a file that is not a copy stays");
+
+        drop(copy);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
