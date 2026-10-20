@@ -74,7 +74,8 @@ fn widest(a: u32, b: u32) -> u32 {
 /// which never waits.
 pub type Switch = Arc<dyn Fn(Option<FeedShape>) + Send + Sync>;
 
-/// What the branch and its subscribers share.
+/// What the branch and its subscribers share. One source at full size has
+/// one of these too, counted as `source` rather than `programme`.
 pub struct ProgrammeFeed {
     tx: broadcast::Sender<Arc<[u8]>>,
     asks: Mutex<BTreeMap<u64, FeedAsk>>,
@@ -84,6 +85,8 @@ pub struct ProgrammeFeed {
     starts: AtomicU64,
     /// `gmx_stream_clients{kind="programme"}` is 1 while the branch is on.
     counted: Mutex<Option<ClientGuard>>,
+    /// The `kind` that gauge is read under.
+    kind: &'static str,
 }
 
 impl Default for ProgrammeFeed {
@@ -99,6 +102,7 @@ impl Default for ProgrammeFeed {
             frames: AtomicU64::new(0),
             starts: AtomicU64::new(0),
             counted: Mutex::default(),
+            kind: "programme",
         }
     }
 }
@@ -106,6 +110,11 @@ impl Default for ProgrammeFeed {
 impl ProgrammeFeed {
     pub fn new() -> Arc<Self> {
         Arc::new(Self::default())
+    }
+
+    /// The same, counted under another `kind`.
+    pub fn counted_as(kind: &'static str) -> Arc<Self> {
+        Arc::new(Self { kind, ..Self::default() })
     }
 
     /// Frames the branch has published since boot. Flat while nobody holds
@@ -159,7 +168,7 @@ impl ProgrammeFeed {
         match (told.is_some(), shape.is_some()) {
             (false, true) => {
                 self.starts.fetch_add(1, Ordering::Relaxed);
-                *self.counted.lock() = clients.map(|c| c.open("programme"));
+                *self.counted.lock() = clients.map(|c| c.open(self.kind));
             }
             (true, false) => {
                 self.counted.lock().take();
@@ -180,7 +189,7 @@ pub struct FeedSubscription {
 }
 
 impl FeedSubscription {
-    /// The next programme JPEG.
+    /// The next JPEG.
     pub async fn recv(&mut self) -> Result<Arc<[u8]>, broadcast::error::RecvError> {
         self.frames.recv().await
     }

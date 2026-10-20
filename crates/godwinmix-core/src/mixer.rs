@@ -433,6 +433,7 @@ mod patience;
 mod rendered;
 mod reported;
 mod source_call;
+mod source_feed;
 pub use source_call::SourceToolOutcome;
 mod supervise;
 pub mod slots;
@@ -1216,6 +1217,9 @@ pub struct Mixer {
     /// The full quality programme feed for a full screen output, on the raw
     /// tee only while somebody holds `ext.programme`.
     feed_branch: crate::preview::feed_branch::FeedBranch,
+    /// One source at full size, by source id, while somebody watches it that
+    /// way. See `mixer/source_feed.rs`.
+    source_feeds: HashMap<String, source_feed::SourceFeed>,
     /// Where preview sockets live, from `persist_runtime_to`'s neighbour.
     runtime_dir: Option<std::path::PathBuf>,
     program_source: Option<SourceId>,
@@ -1945,6 +1949,7 @@ impl Mixer {
             download_bridge(&sel.graphics, "pgm-f")?,
             (canvas.width, canvas.height),
             &preview.feed(),
+            "pgm-f",
         )
         .context("building the programme feed branch")?;
 
@@ -1996,6 +2001,7 @@ impl Mixer {
             preview,
             thumb_branch,
             feed_branch,
+            source_feeds: HashMap::new(),
             runtime_dir: None,
             program_source: None,
             ad: None,
@@ -2383,6 +2389,8 @@ impl Mixer {
             watch: supervise::Watch::default(),
             _watch: watch,
         });
+        // A viewer of this source at full size, from before a rebuild.
+        self.attach_source_feed(&cfg.id);
 
         let started = {
             let slot = self.sources.last().expect("slot was just pushed");
@@ -2817,6 +2825,7 @@ impl Mixer {
         let Some(pos) = self.sources.iter().position(|s| &s.input.id == id) else {
             anyhow::bail!("no such source {id}");
         };
+        self.detach_source_feed(id);
         let slot = self.sources.remove(pos);
         if let Some(mv) = &mut self.multiview {
             mv.remove_tile(id).ok();
@@ -3039,6 +3048,7 @@ impl Mixer {
         if self.program_source.as_ref() == Some(id) {
             crate::slow_step!("take off programme", id, self.take(None, None))?;
         }
+        self.detach_source_feed(id);
         let slot = self.sources.remove(pos);
         self.overlay.detach(id);
         if let Some(mv) = &mut self.multiview {
@@ -5559,6 +5569,11 @@ impl Mixer {
                 }
             }
             P::Feed(None) => self.feed_branch.detach(),
+            P::HasSource { id, reply } => {
+                let here = self.sources.iter().any(|s| s.input.id == id);
+                let _ = reply.send(if here { Ok(()) } else { Err(self.no_such_source(&id)) });
+            }
+            P::SourceFeed { id, feed, shape } => self.source_feed(id, feed, shape),
         }
     }
 
@@ -5698,6 +5713,7 @@ impl Mixer {
         self.detach_programme_return();
         self.thumb_branch.detach();
         self.feed_branch.detach();
+        self.drop_source_feeds();
         self.pool.teardown();
         self.audio_taps.clear();
         #[cfg(unix)]
