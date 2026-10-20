@@ -1,7 +1,9 @@
 // Interact: use a web page source the way you would a page in a browser.
 //
-// The live picture is the source's own cell of the multiview, as MJPEG, open
-// only while this view is. A click, a scroll or a key on it goes to the page
+// The live picture is the source itself at the canvas size, as MJPEG
+// (`/mjpeg/{source}?full=1`), made only while this view is open. A multiview
+// cell is a fraction of a 1920 pixel sheet, which left a page's text and a
+// video player's menus too blurred to read. A click, a scroll or a key on it goes to the page
 // through `source.page.input`; the address bar, Back, Forward and Reload go
 // through `source.page.navigate`. One call is in flight at a time and moves
 // that pile up behind it are kept as the newest, so a slow link never queues
@@ -37,12 +39,23 @@ export function openInteract(client, source) {
     if (said) notice.textContent = noticeText(said);
   };
 
-  // The picture is a cell of the multiview, and the width asked for is the
-  // whole mosaic's. The widest there is, so the page's text can be read.
-  img.src = streamUrl(client, `/mjpeg/${encodeURIComponent(id)}?width=1920&fps=30`);
-  img.onerror = () => {
-    note.textContent = "No live picture: the multiview is switched off in Settings. Clicks and keys still reach the page.";
+  // The source's own frames, whole. A stream ends when the source stops
+  // sending for a few seconds (a restart, a page that hangs), so it is asked
+  // for again while this view is open.
+  let open = true;
+  let tries = 0;
+  const watch = () => {
+    img.src = streamUrl(client, `/mjpeg/${encodeURIComponent(id)}?full=1&fps=30&n=${tries++}`);
   };
+  img.onload = () => {
+    note.textContent = "Click, scroll and type on the picture. It is the page as it goes to air.";
+  };
+  img.onerror = () => {
+    if (!open) return;
+    note.textContent = "No live picture: the source is not sending one, or it is restarting. Clicks and keys still reach the page.";
+    setTimeout(() => open && watch(), 2000);
+  };
+  watch();
 
   pointer(surface, img, keys, send);
   typing(keys, send);
@@ -63,7 +76,8 @@ export function openInteract(client, source) {
       off();
       clearInterval(poll);
       send.stop();
-      // Dropping the address ends the stream, and the multiview cell with it.
+      // Dropping the address ends the stream, and the branch making it.
+      open = false;
       img.removeAttribute("src");
     },
   });
