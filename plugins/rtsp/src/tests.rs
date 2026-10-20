@@ -149,16 +149,24 @@ fn ffmpeg_pulls_over_udp_as_well() {
 
 /// The core pulls `rtsp://` with `hls/source`, which is `uridecodebin`: the
 /// same element here, decoding what this output serves.
+///
+/// Like the core, it takes the sound as well as the picture. Asked for video
+/// alone (`caps=video/x-raw(ANY)`), `uridecodebin` called the decoded AAC an
+/// unknown type, the sound's `udpsrc` stopped with `not-linked`, and when that
+/// came before the first picture `gst-launch` ended with nothing decoded. That
+/// was one run in fifteen on the macOS runner.
 #[test]
 fn uridecodebin_decodes_it_as_the_cores_own_rtsp_source_would() {
     let err = std::env::temp_dir().join(format!("gmx-rtsp-uridecode-{}.err", std::process::id()));
     let err_at = err.clone();
     let pull = move |url: &str, out: &Path| {
-        let line = format!("uridecodebin uri={url} caps=video/x-raw(ANY) ! fakesink silent=false");
+        let line = format!(
+            "uridecodebin name=d uri={url} d. ! video/x-raw(ANY) ! queue ! fakesink name=v silent=false \n             d. ! audio/x-raw ! queue ! fakesink name=a sync=false"
+        );
         Command::new("gst-launch-1.0")
             .arg("-v")
             .args(line.split_whitespace())
-            .env("GST_DEBUG", "2,rtspsrc:4,rtspconnection:4")
+            .env("GST_DEBUG", "2")
             .stdout(std::fs::File::create(out).unwrap())
             .stderr(std::fs::File::create(&err_at).unwrap())
             .spawn()
@@ -167,7 +175,7 @@ fn uridecodebin_decodes_it_as_the_cores_own_rtsp_source_would() {
     let Some((_, got)) = serve_and_pull("uridecode", pull) else { return };
     let said = std::fs::read_to_string(&err).unwrap_or_default();
     let _ = std::fs::remove_file(&err);
-    let frames = got.lines().filter(|l| l.contains("last-message = chain")).count();
+    let frames = got.lines().filter(|l| l.contains("GstFakeSink:v: last-message = chain")).count();
     let used = decoders(&got);
     eprintln!("uridecodebin decoded {frames} frames with {used:?}");
     assert!(

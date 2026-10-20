@@ -22,7 +22,7 @@ jobs:
           GST_GL_DISABLED: 1
           RUST_TEST_THREADS: 2
         run: |
-          for i in $(seq 1 30); do
+          for i in $(seq 1 40); do
             start=$(date +%s)
             if cargo test --profile ci -p gmx-rtsp -- --nocapture tests::uridecodebin > run.log 2>&1; then
               echo "run $i ok in $(( $(date +%s) - start )) s: $(grep 'uridecodebin decoded' run.log)"
