@@ -120,6 +120,7 @@ goes nowhere: no output of a direct show could carry it.
 | Route | What | Tested |
 |---|---|---|
 | `GET /mjpeg/{program, source}` | MJPEG picture | `crates/godwinmix/tests/preview.rs` |
+| `GET /mjpeg/{source}?full=1` | one source at the canvas size | `crates/godwinmix/tests/source_full.rs` |
 | `GET /pcm/{target}`, `/opus/{target}` | WebSocket audio | `crates/godwinmix/tests/preview.rs` |
 | local preview socket | raw frames over `unixfd` | `preview/local.rs` |
 
