@@ -101,9 +101,16 @@ async fn restarts_in_place_leave_nothing_behind() {
         mix.handle(Command::RestartSource(id.clone())).unwrap();
         tokio::time::sleep(Duration::from_millis(250)).await;
     }
-    // Long enough for the last restart's worker to finish and let go.
-    tokio::time::sleep(Duration::from_secs(1)).await;
-    let after = count(&mix);
+    // Until the last restart's worker has finished and let go of its clone
+    // of the source. A fixed second was not enough on a loaded Windows
+    // runner, where the twentieth restart was still running and the count
+    // read 2; a leak never lets go, so ten seconds still catches one.
+    let until = std::time::Instant::now() + Duration::from_secs(10);
+    let mut after = count(&mix);
+    while after != before && std::time::Instant::now() < until {
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        after = count(&mix);
+    }
     let live = mix.sources.iter().find(|s| s.input.id == id).map(|s| s.input.observed_state());
     mix.shutdown();
     assert_eq!(after, before, "(programme, source pipeline, holders of the source) grew");
