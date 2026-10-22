@@ -7291,6 +7291,14 @@
             "null"
           ]
         },
+        "audio_peak_db": {
+          "description": "The first sound track's peak in dBFS over a short burst, measured\nabout once a second while the show's alarms are on or its picture is\nasked for; -120 is digital silence. Left out while unmeasured.",
+          "format": "double",
+          "type": [
+            "number",
+            "null"
+          ]
+        },
         "cc_errors": {
           "default": 0,
           "format": "uint64",

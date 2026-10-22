@@ -16,6 +16,9 @@ pub fn show_stats(host: &Host, show: &Show) -> Value {
     drop(seen);
     let desc = host.hub.stream(&show.row.app(), STREAM).unwrap_or(Value::Null);
     fill(&mut input, &desc, last_tag);
+    if let Some(db) = host.vitals.peak(&show.row.id) {
+        input["audio_peak_db"] = json!((db * 10.0).round() / 10.0);
+    }
     let outputs: Vec<Value> = show
         .outputs
         .iter()
