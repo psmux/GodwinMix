@@ -6447,6 +6447,222 @@
         ],
         "type": "object"
       },
+      "GpuDevice": {
+        "description": "One GPU: what it is, its newest reading and the ones before it.",
+        "properties": {
+          "driver": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "history": {
+            "default": [],
+            "description": "One a second, oldest first, the last two minutes at most.",
+            "items": {
+              "$ref": "#/components/schemas/GpuSample"
+            },
+            "type": "array"
+          },
+          "index": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "name": {
+            "description": "`NVIDIA GeForce RTX 3060`.",
+            "type": "string"
+          },
+          "now": {
+            "$ref": "#/components/schemas/GpuSample"
+          }
+        },
+        "required": [
+          "index",
+          "name",
+          "now"
+        ],
+        "type": "object"
+      },
+      "GpuSample": {
+        "description": "One reading of one GPU. A number the driver would not give is left out.",
+        "properties": {
+          "at_ms": {
+            "description": "Unix milliseconds.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "decoder_pct": {
+            "description": "NVDEC, percent.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "encoder_fps": {
+            "description": "The sessions' average frame rate.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "encoder_pct": {
+            "description": "NVENC, percent.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "encoder_sessions": {
+            "description": "Open NVENC sessions, every process on the machine.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "fan_pct": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "gpu_pct": {
+            "description": "The 3D and compute engines, percent of the last sample period.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "graphics_mhz": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "memory_mhz": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "memory_total_mib": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "memory_used_mib": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "power_limit_w": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "power_w": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "temperature_c": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "video_mhz": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "at_ms"
+        ],
+        "type": "object"
+      },
+      "GpuStatus": {
+        "description": "`gpu.status`'s answer.",
+        "properties": {
+          "every_ms": {
+            "description": "How often a reading is taken while someone asks.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "gpus": {
+            "items": {
+              "$ref": "#/components/schemas/GpuDevice"
+            },
+            "type": "array"
+          },
+          "note": {
+            "description": "Why there are no GPUs, or what is missing, in one sentence.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "source": {
+            "description": "`nvml`, `nvidia-smi`, or `none`.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "every_ms",
+          "gpus"
+        ],
+        "type": "object"
+      },
+      "GpuStatusRequest": {
+        "description": "`gpu.status`.",
+        "properties": {
+          "since_ms": {
+            "description": "Only the history after this time, unix milliseconds: what a client\nthat already holds the rest asks for. Left out, the whole history.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
       "GraphicListing": {
         "description": "`scene.graphic.list`.",
         "properties": {
@@ -7822,6 +8038,77 @@
         },
         "required": [
           "level"
+        ],
+        "type": "object"
+      },
+      "MachineStatus": {
+        "description": "`machine.status`'s answer: the box, not one process.",
+        "properties": {
+          "cores": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "cpu_pct": {
+            "description": "Every process on the machine, percent of all cores, over the last\nsecond. Left out until two readings have been taken.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "host_name": {
+            "type": "string"
+          },
+          "load_average": {
+            "description": "One, five and fifteen minutes, where the system keeps them.",
+            "items": {
+              "format": "double",
+              "type": "number"
+            },
+            "maxItems": 3,
+            "minItems": 3,
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "memory_available_mib": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "memory_total_mib": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "process_uptime_secs": {
+            "description": "Since this process started.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "uptime_secs": {
+            "description": "Since the machine booted.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "host_name",
+          "cores",
+          "process_uptime_secs"
         ],
         "type": "object"
       },
@@ -17263,6 +17550,34 @@
         "x-scope": "read"
       }
     },
+    "/api/v1/gpu/status": {
+      "get": {
+        "description": "JSON-RPC method `gpu.status`. Needs the `read` scope.",
+        "operationId": "gpu.status",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GpuStatus"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Every NVIDIA GPU on this machine: encoder, decoder and 3D use, video memory, encoder sessions, temperature, power and clocks, now and over the last two minutes. Read once a second from NVML or nvidia-smi while a client keeps asking, and not at all otherwise. No GPUs, and a note, on a machine without one.",
+        "tags": [
+          "gpu"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
     "/api/v1/log/gst": {
       "post": {
         "description": "JSON-RPC method `log.gst`. Needs the `admin` scope. Accepts `idempotency_key`, honoured for 24 hours.",
@@ -17365,6 +17680,34 @@
         "x-destructive": false,
         "x-idempotent": true,
         "x-scope": "admin"
+      }
+    },
+    "/api/v1/machine/status": {
+      "get": {
+        "description": "JSON-RPC method `machine.status`. Needs the `read` scope.",
+        "operationId": "machine.status",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MachineStatus"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "The machine itself: its name, cores, CPU use of every process, memory, how long it and this process have been up, and its load average.",
+        "tags": [
+          "machine"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
       }
     },
     "/api/v1/media": {
