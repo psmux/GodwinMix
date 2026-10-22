@@ -22,11 +22,21 @@ pub struct Headers {
     pub script: Option<MediaTag>,
     pub video: Option<MediaTag>,
     pub audio: Option<MediaTag>,
+    /// The sequence headers of sound tracks after the first (AAC has one),
+    /// for a reader of every track.
+    pub tracks: Vec<MediaTag>,
 }
 
 impl Headers {
-    fn in_order(&self) -> impl Iterator<Item = &MediaTag> {
-        [&self.script, &self.video, &self.audio].into_iter().flatten()
+    fn in_order(&self, all: bool) -> impl Iterator<Item = &MediaTag> {
+        let more = if all { &self.tracks[..] } else { &[] };
+        [&self.script, &self.video, &self.audio].into_iter().flatten().chain(more)
+    }
+
+    /// Keep a further track's sequence header, one per track.
+    pub fn track(&mut self, tag: &MediaTag) {
+        self.tracks.retain(|t| t.track != tag.track);
+        self.tracks.push(tag.clone());
     }
 }
 
@@ -55,13 +65,21 @@ pub enum Recv {
 pub struct Shared {
     queue: Mutex<Queue>,
     ready: Condvar,
+    /// Given the sound tracks after the first too. A reader that did not
+    /// ask is given track 0 alone, exactly as before tracks existed.
+    all_tracks: bool,
 }
 
 impl Shared {
     /// A queue that starts at the next keyframe with the headers in front.
     pub fn new() -> Shared {
+        Shared::with_tracks(false)
+    }
+
+    /// The same, given every track when `all` is set.
+    pub fn with_tracks(all: bool) -> Shared {
         let queue = Queue { skipping: true, owe_headers: true, ..Queue::default() };
-        Shared { queue: Mutex::new(queue), ready: Condvar::new() }
+        Shared { queue: Mutex::new(queue), ready: Condvar::new(), all_tracks: all }
     }
 
     fn lock(&self) -> std::sync::MutexGuard<'_, Queue> {
@@ -71,6 +89,9 @@ impl Shared {
     /// Offer one tag. Never blocks on the reader. `headers` are the ones in
     /// force, already updated with this tag when it is one.
     pub fn offer(&self, tag: &MediaTag, headers: &Headers, audio_only: bool) {
+        if tag.track != 0 && !self.all_tracks {
+            return;
+        }
         let mut q = self.lock();
         if q.ended {
             return;
@@ -85,8 +106,8 @@ impl Shared {
             q.skipping = false;
         }
         if std::mem::take(&mut q.owe_headers) {
-            for h in headers.in_order() {
-                if !(header && h.kind == tag.kind) {
+            for h in headers.in_order(self.all_tracks) {
+                if !(header && h.kind == tag.kind && h.track == tag.track) {
                     q.push(h.clone());
                 }
             }
@@ -99,7 +120,7 @@ impl Shared {
             // A header went with the dropped GOP and a keyframe is now at the
             // front: the headers go in front of it rather than after it.
             q.owe_headers = false;
-            for h in headers.in_order().collect::<Vec<_>>().into_iter().rev() {
+            for h in headers.in_order(self.all_tracks).collect::<Vec<_>>().into_iter().rev() {
                 q.bytes += h.payload.len();
                 q.tags.push_front(h.clone());
             }

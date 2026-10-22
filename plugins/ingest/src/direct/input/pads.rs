@@ -5,10 +5,13 @@
 //! ```text
 //!   transport ──► parsebin ─┬─► h264parse | h265parse ──► appsink (video tags)
 //!                           ├─► aacparse | ac3parse | mpegaudioparse ──► appsink (audio tags)
-//!                           └─► fakesink (teletext, MPEG-2 video)
+//!                           ├─► appsink (MPEG-2 video, already framed by parsebin, as `mp2v` tags)
+//!                           └─► fakesink (teletext, anything else)
 //! ```
 //!
-//! One video and one audio stream are carried, the first of each to appear.
+//! MPEG-2 video is carried only when the show converts it, and every sound
+//! track only when it converts them (`Carry`); otherwise one video and one
+//! audio stream are carried, the first of each to appear.
 //! A second one of a kind stands by until the first one's pad goes away,
 //! which is what a sender restarting with a new layout looks like
 //! (`streams.rs`). What is left out is named in the input's error.
@@ -19,7 +22,9 @@ use gstreamer as gst;
 use gstreamer::prelude::*;
 
 use super::frames;
-use super::streams::{gate, take_out, Slot, Streams};
+use super::numbering::meta;
+use super::spec::Carry;
+use super::streams::{gate, take_out, Gate, Slot, Streams};
 use crate::tagger::{self, Zero};
 
 /// What every pad of one session shares.
@@ -30,19 +35,21 @@ pub struct Pads {
     pub sync: bool,
     /// The MPEG-TS program to take, set on any `tsdemux` parsebin makes.
     pub program: Option<u16>,
+    pub carry: Carry,
     streams: Arc<Streams>,
     /// What went wrong putting the demuxer in, said once.
     pub note: Mutex<Vec<String>>,
 }
 
 impl Pads {
-    pub fn new(to: tagger::Shared, sync: bool, program: Option<u16>) -> Arc<Pads> {
+    pub fn new(to: tagger::Shared, sync: bool, program: Option<u16>, carry: Carry) -> Arc<Pads> {
         Arc::new(Pads {
             to,
             zero: Arc::new(Zero::default()),
             sync,
             program,
-            streams: Arc::default(),
+            carry,
+            streams: Arc::new(Streams::new(carry.tracks)),
             note: Mutex::new(Vec::new()),
         })
     }
@@ -52,6 +59,11 @@ impl Pads {
         let mut all = self.note.lock().unwrap_or_else(|e| e.into_inner()).clone();
         all.extend(self.streams.notes());
         all.join("; ")
+    }
+
+    /// What is carried now, for the input's stats.
+    pub fn tracks(&self) -> Vec<super::stats::TrackInfo> {
+        self.streams.tracks()
     }
 }
 
@@ -98,12 +110,20 @@ fn attach(pipeline: &gst::Pipeline, pad: &gst::Pad, pads: &Pads) -> Result<(), S
     // MPEG-1 audio is layers I to III; anything else called audio/mpeg is AAC.
     let layered = s.as_ref().is_some_and(|s| s.get::<i32>("mpegversion").ok() == Some(1) || s.has_field("layer"));
     let slot = if name.starts_with("video/") { Slot::Video } else { Slot::Audio };
+    let mpeg2 = name == "video/mpeg" && pads.carry.mpeg2 && s.as_ref().is_some_and(|s| s.get::<bool>("systemstream").ok() != Some(true));
+    let numbered = Arc::new(Gate::default());
+    let to = match slot == Slot::Audio && pads.carry.tracks {
+        true => frames::numbered(pads.to.clone(), numbered.clone()),
+        false => pads.to.clone(),
+    };
+    let zero = pads.zero.clone();
     let (parser, sink) = match name.as_str() {
-        "video/x-h264" => ("h264parse", tagger::video_sink(pads.to.clone(), pads.zero.clone())),
-        "video/x-h265" => ("h265parse", tagger::hevc_sink(pads.to.clone(), pads.zero.clone())),
-        "audio/mpeg" if !layered => ("aacparse", tagger::audio_sink(pads.to.clone(), pads.zero.clone())),
-        "audio/x-ac3" | "audio/x-eac3" => ("ac3parse", frames::ac3_sink(pads.to.clone(), pads.zero.clone())),
-        "audio/mpeg" => ("mpegaudioparse", frames::mpeg_sink(pads.to.clone(), pads.zero.clone())),
+        "video/x-h264" => (Some("h264parse"), tagger::video_sink(to, zero)),
+        "video/x-h265" => (Some("h265parse"), tagger::hevc_sink(to, zero)),
+        "video/mpeg" if mpeg2 => (None, frames::mpeg2_sink(to, zero)),
+        "audio/mpeg" if !layered => (Some("aacparse"), tagger::audio_sink(to, zero)),
+        "audio/x-ac3" | "audio/x-eac3" => (Some("ac3parse"), frames::ac3_sink(to, zero)),
+        "audio/mpeg" => (Some("mpegaudioparse"), frames::mpeg_sink(to, zero)),
         _ => return discard(pipeline, pad, pads, &name),
     };
     sink.set_property("sync", pads.sync);
@@ -113,9 +133,11 @@ fn attach(pipeline: &gst::Pipeline, pad: &gst::Pad, pads: &Pads) -> Result<(), S
     sink.set_property("async", false);
     // No queue of our own: parsebin already puts a multiqueue after a
     // demuxer, and two more threads per input is 400 for 200 shows.
-    let parse = make(parser)?;
-    gate(pad, pads.streams.add(pad, slot, &name, vec![parse.clone(), sink.clone()]), Arc::downgrade(&pads.streams));
-    link(pipeline, pad, &[&parse, &sink])
+    // parsebin has framed MPEG-2 already, and nothing needs it converted.
+    let chain: Vec<gst::Element> = parser.map(make).transpose()?.into_iter().chain([sink]).collect();
+    let on = pads.streams.add_with(pad, slot, &name, chain.clone(), meta(pad), numbered);
+    gate(pad, on, Arc::downgrade(&pads.streams));
+    link(pipeline, pad, &chain.iter().collect::<Vec<_>>())
 }
 
 /// Send a stream nobody carries to a fakesink; `Streams` says why.

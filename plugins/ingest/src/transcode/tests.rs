@@ -76,7 +76,7 @@ fn spec(small: bool) -> Vec<StreamSpec> {
 }
 
 fn wanted(id: &str, video: &str, url: &str) -> Wanted {
-    let feed = Feed::Rendition { video: Some(video.into()), audio: Some("copy:main:audio".into()) };
+    let feed = Feed::Rendition { video: Some(video.into()), audio: Some("copy:main:audio".into()), tracks: Vec::new() };
     Wanted { channel: "church".into(), app: "church".into(), id: id.into(), platform: "custom".into(), url: url.into(), stream: "main".into(), feed }
 }
 

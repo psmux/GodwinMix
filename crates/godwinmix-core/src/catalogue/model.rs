@@ -110,6 +110,10 @@ pub struct VideoEntry {
     pub requires: Vec<String>,
     #[serde(default)]
     pub properties: BTreeMap<String, PropValue>,
+    /// Properties set on the decoder, where `properties` are the encoder's:
+    /// a hardware decoder's surface count, for one.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub decode_properties: BTreeMap<String, PropValue>,
     /// Properties for one CPU architecture, laid over `properties` when the
     /// catalogue is loaded, keyed by Rust's name for it (`x86_64`,
     /// `aarch64`). For an element that behaves differently on two kinds of

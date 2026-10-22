@@ -33,6 +33,21 @@ pub struct InputSpec {
     /// `latency_ms`, `passphrase` and `mode` for SRT, `transport` for RTSP.
     pub params: Value,
     pub backup: Option<Box<InputSpec>>,
+    /// What to carry beyond the one video and one sound every reader has
+    /// always had. Not part of the contract's JSON: the host sets it from
+    /// the show's outputs, so nothing is carried that nobody converts.
+    pub carry: Carry,
+}
+
+/// What an input carries for a show that converts.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Carry {
+    /// MPEG-2 video as `mp2v` tags (`crate::mp2v`), for a rendition to
+    /// decode. Without it MPEG-2 is left out, named in the input's error.
+    pub mpeg2: bool,
+    /// Every sound track: the first as track 0, the others as tracks 1, 2,
+    /// 3 in PMT order. Without it the others stand by as before.
+    pub tracks: bool,
 }
 
 /// A refusal: the sentence and a `data` object a caller can act on.
@@ -56,7 +71,7 @@ impl std::fmt::Display for InputError {
 
 impl InputSpec {
     pub fn new(uri: &str) -> InputSpec {
-        InputSpec { uri: uri.to_string(), program: None, params: json!({}), backup: None }
+        InputSpec { uri: uri.to_string(), program: None, params: json!({}), backup: None, carry: Carry::default() }
     }
 
     /// Read the contract's JSON. A bare string is taken as the address.
@@ -81,7 +96,7 @@ impl InputSpec {
             None | Some(Value::Null) => None,
             Some(b) => Some(Box::new(InputSpec::from_json(b)?)),
         };
-        let spec = InputSpec { uri: uri.to_string(), program, params, backup };
+        let spec = InputSpec { uri: uri.to_string(), program, params, backup, carry: Carry::default() };
         spec.kind()?;
         Ok(spec)
     }

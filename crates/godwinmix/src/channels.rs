@@ -38,6 +38,7 @@ pub mod hooks;
 pub(crate) mod keys;
 mod kept_rules;
 mod live;
+mod tracks;
 mod newkey;
 pub mod local;
 pub(crate) mod net;
