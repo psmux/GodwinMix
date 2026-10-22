@@ -47,6 +47,9 @@ pub(super) fn session(mut reader: flv::Reader, stream: &Arc<Stream>, board: &Boa
             Ok(Some(t)) => t,
             Ok(None) => return End::Stopped,
             Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => return End::Lost("the input's stream ended; waiting for it again".into()),
+            Err(e) if at.session.is_none() => {
+                return End::Lost(format!("nothing came from the relay for {} s: the input is not live yet, or the rendition it reads makes nothing ({e})", patience.as_secs()))
+            }
             Err(e) => return End::Lost(format!("nothing came from the input for {} s ({e})", patience.as_secs())),
         };
         let read = match tag.kind {
