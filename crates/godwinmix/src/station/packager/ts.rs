@@ -51,6 +51,10 @@ impl Cutters {
                 main_cut.extend(config(caps, UnitKind::AacConfig));
             }
             let mut info = info_of(caps).unwrap_or_default();
+            // Raw AAC caps say no channels; the AudioSpecificConfig does.
+            if info.channels == 0 {
+                info.channels = config(caps, UnitKind::AacConfig).and_then(|u| u.data.get(1).map(|b| u32::from((b >> 3) & 0x0f))).unwrap_or(0);
+            }
             info.sound = *track;
             info.lang = named.iter().find(|s| s.track == *track).map(|s| s.lang.clone()).unwrap_or_default();
             *t.sound_info.write() = info;
