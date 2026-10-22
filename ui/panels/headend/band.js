@@ -3,7 +3,7 @@
 // it, how long the machine and the station have been up, and the buttons
 // for full screen and close.
 
-import { el } from "../../shell/dom.js";
+import { el, svg } from "../../shell/dom.js";
 import { kbps } from "../wall/model.js";
 import { level, ring, spark } from "./charts.js";
 
@@ -24,7 +24,7 @@ export function band(act) {
   const outS = spark("out", 140, 30);
   const v = () => el("strong.he-big");
   const [inV, outV, upV, upSub, host, problems] = [v(), v(), v(), el("span.he-small"), el("span.he-host"), el("span.he-problems")];
-  const button = (key, text, title) => el("button.btn.he-btn", { type: "button", "data-act": key, title, "aria-label": title, text });
+  const button = (key, icon, title) => el("button.btn.he-btn", { type: "button", "data-act": key, title, "aria-label": title }, [svg(icon, 18)]);
   const node = el("header.he-band", {}, [
     el("div.he-brand", {}, [el("h2", { text: "Headend" }), host, problems]),
     el("div.he-cell.ring", {}, [chans.node]),
@@ -33,7 +33,7 @@ export function band(act) {
     el("div.he-cell.net", {}, [el("span.he-k", { text: "Network in" }), inV, inS.node]),
     el("div.he-cell.net", {}, [el("span.he-k", { text: "Network out" }), outV, outS.node]),
     el("div.he-cell.up", {}, [el("span.he-k", { text: "Up" }), upV, upSub]),
-    el("div.he-cell.acts", {}, [button("full", "⛶", "Full screen"), button("close", "×", "Close the headend view (Escape)")]),
+    el("div.he-cell.acts", {}, [button("full", "M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5", "Full screen"), button("close", "M6 6l12 12M18 6L6 18", "Close the headend view (Escape)")]),
   ]);
   node.addEventListener("click", (e) => {
     const b = e.target.closest("[data-act]");

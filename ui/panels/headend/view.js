@@ -83,8 +83,8 @@ export function openHeadend(client) {
       empty.textContent = text;
     },
     /** Patch the tiles on screen and ask for their pictures, and no others. */
-    fetch() {
-      const shown = grid.draw((id) => data.series.get(id), view.selected);
+    fetch(patch = true) {
+      const shown = grid.draw((id) => data.series.get(id), view.selected, patch);
       const pics = shown.filter((r) => pictured(r.show) && r.state !== "offline");
       thumbs.blank(shown.filter((r) => !pics.includes(r)).map((r) => r.show.id));
       thumbs.visible(pics.map((r) => r.show.id));
@@ -109,7 +109,7 @@ export function openHeadend(client) {
     },
   });
 
-  scroll.addEventListener("scroll", () => { cancelAnimationFrame(view.sf); view.sf = requestAnimationFrame(() => view.fetch()); }, { passive: true });
+  scroll.addEventListener("scroll", () => { cancelAnimationFrame(view.sf); view.sf = requestAnimationFrame(() => view.fetch(false)); }, { passive: true });
   root.addEventListener("click", (e) => {
     const grp = e.target.closest("[data-group]");
     if (grp) return act(view, "group", opts.group === grp.dataset.group ? "" : grp.dataset.group);
