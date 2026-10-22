@@ -15,6 +15,7 @@ use gstreamer as gst;
 use gstreamer::prelude::*;
 
 use super::build::{build, Built};
+use super::tee::{hang, unlink_when_idle};
 use super::input::Input;
 use super::sink::{attach, tap_pictures, Route};
 use super::spec::NodeSpec;
@@ -45,8 +46,23 @@ impl Graph {
     /// Make what runs match `specs`: stop what changed or went, and
     /// everything reading from it, then start what is new.
     pub fn apply(&mut self, specs: &[NodeSpec], input: &Input, route: &Arc<dyn Route>) {
-        let mut stop: Vec<String> = self.running.iter().filter(|r| !specs.contains(&r.spec)).map(|r| r.spec.id.clone()).collect();
-        // Readers of a stopped node stop with it, however far downstream.
+        let changed: Vec<String> = self.running.iter().filter(|r| !specs.contains(&r.spec)).map(|r| r.spec.id.clone()).collect();
+        self.take_down(changed, input);
+        self.failed.retain(|id, _| specs.iter().any(|s| &s.id == id));
+        for spec in specs {
+            if self.running.iter().any(|r| r.spec.id == spec.id) {
+                continue;
+            }
+            if let Err(why) = self.start(spec, input, route) {
+                eprintln!("transcode: node {} did not start: {why}", spec.id);
+                self.failed.insert(spec.id.clone(), why);
+            }
+        }
+    }
+
+    /// Stop `ids` and every node reading from them, however far downstream,
+    /// last first, so the next `apply` builds them all again.
+    pub fn take_down(&mut self, mut stop: Vec<String>, input: &Input) {
         loop {
             let more: Vec<String> = self
                 .running
@@ -61,16 +77,7 @@ impl Graph {
         }
         for id in self.running.iter().rev().map(|r| r.spec.id.clone()).filter(|id| stop.contains(id)).collect::<Vec<_>>() {
             self.stop(&id, input);
-        }
-        self.failed.retain(|id, _| specs.iter().any(|s| &s.id == id));
-        for spec in specs {
-            if self.running.iter().any(|r| r.spec.id == spec.id) {
-                continue;
-            }
-            if let Err(why) = self.start(spec, input, route) {
-                eprintln!("transcode: node {} did not start: {why}", spec.id);
-                self.failed.insert(spec.id.clone(), why);
-            }
+            self.failed.remove(&id);
         }
     }
 
@@ -162,28 +169,4 @@ impl Drop for Graph {
     fn drop(&mut self) {
         let _ = self.pipeline.set_state(gst::State::Null);
     }
-}
-
-/// Hang a branch off a tee: a new pad of the tee, linked to the branch's head.
-fn hang(tee: &gst::Element, head: &gst::Element) -> Result<gst::Pad, String> {
-    let pad = tee.request_pad_simple("src_%u").ok_or("the tee gave no pad")?;
-    let sink = head.static_pad("sink").ok_or("the branch has no sink pad")?;
-    if let Err(e) = pad.link(&sink) {
-        tee.release_request_pad(&pad);
-        return Err(format!("{e:?}"));
-    }
-    Ok(pad)
-}
-
-/// Unlink a branch from its tee once no buffer is on the way through, and
-/// wait a moment for that; a tee with nothing flowing is idle at once.
-fn unlink_when_idle(pad: &gst::Pad, head: &gst::Element) {
-    let Some(sink) = head.static_pad("sink") else { return };
-    let (tx, rx) = std::sync::mpsc::sync_channel::<()>(1);
-    pad.add_probe(gst::PadProbeType::IDLE, move |pad, _| {
-        let _ = pad.unlink(&sink);
-        let _ = tx.try_send(());
-        gst::PadProbeReturn::Remove
-    });
-    let _ = rx.recv_timeout(Duration::from_millis(500));
 }

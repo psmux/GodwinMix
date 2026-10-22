@@ -27,6 +27,9 @@ use crate::media_tag::TagKind;
 
 const LOOK: Duration = Duration::from_millis(250);
 
+/// The shortest time between two rebuilds of a node that keeps failing.
+const AGAIN: Duration = Duration::from_secs(5);
+
 struct Shared {
     router: Arc<Router>,
     input: Input,
@@ -34,6 +37,8 @@ struct Shared {
     nodes: Mutex<Vec<NodeSpec>>,
     /// Nodes that would not run in this session or the last, and why.
     failed: Mutex<HashMap<String, String>>,
+    /// When each failed node was last built again.
+    restarted: Mutex<HashMap<String, Instant>>,
 }
 
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -50,7 +55,7 @@ impl Session {
         let router = Arc::new(Router::new(renditions, app));
         router.set_nodes(&nodes.iter().map(|n| (n.id.clone(), n.raw.clone())).collect::<Vec<_>>());
         router.set_outputs(outputs);
-        let shared = Arc::new(Shared { router, input: Input::default(), graph: Mutex::default(), nodes: Mutex::new(nodes), failed: Mutex::default() });
+        let shared = Arc::new(Shared { router, input: Input::default(), graph: Mutex::default(), nodes: Mutex::new(nodes), failed: Mutex::default(), restarted: Mutex::default() });
         let stop = Arc::new(AtomicBool::new(false));
         let (me, halt, app, stream) = (shared.clone(), stop.clone(), app.to_string(), stream.to_string());
         let _ = std::thread::Builder::new().name(format!("gmx-transcode-{stream}")).spawn(move || run(&me, &halt, &hub, &app, &stream));
@@ -144,11 +149,30 @@ fn begin(s: &Shared) {
     *lock(&s.graph) = Some(graph);
 }
 
+/// Errors since the last look. A node that failed is built again with
+/// everything reading it, at most once every `AGAIN`: an AAC encoder that
+/// refused one odd frame of a broadcast stayed down for good before, and
+/// its output went on without sound.
 fn errors(s: &Shared) {
-    if let Some(graph) = lock(&s.graph).as_mut() {
-        for (node, why) in graph.errors() {
-            eprintln!("transcode: {node}: {why}");
-            lock(&s.failed).insert(node, why);
+    let mut graph = lock(&s.graph);
+    let Some(graph) = graph.as_mut() else { return };
+    let mut again = Vec::new();
+    for (node, why) in graph.errors() {
+        eprintln!("transcode: {node}: {why}");
+        lock(&s.failed).insert(node.clone(), why);
+        let mut tried = lock(&s.restarted);
+        if tried.get(&node).is_none_or(|t| t.elapsed() >= AGAIN) {
+            tried.insert(node.clone(), Instant::now());
+            again.push(node);
         }
     }
+    if again.is_empty() {
+        return;
+    }
+    eprintln!("transcode: building {} again", again.join(", "));
+    graph.take_down(again.clone(), &s.input);
+    let route: Arc<dyn Route> = s.router.clone();
+    graph.apply(&lock(&s.nodes), &s.input, &route);
+    let mut failed = lock(&s.failed);
+    failed.retain(|id, _| !again.contains(id) || graph.failed.contains_key(id));
 }
