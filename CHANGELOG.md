@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+* Show tabs switch the way a browser's tabs do. One click on another show's tab marks it chosen at once and moves the page to that show; a click used to wait a quarter second for a possible second click, and a double click or double tap on another show's tab opened its name for renaming and never switched. Double click renames only the show you are on now. `Ctrl+Tab` and `Ctrl+Shift+Tab` (and `Ctrl+PageDown`, `Ctrl+PageUp`, `Cmd+Shift+]` and `Cmd+Shift+[` on a Mac) go to the next show and the one before. A redraw of the tabs no longer drops the keyboard focus off the tab it was on. See [Run several shows](docs/how-to/run-several-shows.md).
+
 ## 0.3.16 (2026-10-21)
 
 From tester issue 24: Interact shows a web page sharp enough to read, so YouTube's quality can be picked there. And a page with a looping clip can no longer fill the disk.
