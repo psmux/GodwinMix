@@ -94,7 +94,15 @@ pub fn check(s: &Settings) -> Result<String> {
         import.shows.iter().filter(|p| p.disabled).count()
     );
     for (scope, n) in &import.notes {
-        out.push_str(&format!("line {}, {scope}: {:?}: {}\n", n.line, n.kind, n.what));
+        let kind = match n.kind {
+            godwinmix_flussonic::import::NoteKind::Ignored => "ignored",
+            godwinmix_flussonic::import::NoteKind::NotCarried => "not carried",
+            godwinmix_flussonic::import::NoteKind::Waiting => "waiting",
+        };
+        match n.line {
+            0 => out.push_str(&format!("{scope}, {kind}: {}\n", n.what)),
+            line => out.push_str(&format!("line {line}, {scope}, {kind}: {}\n", n.what)),
+        }
     }
     Ok(out)
 }

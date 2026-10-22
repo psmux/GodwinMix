@@ -156,7 +156,7 @@ fn waiting(p: &ShowPlan, line: usize, notes: &mut Vec<Note>) {
         }
     }
     if !held.is_empty() {
-        let what = format!("rendition fields {} are written for the media branch and not read by this build yet", held.join(", "));
+        let what = format!("rendition fields {} are passed on, and this build does not act on them yet", held.join(", "));
         notes.push(Note { line, kind: NoteKind::Waiting, what });
     }
 }

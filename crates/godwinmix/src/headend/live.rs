@@ -61,9 +61,23 @@ fn due(last: &mut Option<i64>, holds: bool, now: i64) -> bool {
     }
 }
 
+/// The input's numbers (`direct.stats`, flat) with what only `direct.input`
+/// says laid over them: its state, its error, `tracks` and `scrambled`.
+fn input_of(seen: &crate::station::direct::Seen) -> Value {
+    let mut v = seen.input_stats.as_ref().and_then(|s| serde_json::to_value(s).ok()).unwrap_or_else(|| Value::Object(Default::default()));
+    if let Some(said) = &seen.input {
+        for k in ["state", "error", "tracks", "scrambled"] {
+            if let Some(x) = said.get(k) {
+                v[k] = x.clone();
+            }
+        }
+    }
+    v
+}
+
 fn read(h: &Headend, name: &str, id: &str, copy: bool, mem: &mut Memory) -> Live {
     let seen = h.st.direct.seen.lock().get(id).cloned().unwrap_or_default();
-    let input = seen.input.clone().unwrap_or(Value::Null);
+    let input = input_of(&seen);
     let (out, _) = h.st.direct.hls.view(id, HLS_OUTPUT).unwrap_or_default();
     let now = now_ms();
     let cc = input["cc_errors"].as_u64().unwrap_or(0);
