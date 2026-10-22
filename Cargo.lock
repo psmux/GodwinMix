@@ -1567,6 +1567,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "godwinmix-flussonic"
+version = "0.3.16"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "godwinmix-framebus"
 version = "0.3.16"
 dependencies = [

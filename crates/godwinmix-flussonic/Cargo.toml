@@ -1,0 +1,11 @@
+[package]
+name = "godwinmix-flussonic"
+description = "Flussonic compatibility for headend mode: its config language (lossless parse, typed view, write back), and later the import and the HTTP facade"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+serde = { workspace = true, features = ["derive"] }
