@@ -1475,6 +1475,7 @@ dependencies = [
  "clap",
  "futures-util",
  "godwinmix-core",
+ "godwinmix-flussonic",
  "godwinmix-govern",
  "godwinmix-host",
  "godwinmix-protocol",

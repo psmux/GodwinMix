@@ -24,7 +24,14 @@ pub struct Options {
     pub supervised: bool,
     /// Flags every show is started with as well.
     pub common: Vec<String>,
+    /// False for a headend: no show that composites is started, so the
+    /// station runs direct shows and nothing else.
+    pub mixing: bool,
+    /// Called once the control port is bound, with the station.
+    pub ready: Option<Ready>,
 }
+
+pub type Ready = Box<dyn FnOnce(Arc<Station>) + Send>;
 
 pub async fn run(opts: Options) -> Result<()> {
     let cfg = Config::load(&opts.config).with_context(|| format!("could not load {}", opts.config.display()))?;
@@ -65,7 +72,10 @@ pub async fn run(opts: Options) -> Result<()> {
     let tls = crate::tls::start(&cfg, &bind, &opts.config, &events);
     let ingest = open_channels(&st, &cfg, &opts.config, events);
     render.begin();
-    let starting: Vec<String> = st.registry.lock().records.iter().filter(|r| !r.stopped && r.compositing).map(|r| r.id.clone()).collect();
+    let starting: Vec<String> = match opts.mixing {
+        true => st.registry.lock().records.iter().filter(|r| !r.stopped && r.compositing).map(|r| r.id.clone()).collect(),
+        false => Vec::new(),
+    };
     for id in &starting {
         supervise::start(&st, id);
     }
@@ -78,6 +88,9 @@ pub async fn run(opts: Options) -> Result<()> {
     }
     let app = server::router(st.clone());
     let serving = tokio::spawn(crate::tls::serve(listener, app, tls.map(|t| t.acceptor)));
+    if let Some(ready) = opts.ready {
+        ready(st.clone());
+    }
 
     tokio::select! {
         _ = tokio::signal::ctrl_c() => {}
