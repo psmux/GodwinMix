@@ -106,11 +106,16 @@ ENV DEBIAN_FRONTEND=noninteractive
 # libav: the fallback, below, for what nothing else decodes.
 # tools: gst-inspect-1.0 and gst-launch-1.0, for `docker exec` when a pipeline
 #       misbehaves. Half a megabyte and worth it on a headless box.
+# x:    on Debian this is where pango lives, and with it textoverlay, which
+#       draws every text source, lower third and ticker. Without it each of
+#       those failed in the image with "No such element or plugin
+#       'textoverlay'".
 RUN apt-get update && apt-get install -y --no-install-recommends \
       gstreamer1.0-plugins-base \
       gstreamer1.0-plugins-good \
       gstreamer1.0-plugins-bad \
       gstreamer1.0-tools \
+      gstreamer1.0-x \
       ca-certificates \
       curl \
     && if [ "$WITH_CEF" = "1" ]; then \
