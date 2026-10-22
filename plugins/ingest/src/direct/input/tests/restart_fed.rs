@@ -89,7 +89,7 @@ fn a_restarted_sender_is_followed_at_its_whole_frame_rate_without_a_socket() {
     let feed: Feed = Arc::default();
     let (got, stop) = (Collect::default(), StopSignal::default());
     let (sink, s, plan) = (Box::new(got.clone()), stop.clone(), Fed(feed.clone()));
-    let thread = std::thread::spawn(move || run(plan, sink, s));
+    let thread = std::thread::spawn(move || run(plan, Default::default(), sink, s));
     let mut tx = sender(&feed, 65, 66, 1);
     let started = Instant::now();
     while got.keyframes() < 3 && started.elapsed() < Duration::from_secs(20) {

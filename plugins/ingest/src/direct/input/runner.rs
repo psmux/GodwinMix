@@ -15,6 +15,7 @@ use super::super::{Sink, StopSignal};
 use super::loss::Loss;
 use super::outlet::Shared;
 use super::pads::Pads;
+use super::spec::Carry;
 use super::stats::{InputStats, State};
 use crate::tagger;
 
@@ -54,7 +55,7 @@ enum Ended {
     Failed(String),
 }
 
-pub fn run(mut plan: impl Plan, sink: Sink, stop: StopSignal) {
+pub fn run(mut plan: impl Plan, carry: Carry, sink: Sink, stop: StopSignal) {
     let out = Shared::new(sink);
     let mut stats = InputStats { program: plan.program(), ..InputStats::default() };
     let mut totals = (0u64, 0u64);
@@ -62,7 +63,7 @@ pub fn run(mut plan: impl Plan, sink: Sink, stop: StopSignal) {
     while !stop.is_stopped() {
         out.new_session();
         let started = Instant::now();
-        let why = match session(&mut plan, &out, &mut stats, &mut totals, &stop) {
+        let why = match session(&mut plan, carry, &out, &mut stats, &mut totals, &stop) {
             Ended::Stopped => break,
             Ended::Again if started.elapsed() > Duration::from_secs(1) => continue,
             Ended::Again => format!(
@@ -87,10 +88,10 @@ pub fn run(mut plan: impl Plan, sink: Sink, stop: StopSignal) {
     }
 }
 
-fn session(plan: &mut impl Plan, out: &Shared, stats: &mut InputStats, totals: &mut (u64, u64), stop: &StopSignal) -> Ended {
+fn session(plan: &mut impl Plan, carry: Carry, out: &Shared, stats: &mut InputStats, totals: &mut (u64, u64), stop: &StopSignal) -> Ended {
     let pipeline = gst::Pipeline::with_name(&format!("direct-in-{}", std::process::id()));
     let to = tagger::share(out.inlet());
-    let pads = Pads::new(to.clone(), plan.paced(), plan.program());
+    let pads = Pads::new(to.clone(), plan.paced(), plan.program(), carry);
     let ended = match plan.build(&pipeline, &pads) {
         Ok(loss) => {
             let ended = match pipeline.set_state(gst::State::Playing) {
@@ -136,6 +137,7 @@ fn watch(plan: &impl Plan, pipeline: &gst::Pipeline, out: &Shared, pads: &Pads, 
             Some(q) => (State::Retrying, Some(format!("nothing from {} for {} s", plan.address(), q / 1000))),
             None => (State::Connecting, (!notes.is_empty()).then(|| format!("{} carries {notes}", plan.address()))),
         };
+        stats.tracks = pads.tracks();
         out.publish_with(stats, |s| loss.fill(s, totals));
         let silent = quiet.unwrap_or(started.elapsed().as_millis() as u64);
         if let Some(limit) = plan.stall_ms().filter(|&l| silent > l) {
