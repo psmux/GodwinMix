@@ -2,4 +2,5 @@
 
 mod compare;
 mod feed;
+mod shared;
 mod sync;

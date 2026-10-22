@@ -37,11 +37,10 @@ pub fn subscribe(key: &Key, address: &str, buffer: usize, program: Option<u16>) 
 
 /// What every open group is doing, for the wall: one row per socket.
 pub fn snapshot() -> Vec<serde_json::Value> {
-    let all = groups().lock().unwrap_or_else(|e| e.into_inner()).clone();
+    let all = {
+        let mut all = groups().lock().unwrap_or_else(|e| e.into_inner());
+        all.retain(|g| !g.subs().closed);
+        all.clone()
+    };
     all.iter().map(|g| super::stats::group_json(g)).collect()
-}
-
-/// How many groups are open, for the tests.
-pub fn open_count() -> usize {
-    groups().lock().unwrap_or_else(|e| e.into_inner()).iter().filter(|g| !g.subs().closed).count()
 }
