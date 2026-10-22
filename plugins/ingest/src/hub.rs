@@ -35,6 +35,7 @@ use serde_json::{json, Value};
 pub use ends::{Publication, Reader};
 pub use queue::Recv;
 pub use takeover::STALE;
+pub use tracks::mpeg2;
 #[cfg(all(test, unix))]
 pub use takeover::HESITATE;
 
