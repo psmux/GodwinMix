@@ -16,14 +16,15 @@ async fn call(h: &Headend, method: &str, params: Value) -> Result<Value, String>
     methods::call(&h.st, &h.token, method, params).await.map_err(|e| e.message)
 }
 
-/// Import the document in hand and apply it.
-pub async fn apply_file(h: &Headend) {
+/// Import the document in hand and apply it. `announce` logs every line
+/// the import does not carry, which is for a file just read.
+pub async fn apply_file(h: &Headend, announce: bool) {
     let (plans, notes) = {
         let doc = h.doc.lock();
         let i = import::import(&doc.config);
         (i.shows, i.notes)
     };
-    for (scope, n) in &notes {
+    for (scope, n) in notes.iter().filter(|_| announce) {
         info!(line = n.line, scope = %scope, kind = ?n.kind, "headend import: {}", n.what);
     }
     apply(h, plans).await;

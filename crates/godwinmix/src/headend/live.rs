@@ -117,10 +117,8 @@ fn read(h: &Headend, name: &str, id: &str, copy: bool, mem: &mut Memory) -> Live
 }
 
 async fn refresh_tracks(h: &Headend) {
-    let ats: Vec<(String, godwinmix_flussonic::facade::access::At)> = {
-        let live = h.live.read();
-        h.running.lock().iter().filter(|(n, _)| live.get(*n).is_some_and(|l| l.output_live)).filter_map(|(n, _)| h.at(n).map(|a| (n.clone(), a))).collect()
-    };
+    let live: Vec<String> = h.live.read().iter().filter(|(_, l)| l.output_live).map(|(n, _)| n.clone()).collect();
+    let ats: Vec<(String, godwinmix_flussonic::facade::access::At)> = live.into_iter().filter_map(|n| h.at(&n).map(|a| (n, a))).collect();
     let asks = ats.iter().map(|(n, at)| async move { (n.clone(), h.segments.tracks(at).await) });
     for (name, got) in futures_util::future::join_all(asks).await {
         if let Ok(t) = got {

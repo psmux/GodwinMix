@@ -73,7 +73,7 @@ async fn save(h: &Arc<Headend>) -> Result<(), Response> {
     std::fs::write(&tmp, &text)
         .and_then(|_| std::fs::rename(&tmp, &h.file))
         .map_err(|e| refuse(StatusCode::INTERNAL_SERVER_ERROR, format!("could not write {}: {e}", h.file.display())))?;
-    super::apply::apply_file(h).await;
+    super::apply::apply_file(h, false).await;
     h.changed.notify_one();
     Ok(())
 }
