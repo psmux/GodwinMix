@@ -54,6 +54,7 @@ pub mod cutter;
 pub mod dash;
 pub mod follow;
 pub mod key;
+pub mod lang;
 #[cfg(test)]
 mod ladder;
 pub mod master;

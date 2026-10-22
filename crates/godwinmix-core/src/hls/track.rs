@@ -36,6 +36,13 @@ pub struct TrackInfo {
     pub timescale: u32,
     /// What the rendition asked for, 0 when nobody said.
     pub declared_kbps: u32,
+    /// A sound track's number: 0 the first, then 1, 2, 3 in PMT order.
+    pub sound: u8,
+    /// Its ISO 639 code from the PMT, empty when it had none.
+    pub lang: String,
+    /// A name for a player's menu, when something better than the
+    /// language's is known.
+    pub name: String,
 }
 
 pub struct Track {
