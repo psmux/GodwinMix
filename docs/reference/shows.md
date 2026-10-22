@@ -273,7 +273,7 @@ is left out, narrowed by `fields` to any of `health`, `input`, `outputs`:
   "work": "copy", "cpu_millicores": 0,
   "input": {"kbps": 6100, "fps": 25.0, "width": 1920, "height": 1080, "video_codec": "h264",
             "audio_codec": "aac", "audio_channels": 2, "cc_errors": 0, "packets_lost": 0,
-            "keyframe_ms": 1000, "last_frame_ms": 12},
+            "keyframe_ms": 1000, "last_frame_ms": 12, "audio_peak_db": -14.2},
   "outputs": [{"id": "srt", "state": "live", "kbps": 6050, "reconnects": 0,
                "rendition_text": "copy", "cpu_millicores": 0}]}]}
 ```
@@ -285,7 +285,10 @@ A field the host has not counted yet is left out. `fps` is read off the
 stream's own clock over the last second, and reads 0 for a second in which
 the input stalled (two frames more than a second apart, as when a sender
 restarts); `keyframe_ms` keeps the interval from before the stall rather
-than measuring across it. A show that composites has
+than measuring across it. `audio_peak_db` is the first sound track's
+peak over the few frames the silence alarm measures, about once a second,
+and only while the show's alarms are on or its picture is asked for; -120
+is digital silence. A show that composites has
 its health and, when it has an input, the input's numbers; its outputs are
 read with `output.list` and `?show=<id>`.
 
