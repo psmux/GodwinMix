@@ -31,6 +31,7 @@ pub mod vitals;
 
 mod events;
 mod host;
+mod input_event;
 mod output;
 mod readers;
 mod show;
