@@ -64,6 +64,13 @@ pub trait Parser: Send {
     fn said(&self) -> Said {
         Said::default()
     }
+    /// Video tags handed on so far, and how many of them were one field of
+    /// a field coded picture: `h264parse` hands on each field as an access
+    /// unit of its own, and so does this, so a frame rate counts two of
+    /// those as one frame.
+    fn pictures(&self) -> (u64, u64) {
+        (0, 0)
+    }
 }
 
 /// What a stream is, from its PMT entry.
