@@ -121,10 +121,14 @@ impl Host {
     }
 
     /// The calls the station makes as `tool.call`: `direct.stats {ids?}`,
+    /// `direct.groups` (every multicast group's socket, read when asked),
     /// and `direct.thumbnail {show, width?}` and `channel.thumbnail {app,
     /// stream, width?}`, which the vitals answer.
     /// `None` for a name that is not the host's.
     pub fn call(&self, name: &str, arguments: &Value) -> Option<Value> {
+        if name == "direct.groups" {
+            return Some(json!({"groups": super::input::groups()}));
+        }
         if name == "direct.stats" {
             let ids: Option<Vec<String>> = arguments.get("ids").and_then(|v| serde_json::from_value(v.clone()).ok());
             return Some(self.stats(ids.as_deref()));

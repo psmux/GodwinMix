@@ -67,6 +67,19 @@ pub(super) fn leaky_queue() -> Result<gst::Element, String> {
     Ok(q)
 }
 
+/// Sound arrives in bursts as a multiplex interleaves it, many frames at a
+/// time: a branch of three buffers dropped a third of them, and an encoder
+/// that stamps its frames by counting samples then ran ahead of the picture.
+/// So a sound branch holds up to two seconds before it drops its oldest.
+fn audio_queue() -> Result<gst::Element, String> {
+    let q = make("queue")?;
+    q.set_property_from_str("leaky", "downstream");
+    q.set_property("max-size-buffers", 0u32);
+    q.set_property("max-size-bytes", 0u32);
+    q.set_property("max-size-time", 2_000_000_000u64);
+    Ok(q)
+}
+
 pub(super) fn tee() -> Result<gst::Element, String> {
     let t = make("tee")?;
     t.set_property("allow-not-linked", true);
@@ -111,14 +124,14 @@ fn decode(node: &NodeSpec) -> Result<Built, String> {
 fn aconvert(node: &NodeSpec) -> Result<Built, String> {
     let text = format!("audio/x-raw,rate={},channels={}", node.number("sample_rate"), node.number("channels"));
     let tee = tee()?;
-    let elements = vec![leaky_queue()?, make("audioconvert")?, make("audioresample")?, caps(&text)?, tee.clone()];
+    let elements = vec![audio_queue()?, make("audioconvert")?, make("audioresample")?, caps(&text)?, tee.clone()];
     Ok(Built { head: Some(elements[0].clone()), elements, tee: Some(tee), appsrc: None, appsink: None })
 }
 
 fn aencode(node: &NodeSpec) -> Result<Built, String> {
     let enc = element(node, "element")?;
     set_all(&enc, node.raw.get("props"));
-    let mut elements = vec![leaky_queue()?, make("audioconvert")?, make("audioresample")?, enc];
+    let mut elements = vec![audio_queue()?, make("audioconvert")?, make("audioresample")?, enc];
     if let Some(p) = node.text("parser") {
         elements.push(make(p)?);
     }
