@@ -103,17 +103,29 @@ invisible to every existing reader:
 
 ### 3. HLS for every player (`wip/headend-hls`)
 
-* An HLS output carries every sound track as an `EXT-X-MEDIA` rendition with
-  `NAME` and `LANGUAGE` from the track, the first one `DEFAULT=YES`.
-* MPEG-TS segments beside CMAF: `segments = "cmaf" | "ts" | "both"`. TS
-  segments come from the ingest plugin's own `tsmux`, cut on the same
-  keyframes as CMAF, so a player that wants TS (old set top boxes, the
-  Flussonic URL shape) and a player that wants LL-HLS get the same
-  segments in time.
-* Keyed and unkeyed: today every playlist needs the viewer key or a
-  token. `access = "keyed" | "open"`. Open is for an output behind a
-  gateway that checks its own signature (BTN36's nginx), and binds only
-  to loopback or a LAN address unless told otherwise.
+Done on the branch; `docs/reference/hls-output.md` has the surface.
+
+* An HLS output carries every sound track as its own rung and its own
+  `EXT-X-MEDIA` rendition, `NAME` and `LANGUAGE` from the PMT's ISO 639
+  code (`English` and `en` for `eng`; the code when it is unknown; `Track N`
+  when there is none), the first `DEFAULT=YES`. The packager reads every
+  track off the relay with `tracks=all`; the languages come from
+  `direct.input`'s `tracks`.
+* MPEG-TS segments beside CMAF: `segments = "cmaf" | "ts" | "both"`. Made
+  in Rust by a copy of the ingest plugin's `tsmux` (the plugin is a binary,
+  so it cannot be linked), cut where `cmafmux` cut the CMAF picture and
+  given its numbers. `main` carries the picture and the first sound in one
+  stream, each further sound is a TS rendition of its own. A segment is
+  named by its UTC start in ms, so a name is never reused, not across a
+  restart either. The station's `ts_master`, `ts_media` and `ts_segment`
+  hand the facade the same as data, without a viewer key, and
+  `headend::ts_bridge` answers the facade's `Segments` from them.
+* Keyed and open: `access = "keyed" | "open"`. Open answers players on
+  loopback and private networks with no key or token, for an output behind
+  a gateway that checks a signature of its own; anyone else still needs the
+  key unless `open_public = true`. CMAF, LL-HLS, DASH and TS alike.
+* Measured on one 720p output: TS beside CMAF costs about 0.1% of one core
+  and 9 MiB (`docs/explanation/hls-output.md`).
 
 ### 4. Flussonic compatibility (`wip/headend-flussonic`)
 

@@ -39,13 +39,13 @@ pub fn router(door: PackagerDoor) -> Router {
     Router::new().route(MASTER, get(master)).route(MEDIA, get(media)).route(SEGMENT, get(segment)).with_state(door)
 }
 
-fn find(door: &PackagerDoor, headers: &HeaderMap, ask: &Ask) -> Result<Arc<Stream>, Response> {
+fn find(door: &PackagerDoor, headers: &HeaderMap, ask: &Ask) -> Result<Arc<Stream>, Box<Response>> {
     if !door.station(headers) {
-        return Err(super::serve::not_the_station());
+        return Err(Box::new(super::serve::not_the_station()));
     }
     let show = headers.get(SHOW_HEADER).and_then(|v| v.to_str().ok()).unwrap_or_default();
     door.outputs.stream(show, &ask.output).ok_or_else(|| {
-        refuse(StatusCode::NOT_FOUND, format!("show {show} has no HLS output `{}` in the packager now", ask.output), json!({ "show": show }))
+        Box::new(refuse(StatusCode::NOT_FOUND, format!("show {show} has no HLS output `{}` in the packager now", ask.output), json!({ "show": show })))
     })
 }
 
@@ -56,21 +56,21 @@ fn not_yet(what: &str) -> Response {
 async fn master(State(door): State<PackagerDoor>, headers: HeaderMap, Query(ask): Query<Ask>) -> Response {
     match find(&door, &headers, &ask) {
         Ok(s) => s.ts_master().map_or_else(|| not_yet("The first MPEG-TS segment"), |m| Json(m).into_response()),
-        Err(r) => r,
+        Err(r) => *r,
     }
 }
 
 async fn media(State(door): State<PackagerDoor>, headers: HeaderMap, Query(ask): Query<Ask>) -> Response {
     match find(&door, &headers, &ask) {
         Ok(s) => s.ts_media(&ask.rendition).map_or_else(|| not_yet(&format!("MPEG-TS rendition `{}`", ask.rendition)), |m| Json(m).into_response()),
-        Err(r) => r,
+        Err(r) => *r,
     }
 }
 
 async fn segment(State(door): State<PackagerDoor>, headers: HeaderMap, Query(ask): Query<Ask>) -> Response {
     let stream = match find(&door, &headers, &ask) {
         Ok(s) => s,
-        Err(r) => return r,
+        Err(r) => return *r,
     };
     let Some(at) = ask.at.as_deref().and_then(|a| serde_json::from_str::<At>(a).ok()) else {
         return refuse(StatusCode::BAD_REQUEST, "at must be a ts::At as JSON".into(), json!({}));

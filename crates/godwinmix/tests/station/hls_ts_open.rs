@@ -64,8 +64,17 @@ async fn an_open_output_serves_cmaf_and_ts_without_a_key_and_a_keyed_one_with_it
     assert_eq!(status, 200, "{master}");
     assert!(master.contains("avc1.") && master.contains("mp4a.40") && master.contains("TYPE=AUDIO"), "{master}");
     assert!(master.contains("main/ts.m3u8?show=feed"), "{master}");
-    let (status, media) = text(&st, "/hls/open/main/ts.m3u8?show=feed").await;
-    assert_eq!(status, 200, "{media}");
+    // The output is live with one whole CMAF segment; wait for two TS ones.
+    let mut media = String::new();
+    for _ in 0..40 {
+        let (status, m) = text(&st, "/hls/open/main/ts.m3u8?show=feed").await;
+        assert_eq!(status, 200, "{m}");
+        media = m;
+        if uris(&media).len() >= 2 {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(500)).await;
+    }
     assert!(media.contains("#EXT-X-TARGETDURATION:") && media.contains("#EXT-X-PROGRAM-DATE-TIME:"), "{media}");
     let listed = uris(&media);
     assert!(listed.len() >= 2, "two whole segments: {media}");
