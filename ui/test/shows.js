@@ -23,6 +23,8 @@ async function row(stub) {
 
 export async function showTests(test, eq, ok) {
   await tabTests(test, eq, ok);
+  const { switchTests } = await import("./shows-switch.js");
+  await switchTests(test, eq, ok, { row, key, until, wait });
   await actionTests(test, eq, ok);
   await modelTests(test, eq, ok);
   await viewTests(test, eq, ok);
@@ -73,10 +75,6 @@ async function actionTests(test, eq, ok) {
   const stub = showStub();
   const node = await row(stub);
   const tab = (id) => node.querySelector(`[data-show="${id}"]`);
-
-  tab("kids").click();
-  await until(() => went.length);
-  test("a click on another show loads the page on that show", () => ok(/[?&]show=kids\b/.test(went[0] || ""), went[0]));
 
   key(tab("main"), "F2");
   await until(() => node.querySelector(".showtab-input"));

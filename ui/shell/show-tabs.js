@@ -1,11 +1,18 @@
 // The show tabs: drawn here, on every page; whatever is done to one is
 // show-actions.js, fetched on first use. No show.* on the core, no row.
 
-import { el } from "./dom.js";
+import { el, IS_MAC } from "./dom.js";
 
 let acts = null;
 export const actions = () => (acts ||= import("./show-actions.js"));
 const WORD = { starting: "starting", stopped: "stopped", failed: "failed" };
+
+/** Tab keys as a step: Ctrl+Tab, Ctrl+PageDown, Cmd+Shift+] on a Mac. */
+export function stepOf(e, mac = IS_MAC) {
+  if (e.altKey) return 0;
+  const k = e.ctrlKey && !e.metaKey ? (e.key === "Tab" ? (e.shiftKey ? -1 : 1) : e.shiftKey ? 0 : { PageDown: 1, PageUp: -1 }[e.key]) : mac && e.metaKey && e.shiftKey && { BracketRight: 1, BracketLeft: -1 }[e.code];
+  return k || 0;
+}
 
 export function showTabs(client) {
   const list = el("div.showtabs", { role: "tablist", "aria-label": "Shows" });
@@ -23,7 +30,12 @@ export function showTabs(client) {
   }, (e) => e && e.code === -32601 && stop());
   const held = client.listen ? client.listen("show.*") : () => {};
   const offs = [client.on("open", view.read), client.on("event", (e) => /^show\./.test(e.name) && view.read())];
-  const stop = () => { held(); offs.forEach((f) => f()); row.remove(); };
+  const onKey = (e) => {
+    const by = stepOf(e);
+    if (by && view.shows.length > 1 && row.isConnected) e.preventDefault(), actions().then((m) => m.step(view, by));
+  };
+  window.addEventListener("keydown", onKey, true);
+  const stop = () => { held(); offs.forEach((f) => f()); window.removeEventListener("keydown", onKey, true); row.remove(); };
   for (const type of ["click", "dblclick", "keydown", "contextmenu"]) {
     row.addEventListener(type, (e) => {
       // Not the page's F2 or Delete, which act on scenes.
@@ -36,7 +48,11 @@ export function showTabs(client) {
 }
 
 export function draw(view) {
-  const { shows, current } = view;
+  const { shows } = view;
+  // A switch asked for shows as made; focus stays on its show.
+  const current = view.switching || view.current;
+  const f = document.activeElement;
+  const keep = f && f.matches && f.matches(".showtab") && view.list.contains(f) ? f.dataset.show : null;
   view.row.hidden = !shows.length;
   view.row.classList.toggle("one", shows.length === 1);
   view.list.replaceChildren(...shows.map((s) => {
@@ -48,4 +64,5 @@ export function draw(view) {
       WORD[s.state] ? el(`span.showtab-state.${s.state}`, { text: WORD[s.state] }) : null,
     ]);
   }));
+  if (keep) view.list.querySelector(`[data-show="${CSS.escape(keep)}"]`)?.focus();
 }

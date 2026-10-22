@@ -396,6 +396,7 @@ const ASSETS: &[(&str, &str)] = &[
     ("shell/show-actions.js", include_str!("../../../ui/shell/show-actions.js")),
     ("shell/show-file.js", include_str!("../../../ui/shell/show-file.js")),
     ("shell/show-remove.js", include_str!("../../../ui/shell/show-remove.js")),
+    ("shell/show-rename.js", include_str!("../../../ui/shell/show-rename.js")),
     ("shell/shows.css", include_str!("../../../ui/shell/shows.css")),
     ("shell/settings-dialog.js", include_str!("../../../ui/shell/settings-dialog.js")),
     ("shell/shell.js", include_str!("../../../ui/shell/shell.js")),
@@ -526,6 +527,7 @@ const DEV_ASSETS: &[(&str, &str)] = &[
     // Show tabs and the routing view against a stub of the wave 3 contract,
     // as tests and as a page to look at: /test/shows.html?scene=routing.
     ("test/shows.js", include_str!("../../../ui/test/shows.js")),
+    ("test/shows-switch.js", include_str!("../../../ui/test/shows-switch.js")),
     ("test/shows-stub.js", include_str!("../../../ui/test/shows-stub.js")),
     ("test/shows-preview.js", include_str!("../../../ui/test/shows-preview.js")),
     ("test/shows.html", include_str!("../../../ui/test/shows.html")),
