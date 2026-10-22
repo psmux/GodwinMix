@@ -47,7 +47,9 @@ pub fn scale(node: &NodeSpec) -> Result<Built, String> {
     if scaler.has_property("add-borders") {
         scaler.set_property("add-borders", fit == "pad");
     }
-    set_all(&scaler, Some(&serde_json::json!({"border-color": node.number("border")})).filter(|_| scaler.has_property("border-color")));
+    if scaler.has_property("border-color") {
+        set_all(&scaler, Some(&serde_json::json!({"border-color": node.number("border")})));
+    }
     elements.push(scaler);
     let memory = if cuda { "(memory:CUDAMemory)" } else { "" };
     let framerate = if rate { format!(",framerate={num}/{den}") } else { String::new() };
