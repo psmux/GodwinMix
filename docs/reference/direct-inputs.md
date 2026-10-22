@@ -107,8 +107,12 @@ An H.264 keyframe is an IDR, or an I slice behind a recovery point SEI,
 which is how a broadcast encoder that never sends an IDR starts its GOPs;
 HEVC's are IDR, CRA and BLA pictures. Both are what `h264parse` and
 `h265parse` mark. A field coded H.264 stream is one tag per field, as
-`h264parse` frames it, so its `fps` reads the field rate, 59.94 for 1080i
-or 480i at 29.97 frames.
+`h264parse` frames it, so a decoder is handed what parsebin handed it. Its
+`fps` is still frames: the input reads `field_pic_flag` from each picture's
+first slice and counts two fields as one frame, so 480i or 1080i reads
+29.97, not 59.94. The video's entry in `tracks`, and the `video` object of
+`direct.input`, say `field_coded: true`, and their `fps` is frames too. A
+rendition planned on such a feed keeps 29.97.
 
 `params.engine = "gstreamer"` takes the GStreamer input instead: `udpsrc`,
 the udp plugin's program filter and `parsebin`, one socket per show.

@@ -129,6 +129,9 @@ fn input_event(host: &Host, show: &Show) -> (Value, Value) {
             v.insert(k.into(), desc[k].clone());
         }
     }
+    if let Some(video) = v.get_mut("video").filter(|_| pmt.iter().any(|t| t.kind == "video" && t.field_coded)) {
+        super::stats::fields_to_frames(video);
+    }
     let tracks = super::stats::tracks(&desc["tracks"], &pmt);
     if tracks.as_array().is_some_and(|t| !t.is_empty()) {
         v.insert("tracks".into(), tracks.clone());

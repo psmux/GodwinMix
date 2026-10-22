@@ -47,6 +47,9 @@ pub struct TrackInfo {
     pub pid: Option<u16>,
     /// ISO 639 code from the PMT's language descriptor: `eng`, `spa`.
     pub lang: Option<String>,
+    /// Video coded as fields, each field a tag of its own, as `h264parse`
+    /// frames it. The input's `fps` is then frames, two fields to one.
+    pub field_coded: bool,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
