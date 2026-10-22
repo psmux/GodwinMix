@@ -16,7 +16,10 @@ pub enum Outcome {
     /// Read from the plan's nodes. `video` and `audio` name the node each
     /// track comes from: an encode, or `copy:<stream>:<track>` for the
     /// stream's own.
-    Transcode { plan: DestinationPlan, video: Option<String>, audio: Option<String> },
+    ///
+    /// `tracks` names the node of each further sound track, track 1 first,
+    /// for a request that converts every track.
+    Transcode { plan: DestinationPlan, video: Option<String>, audio: Option<String>, tracks: Vec<String> },
     Refused(DestinationRefusal),
 }
 
@@ -32,19 +35,22 @@ impl Outcome {
 /// The outcome of a request the plan serves.
 pub fn describe(plan: &Plan, id: &str, stream: &str, info: &StreamInfo) -> Outcome {
     let Some(mux) = plan.output(id) else { return Outcome::Waiting };
-    let (mut video, mut audio) = (None, None);
+    let (mut video, mut audio, mut tracks) = (None, None, Vec::new());
     for input in &mux.inputs {
         match plan.node(input).map(|n| &n.kind) {
             Some(NodeKind::Copy { track: Track::Video, .. } | NodeKind::Encode { .. }) => video = Some(input.clone()),
-            Some(NodeKind::Copy { track: Track::Audio, .. } | NodeKind::AudioEncode { .. }) => audio = Some(input.clone()),
+            Some(NodeKind::Copy { track: Track::Audio, index: 0, .. } | NodeKind::AudioEncode { index: 0, .. }) => audio = Some(input.clone()),
+            Some(NodeKind::Copy { track: Track::Audio, index, .. } | NodeKind::AudioEncode { index, .. }) => tracks.push((*index, input.clone())),
             _ => {}
         }
     }
+    tracks.sort();
+    let tracks: Vec<String> = tracks.into_iter().map(|(_, id)| id).collect();
     let copied = |node: &Option<String>, has: bool| match node {
         Some(n) => n.starts_with("copy:"),
         None => !has,
     };
-    let all_copy = copied(&video, info.video.is_some()) && copied(&audio, info.audio.is_some());
+    let all_copy = copied(&video, info.video.is_some()) && copied(&audio, info.audio.is_some()) && tracks.is_empty();
     let mut chain: Vec<String> = plan
         .chain(id)
         .iter()
@@ -81,5 +87,5 @@ pub fn describe(plan: &Plan, id: &str, stream: &str, info: &StreamInfo) -> Outco
     if all_copy {
         return Outcome::Copy(view);
     }
-    Outcome::Transcode { plan: view, video, audio }
+    Outcome::Transcode { plan: view, video, audio, tracks }
 }

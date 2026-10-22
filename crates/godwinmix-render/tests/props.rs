@@ -58,7 +58,7 @@ fn no_two_encode_nodes_do_the_same_work() {
         }
         let mut audio = HashSet::new();
         for node in &p.nodes {
-            if let NodeKind::AudioEncode { source, shape } = &node.kind {
+            if let NodeKind::AudioEncode { source, shape, .. } = &node.kind {
                 assert!(audio.insert((source.clone(), *shape)), "{} twice", node.id);
             }
         }
@@ -70,7 +70,7 @@ fn no_source_is_decoded_twice() {
     each_random_plan(|p, _| {
         let mut seen = HashSet::new();
         for node in &p.nodes {
-            if let NodeKind::Decode { source, track } = &node.kind {
+            if let NodeKind::Decode { source, track, .. } = &node.kind {
                 assert!(seen.insert((source.clone(), *track)), "{} twice", node.id);
             }
         }

@@ -4,13 +4,13 @@
 
 use std::collections::HashMap;
 
-use godwinmix_protocol::rendition::{Cost, EncoderSlot, VideoShape};
+use godwinmix_protocol::rendition::{AudioShape, Cost, Deinterlace, EncoderSlot, VideoShape};
 
 use crate::choose::{choose, hold, Used};
 use crate::container::video_slug;
 use crate::error::{NoEncoder, PlanError, Skip};
 use crate::graph::{Node, NodeKind, Track};
-use crate::ids::{encode_id, scale_id, track_slug};
+use crate::ids::{encode_id, scale_id, track_slug, Look};
 use crate::model::{device_of, AudioWork, CostModel, CPU};
 use crate::nearest::nearest;
 use crate::plan::Resolved;
@@ -101,16 +101,55 @@ impl<'m> Builder<'m> {
                 }
                 _ => Cost::default(),
             };
-            (NodeKind::Decode { source, track }, cost)
+            (
+                NodeKind::Decode {
+                    source,
+                    track,
+                    index: 0,
+                },
+                cost,
+            )
         })
     }
 
     pub fn copied(&mut self, r: &Resolved, track: Track) -> String {
+        self.copied_track(r, track, 0)
+    }
+
+    /// `copy:<source>:audio2` for sound track 2; `copy:<source>:audio` for
+    /// the first, as it always was.
+    pub fn copied_track(&mut self, r: &Resolved, track: Track, index: u8) -> String {
         let src = self.source(r);
         let source = r.source.to_string();
-        let id = format!("copy:{source}:{}", track_slug(track));
+        let id = format!("copy:{source}:{}{}", track_slug(track), nth(index));
         self.cpu(id, r.id(), vec![src], || {
-            (NodeKind::Copy { source, track }, Cost::default())
+            (
+                NodeKind::Copy {
+                    source,
+                    track,
+                    index,
+                },
+                Cost::default(),
+            )
+        })
+    }
+
+    /// The one decoder of a further sound track, `decode:<source>:audio2`.
+    pub fn decoded_track(&mut self, r: &Resolved, index: u8, shape: &AudioShape) -> String {
+        if index == 0 {
+            return self.decoded(r, Track::Audio);
+        }
+        let src = self.source(r);
+        if !r.info.encoded {
+            return src;
+        }
+        let source = r.source.to_string();
+        let model = self.model;
+        let shape = *shape;
+        self.cpu(format!("decode:{source}:audio{index}"), r.id(), vec![src], || {
+            let cost = model.audio_cost(&shape, AudioWork::Decode).unwrap_or_default();
+            let track = Track::Audio;
+            (NodeKind::Decode { source, track, index }, cost)
         })
     }
 
@@ -122,10 +161,17 @@ impl<'m> Builder<'m> {
         src: &VideoShape,
     ) -> Result<String, PlanError> {
         let mut upstream = self.decoded(r, Track::Video);
-        if (target.width, target.height, target.fps) != (src.width, src.height, src.fps) {
+        let want = r.request.video.clone().unwrap_or_default();
+        let look = Look {
+            fit: want.fit.unwrap_or_default(),
+            pad_color: want.pad_color.clone().filter(|c| !is_black(c)),
+            deinterlace: want.deinterlace.unwrap_or_default(),
+        };
+        let resized = (target.width, target.height, target.fps) != (src.width, src.height, src.fps);
+        if resized || look.deinterlace != Deinterlace::Off {
             let source = r.source.to_string();
             let (width, height, fps) = (target.width, target.height, target.fps);
-            let id = scale_id(&source, target);
+            let id = scale_id(&source, target, &look);
             let model = self.model;
             upstream = self.cpu(id, r.id(), vec![upstream], || {
                 (
@@ -134,12 +180,16 @@ impl<'m> Builder<'m> {
                         width,
                         height,
                         fps,
+                        fit: look.fit,
+                        pad_color: look.pad_color,
+                        deinterlace: look.deinterlace,
                     },
                     model.scale_cost(src, target),
                 )
             });
         }
-        let id = encode_id(r.source, target);
+        let (preset, bframes) = (want.preset.clone(), want.bframes);
+        let id = encode_id(r.source, target, preset.as_deref(), bframes);
         if self.share(&id, r.id()) {
             return Ok(id);
         }
@@ -153,6 +203,8 @@ impl<'m> Builder<'m> {
             source: r.source.into(),
             shape: *target,
             encoder: choice.encoder,
+            preset,
+            bframes,
         };
         let reason = Some(choice.reason);
         let serves = vec![r.id().to_string()];
@@ -184,4 +236,18 @@ impl<'m> Builder<'m> {
             nearest: found,
         }))
     }
+}
+
+/// `""` for the first sound track, its number for the others.
+fn nth(index: u8) -> String {
+    match index {
+        0 => String::new(),
+        n => n.to_string(),
+    }
+}
+
+/// Black bars are what a pad has always made, so black is no colour of its own.
+fn is_black(color: &str) -> bool {
+    let hex = color.trim_start_matches('#').trim_start_matches("0x");
+    !hex.is_empty() && hex.chars().all(|c| c == '0')
 }

@@ -24,6 +24,7 @@
 mod admit;
 mod answers;
 mod governor;
+mod gpu;
 mod machine;
 mod model;
 mod outcome;
@@ -33,6 +34,7 @@ mod refuse;
 mod shed;
 mod source;
 mod spec;
+mod spec_video;
 mod state;
 mod watch;
 
@@ -50,6 +52,7 @@ use serde_json::{json, Value};
 pub use machine::Machine;
 pub use shed::RETRY;
 pub use price::assumed_input;
+pub use source::audio_codec;
 use outcome::Outcome;
 use state::State;
 
@@ -111,7 +114,7 @@ impl Transcode {
         match state.outcome(channel, &d.id) {
             Some(Outcome::Copy(_)) => {}
             Some(Outcome::Refused(_)) => return None,
-            Some(Outcome::Transcode { plan, video, audio }) => {
+            Some(Outcome::Transcode { plan, video, audio, tracks }) => {
                 row["stream"] = json!(plan.stream);
                 row["rendition"] = json!(true);
                 if let Some(v) = video {
@@ -119,6 +122,9 @@ impl Transcode {
                 }
                 if let Some(a) = audio {
                     row["audio"] = json!(a);
+                }
+                if !tracks.is_empty() {
+                    row["audio_tracks"] = json!(tracks);
                 }
             }
             // Its stream is not live yet: the listener waits rather than

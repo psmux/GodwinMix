@@ -135,6 +135,7 @@ pub(super) fn programme_info(cfg: &crate::config::Config) -> StreamInfo {
             bitrate_kbps: 0,
         }),
         encoded: false,
+        ..StreamInfo::default()
     }
 }
 

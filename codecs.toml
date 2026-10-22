@@ -469,6 +469,36 @@ verified = []
 comment = "Decode only, from gst-libav, and the last resort for HEVC."
 
 # ---------------------------------------------------------------------------
+# MPEG-2, decode only: broadcast feeds a headend converts
+# ---------------------------------------------------------------------------
+
+[[video]]
+id = "mpeg2-nvidia"
+codec = "mpeg2"
+accel = "nvidia"
+rank = 240
+decoder = "nvmpeg2videodec"
+download = "cudadownload"
+requires = []
+license = "LGPL-2.1-or-later"
+container = ["mpegts"]
+verified = []
+comment = "NVDEC. No parser: the listener frames MPEG-2 a picture at a time itself and gives the decoder its caps. MPEG-2 keeps at most two reference pictures, so the decoder needs few surfaces of its own."
+decode_properties = { "num-output-surfaces" = 2 }
+
+[[video]]
+id = "mpeg2-software-decode"
+codec = "mpeg2"
+accel = "software"
+rank = 30
+decoder = "avdec_mpeg2video"
+requires = []
+license = "LGPL-2.1-or-later"
+container = ["mpegts"]
+verified = []
+comment = "Decode only, from gst-libav: MPEG-2 where there is no hardware decoder."
+
+# ---------------------------------------------------------------------------
 # Audio
 # ---------------------------------------------------------------------------
 
