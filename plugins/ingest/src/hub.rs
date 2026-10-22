@@ -24,6 +24,7 @@ mod ends;
 mod meter;
 mod queue;
 mod takeover;
+mod tracks;
 
 use std::collections::HashMap;
 use std::sync::atomic::AtomicU64;
@@ -127,9 +128,20 @@ impl Hub {
     /// The restreamer's door in. It takes the reader as an iterator of
     /// `MediaTag`, which ends when the publisher leaves.
     pub fn subscribe(&self, app: &str, stream: &str) -> Reader {
+        self.subscribe_with(app, stream, false)
+    }
+
+    /// Read every track of a stream: the sound tracks after the first as
+    /// well (`MediaTag::track` 1, 2, 3), for the transcoder and the HLS
+    /// packager. Every other reader is given track 0 alone.
+    pub fn subscribe_all(&self, app: &str, stream: &str) -> Reader {
+        self.subscribe_with(app, stream, true)
+    }
+
+    fn subscribe_with(&self, app: &str, stream: &str, all: bool) -> Reader {
         let mut slots = lock(&self.inner.slots);
         let slot = Hub::slot(&mut slots, app, stream);
-        let shared = Arc::new(queue::Shared::new());
+        let shared = Arc::new(queue::Shared::with_tracks(all));
         lock(&slot.state).readers.push(shared.clone());
         drop(slots);
         Reader { inner: self.inner.clone(), slot, shared }
@@ -172,6 +184,7 @@ fn describe(slot: &Slot) -> Option<Value> {
         "protocol": session.via,
         "video": video,
         "audio": audio,
+        "tracks": session.meter.tracks(),
         "measured": session.meter.measured(),
         "readers": state.readers.len(),
         "dropped_gops": dropped,

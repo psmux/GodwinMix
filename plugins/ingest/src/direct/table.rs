@@ -64,7 +64,7 @@ fn row(r: &Value) -> Result<Row, String> {
         Ok(input) => (input, None),
         Err(e) => {
             let uri = raw.get("uri").and_then(Value::as_str).unwrap_or_default();
-            (InputSpec { uri: uri.to_string(), program: None, params: Value::Null, backup: None }, Some(e.message))
+            (InputSpec { params: Value::Null, ..InputSpec::new(uri) }, Some(e.message))
         }
     };
     let app = app_of(&id);
