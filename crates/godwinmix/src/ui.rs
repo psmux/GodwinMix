@@ -236,6 +236,29 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/routing/model.js", include_str!("../../../ui/panels/routing/model.js")),
     ("panels/routing/routing.css", include_str!("../../../ui/panels/routing/routing.css")),
     ("panels/routing/view.js", include_str!("../../../ui/panels/routing/view.js")),
+    ("panels/headend/act.js", include_str!("../../../ui/panels/headend/act.js")),
+    ("panels/headend/band.js", include_str!("../../../ui/panels/headend/band.js")),
+    ("panels/headend/charts.js", include_str!("../../../ui/panels/headend/charts.js")),
+    ("panels/headend/data.js", include_str!("../../../ui/panels/headend/data.js")),
+    ("panels/headend/drawer.js", include_str!("../../../ui/panels/headend/drawer.js")),
+    ("panels/headend/gpu.js", include_str!("../../../ui/panels/headend/gpu.js")),
+    ("panels/headend/grid.js", include_str!("../../../ui/panels/headend/grid.js")),
+    ("panels/headend/groups.js", include_str!("../../../ui/panels/headend/groups.js")),
+    ("panels/headend/headend.css", include_str!("../../../ui/panels/headend/headend.css")),
+    ("panels/headend/machine.js", include_str!("../../../ui/panels/headend/machine.js")),
+    ("panels/headend/model.js", include_str!("../../../ui/panels/headend/model.js")),
+    ("panels/headend/parts.js", include_str!("../../../ui/panels/headend/parts.js")),
+    ("panels/headend/player.js", include_str!("../../../ui/panels/headend/player.js")),
+    ("panels/headend/sheet.js", include_str!("../../../ui/panels/headend/sheet.js")),
+    ("panels/headend/tiles.css", include_str!("../../../ui/panels/headend/tiles.css")),
+    ("panels/headend/tile.js", include_str!("../../../ui/panels/headend/tile.js")),
+    ("panels/headend/tools.js", include_str!("../../../ui/panels/headend/tools.js")),
+    ("panels/headend/totals.js", include_str!("../../../ui/panels/headend/totals.js")),
+    ("panels/headend/view.js", include_str!("../../../ui/panels/headend/view.js")),
+    // hls.js 1.6.15, light build, Apache-2.0 (ui/vendor/hls.js-LICENSE.txt): the
+    // headend drawer's player where a browser cannot play HLS itself, added
+    // by a <script> the first time a drawer opens a player.
+    ("vendor/hls.light.min.js", include_str!("../../../ui/vendor/hls.light.min.js")),
     ("panels/wall/act.js", include_str!("../../../ui/panels/wall/act.js")),
     ("panels/wall/bulk-parse.js", include_str!("../../../ui/panels/wall/bulk-parse.js")),
     ("panels/wall/bulk-table.js", include_str!("../../../ui/panels/wall/bulk-table.js")),
@@ -1250,6 +1273,11 @@ mod tests {
         reachable.extend(closure_of("panels/wall/view.js"));
         reachable.extend(closure_of("panels/wall/bulk.js"));
         reachable.extend(closure_of("panels/wall/detail.js"));
+        // View > Headend, or Headend view on the wall.
+        reachable.extend(closure_of("panels/headend/view.js"));
+        // Not imported: the headend player adds it with a <script>, when a
+        // browser that cannot play HLS opens a channel's drawer.
+        reachable.insert("vendor/hls.light.min.js");
         reachable.extend(closure_of("panels/outputs/record-start.js"));
         // The REC button in the header, or Outputs > Stop recording.
         reachable.extend(closure_of("panels/outputs/record-stop.js"));
@@ -1377,6 +1405,9 @@ mod tests {
             ("panels/routing/data.js", "View > Routing"),
             ("panels/routing/model.js", "View > Routing"),
             ("panels/wall/view.js", "View > Monitoring wall"),
+            ("panels/headend/view.js", "View > Headend"),
+            ("panels/headend/tile.js", "View > Headend"),
+            ("vendor/hls.light.min.js", "a channel's drawer in the headend view"),
             ("panels/wall/data.js", "View > Monitoring wall"),
             ("panels/wall/task.js", "View > Monitoring wall"),
             ("panels/wall/rows.js", "View > Monitoring wall"),

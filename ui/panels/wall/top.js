@@ -20,6 +20,7 @@ export function topBar(opts, act) {
   const node = el("header.wl-top", {}, [
     el("div.wl-titlebar", {}, [
       el("h2", { text: "Shows" }), summary, el("span.grow"),
+      el("button.btn.wl-headend", { type: "button", "data-top": "headend", text: "Headend view", title: "Every channel as a tile, with the GPU and the input groups" }),
       el("button.btn.primary.wl-addmany", { type: "button", "data-top": "add", text: "Add shows" }),
       el("button.btn.icon", { type: "button", "data-top": "close", text: "×", title: "Close the wall (Escape)", "aria-label": "Close the wall" }),
     ]),
