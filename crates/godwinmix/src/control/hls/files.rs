@@ -38,6 +38,9 @@ pub async fn file<D: Door>(State(door): State<D>, Path((output, rung, file)): Pa
         Ok(v) => v,
         Err(r) => return *r,
     };
+    if let Some(start_ms) = super::ts::parse(&file) {
+        return super::ts::segment(&stream, &viewer, &rung, start_ms);
+    }
     let (Some(track), Some(name)) = (stream.track(&rung), parse(&file)) else {
         let message = format!("{output} has no {rung}/{file}. Its playlists name every file there is.");
         return refuse(StatusCode::NOT_FOUND, message, json!({ "output": output, "rung": rung }));

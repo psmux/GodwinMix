@@ -59,7 +59,17 @@ impl TsCut {
         let min_ns = p.mux_durations().0;
         TsCut { stream, track, alone, mux: Muxer::default(), base, min_ns, hold_ms, queue: VecDeque::new(), open: None, last_len: 0 }
     }
+}
 
+impl Extend<Unit> for TsCut {
+    fn extend<I: IntoIterator<Item = Unit>>(&mut self, units: I) {
+        for u in units {
+            self.push(u);
+        }
+    }
+}
+
+impl TsCut {
     /// Take one frame or configuration, and mux whatever can be placed.
     pub fn push(&mut self, u: Unit) {
         self.queue.push_back(u);

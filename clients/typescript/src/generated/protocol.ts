@@ -1621,9 +1621,12 @@ export interface HistoryStep {
 
 /** An `hls://` output's params, as an `hls/output` takes them. */
 export interface HlsOutputParams {
+  access?: string | null;
   low_latency?: boolean | null;
+  open_public?: boolean | null;
   part_ms?: number | null;
   segment_ms?: number | null;
+  segments?: string | null;
   viewer_key?: string | null;
   window?: number | null;
 }
