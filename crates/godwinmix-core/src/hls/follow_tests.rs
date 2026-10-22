@@ -11,7 +11,7 @@ use crate::hls::HlsParams;
 const MS: u64 = 1_000_000;
 
 fn stream(segment_ms: u32) -> Arc<Stream> {
-    let p = HlsParams { segment_ms, part_ms: 0, window_s: 60 };
+    let p = HlsParams { segment_ms, part_ms: 0, window_s: 60, ..HlsParams::default() };
     Arc::new(Stream::new("watch", p, &"k".repeat(24)))
 }
 

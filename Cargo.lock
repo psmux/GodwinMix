@@ -1472,6 +1472,7 @@ dependencies = [
  "anyhow",
  "axum",
  "base64",
+ "bytes",
  "clap",
  "futures-util",
  "godwinmix-core",

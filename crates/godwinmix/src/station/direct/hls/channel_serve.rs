@@ -7,6 +7,7 @@
 //! |---|---|
 //! | `.../index.m3u8` | `/hls/<destination>/master.m3u8` |
 //! | `.../manifest.mpd` | `/hls/<destination>/manifest.mpd` |
+//! | `.../master-ts.m3u8` | `/hls/<destination>/master-ts.m3u8` |
 //! | `.../<rung>/index.m3u8` | `/hls/<destination>/<rung>/index.m3u8` |
 //! | `.../<rung>/<file>` | `/hls/<destination>/<rung>/<file>` |
 
@@ -26,14 +27,18 @@ pub fn router(st: Arc<Station>) -> Router {
     Router::new()
         .route("/hls/channel/{channel}/{destination}/index.m3u8", get(top))
         .route("/hls/channel/{channel}/{destination}/manifest.mpd", get(top))
+        .route("/hls/channel/{channel}/{destination}/master-ts.m3u8", get(top))
         .route("/hls/channel/{channel}/{destination}/{rung}/index.m3u8", get(rung))
         .route("/hls/channel/{channel}/{destination}/{rung}/{file}", get(rung))
         .with_state(st)
 }
 
 async fn top(State(st): State<Arc<Station>>, Path((channel, destination)): Path<(String, String)>, req: Request) -> Response {
-    let file = if req.uri().path().ends_with(".mpd") { "manifest.mpd" } else { "master.m3u8" };
-    answer(st, &channel, &destination, file, req).await
+    let file = match req.uri().path().rsplit('/').next() {
+        Some(f @ ("manifest.mpd" | "master-ts.m3u8")) => f.to_string(),
+        _ => "master.m3u8".to_string(),
+    };
+    answer(st, &channel, &destination, &file, req).await
 }
 
 async fn rung(State(st): State<Arc<Station>>, Path(parts): Path<Vec<(String, String)>>, req: Request) -> Response {

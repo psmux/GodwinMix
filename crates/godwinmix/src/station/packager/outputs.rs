@@ -37,7 +37,7 @@ impl Outputs {
                 _ => Arc::new(Stream::new(&want.output, want.params(), &want.viewer_key)),
             };
             let sound = refusal(&want.show, &want.output);
-            let packager = Packager::start(stream, want.source.clone(), want.why_not.clone(), sound);
+            let packager = Packager::start(stream, want.source.clone(), want.why_not.clone(), want.sounds.clone(), sound);
             running.insert(key, Running { want, packager });
         }
     }

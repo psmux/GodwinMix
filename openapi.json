@@ -6672,8 +6672,22 @@
         "additionalProperties": false,
         "description": "An `hls://` output's params, as an `hls/output` takes them.",
         "properties": {
+          "access": {
+            "description": "`keyed` (the default) or `open`: whether a player needs the viewer key.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "low_latency": {
             "description": "true: parts of 333 ms.",
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "open_public": {
+            "description": "With `access = \"open\"`, answer players outside loopback and the\nprivate networks too.",
             "type": [
               "boolean",
               "null"
@@ -6694,6 +6708,13 @@
             "minimum": 0,
             "type": [
               "integer",
+              "null"
+            ]
+          },
+          "segments": {
+            "description": "`cmaf` (the default), `ts` or `both`: which segments are made.",
+            "type": [
+              "string",
               "null"
             ]
           },

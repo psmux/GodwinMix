@@ -641,10 +641,12 @@ pub const WELL_KNOWN: &[(&str, &str, &str)] = &[
     ("POST", "/whip/{channel}/{stream}", "WHIP ingest for a channel that has WHIP on. The body is the SDP offer, the channel's key is the bearer token, and the answer is 201 with the SDP answer and the session's Location."),
     ("DELETE", "/whip/{channel}/{stream}/{session}", "ends a WHIP session, as the WHIP client does when it stops publishing"),
     ("PATCH", "/whip/{channel}/{stream}/{session}", "405: every candidate is in the answer, and none are taken later"),
-    ("GET", "/hls/{output}/master.m3u8", "an hls/output's multivariant playlist. Readable with the output's viewer key as ?key= (output.list playback.master_url_path) or a token with read"),
+    ("GET", "/hls/{output}/master.m3u8", "an hls/output's multivariant playlist. Readable with the output's viewer key as ?key= (output.list playback.master_url_path) or a token with read, or with nothing from loopback and private networks when params.access is open"),
     ("GET", "/hls/{output}/manifest.mpd", "the same segments as a DASH MPD, dynamic, with a SegmentTimeline per representation; the same keys as the playlists"),
     ("GET", "/hls/{output}/{rung}/index.m3u8", "one rung's media playlist; _HLS_msn and _HLS_part hold it until that part exists (LL-HLS blocking reload)"),
-    ("GET", "/hls/{output}/{rung}/{file}", "init.mp4, a CMAF segment {n}.m4s or an LL-HLS part {n}.{p}.m4s, from memory"),
+    ("GET", "/hls/{output}/{rung}/{file}", "init.mp4, a CMAF segment {n}.m4s or an LL-HLS part {n}.{p}.m4s, or an MPEG-TS segment {start_ms}.ts, from memory"),
+    ("GET", "/hls/{output}/master-ts.m3u8", "an hls/output's MPEG-TS multivariant playlist, with params.segments ts or both: main carries the picture and the first sound, each further sound is its own rendition. The same keys as master.m3u8"),
+    ("GET", "/hls/{output}/{rung}/ts.m3u8", "an MPEG-TS media playlist, main or audio<n>; segments named by their UTC start in ms"),
 ];
 
 /// Build the whole document.

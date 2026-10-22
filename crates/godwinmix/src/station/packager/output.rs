@@ -18,6 +18,7 @@
 use super::board::Board;
 use super::feed::session;
 use super::flv;
+use super::tracks::Sound;
 use super::wire::Source;
 use godwinmix_core::hls::Stream;
 use godwinmix_protocol::destination::DestinationState as S;
@@ -48,7 +49,7 @@ pub enum End {
 
 impl Packager {
     /// Start one. With no source yet it runs nothing, waits, and says why.
-    pub fn start(stream: Arc<Stream>, source: Option<Source>, why_not: Option<String>, sound: impl Fn(bool, &str) -> String + Send + 'static) -> Packager {
+    pub fn start(stream: Arc<Stream>, source: Option<Source>, why_not: Option<String>, named: Vec<Sound>, sound: impl Fn(bool, &str) -> String + Send + 'static) -> Packager {
         let (stop, board) = (Arc::new(AtomicBool::new(false)), Arc::new(Board::default()));
         let Some(src) = source else {
             board.set(S::Waiting, why_not);
@@ -56,7 +57,7 @@ impl Packager {
         };
         let (st, b, s) = (stream.clone(), board.clone(), stop.clone());
         let name = format!("gmx-hls-{}", stream.id);
-        let ran = std::thread::Builder::new().name(name).spawn(move || run(&src, &st, &b, &s, &sound));
+        let ran = std::thread::Builder::new().name(name).spawn(move || run(&src, &st, &b, &s, &named, &sound));
         if let Err(e) = ran {
             board.set(S::Failed, Some(format!("no thread for the packager ({e}); remove the output and add it again")));
         }
@@ -74,7 +75,7 @@ impl Drop for Packager {
     }
 }
 
-fn run(src: &Source, stream: &Arc<Stream>, board: &Board, stop: &AtomicBool, sound: &dyn Fn(bool, &str) -> String) {
+fn run(src: &Source, stream: &Arc<Stream>, board: &Board, stop: &AtomicBool, named: &[Sound], sound: &dyn Fn(bool, &str) -> String) {
     let mut ever = false;
     while !stop.load(Ordering::Relaxed) {
         if board.state() != S::Failed {
@@ -86,7 +87,7 @@ fn run(src: &Source, stream: &Arc<Stream>, board: &Board, stop: &AtomicBool, sou
                     board.reconnected();
                 }
                 ever = true;
-                session(reader, stream, board, stop, sound)
+                session(reader, stream, board, stop, named, sound)
             }
             Err(e) => End::Lost(format!("the relay at {} did not answer ({e})", src.relay)),
         };

@@ -52,12 +52,13 @@ impl Door for StationDoor {
     }
 }
 
-/// The routes, for the station's router. One handler serves all four: what
+/// The routes, for the station's router. One handler serves them all: what
 /// differs between them is the packager's to answer.
 pub fn router(st: Arc<Station>) -> Router {
     Router::new()
         .route("/hls/{output}/master.m3u8", get(any))
         .route("/hls/{output}/manifest.mpd", get(any))
+        .route("/hls/{output}/master-ts.m3u8", get(any))
         .route("/hls/{output}/{rung}/index.m3u8", get(any))
         .route("/hls/{output}/{rung}/{file}", get(any))
         .with_state(st)

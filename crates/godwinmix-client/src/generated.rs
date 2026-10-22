@@ -2967,15 +2967,25 @@ pub struct HistoryStep {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct HlsOutputParams {
+    /// `keyed` (the default) or `open`: whether a player needs the viewer key.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub access: Option<String>,
     /// true: parts of 333 ms.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub low_latency: Option<bool>,
+    /// With `access = "open"`, answer players outside loopback and the
+    /// private networks too.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub open_public: Option<bool>,
     /// LL-HLS part, 0 for none.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub part_ms: Option<u32>,
     /// 500 to 10000, default 2000.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub segment_ms: Option<u32>,
+    /// `cmaf` (the default), `ts` or `both`: which segments are made.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub segments: Option<String>,
     /// 16 characters or more.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub viewer_key: Option<String>,
