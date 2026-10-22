@@ -148,6 +148,7 @@ mod tests {
 
     fn tag(kind: TagKind, body: &[u8]) -> MediaTag {
         MediaTag {
+            track: 0,
             kind,
             timestamp_ms: 0,
             keyframe: false,

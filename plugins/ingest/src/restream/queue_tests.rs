@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 pub(crate) fn tag(kind: TagKind, ts: u32, keyframe: bool, header: bool, size: usize) -> MediaTag {
     MediaTag {
+        track: 0,
         kind,
         timestamp_ms: ts,
         keyframe,

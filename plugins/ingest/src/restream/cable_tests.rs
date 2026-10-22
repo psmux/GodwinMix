@@ -77,7 +77,7 @@ fn pipe(mut from: TcpStream, mut to: TcpStream, down: Arc<AtomicBool>) {
 }
 
 fn tag(kind: TagKind, ts: u32, keyframe: bool, header: bool, body: Vec<u8>) -> MediaTag {
-    MediaTag { kind, timestamp_ms: ts, keyframe, sequence_header: header, payload: Arc::from(body) }
+    MediaTag { track: 0, kind, timestamp_ms: ts, keyframe, sequence_header: header, payload: Arc::from(body) }
 }
 
 /// Headers, then a 2 MB/s picture: enough to fill the socket buffers on

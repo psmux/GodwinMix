@@ -162,7 +162,7 @@ fn make(kind: TagKind, timestamp_ms: u32, keyframe: bool, sequence_header: bool,
     let mut payload = Vec::with_capacity(head.len() + body.len());
     payload.extend_from_slice(head);
     payload.extend_from_slice(body);
-    MediaTag { kind, timestamp_ms, keyframe, sequence_header, payload: Arc::from(payload) }
+    MediaTag { track: 0, kind, timestamp_ms, keyframe, sequence_header, payload: Arc::from(payload) }
 }
 
 fn running_time(sample: &gst::Sample, buffer: &gst::BufferRef) -> Option<gst::ClockTime> {

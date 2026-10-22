@@ -10,7 +10,7 @@ fn tag(kind: TagKind, header: bool, size: usize) -> MediaTag {
     let mut body = vec![0u8; size.max(4)];
     body[0] = if kind == TagKind::Audio { 0xaf } else { 0x17 };
     body[1] = if header { 0 } else { 1 };
-    MediaTag { kind, timestamp_ms: 0, keyframe: kind == TagKind::Video, sequence_header: header, payload: Arc::from(body) }
+    MediaTag { track: 0, kind, timestamp_ms: 0, keyframe: kind == TagKind::Video, sequence_header: header, payload: Arc::from(body) }
 }
 
 fn audio(header: bool, size: usize) -> MediaTag {

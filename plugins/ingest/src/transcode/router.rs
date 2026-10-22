@@ -198,5 +198,5 @@ fn metadata(inner: &Inner, output: &Output, at: u32) -> MediaTag {
         (meta.audio_codec_id, meta.audio_bitrate_kbps, meta.audio_channels, meta.audio_sample_rate) = (None, None, None, None);
     }
     let payload = flv::metadata_body(&meta);
-    MediaTag { kind: TagKind::Script, timestamp_ms: at, keyframe: false, sequence_header: false, payload: payload.into() }
+    MediaTag { track: 0, kind: TagKind::Script, timestamp_ms: at, keyframe: false, sequence_header: false, payload: payload.into() }
 }

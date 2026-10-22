@@ -64,7 +64,7 @@ fn enhanced_sound(encoder: &str, parser: &str, cc: &[u8; 4]) -> Option<Vec<Media
         let ms = buffer.pts().map_or(0, |t| t.mseconds() as u32);
         let map = buffer.map_readable().unwrap();
         let payload = [&crate::exaudio::prefix(cc)[..], map.as_slice()].concat();
-        tags.push(MediaTag { kind: TagKind::Audio, timestamp_ms: ms, keyframe: false, sequence_header: false, payload: payload.into() });
+        tags.push(MediaTag { track: 0, kind: TagKind::Audio, timestamp_ms: ms, keyframe: false, sequence_header: false, payload: payload.into() });
     }
     let _ = p.set_state(gst::State::Null);
     Some(tags)

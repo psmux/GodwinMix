@@ -49,7 +49,7 @@ fn kick() -> (Kick, Arc<AtomicBool>) {
 
 fn tag(kind: TagKind, keyframe: bool) -> MediaTag {
     let payload: Arc<[u8]> = Arc::from(&[0x17u8, 1, 0, 0, 0, 0, 0, 0, 1][..]);
-    MediaTag { kind, timestamp_ms: 0, keyframe, sequence_header: false, payload }
+    MediaTag { track: 0, kind, timestamp_ms: 0, keyframe, sequence_header: false, payload }
 }
 
 #[test]
