@@ -1,6 +1,6 @@
 [package]
 name = "godwinmix-flussonic"
-description = "Flussonic compatibility for headend mode: its config language (lossless parse, typed view, write back), and later the import and the HTTP facade"
+description = "Flussonic compatibility for headend mode: its config language (lossless parse, typed view, write back), the import into direct shows, the URL and API shapes of its HTTP facade, and its log format"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,3 +9,8 @@ repository.workspace = true
 
 [dependencies]
 serde = { workspace = true, features = ["derive"] }
+# The import writes show.add_many's params, and the API answers in
+# Flussonic's JSON. Both already in the tree.
+serde_json = { workspace = true }
+# Basic auth on the API. Already in the tree.
+base64 = { workspace = true }

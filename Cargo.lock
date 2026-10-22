@@ -1476,6 +1476,7 @@ dependencies = [
  "clap",
  "futures-util",
  "godwinmix-core",
+ "godwinmix-flussonic",
  "godwinmix-govern",
  "godwinmix-host",
  "godwinmix-protocol",
@@ -1571,7 +1572,9 @@ dependencies = [
 name = "godwinmix-flussonic"
 version = "0.3.16"
 dependencies = [
+ "base64",
  "serde",
+ "serde_json",
 ]
 
 [[package]]
