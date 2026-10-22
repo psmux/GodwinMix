@@ -11,8 +11,10 @@ pub enum Feed {
     /// A converted pair from the renditions hub: the node its video comes
     /// from and the node its sound comes from. Both `None` while the plan
     /// has nothing for it yet (its stream is not live): it waits, and never
-    /// sends the stream as it is in the meantime.
-    Rendition { video: Option<String>, audio: Option<String> },
+    /// sends the stream as it is in the meantime. `tracks` names the node of
+    /// each further sound track, track 1 first, for a rendition that
+    /// converts every one; they go out as tracks 1, 2, 3 of the same pair.
+    Rendition { video: Option<String>, audio: Option<String>, tracks: Vec<String> },
 }
 
 /// One destination as the core asked for it.
@@ -36,8 +38,8 @@ impl Wanted {
     pub fn reads(&self) -> String {
         match &self.feed {
             Feed::Copy => self.stream.clone(),
-            Feed::Rendition { video: None, audio: None } => String::new(),
-            Feed::Rendition { video, audio } => crate::transcode::output_key(&self.stream, video.as_deref(), audio.as_deref()),
+            Feed::Rendition { video: None, audio: None, .. } => String::new(),
+            Feed::Rendition { video, audio, tracks } => crate::transcode::output_key_with(&self.stream, video.as_deref(), audio.as_deref(), tracks),
         }
     }
 }
@@ -61,6 +63,11 @@ pub fn wanted(params: &Value) -> Vec<Wanted> {
     out
 }
 
+/// A list of strings in a row, empty when it is not there.
+fn texts(v: &Value, k: &str) -> Vec<String> {
+    v.get(k).and_then(Value::as_array).into_iter().flatten().filter_map(Value::as_str).map(str::to_string).collect()
+}
+
 /// One destination row, read as a destination of `channel` reading `app`.
 /// `None` when it is switched off or is missing its id or its address. The
 /// direct host reads its shows' outputs with this, since each is a row of
@@ -76,7 +83,7 @@ pub fn destination(channel: &str, app: &str, d: &Value) -> Option<Wanted> {
         platform: text(d, "platform"),
         url: text(d, "url"),
         stream: some(d, "stream").unwrap_or_else(|| "*".into()),
-        feed: if rendition { Feed::Rendition { video: some(d, "video"), audio: some(d, "audio") } } else { Feed::Copy },
+        feed: if rendition { Feed::Rendition { video: some(d, "video"), audio: some(d, "audio"), tracks: texts(d, "audio_tracks") } } else { Feed::Copy },
     };
     let on = d.get("enabled").and_then(Value::as_bool).unwrap_or(true);
     (on && !w.channel.is_empty() && !w.id.is_empty() && !w.url.is_empty()).then_some(w)

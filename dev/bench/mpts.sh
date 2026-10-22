@@ -66,7 +66,7 @@ for engine in $ENGINES; do
   python3 -c "import json,sys
 g,p,n,iface,e=sys.argv[1],int(sys.argv[2]),int(sys.argv[3]),sys.argv[4],sys.argv[5]
 rows=[{'id':'p%d'%i,'input':{'uri':'udp://@%s:%d'%(g,p),'program':i,'params':{'interface':iface,'engine':e}},
-'outputs':[{'id':'out','uri':'udp://127.0.0.1:%d'%(p+i)}],'monitor':{'alarms':False}} for i in range(1,n+1)]
+'outputs':[{'id':'out','url':'udp://127.0.0.1:%d'%(p+i)}],'monitor':{'alarms':False}} for i in range(1,n+1)]
 print(json.dumps({'direct':rows}))" "$GROUP" "$PORT" "$PROGRAMS" "$IFACE" "$engine" > "$TABLE"
   LOG="$OUT/run-$engine.log"
   "$BIN" --direct "$TABLE" --seconds "$SECONDS_" 2> "$LOG" &

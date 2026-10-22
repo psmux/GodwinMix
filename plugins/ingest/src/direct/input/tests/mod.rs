@@ -6,6 +6,7 @@
 
 mod cpu;
 mod files;
+mod headend;
 mod pull;
 mod restart;
 mod restart_fed;

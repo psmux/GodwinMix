@@ -21,14 +21,14 @@ impl Inlet for Keep {
 }
 
 /// The tags `filesrc ! parsebin ! h264parse | aacparse ! appsink` make.
-pub fn gstreamer_tags(path: &std::path::Path) -> Vec<MediaTag> {
+pub fn gstreamer_tags(path: &std::path::Path, carry: Carry) -> Vec<MediaTag> {
     gmx_netkit::init().unwrap();
     let got = Arc::new(Mutex::new(Vec::new()));
     let to = crate::tagger::share(Box::new(Keep(got.clone())));
     let pipeline = gst::Pipeline::new();
     let src = gst::ElementFactory::make("filesrc").property("location", path.to_str().unwrap()).build().unwrap();
     pipeline.add(&src).unwrap();
-    let pads = Pads::new(to.clone(), false, None);
+    let pads = Pads::new(to.clone(), false, None, carry);
     parse_into(&pipeline, &src.static_pad("src").unwrap(), &pads).unwrap();
     pipeline.set_state(gst::State::Playing).unwrap();
     let bus = pipeline.bus().unwrap();
@@ -42,9 +42,9 @@ pub fn gstreamer_tags(path: &std::path::Path) -> Vec<MediaTag> {
 
 type Line = Vec<(i64, bool, bool, Arc<[u8]>)>;
 
-/// One kind's tags as `(time, keyframe, header, payload)`.
-fn line(tags: &[MediaTag], kind: TagKind) -> Line {
-    tags.iter().filter(|t| t.kind == kind && t.track == 0).map(|t| (i64::from(t.timestamp_ms), t.keyframe, t.sequence_header, t.payload.clone())).collect()
+/// One track's tags as `(time, keyframe, header, payload)`.
+fn line(tags: &[MediaTag], kind: TagKind, track: u8) -> Line {
+    tags.iter().filter(|t| t.kind == kind && t.track == track).map(|t| (i64::from(t.timestamp_ms), t.keyframe, t.sequence_header, t.payload.clone())).collect()
 }
 
 /// Both lines from the first frame GStreamer handed on, headers apart, with
@@ -74,10 +74,17 @@ fn aligned(a: Line, b: Line) -> (Line, Line) {
 }
 
 pub fn assert_same(path: &std::path::Path, what: &str) {
-    let theirs = gstreamer_tags(path);
-    let ours = feed::tags(&std::fs::read(path).unwrap(), Carry::default());
-    for kind in [TagKind::Video, TagKind::Audio] {
-        let (a, b) = aligned(line(&theirs, kind), line(&ours, kind));
+    assert_carried(path, what, Carry::default(), 1);
+}
+
+/// The same with `carry`, for the video and `sounds` sound tracks.
+pub fn assert_carried(path: &std::path::Path, what: &str, carry: Carry, sounds: u8) {
+    let theirs = gstreamer_tags(path, carry);
+    let ours = feed::tags(&std::fs::read(path).unwrap(), carry);
+    let lines = std::iter::once((TagKind::Video, 0)).chain((0..sounds).map(|t| (TagKind::Audio, t)));
+    for (kind, track) in lines {
+        let what = &format!("{what}, track {track}");
+        let (a, b) = aligned(line(&theirs, kind, track), line(&ours, kind, track));
         if std::env::var("NATIVE_DUMP").is_ok() {
             for (i, (x, y)) in a.iter().zip(&b).enumerate().take(6) {
                 eprintln!("{kind:?} {i}: gst {} {} {} {} {:02x?} | native {} {} {} {} {:02x?}", x.0, x.1, x.2, x.3.len(), &x.3[..x.3.len().min(16)], y.0, y.1, y.2, y.3.len(), &y.3[..y.3.len().min(16)]);
@@ -107,6 +114,19 @@ fn h264_and_aac_tags_are_byte_for_byte_the_gstreamer_paths() {
         "-f", "lavfi", "-i", "sine=frequency=660:sample_rate=48000", "-map", "0", "-map", "1", "-map", "2", "-t", "6",
         "-c:v", "libx264", "-preset", "veryfast", "-g", "30", "-bf", "2", "-c:a", "aac", "-ac", "2", "-f", "mpegts"]);
     assert_same(&path, "h264 and aac");
+    // And both sound tracks, for a show that converts every track.
+    assert_carried(&path, "h264 and two aac tracks", Carry { mpeg2: false, tracks: true }, 2);
+}
+
+#[test]
+fn mpeg2_video_and_two_ac3_tracks_are_byte_for_byte_the_gstreamer_paths() {
+    if !which("ffmpeg") {
+        return;
+    }
+    let path = clip("native-mpeg2-ac3.ts", &["-f", "lavfi", "-i", "testsrc2=size=704x480:rate=30000/1001", "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000",
+        "-f", "lavfi", "-i", "sine=frequency=660:sample_rate=48000", "-map", "0", "-map", "1", "-map", "2", "-t", "4",
+        "-c:v", "mpeg2video", "-b:v", "4M", "-g", "15", "-bf", "2", "-c:a", "ac3", "-ac", "2", "-f", "mpegts"]);
+    assert_carried(&path, "mpeg2 and two ac3 tracks", Carry { mpeg2: true, tracks: true }, 2);
 }
 
 #[test]

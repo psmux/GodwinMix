@@ -39,6 +39,16 @@ impl NodeSpec {
     pub fn track(&self) -> &str {
         self.text("track").unwrap_or("video")
     }
+
+    /// Which sound track: 0 for the first, 1, 2, 3 for the others.
+    pub fn index(&self) -> u8 {
+        u8::try_from(self.number("index")).unwrap_or(0)
+    }
+
+    /// Whether the node works in CUDA memory (`"memory": "cuda"`).
+    pub fn cuda(&self) -> bool {
+        self.text("memory") == Some("cuda")
+    }
 }
 
 /// What to build for one live stream.
