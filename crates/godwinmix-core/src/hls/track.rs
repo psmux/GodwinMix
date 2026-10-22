@@ -23,7 +23,7 @@ pub enum TrackKind {
 
 /// What a playlist says about a rung. Filled in from the caps the muxer
 /// was given, so it is empty until the first buffer.
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct TrackInfo {
     /// RFC 6381, `avc1.64001f`, `hvc1.1.6.L93.B0`, `mp4a.40.2`.
     pub codecs: String,
