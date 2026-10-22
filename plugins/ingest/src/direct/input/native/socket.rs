@@ -32,7 +32,7 @@ pub fn open(e: &Endpoint, iface: &str, buffer: usize) -> Result<(Socket, usize),
         s.set_reuse_port(true).map_err(|x| fail("share the port", x))?;
     }
     let got = buffer_of(&s, buffer);
-    let bind = if multicast && cfg!(unix) { host } else if multicast { unspecified(host) } else { host };
+    let bind = if multicast && !cfg!(unix) { unspecified(host) } else { host };
     s.bind(&SocketAddr::new(bind, e.port).into()).map_err(|x| fail(&format!("bind port {}", e.port), x))?;
     if multicast {
         join(&s, host, e, iface)?;
