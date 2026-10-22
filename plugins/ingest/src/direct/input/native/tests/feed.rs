@@ -49,3 +49,15 @@ pub fn tags_of(ts: &[u8], carry: Carry, program: Option<u16>) -> Vec<MediaTag> {
     }
     out.into_iter().map(|o| timeline::tag(o, &zero)).collect()
 }
+
+/// The video's tags and how many were fields, for `program` of `ts`.
+pub fn pictures(ts: &[u8], program: u16) -> (u64, u64) {
+    let (number, pmt) = programs(ts).into_iter().find(|x| x.0 == program).expect("the program is in the file");
+    let mut d = Demux::new(Carry::default());
+    d.follow(number, pmt);
+    let mut out = Vec::new();
+    for chunk in ts.chunks(7 * PACKET) {
+        d.feed(chunk, &mut out);
+    }
+    d.pictures()
+}

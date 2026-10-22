@@ -2,12 +2,15 @@
 //! it: an IDR, or an I slice behind a recovery point SEI. A broadcast
 //! encoder that codes fields and never sends an IDR starts its GOPs the
 //! second way, and a reader waiting for a keyframe must be given one.
+//!
+//! The first slice also says whether the access unit is a field, which is
+//! how the frame rate of a field coded stream is told from its field rate.
+
+use crate::sps::{Bits, Layout};
 
 const IDR: u8 = 5;
 const SEI: u8 = 6;
 const SLICE: u8 = 1;
-const SPS: u8 = 7;
-const PPS: u8 = 8;
 
 /// What one access unit holds that says whether a decoder can start at it.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -17,19 +20,24 @@ pub struct Seen {
     pub recovery: bool,
     /// The first slice is an I or SI slice (slice_type 2, 4, 7 or 9).
     pub intra: bool,
-    pub sps: bool,
-    pub pps: bool,
+    /// The first slice is of a field, not a frame (`field_pic_flag`).
+    pub field: bool,
+    /// The first slice has been read.
+    sliced: bool,
 }
 
 impl Seen {
-    pub fn nal(&mut self, nal: &[u8]) {
-        match nal[0] & 0x1F {
-            IDR => self.idr = true,
-            SPS => self.sps = true,
-            PPS => self.pps = true,
-            SEI => self.recovery |= recovery_point(&unescape(&nal[1..])),
-            SLICE if !self.intra => self.intra = matches!(slice_type(&nal[1..]), Some(2 | 4 | 7 | 9)),
-            _ => {}
+    /// One NAL unit, read with the stream's SPS when there is one.
+    pub fn nal(&mut self, nal: &[u8], sps: Option<&Layout>) {
+        let kind = nal[0] & 0x1F;
+        self.idr |= kind == IDR;
+        if kind == SEI {
+            self.recovery |= recovery_point(&unescape(&nal[1..]));
+        }
+        if (kind == SLICE || kind == IDR) && !std::mem::replace(&mut self.sliced, true) {
+            if let Some((slice_type, field)) = slice(&nal[1..], sps) {
+                (self.intra, self.field) = (matches!(slice_type, 2 | 4 | 7 | 9), field);
+            }
         }
     }
 
@@ -80,11 +88,22 @@ fn unescape(b: &[u8]) -> Vec<u8> {
     out
 }
 
-/// `slice_type` from a slice header (7.3.3), after its NAL header byte.
-fn slice_type(b: &[u8]) -> Option<u32> {
-    let mut bits = crate::sps::Bits::new(b.get(..8.min(b.len()))?);
+/// `slice_type`, and whether the picture is a field, from a slice header
+/// (7.3.3) after its NAL header byte. Without the SPS it is taken as a
+/// frame.
+fn slice(b: &[u8], sps: Option<&Layout>) -> Option<(u32, bool)> {
+    let mut bits = Bits::new(b.get(..b.len().min(24))?);
     bits.ue()?;
-    bits.ue()
+    let slice_type = bits.ue()?;
+    let field = sps.and_then(|l| {
+        bits.ue()?;
+        if l.separate_colour_plane {
+            bits.bits(2)?;
+        }
+        bits.bits(l.frame_num_bits)?;
+        Some(!l.frame_mbs_only && bits.bit()? == 1)
+    });
+    Some((slice_type, field.unwrap_or(false)))
 }
 
 #[cfg(test)]
@@ -93,7 +112,7 @@ mod tests {
 
     fn seen(nals: &[&[u8]]) -> Seen {
         let mut s = Seen::default();
-        nals.iter().for_each(|n| s.nal(n));
+        nals.iter().for_each(|n| s.nal(n, None));
         s
     }
 
@@ -110,5 +129,22 @@ mod tests {
         // A user data SEI (type 5) ahead of the recovery point in one NAL.
         let both: &[u8] = &[0x06, 0x05, 0x01, 0xAA, 0x06, 0x01, 0x84, 0x80];
         assert!(seen(&[both, i]).keyframe());
+    }
+
+    #[test]
+    fn field_pic_flag_says_a_slice_is_a_field() {
+        let sps = Layout { width: 640, height: 480, separate_colour_plane: false, frame_num_bits: 4, frame_mbs_only: false };
+        // first_mb 0, slice_type 7, pps 0, frame_num 0000, then the flag.
+        let (field, frame): (&[u8], &[u8]) = (&[0x21, 0x88, 0x86], &[0x21, 0x88, 0x82]);
+        let mut s = Seen::default();
+        s.nal(field, Some(&sps));
+        assert!(s.field && s.intra);
+        let mut s = Seen::default();
+        s.nal(frame, Some(&sps));
+        assert!(!s.field);
+        let progressive = Layout { frame_mbs_only: true, ..sps };
+        let mut s = Seen::default();
+        s.nal(field, Some(&progressive));
+        assert!(!s.field, "a stream of frames only has no flag to read");
     }
 }
