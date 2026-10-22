@@ -31,6 +31,11 @@ pub struct InputStats {
     /// Since the last frame arrived.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_frame_ms: Option<u64>,
+    /// The first sound track's peak in dBFS over a short burst, measured
+    /// about once a second while the show's alarms are on or its picture is
+    /// asked for; -120 is digital silence. Left out while unmeasured.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub audio_peak_db: Option<f64>,
 }
 
 /// What one output is doing.

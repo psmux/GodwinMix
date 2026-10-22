@@ -77,6 +77,11 @@ impl Vitals {
         }
     }
 
+    /// The first sound track's last measured peak, dBFS, while it is watched.
+    pub fn peak(&self, id: &str) -> Option<f64> {
+        self.show(id).and_then(|s| lock(&s.judge).peak_db())
+    }
+
     /// An output's state. `failed` carries the error while it is failed.
     pub fn output(&self, id: &str, output: &str, failed: Option<&str>) {
         if let Some(s) = self.show(id) {
