@@ -19,10 +19,12 @@ use std::time::{Duration, Instant};
 
 const INIT_FOR: Duration = Duration::from_secs(5);
 
+/// Init segments by path: their bytes, the id the bytes give, and when read.
+type Inits = Mutex<HashMap<String, (Vec<u8>, String, Instant)>>;
+
 pub struct Cmaf {
     st: Arc<Station>,
-    /// Init segments by path, with the id made from their bytes.
-    inits: Mutex<HashMap<String, (Vec<u8>, String, Instant)>>,
+    inits: Inits,
 }
 
 fn not_yet(why: String) -> Missing {
