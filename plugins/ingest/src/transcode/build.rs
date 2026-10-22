@@ -38,8 +38,10 @@ pub struct Built {
     pub appsink: Option<AppSink>,
 }
 
-/// Frames or buffers a branch holds before it drops its oldest.
-const BRANCH_BUFFERS: u32 = 3;
+/// Frames a branch holds before it drops its oldest. A multiplex hands its
+/// pictures over in bursts, and fifty channels on one decoder make them
+/// burstier: with three, a 720p60 channel lost a few frames now and then.
+const BRANCH_BUFFERS: u32 = 8;
 
 static SERIAL: AtomicU64 = AtomicU64::new(0);
 

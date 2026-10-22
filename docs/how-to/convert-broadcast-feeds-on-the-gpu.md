@@ -54,6 +54,35 @@ The source's frame rate is kept: leave `fps` out.
 nvenc_session_probe = 128
 ```
 
+## In a container, ask for the GPU through CDI
+
+Started with `--gpus all` (or `runtime: nvidia`), a container loses the GPU
+the first time systemd reloads its units, which a package refresh does on
+its own: inside it `nvidia-smi` says `Failed to initialize NVML: Unknown
+Error`, and every decoder and encoder after that fails. The NVIDIA hook adds
+the GPU's devices behind Docker's back, and the reload puts back only what
+Docker knows of.
+
+Ask for it as a CDI device instead, which Docker 25 and later understand
+and which the NVIDIA Container Toolkit describes in `/var/run/cdi/nvidia.yaml`
+(its `nvidia-cdi-refresh` unit keeps that file current):
+
+```sh
+docker run --device nvidia.com/gpu=all ...
+```
+
+or in a compose file:
+
+```yaml
+services:
+  headend:
+    devices:
+      - nvidia.com/gpu=all
+```
+
+A container started this way kept the GPU, and kept encoding without a lost
+frame, through `systemctl daemon-reload`.
+
 ## What it builds
 
 For each show, one decode on NVDEC, one scale and pad in CUDA memory, one
