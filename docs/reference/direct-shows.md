@@ -52,6 +52,17 @@ still starting reached nobody.
 | `transcode` | exactly a channel row's `transcode`, planned and admitted by the station |
 | `monitor` | handed to the vitals as it is |
 
+A row may carry `carry`, which the station sets: `{"tracks": true}` makes
+the input carry every sound track, for an output whose rendition converts
+all of them. MPEG-2 video is carried whenever any output of the row has a
+rendition. Neither is carried otherwise, so a show that only copies is what
+it always was.
+
+An output whose rendition converts every track has `audio_tracks` beside
+`audio` in its row: the node of each further track, track 1 first. Its pair
+is published under `<stream>|<video>|<audio>|<track nodes, comma
+separated>`, with the further tracks as tracks 1, 2, 3.
+
 What a change does:
 
 | Change | What the host does |
@@ -123,6 +134,22 @@ backup, changes shape, or cannot be opened:
  "audio": {"codec": "aac", "channels": 2, "sample_rate": 48000, "kbps": 128}}
 ```
 
+With a headend input, `direct.input` also says what it carries and what
+the PMT says of it, one entry per track, and the scrambled packets counted
+since the input opened:
+
+```json
+{"scrambled": 0, "tracks": [
+  {"track": 0, "kind": "video", "codec": "mpeg2", "width": 1920, "height": 1080, "frame_rate": 29.97, "interlaced": true, "kbps": 11800, "pid": 49, "lang": null},
+  {"track": 0, "kind": "audio", "codec": "ac3", "channels": 6, "sample_rate": 48000, "kbps": 384, "pid": 52, "lang": "eng"},
+  {"track": 1, "kind": "audio", "codec": "ac3", "channels": 2, "sample_rate": 48000, "kbps": 192, "pid": 53, "lang": "spa"}]}
+```
+
+`track` is the hub tag's: 0 for the video and the first sound, which is all
+any reader is given unless it asks (`Hub::subscribe_all`, or `tracks=all` on
+the relay), then 1, 2, 3 in PMT order. `lang` is the ISO 639 code from the
+PMT's language descriptor.
+
 `idle` means no frame for three seconds. An input that would not open is
 `idle` with `error` saying why. `relay` and `stream` are what an
 `ingest/rtmp` source is given to read the input, which is how a show with
@@ -161,8 +188,9 @@ The station makes these as `tool.call` on `ingest/discover`:
 |---|---|
 | `direct.stats {ids?}` | `{shows: [...]}` as in the event, every show or those in `ids` |
 | `direct.thumbnail {show, width?}` | the vitals' newest picture, `{jpeg, width, height, at_ms}` with the JPEG in base64, or `{pending: true}` |
+| `direct.groups` | `{groups: [...]}`: every multicast group the native inputs have open, one row per socket, read when asked |
 
-Any other `direct.` name is refused with `-32601` and the two it answers.
+Any other `direct.` name is refused with `-32601` and the ones it answers.
 
 ## Running the host alone
 

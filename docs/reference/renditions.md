@@ -40,12 +40,33 @@ starts no thread and touches no GStreamer element.
 | `video.bitrate_kbps` | kbit/s | on a copy, any; on an encode, a default from the size (below) |
 | `video.bitrate_tolerance` | fraction | 0.25 |
 | `video.keyframe_ms` | ms | the ladder's interval (below) |
+| `video.keyframe_frames` | frames at the source's rate | `keyframe_ms`; when set it wins, so 50 is 1668 ms at 29.97 and 834 ms at 59.94 |
+| `video.fit` | `pad`, `crop`, `stretch` | `pad`: the whole picture in the size asked for, with bars |
+| `video.pad_color` | `#rrggbb` | black. Only black is drawn today: neither scaler has a border colour, so another colour plans as a scale of its own and comes out black |
+| `video.deinterlace` | `off`, `on`, `auto` | `off`: an interlaced picture is scaled as the frame it is, both fields woven |
+| `video.preset` | the encoder's own word, `p1` on NVENC, `veryfast` on x264 | the catalogue's |
+| `video.bframes` | count | the catalogue's (none, for live) |
 | `audio.codec` | `aac`, `opus`, `mp3`, `ac3`, `pcm` | as for video |
 | `audio.channels`, `audio.sample_rate` | | the source's |
 | `audio.bitrate_kbps` | kbit/s | 64 per channel for AAC and MP3, 48 for Opus, 96 for AC-3 |
+| `audio.tracks` | `first`, `all` | `first`. `all` converts every sound track the source carries, each alone at its own channel count unless `channels` names one |
 | `no_video`, `no_audio` | bool | false |
 
 An empty request is a plain copy of the source.
+
+`fit`, `pad_color` and `deinterlace` are what a scale does, so two requests
+for one size with different fits get a scale each: the scale's id gains
+`:crop`, `:stretch`, `:pad-ff0000`, `:di` (deinterlace on) or `:da` (auto).
+A plain scale keeps the id it always had. `preset` and `bframes` add `:p<x>`
+and `:b<n>` to the encode's id. A deinterlace on a source that says it is
+interlaced is never a copy.
+
+With `tracks: all`, every further sound track gets its own chain, numbered
+by the track: `decode:main:audio2`, `aconvert:main:a2:...`,
+`aencode:main:a2:aac:6ch48000:128k`, or `copy:main:audio2` for one that
+already is what was asked. The first track's ids are what they always were.
+The source's further tracks are `StreamInfo.tracks`, `[{track, shape,
+lang}]`, from `direct.input`'s `tracks`.
 
 Default video bitrates come from bits per pixel per frame, rounded to 100
 kbit/s so two requests that leave it out share one encoder: 0.1 for H.264,

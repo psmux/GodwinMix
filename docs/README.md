@@ -136,6 +136,7 @@ Start here if you have never run it.
 * [Run the mixer from a phone or a tablet](how-to/use-a-phone-or-tablet.md): long press for the item menu, double tap to open, drag by the grip
 * [Install the control page as an app](how-to/install-as-an-app.md): on a phone or a desktop, and the certificate a phone needs for it
 * [Take headend feeds into direct shows](how-to/headend-feeds.md)
+* [Convert broadcast feeds on the GPU](how-to/convert-broadcast-feeds-on-the-gpu.md)
 * [Watch many shows at once](how-to/monitor-many-shows.md)
 * [Send a channel on to YouTube, Facebook or Twitch](how-to/restream-a-channel.md)
 * [Record a channel and share a watch link](how-to/record-a-channel.md)
@@ -194,6 +195,7 @@ Start here if you have never run it.
 * [Reference: the shipped codec catalogue](reference/codecs.md)
 * [Every way in and every way out: transports, containers, codecs](reference/formats.md)
 * [Renditions and the planner: the rules, the plan, the reasons](reference/renditions.md)
+* [Hub tags: tracks, MPEG-2 and what each reader is given](reference/hub-tags.md)
 * [The HLS output: params, routes, the viewer key](reference/hls-output.md)
 * [Graphics](reference/graphics.md)
 * [Graphic templates: the SVG kind, the pack, the methods](reference/graphic-templates.md)
