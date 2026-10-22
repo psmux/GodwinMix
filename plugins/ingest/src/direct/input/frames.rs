@@ -65,5 +65,5 @@ fn frame(sample: &gst::Sample, zero: &Zero, head: fn(&gst::CapsRef) -> Vec<u8>) 
     let map = buffer.map_readable().ok()?;
     let mut payload = head(sample.caps()?);
     payload.extend_from_slice(map.as_slice());
-    Some(MediaTag { kind: TagKind::Audio, timestamp_ms: ms, keyframe: false, sequence_header: false, payload: Arc::from(payload) })
+    Some(MediaTag { track: 0, kind: TagKind::Audio, timestamp_ms: ms, keyframe: false, sequence_header: false, payload: Arc::from(payload) })
 }

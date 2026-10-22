@@ -41,7 +41,7 @@ mod tests {
     use std::sync::Arc;
 
     fn tag(kind: TagKind, body: &[u8]) -> MediaTag {
-        MediaTag { kind, timestamp_ms: 0, keyframe: false, sequence_header: true, payload: Arc::from(body) }
+        MediaTag { track: 0, kind, timestamp_ms: 0, keyframe: false, sequence_header: true, payload: Arc::from(body) }
     }
 
     #[test]

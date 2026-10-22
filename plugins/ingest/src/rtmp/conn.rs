@@ -187,6 +187,7 @@ impl Connection {
     fn push(&mut self, stream_key: &str, kind: TagKind, timestamp_ms: u32, body: &[u8]) {
         let Some(inlet) = self.inlets.get_mut(stream_key) else { return };
         inlet.tag(MediaTag {
+            track: 0,
             kind,
             timestamp_ms,
             keyframe: kind == TagKind::Video && codec::is_keyframe(body),

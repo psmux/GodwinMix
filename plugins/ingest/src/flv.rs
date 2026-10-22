@@ -175,6 +175,7 @@ mod tests {
         let Amf0Value::Object(props) = &values[1] else { panic!("{values:?}") };
         assert_eq!(props["width"], Amf0Value::Number(1920.0));
         let t = write(&MediaTag {
+            track: 0,
             kind: TagKind::Script,
             timestamp_ms: 0,
             keyframe: false,
@@ -187,6 +188,7 @@ mod tests {
     #[test]
     fn writing_into_a_writer_gives_the_same_bytes_as_building_the_tag() {
         let tag = MediaTag {
+            track: 0,
             kind: TagKind::Video,
             timestamp_ms: 0x0102_0304,
             keyframe: true,

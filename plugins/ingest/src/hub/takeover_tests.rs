@@ -8,7 +8,7 @@ use std::time::Instant;
 
 fn frame(ms: u32) -> MediaTag {
     let body = vec![0x17, 1, 0, 0, 0];
-    MediaTag { kind: TagKind::Video, timestamp_ms: ms, keyframe: true, sequence_header: false, payload: Arc::from(body) }
+    MediaTag { track: 0, kind: TagKind::Video, timestamp_ms: ms, keyframe: true, sequence_header: false, payload: Arc::from(body) }
 }
 
 fn kick() -> (Kick, Arc<AtomicBool>) {

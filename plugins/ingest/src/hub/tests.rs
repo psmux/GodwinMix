@@ -11,7 +11,7 @@ fn tag(kind: TagKind, ms: u32, keyframe: bool, header: bool, size: usize) -> Med
         TagKind::Script => 0x02,
     };
     body[1] = if header { 0 } else { 1 };
-    MediaTag { kind, timestamp_ms: ms, keyframe, sequence_header: header, payload: Arc::from(body) }
+    MediaTag { track: 0, kind, timestamp_ms: ms, keyframe, sequence_header: header, payload: Arc::from(body) }
 }
 
 /// A publisher's opening: metadata, the two headers.
