@@ -26,6 +26,10 @@ use crate::sends::Wanted;
 
 const LOOK: Duration = Duration::from_millis(250);
 
+/// What a copy output says when its input is MPEG-2 video.
+pub const MPEG2: &str = "the input's video is MPEG-2, which this output cannot carry as it is, so only its sound goes out. \
+                         Give the output a rendition (H.264, for example) to send the picture.";
+
 pub struct Output {
     pub wanted: Wanted,
     /// The encoder a converting output's video comes from, for its stats.
@@ -78,7 +82,7 @@ fn run(w: &Wanted, hub: &Hub, stop: &Arc<AtomicBool>, board: &Arc<Board>) {
             std::thread::sleep(LOOK);
             continue;
         }
-        let tags = Arc::new(Feed { reader: hub.subscribe(&w.app, &key) });
+        let tags = Arc::new(Feed { reader: hub.subscribe(&w.app, &key), board: board.clone(), said: AtomicBool::new(false) });
         let sender = Sender {
             target: Target::new(&w.id, &w.platform, &w.url),
             queue: tags,
@@ -103,11 +107,22 @@ fn run(w: &Wanted, hub: &Hub, stop: &Arc<AtomicBool>, board: &Arc<Board>) {
 /// A hub reader as the sender's queue.
 struct Feed {
     reader: Reader,
+    board: Arc<Board>,
+    /// Whether the MPEG-2 error has been said this session.
+    said: AtomicBool,
 }
 
 impl Tags for Feed {
     fn pop(&self, wait: Duration) -> Pop {
         match self.reader.recv_timeout(wait) {
+            // MPEG-2 is carried for a rendition to decode; no wire this
+            // output knows carries it, so a copy goes without its picture.
+            Recv::Tag(t) if t.kind == crate::media_tag::TagKind::Video && crate::mp2v::is(&t.payload) => {
+                if !self.said.swap(true, Ordering::Relaxed) {
+                    self.board.error(Some(MPEG2.into()));
+                }
+                Pop::Empty
+            }
             Recv::Tag(t) => Pop::Tag(t),
             Recv::Ended => Pop::Closed,
             Recv::Timeout => Pop::Empty,

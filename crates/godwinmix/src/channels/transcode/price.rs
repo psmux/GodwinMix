@@ -17,7 +17,7 @@ use super::Transcode;
 pub fn assumed_input() -> (StreamInfo, &'static str) {
     let video = VideoShape { codec: VideoCodec::H264, width: 1920, height: 1080, fps: Fps::whole(30), bitrate_kbps: 6000, keyframe_ms: 0 };
     let audio = AudioShape { codec: AudioCodec::Aac, channels: 2, sample_rate: 48_000, bitrate_kbps: 128 };
-    (StreamInfo { video: Some(video), audio: Some(audio), encoded: true }, "H.264 1920x1080 30 fps with stereo AAC")
+    (StreamInfo { video: Some(video), audio: Some(audio), encoded: true, ..StreamInfo::default() }, "H.264 1920x1080 30 fps with stereo AAC")
 }
 
 impl Transcode {

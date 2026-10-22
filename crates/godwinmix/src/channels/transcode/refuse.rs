@@ -27,15 +27,18 @@ pub fn undecodable(plan: &Plan, sources: &[(String, StreamInfo)]) -> Option<(Vec
             );
             return Some((n.serves.clone(), refusal("plan", message)));
         }
-        let NodeKind::Decode { source, track } = &n.kind else { continue };
+        let NodeKind::Decode { source, track, index } = &n.kind else { continue };
         let info = sources.iter().find(|(s, _)| s == source).map(|(_, i)| i)?;
         let (ok, name) = match track {
-            Track::Video => (info.video.is_some_and(|v| carried(v.codec)), "its video"),
-            Track::Audio => (info.audio.is_some_and(|a| matches!(a.codec, AudioCodec::Aac | AudioCodec::Mp3 | AudioCodec::Ac3)), "its sound"),
+            Track::Video => (info.video.is_some_and(|v| decodable(v.codec)), "its video"),
+            Track::Audio => {
+                let shape = if *index == 0 { info.audio } else { info.tracks.iter().find(|t| t.track == *index).map(|t| t.shape) };
+                (shape.is_some_and(|a| matches!(a.codec, AudioCodec::Aac | AudioCodec::Mp3 | AudioCodec::Ac3)), "its sound")
+            }
         };
         if !ok {
             let message = format!(
-                "Stream `{source}` would have to be decoded to make this, and {name} is not H.264, HEVC, AAC, \
+                "Stream `{source}` would have to be decoded to make this, and {name} is not H.264, HEVC, MPEG-2, AAC, \
                  MPEG audio or AC-3, which is all the channel server converts from. Ask for a copy, or send H.264 \
                  or HEVC and AAC."
             );
@@ -46,6 +49,12 @@ pub fn undecodable(plan: &Plan, sources: &[(String, StreamInfo)]) -> Option<(Vec
 }
 
 /// A video codec the channel server both reads and sends.
+/// What the listener decodes: what it carries, and MPEG-2 from a headend
+/// input, which it carries only to decode.
+pub fn decodable(codec: VideoCodec) -> bool {
+    carried(codec) || codec == VideoCodec::Mpeg2
+}
+
 pub fn carried(codec: VideoCodec) -> bool {
     matches!(codec, VideoCodec::H264 | VideoCodec::H265)
 }

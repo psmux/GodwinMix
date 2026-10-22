@@ -43,7 +43,7 @@ pub fn info(live: &Live) -> Option<StreamInfo> {
     if video.is_none() && audio.is_none() {
         return None;
     }
-    Some(StreamInfo { video, audio, encoded: true })
+    Some(StreamInfo { video, audio, encoded: true, tracks: live.more_audio.clone(), interlaced: live.interlaced })
 }
 
 /// The same stream for the purpose of planning: everything but the bit
@@ -51,7 +51,8 @@ pub fn info(live: &Live) -> Option<StreamInfo> {
 pub fn same_shape(a: &StreamInfo, b: &StreamInfo) -> bool {
     let v = |i: &StreamInfo| i.video.map(|v| (v.codec, v.width, v.height, v.fps));
     let s = |i: &StreamInfo| i.audio.map(|a| (a.codec, a.channels, a.sample_rate));
-    v(a) == v(b) && s(a) == s(b)
+    let t = |i: &StreamInfo| i.tracks.iter().map(|t| (t.track, t.shape.codec, t.shape.channels, t.shape.sample_rate)).collect::<Vec<_>>();
+    v(a) == v(b) && s(a) == s(b) && t(a) == t(b) && a.interlaced == b.interlaced
 }
 
 /// A frame rate as a fraction. A stated one is taken as stated, with the
