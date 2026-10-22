@@ -82,7 +82,7 @@ impl Output for HlsOutput {
     }
 
     fn initialize(&mut self, hello: Hello) -> Result<Ready> {
-        self.params = HlsParams::from_params(&hello.params)?;
+        self.params = composited(HlsParams::from_params(&hello.params)?)?;
         self.viewer_key = match hello.params.get("viewer_key").and_then(|v| v.as_str()) {
             Some(k) if k.len() >= 16 => k.to_string(),
             Some(_) => anyhow::bail!("hls/output params.viewer_key must be at least 16 characters, or left out for the one this machine makes"),
@@ -132,7 +132,7 @@ impl Output for HlsOutput {
     }
 
     fn configure(&mut self, params: &Params) -> Result<Configure> {
-        HlsParams::from_params(params)?;
+        composited(HlsParams::from_params(params)?)?;
         Ok(Configure::RestartRequired("an hls output takes new segment lengths or a new ladder by being added again".into()))
     }
 
@@ -155,4 +155,17 @@ impl Drop for HlsOutput {
             stream::withdraw(&s);
         }
     }
+}
+
+/// The params a show that composites can serve: CMAF segments only, since
+/// MPEG-TS is cut from the hub's frames, which only a show without
+/// compositing has.
+fn composited(p: HlsParams) -> Result<HlsParams> {
+    anyhow::ensure!(
+        p.segments == super::Segments::Cmaf,
+        "hls/output params.segments = \"{}\": MPEG-TS segments are made for a show without compositing only, so far. \
+         Leave segments out here, or serve the feed from a show with compositing off.",
+        p.segments.as_str()
+    );
+    Ok(p)
 }

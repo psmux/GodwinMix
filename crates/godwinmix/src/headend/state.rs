@@ -70,7 +70,7 @@ pub async fn start(st: Arc<Station>, s: Settings) -> Result<()> {
     }
     let running = super::saved::load(&st);
     let h = Arc::new(Headend {
-        segments: Arc::new(super::bridge::Cmaf::new(st.clone())),
+        segments: Arc::new(super::ts_bridge::Ts::new(st.clone())),
         st,
         file: s.file.clone(),
         doc: Mutex::new(doc),

@@ -52,20 +52,15 @@ pub struct TsCut {
 
 impl TsCut {
     pub fn new(stream: &Arc<Stream>, track: Arc<TsTrack>, base: u32) -> TsCut {
-        let p = stream.params;
-        let alone = track.sound.is_some();
-        let hold_ms = (p.window_s * 1000).max(4 * p.segment_ms);
-        let stream = Arc::downgrade(stream);
-        let min_ns = p.mux_durations().0;
+        let (p, alone) = (stream.params, track.sound.is_some());
+        let (hold_ms, min_ns, stream) = ((p.window_s * 1000).max(4 * p.segment_ms), p.mux_durations().0, Arc::downgrade(stream));
         TsCut { stream, track, alone, mux: Muxer::default(), base, min_ns, hold_ms, queue: VecDeque::new(), open: None, last_len: 0 }
     }
 }
 
 impl Extend<Unit> for TsCut {
     fn extend<I: IntoIterator<Item = Unit>>(&mut self, units: I) {
-        for u in units {
-            self.push(u);
-        }
+        units.into_iter().for_each(|u| self.push(u));
     }
 }
 

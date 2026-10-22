@@ -27,6 +27,7 @@ mod media;
 mod picture;
 mod saved;
 mod state;
+mod ts_bridge;
 mod watch;
 
 use anyhow::{Context, Result};
