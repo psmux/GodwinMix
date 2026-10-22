@@ -56,6 +56,7 @@ pub mod gallery;
 pub mod graphics;
 pub mod health;
 pub mod idempotency;
+pub mod machine;
 pub mod media;
 pub mod mcp_bindings;
 pub mod mcp_schema;

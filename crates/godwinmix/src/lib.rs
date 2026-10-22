@@ -28,6 +28,7 @@ pub mod ctl;
 pub mod devices;
 pub mod feeds;
 mod job;
+pub mod machine;
 pub mod mcp;
 pub mod nodes;
 pub mod mcp_http;
