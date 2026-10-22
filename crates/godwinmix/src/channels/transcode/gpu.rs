@@ -28,7 +28,7 @@ pub fn keep_on_gpu(nodes: &mut [Value], machine: &Machine) {
         let reads = |n: &Value| n["input"] == decode.as_str() || scales.iter().any(|s| n["input"] == s.as_str());
         let encodes: Vec<String> = ids(nodes, |n| n["kind"] == "encode" && reads(n));
         let on_gpu = |id: &String| nodes.iter().find(|n| n["id"] == id.as_str()).is_some_and(|n| match n["kind"].as_str() {
-            Some("scale") => n["deinterlace"] == "off",
+            Some("scale") => n["deinterlace"] == "off" && n["fit"] != "crop",
             Some("encode") => n["accel"] == "nvidia",
             _ => false,
         });

@@ -483,8 +483,8 @@ requires = []
 license = "LGPL-2.1-or-later"
 container = ["mpegts"]
 verified = []
-comment = "NVDEC. No parser: the listener frames MPEG-2 a picture at a time itself and gives the decoder its caps. MPEG-2 keeps at most two reference pictures, so the decoder needs few surfaces of its own."
-decode_properties = { "num-output-surfaces" = 2 }
+comment = "NVDEC. No parser: the listener frames MPEG-2 a picture at a time itself and gives the decoder its caps. MPEG-2 keeps at most two reference pictures and a picture goes out as soon as it is decoded, so the decoder holds no display queue of its own."
+decode_properties = { "max-display-delay" = 0 }
 
 [[video]]
 id = "mpeg2-software-decode"

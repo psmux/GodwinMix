@@ -37,6 +37,7 @@ pub struct Graph {
 impl Graph {
     pub fn new() -> Graph {
         let pipeline = gst::Pipeline::with_name("gmx-transcode");
+        super::cuda::share(&pipeline);
         let _ = pipeline.set_state(gst::State::Playing);
         Graph { pipeline, running: Vec::new(), failed: HashMap::new() }
     }
@@ -109,7 +110,7 @@ impl Graph {
         }
         if let Some(src) = &built.appsrc {
             let track = if spec.track() == "audio" { TagKind::Audio } else { TagKind::Video };
-            input.attach(track, Some(src.clone()));
+            input.attach(track, spec.index(), Some(src.clone()));
         }
         self.running.push(Running { spec: spec.clone(), built, feed });
         Ok(())
@@ -119,7 +120,7 @@ impl Graph {
         let Some(at) = self.running.iter().position(|r| r.spec.id == id) else { return };
         let r = self.running.remove(at);
         if r.built.appsrc.is_some() {
-            input.attach(if r.spec.track() == "audio" { TagKind::Audio } else { TagKind::Video }, None);
+            input.attach(if r.spec.track() == "audio" { TagKind::Audio } else { TagKind::Video }, r.spec.index(), None);
         }
         if let (Some(pad), Some(head)) = (&r.feed, &r.built.head) {
             unlink_when_idle(pad, head);

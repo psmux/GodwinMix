@@ -94,6 +94,11 @@ impl Direct {
         if let Some(streams) = self.transcode.streams(&r.id) {
             row["transcode"] = streams;
         }
+        // The host carries MPEG-2 for any output that converts; every sound
+        // track only when an output converts every one.
+        if outs.iter().any(|d| d.enabled && crate::channels::transcode::every_track(d)) {
+            row["carry"] = json!({"tracks": true});
+        }
         strip_nulls(&mut row);
         row
     }

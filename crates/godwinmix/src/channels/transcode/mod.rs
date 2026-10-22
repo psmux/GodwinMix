@@ -71,6 +71,13 @@ pub fn request_for(id: &str, choice: &RenditionChoice) -> Result<Option<Renditio
     Ok((!empty).then_some(request))
 }
 
+/// Whether a destination's rendition converts every sound track, which a
+/// direct show's input must then carry.
+pub fn every_track(d: &StoredDestination) -> bool {
+    let request = d.rendition.as_ref().and_then(|c| request_for(&d.id, c).ok().flatten());
+    request.and_then(|r| r.audio).and_then(|a| a.tracks) == Some(godwinmix_protocol::rendition::Tracks::All)
+}
+
 /// The channels' renditions.
 pub struct Transcode {
     governor: governor::Seam,
