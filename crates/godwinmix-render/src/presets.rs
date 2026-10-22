@@ -16,6 +16,7 @@ fn aac(kbps: u32) -> Option<AudioWant> {
         channels: Some(2),
         sample_rate: Some(48_000),
         bitrate_kbps: Some(kbps),
+        ..AudioWant::default()
     })
 }
 

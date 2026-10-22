@@ -40,6 +40,7 @@ impl Publication {
         let news = session.meter.record(&tag);
         let audio_only = !session.meter.has_video();
         match tag.kind {
+            _ if tag.sequence_header && tag.track != 0 => state.headers.track(&tag),
             TagKind::Script => state.headers.script = Some(tag.clone()),
             TagKind::Video if tag.sequence_header => state.headers.video = Some(tag.clone()),
             TagKind::Audio if tag.sequence_header => state.headers.audio = Some(tag.clone()),

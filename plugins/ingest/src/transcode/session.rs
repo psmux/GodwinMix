@@ -97,7 +97,8 @@ fn run(s: &Shared, stop: &AtomicBool, hub: &Hub, app: &str, stream: &str) {
         return;
     }
     while !stop.load(Ordering::Relaxed) {
-        let reader = hub.subscribe(app, stream);
+        // Every track: a rendition may convert each sound track.
+        let reader = hub.subscribe_all(app, stream);
         let mut base: Option<u32> = None;
         let mut looked = Instant::now();
         loop {

@@ -5,7 +5,9 @@
 //! two bytes and a raw AAC frame; the sequence headers carry the
 //! configuration a decoder is given as `codec_data` in its caps. AC-3,
 //! E-AC-3 and MPEG audio have no header: each frame says what it is, and
-//! its caps are read off it (`direct::vitals::sound`). So each tag becomes
+//! its caps are read off it (`direct::vitals::sound`). MPEG-2 video
+//! (`crate::mp2v`) is the same: its keyframes say its size and rate. Each
+//! sound track has a feed of its own, by the tag's `track`. So each tag becomes
 //! one buffer with its time on the pipeline's clock (the publisher's time
 //! less the session's first), and nothing is parsed beyond that.
 //!
@@ -31,10 +33,13 @@ struct Feed {
     framed: Option<gst::Caps>,
 }
 
+/// Sound tracks a stream may have converted, the first included.
+pub const TRACKS: usize = 16;
+
 #[derive(Default)]
 pub struct Input {
     video: Mutex<Feed>,
-    audio: Mutex<Feed>,
+    audio: [Mutex<Feed>; TRACKS],
 }
 
 fn lock(m: &Mutex<Feed>) -> MutexGuard<'_, Feed> {
@@ -42,18 +47,18 @@ fn lock(m: &Mutex<Feed>) -> MutexGuard<'_, Feed> {
 }
 
 impl Input {
-    fn feed(&self, kind: TagKind) -> Option<&Mutex<Feed>> {
+    fn feed(&self, kind: TagKind, index: u8) -> Option<&Mutex<Feed>> {
         match kind {
-            TagKind::Video => Some(&self.video),
-            TagKind::Audio => Some(&self.audio),
-            TagKind::Script => None,
+            TagKind::Video if index == 0 => Some(&self.video),
+            TagKind::Audio => self.audio.get(usize::from(index)),
+            _ => None,
         }
     }
 
-    /// A decoder's appsrc for `track`, or none. A new one starts at the next
-    /// keyframe with the configuration already known.
-    pub fn attach(&self, track: TagKind, src: Option<AppSrc>) {
-        let Some(feed) = self.feed(track) else { return };
+    /// A decoder's appsrc for `track` (sound track `index`), or none. A new
+    /// one starts at the next keyframe with the configuration already known.
+    pub fn attach(&self, track: TagKind, index: u8, src: Option<AppSrc>) {
+        let Some(feed) = self.feed(track, index) else { return };
         let mut f = lock(feed);
         if let (Some(s), Some(caps)) = (&src, f.header.as_ref().and_then(caps_for)) {
             s.set_caps(Some(&caps));
@@ -65,14 +70,14 @@ impl Input {
 
     /// Forget the configuration: a new session brings its own.
     pub fn reset(&self) {
-        for feed in [&self.video, &self.audio] {
+        for feed in std::iter::once(&self.video).chain(&self.audio) {
             *lock(feed) = Feed::default();
         }
     }
 
     /// One tag of the stream, with the session's first time `base`.
     pub fn push(&self, tag: &MediaTag, base: u32) {
-        let Some(feed) = self.feed(tag.kind) else { return };
+        let Some(feed) = self.feed(tag.kind, tag.track) else { return };
         let (src, skip) = {
             let mut f = lock(feed);
             if tag.sequence_header {
@@ -82,7 +87,11 @@ impl Input {
                 }
                 return;
             }
-            let framed = headerless(tag).then(|| crate::direct::vitals::sound::coded(tag, None)).flatten();
+            let framed = match tag.kind {
+                TagKind::Video => super::caps::mpeg2(tag),
+                _ => headerless(tag).then(|| crate::direct::vitals::sound::coded(tag, None)).flatten(),
+            };
+            let mpeg2 = crate::mp2v::is(&tag.payload);
             if let (Some(s), Some(c)) = (&f.src, &framed) {
                 if f.framed.as_ref() != Some(&c.caps) {
                     s.set_caps(Some(&c.caps));
@@ -90,11 +99,13 @@ impl Input {
                 }
             }
             let starts = tag.kind == TagKind::Audio || tag.keyframe;
-            if f.src.is_none() || (f.header.is_none() && framed.is_none()) || (f.need_key && !starts) {
+            let known = f.header.is_some() || framed.is_some() || (mpeg2 && f.framed.is_some());
+            if f.src.is_none() || !known || (f.need_key && !starts) {
                 return;
             }
             f.need_key = false;
-            (f.src.clone(), framed.map(|c| c.skip))
+            // MPEG-2 pictures carry their offset: read as any video body.
+            (f.src.clone(), framed.filter(|_| !mpeg2).map(|c| c.skip))
         };
         let buffer = match skip {
             Some(skip) => framed(tag, base, skip, 0),

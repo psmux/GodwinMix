@@ -49,6 +49,7 @@ mod source;
 mod sps;
 mod hevc;
 mod eflv;
+mod mp2v;
 mod exaudio;
 mod whip_in;
 
