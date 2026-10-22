@@ -39,7 +39,7 @@ impl Governor {
         let profile = self.inner.profile.read().clone();
         let device = device.map(|d| {
             let (committed_millis, committed_sessions) = book.on_device(d);
-            DeviceUse { committed_millis, committed_sessions, session_limit: profile.session_limit(d), measured_millis: load.device(d) }
+            DeviceUse { committed_millis, committed_sessions, session_limit: self.inner.config.sessions_on(d).or(profile.session_limit(d)), measured_millis: load.device(d) }
         });
         headroom::have(&Inputs {
             cores: self.inner.cores,

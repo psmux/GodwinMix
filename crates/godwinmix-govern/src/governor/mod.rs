@@ -93,6 +93,11 @@ impl Governor {
         Ok(())
     }
 
+    /// The settings it was made with.
+    pub fn config(&self) -> &GovernorConfig {
+        &self.inner.config
+    }
+
     /// Replace the profile, after a calibration.
     pub fn set_profile(&self, profile: Profile) {
         *self.inner.profile.write() = Arc::new(profile);
