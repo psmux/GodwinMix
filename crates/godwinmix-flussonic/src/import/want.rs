@@ -5,8 +5,10 @@
 //! `codec`, `width`, `height`, `fps` and `bitrate_kbps` are
 //! `VideoWant`'s today; `codec` and `bitrate_kbps` are `AudioWant`'s. The
 //! rest are the fields `wip/headend-media` adds (`fit` with its pad colour,
-//! `deinterlace`, `keyframe_frames`, `preset`, `bframes`, the hardware
-//! preference, `AudioWant.tracks`). They are written here under the names
+//! `deinterlace`, `keyframe_frames`, `preset`, `bframes`,
+//! `AudioWant.tracks`). `hw=nvenc` and `deviceid` have no field: the planner
+//! already takes a hardware encoder first, in catalogue rank order, and a
+//! station that must never encode in software pins it with `[hardware]`. They are written here under the names
 //! that branch plans; until it lands the station reads the request without
 //! them, and each one is listed in the import report as waiting, so nothing
 //! is dropped without a word.
@@ -17,7 +19,7 @@ use crate::model::{Bitrate, Deinterlace, DeinterlaceRate, Hw, SizeMode, Transcod
 use serde_json::{json, Map, Value};
 
 /// Fields this import writes that the station does not read yet.
-pub const WAITING: &[&str] = &["fit", "pad_color", "deinterlace", "keyframe_frames", "preset", "bframes", "hardware", "device", "tracks"];
+pub const WAITING: &[&str] = &["fit", "pad_color", "deinterlace", "keyframe_frames", "preset", "bframes", "tracks"];
 
 fn kbps(b: Bitrate) -> Option<u64> {
     match b {
@@ -53,6 +55,9 @@ fn video(t: &Transcoder, line: usize, notes: &mut Vec<Note>) -> Option<Value> {
         v.insert("fit".into(), json!(fit));
         if let Some(rgb) = size.pad.filter(|_| size.mode == SizeMode::Fit) {
             v.insert("pad_color".into(), json!(format!("#{rgb:06x}")));
+            if rgb != 0 {
+                notes.push(Note::not_carried(line, format!("pad colour #{rgb:06x}: the bars are drawn black")));
+            }
         }
     }
     if let Some(fps) = track.fps {
@@ -76,13 +81,8 @@ fn video(t: &Transcoder, line: usize, notes: &mut Vec<Note>) -> Option<Value> {
     if let Some(b) = track.bframes {
         v.insert("bframes".into(), json!(b));
     }
-    match t.hw {
-        Hw::Nvenc => {
-            v.insert("hardware".into(), json!("nvenc"));
-            v.insert("device".into(), json!(t.device_id));
-        }
-        Hw::Cpu => {}
-        Hw::Qsv | Hw::Other => notes.push(Note::not_carried(line, "hw other than nvenc or cpu: the planner picks the encoder".into())),
+    if matches!(t.hw, Hw::Qsv | Hw::Other) {
+        notes.push(Note::not_carried(line, "hw other than nvenc or cpu: the planner picks the encoder".into()));
     }
     for (what, set) in [("vprofile", track.profile.is_some()), ("level", track.level.is_some())] {
         if set {

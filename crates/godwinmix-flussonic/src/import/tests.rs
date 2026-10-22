@@ -20,7 +20,13 @@ fn a_headend_config_is_51_renditions_and_one_copy() {
     assert_eq!(r["video"]["bitrate_kbps"], 1500);
     assert_eq!((r["video"]["fit"].as_str(), r["video"]["pad_color"].as_str()), (Some("pad"), Some("#000000")));
     assert_eq!((r["video"]["keyframe_frames"].as_u64(), r["video"]["deinterlace"].as_str()), (Some(50), Some("off")));
-    assert_eq!((r["video"]["hardware"].as_str(), r["video"]["device"].as_u64()), (Some("nvenc"), Some(0)));
+    // Exactly the request the media side plans from; the planner takes NVENC first on its own.
+    assert_eq!(
+        *r,
+        json!({"video": {"codec": "h264", "width": 1280, "height": 720, "bitrate_kbps": 1500, "keyframe_frames": 50,
+                         "fit": "pad", "pad_color": "#000000", "deinterlace": "off"},
+               "audio": {"codec": "aac", "bitrate_kbps": 128, "tracks": "all"}})
+    );
     assert_eq!((r["audio"]["codec"].as_str(), r["audio"]["bitrate_kbps"].as_u64()), (Some("aac"), Some(128)));
     assert_eq!(r["audio"]["tracks"], "all");
     let relay = i.shows.iter().find(|s| s.name == "RELAY1").unwrap();
