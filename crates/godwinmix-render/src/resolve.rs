@@ -1,7 +1,9 @@
 //! One request against one source: fill in what the request left out, then
 //! decide copy or encode for the video. Pure arithmetic, no nodes yet.
 
-use godwinmix_protocol::rendition::{RenditionRequest, StreamInfo, VideoCodec, VideoShape};
+use godwinmix_protocol::rendition::{
+    Deinterlace, Fps, RenditionRequest, StreamInfo, VideoCodec, VideoShape,
+};
 
 use crate::container::{
     carries_video, container_slug, fps_text, video_codecs, video_name, video_slug,
@@ -99,7 +101,11 @@ pub fn resolve_video(
     let (codec, explicit) = codec_for(req, info, available)?;
     let (width, height) = size(want.width, want.height, &src);
     let fps = want.fps.unwrap_or(src.fps);
-    let keyframe_ms = want.keyframe_ms.unwrap_or(0);
+    let keyframe_ms = want
+        .keyframe_frames
+        .map(|f| frames_ms(f, fps))
+        .or(want.keyframe_ms)
+        .unwrap_or(0);
     let tolerance = want.bitrate_tolerance.unwrap_or(DEFAULT_TOLERANCE);
     let mut target = VideoShape {
         codec,
@@ -109,7 +115,11 @@ pub fn resolve_video(
         bitrate_kbps: 0,
         keyframe_ms,
     };
-    let why = mismatch(req, info, &src, &target, want.bitrate_kbps, tolerance);
+    let progressive = want.deinterlace == Some(Deinterlace::On) && info.interlaced;
+    let why = match progressive {
+        true => Some("the source is interlaced and this output wants it progressive".into()),
+        false => mismatch(req, info, &src, &target, want.bitrate_kbps, tolerance),
+    };
     let Some(why) = why else {
         return Ok(VideoDecision::Copy);
     };
@@ -118,6 +128,12 @@ pub fn resolve_video(
     }
     target.bitrate_kbps = want.bitrate_kbps.unwrap_or_else(|| default_kbps(&target));
     Ok(VideoDecision::Encode { target, why })
+}
+
+/// A keyframe interval of `frames` at `fps`, in whole milliseconds: 50
+/// frames at 29.97 is 1668 ms, which comes back as 50 frames.
+pub fn frames_ms(frames: u32, fps: Fps) -> u32 {
+    (f64::from(frames) * 1000.0 / fps.as_f64().max(1.0)).round() as u32
 }
 
 pub fn missing(req: &RenditionRequest, source: &str, track: &str) -> PlanError {

@@ -2,7 +2,9 @@
 
 use std::collections::BTreeMap;
 
-use godwinmix_protocol::rendition::{AudioShape, Container, Cost, EncoderSlot, Fps, VideoShape};
+use godwinmix_protocol::rendition::{
+    AudioShape, Container, Cost, Deinterlace, EncoderSlot, Fit, Fps, VideoShape,
+};
 use serde::Serialize;
 
 /// Video or audio.
@@ -22,35 +24,69 @@ pub enum NodeKind {
     /// Where a source's frames or bytes come from: the hub or the frame bus.
     Source { source: String },
     /// The source's encoded bytes, parsed and passed on untouched.
-    Copy { source: String, track: Track },
+    Copy {
+        source: String,
+        track: Track,
+        /// Which sound track: 0 for the first, 1, 2, 3 for the others.
+        #[serde(default, skip_serializing_if = "is_zero")]
+        index: u8,
+    },
     /// The source's one decoder for this track.
-    Decode { source: String, track: Track },
+    Decode {
+        source: String,
+        track: Track,
+        #[serde(default, skip_serializing_if = "is_zero")]
+        index: u8,
+    },
     /// Scale, convert and change the frame rate, once per distinct result.
     Scale {
         source: String,
         width: u32,
         height: u32,
         fps: Fps,
+        /// How a picture of another shape goes in, and the bars' colour.
+        #[serde(default)]
+        fit: Fit,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pad_color: Option<String>,
+        #[serde(default)]
+        deinterlace: Deinterlace,
     },
     /// One video encoder, shared by every output that wants this shape.
     Encode {
         source: String,
         shape: VideoShape,
         encoder: EncoderSlot,
+        /// The encoder's own preset and B frames, when a request named them.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        preset: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        bframes: Option<u8>,
     },
     /// Resample or remix, once per distinct result.
     AudioConvert {
         source: String,
         channels: u8,
         sample_rate: u32,
+        #[serde(default, skip_serializing_if = "is_zero")]
+        index: u8,
     },
     /// One audio encoder, shared by every output that wants this shape.
-    AudioEncode { source: String, shape: AudioShape },
+    AudioEncode {
+        source: String,
+        shape: AudioShape,
+        #[serde(default, skip_serializing_if = "is_zero")]
+        index: u8,
+    },
     /// One output's container. Every request has exactly one.
     Mux {
         request: String,
         container: Container,
     },
+}
+
+fn is_zero(n: &u8) -> bool {
+    *n == 0
 }
 
 /// Why the planner decided what it did, for the page to show as it is.

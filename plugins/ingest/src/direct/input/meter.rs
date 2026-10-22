@@ -74,13 +74,16 @@ impl Meter {
     pub fn record(&mut self, tag: &MediaTag) {
         let now = Instant::now();
         self.bytes += tag.payload.len() as u64;
-        // The sound tracks after the first are the hub's to measure.
         if tag.track != 0 {
+            // A further sound track: its bytes count, its codec is the hub's.
             return;
         }
         match tag.kind {
             TagKind::Video if tag.sequence_header => self.video = Some(codec::read_video(tag)),
             TagKind::Video => {
+                if let Some((read, _, _)) = crate::hub::mpeg2(tag) {
+                    self.video = Some(read);
+                }
                 self.frames += 1;
                 self.last_video = Some(now);
                 let ts = tag.timestamp_ms;

@@ -21,6 +21,7 @@ mod frames;
 mod loss;
 mod meter;
 mod native;
+mod numbering;
 mod outlet;
 mod pads;
 mod pull;
@@ -59,24 +60,24 @@ pub fn open(spec: &InputSpec, ctx: &Context) -> Result<Box<dyn Input>, InputErro
 fn one(spec: &InputSpec, ctx: &Context) -> Result<Box<dyn Input>, InputError> {
     Ok(match spec.kind()? {
         // The native path unless asked for the old one (`docs/reference/direct-inputs.md`).
-        Kind::Udp if spec.param("engine").as_deref() == Some("gstreamer") => Box::new(Gst(ts_in::Udp::new(spec)?)),
+        Kind::Udp if spec.param("engine").as_deref() == Some("gstreamer") => Box::new(Gst(ts_in::Udp::new(spec)?, spec.carry)),
         Kind::Udp => Box::new(native::Native::new(spec)?),
-        Kind::Srt => Box::new(Gst(ts_in::Srt::new(spec))),
-        Kind::Rist => Box::new(Gst(rist::Rist::new(spec)?)),
-        Kind::Rtsp => Box::new(Gst(rtsp::Rtsp::new(spec)?)),
-        Kind::Http => Box::new(Gst(pull::Uri::new(spec, true))),
-        Kind::Rtmp => Box::new(Gst(pull::Uri::new(spec, false))),
-        Kind::File => Box::new(Gst(pull::File::new(spec)?)),
+        Kind::Srt => Box::new(Gst(ts_in::Srt::new(spec), spec.carry)),
+        Kind::Rist => Box::new(Gst(rist::Rist::new(spec)?, spec.carry)),
+        Kind::Rtsp => Box::new(Gst(rtsp::Rtsp::new(spec)?, spec.carry)),
+        Kind::Http => Box::new(Gst(pull::Uri::new(spec, true), spec.carry)),
+        Kind::Rtmp => Box::new(Gst(pull::Uri::new(spec, false), spec.carry)),
+        Kind::File => Box::new(Gst(pull::File::new(spec)?, spec.carry)),
         Kind::Channel => Box::new(channel::Channel::new(spec, ctx.hub.as_ref())?),
     })
 }
 
-/// A GStreamer backed input: its plan, run by the runner.
-struct Gst<P: runner::Plan>(P);
+/// A GStreamer backed input: its plan, run by the runner, and what it carries.
+struct Gst<P: runner::Plan>(P, Carry);
 
 impl<P: runner::Plan> Input for Gst<P> {
     fn run(self: Box<Self>, out: Sink, stop: StopSignal) {
-        runner::run(self.0, out, stop);
+        runner::run(self.0, self.1, out, stop);
     }
 }
 

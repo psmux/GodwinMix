@@ -55,3 +55,17 @@ fn fill(input: &mut Value, desc: &Value, last_tag: Option<u64>) {
         o.retain(|_, x| !x.is_null());
     }
 }
+
+/// `direct.input`'s `tracks`: each track the hub measured, `{track, kind,
+/// codec, channels, sample_rate}` or the video's size and rate, with the
+/// `pid` and `lang` the input read from the PMT where it did.
+pub fn tracks(measured: &Value, from_input: &[super::input::TrackInfo]) -> Value {
+    let rows = measured.as_array().into_iter().flatten().map(|t| {
+        let mut v = t.clone();
+        let mine = from_input.iter().find(|i| t["kind"] == i.kind && t["track"].as_u64() == Some(u64::from(i.track)));
+        v["pid"] = json!(mine.and_then(|i| i.pid));
+        v["lang"] = json!(mine.and_then(|i| i.lang.clone()));
+        v
+    });
+    Value::Array(rows.collect())
+}

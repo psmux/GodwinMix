@@ -20,6 +20,9 @@ pub struct Machine {
     pub decoders: Vec<VideoEntry>,
     pub audio_encoders: Vec<AudioEntry>,
     pub audio_decoders: Vec<AudioEntry>,
+    /// `cudaconvertscale` is here, so pictures an NVIDIA decoder made can be
+    /// scaled and padded where they are, in the GPU's memory.
+    pub cuda_scale: bool,
 }
 
 fn present(needs: Vec<String>, reg: &dyn Registry) -> bool {
@@ -53,6 +56,7 @@ impl Machine {
             decoders: video(Role::Decode),
             audio_encoders: audio(Role::Encode),
             audio_decoders: audio(Role::Decode),
+            cuda_scale: reg.has("cudaconvertscale"),
         }
     }
 
