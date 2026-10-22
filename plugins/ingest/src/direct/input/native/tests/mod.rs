@@ -2,5 +2,6 @@
 
 mod compare;
 mod feed;
+mod fixture;
 mod shared;
 mod sync;

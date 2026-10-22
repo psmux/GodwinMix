@@ -5,7 +5,6 @@ use std::sync::{Arc, Mutex};
 
 use gstreamer as gst;
 use gstreamer::prelude::*;
-
 use super::feed;
 use crate::direct::input::pads::{parse_into, Pads};
 use crate::direct::input::spec::Carry;
@@ -21,14 +20,14 @@ impl Inlet for Keep {
 }
 
 /// The tags `filesrc ! parsebin ! h264parse | aacparse ! appsink` make.
-pub fn gstreamer_tags(path: &std::path::Path, carry: Carry) -> Vec<MediaTag> {
+pub fn gstreamer_tags(path: &std::path::Path, carry: Carry, program: Option<u16>) -> Vec<MediaTag> {
     gmx_netkit::init().unwrap();
     let got = Arc::new(Mutex::new(Vec::new()));
     let to = crate::tagger::share(Box::new(Keep(got.clone())));
     let pipeline = gst::Pipeline::new();
     let src = gst::ElementFactory::make("filesrc").property("location", path.to_str().unwrap()).build().unwrap();
     pipeline.add(&src).unwrap();
-    let pads = Pads::new(to.clone(), false, None, carry);
+    let pads = Pads::new(to.clone(), false, program, carry);
     parse_into(&pipeline, &src.static_pad("src").unwrap(), &pads).unwrap();
     pipeline.set_state(gst::State::Playing).unwrap();
     let bus = pipeline.bus().unwrap();
@@ -40,6 +39,9 @@ pub fn gstreamer_tags(path: &std::path::Path, carry: Carry) -> Vec<MediaTag> {
     tags
 }
 
+/// Tags either side may lack at the end of a file (see `aligned`).
+const END: usize = 4;
+
 type Line = Vec<(i64, bool, bool, Arc<[u8]>)>;
 
 /// One track's tags as `(time, keyframe, header, payload)`.
@@ -49,10 +51,9 @@ fn line(tags: &[MediaTag], kind: TagKind, track: u8) -> Line {
 
 /// Both lines from the first frame GStreamer handed on, headers apart, with
 /// times from there. `filesrc ! parsebin` loses the first frame or two while
-/// it links its pads, and the native path has no last frame until the next
-/// packet starts, which at the end of a file never comes; both ends are
-/// trimmed.
-fn aligned(a: Line, b: Line) -> (Line, Line) {
+/// it links its pads; at the end GStreamer hands on what its parsers still
+/// hold, and the native path waits for packets that never come.
+fn aligned(a: Line, b: Line, what: &str) -> (Line, Line) {
     let (head_a, mut a): (Line, Line) = a.into_iter().partition(|x| x.2);
     let (head_b, mut b): (Line, Line) = b.into_iter().partition(|x| x.2);
     let bodies = |h: &Line| h.iter().map(|x| x.3.clone()).collect::<Vec<_>>();
@@ -60,7 +61,7 @@ fn aligned(a: Line, b: Line) -> (Line, Line) {
     let mine = b.iter().position(|y| y.3 == a[0].3).expect("GStreamer's first frame is among the native ones");
     b.drain(..mine);
     let n = a.len().min(b.len());
-    assert!(a.len() - n <= 1 && b.len() - n <= 1, "{} against {} tags", a.len(), b.len());
+    assert!(a.len() - n <= END && b.len() - n <= END, "{what}: {} against {} tags", a.len(), b.len());
     a.truncate(n);
     b.truncate(n);
     // Times from the second frame: GStreamer's first one after a start in
@@ -79,18 +80,17 @@ pub fn assert_same(path: &std::path::Path, what: &str) {
 
 /// The same with `carry`, for the video and `sounds` sound tracks.
 pub fn assert_carried(path: &std::path::Path, what: &str, carry: Carry, sounds: u8) {
-    let theirs = gstreamer_tags(path, carry);
-    let ours = feed::tags(&std::fs::read(path).unwrap(), carry);
+    assert_program(path, what, carry, sounds, None);
+}
+
+/// The same for one program of a multiplex.
+pub fn assert_program(path: &std::path::Path, what: &str, carry: Carry, sounds: u8, program: Option<u16>) {
+    let theirs = gstreamer_tags(path, carry, program);
+    let ours = feed::tags_of(&std::fs::read(path).unwrap(), carry, program);
     let lines = std::iter::once((TagKind::Video, 0)).chain((0..sounds).map(|t| (TagKind::Audio, t)));
     for (kind, track) in lines {
         let what = &format!("{what}, track {track}");
-        let (a, b) = aligned(line(&theirs, kind, track), line(&ours, kind, track));
-        if std::env::var("NATIVE_DUMP").is_ok() {
-            for (i, (x, y)) in a.iter().zip(&b).enumerate().take(6) {
-                eprintln!("{kind:?} {i}: gst {} {} {} {} {:02x?} | native {} {} {} {} {:02x?}", x.0, x.1, x.2, x.3.len(), &x.3[..x.3.len().min(16)], y.0, y.1, y.2, y.3.len(), &y.3[..y.3.len().min(16)]);
-            }
-            eprintln!("{kind:?} last: gst {:?} native {:?}", a.last().map(|x| (x.0, x.3.len())), b.last().map(|y| (y.0, y.3.len())));
-        }
+        let (a, b) = aligned(line(&theirs, kind, track), line(&ours, kind, track), what);
         assert!(!a.is_empty(), "{what}: GStreamer made no {kind:?} tags");
         assert_eq!(a.len(), b.len(), "{what}: {kind:?} tags, GStreamer against native");
         for (i, (x, y)) in a.iter().zip(&b).enumerate() {
