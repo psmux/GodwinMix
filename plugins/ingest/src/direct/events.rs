@@ -113,6 +113,7 @@ fn input_event(host: &Host, show: &Show) -> (Value, Value) {
     // The inputs say so this way while the backup carries the show.
     let backup = seen.stats.error.as_deref().is_some_and(|e| e.starts_with("on the backup input"));
     let pmt = seen.stats.tracks.clone();
+    let scrambled = seen.stats.scrambled;
     drop(seen);
     let desc = host.hub.stream(&app, STREAM).unwrap_or(Value::Null);
     let mut v = Map::new();
@@ -120,6 +121,7 @@ fn input_event(host: &Host, show: &Show) -> (Value, Value) {
     v.insert("state".into(), json!(if live { "live" } else { "idle" }));
     v.insert("from".into(), json!(from(&show.row.input.uri)));
     v.insert("backup".into(), json!(backup));
+    v.insert("scrambled".into(), json!(scrambled));
     v.insert("relay".into(), json!((host.relay)()));
     v.insert("stream".into(), json!(format!("{app}/{STREAM}")));
     for k in ["video", "audio"] {
@@ -138,7 +140,7 @@ fn input_event(host: &Host, show: &Show) -> (Value, Value) {
     let shape = |k: &str| json!([desc[k]["codec"], desc[k]["width"], desc[k]["height"], desc[k]["channels"]]);
     // The relay too: it opens when a show first needs it, and a station
     // waiting to read the show learns where only from this event.
-    let key = json!([live, backup, shape("video"), shape("audio"), error, (host.relay)(), lineup]);
+    let key = json!([live, backup, shape("video"), shape("audio"), error, (host.relay)(), lineup, scrambled > 0]);
     (Value::Object(v), key)
 }
 

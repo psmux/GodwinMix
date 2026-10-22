@@ -76,6 +76,9 @@ pub struct InputStats {
     pub programs: Vec<ProgramInfo>,
     /// While it waits to try again after a failure: how long it waits.
     pub retry_ms: Option<u64>,
+    /// Scrambled packets on the chosen program, counted since the input
+    /// started: a feed whose key is missing reads as nothing but this.
+    pub scrambled: u64,
     /// Every stream carried, video first then sound by track. Empty from an
     /// input that does not know its PIDs.
     pub tracks: Vec<TrackInfo>,
@@ -94,6 +97,7 @@ impl InputStats {
             "audio_channels": self.audio_channels,
             "cc_errors": self.cc_errors,
             "packets_lost": self.packets_lost,
+            "scrambled": self.scrambled,
             "keyframe_ms": self.keyframe_ms,
             "last_frame_ms": self.last_frame_ms,
         });
@@ -123,7 +127,7 @@ mod tests {
         let s = InputStats { state: State::Live, kbps: 8000, ..InputStats::default() };
         let v = s.json();
         for key in ["kbps", "fps", "width", "height", "video_codec", "audio_codec", "audio_channels",
-                    "cc_errors", "packets_lost", "keyframe_ms", "last_frame_ms", "state"] {
+                    "cc_errors", "packets_lost", "scrambled", "keyframe_ms", "last_frame_ms", "state"] {
             assert!(v.get(key).is_some(), "{key} missing");
         }
         assert!(v.get("programs").is_none() && v.get("error").is_none());
