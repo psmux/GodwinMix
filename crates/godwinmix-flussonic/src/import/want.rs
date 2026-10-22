@@ -21,6 +21,13 @@ use serde_json::{json, Map, Value};
 /// Fields this import writes that the station does not read yet.
 pub const WAITING: &[&str] = &["fit", "pad_color", "deinterlace", "keyframe_frames", "preset", "bframes", "tracks"];
 
+/// The NVENC preset for a transcoder line that names none. The catalogue's
+/// own default (p4) is tuned for one encode; a headend runs dozens on one
+/// card, and measured on an RTX 3060 class card p4 filled the encoder before
+/// 46 channels of 720p while p1 ran them with room. A line's own `preset=`
+/// is passed through as written.
+pub const NVENC_PRESET: &str = "p1";
+
 fn kbps(b: Bitrate) -> Option<u64> {
     match b {
         Bitrate::Copy => None,
@@ -75,8 +82,14 @@ fn video(t: &Transcoder, line: usize, notes: &mut Vec<Note>) -> Option<Value> {
     if let Some(gop) = t.gop {
         v.insert("keyframe_frames".into(), json!(gop));
     }
-    if let Some(p) = &track.preset {
-        v.insert("preset".into(), json!(p));
+    match (&track.preset, t.hw) {
+        (Some(p), _) => {
+            v.insert("preset".into(), json!(p));
+        }
+        (None, Hw::Nvenc) => {
+            v.insert("preset".into(), json!(NVENC_PRESET));
+        }
+        (None, _) => {}
     }
     if let Some(b) = track.bframes {
         v.insert("bframes".into(), json!(b));
