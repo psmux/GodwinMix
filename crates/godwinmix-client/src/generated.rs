@@ -461,6 +461,11 @@ pub struct AudioWant {
     pub codec: Option<AudioCodec>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sample_rate: Option<u32>,
+    /// The first sound track alone (when left out), or every one the source
+    /// carries, each converted on its own at its own channel count unless
+    /// `channels` says otherwise.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tracks: Option<Tracks>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -1317,6 +1322,11 @@ pub struct Crop {
     pub top: f64,
 }
 
+/// Whether an interlaced picture is made progressive.
+pub type Deinterlace = String;
+/// The values api_level 1 knows for [`Deinterlace`].
+pub const DEINTERLACE_VALUES: &[&str] = &["auto", "off", "on"];
+
 /// One destination as a client sees it. The key never appears: `has_key`
 /// says whether there is one.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -2011,11 +2021,16 @@ pub struct Finding {
     pub severity: Severity,
 }
 
-/// How content fills its frame. SVG's vocabulary, which replaces OBS's seven
-/// bounds types and maps onto `sizing-policy` on a `glvideomixer` pad.
+/// How a picture goes into a size of another shape.
 pub type Fit = String;
 /// The values api_level 1 knows for [`Fit`].
-pub const FIT_VALUES: &[&str] = &["none", "contain", "cover", "stretch", "fit-width", "fit-height", "max"];
+pub const FIT_VALUES: &[&str] = &["pad", "crop", "stretch"];
+
+/// How content fills its frame. SVG's vocabulary, which replaces OBS's seven
+/// bounds types and maps onto `sizing-policy` on a `glvideomixer` pad.
+pub type Fit2 = String;
+/// The values api_level 1 knows for [`Fit2`].
+pub const FIT2_VALUES: &[&str] = &["none", "contain", "cover", "stretch", "fit-width", "fit-height", "max"];
 
 /// Content on the wire. The same four shapes as the tree, except that a group
 /// names no children: they are records whose parent is the group.
@@ -6409,6 +6424,11 @@ pub struct ToolCallRequest {
     pub source: Option<String>,
 }
 
+/// Which sound tracks a rendition converts.
+pub type Tracks = String;
+/// The values api_level 1 knows for [`Tracks`].
+pub const TRACKS_VALUES: &[&str] = &["first", "all"];
+
 /// Where an item sits and how it is sized.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -6420,7 +6440,7 @@ pub struct Transform {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub anchor: Option<Vec2>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub fit: Option<Fit>,
+    pub fit: Option<Fit2>,
     /// The rectangle the content is fitted into, in canvas pixels. Absent
     /// means the content's own size, scaled.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -6594,6 +6614,10 @@ pub struct VideoShape {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct VideoWant {
+    /// B frames between references. The catalogue's (none, for live) when
+    /// left out.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bframes: Option<u8>,
     /// Target bitrate. A copy is kept when the source is within
     /// `bitrate_tolerance` of it.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -6604,13 +6628,31 @@ pub struct VideoWant {
     pub bitrate_tolerance: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub codec: Option<VideoCodec>,
+    /// Off when left out: an interlaced picture is scaled as it comes.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deinterlace: Option<Deinterlace>,
+    /// How a picture of another shape goes into the size asked for. Pad when
+    /// left out, in black, which is what scaling has always done.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fit: Option<Fit>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fps: Option<Fps>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub height: Option<u32>,
+    /// Keyframe interval in frames of the source's own rate, as Flussonic's
+    /// `gop` is written. Taken over `keyframe_ms` when both are set.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub keyframe_frames: Option<u32>,
     /// Keyframe interval. Renditions in one ladder share it.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub keyframe_ms: Option<u32>,
+    /// The colour of the bars a pad fit adds, `#rrggbb`. Black when left out.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pad_color: Option<String>,
+    /// The encoder's speed and quality preset in its own words (`p4` on
+    /// NVENC, `veryfast` on x264). The catalogue's when left out.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub preset: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub width: Option<u32>,
 }

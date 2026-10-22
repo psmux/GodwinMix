@@ -235,6 +235,7 @@ export interface AudioWant {
   channels?: number | null;
   codec?: AudioCodec | null;
   sample_rate?: number | null;
+  tracks?: Tracks | null;
 }
 
 export interface BackendInfo {
@@ -699,6 +700,9 @@ export interface Crop {
   top: number;
 }
 
+/** Whether an interlaced picture is made progressive. */
+export type Deinterlace = "off" | "on" | "auto";
+
 /**
  * One destination as a client sees it. The key never appears: `has_key`
  * says whether there is one.
@@ -1084,11 +1088,14 @@ export interface Finding {
   severity: Severity;
 }
 
+/** How a picture goes into a size of another shape. */
+export type Fit = "pad" | "crop" | "stretch";
+
 /**
  * How content fills its frame. SVG's vocabulary, which replaces OBS's seven
  * bounds types and maps onto `sizing-policy` on a `glvideomixer` pad.
  */
-export type Fit = "none" | "contain" | "cover" | "stretch" | "fit-width" | "fit-height" | "max";
+export type Fit2 = "none" | "contain" | "cover" | "stretch" | "fit-width" | "fit-height" | "max";
 
 /**
  * Content on the wire. The same four shapes as the tree, except that a group
@@ -3595,11 +3602,14 @@ export interface ToolCallRequest {
   source?: string | null;
 }
 
+/** Which sound tracks a rendition converts. */
+export type Tracks = "first" | "all";
+
 /** Where an item sits and how it is sized. */
 export interface Transform {
   align?: Align;
   anchor?: Vec2;
-  fit?: Fit;
+  fit?: Fit2;
   frame?: Frame | null;
   position?: Vec2;
   rotation?: number;
@@ -3703,12 +3713,18 @@ export interface VideoShape {
 
 /** The video an output wants. Every field left out is taken from the source. */
 export interface VideoWant {
+  bframes?: number | null;
   bitrate_kbps?: number | null;
   bitrate_tolerance?: number | null;
   codec?: VideoCodec | null;
+  deinterlace?: Deinterlace | null;
+  fit?: Fit | null;
   fps?: Fps | null;
   height?: number | null;
+  keyframe_frames?: number | null;
   keyframe_ms?: number | null;
+  pad_color?: string | null;
+  preset?: string | null;
   width?: number | null;
 }
 
