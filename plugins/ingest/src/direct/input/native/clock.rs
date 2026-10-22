@@ -22,6 +22,12 @@ const UP: i64 = 1_000_000_000_000_000;
 const AHEAD: i64 = 3 * 90_000;
 /// How far after the old clock's last PCR a new clock starts.
 const GAP: i64 = 3_600;
+/// A PES time this far before the last PCR, or [`LATER`] after it, belongs
+/// to a clock the PCR has not caught up with yet: a sender that restarted,
+/// whose first sound came before its first PCR. It is dropped rather than
+/// laid on the old clock, where it would land seconds away.
+const EARLIER: i64 = 90_000;
+const LATER: i64 = 5 * 90_000;
 
 #[derive(Debug, Default)]
 pub struct Clock {
@@ -76,10 +82,14 @@ impl Clock {
         }
     }
 
-    /// A PES time on the program's line, or `None` before the first PCR.
+    /// A PES time on the program's line, or `None` before the first PCR
+    /// or on a clock the PCR does not speak for.
     pub fn time(&mut self, t: u64) -> Option<Ns> {
         let base = self.base?;
         let v = self.unwrap(t) + self.shift;
+        if self.last_pcr.is_some_and(|lp| v < lp - EARLIER || v > lp + LATER) {
+            return None;
+        }
         Some((ns_of_90k(v.max(0) as u64) as i64 - base + UP).max(0) as Ns)
     }
 }
@@ -116,5 +126,7 @@ mod tests {
         let audio = c.time(100_000 + 9_000 + 2_700).unwrap();
         assert!(video > before && video - before < 100_000_000, "{before} then {video}");
         assert!(near(audio - video, 30_000_000), "30 ms apart before the jump and after");
+        // Sound from the next restart, ahead of that sender's first PCR.
+        assert_eq!(c.time(5_000_000), None);
     }
 }

@@ -5,6 +5,10 @@
 //! goes on without waiting for the next packet to start. Video usually says
 //! 0, unbounded, and ends where the next one starts. A packet that lost a
 //! piece on the way is dropped whole.
+//!
+//! A packet's times are read off its header when it starts (`stream.rs`),
+//! not when it ends: an unbounded one ends only when the next one starts,
+//! and a sender that restarted may have moved the clock by then.
 
 /// More than this and the packet is junk: a 1080i MPEG-2 I frame at 20
 /// Mbit/s is under 1 MB.
@@ -19,11 +23,12 @@ pub struct Assembly {
 }
 
 impl Assembly {
-    /// Add one TS packet's payload, calling `done` with each whole PES.
-    pub fn push(&mut self, start: bool, payload: &[u8], done: &mut dyn FnMut(&[u8])) {
+    /// Add one TS packet's payload, calling `done` with each whole PES,
+    /// and whether it is the one this packet started.
+    pub fn push(&mut self, start: bool, payload: &[u8], done: &mut dyn FnMut(&[u8], bool)) {
         if start {
             if !self.broken && self.want.is_none() && !self.buf.is_empty() {
-                done(&self.buf);
+                done(&self.buf, false);
             }
             self.buf.clear();
             self.broken = false;
@@ -41,7 +46,7 @@ impl Assembly {
         }
         if let Some(want) = self.want.filter(|&w| self.buf.len() >= w) {
             if !self.broken {
-                done(&self.buf[..want]);
+                done(&self.buf[..want], start);
             }
             self.buf.clear();
             self.want = None;
@@ -112,12 +117,12 @@ mod tests {
         let mut got = Vec::new();
         let mut a = Assembly::default();
         let first = [0, 0, 1, 0xC0, 0, 4, 1, 2];
-        a.push(true, &first, &mut |p| got.push(p.to_vec()));
-        a.push(false, &[3, 4, 5], &mut |p| got.push(p.to_vec()));
+        a.push(true, &first, &mut |p, _| got.push(p.to_vec()));
+        a.push(false, &[3, 4, 5], &mut |p, _| got.push(p.to_vec()));
         assert_eq!(got, vec![vec![0, 0, 1, 0xC0, 0, 4, 1, 2, 3, 4]]);
-        a.push(true, &[0, 0, 1, 0xE0, 0, 0, 9], &mut |p| got.push(p.to_vec()));
+        a.push(true, &[0, 0, 1, 0xE0, 0, 0, 9], &mut |p, _| got.push(p.to_vec()));
         a.lose();
-        a.push(true, &[0, 0, 1, 0xE0, 0, 0, 8], &mut |p| got.push(p.to_vec()));
+        a.push(true, &[0, 0, 1, 0xE0, 0, 0, 8], &mut |p, _| got.push(p.to_vec()));
         assert_eq!(got.len(), 1, "the broken one never came out");
     }
 }
