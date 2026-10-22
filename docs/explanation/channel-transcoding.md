@@ -150,11 +150,23 @@ was shared with other builds and tests throughout, at a load average between
 10 and 12 on 14 cores, which is why so little was free; the two admitted
 encodes ran at 92% of one core together.
 
+## On an NVIDIA card, the picture stays on it
+
+When the decoder is NVDEC and every encoder reading it is NVENC, the core
+marks the decode, its scales and its encodes `"memory": "cuda"`: the
+decoder hands its pictures on in CUDA memory, the scale and the bars are
+`cudaconvertscale`, and the encoder takes them as they are. A 1080i
+picture never crosses the bus. Every pipeline in the plugin shares one
+CUDA context, made to sleep while it waits for the card: GStreamer's own
+contexts spin, and with fifty channels and the encoder near its limit
+that was forty cores spent waiting.
+
 ## What is not here yet
 
-* Codecs other than H.264 and AAC, in or out. RTMP here is classic RTMP and
-  the SRT sender makes MPEG-TS from the same tags, so a destination sends
-  H.264 and AAC; a stream that arrives as HEVC can be copied, not converted.
+* Codecs other than H.264 and AAC out. RTMP here is classic RTMP and the
+  SRT sender makes MPEG-TS from the same tags, so a destination sends H.264
+  and AAC. In, a direct show's MPEG-2 and AC-3 are converted, and so is
+  HEVC; see [converting broadcast feeds on the GPU](../how-to/convert-broadcast-feeds-on-the-gpu.md).
 * A per destination preset lowering when the governor sheds: a shed channel
   conversion is stopped and brought back, never slowed.
 * The graph work's `rendition.plan` handler answering the `channel:<id>`
