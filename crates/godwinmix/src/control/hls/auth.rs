@@ -126,3 +126,7 @@ fn not_local(stream: &Stream, peer: Option<std::net::IpAddr>) -> Box<Response> {
     );
     Box::new(refuse(StatusCode::FORBIDDEN, message, json!({ "output": stream.id, "needs": "key", "access": "open" })))
 }
+
+#[cfg(test)]
+#[path = "auth_tests.rs"]
+mod tests;
