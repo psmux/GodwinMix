@@ -42,14 +42,24 @@ RUN apt-get update && apt-get install -y --no-install-recommends python3 curl \
 
 # The browser runs outside the mixer. Debian's WPE fallback can crash inside
 # the mixer process, so the default image ships the existing CEF sidecar.
+# The CEF is GodwinMix's own build with H.264 and AAC, the one the desktop
+# packages carry (dev/cef-codecs.sh, checked by SHA-256 after the download).
+# The official CEF plays neither, so a page with an H.264 video in it, or a
+# superimposed page whose clip is AAC, stayed silent or black in the image.
+# CEF_CODECS=off builds against the official CEF.
 FROM builder AS browser-builder
 ARG WITH_CEF=1
+ARG CEF_CODECS=on
 ENV CEF_PATH=/cef
 RUN mkdir -p /browser-runtime \
     && if [ "$WITH_CEF" = "1" ]; then \
          apt-get update && apt-get install -y --no-install-recommends \
            cmake ninja-build libx11-dev libgtk-3-dev && \
-         cargo build --manifest-path browser/Cargo.toml --release --locked --bin godwinmix-browser && \
+         REPO=/src CEF_CODECS="$CEF_CODECS" bash -euo pipefail -c ' \
+           source dev/cef-codecs.sh; \
+           [ "$CEF_CODECS" = off ] || use_cef_codecs; \
+           cargo build --manifest-path browser/Cargo.toml --release --locked --bin godwinmix-browser; \
+           [ "$CEF_CODECS" = off ] || check_cef_codecs' && \
          cp browser/target/release/godwinmix-browser /browser-runtime/ && \
          find browser/target/release -maxdepth 1 -type f \
            \( -name '*.so*' -o -name '*.pak' -o -name '*.dat' -o -name '*.bin' \
@@ -96,11 +106,16 @@ ENV DEBIAN_FRONTEND=noninteractive
 # libav: the fallback, below, for what nothing else decodes.
 # tools: gst-inspect-1.0 and gst-launch-1.0, for `docker exec` when a pipeline
 #       misbehaves. Half a megabyte and worth it on a headless box.
+# x:    on Debian this is where pango lives, and with it textoverlay, which
+#       draws every text source, lower third and ticker. Without it each of
+#       those failed in the image with "No such element or plugin
+#       'textoverlay'".
 RUN apt-get update && apt-get install -y --no-install-recommends \
       gstreamer1.0-plugins-base \
       gstreamer1.0-plugins-good \
       gstreamer1.0-plugins-bad \
       gstreamer1.0-tools \
+      gstreamer1.0-x \
       ca-certificates \
       curl \
     && if [ "$WITH_CEF" = "1" ]; then \
