@@ -47,6 +47,7 @@ godwinmix-host = { path = "crates/godwinmix-host", version = "0.3.16" }
 godwinmix-govern = { path = "crates/godwinmix-govern", version = "0.3.16" }
 godwinmix-framebus = { path = "crates/godwinmix-framebus", version = "0.3.16" }
 godwinmix-render = { path = "crates/godwinmix-render", version = "0.3.16" }
+godwinmix-flussonic = { path = "crates/godwinmix-flussonic", version = "0.3.16" }
 
 gstreamer = "0.24"
 gstreamer-video = "0.24"

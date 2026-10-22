@@ -136,6 +136,7 @@ Start here if you have never run it.
 * [Run the mixer from a phone or a tablet](how-to/use-a-phone-or-tablet.md): long press for the item menu, double tap to open, drag by the grip
 * [Install the control page as an app](how-to/install-as-an-app.md): on a phone or a desktop, and the certificate a phone needs for it
 * [Take headend feeds into direct shows](how-to/headend-feeds.md)
+* [Replace Flussonic with GodwinMix](how-to/replace-flussonic.md)
 * [Watch many shows at once](how-to/monitor-many-shows.md)
 * [Send a channel on to YouTube, Facebook or Twitch](how-to/restream-a-channel.md)
 * [Record a channel and share a watch link](how-to/record-a-channel.md)
@@ -205,6 +206,7 @@ Start here if you have never run it.
 * [Preview monitor status](reference/preview-monitor.md)
 * [The channel methods](reference/channels.md)
 * [Reference: what a direct show takes in](reference/direct-inputs.md)
+* [Reference: the Flussonic facade](reference/flussonic-facade.md)
 * [Direct shows: the host's table, events and calls](reference/direct-shows.md)
 * [Reference: the resource governor](reference/governor.md)
 * [Media upload](reference/media-upload.md)
