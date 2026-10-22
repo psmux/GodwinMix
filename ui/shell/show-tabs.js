@@ -1,13 +1,13 @@
-// The show tabs: drawn here, on every page; whatever is done to one is
-// show-actions.js, fetched on first use. No show.* on the core, no row.
+// The show tabs; acting on one is show-actions.js, fetched on first
+// hover or focus. No show.* on the core, no row.
 
 import { el, IS_MAC } from "./dom.js";
 
 let acts = null;
-export const actions = () => (acts ||= import("./show-actions.js"));
+export const actions = () => (acts ||= import("./show-actions.js").catch((e) => { acts = null; throw e; }));
 const WORD = { starting: "starting", stopped: "stopped", failed: "failed" };
 
-/** Tab keys as a step: Ctrl+Tab, Ctrl+PageDown, Cmd+Shift+] on a Mac. */
+/** Ctrl+Tab, Ctrl+PageDown, Cmd+Shift+]: a step. */
 export function stepOf(e, mac = IS_MAC) {
   if (e.altKey) return 0;
   const k = e.ctrlKey && !e.metaKey ? (e.key === "Tab" ? (e.shiftKey ? -1 : 1) : e.shiftKey ? 0 : { PageDown: 1, PageUp: -1 }[e.key]) : mac && e.metaKey && e.shiftKey && { BracketRight: 1, BracketLeft: -1 }[e.code];
@@ -36,6 +36,7 @@ export function showTabs(client) {
   };
   window.addEventListener("keydown", onKey, true);
   const stop = () => { held(); offs.forEach((f) => f()); window.removeEventListener("keydown", onKey, true); row.remove(); };
+  for (const t of ["focusin", "pointerover"]) row.addEventListener(t, () => actions().catch(() => {}), { once: true });
   for (const type of ["click", "dblclick", "keydown", "contextmenu"]) {
     row.addEventListener(type, (e) => {
       // Not the page's F2 or Delete, which act on scenes.
@@ -49,10 +50,9 @@ export function showTabs(client) {
 
 export function draw(view) {
   const { shows } = view;
-  // A switch asked for shows as made; focus stays on its show.
   const current = view.switching || view.current;
   const f = document.activeElement;
-  const keep = f && f.matches && f.matches(".showtab") && view.list.contains(f) ? f.dataset.show : null;
+  const keep = view.list.contains(f) && f.dataset.show;
   view.row.hidden = !shows.length;
   view.row.classList.toggle("one", shows.length === 1);
   view.list.replaceChildren(...shows.map((s) => {
