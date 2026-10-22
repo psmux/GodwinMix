@@ -5,7 +5,7 @@
 //!   scale    queue(leaky) ─ [videorate] ─ [deinterlace] ─ [crop] ─ videoscale | cudaconvertscale ─ caps ─ tee
 //!   encode   queue(leaky) ─ [videoconvert] ─ encoder ─ parser ─ caps ─ appsink
 //!   aconvert queue(leaky) ─ audioconvert ─ audioresample ─ caps ─ tee
-//!   aencode  queue(leaky) ─ audioconvert ─ audioresample ─ encoder [─ parser] ─ caps ─ appsink
+//!   aencode  queue(leaky) ─ audioconvert ─ audioresample ─ caps ─ encoder [─ parser] ─ caps ─ appsink
 //! ```
 //!
 //! Every branch off a tee starts with a small leaky queue on its own thread,
@@ -131,7 +131,15 @@ fn aconvert(node: &NodeSpec) -> Result<Built, String> {
 fn aencode(node: &NodeSpec) -> Result<Built, String> {
     let enc = element(node, "element")?;
     set_all(&enc, node.raw.get("props"));
-    let mut elements = vec![audio_queue()?, make("audioconvert")?, make("audioresample")?, enc];
+    let mut elements = vec![audio_queue()?, make("audioconvert")?, make("audioresample")?];
+    // A broadcast switches between 5.1 and stereo at a programme's edge; the
+    // encoder keeps the count it was planned at, and the sound is mixed to it,
+    // since an AAC encoder does not take a new layout mid stream.
+    let (channels, rate) = (node.number("channels"), node.number("sample_rate"));
+    if channels > 0 && rate > 0 {
+        elements.push(caps(&format!("audio/x-raw,channels={channels},rate={rate}"))?);
+    }
+    elements.push(enc);
     if let Some(p) = node.text("parser") {
         elements.push(make(p)?);
     }
