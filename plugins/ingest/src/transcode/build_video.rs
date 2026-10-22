@@ -16,6 +16,9 @@ pub fn scale(node: &NodeSpec) -> Result<Built, String> {
     let (num, den) = node.fps().unwrap_or((30, 1));
     let (width, height) = (node.number("width"), node.number("height"));
     let mut elements = vec![leaky_queue()?];
+    if node.text("deinterlace").is_none_or(|d| d == "off") {
+        weave(&elements[0]);
+    }
     // Only a change of rate needs videorate: at the source's own rate it
     // could only drop or repeat a picture whose time wobbled.
     let rate = node.raw.get("rate").and_then(serde_json::Value::as_bool).unwrap_or(true);
@@ -76,4 +79,28 @@ pub fn encode(node: &NodeSpec) -> Result<Built, String> {
     let sink = appsink()?;
     elements.push(sink.clone().upcast());
     Ok(Built { head: Some(elements[0].clone()), elements, tee: None, appsrc: None, appsink: Some(sink) })
+}
+
+/// Take an interlaced picture as the frame it is, both fields woven, which
+/// is what "no deinterlace" means: the caps going into the branch say
+/// progressive. `cudaconvertscale` takes nothing else, and a decoder marks
+/// a broadcast's pictures `mixed` whether or not a field ever differs.
+fn weave(head: &gst::Element) {
+    let Some(pad) = head.static_pad("sink") else { return };
+    pad.add_probe(gst::PadProbeType::EVENT_DOWNSTREAM, |_, info| {
+        let Some(gst::PadProbeData::Event(event)) = &info.data else { return gst::PadProbeReturn::Ok };
+        let gst::EventView::Caps(c) = event.view() else { return gst::PadProbeReturn::Ok };
+        let caps = c.caps();
+        let interlaced = caps.structure(0).and_then(|s| s.get::<&str>("interlace-mode").ok()).is_some_and(|m| m != "progressive");
+        if !interlaced {
+            return gst::PadProbeReturn::Ok;
+        }
+        let mut woven = caps.to_owned();
+        if let Some(s) = woven.make_mut().structure_mut(0) {
+            s.set("interlace-mode", "progressive");
+            s.remove_field("field-order");
+        }
+        info.data = Some(gst::PadProbeData::Event(gst::event::Caps::new(&woven)));
+        gst::PadProbeReturn::Ok
+    });
 }
