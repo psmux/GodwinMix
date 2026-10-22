@@ -12,13 +12,18 @@ use crate::tagger::Zero;
 
 /// The first program's number and PMT PID, from the file's first PAT.
 pub fn first_program(ts: &[u8]) -> (u16, u16) {
+    programs(ts)[0]
+}
+
+/// Every program's number and PMT PID, from the file's first PAT.
+pub fn programs(ts: &[u8]) -> Vec<(u16, u16)> {
     let mut a = Assembler::default();
     for p in ts.chunks_exact(PACKET) {
         let Some(h) = header(p).filter(|h| h.pid == PAT_PID) else { continue };
-        let mut found = None;
-        a.push(h.start, &p[h.payload_at..], |s| found = parse_pat(s).first().copied());
-        if let Some(f) = found {
-            return f;
+        let mut found = Vec::new();
+        a.push(h.start, &p[h.payload_at..], |s| found = parse_pat(s));
+        if !found.is_empty() {
+            return found;
         }
     }
     panic!("no PAT in the file")
@@ -26,7 +31,15 @@ pub fn first_program(ts: &[u8]) -> (u16, u16) {
 
 /// Every tag the native path makes of `ts`, in order.
 pub fn tags(ts: &[u8], carry: Carry) -> Vec<MediaTag> {
-    let (number, pmt) = first_program(ts);
+    tags_of(ts, carry, None)
+}
+
+/// The same for `program`, or the first.
+pub fn tags_of(ts: &[u8], carry: Carry, program: Option<u16>) -> Vec<MediaTag> {
+    let (number, pmt) = match program {
+        Some(p) => programs(ts).into_iter().find(|x| x.0 == p).expect("the program is in the file"),
+        None => first_program(ts),
+    };
     let mut d = Demux::new(carry);
     d.follow(number, pmt);
     let zero = Zero::default();

@@ -3,11 +3,11 @@
 //! access unit with four byte lengths in front of its NAL units.
 
 use super::annexb::{push_sized, units};
+use super::h264_key::Seen;
 use super::{cts_ms, Parser, Pes, Said, Unit};
 use crate::media_tag::TagKind;
 use crate::tagger::prefix;
 
-const IDR: u8 = 5;
 const SPS: u8 = 7;
 const PPS: u8 = 8;
 
@@ -23,16 +23,17 @@ impl Parser for H264 {
     fn pes(&mut self, pes: &Pes, out: &mut Vec<Unit>) {
         let Some(at) = pes.at() else { return };
         let mut au = Vec::with_capacity(pes.data.len() + 16);
-        let mut keyframe = false;
+        let mut seen = Seen::default();
         for nal in units(pes.data) {
             match nal[0] & 0x1F {
                 SPS => self.sps = Some(nal.to_vec()),
                 PPS => self.pps = Some(nal.to_vec()),
-                IDR => keyframe = true,
                 _ => {}
             }
+            seen.nal(nal);
             push_sized(&mut au, nal);
         }
+        let keyframe = seen.keyframe();
         // `h264parse` hands on nothing before it has the parameter sets.
         let Some(config) = avcc(self.sps.as_deref(), self.pps.as_deref()) else { return };
         if au.is_empty() {
@@ -94,3 +95,4 @@ fn high(sps: &[u8]) -> Option<(u8, u8, u8)> {
     }
     Some((chroma as u8, b.ue()? as u8, b.ue()? as u8))
 }
+
