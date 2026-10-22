@@ -36,6 +36,8 @@ pub async fn run(opts: Options) -> Result<()> {
     // every show reads the same file (see `child::command`).
     let tokens = Arc::new(cfg.tokens(opts.rehearsal).with_devices(crate::devices::for_station(&opts.config)));
     crate::ui::configure(cfg.control.ui_dir.as_deref(), cfg.control.plugins_dir.as_deref());
+    // When this process started, for machine.status.
+    crate::control::methods::lifecycle::started_ms();
     let _ = godwinmix_core::catalogue::init(Some(&cfg), opts.codecs.as_deref());
     let runtime = core_observe::runtime_dir(&opts.config);
     load_plugins(&cfg, &tokens, &runtime);

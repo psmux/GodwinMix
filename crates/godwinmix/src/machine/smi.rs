@@ -26,7 +26,7 @@ pub fn query() -> Result<Vec<Read>, String> {
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .spawn()
-        .map_err(|_| "No NVIDIA GPU here: NVML could not be opened and nvidia-smi is not installed.".to_string())?;
+        .map_err(|_| "No NVIDIA GPU here: neither NVML nor nvidia-smi answered.".to_string())?;
     let until = Instant::now() + LIMIT;
     loop {
         match child.try_wait() {
@@ -90,7 +90,7 @@ fn line_of(line: &str, at_ms: u64) -> Option<Read> {
 mod tests {
     use super::*;
 
-    /// The answer of an RTX 3060 carrying the box's channels, and a second
+    /// The answer of an RTX 3060 carrying fifty channels, and a second
     /// card with no fan and no power reading, as nvidia-smi writes them.
     const CAPTURED: &str = include_str!("../../tests/fixtures/nvidia-smi.csv");
 

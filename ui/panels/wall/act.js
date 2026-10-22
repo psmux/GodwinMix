@@ -25,6 +25,7 @@ export function savePrefs(o) {
 export function press(view, what, value) {
   const o = view.opts;
   if (what === "close") return view.close();
+  if (what === "headend") return view.close(), import("../headend/view.js").then((m) => m.showHeadend(view.client));
   if (what === "add") return import("./bulk.js").then((m) => m.bulkAdd(view.client, { onDone: () => view.data.read() }));
   if (what === "group") o.group = !o.group;
   else if (what === "rows" || what === "tiles") o.mode = what;

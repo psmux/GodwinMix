@@ -843,6 +843,7 @@ pub async fn run() -> Result<()> {
     godwinmix_core::graphics::configure(&cfg.media.dir, &cfg.graphics);
     // Where the web UI and any plugin panels are read from.
     ui::configure(cfg.control.ui_dir.as_deref(), cfg.control.plugins_dir.as_deref());
+    control::methods::lifecycle::started_ms();
     // The same directory the panels are served from is the one plugins are
     // installed into, so `<plugins_dir>/<name>/<version>/ui/` is both the
     // plugin and its panel and nothing has to be copied anywhere.
