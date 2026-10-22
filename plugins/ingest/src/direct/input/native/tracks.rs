@@ -55,7 +55,7 @@ pub fn infos(picks: &[Pick]) -> Vec<TrackInfo> {
         .filter_map(|p| {
             let (codec, track) = p.carried?;
             let kind = if codec.video() { "video" } else { "audio" };
-            Some(TrackInfo { track, kind, pid: Some(p.stream.pid), lang: lang(&p.stream) })
+            Some(TrackInfo { track, kind, pid: Some(p.stream.pid), lang: lang(&p.stream), field_coded: false })
         })
         .collect();
     out.sort_by_key(|t| (t.kind != "video", t.track));
