@@ -27,6 +27,7 @@ pub mod control;
 pub mod ctl;
 pub mod devices;
 pub mod feeds;
+pub mod headend;
 mod job;
 pub mod mcp;
 pub mod nodes;
@@ -387,6 +388,9 @@ enum Command {
         cmd: cli::chaos::Chaos,
     },
 
+    /// Run in place of Flussonic: its config's streams as shows without
+    /// mixing, served on its URLs and API. See `docs/how-to/replace-flussonic.md`.
+    Headend(headend::Args),
     /// doctor, logs, trace, dot and support-bundle. See `src/cli/observe.rs`.
     #[command(flatten)]
     Observe(cli::observe::ObserveCmd),
@@ -614,7 +618,7 @@ pub fn main_with_room() -> anyhow::Result<()> {
 }
 
 pub async fn run() -> Result<()> {
-    let args = Args::parse();
+    let mut args = Args::parse();
 
     // Tier W, before anything else. Registered here rather than beside the
     // supervisor because `gmx plugin test`, `gmx plugin new` and `gmx doctor`
@@ -641,7 +645,9 @@ pub async fn run() -> Result<()> {
     // of the setup below.
     // clap reads the new environment variable names on its own; the old ones
     // are picked up here, with the warning, for one release. See `config::env_var`.
-    match args.command {
+    let mut headend = None;
+    match args.command.take() {
+        Some(Command::Headend(h)) => headend = Some(h),
         Some(Command::Ctl { url, token, cmd }) => {
             let (url, token) = address::resolve(url, token);
             return ctl::run(&url, token.as_deref(), cmd).await;
@@ -788,6 +794,14 @@ pub async fn run() -> Result<()> {
     // show `main` in a process of its own, beside any other show, and mixes
     // nothing itself. See `station.rs`.
     if args.show.is_none() {
+        let headend = match headend {
+            Some(h) => Some(headend::settings(&h, Config::load(&config_path).ok().as_ref()).map(|s| (h.check, s))?),
+            None => None,
+        };
+        if let Some((true, s)) = &headend {
+            print!("{}", headend::check(s)?);
+            return Ok(());
+        }
         first_run(&config_path)?;
         let common = show_flags(&args);
         station::run(station::Options {
@@ -797,6 +811,8 @@ pub async fn run() -> Result<()> {
             codecs: args.codecs,
             supervised: args.supervised,
             common,
+            mixing: headend.is_none(),
+            ready: headend.map(|(_, s)| headend::ready(s)),
         })
         .await?;
         // The station owns the port, so `network.share` stops it, not a show.

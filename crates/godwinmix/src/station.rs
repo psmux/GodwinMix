@@ -48,4 +48,4 @@ pub mod usage;
 pub mod state;
 pub mod supervise;
 
-pub use run::{run, Options};
+pub use run::{run, Options, Ready};
