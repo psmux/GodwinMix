@@ -1,15 +1,15 @@
 use super::*;
 use crate::Document;
 
-const TVNET: &str = include_str!("../../tests/fixtures/tvnet.conf");
+const SAMPLE: &str = include_str!("../../tests/fixtures/sample-headend.conf");
 
 fn of(text: &str) -> Import {
     import(&Document::parse(text).unwrap().config)
 }
 
 #[test]
-fn the_tvnet_config_is_51_renditions_and_one_copy() {
-    let i = of(TVNET);
+fn a_headend_config_is_51_renditions_and_one_copy() {
+    let i = of(SAMPLE);
     assert_eq!(i.shows.len(), 52);
     assert_eq!(i.shows.iter().filter(|s| s.copy).count(), 1);
     let ch = i.shows.iter().find(|s| s.name == "CH117").unwrap();
@@ -23,11 +23,11 @@ fn the_tvnet_config_is_51_renditions_and_one_copy() {
     assert_eq!((r["video"]["hardware"].as_str(), r["video"]["device"].as_u64()), (Some("nvenc"), Some(0)));
     assert_eq!((r["audio"]["codec"].as_str(), r["audio"]["bitrate_kbps"].as_u64()), (Some("aac"), Some(128)));
     assert_eq!(r["audio"]["tracks"], "all");
-    let quizcast = i.shows.iter().find(|s| s.name == "QUIZCAST").unwrap();
-    assert!(quizcast.copy && quizcast.outputs[0].get("rendition").is_none());
-    assert_eq!(quizcast.outputs[0]["uri"], "hls://flussonic");
+    let relay = i.shows.iter().find(|s| s.name == "RELAY1").unwrap();
+    assert!(relay.copy && relay.outputs[0].get("rendition").is_none());
+    assert_eq!(relay.outputs[0]["uri"], "hls://flussonic");
     // The DVR is not carried, and every transcoded stream says which fields wait.
-    assert!(i.notes.iter().any(|(_, n)| n.what.starts_with("dvr principal")));
+    assert!(i.notes.iter().any(|(_, n)| n.what.starts_with("dvr archive")));
     assert_eq!(i.notes.iter().filter(|(_, n)| n.kind == NoteKind::Waiting).count(), 51);
 }
 
