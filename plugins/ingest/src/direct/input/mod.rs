@@ -3,7 +3,7 @@
 //!
 //! | Address | Module | What it does |
 //! |---|---|---|
-//! | `udp://`, `rtp://` | `ts_in` | MPEG-TS, bare or in RTP, unicast or multicast, one program |
+//! | `udp://`, `rtp://` | `native` | MPEG-TS, bare or in RTP, unicast or multicast, one program, one socket per group shared by every show on it; `ts_in` with `params.engine = "gstreamer"` |
 //! | `srt://` | `ts_in` | SRT caller, or listener for `srt://@:port` |
 //! | `rist://` | `rist` | RIST Simple Profile, listening |
 //! | `rtsp://` | `rtsp` | a camera or an encoder, over TCP or UDP |
@@ -20,6 +20,7 @@ mod channel;
 mod frames;
 mod loss;
 mod meter;
+mod native;
 mod numbering;
 mod outlet;
 mod pads;
@@ -58,7 +59,9 @@ pub fn open(spec: &InputSpec, ctx: &Context) -> Result<Box<dyn Input>, InputErro
 
 fn one(spec: &InputSpec, ctx: &Context) -> Result<Box<dyn Input>, InputError> {
     Ok(match spec.kind()? {
-        Kind::Udp => Box::new(Gst(ts_in::Udp::new(spec)?, spec.carry)),
+        // The native path unless asked for the old one (`docs/reference/direct-inputs.md`).
+        Kind::Udp if spec.param("engine").as_deref() == Some("gstreamer") => Box::new(Gst(ts_in::Udp::new(spec)?, spec.carry)),
+        Kind::Udp => Box::new(native::Native::new(spec)?),
         Kind::Srt => Box::new(Gst(ts_in::Srt::new(spec), spec.carry)),
         Kind::Rist => Box::new(Gst(rist::Rist::new(spec)?, spec.carry)),
         Kind::Rtsp => Box::new(Gst(rtsp::Rtsp::new(spec)?, spec.carry)),

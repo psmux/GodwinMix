@@ -44,6 +44,13 @@ rml_amf0 = "0.3.0"
 rustls = { workspace = true }
 webpki-roots = "1"
 
+# The native MPEG-TS input's one socket per multicast group
+# (src/direct/input/native/socket.rs): bind, join on the named interface,
+# source specific joins and a large receive buffer, the same on every
+# platform. Already in the tree under tokio and hyper, so nothing new is
+# compiled; `all` is for SO_REUSEPORT.
+socket2 = { version = "0.6", features = ["all"] }
+
 # SRT on one port for every channel (src/srt.rs). libsrt is loaded at run
 # time, not linked, so building this plugin needs no SRT headers; libloading
 # is already in the tree under wasmtime. src/srt.rs says why GStreamer's own

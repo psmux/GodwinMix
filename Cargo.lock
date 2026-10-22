@@ -1321,6 +1321,7 @@ dependencies = [
  "rml_rtmp",
  "rustls",
  "serde_json",
+ "socket2",
  "webpki-roots 1.0.9",
 ]
 
