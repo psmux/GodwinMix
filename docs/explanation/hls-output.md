@@ -180,6 +180,23 @@ muxed, so a segment can start with its own PAT and PMT. One muxer serves
 the cutter's life, so the continuity counters carry on and two segments
 back to back are one stream.
 
+What TS costs beside CMAF, measured on a Debian build container (64 cores,
+GStreamer 1.26.2, the release build), for the HLS packager process alone
+with one output of a direct show: 1280x720 H.264 at 1.5 Mbit/s with a
+keyframe a second and one AAC track, two second segments, a 30 s window.
+Three runs of CMAF alone and two of both (the third was cut off), 60 s
+measured after 45 s to settle:
+
+| | CPU of one core | Resident memory | Threads |
+|---|---|---|---|
+| `segments = "cmaf"` | 2.35, 2.48, 2.42% | 33.8, 33.7, 33.6 MiB | 75 |
+| `segments = "both"` | 2.48, 2.58% | 42.2, 43.3 MiB | 75 |
+
+So TS beside CMAF costs about a tenth of a percent of one core and about
+9 MiB per 720p output: the window's segments a second time (17 of them at
+about 1.9 Mbit/s, the picture, the sound and the TS packets' own few
+percent), and no thread. The cutters run on the output's own thread.
+
 A TS segment's name is its start in UTC milliseconds, not its number. A
 cache downstream keeps segments by path for ten minutes, and the numbers
 start again from the running time after a restart; the wall clock does not.

@@ -12,7 +12,13 @@ use godwinmix_protocol::destination::DestinationState as S;
 use gstreamer as gst;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::collections::BTreeMap;
+use std::time::Duration;
 use std::sync::Arc;
+
+/// The longest a live stream may go between two tags.
+const LIVE_WAIT: Duration = Duration::from_secs(5);
+/// The longest a new connection may wait for its first frame.
+const FIRST_WAIT: Duration = Duration::from_secs(30);
 
 /// What one connection has learned.
 #[derive(Default)]
@@ -32,10 +38,16 @@ pub(super) fn session(mut reader: flv::Reader, stream: &Arc<Stream>, board: &Boa
         if let Some(why) = at.session.as_ref().and_then(Session::failure) {
             return End::Lost(format!("the packager stopped: {why}"));
         }
-        let tag = match reader.next() {
-            Ok(t) => t,
+        // Before the first picture the relay may be waiting on a keyframe,
+        // or a rendition on its encoder, which on a station starting fifty
+        // outputs at once took longer than the five seconds a live stream
+        // gets between tags.
+        let patience = if at.session.is_some() { LIVE_WAIT } else { FIRST_WAIT };
+        let tag = match reader.ready(patience, stop).and_then(|go| go.then(|| reader.next()).transpose()) {
+            Ok(Some(t)) => t,
+            Ok(None) => return End::Stopped,
             Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => return End::Lost("the input's stream ended; waiting for it again".into()),
-            Err(e) => return End::Lost(format!("nothing came from the input for five seconds ({e})")),
+            Err(e) => return End::Lost(format!("nothing came from the input for {} s ({e})", patience.as_secs())),
         };
         let read = match tag.kind {
             Kind::Video => caps::video(&tag.body),

@@ -26,10 +26,12 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
-/// How long one read waits before the stop flag is looked at. Longer than
-/// the gap to an encoder's next keyframe, which the relay waits for after
-/// the headers: two seconds is common from OBS and hardware encoders, and a
-/// one second wait here dropped and dialled such a stream again forever.
+/// How long one read waits before the stop flag is looked at, and the
+/// longest a tag may take to arrive once it has begun. Between tags `feed`
+/// decides how long is too long (`Reader::ready`): five seconds once live,
+/// thirty for a new connection's first frame. A one second wait here once
+/// dropped and dialled again forever a stream whose keyframes were two
+/// seconds apart.
 const READ: Duration = Duration::from_secs(5);
 
 pub struct Packager {

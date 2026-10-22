@@ -7,7 +7,9 @@
 //! waits on it.
 
 use bytes::Bytes;
-use std::io::{BufReader, Read, Write};
+use std::io::{BufRead, BufReader, Read, Write};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Instant;
 use std::net::{SocketAddr, TcpStream};
 use std::time::Duration;
 
@@ -58,6 +60,25 @@ impl Reader {
         }
         io.get_ref().set_read_timeout(Some(wait))?;
         Ok(Reader { io })
+    }
+
+    /// Wait up to `patience` for the next tag to begin, without taking a
+    /// byte of it, looking at `stop` after every quiet read. False when
+    /// stopped; a timeout is `TimedOut` and the stream ending
+    /// `UnexpectedEof`. Waiting here rather than in `next` means a quiet
+    /// spell never cuts a tag in half.
+    pub fn ready(&mut self, patience: Duration, stop: &AtomicBool) -> std::io::Result<bool> {
+        let since = Instant::now();
+        loop {
+            match self.io.fill_buf() {
+                Ok([]) => return Err(std::io::ErrorKind::UnexpectedEof.into()),
+                Ok(_) => return Ok(true),
+                Err(e) if !matches!(e.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut) => return Err(e),
+                Err(_) if stop.load(Ordering::Relaxed) => return Ok(false),
+                Err(e) if since.elapsed() >= patience => return Err(std::io::Error::new(std::io::ErrorKind::TimedOut, e)),
+                Err(_) => {}
+            }
+        }
     }
 
     /// The next tag. A timeout is `WouldBlock` or `TimedOut`, and the
