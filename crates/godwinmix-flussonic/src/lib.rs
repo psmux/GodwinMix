@@ -1,9 +1,19 @@
-//! Flussonic compatibility for GodwinMix headend mode, starting with its config language.
+//! Flussonic compatibility for GodwinMix headend mode.
 //!
 //! `Document` holds the file as written (`syntax`) and the typed view
 //! (`model`). Edits go through the syntax tree, so whatever GodwinMix does
-//! not understand survives a save.
+//! not understand survives a save. `import` turns the view into direct
+//! shows, `diff` says which of them a changed file restarts, and `facade`,
+//! `api` and `log` are the shapes Flussonic's readers expect: its URLs and
+//! playlists, its API's JSON, its log lines. No media and no server here;
+//! the binary serves them (`godwinmix headend`).
 
+pub mod api;
+pub mod clock;
+pub mod diff;
+pub mod facade;
+pub mod import;
+pub mod log;
 pub mod model;
 pub mod syntax;
 
