@@ -33,14 +33,15 @@ fn refuse(status: StatusCode, msg: impl Into<String>) -> Response {
     r
 }
 
-fn allowed(h: &Headend, headers: &HeaderMap, peer: SocketAddr, want: Access) -> Result<(), Response> {
+fn allowed(h: &Headend, headers: &HeaderMap, peer: SocketAddr, want: Access) -> Result<(), Box<Response>> {
     let auth = headers.get(header::AUTHORIZATION).and_then(|v| v.to_str().ok());
-    match check(&h.doc.lock().config, auth, want, peer.ip().is_loopback()) {
-        Ok(()) => Ok(()),
-        Err(Refusal::Unauthorized) => Err(refuse(StatusCode::UNAUTHORIZED, "send the edit_auth (or view_auth) user and password of the config as Basic auth")),
-        Err(Refusal::ReadOnly) => Err(refuse(StatusCode::FORBIDDEN, "view_auth reads; changes need edit_auth")),
-        Err(Refusal::NoAuthConfigured) => Err(refuse(StatusCode::FORBIDDEN, "the config has no edit_auth, so the API answers this machine only. Add edit_auth to open it to others.")),
-    }
+    let refused = match check(&h.doc.lock().config, auth, want, peer.ip().is_loopback()) {
+        Ok(()) => return Ok(()),
+        Err(Refusal::Unauthorized) => refuse(StatusCode::UNAUTHORIZED, "send the edit_auth (or view_auth) user and password of the config as Basic auth"),
+        Err(Refusal::ReadOnly) => refuse(StatusCode::FORBIDDEN, "view_auth reads; changes need edit_auth"),
+        Err(Refusal::NoAuthConfigured) => refuse(StatusCode::FORBIDDEN, "the config has no edit_auth, so the API answers this machine only. Add edit_auth to open it to others."),
+    };
+    Err(Box::new(refused))
 }
 
 fn answered(h: &Headend, name: Option<&str>) -> Vec<(godwinmix_flussonic::model::Stream, Live)> {
@@ -51,14 +52,14 @@ fn answered(h: &Headend, name: Option<&str>) -> Vec<(godwinmix_flussonic::model:
 
 async fn list(State(h): St, ConnectInfo(peer): ConnectInfo<SocketAddr>, headers: HeaderMap) -> Response {
     if let Err(r) = allowed(&h, &headers, peer, Access::Read) {
-        return r;
+        return *r;
     }
     Json(shape::list(&answered(&h, None))).into_response()
 }
 
 async fn one(State(h): St, ConnectInfo(peer): ConnectInfo<SocketAddr>, headers: HeaderMap, Path(name): Path<String>) -> Response {
     if let Err(r) = allowed(&h, &headers, peer, Access::Read) {
-        return r;
+        return *r;
     }
     match answered(&h, Some(&name)).first() {
         Some((s, l)) => Json(shape::stream(s, l)).into_response(),
@@ -67,12 +68,12 @@ async fn one(State(h): St, ConnectInfo(peer): ConnectInfo<SocketAddr>, headers: 
 }
 
 /// Write the document back to the file, atomically, and apply it.
-async fn save(h: &Arc<Headend>) -> Result<(), Response> {
+async fn save(h: &Arc<Headend>) -> Result<(), Box<Response>> {
     let text = h.doc.lock().text();
     let tmp = h.file.with_extension("conf.godwinmix-tmp");
     std::fs::write(&tmp, &text)
         .and_then(|_| std::fs::rename(&tmp, &h.file))
-        .map_err(|e| refuse(StatusCode::INTERNAL_SERVER_ERROR, format!("could not write {}: {e}", h.file.display())))?;
+        .map_err(|e| Box::new(refuse(StatusCode::INTERNAL_SERVER_ERROR, format!("could not write {}: {e}", h.file.display()))))?;
     super::apply::apply_file(h, false).await;
     h.changed.notify_one();
     Ok(())
@@ -80,7 +81,7 @@ async fn save(h: &Arc<Headend>) -> Result<(), Response> {
 
 async fn put(State(h): St, ConnectInfo(peer): ConnectInfo<SocketAddr>, headers: HeaderMap, Path(name): Path<String>, body: axum::body::Bytes) -> Response {
     if let Err(r) = allowed(&h, &headers, peer, Access::Edit) {
-        return r;
+        return *r;
     }
     let Ok(v) = serde_json::from_slice::<Value>(&body) else { return refuse(StatusCode::BAD_REQUEST, "the body is not JSON") };
     let edited = {
@@ -92,27 +93,27 @@ async fn put(State(h): St, ConnectInfo(peer): ConnectInfo<SocketAddr>, headers: 
         return refuse(StatusCode::BAD_REQUEST, e.to_string());
     }
     if let Err(r) = save(&h).await {
-        return r;
+        return *r;
     }
     one(State(h), ConnectInfo(peer), headers, Path(name)).await
 }
 
 async fn delete(State(h): St, ConnectInfo(peer): ConnectInfo<SocketAddr>, headers: HeaderMap, Path(name): Path<String>) -> Response {
     if let Err(r) = allowed(&h, &headers, peer, Access::Edit) {
-        return r;
+        return *r;
     }
     if let Err(e) = h.doc.lock().remove_stream(&name) {
         return refuse(StatusCode::NOT_FOUND, e.to_string());
     }
     match save(&h).await {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
-        Err(r) => r,
+        Err(r) => *r,
     }
 }
 
 async fn config(State(h): St, ConnectInfo(peer): ConnectInfo<SocketAddr>, headers: HeaderMap) -> Response {
     if let Err(r) = allowed(&h, &headers, peer, Access::Read) {
-        return r;
+        return *r;
     }
     Json(sanitised::config(&h.doc.lock().config)).into_response()
 }

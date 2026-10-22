@@ -130,7 +130,9 @@ async fn refresh_tracks(h: &Headend) {
 pub async fn keep(h: Arc<Headend>) {
     let mut memory: BTreeMap<String, Memory> = BTreeMap::new();
     let mut tick = tokio::time::interval(Duration::from_secs(1));
-    for n in 0u64.. {
+    let mut n = 0u64;
+    loop {
+        n += 1;
         tick.tick().await;
         let running: Vec<(String, String, bool)> = h.running.lock().iter().map(|(n, a)| (n.clone(), a.id.clone(), a.plan.copy)).collect();
         memory.retain(|n, _| running.iter().any(|(r, _, _)| r == n));
@@ -141,7 +143,7 @@ pub async fn keep(h: Arc<Headend>) {
         }
         *h.live.write() = next;
         h.tracks.write().retain(|n, _| running.iter().any(|(r, _, _)| r == n));
-        if n % TRACKS_EVERY == 0 {
+        if n % TRACKS_EVERY == 1 {
             refresh_tracks(&h).await;
         }
     }

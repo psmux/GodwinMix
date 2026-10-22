@@ -100,7 +100,7 @@ pub fn output(t: &Tracks, kbps: u32) -> Vec<MediaTrack> {
             width: (x.width > 0).then_some(x.width),
             height: (x.height > 0).then_some(x.height),
             fps: x.fps.map(|f| (f * 100.0).round() / 100.0),
-            bitrate: video.then_some(kbps).filter(|k| *k > 0).or_else(|| (x.bandwidth > 0).then(|| (x.bandwidth / 1000) as u32)),
+            bitrate: video.then_some(kbps).filter(|k| *k > 0).or_else(|| (x.bandwidth > 0).then_some((x.bandwidth / 1000) as u32)),
             profile,
             level,
             channels: x.channels,
