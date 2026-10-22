@@ -6,6 +6,10 @@
 //! refused or the cap is reached, then close them all. One probe per device,
 //! with its first hardware encoder: the limit is the device's, not the
 //! codec's.
+//!
+//! The sessions share one device context, as a running station's do: each
+//! a pipeline with a CUDA context of its own ran the card out of memory at
+//! 43 sessions, on a driver whose limit is far above that.
 
 use super::pipeline::{make, sink, video_source};
 use super::Candidate;
@@ -14,7 +18,7 @@ use godwinmix_protocol::rendition::{Fps, VideoShape};
 use gstreamer as gst;
 use gstreamer::prelude::*;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 /// How long a session gets to produce its first frame before it counts as
@@ -44,8 +48,9 @@ pub fn probe_all(candidates: &[Candidate], encs: &mut [EncoderCal], cap: u32, no
 pub fn probe(c: &Candidate, cap: u32) -> Sessions {
     let mut open: Vec<gst::Pipeline> = Vec::new();
     let mut refused = false;
+    let shared: Arc<Mutex<Vec<gst::Context>>> = Arc::default();
     while (open.len() as u32) < cap {
-        match session(c) {
+        match session(c, &shared) {
             Some(p) => open.push(p),
             None => {
                 refused = true;
@@ -62,7 +67,7 @@ pub fn probe(c: &Candidate, cap: u32) -> Sessions {
 
 /// One small live session, running until closed, or None when it would not
 /// produce a frame.
-fn session(c: &Candidate) -> Option<gst::Pipeline> {
+fn session(c: &Candidate, shared: &Arc<Mutex<Vec<gst::Context>>>) -> Option<gst::Pipeline> {
     let mut els = video_source(640, 360, 30, u32::MAX >> 1).ok()?;
     // Paced, so a session holds the device the way a live one does without
     // burning it.
@@ -74,6 +79,7 @@ fn session(c: &Candidate) -> Option<gst::Pipeline> {
     els.push(enc);
     els.push(sink().ok()?);
     let pipeline = gst::Pipeline::new();
+    share(&pipeline, shared);
     pipeline.add_many(&els).ok()?;
     gst::Element::link_many(&els).ok()?;
     let got = Arc::new(AtomicBool::new(false));
@@ -98,4 +104,24 @@ fn session(c: &Candidate) -> Option<gst::Pipeline> {
     }
     let _ = pipeline.set_state(gst::State::Null);
     None
+}
+
+/// Hand `pipeline` every device context the sessions before it made, and
+/// keep any its elements make.
+fn share(pipeline: &gst::Pipeline, shared: &Arc<Mutex<Vec<gst::Context>>>) {
+    for c in shared.lock().unwrap_or_else(|e| e.into_inner()).iter() {
+        pipeline.set_context(c);
+    }
+    let Some(bus) = pipeline.bus() else { return };
+    let keep = shared.clone();
+    bus.set_sync_handler(move |_, msg| {
+        if let gst::MessageView::HaveContext(h) = msg.view() {
+            let mut all = keep.lock().unwrap_or_else(|e| e.into_inner());
+            let c = h.context();
+            if !all.iter().any(|k| k.context_type() == c.context_type()) {
+                all.push(c);
+            }
+        }
+        gst::BusSyncReply::Pass
+    });
 }

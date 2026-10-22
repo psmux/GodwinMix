@@ -40,6 +40,8 @@ mod watch;
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_headend;
 
 use std::sync::OnceLock;
 

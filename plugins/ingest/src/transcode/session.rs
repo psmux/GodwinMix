@@ -48,6 +48,7 @@ fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
 pub struct Session {
     stop: Arc<AtomicBool>,
     shared: Arc<Shared>,
+    thread: Option<std::thread::JoinHandle<()>>,
 }
 
 impl Session {
@@ -58,8 +59,8 @@ impl Session {
         let shared = Arc::new(Shared { router, input: Input::default(), graph: Mutex::default(), nodes: Mutex::new(nodes), failed: Mutex::default(), restarted: Mutex::default() });
         let stop = Arc::new(AtomicBool::new(false));
         let (me, halt, app, stream) = (shared.clone(), stop.clone(), app.to_string(), stream.to_string());
-        let _ = std::thread::Builder::new().name(format!("gmx-transcode-{stream}")).spawn(move || run(&me, &halt, &hub, &app, &stream));
-        Session { stop, shared }
+        let thread = std::thread::Builder::new().name(format!("gmx-transcode-{stream}")).spawn(move || run(&me, &halt, &hub, &app, &stream)).ok();
+        Session { stop, shared, thread }
     }
 
     /// New nodes or new pairs, applied to the running pipeline at once.
@@ -87,6 +88,11 @@ impl Session {
 
     pub fn stop(&self) {
         self.stop.store(true, Ordering::Relaxed);
+    }
+
+    /// Whether its thread has taken its pipeline down and ended.
+    pub fn ended(&self) -> bool {
+        self.thread.as_ref().is_none_or(|t| t.is_finished())
     }
 }
 
