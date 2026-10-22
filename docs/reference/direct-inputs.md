@@ -32,7 +32,7 @@ the three names `params.transport` with `data.allowed`.
 
 | Address | What it opens | Params |
 |---|---|---|
-| `udp://@239.1.1.1:5000`, `udp://0.0.0.0:5000` | MPEG-TS on a multicast group or a unicast port | `interface` (a name such as `en0`, or its address) to join on; `source_address` for source specific multicast, or write `udp://10.0.0.9@232.1.1.1:5000`; `receive_buffer_kb` (64 to 262144, default 4096) |
+| `udp://@239.1.1.1:5000`, `udp://0.0.0.0:5000` | MPEG-TS on a multicast group or a unicast port | `interface` (a name such as `en0`, or its address) to join on; `source_address` for source specific multicast, or write `udp://10.0.0.9@232.1.1.1:5000`; `receive_buffer_kb` (64 to 262144, default 16384, or 4096 with the GStreamer engine); `engine`: `gstreamer` for the GStreamer input this one replaced (below) |
 | `rtp://@239.1.1.1:5000` | the same, in RTP (RFC 2250, SMPTE 2022-2). A `udp://` address takes RTP too: each datagram says which it is | as `udp://` |
 | `srt://10.0.0.9:9000` | SRT caller, dialling a sender that listens | `latency_ms`, `passphrase`, `streamid` |
 | `srt://@:9000`, `srt://0.0.0.0:9000`, or `params.mode` `listener` | SRT listener on that port, waiting for a sender to call. The port stays open for as long as the input exists: a sender that hangs up leaves the input quiet, the next one to call is read in its place, and one that calls while another is sending takes over from it | `latency_ms`, `passphrase`. Any stream id is taken |
@@ -65,6 +65,53 @@ One video and one audio stream are taken, the first of each to appear. A
 second audio track, teletext, subtitles and MPEG-2 video go nowhere, and
 `error` says so once the input is live: `left out: a second audio stream
 (audio/mpeg); the first is taken`.
+
+## UDP and RTP: one socket per group
+
+A `udp://` or `rtp://` input is read in Rust, with no GStreamer between the
+socket and the hub. Every show that takes a program from the same group
+(the same address, port, source and `interface`) shares one socket, joined
+once, and one thread that reads it:
+
+* The thread reads the PAT, PMT and SDT once for every show on the group,
+  and hands each show the packets of its own program (its PMT, its PCR and
+  its streams) through a queue of 512 batches. A show that falls behind
+  loses packets in its own queue, counted in `packets_lost`; the thread
+  never waits for it.
+* On Linux it takes up to 32 datagrams in one `recvmmsg` call; elsewhere one
+  receive and then whatever is already waiting. The receive buffer asked for
+  is `receive_buffer_kb`; on Linux a buffer over `net.core.rmem_max` is
+  asked for with `SO_RCVBUFFORCE`, which needs `CAP_NET_ADMIN`, and without
+  it the buffer is what the ceiling allows.
+* The socket closes when the last show on it goes.
+
+Each show demuxes its program on its own thread: PES packets put back
+together, the 33 bit PTS and DTS unwrapped, continuity errors counted per
+PID, scrambled packets (transport scrambling control set) counted and
+named in `error`, and the PMT followed as it changes. Times come from the
+PES headers alone, counted from the program's first PCR as `tsdemux` counts
+them, with one zero for the video and every sound track, so sound and
+picture keep the distance the sender gave them. When the PCR jumps back, or
+ahead by more than 3 s, or is flagged as a discontinuity, the new clock is
+laid 40 ms after the old one and every stream moves with it.
+
+The tags are byte for byte the ones the GStreamer input makes from the same
+feed (`plugins/ingest/src/direct/input/native/tests/compare.rs` checks
+H.264 with AAC, HEVC with 5.1 AC-3, and H.264 with MPEG layer II), with two
+differences in what arrives: the native input hands on the first frames of
+a feed, which the GStreamer input loses while it links its pads, and it
+carries every sound track and MPEG-2 video when the show asks for them
+(`InputSpec.carry`, set by the host for a show that converts).
+
+`params.engine = "gstreamer"` takes the GStreamer input instead: `udpsrc`,
+the udp plugin's program filter and `parsebin`, one socket per show.
+
+What every open group is doing is one row each in
+`direct::input::native::registry::snapshot()`: address, interface, shows
+on it, datagrams, bytes in, continuity errors, TS and RTP packets lost,
+stuffing dropped, how long it has been silent, the receive buffer the OS
+gave, and why the socket is not open when it is not. Nothing reads it over
+the protocol yet.
 
 ## Backup
 
