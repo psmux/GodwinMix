@@ -47,7 +47,7 @@ export function player(client, show) {
   }
   const base = (client.transport && client.transport.base) || location.origin;
   const url = new URL(out.playback.master_url_path, base).href;
-  say.textContent = `HLS from the output ${out.id}.`;
+  say.textContent = out.state && out.state !== "live" && out.error ? `The output ${out.id} is ${out.state}: ${out.error}` : `HLS from the output ${out.id}.`;
   if (native()) {
     video.src = url;
   } else {

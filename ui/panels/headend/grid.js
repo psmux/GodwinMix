@@ -44,8 +44,12 @@ export class Grid {
     return [first * this.cols, Math.min(this.rows.length - 1, (last + 1) * this.cols - 1)];
   }
 
-  /** Place and patch the tiles in view, drop the rest. Answers the ids on screen. */
-  draw(seriesOf, selected) {
+  /**
+   * Place and patch the tiles in view, drop the rest. Answers the rows on
+   * screen. A scroll passes `patch` false: a tile already drawn keeps what it
+   * shows until the next second's numbers, and only new ones are drawn.
+   */
+  draw(seriesOf, selected, patch = true) {
     const [a, b] = this.inView();
     const from = Math.max(0, a - MARGIN_ROWS * this.cols);
     const to = Math.min(this.rows.length - 1, b + MARGIN_ROWS * this.cols);
@@ -55,7 +59,8 @@ export class Grid {
       const id = row.show.id;
       keep.add(id);
       let t = this.tiles.get(id);
-      if (!t) {
+      const fresh = !t;
+      if (fresh) {
         t = new Tile(id, this.thumbs);
         this.tiles.set(id, t);
       }
@@ -66,7 +71,7 @@ export class Grid {
       s.width = `${this.tileW.toFixed(1)}px`;
       s.height = `${this.tileH}px`;
       if (t.node.parentNode !== this.body) this.body.append(t.node);
-      t.update(row, seriesOf(id), selected === id);
+      if (fresh || patch) t.update(row, seriesOf(id), selected === id);
     }
     for (const [id, t] of this.tiles) {
       if (keep.has(id)) continue;

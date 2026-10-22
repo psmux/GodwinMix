@@ -63,16 +63,23 @@ export class HeadendData extends WallData {
     return this.series.get(id);
   }
 
+  /** The channels: shows with compositing off. A show that mixes is not one. */
+  async read() {
+    await super.read();
+    this.shows = this.shows.filter((s) => s.compositing === false);
+    this.ids = this.shows.map((s) => s.id);
+    this.tick();
+  }
+
+  event(e) {
+    super.event(e);
+    this.shows = this.shows.filter((s) => s.compositing === false);
+  }
+
   /** Every channel, not only those on screen: the groups and totals need them all. */
   async tick() {
     this.ids = this.shows.map((s) => s.id);
     return super.tick();
-  }
-
-  async read() {
-    await super.read();
-    this.ids = this.shows.map((s) => s.id);
-    this.tick();
   }
 
   take(s) {
