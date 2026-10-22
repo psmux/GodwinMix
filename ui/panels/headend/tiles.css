@@ -100,3 +100,6 @@
 .he.narrow .he-sub { display: none; }
 .he.narrow .he-num { font-size: 13px; }
 @media (prefers-reduced-motion: reduce) { .he-tile.he-pulse { animation: none; } .he-fill, .he-ringfill { transition: none; } }
+.he-gauge .he-ringword { font-size: 7px; }
+.he-gauge .he-ringnum { font-size: 12px; }
+.he-gtop .he-v { white-space: nowrap; font-size: 12px; color: var(--dim); }

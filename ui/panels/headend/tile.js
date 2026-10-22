@@ -38,7 +38,7 @@ export class Tile {
     this.outV = el("span.he-v");
     this.cc = el("span.he-cc");
     this.pic = el("div.he-pic", {}, [thumbs.img(id), this.word, this.badge, this.num, this.meters, this.badges]);
-    this.node = el("div.he-tile", { "data-id": id, role: "button", tabindex: "-1" }, [
+    this.node = el("div.he-tile", { "data-id": id, role: "button", tabindex: "0" }, [
       this.pic,
       el("div.he-info", {}, [
         el("div.he-head", {}, [this.title, this.cc]),

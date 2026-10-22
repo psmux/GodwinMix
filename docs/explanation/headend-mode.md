@@ -136,6 +136,16 @@ silence, sound levels per track; a GPU strip (encoder, decoder, memory,
 sessions, temperature, power); input groups with their rates and errors; a
 channel's detail with its tracks and a player.
 
+Built as View > Headend (`ui/panels/headend/`), on the wall's data, its
+pictures and its alarms; [Watch a headend of many channels](../how-to/watch-a-headend.md)
+says how to read it. The GPU and the box come from two new methods,
+`gpu.status` and `machine.status` ([the reference](../reference/machine-status.md)),
+read from NVML or `nvidia-smi` once a second while a client asks. A
+channel's sound level is the silence check's peak, now in `show.stats` as
+`audio_peak_db`. The view reads `input.tracks` and `input.scrambled` from
+`show.stats` when the carriage work sends them, and until then shows the
+one video and one sound track a station carries today.
+
 ## How it is checked
 
 * Every existing test passes unchanged; the copy path is byte for byte what

@@ -127,3 +127,6 @@
 .he.narrow .he-drawer { position: absolute; inset: auto 0 0 0; width: auto; max-height: 82%; border-left: 0; border-top: var(--border) solid var(--line); border-radius: 14px 14px 0 0; animation-name: he-up; }
 @keyframes he-up { from { transform: translateY(40px); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .he-group.dead { animation: none; } }
+.he.narrow .he-gauges { flex-wrap: wrap; }
+.he.narrow .he-facts { margin: 0; grid-template-columns: auto 1fr; width: 100%; }
+.he.narrow .he-gpu { min-width: 0; width: 100%; }
