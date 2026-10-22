@@ -38,6 +38,7 @@ pub fn video_codec(body: &[u8]) -> String {
             Some(b"hvc1") => "h265".into(),
             Some(b"av01") => "av1".into(),
             Some(b"vp09") => "vp9".into(),
+            Some(b"mp2v") => "mpeg2".into(),
             Some(other) => String::from_utf8_lossy(other).into_owned(),
             None => "unknown".into(),
         };

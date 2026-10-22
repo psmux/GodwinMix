@@ -33,7 +33,8 @@ pub fn frame(body: &[u8]) -> Option<(usize, i32)> {
         }
         Some(cc) => {
             let packet = body[0] & 0x0f;
-            if packet == CODED_FRAMES && &cc == HEVC {
+            // HEVC and our own MPEG-2 (`crate::mp2v`) carry the offset.
+            if packet == CODED_FRAMES && (&cc == HEVC || &cc == crate::mp2v::FOURCC) {
                 let b = body.get(5..8)?;
                 return Some((8, ((i32::from(b[0]) << 16) | (i32::from(b[1]) << 8) | i32::from(b[2])) << 8 >> 8));
             }

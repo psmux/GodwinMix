@@ -35,6 +35,20 @@ pub struct ProgramInfo {
     pub streams: Vec<String>,
 }
 
+/// One elementary stream the input carries on the hub, as its PMT names it.
+/// The codec, channels and rate the frames themselves say are the hub's
+/// (`hub::meter`); `direct.input`'s `tracks` puts the two together.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct TrackInfo {
+    /// The tag's `track`: 0 for the video and the first sound, then 1, 2, 3.
+    pub track: u8,
+    /// `video` or `audio`.
+    pub kind: &'static str,
+    pub pid: Option<u16>,
+    /// ISO 639 code from the PMT's language descriptor: `eng`, `spa`.
+    pub lang: Option<String>,
+}
+
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct InputStats {
     pub state: State,
@@ -62,6 +76,9 @@ pub struct InputStats {
     pub programs: Vec<ProgramInfo>,
     /// While it waits to try again after a failure: how long it waits.
     pub retry_ms: Option<u64>,
+    /// Every stream carried, video first then sound by track. Empty from an
+    /// input that does not know its PIDs.
+    pub tracks: Vec<TrackInfo>,
 }
 
 impl InputStats {
