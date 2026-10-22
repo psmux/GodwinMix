@@ -18,6 +18,7 @@ mod adts;
 mod frames;
 pub mod annexb;
 mod h264;
+mod h264_key;
 mod hevc;
 mod mp2v;
 mod mpa;

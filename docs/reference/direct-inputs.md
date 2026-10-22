@@ -103,6 +103,13 @@ a feed, which the GStreamer input loses while it links its pads, and it
 carries every sound track and MPEG-2 video when the show asks for them
 (`InputSpec.carry`, set by the host for a show that converts).
 
+An H.264 keyframe is an IDR, or an I slice behind a recovery point SEI,
+which is how a broadcast encoder that never sends an IDR starts its GOPs;
+HEVC's are IDR, CRA and BLA pictures. Both are what `h264parse` and
+`h265parse` mark. A field coded H.264 stream is one tag per field, as
+`h264parse` frames it, so its `fps` reads the field rate, 59.94 for 1080i
+or 480i at 29.97 frames.
+
 `params.engine = "gstreamer"` takes the GStreamer input instead: `udpsrc`,
 the udp plugin's program filter and `parsebin`, one socket per show.
 
