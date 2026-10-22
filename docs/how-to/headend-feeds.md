@@ -85,6 +85,13 @@ Then set `program` to the one you want:
 Everything else in the multiplex is dropped as it arrives, before anything
 reads it.
 
+To carry several programs of one multiplex, make one show per program with
+the same address. They share one socket: the group is joined once, its
+tables are read once, and each show is handed only its own program's
+packets. The socket closes when the last of them is removed. A show that
+falls behind loses packets in its own queue (they count in its
+`packets_lost`) and never slows the others.
+
 ## Give a feed a backup
 
 Name a second input as `backup`. Both run all the time, so the backup is
@@ -144,6 +151,12 @@ Each input reports about once a second:
 * `keyframe_ms` is the keyframe interval. A contribution encoder set to two
   seconds should read about 2000.
 * `last_frame_ms` is how long since the last frame.
+* A UDP or RTP feed that carries scrambled packets (encrypted, with no key
+  here) says so in `error`, with how many arrived in the last second.
+
+A UDP or RTP feed is read in Rust, without GStreamer. If a feed plays with
+the GStreamer input and not with this one, set `"params": {"engine":
+"gstreamer"}` on it to take the GStreamer input, the one this replaced.
 
 `docs/reference/direct-inputs.md` has every field and param.
 

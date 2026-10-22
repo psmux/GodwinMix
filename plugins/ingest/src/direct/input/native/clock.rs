@@ -65,7 +65,7 @@ impl Clock {
         let v = self.unwrap(base);
         if let Some(lp) = self.last_pcr {
             let d = v + self.shift - lp;
-            if discontinuity || d < 0 || d > AHEAD {
+            if discontinuity || !(0..=AHEAD).contains(&d) {
                 self.shift = lp + GAP - v;
             }
         }

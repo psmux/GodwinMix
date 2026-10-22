@@ -7,6 +7,8 @@ use std::time::Instant;
 
 use serde_json::{json, Value};
 
+use gmx_udp::ts::plan::{plan, Choice, Plan};
+
 use super::group::{Group, Subscription};
 use super::program::Demux;
 use super::tracks;
@@ -18,6 +20,8 @@ const LIVE_MS: u64 = 3_000;
 
 pub struct Report {
     pub stats: InputStats,
+    /// The program asked for, if one was.
+    asked: Option<u16>,
     /// The program's byte count and when it was read, for its rate.
     rate: (u64, Instant),
     /// The group's RTP loss when this show joined it.
@@ -29,7 +33,7 @@ pub struct Report {
 impl Report {
     pub fn new(program: Option<u16>, sub: &Subscription) -> Report {
         let stats = InputStats { program, ..InputStats::default() };
-        Report { stats, rate: (0, Instant::now()), rtp_before: sub.group.counters.rtp_lost.load(Relaxed), scrambled: 0 }
+        Report { stats, asked: program, rate: (0, Instant::now()), rtp_before: sub.group.counters.rtp_lost.load(Relaxed), scrambled: 0 }
     }
 
     /// Fill and hand on this second's numbers.
@@ -42,8 +46,10 @@ impl Report {
             said.push(format!("{scrambled} scrambled packets in the last second, which cannot be read without the key"));
         }
         let said = said.join("; ");
+        let missing = self.asked.and_then(|n| missing(g, n));
         let s = &mut self.stats;
-        (s.state, s.error) = match (g.error(), out.quiet_ms()) {
+        (s.state, s.error) = match (g.error().or(missing), out.quiet_ms()) {
+            (Some(e), None) => (State::Connecting, Some(e)),
             (Some(e), _) => (State::Retrying, Some(e)),
             (None, Some(q)) if q < LIVE_MS => (State::Live, (!said.is_empty()).then(|| format!("left out: {said}"))),
             (None, Some(q)) => (State::Retrying, Some(format!("nothing from {} for {} s", g.address, q / 1000))),
@@ -88,6 +94,16 @@ fn programs(g: &Group) -> Option<Vec<ProgramInfo>> {
         streams: p.streams.iter().map(|s| s.kind().to_string()).collect(),
     };
     Some(c.programs.iter().map(one).collect())
+}
+
+/// Why `program` cannot be taken, when the tables say it is not there:
+/// the udp plugin's own words, which list what the feed does carry.
+fn missing(g: &Group, program: u16) -> Option<String> {
+    let c = g.catalog.try_lock().ok()?;
+    match plan(&Choice { program, pids: Vec::new() }, &c.programs, &|_| true) {
+        Plan::Missing(why) => Some(why),
+        _ => None,
+    }
 }
 
 /// One group's row for the wall: a dead group is one fault, not one per
