@@ -15,11 +15,21 @@
 
 mod clock;
 pub mod es;
+mod group;
+mod input;
 mod pes;
 mod program;
+mod pump;
+mod recv;
+pub mod registry;
+mod route;
+mod socket;
+mod stats;
 mod stream;
 mod timeline;
 mod tracks;
+
+pub use input::Native;
 
 /// What one program's packets have counted.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]

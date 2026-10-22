@@ -4,7 +4,7 @@
 use gmx_udp::ts::Header;
 
 use super::clock::Clock;
-use super::es::{Codec, Parser, Pes, Unit};
+use super::es::{Codec, Ns, Parser, Pes, Unit};
 use super::pes::{self, Assembly};
 use super::Counts;
 use crate::media_tag::TagKind;
@@ -26,11 +26,17 @@ pub struct Es {
     asm: Assembly,
     /// The last continuity counter, 16 before the first.
     cc: u8,
+    /// The times of the PES being put together, read when it started.
+    times: Times,
 }
+
+/// A PES packet's PTS and DTS on the program's clock, and whether its
+/// header said it has a PTS at all.
+type Times = (Option<Ns>, Option<Ns>, bool);
 
 impl Es {
     pub fn new(pid: u16, stream_type: u8, codec: Codec, track: u8) -> Es {
-        Es { pid, stream_type, codec, track, parser: codec.parser(), asm: Assembly::default(), cc: 16 }
+        Es { pid, stream_type, codec, track, parser: codec.parser(), asm: Assembly::default(), cc: 16, times: (None, None, false) }
     }
 
     /// The sender restarted: its counters start wherever they like.
@@ -59,23 +65,33 @@ impl Es {
             return;
         }
         let (track, kind) = (self.track, if self.codec.video() { TagKind::Video } else { TagKind::Audio });
-        let parser = &mut self.parser;
+        let payload = &p[h.payload_at..];
+        let fresh = if h.start { pes::header(payload).map(|head| times(&head, clock, no_pcr)) } else { None };
+        let (parser, before) = (&mut self.parser, self.times);
         let mut units = Vec::new();
-        self.asm.push(h.start, &p[h.payload_at..], &mut |whole| {
+        self.asm.push(h.start, payload, &mut |whole, started_here| {
             let Some(head) = pes::header(whole) else { return };
-            if no_pcr {
-                if let Some(first) = head.dts.or(head.pts) {
-                    clock.no_pcr(first);
-                }
-            }
-            let (dts, pts) = (head.dts.and_then(|t| clock.time(t)), head.pts.and_then(|t| clock.time(t)));
-            if head.pts.is_some() && pts.is_none() {
+            let (pts, dts, has_pts) = if started_here { fresh.unwrap_or_default() } else { before };
+            if has_pts && pts.is_none() {
                 return;
             }
             parser.pes(&Pes { pts, dts, data: &whole[head.data_at..] }, &mut units);
         });
+        if h.start {
+            self.times = fresh.unwrap_or_default();
+        }
         out.extend(units.into_iter().map(|unit| Out { track, kind, unit }));
     }
+}
+
+/// A PES header's times on the clock as it stands now.
+fn times(head: &pes::Header, clock: &mut Clock, no_pcr: bool) -> Times {
+    if no_pcr {
+        if let Some(first) = head.dts.or(head.pts) {
+            clock.no_pcr(first);
+        }
+    }
+    (head.pts.and_then(|t| clock.time(t)), head.dts.and_then(|t| clock.time(t)), head.pts.is_some())
 }
 
 pub enum Check {
