@@ -1,11 +1,10 @@
 //! `/<name>/embed.html`, a player page that loads nothing from anywhere
 //! else, and the hls.js it plays with, served at `/flu/player/hls.min.js`
-//! (the path Flussonic's own player files have, which the BTN36 tunnel
-//! already passes to this port).
+//! (the path Flussonic's own player files have, so a tunnel or proxy that
+//! already passes them to this port needs no change).
 //!
 //! `assets/hls.min.js` is hls.js 1.5.20 as released (Apache License 2.0,
-//! https://github.com/video-dev/hls.js), the same file the BTN36 channel
-//! wall serves.
+//! https://github.com/video-dev/hls.js).
 
 pub const HLS_JS: &[u8] = include_bytes!("../../assets/hls.min.js");
 

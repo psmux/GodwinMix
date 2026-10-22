@@ -4,7 +4,7 @@ use super::*;
 fn a_line_is_in_flussonic_s_shape() {
     let l = line(1_792_756_804_123, "CH117", Event::Scrambled.text());
     assert_eq!(l, "2026-10-23 12:00:04.123 <0.0.0> [CH117] Input closed with reason => scrambled\n");
-    // What the channel wall looks for in each.
+    // What a monitoring page looks for in each.
     assert!(Event::EncoderRefused.text().contains("open_session") && Event::EncoderRefused.text().contains("configure fail"));
     assert!(line(0, "A", "two\nlines").ends_with("[A] two lines\n"));
 }

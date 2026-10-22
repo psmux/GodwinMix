@@ -1,5 +1,5 @@
 //! `/streamer/api/v3/streams` in Flussonic's JSON shape, filled from what
-//! the shows report. Every field the BTN36 channel wall reads is here, with
+//! the shows report. Every field a monitoring page that reads the v3 streams API uses is here, with
 //! Flussonic's meaning: rates in kbit/s, `lifetime` in milliseconds,
 //! transcoder bitrates in bit/s.
 

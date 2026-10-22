@@ -1,5 +1,5 @@
 //! Log lines in Flussonic's format, for readers that count them, such as
-//! the BTN36 channel wall:
+//! a monitoring page that reads the v3 streams API and the log:
 //!
 //! ```text
 //! 2026-10-23 12:00:04.123 <0.0.0> [CH117] Input closed with reason => scrambled

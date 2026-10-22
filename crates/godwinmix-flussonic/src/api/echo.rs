@@ -1,6 +1,6 @@
 //! A stream's config as Flussonic's API echoes it: `name`, `title`,
 //! `inputs[].url`, and `transcoder` with `global` and `tracks`, which is
-//! what the BTN36 channel wall's `transcoder_settings` reads.
+//! what a monitoring page reads a stream's transcoder settings from.
 
 use crate::model::{Bitrate, Deinterlace, Hw, SizeMode, Stream, Transcoder};
 use serde_json::{json, Map, Value};

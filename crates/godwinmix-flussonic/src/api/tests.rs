@@ -1,7 +1,7 @@
 use super::*;
 use crate::Document;
 
-const BTN36: &str = include_str!("../../tests/fixtures/btn36.conf");
+const SAMPLE: &str = include_str!("../../tests/fixtures/sample-headend.conf");
 
 fn live() -> Live {
     let video = MediaTrack { content: "video", track_id: "v1".into(), codec: "h264".into(), width: Some(1280), height: Some(720), fps: Some(29.97), bitrate: Some(1500), ..Default::default() };
@@ -11,8 +11,8 @@ fn live() -> Live {
 }
 
 #[test]
-fn a_running_stream_answers_every_field_the_wall_reads() {
-    let doc = Document::parse(BTN36).unwrap();
+fn a_running_stream_answers_every_field_a_monitoring_page_reads() {
+    let doc = Document::parse(SAMPLE).unwrap();
     let s = doc.config.streams.iter().find(|s| s.name == "CH117").unwrap();
     let v = stream(s, &live());
     assert_eq!(v["name"], "CH117");
@@ -35,7 +35,7 @@ fn a_running_stream_answers_every_field_the_wall_reads() {
 
 #[test]
 fn a_stream_that_is_not_flowing_is_not_running() {
-    let doc = Document::parse(BTN36).unwrap();
+    let doc = Document::parse(SAMPLE).unwrap();
     let s = &doc.config.streams[0];
     let mut l = live();
     l.output_live = false;
@@ -44,7 +44,7 @@ fn a_stream_that_is_not_flowing_is_not_running() {
     assert_eq!((st["status"].as_str(), st["bitrate"].as_u64()), (Some("starting"), Some(0)));
     assert_eq!(st["media_info"]["tracks"].as_array().map(Vec::len), Some(0));
     assert_eq!(st["inputs"][0]["stop_events"][0]["code"], "scrambled");
-    let faithiq = doc.config.streams.iter().find(|s| s.name == "FAITHIQ").unwrap();
-    assert!(stream(faithiq, &l).get("transcoder").is_none());
+    let relay = doc.config.streams.iter().find(|s| s.name == "RELAY1").unwrap();
+    assert!(stream(relay, &l).get("transcoder").is_none());
     assert_eq!(list(&[(s.clone(), l)])["streams"].as_array().map(Vec::len), Some(1));
 }

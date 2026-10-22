@@ -135,21 +135,21 @@ impl Document {
 mod tests {
     use super::*;
 
-    const BTN36: &str = include_str!("../tests/fixtures/btn36.conf");
+    const SAMPLE: &str = include_str!("../tests/fixtures/sample-headend.conf");
 
     #[test]
-    fn reads_the_btn36_config() {
-        let doc = Document::parse(BTN36).unwrap();
+    fn reads_a_headend_config() {
+        let doc = Document::parse(SAMPLE).unwrap();
         let c = &doc.config;
         assert_eq!(c.listeners, vec![Listen { addr: None, port: 8090 }]);
         assert_eq!(c.edit_auth.as_ref().unwrap().user, "admin");
         assert_eq!(c.streams.len(), 52);
-        assert_eq!(c.dvrs[0].root.as_deref(), Some("/lsstorage"));
+        assert_eq!(c.dvrs[0].root.as_deref(), Some("/var/lib/dvr"));
         let transcoded = c.streams.iter().filter(|s| s.transcoder.is_some()).count();
         assert_eq!(transcoded, 51);
-        let faithiq = c.streams.iter().find(|s| s.name == "FAITHIQ").unwrap();
-        assert!(faithiq.transcoder.is_none());
-        assert_eq!(faithiq.inputs[0].source, Source::Url { scheme: "rtmp".into() });
+        let relay = c.streams.iter().find(|s| s.name == "RELAY1").unwrap();
+        assert!(relay.transcoder.is_none());
+        assert_eq!(relay.inputs[0].source, Source::Url { scheme: "rtmp".into() });
         assert!(c.unknown.is_empty(), "{:?}", c.unknown);
         // 8 multicast groups feed 51 streams.
         let mut groups: Vec<_> = c
@@ -167,7 +167,7 @@ mod tests {
 
     #[test]
     fn writes_back_what_it_read() {
-        let doc = Document::parse(BTN36).unwrap();
+        let doc = Document::parse(SAMPLE).unwrap();
         let again = Document::parse(&doc.text()).unwrap();
         assert_eq!(again.nodes, doc.nodes);
         assert_eq!(again.config, doc.config);

@@ -1,7 +1,7 @@
 //! A Flussonic `input` as a direct show's input.
 //!
-//! `mpts-udp://eno1@224.2.2.2:2001?program=7` and `udp://...` become
-//! `udp://@224.2.2.2:2001` with `program` and `params.interface`, which is
+//! `mpts-udp://eth1@239.10.0.1:2001?program=7` and `udp://...` become
+//! `udp://@239.10.0.1:2001` with `program` and `params.interface`, which is
 //! how a direct show joins a group on one card. In Flussonic the part before
 //! the `@` is the card; in GodwinMix it would be a source address, so it
 //! moves to `params`. Every other scheme is passed through as written and

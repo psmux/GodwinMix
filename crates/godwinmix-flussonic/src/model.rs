@@ -88,7 +88,7 @@ pub enum Source {
     /// group and port is shared by every stream that takes a program from it.
     Udp {
         mpts: bool,
-        /// An interface name (`eno1`) or a local address.
+        /// An interface name (`eth1`) or a local address.
         interface: Option<String>,
         group: Ipv4Addr,
         port: u16,
@@ -230,7 +230,7 @@ pub fn parse_size(s: &str) -> Option<Size> {
     Some(Size { width, height, mode, pad })
 }
 
-/// `mpts-udp://eno1@224.2.2.2:2001?program=7`, `udp://224.2.2.2:2001`,
+/// `mpts-udp://eth1@239.10.0.1:2001?program=7`, `udp://239.10.0.1:2001`,
 /// `udp://10.0.0.5@239.1.1.1:5000`, or any other URL.
 pub fn parse_source(url: &str) -> Result<Source, String> {
     let (scheme, rest) = url.split_once("://").ok_or_else(|| format!("'{url}' is not a URL"))?;
@@ -524,22 +524,22 @@ mod tests {
     #[test]
     fn sources() {
         assert_eq!(
-            parse_source("mpts-udp://eno1@224.2.2.2:2001?program=7").unwrap(),
+            parse_source("mpts-udp://eth1@239.10.0.1:2001?program=7").unwrap(),
             Source::Udp {
                 mpts: true,
-                interface: Some("eno1".into()),
-                group: "224.2.2.2".parse().unwrap(),
+                interface: Some("eth1".into()),
+                group: "239.10.0.1".parse().unwrap(),
                 port: 2001,
                 program: Some(7)
             }
         );
         assert!(matches!(parse_source("udp://239.1.1.1:5000").unwrap(), Source::Udp { interface: None, program: None, .. }));
         assert_eq!(parse_source("rtmp://127.0.0.1/live/x").unwrap(), Source::Url { scheme: "rtmp".into() });
-        assert!(parse_source("udp://eno1@nowhere:1").is_err());
+        assert!(parse_source("udp://eth1@nowhere:1").is_err());
     }
 
     #[test]
-    fn the_btn36_transcoder_line() {
+    fn a_typical_transcoder_line() {
         let args: Vec<String> = "deviceid=0 gop=50 hw=nvenc deinterlace=false deinterlace_rate=frame vb=1500k vcodec=h264 size=1280x720:fit:#000000 ab=128k"
             .split(' ')
             .map(String::from)
