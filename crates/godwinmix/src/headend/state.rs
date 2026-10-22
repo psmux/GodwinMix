@@ -94,7 +94,7 @@ pub async fn start(st: Arc<Station>, s: Settings) -> Result<()> {
             }
         });
     }
-    super::apply::apply_file(&h).await;
+    super::apply::apply_file(&h, true).await;
     tokio::spawn(super::watch::watch(h.clone()));
     tokio::spawn(super::live::keep(h.clone()));
     Ok(())

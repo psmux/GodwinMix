@@ -52,11 +52,11 @@ pub async fn watch(h: Arc<Headend>) {
             seen = now;
             info!(file = %h.file.display(), "headend: the config changed");
             if reread(&h) {
-                super::apply::apply_file(&h).await;
+                super::apply::apply_file(&h, true).await;
                 applied = Instant::now();
             }
         } else if applied.elapsed() >= AGAIN {
-            super::apply::apply_file(&h).await;
+            super::apply::apply_file(&h, false).await;
             applied = Instant::now();
         }
     }

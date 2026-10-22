@@ -64,10 +64,14 @@ fn rfc6381(codecs: &str) -> (String, Option<String>, Option<String>) {
     let (family, rest) = codecs.split_once('.').unwrap_or((codecs, ""));
     match family {
         "avc1" | "avc3" if rest.len() >= 6 => {
-            let profile = match &rest[0..2] {
-                "42" => "Baseline",
-                "4d" | "4D" => "Main",
-                "64" => "High",
+            let profile = match u8::from_str_radix(&rest[0..2], 16).unwrap_or(0) {
+                66 => "Baseline",
+                77 => "Main",
+                88 => "Extended",
+                100 => "High",
+                110 => "High 10",
+                122 => "High 4:2:2",
+                244 => "High 4:4:4",
                 _ => "",
             };
             let level = u8::from_str_radix(&rest[4..6], 16).ok().map(|l| format!("{}.{}", l / 10, l % 10));
