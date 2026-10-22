@@ -24,7 +24,7 @@ fn a_headend_config_is_51_renditions_and_one_copy() {
     assert_eq!(
         *r,
         json!({"video": {"codec": "h264", "width": 1280, "height": 720, "bitrate_kbps": 1500, "keyframe_frames": 50,
-                         "fit": "pad", "pad_color": "#000000", "deinterlace": "off"},
+                         "fit": "pad", "pad_color": "#000000", "deinterlace": "off", "preset": "p1"},
                "audio": {"codec": "aac", "bitrate_kbps": 128, "tracks": "all"}})
     );
     assert_eq!((r["audio"]["codec"].as_str(), r["audio"]["bitrate_kbps"].as_u64()), (Some("aac"), Some(128)));
