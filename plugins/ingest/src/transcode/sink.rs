@@ -39,7 +39,10 @@ pub fn tap_pictures(tee: &gst::Element, node: String, route: Arc<dyn Route>) {
             return gst::PadProbeReturn::Ok;
         }
         *last = Some(std::time::Instant::now());
-        if let (Some(gst::PadProbeData::Buffer(buffer)), Some(caps)) = (&info.data, pad.current_caps()) {
+        if let (Some(gst::PadProbeData::Buffer(buffer)), Some(mut caps)) = (&info.data, pad.current_caps()) {
+            // A picture in CUDA memory maps to system memory when read, so
+            // its caps go without the feature, as a picture anyone can read.
+            caps.make_mut().set_features(0, None);
             let sample = gst::Sample::builder().buffer(buffer).caps(&caps).build();
             route.frame(&node, &sample);
         }
