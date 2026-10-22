@@ -36,6 +36,8 @@ pub enum At {
     Start(i64),
     /// By the second it starts in and its length: Flussonic's names.
     Clock { unix_s: i64, duration_ms: u32 },
+    /// By the second it starts in alone.
+    Second(i64),
 }
 
 /// The rendition id a sound track's TS has: `audio1` for track 1. Track 0

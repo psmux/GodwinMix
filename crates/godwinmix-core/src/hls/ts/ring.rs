@@ -94,6 +94,7 @@ impl TsTrack {
         let found = r.segments.iter().find(|s| match at {
             super::At::Msn(m) => s.msn == m,
             super::At::Start(ms) => s.pdt_ms == ms,
+            super::At::Second(unix_s) => s.pdt_ms.div_euclid(1000) == unix_s,
             super::At::Clock { unix_s, duration_ms } => s.pdt_ms.div_euclid(1000) == unix_s && (s.duration_ns / 1_000_000) as u32 == duration_ms,
         });
         found.map(|s| s.bytes.clone())

@@ -23,8 +23,7 @@ use gstreamer_app::AppSrc;
 use godwinmix_core::hls::{self, Stream, TrackKind};
 use std::sync::Arc;
 
-/// The rung a direct show's picture is served as. Its sound tracks are
-/// `audio`, `audio1` and on (`tracks::rung`).
+/// The rung a direct show's picture is served as; its sounds are `tracks::rung`.
 pub const VIDEO: &str = "main";
 
 pub struct Session {
@@ -97,9 +96,7 @@ impl Session {
     }
 
     /// Whether this session was built with sound track `track`.
-    pub fn has_sound(&self, track: u8) -> bool {
-        self.sounds.contains(&track)
-    }
+    pub fn has_sound(&self, track: u8) -> bool { self.sounds.contains(&track) }
 
     /// Hand on one tag: a frame to its CMAF appsrc, and anything to its TS
     /// cutter. Answers the bytes handed on.

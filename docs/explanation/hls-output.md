@@ -142,6 +142,48 @@ ladder, the programme's own encode is packaged as it is, and its segments are
 as long as its keyframe interval makes them; `EXT-X-TARGETDURATION` follows
 the longest and never shrinks.
 
+## Every sound track
+
+A broadcast programme carries two to four sound tracks, one per language,
+and a player builds its audio menu from the `EXT-X-MEDIA` renditions of one
+group. So each sound track is a rung of its own, packaged by a `cmafmux` of
+its own as `audio`, `audio1`, `audio2`, each cut beside the picture as the
+one sound always was (`follow.rs`), so every track has the same segment
+numbers for the same moments. The language comes from the PMT by way of
+`direct.input`'s `tracks`, since an FLV tag has nowhere to carry it. The
+packager reads every track off the relay in one connection, each tag's
+track number in the FLV stream id, which is zero everywhere else.
+
+## MPEG-TS beside CMAF
+
+Some players take MPEG-TS and nothing else, and some readers want the
+picture and the first sound in one stream. GStreamer has `mpegtsmux` and
+`hlssink3`, but the packager already has every frame in hand as a tag, and
+the ingest plugin already has a muxer from tags to MPEG-TS in a few hundred
+lines of Rust (`plugins/ingest/src/tsmux/`). The ingest plugin is a binary,
+so its muxer is copied, cut down to H.264, HEVC and AAC, into
+`crates/godwinmix-core/src/hls/ts/`. Nothing in the data path is a
+GStreamer element for TS, and no frame is copied for it: a tag's bytes are
+one allocation that the CMAF buffer and the TS cutter both point at.
+
+The hard part is cutting in the same places. `cmafmux` decides where a
+segment ends, a moment after the TS cutter sees the keyframe. So the TS
+cutter queues frames (pointers, a few hundred milliseconds of them) and asks
+the CMAF picture's ring what each keyframe is: the start of segment N, a
+keyframe inside one, or not known yet (`ring_cut.rs`). Without parts a CMAF
+segment reaches the ring only once it is whole, which is the moment the
+keyframe after it reached the muxer; so the keyframe at the end of the newest
+whole segment starts the next one, and the TS segment is done at the same
+moment the CMAF one is. A further sound alone is placed by its frames'
+times, as the CMAF sound is. Only once a frame's segment is known is it
+muxed, so a segment can start with its own PAT and PMT. One muxer serves
+the cutter's life, so the continuity counters carry on and two segments
+back to back are one stream.
+
+A TS segment's name is its start in UTC milliseconds, not its number. A
+cache downstream keeps segments by path for ten minutes, and the numbers
+start again from the running time after a restart; the wall clock does not.
+
 ## DASH from the same ring
 
 CMAF segments are what DASH plays too, so DASH is one more way of listing
