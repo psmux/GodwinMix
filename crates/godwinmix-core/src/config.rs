@@ -1296,10 +1296,12 @@ impl SourceConfig {
             if out.contains_key(key) {
                 continue;
             }
-            tracing::warn!(
-                source = %self.id,
-                "`{from}` on a source is now `params.{key}`; the old key will not be read after this release"
-            );
+            if first_mention(&self.id, from) {
+                tracing::warn!(
+                    source = %self.id,
+                    "`{from}` on a source is now `params.{key}`; the old key will not be read after this release"
+                );
+            }
             out.insert(key.to_string(), value);
         }
         for (k, v) in &self.extra {
@@ -1343,6 +1345,17 @@ impl SourceConfig {
             _ => Ok(()),
         }
     }
+}
+
+/// True the first time this process is asked about `key` on `source`, so a
+/// moved key warns once per source rather than on every read of the params,
+/// which the status, the tick and every build all do: an old runtime store
+/// with two such sources wrote about 130,000 identical warnings a day.
+fn first_mention(source: &str, key: &'static str) -> bool {
+    static SEEN: std::sync::OnceLock<std::sync::Mutex<std::collections::HashSet<(String, &'static str)>>> =
+        std::sync::OnceLock::new();
+    let seen = SEEN.get_or_init(Default::default);
+    seen.lock().unwrap_or_else(|e| e.into_inner()).insert((source.to_string(), key))
 }
 
 /// Whether a `type` names a plugin provide (`ndi/source`) rather than nothing
@@ -1813,6 +1826,16 @@ impl Config {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_moved_key_is_mentioned_once_per_source() {
+        // Ids of this test's own, so no other test's sources share the set.
+        assert!(super::first_mention("moved-key-test-a", "superimpose"));
+        assert!(!super::first_mention("moved-key-test-a", "superimpose"));
+        assert!(super::first_mention("moved-key-test-a", "rtmp_client"));
+        assert!(super::first_mention("moved-key-test-b", "superimpose"));
+        assert!(!super::first_mention("moved-key-test-b", "superimpose"));
+    }
+
     use super::*;
 
     /// A box that was running LiveboxMix yesterday has `liveboxmix.toml` and
