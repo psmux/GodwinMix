@@ -113,19 +113,25 @@ impl Stream {
     /// What a playlist or an MPD says about one track. Peak bandwidth is what
     /// was measured over the window, or what the rendition asked for if that
     /// is higher.
-    fn variant(t: &Arc<Track>) -> Variant {
+    pub fn variant(t: &Arc<Track>) -> Variant {
         let info = t.info();
         let declared = u64::from(info.declared_kbps) * 1000;
         let (peak, average) = t.measured_bps().map(|(p, a)| (p, Some(a))).unwrap_or((0, None));
         Variant { id: t.id.clone(), bandwidth: peak.max(declared).max(1), average, info }
     }
 
+    /// Every sound track, in track order.
+    pub fn sounds(&self) -> Vec<Variant> {
+        let mut audio: Vec<Variant> = self.tracks().iter().filter(|t| t.kind == TrackKind::Audio).map(Self::variant).collect();
+        audio.sort_by_key(|a| a.info.sound);
+        audio
+    }
+
     /// The multivariant playlist.
     pub fn master(&self) -> String {
         let tracks = self.tracks();
         let video: Vec<Variant> = tracks.iter().filter(|t| t.kind == TrackKind::Video).map(Self::variant).collect();
-        let audio = tracks.iter().find(|t| t.kind == TrackKind::Audio).map(Self::variant);
-        playlist::master(&video, audio.as_ref())
+        playlist::master(&video, &self.sounds())
     }
 
     /// The same tracks as a DASH MPD, with `query` on every URL. None until
