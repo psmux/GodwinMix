@@ -127,6 +127,21 @@ impl Transcoders {
     }
 }
 
+impl Drop for Transcoders {
+    /// Stop every stream and give their threads a moment to take their
+    /// pipelines down. NVIDIA's decoder library waits at the process's exit
+    /// for every decoder to be closed, so a process that left one running on
+    /// another thread never exited.
+    fn drop(&mut self) {
+        let running = std::mem::take(&mut *self.lock());
+        running.values().for_each(Session::stop);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+        while running.values().any(|s| !s.ended()) && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+    }
+}
+
 /// The pairs the destinations of one stream read.
 fn outputs(s: &StreamSpec, wanted: &[Wanted]) -> Vec<Output> {
     let mut out: Vec<Output> = Vec::new();
