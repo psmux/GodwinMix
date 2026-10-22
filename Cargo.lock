@@ -1570,7 +1570,9 @@ dependencies = [
 name = "godwinmix-flussonic"
 version = "0.3.16"
 dependencies = [
+ "base64",
  "serde",
+ "serde_json",
 ]
 
 [[package]]
