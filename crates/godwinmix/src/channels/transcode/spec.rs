@@ -101,8 +101,16 @@ pub fn fps_pair(fps: Fps) -> Value {
 fn audio_encoder(shape: &AudioShape, machine: &Machine) -> Option<Value> {
     let e = machine.audio_encoder(shape.codec)?;
     let vars = Vars { audio_bitrate_kbps: i64::from(shape.bitrate_kbps), ..Vars::default() };
+    let mut props = resolve(&e.properties, &vars);
+    // A converted stream's sound keeps the times it came with. Stamped by
+    // counting samples, as the programme's encoder is, a gap in the input
+    // (whole GOPs a slow reader lost) left every frame after it seconds
+    // early against the picture.
+    if props.contains_key("perfect-timestamp") {
+        props.insert("perfect-timestamp".into(), json!(false));
+    }
     let mut v = json!({
-        "encoder": e.id(), "element": e.encoder, "props": resolve(&e.properties, &vars),
+        "encoder": e.id(), "element": e.encoder, "props": props,
         "codec": audio_slug(shape.codec), "channels": shape.channels,
         "sample_rate": shape.sample_rate, "bitrate_kbps": shape.bitrate_kbps,
     });

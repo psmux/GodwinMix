@@ -22,6 +22,7 @@
 mod build;
 mod caps;
 mod cuda;
+mod cuda_ctx;
 mod build_video;
 mod graph;
 pub(crate) mod input;
@@ -30,6 +31,7 @@ mod router;
 mod session;
 mod sink;
 mod spec;
+mod tee;
 
 #[cfg(test)]
 mod tests;
@@ -122,6 +124,21 @@ impl Transcoders {
         let running = self.lock();
         let session = running.get(&(w.app.clone(), w.stream.clone()))?;
         [video, audio].into_iter().flatten().chain(tracks).find_map(|node| session.failed(node).or_else(|| session.failed("*")))
+    }
+}
+
+impl Drop for Transcoders {
+    /// Stop every stream and give their threads a moment to take their
+    /// pipelines down. NVIDIA's decoder library waits at the process's exit
+    /// for every decoder to be closed, so a process that left one running on
+    /// another thread never exited.
+    fn drop(&mut self) {
+        let running = std::mem::take(&mut *self.lock());
+        running.values().for_each(Session::stop);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+        while running.values().any(|s| !s.ended()) && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
     }
 }
 

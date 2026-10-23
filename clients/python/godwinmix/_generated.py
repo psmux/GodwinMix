@@ -264,6 +264,8 @@ class AudioWant(TypedDict, total=False):
     channels: Optional[int]
     codec: Union[AudioCodec, None]
     sample_rate: Optional[int]
+    tracks: Union[Tracks, None]
+    # The first sound track alone (when left out), or every one the source carries, each converted on its own at its own channel count unless `channels` says otherwise.
 
 class BackendInfo(TypedDict, total=False):
     audio_decoder: str
@@ -4011,7 +4013,7 @@ class Transform(TypedDict, total=False):
     align: Align
     anchor: Vec2
     # Normalised 0 to 1 within the item's own box: (0,0) top left, (0.5,0.5) centre, (1,1) bottom right.
-    fit: Fit
+    fit: Fit2
     frame: Union[Frame, None]
     # The rectangle the content is fitted into, in canvas pixels. Absent means the content's own size, scaled.
     position: Vec2
@@ -4126,15 +4128,27 @@ class VideoShape(TypedDict, total=False):
 class VideoWant(TypedDict, total=False):
     """The video an output wants. Every field left out is taken from the source."""
 
+    bframes: Optional[int]
+    # B frames between references. The catalogue's (none, for live) when left out.
     bitrate_kbps: Optional[int]
     # Target bitrate. A copy is kept when the source is within `bitrate_tolerance` of it.
     bitrate_tolerance: Optional[float]
     # Fraction either way a source's bitrate may differ and still be copied. 0.25 when left out.
     codec: Union[VideoCodec, None]
+    deinterlace: Union[Deinterlace, None]
+    # Off when left out: an interlaced picture is scaled as it comes.
+    fit: Union[Fit, None]
+    # How a picture of another shape goes into the size asked for. Pad when left out, in black, which is what scaling has always done.
     fps: Union[Fps, None]
     height: Optional[int]
+    keyframe_frames: Optional[int]
+    # Keyframe interval in frames of the source's own rate, as Flussonic's `gop` is written. Taken over `keyframe_ms` when both are set.
     keyframe_ms: Optional[int]
     # Keyframe interval. Renditions in one ladder share it.
+    pad_color: Optional[str]
+    # The colour of the bars a pad fit adds, `#rrggbb`. Black when left out.
+    preset: Optional[str]
+    # The encoder's speed and quality preset in its own words (`p4` on NVENC, `veryfast` on x264). The catalogue's when left out.
     width: Optional[int]
 
 class VitalsConfig(TypedDict, total=False):
@@ -4336,6 +4350,9 @@ Container = Literal['flv', 'mpeg-ts', 'mp4-fragmented', 'mkv', 'hls', 'll-hls', 
 
 ConversionPhase = Literal['running', 'done', 'failed']
 
+# Whether an interlaced picture is made progressive.
+Deinterlace = Union[Literal['off', 'on'], Literal['auto']]
+
 # Copied as it arrives, or converted.
 DestinationMode = Literal['copy', 'transcode']
 
@@ -4360,8 +4377,11 @@ FeedState2 = Union[Literal['paused'], Literal['starting'], Literal['ok'], Litera
 # What a field holds.
 FieldType = Literal['text', 'color', 'image']
 
+# How a picture goes into a size of another shape.
+Fit = Literal['pad', 'crop', 'stretch']
+
 # How content fills its frame. SVG's vocabulary, which replaces OBS's seven bounds types and maps onto `sizing-policy` on a `glvideomixer` pad.
-Fit = Literal['none', 'contain', 'cover', 'stretch', 'fit-width', 'fit-height', 'max']
+Fit2 = Literal['none', 'contain', 'cover', 'stretch', 'fit-width', 'fit-height', 'max']
 
 # Content on the wire. The same four shapes as the tree, except that a group names no children: they are records whose parent is the group.
 FlatContent = Dict[str, Any]
@@ -4468,6 +4488,9 @@ TemplateFormat = Literal['svg', 'html']
 
 # Where a template comes from.
 TemplateOrigin = Literal['pack', 'library']
+
+# Which sound tracks a rendition converts.
+Tracks = Literal['first', 'all']
 
 # A name, or an object.
 Transition = Union[str, TransitionRequest]

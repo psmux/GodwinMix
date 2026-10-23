@@ -81,15 +81,33 @@ fn high_profile(profile: u32) -> bool {
 /// Width and height in pixels, after cropping. `nal` starts with the NAL
 /// header byte.
 pub fn size(nal: &[u8]) -> Option<(u32, u32)> {
+    layout(nal).map(|l| (l.width, l.height))
+}
+
+/// What an SPS says about its pictures: their size, and what a slice
+/// header needs to be read as far as `field_pic_flag`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Layout {
+    pub width: u32,
+    pub height: u32,
+    pub separate_colour_plane: bool,
+    /// Bits of `frame_num` in a slice header.
+    pub frame_num_bits: u32,
+    /// False when pictures may be coded as fields.
+    pub frame_mbs_only: bool,
+}
+
+/// Read an SPS as far as the frame cropping fields.
+pub fn layout(nal: &[u8]) -> Option<Layout> {
     let mut b = Bits::new(nal.get(1..)?);
     let profile = b.bits(8)?;
     b.bits(16)?; // constraint flags and level
     b.ue()?; // seq_parameter_set_id
-    let mut chroma = 1;
+    let (mut chroma, mut separate) = (1, false);
     if high_profile(profile) {
         chroma = b.ue()?;
         if chroma == 3 {
-            b.bit()?; // separate_colour_plane_flag
+            separate = b.bit()? == 1;
         }
         b.ue()?; // bit_depth_luma
         b.ue()?; // bit_depth_chroma
@@ -103,7 +121,7 @@ pub fn size(nal: &[u8]) -> Option<(u32, u32)> {
             }
         }
     }
-    b.ue()?; // log2_max_frame_num
+    let frame_num_bits = b.ue()? + 4;
     match b.ue()? {
         0 => {
             b.ue()?;
@@ -142,7 +160,7 @@ pub fn size(nal: &[u8]) -> Option<(u32, u32)> {
     };
     let width = (width_mbs * 16).checked_sub((left + right) * crop_x)?;
     let height = (height_units * 16 * (2 - frame_mbs_only)).checked_sub((top + bottom) * crop_y)?;
-    Some((width, height))
+    Some(Layout { width, height, separate_colour_plane: separate, frame_num_bits, frame_mbs_only: frame_mbs_only == 1 })
 }
 
 #[cfg(test)]

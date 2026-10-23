@@ -965,6 +965,17 @@
               "integer",
               "null"
             ]
+          },
+          "tracks": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Tracks"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The first sound track alone (when left out), or every one the source\ncarries, each converted on its own at its own channel count unless\n`channels` says otherwise."
           }
         },
         "type": "object"
@@ -2951,6 +2962,23 @@
         ],
         "type": "object"
       },
+      "Deinterlace": {
+        "description": "Whether an interlaced picture is made progressive.",
+        "oneOf": [
+          {
+            "enum": [
+              "off",
+              "on"
+            ],
+            "type": "string"
+          },
+          {
+            "const": "auto",
+            "description": "Only pictures the stream marks as interlaced.",
+            "type": "string"
+          }
+        ]
+      },
       "Destination": {
         "description": "One destination as a client sees it. The key never appears: `has_key`\nsays whether there is one.",
         "properties": {
@@ -4485,6 +4513,26 @@
         "type": "object"
       },
       "Fit": {
+        "description": "How a picture goes into a size of another shape.",
+        "oneOf": [
+          {
+            "const": "pad",
+            "description": "Keep the whole picture and fill the rest with bars.",
+            "type": "string"
+          },
+          {
+            "const": "crop",
+            "description": "Fill the frame and cut what overhangs.",
+            "type": "string"
+          },
+          {
+            "const": "stretch",
+            "description": "Fill the frame and change the picture's shape.",
+            "type": "string"
+          }
+        ]
+      },
+      "Fit2": {
         "description": "How content fills its frame. SVG's vocabulary, which replaces OBS's seven\nbounds types and maps onto `sizing-policy` on a `glvideomixer` pad.",
         "oneOf": [
           {
@@ -14384,6 +14432,14 @@
         ],
         "type": "object"
       },
+      "Tracks": {
+        "description": "Which sound tracks a rendition converts.",
+        "enum": [
+          "first",
+          "all"
+        ],
+        "type": "string"
+      },
       "Transform": {
         "additionalProperties": false,
         "description": "Where an item sits and how it is sized.",
@@ -14401,7 +14457,7 @@
             "description": "Normalised 0 to 1 within the item's own box: (0,0) top left, (0.5,0.5)\ncentre, (1,1) bottom right."
           },
           "fit": {
-            "$ref": "#/components/schemas/Fit",
+            "$ref": "#/components/schemas/Fit2",
             "default": "none"
           },
           "frame": {
@@ -14791,6 +14847,16 @@
       "VideoWant": {
         "description": "The video an output wants. Every field left out is taken from the source.",
         "properties": {
+          "bframes": {
+            "description": "B frames between references. The catalogue's (none, for live) when\nleft out.",
+            "format": "uint8",
+            "maximum": 255,
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
           "bitrate_kbps": {
             "description": "Target bitrate. A copy is kept when the source is within\n`bitrate_tolerance` of it.",
             "format": "uint32",
@@ -14818,6 +14884,28 @@
               }
             ]
           },
+          "deinterlace": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Deinterlace"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Off when left out: an interlaced picture is scaled as it comes."
+          },
+          "fit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Fit"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "How a picture of another shape goes into the size asked for. Pad when\nleft out, in black, which is what scaling has always done."
+          },
           "fps": {
             "anyOf": [
               {
@@ -14836,12 +14924,35 @@
               "null"
             ]
           },
+          "keyframe_frames": {
+            "description": "Keyframe interval in frames of the source's own rate, as Flussonic's\n`gop` is written. Taken over `keyframe_ms` when both are set.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
           "keyframe_ms": {
             "description": "Keyframe interval. Renditions in one ladder share it.",
             "format": "uint32",
             "minimum": 0,
             "type": [
               "integer",
+              "null"
+            ]
+          },
+          "pad_color": {
+            "description": "The colour of the bars a pad fit adds, `#rrggbb`. Black when left out.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "preset": {
+            "description": "The encoder's speed and quality preset in its own words (`p4` on\nNVENC, `veryfast` on x264). The catalogue's when left out.",
+            "type": [
+              "string",
               "null"
             ]
           },

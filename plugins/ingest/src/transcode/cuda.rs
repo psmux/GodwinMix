@@ -7,6 +7,11 @@
 //! here and handed to every pipeline after: set on the pipeline when it is
 //! made, which a bin hands to every element added to it, and given to any
 //! element that asks before there is one to give.
+//!
+//! The context is made the first time an element asks for one, so a
+//! machine that converts on the CPU never holds one, and it is made to
+//! sleep while it waits for the GPU (`cuda_ctx.rs`). Where that cannot be
+//! done, the first context an element makes for itself is kept instead.
 
 use std::sync::Mutex;
 
@@ -33,7 +38,7 @@ pub fn share(pipeline: &gst::Pipeline) {
         match msg.view() {
             gst::MessageView::NeedContext(n) if n.context_type() == CUDA => {
                 let asker = msg.src().and_then(|s| s.downcast_ref::<gst::Element>().cloned());
-                if let (Some(c), Some(el)) = (held(), asker) {
+                if let (Some(c), Some(el)) = (held().or_else(make), asker) {
                     el.set_context(&c);
                 }
             }
@@ -49,8 +54,16 @@ pub fn share(pipeline: &gst::Pipeline) {
     });
 }
 
-/// Whether a context has been made yet, for a test.
-#[cfg(test)]
-pub fn made() -> bool {
-    held().is_some()
+/// Make the shared context, once; a failure is said once and leaves it to
+/// GStreamer.
+fn make() -> Option<gst::Context> {
+    static TRIED: std::sync::Once = std::sync::Once::new();
+    TRIED.call_once(|| match super::cuda_ctx::blocking() {
+        Ok(c) => {
+            let mut shared = SHARED.lock().unwrap_or_else(|e| e.into_inner());
+            shared.get_or_insert(c);
+        }
+        Err(why) => eprintln!("transcode: {why}; GStreamer's own CUDA context is used, which spins while it waits"),
+    });
+    held()
 }

@@ -40,6 +40,12 @@ pub use pull::redact;
 pub use spec::{Carry, InputError, InputSpec, Kind};
 pub use stats::{InputStats, TrackInfo};
 
+/// Every multicast group the native inputs have open, one row per socket,
+/// for `direct.groups`.
+pub fn groups() -> Vec<serde_json::Value> {
+    native::registry::snapshot()
+}
+
 /// What an input may need from the host it runs in.
 #[derive(Clone, Default)]
 pub struct Context {

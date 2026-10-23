@@ -5,7 +5,7 @@
 //!   scale    queue(leaky) ─ [videorate] ─ [deinterlace] ─ [crop] ─ videoscale | cudaconvertscale ─ caps ─ tee
 //!   encode   queue(leaky) ─ [videoconvert] ─ encoder ─ parser ─ caps ─ appsink
 //!   aconvert queue(leaky) ─ audioconvert ─ audioresample ─ caps ─ tee
-//!   aencode  queue(leaky) ─ audioconvert ─ audioresample ─ encoder [─ parser] ─ caps ─ appsink
+//!   aencode  queue(leaky) ─ audioconvert ─ audioresample ─ caps ─ encoder [─ parser] ─ caps ─ appsink
 //! ```
 //!
 //! Every branch off a tee starts with a small leaky queue on its own thread,
@@ -38,8 +38,10 @@ pub struct Built {
     pub appsink: Option<AppSink>,
 }
 
-/// Frames or buffers a branch holds before it drops its oldest.
-const BRANCH_BUFFERS: u32 = 3;
+/// Frames a branch holds before it drops its oldest. A multiplex hands its
+/// pictures over in bursts, and fifty channels on one decoder make them
+/// burstier: with three, a 720p60 channel lost a few frames now and then.
+const BRANCH_BUFFERS: u32 = 8;
 
 static SERIAL: AtomicU64 = AtomicU64::new(0);
 
@@ -64,6 +66,19 @@ pub(super) fn leaky_queue() -> Result<gst::Element, String> {
     q.set_property("max-size-buffers", BRANCH_BUFFERS);
     q.set_property("max-size-bytes", 0u32);
     q.set_property("max-size-time", 0u64);
+    Ok(q)
+}
+
+/// Sound arrives in bursts as a multiplex interleaves it, many frames at a
+/// time: a branch of three buffers dropped a third of them, and an encoder
+/// that stamps its frames by counting samples then ran ahead of the picture.
+/// So a sound branch holds up to two seconds before it drops its oldest.
+fn audio_queue() -> Result<gst::Element, String> {
+    let q = make("queue")?;
+    q.set_property_from_str("leaky", "downstream");
+    q.set_property("max-size-buffers", 0u32);
+    q.set_property("max-size-bytes", 0u32);
+    q.set_property("max-size-time", 2_000_000_000u64);
     Ok(q)
 }
 
@@ -111,14 +126,22 @@ fn decode(node: &NodeSpec) -> Result<Built, String> {
 fn aconvert(node: &NodeSpec) -> Result<Built, String> {
     let text = format!("audio/x-raw,rate={},channels={}", node.number("sample_rate"), node.number("channels"));
     let tee = tee()?;
-    let elements = vec![leaky_queue()?, make("audioconvert")?, make("audioresample")?, caps(&text)?, tee.clone()];
+    let elements = vec![audio_queue()?, make("audioconvert")?, make("audioresample")?, caps(&text)?, tee.clone()];
     Ok(Built { head: Some(elements[0].clone()), elements, tee: Some(tee), appsrc: None, appsink: None })
 }
 
 fn aencode(node: &NodeSpec) -> Result<Built, String> {
     let enc = element(node, "element")?;
     set_all(&enc, node.raw.get("props"));
-    let mut elements = vec![leaky_queue()?, make("audioconvert")?, make("audioresample")?, enc];
+    let mut elements = vec![audio_queue()?, make("audioconvert")?, make("audioresample")?];
+    // A broadcast switches between 5.1 and stereo at a programme's edge; the
+    // encoder keeps the count it was planned at, and the sound is mixed to it,
+    // since an AAC encoder does not take a new layout mid stream.
+    let (channels, rate) = (node.number("channels"), node.number("sample_rate"));
+    if channels > 0 && rate > 0 {
+        elements.push(caps(&format!("audio/x-raw,channels={channels},rate={rate}"))?);
+    }
+    elements.push(enc);
     if let Some(p) = node.text("parser") {
         elements.push(make(p)?);
     }

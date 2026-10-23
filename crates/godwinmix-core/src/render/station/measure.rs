@@ -55,7 +55,8 @@ impl Station {
             return false;
         }
         info!(encoders = cands.len(), "calibrating this machine's encoders");
-        let cal = calibrate(&cands, &audio, &Options::default());
+        let probe = self.inner.governor.config().session_probe();
+        let cal = calibrate(&cands, &audio, &Options { session_cap: probe, ..Options::default() });
         let mut kept = false;
         if let Some(dir) = &self.inner.store {
             match Store::new(dir).save(&cal) {

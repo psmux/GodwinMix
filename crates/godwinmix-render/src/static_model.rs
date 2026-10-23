@@ -3,7 +3,9 @@
 //! The numbers are rough figures for a recent laptop CPU, scaled by pixel
 //! rate from 1080p30. x264 at `veryfast` on 1080p30 is about one and a half
 //! cores; x265 and SVT-AV1 cost three to four times that; a hardware encoder
-//! costs a tenth of a core for the upload and about a sixth of its device.
+//! costs a tenth of a core for the upload and a thirtieth of its device at
+//! 1080p30, which is what NVENC on an RTX 3060 class card measured with
+//! forty six broadcast channels running at once.
 //! The governor replaces all of this with what it measured.
 
 use std::collections::BTreeMap;
@@ -107,7 +109,7 @@ impl CostModel for StaticCostModel {
             if shape.width > HW_MAX_SIDE || shape.height > HW_MAX_SIDE {
                 return None;
             }
-            let device_millis = millicores(160.0, shape).max(1);
+            let device_millis = millicores(34.0, shape).max(1);
             let cpu_millicores = millicores(100.0, shape);
             return Some(Cost {
                 cpu_millicores,
