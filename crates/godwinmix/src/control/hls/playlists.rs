@@ -16,11 +16,15 @@ use std::time::{Duration, Instant};
 fn open(door: &impl Door, id: &str, req: &Request) -> Result<(Arc<Stream>, Viewer), Box<Response>> {
     let stream = door.find(id, req)?;
     let viewer = auth::admit(door, &stream, req)?;
+    if !stream.params.segments.cmaf() {
+        let message = format!("`{}` makes MPEG-TS segments only. Its playlist is master-ts.m3u8; set params.segments to \"both\" for CMAF too.", stream.id);
+        return Err(Box::new(refuse(StatusCode::NOT_FOUND, message, json!({ "output": stream.id, "segments": "ts" }))));
+    }
     Ok((stream, viewer))
 }
 
 /// A 503 a player retries, for an output with nothing to say yet.
-fn not_yet(stream: &Stream, what: &str) -> Response {
+pub(super) fn not_yet(stream: &Stream, what: &str) -> Response {
     let mut r = refuse(
         StatusCode::SERVICE_UNAVAILABLE,
         format!("{what} is not made yet. {} starts a few seconds after the programme reaches it; try again.", stream.id),

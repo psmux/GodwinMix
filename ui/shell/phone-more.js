@@ -51,6 +51,7 @@ export function morePage(deck, extras) {
       row("black", "Cut to black", "Take the programme to black now", () => run("program.black")),
       row("routing", "Routing", "Which input goes to which output", () => run("view.routing")),
       row("wall", "Monitoring wall", "Every show and feed at a glance", () => run("view.wall")),
+      row("routing", "Flow map", "What comes in, and where it goes out", () => run("view.flowmap")),
     ]),
     el("h2.phone-group", { text: "This mixer" }),
     el("div.phone-list", {}, [

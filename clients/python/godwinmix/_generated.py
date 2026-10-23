@@ -264,6 +264,8 @@ class AudioWant(TypedDict, total=False):
     channels: Optional[int]
     codec: Union[AudioCodec, None]
     sample_rate: Optional[int]
+    tracks: Union[Tracks, None]
+    # The first sound track alone (when left out), or every one the source carries, each converted on its own at its own channel count unless `channels` says otherwise.
 
 class BackendInfo(TypedDict, total=False):
     audio_decoder: str
@@ -824,6 +826,8 @@ class Destination(TypedDict, total=False):
     key_hint: Optional[str]
     # The key's last four characters, as a channel key's `hint`, so a person can see which key is saved. Left out for a key under eight characters, where four would be half of it. Never the key itself.
     label: str
+    params: Union[HlsOutputParams, None]
+    # What an `hls://` output of a show without compositing was given, as `show.output.set` takes it, less the viewer key. Read while it runs.
     plan: Union[DestinationPlan, None]
     # What the plan gave it, while its stream is live.
     platform: str
@@ -1789,6 +1793,59 @@ class GovernorStatus(TypedDict, total=False):
     # What arrives: every channel stream and every direct show's input, as last counted. Zero on a core with no station.
     shed: List[ShedNote]
 
+class GpuDevice(TypedDict, total=False):
+    """One GPU: what it is, its newest reading and the ones before it."""
+
+    driver: Optional[str]
+    history: List[GpuSample]
+    # One a second, oldest first, the last two minutes at most.
+    index: int
+    name: str
+    # `NVIDIA GeForce RTX 3060`.
+    now: GpuSample
+
+class GpuSample(TypedDict, total=False):
+    """One reading of one GPU. A number the driver would not give is left out."""
+
+    at_ms: int
+    # Unix milliseconds.
+    decoder_pct: Optional[int]
+    # NVDEC, percent.
+    encoder_fps: Optional[int]
+    # The sessions' average frame rate.
+    encoder_pct: Optional[int]
+    # NVENC, percent.
+    encoder_sessions: Optional[int]
+    # Open NVENC sessions, every process on the machine.
+    fan_pct: Optional[int]
+    gpu_pct: Optional[int]
+    # The 3D and compute engines, percent of the last sample period.
+    graphics_mhz: Optional[int]
+    memory_mhz: Optional[int]
+    memory_total_mib: Optional[int]
+    memory_used_mib: Optional[int]
+    power_limit_w: Optional[float]
+    power_w: Optional[float]
+    temperature_c: Optional[int]
+    video_mhz: Optional[int]
+
+class GpuStatus(TypedDict, total=False):
+    """`gpu.status`'s answer."""
+
+    every_ms: int
+    # How often a reading is taken while someone asks.
+    gpus: List[GpuDevice]
+    note: Optional[str]
+    # Why there are no GPUs, or what is missing, in one sentence.
+    source: str
+    # `nvml`, `nvidia-smi`, or `none`.
+
+class GpuStatusRequest(TypedDict, total=False):
+    """`gpu.status`."""
+
+    since_ms: Optional[int]
+    # Only the history after this time, unix milliseconds: what a client that already holds the rest asks for. Left out, the whole history.
+
 class GraphicListing(TypedDict, total=False):
     """`scene.graphic.list`."""
 
@@ -1813,6 +1870,50 @@ class GroupSourcesRequest(TypedDict, total=False):
     name: Optional[str]
     # The tray folder to put them in. Null takes them out of the one they are in.
     sources: List[str]
+
+class HeadendImportReport(TypedDict, total=False):
+    """`headend.import`'s answer: the report, then what was made."""
+
+    converted: int
+    copied: int
+    disabled: int
+    dry_run: bool
+    following: Optional[str]
+    # The Flussonic config this station follows, when it follows one. A show made by an import is not in that file, and the file's own streams are not touched.
+    notes: List[ImportNote]
+    shows: ShowAddManyResult
+    # `show.add_many`'s answer for these shows: on a dry run what would be made, what it costs and what would be refused; otherwise what was.
+    source: str
+    # `pasted text`, or the path that was read.
+    streams: List[ImportedStream]
+
+class HeadendImportRequest(TypedDict, total=False):
+    """`headend.import`. One of `text` and `path`."""
+
+    dry_run: Optional[bool]
+    # Left out: true. Read the config, price its shows and make nothing. False makes them.
+    path: Optional[str]
+    # Or a file on the station's machine, such as `/etc/flussonic/flussonic.conf`, read by the station.
+    text: Optional[str]
+    # The config's text, as pasted.
+
+class HeadendStatus(TypedDict, total=False):
+    """`headend.status`: whether this station runs in headend mode."""
+
+    file: Optional[str]
+    # The file it follows.
+    following: bool
+    # True while the station follows a Flussonic config (`godwinmix headend --flussonic FILE`).
+    listeners: List[str]
+    # Where Flussonic's URLs and API answer, `address:port`.
+    log: Optional[str]
+    # The Flussonic style log, when one is written.
+    note: str
+    # What a reader of this answer can do next, in one sentence.
+    shows: int
+    # Of those, the ones running as a show.
+    streams: int
+    # Streams in the file as last read.
 
 class Header(TypedDict, total=False):
     """Everything in the document that is not a scene or an item: the name, the canvas, the collection's parameters, the transitions it carries, the assets and the source labels. It is not a record and it has no id, so it cannot be diffed the way the tree is. It is carried whole, because it is small and because the alternative is that a command touching only the header produces an empty patch and is thrown away by `edit`, which is exactly what used to happen to `scene.params.set`, `source.set` and `source.group`: all three answered with the change and none of them kept it."""
@@ -1865,12 +1966,18 @@ class HistoryStep(TypedDict, total=False):
 class HlsOutputParams(TypedDict, total=False):
     """An `hls://` output's params, as an `hls/output` takes them."""
 
+    access: Optional[str]
+    # `keyed` (the default) or `open`: whether a player needs the viewer key.
     low_latency: Optional[bool]
     # true: parts of 333 ms.
+    open_public: Optional[bool]
+    # With `access = "open"`, answer players outside loopback and the private networks too.
     part_ms: Optional[int]
     # LL-HLS part, 0 for none.
     segment_ms: Optional[int]
     # 500 to 10000, default 2000.
+    segments: Optional[str]
+    # `cmaf` (the default), `ts` or `both`: which segments are made.
     viewer_key: Optional[str]
     # 16 characters or more.
     window: Optional[int]
@@ -1880,6 +1987,17 @@ class IdRequest(TypedDict, total=False):
     """An id on its own: `source.get`, `source.remove`, `output.remove`, `output.reconnect`, `media.remove`."""
 
     id: str
+
+class ImportNote(TypedDict, total=False):
+    """A line the import read and does not act on, or acts on differently."""
+
+    kind: str
+    # `ignored`: nothing in GodwinMix uses it. `not_carried`: understood, and GodwinMix does something else, which `what` says.
+    line: int
+    # 0 when the note is about the whole config.
+    scope: str
+    # `global`, or `stream NAME`.
+    what: str
 
 class ImportObsRequest(TypedDict, total=False):
     add_sources: bool
@@ -1938,6 +2056,21 @@ class ImportedReport(TypedDict, total=False):
     scenes: List[str]
     # The scenes that were added, by the names they ended up with.
 
+class ImportedStream(TypedDict, total=False):
+    """One `stream` of the config, as the show it becomes."""
+
+    copy: bool
+    # No `transcoder`: the input is served as it comes.
+    disabled: bool
+    # `disabled true`: the show is made and stopped.
+    input: Any
+    # The show's input, as `show.add` takes it, with any password in an address shown as `***`.
+    name: str
+    # Flussonic's name, the show's name when it is made.
+    outputs: List[Any]
+    # The show's outputs: the HLS output with its params and rendition, then one per `push`.
+    title: Optional[str]
+
 class InputSpec(TypedDict, total=False):
     """What a show without compositing takes in. A show that composites makes its input its one source."""
 
@@ -1955,6 +2088,8 @@ class InputStats(TypedDict, total=False):
 
     audio_channels: int
     audio_codec: Optional[str]
+    audio_peak_db: Optional[float]
+    # The first sound track's peak in dBFS over a short burst, measured about once a second while the show's alarms are on or its picture is asked for; -120 is digital silence. Left out while unmeasured.
     cc_errors: int
     fps: float
     height: int
@@ -2189,6 +2324,22 @@ class LogSetRequest(TypedDict, total=False):
     # `off`, `error`, `warn`, `info`, `debug`, `trace`, or `default` to stop overriding this one.
     target: Optional[str]
     # A module path prefix such as `godwinmix::mixer`. The longest match wins, so a more specific override still beats a broader one.
+
+class MachineStatus(TypedDict, total=False):
+    """`machine.status`'s answer: the box, not one process."""
+
+    cores: int
+    cpu_pct: Optional[float]
+    # Every process on the machine, percent of all cores, over the last second. Left out until two readings have been taken.
+    host_name: str
+    load_average: Optional[List[float]]
+    # One, five and fifteen minutes, where the system keeps them.
+    memory_available_mib: Optional[int]
+    memory_total_mib: Optional[int]
+    process_uptime_secs: int
+    # Since this process started.
+    uptime_secs: Optional[int]
+    # Since the machine booted.
 
 class MarkRequest(TypedDict, total=False):
     """`scene.history.mark`."""
@@ -2523,6 +2674,8 @@ class OutputStats(TypedDict, total=False):
     # `copy`, or what the plan gave it, such as `h264 1280x720`.
     state: str
     # waiting, connecting, live, reconnecting, failed, or off.
+    steps: List[OutputStep]
+    # What its picture goes through, in order: the decode, the scale and the encode, for an output that converts. Empty for a copy.
 
 class OutputStatus(TypedDict, total=False):
     error: Union[OutputError, None]
@@ -2539,6 +2692,18 @@ class OutputStatus(TypedDict, total=False):
     # Why the governor has this output's rendition stopped just now, while it has. The output stays connected and resumes by itself.
     state: OutputState
     uri_host: str
+
+class OutputStep(TypedDict, total=False):
+    """One step of an output's conversion."""
+
+    accel: Optional[str]
+    # The hardware family, `nvidia`, for a step that uses some.
+    element: Optional[str]
+    # The GStreamer element that does it, `nvh264enc`, where the plan names one. A scale on the CPU leaves the choice to the host.
+    gpu: bool
+    # Whether it runs on a GPU, its pictures in the GPU's memory.
+    kind: str
+    # `decode`, `scale` or `encode`.
 
 class Override(TypedDict, total=False):
     """A sparse change to one item of a referenced scene."""
@@ -2717,10 +2882,16 @@ class PlanView(TypedDict, total=False):
 class Playback(TypedDict, total=False):
     """The links of an output served as HLS from the control port, each with the output's viewer key on it. A channel's watch link is one too: `/hls/channel/<channel>/<destination>/index.m3u8?key=...`."""
 
+    access: str
+    # `keyed` (a player needs the viewer key) or `open`.
     dash_url_path: str
     # The same segments as a DASH MPD.
     master_url_path: str
     # `/hls/viewers/master.m3u8?show=bbc-one&key=...`.
+    segment_ms: Optional[int]
+    # The length segments are cut to, in milliseconds.
+    segments: str
+    # Which segments a player can fetch: `cmaf`, `ts` or `both`. Left out where the server does not say.
     viewers: int
     # Players that fetched something in the last two windows.
 
@@ -4011,7 +4182,7 @@ class Transform(TypedDict, total=False):
     align: Align
     anchor: Vec2
     # Normalised 0 to 1 within the item's own box: (0,0) top left, (0.5,0.5) centre, (1,1) bottom right.
-    fit: Fit
+    fit: Fit2
     frame: Union[Frame, None]
     # The rectangle the content is fitted into, in canvas pixels. Absent means the content's own size, scaled.
     position: Vec2
@@ -4126,15 +4297,27 @@ class VideoShape(TypedDict, total=False):
 class VideoWant(TypedDict, total=False):
     """The video an output wants. Every field left out is taken from the source."""
 
+    bframes: Optional[int]
+    # B frames between references. The catalogue's (none, for live) when left out.
     bitrate_kbps: Optional[int]
     # Target bitrate. A copy is kept when the source is within `bitrate_tolerance` of it.
     bitrate_tolerance: Optional[float]
     # Fraction either way a source's bitrate may differ and still be copied. 0.25 when left out.
     codec: Union[VideoCodec, None]
+    deinterlace: Union[Deinterlace, None]
+    # Off when left out: an interlaced picture is scaled as it comes.
+    fit: Union[Fit, None]
+    # How a picture of another shape goes into the size asked for. Pad when left out, in black, which is what scaling has always done.
     fps: Union[Fps, None]
     height: Optional[int]
+    keyframe_frames: Optional[int]
+    # Keyframe interval in frames of the source's own rate, as Flussonic's `gop` is written. Taken over `keyframe_ms` when both are set.
     keyframe_ms: Optional[int]
     # Keyframe interval. Renditions in one ladder share it.
+    pad_color: Optional[str]
+    # The colour of the bars a pad fit adds, `#rrggbb`. Black when left out.
+    preset: Optional[str]
+    # The encoder's speed and quality preset in its own words (`p4` on NVENC, `veryfast` on x264). The catalogue's when left out.
     width: Optional[int]
 
 class VitalsConfig(TypedDict, total=False):
@@ -4336,6 +4519,9 @@ Container = Literal['flv', 'mpeg-ts', 'mp4-fragmented', 'mkv', 'hls', 'll-hls', 
 
 ConversionPhase = Literal['running', 'done', 'failed']
 
+# Whether an interlaced picture is made progressive.
+Deinterlace = Union[Literal['off', 'on'], Literal['auto']]
+
 # Copied as it arrives, or converted.
 DestinationMode = Literal['copy', 'transcode']
 
@@ -4360,8 +4546,11 @@ FeedState2 = Union[Literal['paused'], Literal['starting'], Literal['ok'], Litera
 # What a field holds.
 FieldType = Literal['text', 'color', 'image']
 
+# How a picture goes into a size of another shape.
+Fit = Literal['pad', 'crop', 'stretch']
+
 # How content fills its frame. SVG's vocabulary, which replaces OBS's seven bounds types and maps onto `sizing-policy` on a `glvideomixer` pad.
-Fit = Literal['none', 'contain', 'cover', 'stretch', 'fit-width', 'fit-height', 'max']
+Fit2 = Literal['none', 'contain', 'cover', 'stretch', 'fit-width', 'fit-height', 'max']
 
 # Content on the wire. The same four shapes as the tree, except that a group names no children: they are records whose parent is the group.
 FlatContent = Dict[str, Any]
@@ -4469,6 +4658,9 @@ TemplateFormat = Literal['svg', 'html']
 # Where a template comes from.
 TemplateOrigin = Literal['pack', 'library']
 
+# Which sound tracks a rendition converts.
+Tracks = Literal['first', 'all']
+
 # A name, or an object.
 Transition = Union[str, TransitionRequest]
 
@@ -4547,9 +4739,13 @@ METHODS = (
     {"name": "gallery.show", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/gallery/show"), "summary": 'Show a placed gallery item on air, or hide it, taking its scene when that scene is not on air. For a set, take its scene.'},
     {"name": "governor.calibrate", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/governor/calibrate"), "summary": "Measure this machine's encoders again, in the background, a few seconds of every core. Refused while anything is on air unless `confirm` is true."},
     {"name": "governor.status", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/governor/status"), "summary": 'The resource governor: when this machine was measured, what is in use and free on the CPU and each GPU encoder, and what was shed to keep the programme whole.'},
+    {"name": "gpu.status", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/gpu/status"), "summary": 'Every NVIDIA GPU on this machine: encoder, decoder and 3D use, video memory, encoder sessions, temperature, power and clocks, now and over the last two minutes. Read once a second from NVML or nvidia-smi while a client keeps asking, and not at all otherwise. No GPUs, and a note, on a machine without one.'},
+    {"name": "headend.import", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/headend/import"), "summary": "Make a Flussonic config into shows without compositing, one per stream, each with its input, one HLS output and the transcoder line as its rendition. Takes the config's text or a path on the station's machine. A dry run, the default, answers the report (every stream, every line not carried, what the shows would cost) and makes nothing."},
+    {"name": "headend.status", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/headend/status"), "summary": "Whether this station follows a Flussonic config, which file, where Flussonic's URLs and API answer, and how many of its streams run as shows."},
     {"name": "log.gst", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/log/gst"), "summary": "Raise GStreamer's own debug categories for a while, then let them fall back on their own."},
     {"name": "log.levels", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/log/levels"), "summary": 'Every log level override in force, and the GStreamer categories still raised.'},
     {"name": "log.set", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/log/set"), "summary": "Change one instance's or one module's log level while the mixer runs."},
+    {"name": "machine.status", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/machine/status"), "summary": 'The machine itself: its name, cores, CPU use of every process, memory, how long it and this process have been up, and its load average.'},
     {"name": "media.convert", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/media/{id}/convert"), "summary": 'Transcode a library file to a web safe copy, in the background.'},
     {"name": "media.folder.add", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/media/folder/add"), "summary": 'Make a folder in the media library, inside another when the name has a / in it.'},
     {"name": "media.folder.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/media/folder/list"), "summary": 'Every folder in the media library with how many files are in it, and every tag in use.'},
@@ -5857,6 +6053,41 @@ class GeneratedMethods:
         params: Dict[str, Any] = {}
         return await self._call("governor.status", params)
 
+    async def gpu_status(
+        self,
+        *,
+        since_ms: Optional[int] = None,
+    ) -> GpuStatus:
+        """Every NVIDIA GPU on this machine: encoder, decoder and 3D use, video memory, encoder sessions, temperature, power and clocks, now and over the last two minutes. Read once a second from NVML or nvidia-smi while a client keeps asking, and not at all otherwise. No GPUs, and a note, on a machine without one."""
+        params: Dict[str, Any] = {}
+        if since_ms is not None:
+            params["since_ms"] = since_ms
+        return await self._call("gpu.status", params)
+
+    async def headend_import(
+        self,
+        *,
+        dry_run: Optional[bool] = None,
+        path: Optional[str] = None,
+        text: Optional[str] = None,
+    ) -> HeadendImportReport:
+        """Make a Flussonic config into shows without compositing, one per stream, each with its input, one HLS output and the transcoder line as its rendition. Takes the config's text or a path on the station's machine. A dry run, the default, answers the report (every stream, every line not carried, what the shows would cost) and makes nothing."""
+        params: Dict[str, Any] = {}
+        if dry_run is not None:
+            params["dry_run"] = dry_run
+        if path is not None:
+            params["path"] = path
+        if text is not None:
+            params["text"] = text
+        return await self._call("headend.import", params)
+
+    async def headend_status(
+        self,
+    ) -> HeadendStatus:
+        """Whether this station follows a Flussonic config, which file, where Flussonic's URLs and API answer, and how many of its streams run as shows."""
+        params: Dict[str, Any] = {}
+        return await self._call("headend.status", params)
+
     async def log_gst(
         self,
         categories: str,
@@ -5895,6 +6126,13 @@ class GeneratedMethods:
         if target is not None:
             params["target"] = target
         return await self._call("log.set", params)
+
+    async def machine_status(
+        self,
+    ) -> MachineStatus:
+        """The machine itself: its name, cores, CPU use of every process, memory, how long it and this process have been up, and its load average."""
+        params: Dict[str, Any] = {}
+        return await self._call("machine.status", params)
 
     async def media_convert(
         self,

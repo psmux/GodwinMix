@@ -6,6 +6,7 @@ import { el } from "../../shell/dom.js";
 import { modal } from "../../shell/modal.js";
 import { toast, errorToast } from "../../shell/toast.js";
 import { ladderPicker } from "./ladder.js";
+import { hlsAdvanced, paramsFrom } from "./hls-settings.js";
 import { loadPresets, stylesheet } from "./shared.js";
 
 /** True when this core can make an HLS output. */
@@ -29,14 +30,12 @@ export async function hlsTile(client, closePicker, onDone) {
   }, [el("span.grow", {}, [el("div", { text: "HLS for viewers" }), el("div.dim.sm", { text: "A link people open on a phone, a laptop or a TV, in several sizes. No platform, no key." })])]);
 }
 
-/** The params of the add, or `{error}`. */
-export function hlsParams(id, ladder, lowLatency) {
+/** The params of the add, or `{error}`. `params` are the Advanced answers'. */
+export function hlsParams(id, ladder, lowLatency, params) {
   const name = String(id || "").trim();
   if (!/^[a-z0-9][a-z0-9-]*$/.test(name)) return { error: "Give it a short name of small letters, numbers and dashes." };
   if (ladder.error) return { error: ladder.error };
-  const params = { segment_ms: lowLatency ? 1000 : 2000, window: 30 };
-  if (lowLatency) params.part_ms = 200;
-  return { params: { id: name, type: "hls/output", rendition: ladder, params } };
+  return { params: { id: name, type: "hls/output", rendition: ladder, params: params || paramsFrom({}, lowLatency) } };
 }
 
 export async function addHls(client, onDone) {
@@ -47,11 +46,14 @@ export async function addHls(client, onDone) {
   const low = el("input", { type: "checkbox" });
   const refused = el("div", { hidden: true });
   const start = el("button.btn.primary", { text: "Start serving" });
+  // MPEG-TS is made only by a show without compositing, so it is not offered here.
+  const advanced = await hlsAdvanced({ direct: false });
   const body = el("div.form.rnd-hlsform", {}, [
     el("p.dim.sm", { style: { marginTop: "0" }, text: "Players pick the size that suits their connection, and switch as it changes." }),
     el("label.field", {}, [el("span.lbl", { text: "Name" }), name, el("span.hint", { text: "It becomes part of the link." })]),
     el("section.rnd-step", {}, [el("div.rnd-steph", {}, [el("span.rnd-kicker", { text: "Sizes" }), el("span.rnd-dim", { text: "Each one is a separate encode" })]), picker.node]),
     el("label.rnd-check", {}, [low, el("span", { text: "Low latency (about two seconds behind, for players that support it)" })]),
+    advanced.el,
     refused,
   ]);
   const m = modal({ title: "HLS for viewers", body, footer: [el("button.btn", { text: "Cancel", onclick: () => m.close() }), start] });
@@ -76,7 +78,7 @@ export async function addHls(client, onDone) {
   }
 
   start.onclick = async () => {
-    const asked = hlsParams(name.value, picker.value(), low.checked);
+    const asked = hlsParams(name.value, picker.value(), low.checked, advanced.read(low.checked));
     if (asked.error) return toast({ kind: "warning", text: asked.error });
     start.disabled = true;
     if (!(await send(asked.params))) start.disabled = false;

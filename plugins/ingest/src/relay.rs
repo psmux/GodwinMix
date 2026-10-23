@@ -25,6 +25,12 @@ use crate::hub::{Hub, Recv};
 /// What a hub reader says first.
 pub const HELLO: &str = "GMXHUB ";
 
+/// Put after the stream on the request line, `GMXHUB <app>/<stream> tracks=all`,
+/// to be given every sound track, each tag's `track` in its FLV stream id
+/// (the last of the three bytes; 0 for the video and the first sound). A
+/// reader that does not ask is given track 0 alone, byte for byte as before.
+pub const ALL_TRACKS: &str = "tracks=all";
+
 /// The longest request line accepted, so a stray client cannot make this
 /// thread buffer without end.
 const MAX_LINE: usize = 1024;
@@ -35,18 +41,21 @@ pub fn serve(hub: &Hub, mut client: TcpStream, first: &[u8]) -> Result<(), Strin
     let wanted = line
         .strip_prefix(HELLO)
         .ok_or_else(|| "a loopback client that is neither RTMP nor a hub reader".to_string())?;
-    let (app, stream) = wanted
-        .trim()
+    let mut words = wanted.split_whitespace();
+    let path = words.next().unwrap_or_default();
+    let all = words.any(|w| w == ALL_TRACKS);
+    let (app, stream) = path
         .split_once('/')
         .ok_or_else(|| format!("a hub reader asked for '{wanted}', which is not <app>/<stream>"))?;
-    let reader = hub.subscribe(app, stream);
+    let reader = if all { hub.subscribe_all(app, stream) } else { hub.subscribe(app, stream) };
     let mut out = BufWriter::with_capacity(64 * 1024, client.try_clone().map_err(|e| e.to_string())?);
     out.write_all(&flv::header()).map_err(|e| e.to_string())?;
     out.flush().map_err(|e| e.to_string())?;
     loop {
         match reader.recv_timeout(Duration::from_secs(1)) {
             Recv::Tag(tag) => {
-                flv::write_to(&mut out, &tag)
+                let written = if all { flv::write_with_track(&mut out, &tag) } else { flv::write_to(&mut out, &tag) };
+                written
                     .and_then(|_| out.flush())
                     .map_err(|e| format!("the reader of {app}/{stream} went away: {e}"))?;
             }
@@ -104,3 +113,7 @@ pub fn request(address: &str, stream: &str) -> Result<TcpStream, String> {
         .map_err(|e| format!("could not ask the channel server for {stream}: {e}"))?;
     Ok(socket)
 }
+
+#[cfg(test)]
+#[path = "relay_tests.rs"]
+mod tests;

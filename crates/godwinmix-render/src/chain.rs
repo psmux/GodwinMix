@@ -7,7 +7,7 @@ use crate::build::Builder;
 use crate::container::{audio_codecs, audio_name};
 use crate::error::PlanError;
 use crate::graph::{Node, NodeKind, Reason, ReasonCode, Track};
-use crate::ids::{aconvert_id, aencode_id};
+use crate::ids::{aconvert_id, aencode_id, track_source};
 use crate::model::{AudioWork, CPU};
 use crate::plan::Resolved;
 use crate::resolve::VideoDecision;
@@ -20,9 +20,17 @@ pub fn build(b: &mut Builder, r: &Resolved, keyframe_ms: u32) -> Result<(), Plan
         inputs.push(id);
         egress += kbps;
     }
-    if let Some((id, kbps)) = audio(b, r)? {
-        inputs.push(id);
-        egress += kbps;
+    if let Some(src) = r.info.audio {
+        if let Some((id, kbps)) = audio(b, r, 0, src, &r.audio)? {
+            inputs.push(id);
+            egress += kbps;
+        }
+    }
+    for (index, src, decision) in &r.tracks {
+        if let Some((id, kbps)) = audio(b, r, *index, *src, decision)? {
+            inputs.push(id);
+            egress += kbps;
+        }
     }
     let request = r.id().to_string();
     let container = r.request.container;
@@ -66,24 +74,33 @@ fn video(
     }
 }
 
-fn audio(b: &mut Builder, r: &Resolved) -> Result<Option<(String, u32)>, PlanError> {
-    let Some(src) = r.info.audio else {
-        return Ok(None);
-    };
-    let target = match &r.audio {
+/// One sound track's chain: track 0 is the source's first sound, as it
+/// always was; 1, 2, 3 are the further tracks of a request for all.
+fn audio(
+    b: &mut Builder,
+    r: &Resolved,
+    index: u8,
+    src: AudioShape,
+    decision: &AudioDecision,
+) -> Result<Option<(String, u32)>, PlanError> {
+    let target = match decision {
         AudioDecision::None => return Ok(None),
-        AudioDecision::Copy => return Ok(Some((b.copied(r, Track::Audio), src.bitrate_kbps))),
+        AudioDecision::Copy => {
+            let id = b.copied_track(r, Track::Audio, index);
+            return Ok(Some((id, src.bitrate_kbps)));
+        }
         AudioDecision::Encode { target, .. } => *target,
     };
     let model = b.model;
     let Some(cost) = model.audio_cost(&target, AudioWork::Encode) else {
         return Err(no_audio_encoder(b, r, &target));
     };
-    let mut upstream = b.decoded(r, Track::Audio);
+    let mut upstream = b.decoded_track(r, index, &src);
     let source = r.source.to_string();
+    let named = track_source(&source, index);
     let (channels, sample_rate) = (target.channels, target.sample_rate);
     if (channels, sample_rate) != (src.channels, src.sample_rate) {
-        let id = aconvert_id(&source, &target);
+        let id = aconvert_id(&named, &target);
         let s = source.clone();
         upstream = b.cpu(id, r.id(), vec![upstream], || {
             let cost = model
@@ -94,17 +111,19 @@ fn audio(b: &mut Builder, r: &Resolved) -> Result<Option<(String, u32)>, PlanErr
                     source: s,
                     channels,
                     sample_rate,
+                    index,
                 },
                 cost,
             )
         });
     }
-    let id = aencode_id(&source, &target);
+    let id = aencode_id(&named, &target);
     let id = b.cpu(id, r.id(), vec![upstream], || {
         (
             NodeKind::AudioEncode {
                 source,
                 shape: target,
+                index,
             },
             cost,
         )

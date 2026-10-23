@@ -56,7 +56,7 @@ pub fn sps_size(nal: &[u8]) -> Option<(u32, u32)> {
 
 /// profile_tier_level(1, max_sub_layers_minus1): 88 bits of general profile,
 /// 8 of level, then per sub layer what its flags say is present.
-fn skip_profile_tier_level(b: &mut Bits, sub_layers: u32) -> Option<()> {
+pub(crate) fn skip_profile_tier_level(b: &mut Bits, sub_layers: u32) -> Option<()> {
     for _ in 0..3 {
         b.bits(32)?;
     }

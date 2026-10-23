@@ -80,10 +80,15 @@ pub struct ConfigGetResult {
 
 pub(super) async fn get(call: Call, params: Value) -> Result<Value, RpcError> {
     let req: ConfigGetRequest = call.params(&params)?;
+    get_in(&config_file(&call)?, req)
+}
+
+/// `config.get` on one file, for a core or for a station with no show running.
+pub fn get_in(path: &std::path::Path, req: ConfigGetRequest) -> Result<Value, RpcError> {
     for key in &req.keys {
         settable::settable(key).map_err(super::write::refusal)?;
     }
-    let path = config_file(&call)?;
+    let path = path.to_path_buf();
     let now = FileState::read(&path)?;
     let keys = KEYS
         .iter()
@@ -99,7 +104,11 @@ pub(super) async fn schema(_call: Call, _params: Value) -> Result<Value, RpcErro
 
 /// The config file this core writes to, or the refusal for a core with none.
 pub(super) fn config_file(call: &Call) -> Result<PathBuf, RpcError> {
-    let path = call.app.config_path.as_ref().clone();
+    file_at(call.app.config_path.as_ref().clone())
+}
+
+/// `path`, or the refusal when there is no file there to read or change.
+pub fn file_at(path: PathBuf) -> Result<PathBuf, RpcError> {
     if path.as_os_str().is_empty() || !path.exists() {
         return Err(RpcError::not_in_state(format!(
             "this core has no config file to read or change{}. Start it with --config \

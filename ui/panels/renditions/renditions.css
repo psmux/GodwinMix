@@ -32,6 +32,8 @@
 .rnd-customform > .form { gap: 10px; }
 .rnd-customform > .form > .form { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px 16px; }
 .rnd-customform details { grid-column: 1 / -1; }
+.rnd-customform details > .form { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px 16px; }
+.rnd-hlsadv details > .form { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px 16px; }
 
 /* Ladders */
 .rnd-laddercard { min-height: 0; }

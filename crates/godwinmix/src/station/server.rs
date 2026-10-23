@@ -1,7 +1,7 @@
 //! The station's control port: the page, `/rpc`, `/api/v1`, WHIP for its
 //! channels, and every other path relayed to the show it names.
 
-use super::methods;
+use super::{alone, methods};
 use super::relay::{http, pipe, rpc};
 use super::state::Station;
 use crate::control::rest::{self, Route};
@@ -69,7 +69,9 @@ async fn api(State(st): State<Arc<Station>>, req: Request) -> Response {
     let Ok((route, captures)) = resolved else { return http::forward(st, req).await };
     let query = req.uri().query().unwrap_or_default().to_string();
     let peek = rest::params_from(Value::Null, &query, captures.clone());
-    if !methods::answers(route.method, &peek) {
+    let show = super::relay::show_in(Some(&query)).unwrap_or_else(|| st.first());
+    let standing = alone::answers(route.method) && alone::stands_in(&st, &show);
+    if !standing && !methods::answers(route.method, &peek) {
         super::ingest::after(&st, route.method);
         return http::forward(st, req).await;
     }
@@ -94,7 +96,11 @@ async fn api(State(st): State<Arc<Station>>, req: Request) -> Response {
     };
     let query = super::relay::without_show(Some(&query)).unwrap_or_default();
     let params = rest::params_from(body, &query, captures);
-    match methods::call(&st, &token, route.method, params).await {
+    let answer = match standing {
+        true => alone::call(&st, &token, &alone::client_name(&token, None), route.method, params, &[]).await,
+        false => methods::call(&st, &token, route.method, params).await,
+    };
+    match answer {
         Ok(v) => Json(v).into_response(),
         Err(e) => http::refusal(&e),
     }

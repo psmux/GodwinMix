@@ -127,6 +127,11 @@ Which software encoder you get depends on what is installed:
 Either way the software decoder is `openh264dec`, or `avdec_h264` from
 gst-libav where openh264 is not installed. See
 [run-without-ffmpeg.md](run-without-ffmpeg.md) for putting libav first.
+Converting a stream for a rendition (a channel's or a direct show's) is the
+exception: there `avdec_h264` comes first where it is installed, by the
+openh264 entry's `convert_rank`, because openh264 refuses 4:4:4, 4:2:2, 10
+bit and interlaced H.264 and the converter has nothing behind it to take
+such a stream.
 
 ## Graphics: the compositor is a separate choice
 

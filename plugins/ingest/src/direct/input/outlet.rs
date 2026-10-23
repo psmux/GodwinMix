@@ -116,7 +116,7 @@ mod tests {
     fn a_second_session_carries_on_after_the_first() {
         let got = Arc::new(Mutex::new(Vec::new()));
         let out = Shared::new(Box::new(Times(got.clone())));
-        let at = |ms| MediaTag { kind: TagKind::Video, timestamp_ms: ms, keyframe: true, sequence_header: false, payload: Arc::from(&[0x17u8, 1, 0, 0, 0][..]) };
+        let at = |ms| MediaTag { track: 0, kind: TagKind::Video, timestamp_ms: ms, keyframe: true, sequence_header: false, payload: Arc::from(&[0x17u8, 1, 0, 0, 0][..]) };
         out.tag(at(0));
         out.tag(at(1000));
         out.new_session();
@@ -128,7 +128,7 @@ mod tests {
     fn a_clock_that_jumps_inside_a_session_carries_on_from_where_it_was() {
         let got = Arc::new(Mutex::new(Vec::new()));
         let out = Shared::new(Box::new(Times(got.clone())));
-        let at = |ms| MediaTag { kind: TagKind::Video, timestamp_ms: ms, keyframe: true, sequence_header: false, payload: Arc::from(&[0x17u8, 1, 0, 0, 0][..]) };
+        let at = |ms| MediaTag { track: 0, kind: TagKind::Video, timestamp_ms: ms, keyframe: true, sequence_header: false, payload: Arc::from(&[0x17u8, 1, 0, 0, 0][..]) };
         for ms in [60_000, 60_040, 59_500, 60_080, 200, 240, 900_000, 900_040] {
             out.tag(at(ms));
         }

@@ -10,7 +10,7 @@ fn tag(kind: TagKind, header: bool, size: usize) -> MediaTag {
     let mut body = vec![0u8; size.max(4)];
     body[0] = if kind == TagKind::Audio { 0xaf } else { 0x17 };
     body[1] = if header { 0 } else { 1 };
-    MediaTag { kind, timestamp_ms: 0, keyframe: kind == TagKind::Video, sequence_header: header, payload: Arc::from(body) }
+    MediaTag { track: 0, kind, timestamp_ms: 0, keyframe: kind == TagKind::Video, sequence_header: header, payload: Arc::from(body) }
 }
 
 fn audio(header: bool, size: usize) -> MediaTag {
@@ -61,4 +61,25 @@ fn a_track_that_never_sends_holds_the_rates_back_four_seconds_and_no_longer() {
     second();
     p.push(tag(TagKind::Video, false, 20_000));
     assert_eq!(hub.stream("church", "silent").unwrap()["measured"], true, "planned at last, with the sound at 0");
+}
+
+/// An H.264 stream's SPS says its rate, and that is the rate the stream
+/// describes as declared, whatever a second of arrivals counts.
+#[test]
+fn the_rate_an_sps_declares_is_the_stream_s_frame_rate() {
+    let hub = Hub::new();
+    let p = hub.publish("church", "p25", "x", None).unwrap();
+    // 640x360 at 25 fps, as x264 writes it, in an AVC sequence header.
+    let sps = [
+        0x67, 0x42, 0xc0, 0x1e, 0xda, 0x02, 0x80, 0xbf, 0xe5, 0xc0, 0x44, 0x00, 0x00, 0x03, 0x00, 0x04, 0x00, 0x00, 0x03,
+        0x00, 0xc8, 0x3c, 0x58, 0xba, 0x80,
+    ];
+    let mut body = vec![0x17, 0x00, 0, 0, 0, 1, 0x42, 0xc0, 0x1e, 0xff, 0xe1];
+    body.extend_from_slice(&(sps.len() as u16).to_be_bytes());
+    body.extend_from_slice(&sps);
+    let header = MediaTag { track: 0, kind: TagKind::Video, timestamp_ms: 0, keyframe: true, sequence_header: true, payload: Arc::from(body) };
+    assert!(p.push(header), "a declared rate is news");
+    let desc = hub.stream("church", "p25").unwrap();
+    assert_eq!(desc["video"]["frame_rate"], 25.0, "{desc}");
+    assert_eq!(desc["video"]["width"], 640, "{desc}");
 }

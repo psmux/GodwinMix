@@ -235,6 +235,7 @@ export interface AudioWant {
   channels?: number | null;
   codec?: AudioCodec | null;
   sample_rate?: number | null;
+  tracks?: Tracks | null;
 }
 
 export interface BackendInfo {
@@ -699,6 +700,9 @@ export interface Crop {
   top: number;
 }
 
+/** Whether an interlaced picture is made progressive. */
+export type Deinterlace = "off" | "on" | "auto";
+
 /**
  * One destination as a client sees it. The key never appears: `has_key`
  * says whether there is one.
@@ -712,6 +716,7 @@ export interface Destination {
   kbps: number;
   key_hint?: string | null;
   label: string;
+  params?: HlsOutputParams | null;
   plan?: DestinationPlan | null;
   platform: string;
   playback?: Playback | null;
@@ -1084,11 +1089,14 @@ export interface Finding {
   severity: Severity;
 }
 
+/** How a picture goes into a size of another shape. */
+export type Fit = "pad" | "crop" | "stretch";
+
 /**
  * How content fills its frame. SVG's vocabulary, which replaces OBS's seven
  * bounds types and maps onto `sizing-policy` on a `glvideomixer` pad.
  */
-export type Fit = "none" | "contain" | "cover" | "stretch" | "fit-width" | "fit-height" | "max";
+export type Fit2 = "none" | "contain" | "cover" | "stretch" | "fit-width" | "fit-height" | "max";
 
 /**
  * Content on the wire. The same four shapes as the tree, except that a group
@@ -1537,6 +1545,47 @@ export interface GovernorStatus {
   shed: ShedNote[];
 }
 
+/** One GPU: what it is, its newest reading and the ones before it. */
+export interface GpuDevice {
+  driver?: string | null;
+  history?: GpuSample[];
+  index: number;
+  name: string;
+  now: GpuSample;
+}
+
+/** One reading of one GPU. A number the driver would not give is left out. */
+export interface GpuSample {
+  at_ms: number;
+  decoder_pct?: number | null;
+  encoder_fps?: number | null;
+  encoder_pct?: number | null;
+  encoder_sessions?: number | null;
+  fan_pct?: number | null;
+  gpu_pct?: number | null;
+  graphics_mhz?: number | null;
+  memory_mhz?: number | null;
+  memory_total_mib?: number | null;
+  memory_used_mib?: number | null;
+  power_limit_w?: number | null;
+  power_w?: number | null;
+  temperature_c?: number | null;
+  video_mhz?: number | null;
+}
+
+/** `gpu.status`'s answer. */
+export interface GpuStatus {
+  every_ms: number;
+  gpus: GpuDevice[];
+  note?: string | null;
+  source: string;
+}
+
+/** `gpu.status`. */
+export interface GpuStatusRequest {
+  since_ms?: number | null;
+}
+
 /** `scene.graphic.list`. */
 export interface GraphicListing {
   graphics: GraphicType[];
@@ -1556,6 +1605,37 @@ export interface GraphicType {
 export interface GroupSourcesRequest {
   name?: string | null;
   sources: string[];
+}
+
+/** `headend.import`'s answer: the report, then what was made. */
+export interface HeadendImportReport {
+  converted: number;
+  copied: number;
+  disabled: number;
+  dry_run: boolean;
+  following?: string | null;
+  notes: ImportNote[];
+  shows: ShowAddManyResult;
+  source: string;
+  streams: ImportedStream[];
+}
+
+/** `headend.import`. One of `text` and `path`. */
+export interface HeadendImportRequest {
+  dry_run?: boolean | null;
+  path?: string | null;
+  text?: string | null;
+}
+
+/** `headend.status`: whether this station runs in headend mode. */
+export interface HeadendStatus {
+  file?: string | null;
+  following: boolean;
+  listeners?: string[];
+  log?: string | null;
+  note: string;
+  shows: number;
+  streams: number;
 }
 
 /**
@@ -1621,9 +1701,12 @@ export interface HistoryStep {
 
 /** An `hls://` output's params, as an `hls/output` takes them. */
 export interface HlsOutputParams {
+  access?: string | null;
   low_latency?: boolean | null;
+  open_public?: boolean | null;
   part_ms?: number | null;
   segment_ms?: number | null;
+  segments?: string | null;
   viewer_key?: string | null;
   window?: number | null;
 }
@@ -1637,6 +1720,14 @@ export type Id = string;
  */
 export interface IdRequest {
   id: string;
+}
+
+/** A line the import read and does not act on, or acts on differently. */
+export interface ImportNote {
+  kind: string;
+  line: number;
+  scope: string;
+  what: string;
 }
 
 export interface ImportObsRequest {
@@ -1679,6 +1770,16 @@ export interface ImportedReport {
   scenes: string[];
 }
 
+/** One `stream` of the config, as the show it becomes. */
+export interface ImportedStream {
+  copy: boolean;
+  disabled: boolean;
+  input: unknown;
+  name: string;
+  outputs: unknown[];
+  title?: string | null;
+}
+
 /**
  * What a show without compositing takes in. A show that composites makes
  * its input its one source.
@@ -1694,6 +1795,7 @@ export interface InputSpec {
 export interface InputStats {
   audio_channels?: number;
   audio_codec?: string | null;
+  audio_peak_db?: number | null;
   cc_errors?: number;
   fps?: number;
   height?: number;
@@ -1905,6 +2007,18 @@ export interface LogSetRequest {
   instance?: string | null;
   level: string;
   target?: string | null;
+}
+
+/** `machine.status`'s answer: the box, not one process. */
+export interface MachineStatus {
+  cores: number;
+  cpu_pct?: number | null;
+  host_name: string;
+  load_average?: number[] | null;
+  memory_available_mib?: number | null;
+  memory_total_mib?: number | null;
+  process_uptime_secs: number;
+  uptime_secs?: number | null;
 }
 
 /** `scene.history.mark`. */
@@ -2222,6 +2336,7 @@ export interface OutputStats {
   reconnects?: number;
   rendition_text?: string;
   state?: string;
+  steps?: OutputStep[];
 }
 
 export interface OutputStatus {
@@ -2235,6 +2350,14 @@ export interface OutputStatus {
   state: OutputState;
   uri_host: string;
   [key: string]: unknown;
+}
+
+/** One step of an output's conversion. */
+export interface OutputStep {
+  accel?: string | null;
+  element?: string | null;
+  gpu?: boolean;
+  kind: string;
 }
 
 /** A sparse change to one item of a referenced scene. */
@@ -2452,8 +2575,11 @@ export interface PlanView {
  * `/hls/channel/<channel>/<destination>/index.m3u8?key=...`.
  */
 export interface Playback {
+  access?: string;
   dash_url_path: string;
   master_url_path: string;
+  segment_ms?: number | null;
+  segments?: string;
   viewers: number;
 }
 
@@ -3595,11 +3721,14 @@ export interface ToolCallRequest {
   source?: string | null;
 }
 
+/** Which sound tracks a rendition converts. */
+export type Tracks = "first" | "all";
+
 /** Where an item sits and how it is sized. */
 export interface Transform {
   align?: Align;
   anchor?: Vec2;
-  fit?: Fit;
+  fit?: Fit2;
   frame?: Frame | null;
   position?: Vec2;
   rotation?: number;
@@ -3703,12 +3832,18 @@ export interface VideoShape {
 
 /** The video an output wants. Every field left out is taken from the source. */
 export interface VideoWant {
+  bframes?: number | null;
   bitrate_kbps?: number | null;
   bitrate_tolerance?: number | null;
   codec?: VideoCodec | null;
+  deinterlace?: Deinterlace | null;
+  fit?: Fit | null;
   fps?: Fps | null;
   height?: number | null;
+  keyframe_frames?: number | null;
   keyframe_ms?: number | null;
+  pad_color?: string | null;
+  preset?: string | null;
   width?: number | null;
 }
 
@@ -3936,9 +4071,13 @@ export interface MethodParams {
   "gallery.show": GalleryShowRequest;
   "governor.calibrate": CalibrateRequest;
   "governor.status": Record<string, never>;
+  "gpu.status": GpuStatusRequest;
+  "headend.import": HeadendImportRequest;
+  "headend.status": Record<string, never>;
   "log.gst": LogGstRequest;
   "log.levels": Record<string, never>;
   "log.set": LogSetRequest;
+  "machine.status": Record<string, never>;
   "media.convert": NameRequest;
   "media.folder.add": MediaFolderAddRequest;
   "media.folder.list": Record<string, never>;
@@ -4173,9 +4312,13 @@ export interface MethodResults {
   "gallery.show": GalleryShown;
   "governor.calibrate": CalibrateResult;
   "governor.status": GovernorStatus;
+  "gpu.status": GpuStatus;
+  "headend.import": HeadendImportReport;
+  "headend.status": HeadendStatus;
   "log.gst": LogGstResult;
   "log.levels": Record<string, unknown>;
   "log.set": Record<string, unknown>;
+  "machine.status": MachineStatus;
   "media.convert": ConversionState;
   "media.folder.add": Record<string, unknown>;
   "media.folder.list": MediaFolders;
@@ -4465,9 +4608,13 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "gallery.show", summary: "Show a placed gallery item on air, or hide it, taking its scene when that scene is not on air. For a set, take its scene.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/gallery/show" } },
   { name: "governor.calibrate", summary: "Measure this machine's encoders again, in the background, a few seconds of every core. Refused while anything is on air unless `confirm` is true.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/governor/calibrate" } },
   { name: "governor.status", summary: "The resource governor: when this machine was measured, what is in use and free on the CPU and each GPU encoder, and what was shed to keep the programme whole.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/governor/status" } },
+  { name: "gpu.status", summary: "Every NVIDIA GPU on this machine: encoder, decoder and 3D use, video memory, encoder sessions, temperature, power and clocks, now and over the last two minutes. Read once a second from NVML or nvidia-smi while a client keeps asking, and not at all otherwise. No GPUs, and a note, on a machine without one.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/gpu/status" } },
+  { name: "headend.import", summary: "Make a Flussonic config into shows without compositing, one per stream, each with its input, one HLS output and the transcoder line as its rendition. Takes the config's text or a path on the station's machine. A dry run, the default, answers the report (every stream, every line not carried, what the shows would cost) and makes nothing.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/headend/import" } },
+  { name: "headend.status", summary: "Whether this station follows a Flussonic config, which file, where Flussonic's URLs and API answer, and how many of its streams run as shows.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/headend/status" } },
   { name: "log.gst", summary: "Raise GStreamer's own debug categories for a while, then let them fall back on their own.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/log/gst" } },
   { name: "log.levels", summary: "Every log level override in force, and the GStreamer categories still raised.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/log/levels" } },
   { name: "log.set", summary: "Change one instance's or one module's log level while the mixer runs.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/log/set" } },
+  { name: "machine.status", summary: "The machine itself: its name, cores, CPU use of every process, memory, how long it and this process have been up, and its load average.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/machine/status" } },
   { name: "media.convert", summary: "Transcode a library file to a web safe copy, in the background.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/media/{id}/convert" } },
   { name: "media.folder.add", summary: "Make a folder in the media library, inside another when the name has a / in it.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/media/folder/add" } },
   { name: "media.folder.list", summary: "Every folder in the media library with how many files are in it, and every tag in use.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/media/folder/list" } },
@@ -5043,6 +5190,21 @@ export class GeneratedMethods {
     return this._call("governor.status", {}) as Promise<GovernorStatus>;
   }
 
+  /** Every NVIDIA GPU on this machine: encoder, decoder and 3D use, video memory, encoder sessions, temperature, power and clocks, now and over the last two minutes. Read once a second from NVML or nvidia-smi while a client keeps asking, and not at all otherwise. No GPUs, and a note, on a machine without one. */
+  gpuStatus(params: GpuStatusRequest = {}): Promise<GpuStatus> {
+    return this._call("gpu.status", params as unknown as Record<string, unknown>) as Promise<GpuStatus>;
+  }
+
+  /** Make a Flussonic config into shows without compositing, one per stream, each with its input, one HLS output and the transcoder line as its rendition. Takes the config's text or a path on the station's machine. A dry run, the default, answers the report (every stream, every line not carried, what the shows would cost) and makes nothing. */
+  headendImport(params: HeadendImportRequest = {}): Promise<HeadendImportReport> {
+    return this._call("headend.import", params as unknown as Record<string, unknown>) as Promise<HeadendImportReport>;
+  }
+
+  /** Whether this station follows a Flussonic config, which file, where Flussonic's URLs and API answer, and how many of its streams run as shows. */
+  headendStatus(): Promise<HeadendStatus> {
+    return this._call("headend.status", {}) as Promise<HeadendStatus>;
+  }
+
   /** Raise GStreamer's own debug categories for a while, then let them fall back on their own. */
   logGst(params: LogGstRequest): Promise<LogGstResult> {
     return this._call("log.gst", params as unknown as Record<string, unknown>) as Promise<LogGstResult>;
@@ -5056,6 +5218,11 @@ export class GeneratedMethods {
   /** Change one instance's or one module's log level while the mixer runs. */
   logSet(params: LogSetRequest): Promise<Record<string, unknown>> {
     return this._call("log.set", params as unknown as Record<string, unknown>) as Promise<Record<string, unknown>>;
+  }
+
+  /** The machine itself: its name, cores, CPU use of every process, memory, how long it and this process have been up, and its load average. */
+  machineStatus(): Promise<MachineStatus> {
+    return this._call("machine.status", {}) as Promise<MachineStatus>;
   }
 
   /** Transcode a library file to a web safe copy, in the background. */

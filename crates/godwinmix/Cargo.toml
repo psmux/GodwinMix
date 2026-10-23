@@ -41,6 +41,9 @@ godwinmix-host = { workspace = true }
 # catalogue and the streams' shapes are (src/channels/transcode/).
 godwinmix-render = { workspace = true }
 godwinmix-govern = { workspace = true }
+# Headend mode reads Flussonic's config and answers its URLs and API
+# (src/headend/). No media stack in it.
+godwinmix-flussonic = { workspace = true }
 # Tier W, behind the `wasm` feature. Optional because wasmtime is a compiler
 # and most builds do not want one; `docs/reference/wasm.md` has the
 # measurement and the rule.
@@ -52,6 +55,9 @@ gstreamer = { workspace = true }
 # The appsrc a direct show's HLS output is fed through (station/direct/hls).
 # Already in the tree under the engine.
 gstreamer-app = { workspace = true }
+# The frames a direct show's HLS packager reads, shared by its CMAF buffers
+# and its MPEG-TS cutters without a copy. Already in the tree under the engine.
+bytes = { workspace = true }
 
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "sync", "signal", "time", "io-std", "io-util", "fs", "process"] }
 axum = { workspace = true, features = ["ws"] }

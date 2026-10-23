@@ -14,6 +14,10 @@ pub enum TagKind {
 /// One tag. Cloning it clones a pointer, never the payload.
 #[derive(Debug, Clone)]
 pub struct MediaTag {
+    /// Which stream of its kind. 0 is the one every reader has always had;
+    /// a headend input numbers its further sound tracks 1, 2, 3 in PMT
+    /// order, and only a reader that asks for them is given them.
+    pub track: u8,
     pub kind: TagKind,
     /// Milliseconds on the publisher's own timeline.
     pub timestamp_ms: u32,

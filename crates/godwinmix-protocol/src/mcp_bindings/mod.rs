@@ -7,6 +7,7 @@
 //! name, so a binding can be written ahead of the method it names and takes
 //! effect the day that method is registered.
 
+mod headend;
 mod shows;
 mod station;
 
@@ -22,7 +23,7 @@ pub struct Binding {
 
 /// Every row, the shows first.
 pub fn table() -> impl Iterator<Item = &'static Binding> {
-    shows::BINDINGS.iter().chain(station::BINDINGS.iter())
+    shows::BINDINGS.iter().chain(station::BINDINGS.iter()).chain(headend::BINDINGS.iter())
 }
 
 /// Bind every row whose method is registered and has no tool yet.

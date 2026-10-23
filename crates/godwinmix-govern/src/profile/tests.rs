@@ -22,7 +22,9 @@ fn an_encode_costs_what_was_measured_at_a_measured_shape() {
 fn a_hardware_encode_holds_a_session_and_a_share_of_the_device() {
     let c = profile().encode_cost(&gpu(), &shape(1920, 1080, 30));
     assert_eq!(c.device_sessions, 1);
-    assert!((195..=205).contains(&c.device_millis), "{c:?}");
+    // The share is priced from the engine's measured load, not from one
+    // session's wall time: 1080p30 is about a thirtieth of it.
+    assert!((30..=38).contains(&c.device_millis), "{c:?}");
     assert!(c.cpu_millicores < 100);
 }
 

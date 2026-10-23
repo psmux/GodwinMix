@@ -40,6 +40,18 @@ export async function mixerSettingsTests(test, eq, ok) {
     eq(ui.elements[0].elements[0].scope, "canvas.width");
   });
 
+  test("keys the core marks advanced go last, under Advanced, closed", () => {
+    const nv = { type: "integer", title: "NVENC session limit", minimum: 1, maximum: 256, "x-gmx-unit": "sessions", "x-gmx-group": "advanced", "x-gmx-section": "governor", "x-gmx-applies": "restart" };
+    const schema = { type: "object", properties: { "governor.nvenc_sessions": nv, ...SCHEMA.properties, "governor.reserve_cores": { type: "integer", title: "Cores to keep free", "x-gmx-group": "governor" } } };
+    const ui = layoutFromSchema(schema);
+    eq(ui.elements.map((g) => g.label).at(-1), "Advanced");
+    eq(ui.elements.at(-1).elements.map((c) => c.scope), ["governor.nvenc_sessions"]);
+    ok(ui.elements.some((g) => g.label === "Governor"), "the rest of the governor keeps its own section");
+    const inspector = new SchemaInspector({ schema, ui, value: {} });
+    const adv = [...inspector.el.querySelectorAll("details")].find((d) => d.querySelector("summary").textContent === "Advanced");
+    ok(adv && !adv.open && adv.textContent.includes("NVENC session limit"), "drawn closed, with the field in it");
+  });
+
   test("the schema kit draws the mixer form with titles, units, ranges and a secret box", () => {
     const inspector = new SchemaInspector({ schema: SCHEMA, ui: layoutFromSchema(SCHEMA), value: valuesFrom(GOT) });
     const text = inspector.el.textContent;

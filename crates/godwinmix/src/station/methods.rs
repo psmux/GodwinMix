@@ -25,9 +25,11 @@ pub fn answers(method: &str, params: &Value) -> bool {
     method.starts_with("show.")
         || method.starts_with("channel.")
         || method.starts_with("token.")
+        || method.starts_with("headend.")
         || method == "network.share"
         || method == "governor.status"
         || method == "governor.calibrate"
+        || crate::machine::methods::METHODS.contains(&method)
         || (method == "rendition.plan"
             && params.get("scope").and_then(Value::as_str).is_some_and(|s| s.starts_with("channel:")))
         || (matches!(method, "task.get" | "task.cancel") && task_id(params).is_some_and(super::switch::task::is_station_task))
@@ -51,6 +53,8 @@ pub async fn call(st: &Arc<Station>, token: &Token, method: &str, params: Value)
         m if m.starts_with("token.") => crate::devices::call(&st.tokens, m, params).await,
         m if m.starts_with("show.") => super::shows_call::call(st, m, params).await,
         m if m.starts_with("channel.") => super::channel_calls::call(st, token, m, params).await,
+        // Boxed: an import calls show.add_many back through here.
+        m if m.starts_with("headend.") => Box::pin(crate::headend::calls::call(st, token, m, params)).await,
         "governor.status" => {
             let mut status = status::governor_status(&st.render, &[]);
             status.ingress_kbps = ingress_kbps(st);
@@ -58,6 +62,7 @@ pub async fn call(st: &Arc<Station>, token: &Token, method: &str, params: Value)
             Ok(serde_json::to_value(status).unwrap_or_default())
         }
         "governor.calibrate" => calibrate(st, &params),
+        m if crate::machine::methods::METHODS.contains(&m) => crate::machine::methods::answer(m, params).await,
         "network.share" => {
             let here = crate::control::methods::network::Here { open: st.tokens.is_open(), quit: &st.quit };
             let dry_run = params.get("dry_run").and_then(Value::as_bool).unwrap_or(false);

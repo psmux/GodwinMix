@@ -236,6 +236,53 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/routing/model.js", include_str!("../../../ui/panels/routing/model.js")),
     ("panels/routing/routing.css", include_str!("../../../ui/panels/routing/routing.css")),
     ("panels/routing/view.js", include_str!("../../../ui/panels/routing/view.js")),
+    ("panels/headend/act.js", include_str!("../../../ui/panels/headend/act.js")),
+    ("panels/headend/band.js", include_str!("../../../ui/panels/headend/band.js")),
+    ("panels/headend/charts.js", include_str!("../../../ui/panels/headend/charts.js")),
+    ("panels/headend/data.js", include_str!("../../../ui/panels/headend/data.js")),
+    ("panels/headend/drawer.js", include_str!("../../../ui/panels/headend/drawer.js")),
+    ("panels/headend/gpu.js", include_str!("../../../ui/panels/headend/gpu.js")),
+    ("panels/headend/grid.js", include_str!("../../../ui/panels/headend/grid.js")),
+    ("panels/headend/groups.js", include_str!("../../../ui/panels/headend/groups.js")),
+    ("panels/headend/headend.css", include_str!("../../../ui/panels/headend/headend.css")),
+    ("panels/headend/import-report.js", include_str!("../../../ui/panels/headend/import-report.js")),
+    ("panels/headend/import.js", include_str!("../../../ui/panels/headend/import.js")),
+    ("panels/headend/machine.js", include_str!("../../../ui/panels/headend/machine.js")),
+    ("panels/headend/model.js", include_str!("../../../ui/panels/headend/model.js")),
+    ("panels/headend/parts.js", include_str!("../../../ui/panels/headend/parts.js")),
+    ("panels/headend/player.js", include_str!("../../../ui/panels/headend/player.js")),
+    ("panels/headend/sheet.js", include_str!("../../../ui/panels/headend/sheet.js")),
+    ("panels/headend/station.js", include_str!("../../../ui/panels/headend/station.js")),
+    ("panels/headend/tiles.css", include_str!("../../../ui/panels/headend/tiles.css")),
+    ("panels/headend/tile.js", include_str!("../../../ui/panels/headend/tile.js")),
+    ("panels/headend/tools.js", include_str!("../../../ui/panels/headend/tools.js")),
+    ("panels/headend/totals.js", include_str!("../../../ui/panels/headend/totals.js")),
+    ("panels/headend/view.js", include_str!("../../../ui/panels/headend/view.js")),
+    ("panels/flowmap/act.js", include_str!("../../../ui/panels/flowmap/act.js")),
+    ("panels/flowmap/data.js", include_str!("../../../ui/panels/flowmap/data.js")),
+    ("panels/flowmap/dots.js", include_str!("../../../ui/panels/flowmap/dots.js")),
+    ("panels/flowmap/flowmap.css", include_str!("../../../ui/panels/flowmap/flowmap.css")),
+    ("panels/flowmap/frame.js", include_str!("../../../ui/panels/flowmap/frame.js")),
+    ("panels/flowmap/geom.js", include_str!("../../../ui/panels/flowmap/geom.js")),
+    ("panels/flowmap/graph-direct.js", include_str!("../../../ui/panels/flowmap/graph-direct.js")),
+    ("panels/flowmap/graph-mixed.js", include_str!("../../../ui/panels/flowmap/graph-mixed.js")),
+    ("panels/flowmap/graph.js", include_str!("../../../ui/panels/flowmap/graph.js")),
+    ("panels/flowmap/layout.js", include_str!("../../../ui/panels/flowmap/layout.js")),
+    ("panels/flowmap/map.js", include_str!("../../../ui/panels/flowmap/map.js")),
+    ("panels/flowmap/mixed.js", include_str!("../../../ui/panels/flowmap/mixed.js")),
+    ("panels/flowmap/paint.js", include_str!("../../../ui/panels/flowmap/paint.js")),
+    ("panels/flowmap/path.js", include_str!("../../../ui/panels/flowmap/path.js")),
+    ("panels/flowmap/pointer.js", include_str!("../../../ui/panels/flowmap/pointer.js")),
+    ("panels/flowmap/tip-parts.js", include_str!("../../../ui/panels/flowmap/tip-parts.js")),
+    ("panels/flowmap/tip.js", include_str!("../../../ui/panels/flowmap/tip.js")),
+    ("panels/flowmap/tone.js", include_str!("../../../ui/panels/flowmap/tone.js")),
+    ("panels/flowmap/tools.js", include_str!("../../../ui/panels/flowmap/tools.js")),
+    ("panels/flowmap/view.js", include_str!("../../../ui/panels/flowmap/view.js")),
+    ("panels/flowmap/words.js", include_str!("../../../ui/panels/flowmap/words.js")),
+    // hls.js 1.6.15, light build, Apache-2.0 (ui/vendor/hls.js-LICENSE.txt): the
+    // headend drawer's player where a browser cannot play HLS itself, added
+    // by a <script> the first time a drawer opens a player.
+    ("vendor/hls.light.min.js", include_str!("../../../ui/vendor/hls.light.min.js")),
     ("panels/wall/act.js", include_str!("../../../ui/panels/wall/act.js")),
     ("panels/wall/bulk-parse.js", include_str!("../../../ui/panels/wall/bulk-parse.js")),
     ("panels/wall/bulk-table.js", include_str!("../../../ui/panels/wall/bulk-table.js")),
@@ -245,6 +292,7 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/wall/channel-model.js", include_str!("../../../ui/panels/wall/channel-model.js")),
     ("panels/wall/channel-rows.js", include_str!("../../../ui/panels/wall/channel-rows.js")),
     ("panels/wall/data.js", include_str!("../../../ui/panels/wall/data.js")),
+    ("panels/wall/detail-hls.js", include_str!("../../../ui/panels/wall/detail-hls.js")),
     ("panels/wall/detail-outputs.js", include_str!("../../../ui/panels/wall/detail-outputs.js")),
     ("panels/wall/detail.js", include_str!("../../../ui/panels/wall/detail.js")),
     ("panels/wall/dialogs.css", include_str!("../../../ui/panels/wall/dialogs.css")),
@@ -258,9 +306,11 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/wall/virtual.js", include_str!("../../../ui/panels/wall/virtual.js")),
     ("panels/wall/wall.css", include_str!("../../../ui/panels/wall/wall.css")),
     ("panels/renditions/custom.js", include_str!("../../../ui/panels/renditions/custom.js")),
+    ("panels/renditions/custom-advanced.js", include_str!("../../../ui/panels/renditions/custom-advanced.js")),
     ("panels/renditions/format-step.js", include_str!("../../../ui/panels/renditions/format-step.js")),
     ("panels/renditions/hls-add.js", include_str!("../../../ui/panels/renditions/hls-add.js")),
     ("panels/renditions/hls-card.js", include_str!("../../../ui/panels/renditions/hls-card.js")),
+    ("panels/renditions/hls-settings.js", include_str!("../../../ui/panels/renditions/hls-settings.js")),
     ("panels/renditions/ladder.js", include_str!("../../../ui/panels/renditions/ladder.js")),
     ("panels/renditions/model.js", include_str!("../../../ui/panels/renditions/model.js")),
     ("panels/renditions/plan-feed.js", include_str!("../../../ui/panels/renditions/plan-feed.js")),
@@ -452,6 +502,8 @@ const LEGACY: &str = include_str!("../../../ui/legacy/index.html");
 /// puts it back at `/test/`, which is what a developer running the harness
 /// sets and what CI sets.
 const DEV_ASSETS: &[(&str, &str)] = &[
+    ("test/headend-advanced.js", include_str!("../../../ui/test/headend-advanced.js")),
+    ("test/headend-station.js", include_str!("../../../ui/test/headend-station.js")),
     ("test/index.html", include_str!("../../../ui/test/index.html")),
     ("test/run.js", include_str!("../../../ui/test/run.js")),
     ("test/store.js", include_str!("../../../ui/test/store.js")),
@@ -540,6 +592,12 @@ const DEV_ASSETS: &[(&str, &str)] = &[
     ("test/wall-stub.js", include_str!("../../../ui/test/wall-stub.js")),
     ("test/wall.html", include_str!("../../../ui/test/wall.html")),
     ("test/wall.js", include_str!("../../../ui/test/wall.js")),
+    // The flow map against a station of every kind of thing:
+    // /test/flowmap.html?n=48, ?mixed=1, ?n=200.
+    ("test/flowmap.js", include_str!("../../../ui/test/flowmap.js")),
+    ("test/flowmap-stub.js", include_str!("../../../ui/test/flowmap-stub.js")),
+    ("test/flowmap-preview.js", include_str!("../../../ui/test/flowmap-preview.js")),
+    ("test/flowmap.html", include_str!("../../../ui/test/flowmap.html")),
     // This browser's camera: the publisher's parts and the browser channel,
     // against stubs. No camera and no socket.
     ("test/browser-devices.js", include_str!("../../../ui/test/browser-devices.js")),
@@ -1250,6 +1308,15 @@ mod tests {
         reachable.extend(closure_of("panels/wall/view.js"));
         reachable.extend(closure_of("panels/wall/bulk.js"));
         reachable.extend(closure_of("panels/wall/detail.js"));
+        // View > Headend, or Headend view on the wall.
+        reachable.extend(closure_of("panels/headend/view.js"));
+        // File > Import a Flussonic config, or the button on the headend's band.
+        reachable.extend(closure_of("panels/headend/import.js"));
+        // View > Flow map, or its button on the headend view's bar.
+        reachable.extend(closure_of("panels/flowmap/view.js"));
+        // Not imported: the headend player adds it with a <script>, when a
+        // browser that cannot play HLS opens a channel's drawer.
+        reachable.insert("vendor/hls.light.min.js");
         reachable.extend(closure_of("panels/outputs/record-start.js"));
         // The REC button in the header, or Outputs > Stop recording.
         reachable.extend(closure_of("panels/outputs/record-stop.js"));
@@ -1377,6 +1444,11 @@ mod tests {
             ("panels/routing/data.js", "View > Routing"),
             ("panels/routing/model.js", "View > Routing"),
             ("panels/wall/view.js", "View > Monitoring wall"),
+            ("panels/headend/view.js", "View > Headend"),
+            ("panels/flowmap/view.js", "View > Flow map"),
+            ("panels/flowmap/map.js", "View > Flow map"),
+            ("panels/headend/tile.js", "View > Headend"),
+            ("vendor/hls.light.min.js", "a channel's drawer in the headend view"),
             ("panels/wall/data.js", "View > Monitoring wall"),
             ("panels/wall/task.js", "View > Monitoring wall"),
             ("panels/wall/rows.js", "View > Monitoring wall"),

@@ -58,11 +58,13 @@ pub struct Key {
     /// The words a string may be, when it is one of a few.
     pub choices: &'static [&'static str],
     pub unit: Option<&'static str>,
+    /// A setting few people need: a form puts it under Advanced, closed.
+    pub advanced: bool,
 }
 
 impl Key {
     const fn new(key: &'static str, title: &'static str, applies: Applies) -> Self {
-        Self { key, title, applies, secret: false, min: None, max: None, choices: &[], unit: None }
+        Self { key, title, applies, secret: false, min: None, max: None, choices: &[], unit: None, advanced: false }
     }
     const fn range(mut self, min: i64, max: i64) -> Self {
         self.min = Some(min);
@@ -81,9 +83,17 @@ impl Key {
         self.secret = true;
         self
     }
-    /// The section a form groups this key under: `canvas`, `program`.
+    const fn advanced(mut self) -> Self {
+        self.advanced = true;
+        self
+    }
+    /// The section this key is in: `canvas`, `program`.
     pub fn section(&self) -> &'static str {
         self.key.split('.').next().unwrap_or(self.key)
+    }
+    /// The group a form shows this key in: its section, or `advanced`.
+    pub fn group(&self) -> &'static str {
+        if self.advanced { "advanced" } else { self.section() }
     }
 }
 
@@ -131,6 +141,8 @@ pub const KEYS: &[Key] = &[
     Key::new("hardware.graphics", "Hardware compositing", Restart).choices(ACCEL),
     Key::new("governor.reserve_cores", "Cores to keep free for other programs", Restart).range(0, 1024).unit("cores"),
     Key::new("governor.uplink_kbps", "Upload speed", Restart).range(0, 100_000_000).unit("kbit/s"),
+    Key::new("governor.nvenc_session_probe", "NVENC sessions to probe for", Restart).range(1, 256).unit("sessions").advanced(),
+    Key::new("governor.nvenc_sessions", "NVENC session limit", Restart).range(1, 256).unit("sessions").advanced(),
     Key::new("media.dir", "Media folder", Restart),
     Key::new("media.max_depth", "Folder depth to list", Restart).range(0, 32),
     Key::new("media.max_files", "Most files to list", Restart).range(1, 100_000),

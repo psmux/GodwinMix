@@ -18,7 +18,7 @@ impl TagSink for Record {
 fn video(ms: u32, key: bool, header: bool, from: u8) -> MediaTag {
     let first = if key || header { 0x17 } else { 0x27 };
     let body = [first, u8::from(!header), 0, 0, 0, from];
-    MediaTag { kind: TagKind::Video, timestamp_ms: ms, keyframe: key, sequence_header: header, payload: Arc::from(&body[..]) }
+    MediaTag { track: 0, kind: TagKind::Video, timestamp_ms: ms, keyframe: key, sequence_header: header, payload: Arc::from(&body[..]) }
 }
 
 fn switch(out: Record) -> Switch {

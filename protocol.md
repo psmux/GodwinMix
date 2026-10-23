@@ -103,9 +103,13 @@ Keys accepted on every method, handled before a method runs.
 | `gallery.show` | `POST /api/v1/gallery/show` | operate |  | 1 | Show a placed gallery item on air, or hide it, taking its scene when that scene is not on air. For a set, take its scene. |
 | `governor.calibrate` | `POST /api/v1/governor/calibrate` | admin |  | 1 | Measure this machine's encoders again, in the background, a few seconds of every core. Refused while anything is on air unless `confirm` is true. |
 | `governor.status` | `GET /api/v1/governor/status` | read |  | 1 | The resource governor: when this machine was measured, what is in use and free on the CPU and each GPU encoder, and what was shed to keep the programme whole. |
+| `gpu.status` | `GET /api/v1/gpu/status` | read |  | 1 | Every NVIDIA GPU on this machine: encoder, decoder and 3D use, video memory, encoder sessions, temperature, power and clocks, now and over the last two minutes. Read once a second from NVML or nvidia-smi while a client keeps asking, and not at all otherwise. No GPUs, and a note, on a machine without one. |
+| `headend.import` | `POST /api/v1/headend/import` | admin |  | 1 | Make a Flussonic config into shows without compositing, one per stream, each with its input, one HLS output and the transcoder line as its rendition. Takes the config's text or a path on the station's machine. A dry run, the default, answers the report (every stream, every line not carried, what the shows would cost) and makes nothing. |
+| `headend.status` | `GET /api/v1/headend/status` | read |  | 1 | Whether this station follows a Flussonic config, which file, where Flussonic's URLs and API answer, and how many of its streams run as shows. |
 | `log.gst` | `POST /api/v1/log/gst` | admin |  | 1 | Raise GStreamer's own debug categories for a while, then let them fall back on their own. |
 | `log.levels` | `GET /api/v1/log/levels` | read |  | 1 | Every log level override in force, and the GStreamer categories still raised. |
 | `log.set` | `POST /api/v1/log/set` | admin |  | 1 | Change one instance's or one module's log level while the mixer runs. |
+| `machine.status` | `GET /api/v1/machine/status` | read |  | 1 | The machine itself: its name, cores, CPU use of every process, memory, how long it and this process have been up, and its load average. |
 | `media.convert` | `POST /api/v1/media/{id}/convert` | operate |  | 1 | Transcode a library file to a web safe copy, in the background. |
 | `media.folder.add` | `POST /api/v1/media/folder/add` | operate |  | 1 | Make a folder in the media library, inside another when the name has a / in it. |
 | `media.folder.list` | `GET /api/v1/media/folder/list` | read |  | 1 | Every folder in the media library with how many files are in it, and every tag in use. |
@@ -1432,6 +1436,59 @@ MCP tool `governor_status` in the `search` profile: readOnlyHint true, destructi
 }
 ```
 
+#### `gpu.status`
+
+Every NVIDIA GPU on this machine: encoder, decoder and 3D use, video memory, encoder sessions, temperature, power and clocks, now and over the last two minutes. Read once a second from NVML or nvidia-smi while a client keeps asking, and not at all otherwise. No GPUs, and a note, on a machine without one.
+
+MCP tool `gpu_status` in the `headend` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/GpuStatusRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/GpuStatus"
+  }
+}
+```
+
+#### `headend.import`
+
+Make a Flussonic config into shows without compositing, one per stream, each with its input, one HLS output and the transcoder line as its rendition. Takes the config's text or a path on the station's machine. A dry run, the default, answers the report (every stream, every line not carried, what the shows would cost) and makes nothing.
+
+MCP tool `import_flussonic` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint false.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/HeadendImportRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/HeadendImportReport"
+  }
+}
+```
+
+#### `headend.status`
+
+Whether this station follows a Flussonic config, which file, where Flussonic's URLs and API answer, and how many of its streams run as shows.
+
+MCP tool `headend_status` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "$ref": "#/$defs/HeadendStatus"
+  }
+}
+```
+
 #### `log.gst`
 
 Raise GStreamer's own debug categories for a while, then let them fall back on their own.
@@ -1475,6 +1532,25 @@ Change one instance's or one module's log level while the mixer runs.
   },
   "result": {
     "type": "object"
+  }
+}
+```
+
+#### `machine.status`
+
+The machine itself: its name, cores, CPU use of every process, memory, how long it and this process have been up, and its load average.
+
+MCP tool `machine_status` in the `headend` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "$ref": "#/$defs/MachineStatus"
   }
 }
 ```
@@ -4224,10 +4300,12 @@ The paths below still answer, for one release, with a `Deprecation: true` header
 | `POST /whip/{channel}/{stream}` | WHIP ingest for a channel that has WHIP on. The body is the SDP offer, the channel's key is the bearer token, and the answer is 201 with the SDP answer and the session's Location. |
 | `DELETE /whip/{channel}/{stream}/{session}` | ends a WHIP session, as the WHIP client does when it stops publishing |
 | `PATCH /whip/{channel}/{stream}/{session}` | 405: every candidate is in the answer, and none are taken later |
-| `GET /hls/{output}/master.m3u8` | an hls/output's multivariant playlist. Readable with the output's viewer key as ?key= (output.list playback.master_url_path) or a token with read |
+| `GET /hls/{output}/master.m3u8` | an hls/output's multivariant playlist. Readable with the output's viewer key as ?key= (output.list playback.master_url_path) or a token with read, or with nothing from loopback and private networks when params.access is open |
 | `GET /hls/{output}/manifest.mpd` | the same segments as a DASH MPD, dynamic, with a SegmentTimeline per representation; the same keys as the playlists |
 | `GET /hls/{output}/{rung}/index.m3u8` | one rung's media playlist; _HLS_msn and _HLS_part hold it until that part exists (LL-HLS blocking reload) |
-| `GET /hls/{output}/{rung}/{file}` | init.mp4, a CMAF segment {n}.m4s or an LL-HLS part {n}.{p}.m4s, from memory |
+| `GET /hls/{output}/{rung}/{file}` | init.mp4, a CMAF segment {n}.m4s or an LL-HLS part {n}.{p}.m4s, or an MPEG-TS segment {start_ms}.ts, from memory |
+| `GET /hls/{output}/master-ts.m3u8` | an hls/output's MPEG-TS multivariant playlist, with params.segments ts or both: main carries the picture and the first sound, each further sound is its own rendition. The same keys as master.m3u8 |
+| `GET /hls/{output}/{rung}/ts.m3u8` | an MPEG-TS media playlist, main or audio<n>; segments named by their UTC start in ms |
 
 ## The ext table
 

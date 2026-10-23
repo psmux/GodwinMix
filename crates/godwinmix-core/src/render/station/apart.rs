@@ -39,10 +39,11 @@ impl Station {
         *self.inner.apart.lock() = Some(apart);
     }
 
-    /// What the child runs: measure and keep the result in `dir`, here.
-    /// False when nothing was kept.
-    pub fn calibrate_here(pin: crate::config::Accel, dir: &Path) -> bool {
-        let governor = godwinmix_govern::Governor::new(Default::default(), Profile::uncalibrated());
+    /// What the child runs: measure and keep the result in `dir`, here,
+    /// with the station's `[governor]` (how far to probe sessions). False
+    /// when nothing was kept.
+    pub fn calibrate_here(pin: crate::config::Accel, config: godwinmix_govern::GovernorConfig, dir: &Path) -> bool {
+        let governor = godwinmix_govern::Governor::new(config, Profile::uncalibrated());
         let st = Self::build(governor, &crate::catalogue::global(), pin, Some(dir.to_path_buf()));
         st.measure_here()
     }

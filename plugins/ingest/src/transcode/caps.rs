@@ -30,6 +30,23 @@ pub(crate) fn caps_for(header: &MediaTag) -> Option<gst::Caps> {
     Some(caps.build())
 }
 
+/// The caps an MPEG-2 keyframe gives its decoder: parsed, a picture a
+/// buffer, with the size and rate its sequence header states. `None` for
+/// any other picture, which keeps the caps the last keyframe gave.
+pub(crate) fn mpeg2(tag: &MediaTag) -> Option<crate::direct::vitals::sound::Coded> {
+    let (video, _, _) = crate::hub::mpeg2(tag)?;
+    let s = crate::mp2v::sequence(tag.payload.get(crate::mp2v::PREFIX..)?)?;
+    let caps = gst::Caps::builder("video/mpeg")
+        .field("mpegversion", 2i32)
+        .field("systemstream", false)
+        .field("parsed", true)
+        .field("width", video.width as i32)
+        .field("height", video.height as i32)
+        .field("framerate", gst::Fraction::new(s.fps.0 as i32, s.fps.1 as i32))
+        .build();
+    Some(crate::direct::vitals::sound::Coded { caps, skip: crate::mp2v::PREFIX })
+}
+
 /// Sound that is not AAC, which carries no sequence header.
 pub(crate) fn headerless(tag: &MediaTag) -> bool {
     tag.kind == TagKind::Audio && tag.payload.first().is_some_and(|b| b >> 4 != 10)
@@ -41,7 +58,7 @@ mod tests {
     use std::sync::Arc;
 
     fn tag(kind: TagKind, body: &[u8]) -> MediaTag {
-        MediaTag { kind, timestamp_ms: 0, keyframe: false, sequence_header: true, payload: Arc::from(body) }
+        MediaTag { track: 0, kind, timestamp_ms: 0, keyframe: false, sequence_header: true, payload: Arc::from(body) }
     }
 
     #[test]

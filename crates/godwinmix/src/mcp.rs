@@ -689,6 +689,10 @@ mod call_tool;
 mod schema_tests;
 
 #[cfg(test)]
+#[path = "mcp_headend_tests.rs"]
+mod headend_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
