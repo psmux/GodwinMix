@@ -13,9 +13,10 @@ pub const UNLIMITED: u32 = u32::MAX;
 /// On a desktop the page, the window system and whatever else the person
 /// has open share the machine, so a fifth of it with at least a core and a
 /// half. On a headless server a twelfth with at least half a core. On top,
-/// how far the machine's load has jumped above its mean lately, so a bursty
-/// machine keeps more room. Never more than half the machine. An override
-/// from the config replaces all of it.
+/// how far the machine's load has lately jumped above what [`have`] already
+/// takes off (other programs at their peak, this process at its average), so
+/// a process that bursts keeps more room. Never more than half the machine.
+/// An override from the config replaces all of it.
 pub fn reserve(cores: u32, desktop: bool, jitter: u32, override_millicores: Option<u32>) -> u32 {
     let cap = cores.max(1) * 1000;
     if let Some(o) = override_millicores {
