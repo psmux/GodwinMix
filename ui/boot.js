@@ -39,7 +39,7 @@ async function authorise(base) {
   for (let attempt = 0; attempt < 3; attempt += 1) {
     let status;
     try {
-      // `core.info`, which a station answers itself when no show is running.
+      // A station answers core.info itself when no show runs.
       const res = await fetch(new URL("/api/v1/core/info", base), {
         headers: token ? { Authorization: "Bearer " + token } : {},
       });
@@ -101,7 +101,7 @@ async function main() {
   await Promise.all(PANELS.map((path) => import(path).catch((e) => console.error(`panel ${path} failed`, e))));
 
   await mountShell(client);
-  await import("./panels/headend/station.js").then((m) => m.openIfHeadend(client)).catch((e) => console.error("the headend view did not open", e));
+  await import("./panels/headend/station.js").then((m) => m.openIfHeadend(client)).catch(console.error);
 
   if (client.legacy) {
     console.info("this mixer has no /rpc yet, so the page is talking to the REST API through the legacy adapter");
