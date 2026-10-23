@@ -1867,12 +1867,18 @@ class HistoryStep(TypedDict, total=False):
 class HlsOutputParams(TypedDict, total=False):
     """An `hls://` output's params, as an `hls/output` takes them."""
 
+    access: Optional[str]
+    # `keyed` (the default) or `open`: whether a player needs the viewer key.
     low_latency: Optional[bool]
     # true: parts of 333 ms.
+    open_public: Optional[bool]
+    # With `access = "open"`, answer players outside loopback and the private networks too.
     part_ms: Optional[int]
     # LL-HLS part, 0 for none.
     segment_ms: Optional[int]
     # 500 to 10000, default 2000.
+    segments: Optional[str]
+    # `cmaf` (the default), `ts` or `both`: which segments are made.
     viewer_key: Optional[str]
     # 16 characters or more.
     window: Optional[int]

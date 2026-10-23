@@ -55,6 +55,9 @@ gstreamer = { workspace = true }
 # The appsrc a direct show's HLS output is fed through (station/direct/hls).
 # Already in the tree under the engine.
 gstreamer-app = { workspace = true }
+# The frames a direct show's HLS packager reads, shared by its CMAF buffers
+# and its MPEG-TS cutters without a copy. Already in the tree under the engine.
+bytes = { workspace = true }
 
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "sync", "signal", "time", "io-std", "io-util", "fs", "process"] }
 axum = { workspace = true, features = ["ws"] }

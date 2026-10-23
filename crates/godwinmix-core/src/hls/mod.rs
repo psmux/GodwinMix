@@ -49,11 +49,13 @@
 //! `docs/explanation/hls-output.md` says why it is built this way and what
 //! it costs.
 
+pub mod access;
 pub mod boxes;
 pub mod cutter;
 pub mod dash;
 pub mod follow;
 pub mod key;
+pub mod lang;
 #[cfg(test)]
 mod ladder;
 pub mod master;
@@ -68,10 +70,12 @@ pub mod ring;
 pub mod rungs;
 pub mod stream;
 pub mod track;
+pub mod ts;
 pub mod view;
 pub mod viewers;
 
 pub use package::{attach, Attached, Input};
+pub use access::{Access, Segments};
 pub use params::HlsParams;
 pub use stream::Stream;
 pub use track::TrackKind;

@@ -1,5 +1,6 @@
 //! Which HLS outputs should run, and what each one reads.
 
+use crate::station::packager::tracks::{self, Sound};
 use crate::station::packager::wire::Source;
 use super::spec;
 use crate::station::direct::outputs;
@@ -13,6 +14,8 @@ pub struct Want {
     pub spec: spec::HlsSpec,
     pub source: Option<Source>,
     pub why_not: Option<String>,
+    /// The input's sound tracks, with their languages.
+    pub sounds: Vec<Sound>,
 }
 
 /// Every HLS output that should run, with what it reads.
@@ -23,10 +26,14 @@ pub fn wants(st: &Station) -> BTreeMap<(String, String), Want> {
         if !r.outputs.iter().any(|o| o.enabled && o.platform == spec::SCHEME) {
             continue;
         }
-        let relay = st.direct.seen.lock().get(&r.id).and_then(|s| s.relay());
+        let (relay, sounds) = {
+            let seen = st.direct.seen.lock();
+            let s = seen.get(&r.id);
+            (s.and_then(|s| s.relay()), s.and_then(|s| s.input.as_ref()).map(tracks::sounds).unwrap_or_default())
+        };
         for d in outputs::stored(&r.id, &r.outputs).into_iter().filter(|d| d.enabled && d.platform == spec::SCHEME) {
             let (source, why_not) = source_of(st, &r.id, &d, relay.as_ref());
-            out.insert((r.id.clone(), d.id.clone()), Want { spec: spec::read(&d.server), source, why_not });
+            out.insert((r.id.clone(), d.id.clone()), Want { spec: spec::read(&d.server), source, why_not, sounds: sounds.clone() });
         }
     }
     out

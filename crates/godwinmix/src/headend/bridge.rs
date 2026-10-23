@@ -1,8 +1,7 @@
 //! [`Segments`] over the HLS a direct show serves today: CMAF from the HLS
 //! packager, asked on loopback the way the station's own `/hls` door asks
-//! it. This stands in until the HLS branch's open TS access lands; the
-//! facade names everything in Flussonic's shape either way, so swapping it
-//! changes this file and nothing that reads the facade.
+//! it. `ts_bridge` answers from the TS rings instead for an output that
+//! makes TS, and hands every other output to this.
 //!
 //! CMAF keeps the video and each sound in playlists of their own, so this
 //! offers no muxed `tracks-v1a1` and no `/mpegts`.

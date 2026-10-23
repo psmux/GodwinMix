@@ -23,7 +23,7 @@ pub enum TrackKind {
 
 /// What a playlist says about a rung. Filled in from the caps the muxer
 /// was given, so it is empty until the first buffer.
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct TrackInfo {
     /// RFC 6381, `avc1.64001f`, `hvc1.1.6.L93.B0`, `mp4a.40.2`.
     pub codecs: String,
@@ -36,6 +36,13 @@ pub struct TrackInfo {
     pub timescale: u32,
     /// What the rendition asked for, 0 when nobody said.
     pub declared_kbps: u32,
+    /// A sound track's number: 0 the first, then 1, 2, 3 in PMT order.
+    pub sound: u8,
+    /// Its ISO 639 code from the PMT, empty when it had none.
+    pub lang: String,
+    /// A name for a player's menu, when something better than the
+    /// language's is known.
+    pub name: String,
 }
 
 pub struct Track {

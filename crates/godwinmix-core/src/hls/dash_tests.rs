@@ -29,7 +29,7 @@ fn ring(timescale: u64, whole: u64) -> Ring {
 }
 
 fn info(codecs: &str, w: u32, h: u32, timescale: u32, channels: u32) -> TrackInfo {
-    TrackInfo { codecs: codecs.into(), width: w, height: h, fps: (w > 0).then_some((30, 1)), channels, timescale, declared_kbps: 0 }
+    TrackInfo { codecs: codecs.into(), width: w, height: h, fps: (w > 0).then_some((30, 1)), channels, timescale, ..TrackInfo::default() }
 }
 
 #[test]
