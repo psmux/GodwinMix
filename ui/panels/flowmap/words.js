@@ -15,13 +15,19 @@ export function rate(k) {
   return `${Math.round(k)} kbit/s`;
 }
 
-/** "1080i", "720p50", "576p": the height, and the rate where it is not 25 or 30. */
+const RATES = [23.976, 24, 25, 29.97, 30, 48, 50, 59.94, 60];
+
+/**
+ * "1080i", "720p50", "576p": the height, and the frame rate where it is not
+ * 25 or 30. A measured rate wanders, so it is read as the broadcast rate it
+ * is near, and left out when it is near none.
+ */
 export function picture(w, h, fps, interlaced) {
   if (!h) return "";
   const f = fps && typeof fps === "object" ? fps.num / (fps.den || 1) : fps;
-  const round = f ? Math.round(f * 100) / 100 : 0;
-  const plain = !round || [25, 29.97, 30].includes(round);
-  return `${h}${interlaced ? "i" : "p"}${plain ? "" : Math.round(round)}`;
+  const near = f ? RATES.find((r) => Math.abs(f - r) / r < 0.06) : null;
+  const plain = !near || near <= 30;
+  return `${h}${interlaced ? "i" : "p"}${plain ? "" : Math.round(near)}`;
 }
 
 const SOURCE_WORD = { camera: "Camera", screen: "Screen", mic: "Microphone", pattern: "Test pattern", media: "Picture", page: "Browser", stream: "Stream", file: "File", exec: "Program", graphic: "Graphic", text: "Text" };
@@ -74,11 +80,13 @@ export function outputKind(o) {
   return known && !/^custom/.test(known.id) && known.id !== "rtmp" ? known.title : "RTMP";
 }
 
+/** "CMAF and TS", for an HLS output whose station says which. */
+export const segmentWords = (p) => (p && p.segments ? { cmaf: "CMAF", ts: "TS", both: "CMAF and TS" }[p.segments] || p.segments : "");
+
 /** "CMAF and TS, open", for an HLS output whose station says. */
 export function hlsFormat(p) {
   if (!p || !p.segments) return "";
-  const seg = { cmaf: "CMAF", ts: "TS", both: "CMAF and TS" }[p.segments] || p.segments;
-  return `${seg}, ${p.access === "open" ? "open" : "keyed"}`;
+  return `${segmentWords(p)}, ${p.access === "open" ? "open" : "keyed"}`;
 }
 
 /** Where an output goes, without a key: the host and port, or a file's name. */

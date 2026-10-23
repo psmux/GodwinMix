@@ -4,7 +4,7 @@
 
 import { codec, kbps as shortRate } from "../wall/model.js";
 import { WORD as STATE } from "../headend/model.js";
-import { hlsFormat, picture, rate, sourceKind, stateWord, upFor, where } from "./words.js";
+import { picture, rate, segmentWords, sourceKind, stateWord, upFor, where } from "./words.js";
 
 const yes = (rows) => rows.filter((r) => r && r[1] !== "" && r[1] != null);
 
@@ -86,7 +86,7 @@ export function gpuRows(n, ctx) {
 export function outputRows(n) {
   const o = n.output || {}, s = n.stats || {}, p = o.playback || null;
   return {
-    top: yes([["Kind", n.title], ["Format", hlsFormat(p)], ["Segments", p && p.segment_ms ? `${(p.segment_ms / 1000).toFixed(1)} s` : ""], ["Goes to", where(o)], ["State", stateWord(n.state)],
+    top: yes([["Kind", n.title], ["Format", segmentWords(p)], ["Access", p && p.access ? (p.access === "open" ? "open, no key needed on this network" : "keyed, a player needs the viewer key") : ""], ["Segments", p && p.segment_ms ? `${(p.segment_ms / 1000).toFixed(1)} s` : ""], ["Goes to", where(o)], ["State", stateWord(n.state)],
       ["Rate", rate(n.rate) || (n.state === "live" ? "not measured" : "")], ["Watching", p ? String(p.viewers || 0) : ""], ["Problem", o.error ? String(o.error.message || o.error) : o.refused ? o.refused.message : ""]]),
     tech: yes([["Output", o.id], ["Address", o.uri_host], ["Made as", s.rendition_text], ["Encoder", s.encoder], ["Reconnects", s.reconnects || o.reconnects ? String(s.reconnects || o.reconnects) : ""]]),
   };

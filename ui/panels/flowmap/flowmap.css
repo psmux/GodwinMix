@@ -10,7 +10,9 @@
   --deep: color-mix(in srgb, var(--bg) 72%, var(--overlay));
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
   display: flex; flex-direction: column; min-height: 0;
-  background: var(--deep); color: var(--text);
+  /* --deep can be see-through (it mixes in --overlay), so it is laid over
+     the page colour and never over the page. */
+  background: linear-gradient(var(--deep), var(--deep)), var(--bg); color: var(--text);
   border-top: var(--border) solid var(--line);
   font-variant-numeric: tabular-nums;
 }
@@ -39,7 +41,7 @@
 .fm-main { flex: 1; display: flex; min-height: 0; position: relative; }
 .fm-stage {
   flex: 1; position: relative; min-width: 0; overflow: hidden;
-  background: radial-gradient(1100px 520px at 50% 0%, color-mix(in srgb, var(--accent) 7%, transparent), transparent), var(--deep);
+  background: radial-gradient(1100px 520px at 50% 0%, color-mix(in srgb, var(--accent) 7%, transparent), transparent), linear-gradient(var(--deep), var(--deep)), var(--bg);
 }
 .fm-canvas { display: block; touch-action: none; cursor: grab; }
 .fm-canvas:active { cursor: grabbing; }
@@ -75,7 +77,7 @@
 
 .fm-legend {
   position: absolute; left: 10px; bottom: 8px; max-width: calc(100% - 20px); display: flex; flex-wrap: wrap; gap: 4px 14px;
-  padding: 5px 10px; border-radius: 8px; background: color-mix(in srgb, var(--deep) 84%, transparent);
+  padding: 5px 10px; border-radius: 8px; background: color-mix(in srgb, var(--bg) 88%, transparent);
   font-size: 11px; color: var(--dim); pointer-events: none;
 }
 .fm-legend i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; background: var(--tc); }
