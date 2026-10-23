@@ -107,9 +107,18 @@ impl Report {
     }
 }
 
-/// Every program the group's tables list, when the lock is free.
+/// The group's catalog, waited for. Every show on a group reports in the
+/// same instant, woken by the same batch, so a `try_lock` here lost to the
+/// show beside it every second and a show on a shared feed could go on
+/// without its programs list. Nobody holds the lock for more than a copy;
+/// the socket thread itself still only tries it.
+fn catalog(g: &Group) -> std::sync::MutexGuard<'_, gmx_udp::counters::Catalog> {
+    g.catalog.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+/// Every program the group's tables list, once they have been read.
 fn programs(g: &Group) -> Option<Vec<ProgramInfo>> {
-    let c = g.catalog.try_lock().ok()?;
+    let c = catalog(g);
     let one = |p: &gmx_udp::ts::tables::Program| ProgramInfo {
         number: p.number,
         name: p.name.clone(),
@@ -122,7 +131,7 @@ fn programs(g: &Group) -> Option<Vec<ProgramInfo>> {
 /// Why `program` cannot be taken, when the tables say it is not there:
 /// the udp plugin's own words, which list what the feed does carry.
 fn missing(g: &Group, program: u16) -> Option<String> {
-    let c = g.catalog.try_lock().ok()?;
+    let c = catalog(g);
     match plan(&Choice { program, pids: Vec::new() }, &c.programs, &|_| true) {
         Plan::Missing(why) => Some(why),
         _ => None,
@@ -147,4 +156,27 @@ pub fn group_json(g: &Group) -> Value {
         "receive_buffer": g.buffer.load(Relaxed),
         "error": g.error(),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::group::{Group, Key};
+    use super::*;
+
+    #[test]
+    fn a_show_reads_the_programs_while_the_show_beside_it_holds_the_catalog() {
+        let g = std::sync::Arc::new(Group::new(Key { host: "127.0.0.1".into(), port: 1, source: None, interface: String::new() }, "udp://127.0.0.1:1".into()));
+        g.catalog.lock().unwrap().programs = vec![gmx_udp::ts::tables::Program { number: 2, name: "News".into(), ..Default::default() }];
+        let (held, go) = std::sync::mpsc::channel();
+        let other = g.clone();
+        let beside = std::thread::spawn(move || {
+            let _c = other.catalog.lock().unwrap();
+            held.send(()).unwrap();
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        });
+        go.recv().unwrap();
+        let names: Vec<String> = programs(&g).unwrap_or_default().into_iter().map(|p| p.name).collect();
+        assert_eq!(names, ["News"]);
+        beside.join().unwrap();
+    }
 }
