@@ -31,7 +31,15 @@ fn show<'a>(list: &'a Value, id: &str) -> Option<&'a Value> {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn an_import_reports_first_then_makes_each_stream_a_show() {
     let (dir, port) = folder("headend-import");
-    let st = start(dir.clone(), port, &[]).await;
+    // CH117 is converted, about a core of x264 on a runner with no GPU, and
+    // the import refuses a stream the machine has no room for. Alone and
+    // with no reserve, as hls_direct.rs and isolation.rs do: a three or four
+    // core runner shared with other stations had 0 to 151 millicores free and
+    // refused it. What is checked here is the import, not the governor.
+    let config = dir.join("godwinmix.toml");
+    let text = std::fs::read_to_string(&config).unwrap();
+    std::fs::write(&config, format!("{text}\n[governor]\nreserve_cores = 0\n")).unwrap();
+    let st = start_alone(dir.clone(), port, &[]).await;
     let mut ws = rpc(&st, "").await;
 
     let status = call(&mut ws, 1, "headend.status", json!({})).await;
