@@ -1302,6 +1302,8 @@ mod tests {
         reachable.extend(closure_of("panels/wall/detail.js"));
         // View > Headend, or Headend view on the wall.
         reachable.extend(closure_of("panels/headend/view.js"));
+        // View > Flow map, or its button on the headend view's bar.
+        reachable.extend(closure_of("panels/flowmap/view.js"));
         // Not imported: the headend player adds it with a <script>, when a
         // browser that cannot play HLS opens a channel's drawer.
         reachable.insert("vendor/hls.light.min.js");
@@ -1433,6 +1435,8 @@ mod tests {
             ("panels/routing/model.js", "View > Routing"),
             ("panels/wall/view.js", "View > Monitoring wall"),
             ("panels/headend/view.js", "View > Headend"),
+            ("panels/flowmap/view.js", "View > Flow map"),
+            ("panels/flowmap/map.js", "View > Flow map"),
             ("panels/headend/tile.js", "View > Headend"),
             ("vendor/hls.light.min.js", "a channel's drawer in the headend view"),
             ("panels/wall/data.js", "View > Monitoring wall"),
