@@ -2,14 +2,16 @@
 """A station with something of every kind on it, for working on the flow map.
 
 Builds on dev/headend-wall.py: its eight multicast groups of six programs
-(one group with no sender, one losing a packet in a thousand) and fifty
-direct shows, each with an HLS output. On top of that:
+(one group with no sender, one losing a packet in a thousand), here on
+239.10.7.x so the two can run side by side, and fifty direct shows, each
+with an HLS output. On top of that:
 
   * two in three of those HLS outputs convert to 640x360, some serving TS
     beside CMAF and some open without a key;
   * channel 104 also sends on by UDP, 107 by RTMP to a server that is not
     there (so it keeps reconnecting), and 110 by SRT;
-  * "Relay 1", a show whose input is RTMP, played from ffmpeg;
+  * "Relay 1", a show whose input is RTMP, played from ffmpeg, and
+    "Studio link", whose input is an SRT listener an ffmpeg encoder calls;
   * channel 150 is fed by its own sender, which is cut after --cut seconds,
     so its link goes dead while the map watches;
   * the station's mixed show gets two test pictures, a file and an output.
@@ -17,7 +19,7 @@ direct shows, each with an HLS output. On top of that:
 With --mixed-only there are no channels at all: one mixed show, its
 sources and an output, which is what most stations are.
 
-    python3 dev/flowmap-station.py [--port N] [--shows 50] [--cut 90] [--mixed-only]
+    python3 dev/flowmap-station.py [--port N] [--shows 50] [--cut 90] [--mixed-only] [--release]
 
 Needs what headend-wall.py needs, and ffmpeg. Put dev/fake-nvidia-smi.py on
 PATH as nvidia-smi for a GPU on the map. Ctrl+C stops every feed and the
@@ -29,6 +31,11 @@ import argparse, importlib.util, os, shutil, signal, subprocess, sys, tempfile, 
 spec = importlib.util.spec_from_file_location("wall", os.path.join(os.path.dirname(os.path.abspath(__file__)), "headend-wall.py"))
 wall = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(wall)
+
+
+# Groups of their own, so a headend-wall.py running on the same machine,
+# which sends on 239.10.0.x, is not mixed into these.
+NET = "239.10.7."
 
 
 def converted(shows):
@@ -67,6 +74,23 @@ def rtmp_server(port, stop):
     return procs
 
 
+def srt_sender(port, stop):
+    """An encoder calling the station's SRT listener, again whenever it drops."""
+    line = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-re", "-f", "lavfi", "-i", "smptehdbars=size=640x360:rate=25", "-f", "lavfi", "-i", "sine=frequency=550",
+            "-c:v", "libx264", "-preset", "ultrafast", "-tune", "zerolatency", "-g", "50", "-b:v", "1200k", "-c:a", "aac", "-b:a", "96k",
+            "-f", "mpegts", f"srt://127.0.0.1:{port}?mode=caller"]
+    procs = []
+
+    def loop():
+        while not stop:
+            p = subprocess.Popen(line, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+            procs.append(p)
+            p.wait()
+            time.sleep(1)
+    threading.Thread(target=loop, daemon=True).start()
+    return procs
+
+
 def mixer(port, folder):
     clip = os.path.join(folder, "opener.mp4")
     subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc=size=640x360:rate=25:duration=20", "-f", "lavfi", "-i", "sine=duration=20",
@@ -85,18 +109,21 @@ def main():
     ap.add_argument("--shows", type=int, default=50)
     ap.add_argument("--cut", type=int, default=90, help="seconds before channel 150's feed is cut; 0 never")
     ap.add_argument("--mixed-only", action="store_true")
+    ap.add_argument("--release", action="store_true", help="run target/release, built with cargo build --release")
     args = ap.parse_args()
+    if args.release:
+        wall.BIN = os.path.join(wall.REPO, "target", "release")
     if args.mixed_only:
         args.shows = 0
     args.port = args.port or wall.free_port()
     folder = tempfile.mkdtemp(prefix="gmx-flowmap-")
-    single_a, single_b, rtmp, udp_out, srt_out = (wall.free_port() for _ in range(5))
+    single_a, single_b, rtmp, udp_out, srt_out, srt_in = (wall.free_port() for _ in range(6))
     chans = [wall.channel(i) for i in range(args.shows)]
     feeds, stop = [], []
     for g in range(min(wall.GROUPS - 1, args.shows // wall.PER_GROUP)):
-        feeds.append(wall.gst(wall.mux(chans[g * wall.PER_GROUP:(g + 1) * wall.PER_GROUP], f"239.10.0.{g + 1}", 5001 + g, drop=g == 2)))
+        feeds.append(wall.gst(wall.mux(chans[g * wall.PER_GROUP:(g + 1) * wall.PER_GROUP], f"{NET}{g + 1}", 5001 + g, drop=g == 2)))
     cut = wall.gst(wall.mux(chans[49:50], "127.0.0.1", single_b)) if args.shows >= 50 else None
-    served = [] if args.mixed_only else rtmp_server(rtmp, stop)
+    served = [] if args.mixed_only else rtmp_server(rtmp, stop) + srt_sender(srt_in, stop)
     st = wall.station(folder, args.port)
 
     def end(*_):
@@ -123,8 +150,11 @@ def main():
     mixer(args.port, folder)
     if not args.mixed_only:
         shows = converted(wall.shows(args.shows, single_a, single_b))
+        for sh in shows:
+            sh["input"]["uri"] = sh["input"]["uri"].replace("@239.10.0.", f"@{NET}")
         extras(shows, udp_out, srt_out)
         shows.append({"name": "Relay 1", "compositing": False, "input": {"uri": f"rtmp://127.0.0.1:{rtmp}/live/relay1"}, "outputs": [{"id": "hls", "uri": "hls://tv"}, {"id": "lan", "uri": f"udp://127.0.0.1:{udp_out + 1}"}]})
+        shows.append({"name": "Studio link", "compositing": False, "input": {"uri": f"srt://@:{srt_in}"}, "outputs": [{"id": "hls", "uri": "hls://tv", "params": {"segments": "ts", "access": "open"}}]})
         made = wall.post(args.port, "shows/add_many", {"shows": shows, "dry_run": False})
         print(made.get("error") or f"{len(made['result']['added'])} shows added")
         if args.shows >= 49:

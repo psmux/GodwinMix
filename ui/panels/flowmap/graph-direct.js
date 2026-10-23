@@ -4,8 +4,8 @@
 // once every channel is in, since an address feeds many of them; so is the
 // GPU, which every conversion on it uses.
 
-import { groupKey, numbered, stateOf } from "../headend/model.js";
-import { codec } from "../wall/model.js";
+import { WORD, groupKey, numbered, stateOf } from "../headend/model.js";
+import { codec, isLive } from "../wall/model.js";
 import { toneOf } from "./tone.js";
 import { hlsFormat, inputKind, outputFamily, outputKind, picture, rate, where } from "./words.js";
 
@@ -22,8 +22,10 @@ export function addDirect(g, show, st, series) {
   const key = groupKey(show);
   const id = `show:${show.id}`;
   const shape = [picture(i.width, i.height, i.fps), i.video_codec && codec(i.video_codec), i.audio_codec && codec(i.audio_codec)].filter(Boolean).join(" ");
-  g.node({ id, col: 1, kind: "show", show: show.id, direct: true, tone: toneOf(state), state, num: n.num, title: n.title, group: key,
-    lines: [shape || (state === "offline" ? "Stopped" : "No picture yet"), rate(i.kbps)], rate: i.kbps || 0 });
+  // Offline is a stopped channel, or one that runs with nothing arriving: a fault.
+  const running = isLive(show);
+  g.node({ id, col: 1, kind: "show", show: show.id, direct: true, tone: state === "offline" && running ? "bad" : toneOf(state), state: state === "offline" && running ? "dead" : state, num: n.num, title: n.title, group: key,
+    lines: [state === "offline" ? (running ? "Nothing arriving" : "Stopped") : !shape ? "No picture yet" : state === "live" || state === "starting" ? shape : `${WORD[state]} · ${shape}`, rate(i.kbps)], rate: i.kbps || 0 });
   if (key) {
     const err = stutter(series);
     g.link(`in>${show.id}`, `in:${key}`, id, i.kbps, err ? "warn" : toneOf(state === "offline" ? "off" : state === "starting" ? "starting" : "live"), { err });
@@ -77,7 +79,7 @@ export function addInputs(g, shows, stats, series) {
     const st = stats.get(s.id);
     const state = stateOf(s, st);
     e.members.push(s.id);
-    if (state !== "offline") e.on += 1;
+    if (isLive(s)) e.on += 1;
     if (state !== "offline" && state !== "starting") e.live += 1;
     e.kbps += (st && st.input && st.input.kbps) || 0;
     const h = series && series.get(s.id);
