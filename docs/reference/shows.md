@@ -51,6 +51,16 @@ The station answers these itself, whatever `show` says: `show.*`,
 `channel.*`, `governor.status`, `governor.calibrate`, and `rendition.plan`
 with a `channel:<id>` scope.
 
+While the show a request names has no process (it is stopped or failed, or
+it is a show without compositing, which never has one) the station also
+answers `core.info`, `core.subscribe`, `config.get`, `config.schema`,
+`config.set` and `config.reset` in its place, so a page stands up on a
+headend that runs no mixer. Its `core.info` lists the feature `station`,
+and `headend` when it follows a Flussonic config. The config methods read
+and write the station's own config file; a change that a running show would
+take live waits for a show to start. Every other call to that show is still
+refused as above.
+
 ## Methods
 
 ### `show.list {}`

@@ -605,7 +605,7 @@ async fn ws_upgrade(ws: WebSocketUpgrade, State(ctx): State<Ctx>) -> Response {
 /// The loudest a channel can be asked for, matching the ceiling the volume
 /// elements apply. Kept here as well so the request is pinned before it
 /// reaches the pipeline and the answer cannot disagree with what was sent.
-const MAX_GAIN: f64 = 10.0;
+pub(crate) const MAX_GAIN: f64 = 10.0;
 
 /// Pin one gain to the range a volume element accepts.
 ///

@@ -6,8 +6,8 @@
 //! the show's side closes the client's closes with 1012 and it reconnects
 //! through the station, which waits for the show.
 
-use super::super::methods;
 use super::super::state::Station;
+use super::super::{alone, methods};
 use super::pipe::{self, Upstream};
 use axum::extract::ws::{CloseFrame, Message, WebSocket, WebSocketUpgrade};
 use axum::http::{HeaderMap, Method, Uri};
@@ -126,7 +126,7 @@ impl Relay {
         }
         super::super::ingest::after(&self.st, &method);
         if method == "core.subscribe" {
-            let req: SubscribeRequest = serde_json::from_value(params).unwrap_or_default();
+            let req: SubscribeRequest = serde_json::from_value(params.clone()).unwrap_or_default();
             if let Some(show) = req.show.filter(|s| *s != self.show) {
                 self.show = show;
                 self.up = None;
@@ -134,6 +134,10 @@ impl Relay {
             }
             let patterns = if req.events.is_empty() { vec!["*".to_string()] } else { req.events };
             self.sub = Some(Subscription { patterns, ext: req.ext });
+        }
+        if self.up.is_none() && alone::answers(&method) && alone::stands_in(&self.st, &self.show) {
+            self.stand_in(frame.get("id").cloned(), method, params, answers.clone());
+            return None;
         }
         if self.up.is_none() {
             match self.connect().await {

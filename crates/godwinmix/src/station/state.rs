@@ -91,6 +91,8 @@ pub struct Station {
     pub switches: super::switch::Switches,
     /// The Flussonic config this station follows, in headend mode.
     pub headend: OnceLock<std::sync::Weak<crate::headend::Headend>>,
+    /// What the station says of itself for a show that is not running.
+    pub alone: OnceLock<super::alone::Own>,
 }
 
 impl Station {
@@ -119,6 +121,7 @@ impl Station {
             list_cache: Default::default(),
             switches: Default::default(),
             headend: OnceLock::new(),
+            alone: OnceLock::new(),
         })
     }
 

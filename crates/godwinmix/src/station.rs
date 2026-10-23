@@ -18,6 +18,7 @@
 
 pub mod link;
 pub mod registry;
+pub mod alone;
 mod ask;
 pub mod calibrate;
 mod channel_calls;
