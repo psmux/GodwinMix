@@ -89,6 +89,9 @@ const ACTIONS = {
   "help.about": (client) => about(client),
 };
 
+/** The commands done here, each of which the menu bar has to register. */
+export const handled = () => Object.keys(ACTIONS);
+
 export function act(client, id, arg) {
   const fn = ACTIONS[id];
   return fn ? fn(client, arg) : undefined;
