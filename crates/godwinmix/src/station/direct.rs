@@ -31,6 +31,8 @@ mod table;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]
+mod tests_carry;
+#[cfg(test)]
 mod tests_intake;
 #[cfg(test)]
 mod tests_mixed;

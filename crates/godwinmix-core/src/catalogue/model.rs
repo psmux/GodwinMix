@@ -103,6 +103,11 @@ pub struct VideoEntry {
     /// The parser that goes between the encoder and a muxer.
     #[serde(default)]
     pub parser: Option<String>,
+    /// The H.264 or HEVC profile asked of the encoder through the caps after
+    /// it (`high`, `main`). Left out, the encoder picks, which NVENC does as
+    /// Baseline.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile: Option<String>,
     /// The memory type this encoder accepts on its sink pad.
     #[serde(default = "system")]
     pub memory: String,

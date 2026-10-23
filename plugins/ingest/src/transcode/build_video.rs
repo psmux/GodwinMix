@@ -77,7 +77,13 @@ pub fn encode(node: &NodeSpec) -> Result<Built, String> {
         "av1" => "video/x-av1,stream-format=obu-stream,alignment=tu",
         _ => "video/x-h264,stream-format=avc,alignment=au",
     };
-    elements.push(caps(framing)?);
+    // The profile the catalogue asks for, which the encoder reads off the
+    // caps after it: left to itself NVENC makes Baseline.
+    let framing = match node.text("profile") {
+        Some(p) => format!("{framing},profile={p}"),
+        None => framing.to_string(),
+    };
+    elements.push(caps(&framing)?);
     let sink = appsink()?;
     elements.push(sink.clone().upcast());
     Ok(Built { head: Some(elements[0].clone()), elements, tee: None, appsrc: None, appsink: Some(sink) })
