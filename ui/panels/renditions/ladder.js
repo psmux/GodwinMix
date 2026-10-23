@@ -75,8 +75,9 @@ export function ladderArt(requests) {
 
 /**
  * @param {object[]} presets  from `rendition.presets`
- * @param {object} [current]  the `rendition` an edit opens on
- * @returns {{node, value: () => ({preset: string}|{ladder: object[]}|{error: string})}}
+ * @param {object|null} [current]  the `rendition` an edit opens on; null for
+ *   an output serving the programme as it is, which opens with no card picked
+ * @returns {{node, value: () => ({preset: string}|{ladder: object[]}|{error: string}|undefined)}}
  */
 export function ladderPicker(presets, current) {
   const offered = ladders(presets);
@@ -86,7 +87,7 @@ export function ladderPicker(presets, current) {
   const sound = el("input", { type: "number", min: "32", max: "512", step: "16", value: String(soundOf(saved)), "aria-label": "Sound bitrate in kb/s" });
   const soundRow = el("label.rnd-rungsound", {}, [el("span", { text: "Sound" }), sound, el("span.rnd-dim", { text: "kb/s, one track every size shares" })]);
   const custom = el("div.rnd-customwrap", { hidden: true }, [rows, soundRow, el("button.btn.rnd-addrung", { type: "button", text: "Add a rung", onclick: () => addRung() })]);
-  let choice = saved ? "custom" : current && current.preset ? current.preset : (offered.find(usable) || {}).id || "custom";
+  let choice = saved ? "custom" : current && current.preset ? current.preset : current === null ? null : (offered.find(usable) || {}).id || "custom";
   let rungs = saved ? rungsFrom(saved) : (offered.find((p) => p.id === "abr-ladder-3") || offered[0] || { ladder: [rung(720), rung(480), rung(360)] }).ladder.map((r) => rung(r.video.height, r.video.bitrate_kbps));
 
   const pick = (id) => {
@@ -117,13 +118,14 @@ export function ladderPicker(presets, current) {
 
   for (const p of offered) cards.appendChild(ladderCard(p, p.id, p.title, p.ladder, pick));
   // A saved preset this machine no longer lists still opens on Custom.
-  if (choice !== "custom" && !offered.some((p) => p.id === choice)) choice = "custom";
+  if (choice && choice !== "custom" && !offered.some((p) => p.id === choice)) choice = "custom";
   cards.appendChild(ladderCard({}, "custom", "Custom", rungs, pick));
   drawRungs();
   pick(choice);
   return {
     node: el("div", {}, [cards, custom]),
     value() {
+      if (!choice) return undefined;
       if (choice !== "custom") return { preset: choice };
       const wrong = ladderError(rungs);
       return wrong ? { error: wrong } : { ladder: withSound(rungs, sound.value) };
