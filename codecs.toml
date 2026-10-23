@@ -52,13 +52,13 @@ decoder = "nvh264dec"
 download = "cudadownload"
 parser = "h264parse"
 memory = "system"
-profile = "high"
+profile = "main"
 requires = ["nvh264enc"]
 license = "LGPL-2.1-or-later"
 container = ["flv", "mpegts", "mp4", "matroska"]
 keyframe = { property = "gop-size", unit = "frames" }
 verified = []
-comment = "NVENC on Linux and Windows. `preset` is the modern nvcodec naming; an older nvh264enc ignores it with a warning and keeps its default, which is why `zerolatency` is set as well."
+comment = "NVENC on Linux and Windows. `preset` is the modern nvcodec naming; an older nvh264enc ignores it with a warning and keeps its default, which is why `zerolatency` is set as well. Main profile: left to itself NVENC makes Baseline, and High's 8x8 transform cost so much of the engine that forty six 720p channels at p1 ran it at 100% and lost frames, where Main ran at 87% with no loss and kept most of High's gain (SSIM 0.955 to 0.970 against Baseline's 0.953 to 0.967 on 1080i, 480i and 720p60 broadcast)."
 properties = { preset = "p4", tune = "ultra-low-latency", "rc-mode" = "cbr", bitrate = { unit = "kbit", from = "video.bitrate_kbps" }, "max-bitrate" = { unit = "kbit", from = "video.bitrate_kbps" }, bframes = 0, "b-frames" = 0, zerolatency = true, "aud" = false }
 
 [[video]]
