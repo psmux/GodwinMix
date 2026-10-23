@@ -25,14 +25,29 @@ moves to the new show once it is made. A new empty show opens on an empty
 desk; the welcome tiles are under Settings, Show the welcome tiles again, if
 you want a preset.
 
-To switch, click the other show's tab. The page loads again on that show, with
-`?show=<id>` in its address, and your panels stay where you put them. File,
-Switch show lists every show with its state, which is quicker when there are
-many.
+To switch, click the other show's tab, once, as you would a browser's tab.
+The tab shows as chosen at once and the page loads again on that show, with
+`?show=<id>` in its address, so a reload stays there, and your panels stay
+where you put them. A double click or a double tap switches too. Switching
+only changes which show this page controls: nothing on air in any show is
+touched. `Ctrl+Tab` and `Ctrl+Shift+Tab` go to the next show and the one
+before, as do `Ctrl+PageDown` and `Ctrl+PageUp`, and `Cmd+Shift+]` and
+`Cmd+Shift+[` on a Mac. A browser keeps some of those for its own tabs, so
+in a browser window they may switch the browser's tab instead; the desktop
+app passes them all to the page. In a browser, `Tab` to the show tabs, move
+with the arrow keys and press `Enter`. File, Switch show lists every show
+with its state, which is quicker when there are many.
+
+Up to 0.3.16 a click waited a quarter second to see whether a second one
+followed, and a double click on another show's tab opened its name for
+renaming and never switched:
+
+![Before: a double click on Kids hall left the page on Main with Kids hall's name open for editing](../media/show-tabs/before-double-click.png)
+![After: the same double click is on Kids hall](../media/show-tabs/after-double-click.png)
 
 Click the tab of the show you are on, or right click any tab, for its menu:
-Rename, Start show or Stop show, and Remove show. Double click a tab, or press
-`F2` on it, to rename it where it is; `Enter` keeps the name and `Escape` puts
+Rename, Start show or Stop show, and Remove show. Double click the tab of the
+show you are on, or press `F2` on any tab, to rename it where it is; `Enter` keeps the name and `Escape` puts
 the old one back. Remove asks first. The page will not remove the last show,
 or `main`, and says why when you try. If you remove the show you are on, the
 page moves to another one.

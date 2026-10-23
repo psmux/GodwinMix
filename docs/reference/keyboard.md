@@ -178,6 +178,16 @@ stop, as the menu bar is.
 | `Delete` | remove it, after a yes |
 | the menu key | its menu: Rename, Start or Stop, Remove |
 
+Anywhere on the page, with two shows or more:
+
+| Key | Does |
+|---|---|
+| `Ctrl+Tab`, `Ctrl+PageDown`; `Cmd+Shift+]` on a Mac | the next show, round from the last to the first |
+| `Ctrl+Shift+Tab`, `Ctrl+PageUp`; `Cmd+Shift+[` on a Mac | the show before |
+
+A browser may keep these for its own tabs; the desktop app does not. In a
+browser the arrow keys on the focused tab row and `Enter` always work.
+
 These keys are the tab's, not the page's: `F2` and `Delete` on a tab never
 reach a scene or a source.
 
