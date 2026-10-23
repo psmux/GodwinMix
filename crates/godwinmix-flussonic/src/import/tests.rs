@@ -31,6 +31,7 @@ fn a_headend_config_is_51_renditions_and_one_copy() {
     assert_eq!(r["audio"]["tracks"], "all");
     // Flussonic's paths serve TS without a key, so every output makes TS beside CMAF, open.
     assert_eq!((ch.outputs[0]["params"]["segments"].as_str(), ch.outputs[0]["params"]["access"].as_str()), (Some("both"), Some("open")));
+    assert_eq!(ch.outputs[0]["params"]["segment_ms"], 3400);
     let relay = i.shows.iter().find(|s| s.name == "RELAY1").unwrap();
     assert!(relay.copy && relay.outputs[0].get("rendition").is_none());
     assert_eq!(relay.outputs[0]["uri"], "hls://flussonic");
