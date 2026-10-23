@@ -33,7 +33,10 @@ of fifty channels at 720p asks for:
   so a 5.1 English track and a stereo Spanish one come out as 5.1 and stereo
   AAC.
 
-The source's frame rate is kept: leave `fps` out.
+The source's frame rate is kept: leave `fps` out. The H.264 comes out in
+Main profile (the catalogue's `profile` for NVENC): High's 8x8 transform
+costs NVENC enough that a card carrying fifty channels runs out, and Main
+keeps most of its gain over Baseline.
 
 ## What the machine needs
 
