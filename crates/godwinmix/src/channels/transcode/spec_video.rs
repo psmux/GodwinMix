@@ -40,6 +40,19 @@ fn argb(color: Option<&str>) -> u64 {
     0xff00_0000 | u64::from_str_radix(hex, 16).ok().filter(|_| hex.len() == 6).unwrap_or(0)
 }
 
+/// Whether an encoder of this acceleration takes `preset` as written:
+/// NVENC's `p1` to `p7`, x264 and x265's `ultrafast` to `placebo`. Any other
+/// family takes a preset in its own words, so it is passed on as it is.
+fn speaks(accel: &str, preset: &str) -> bool {
+    const X264: &[&str] = &["ultrafast", "superfast", "veryfast", "faster", "fast", "medium", "slow", "slower", "veryslow", "placebo"];
+    let nvenc = preset.len() == 2 && preset.starts_with('p') && preset[1..].parse::<u8>().is_ok_and(|n| (1..=7).contains(&n));
+    match accel {
+        "nvidia" => nvenc,
+        "software" => X264.contains(&preset),
+        _ => !nvenc && !X264.contains(&preset),
+    }
+}
+
 pub fn video_encoder(id: &str, shape: &VideoShape, keyframe_ms: u32, preset: Option<&str>, bframes: Option<u8>, machine: &Machine) -> Option<Value> {
     let e = machine.encoder(id)?;
     let fps = shape.fps.as_f64().max(1.0);
@@ -57,8 +70,12 @@ pub fn video_encoder(id: &str, shape: &VideoShape, keyframe_ms: u32, preset: Opt
         let value = if kf.unit == "seconds" { vars.keyframe_secs } else { frames };
         props.insert(kf.property.clone(), json!(value));
     }
-    // The request's own preset and B frames go where the catalogue already
-    // sets them, under this element's name for them.
+    // The request's own B frames, and its preset when the preset is one this
+    // encoder knows, go where the catalogue already sets them, under this
+    // element's name for them. A preset is one family's word: NVENC's `p1`
+    // means nothing to x264, which then fell back to a CPU encode at its
+    // own preset with a warning, so one for another family is left out.
+    let preset = preset.filter(|p| speaks(&e.accel, p));
     for (name, value) in [("preset", preset.map(|p| json!(p))), ("speed-preset", preset.map(|p| json!(p))), ("bframes", bframes.map(|b| json!(b))), ("b-frames", bframes.map(|b| json!(b)))] {
         if let (Some(v), true) = (value, props.contains_key(name)) {
             props.insert(name.to_string(), v);
@@ -76,4 +93,16 @@ pub fn video_encoder(id: &str, shape: &VideoShape, keyframe_ms: u32, preset: Opt
         v["profile"] = json!(p);
     }
     Some(v)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::speaks;
+
+    #[test]
+    fn a_preset_reaches_only_the_family_that_speaks_it() {
+        assert!(speaks("nvidia", "p1") && !speaks("nvidia", "veryfast"));
+        assert!(speaks("software", "veryfast") && !speaks("software", "p1"));
+        assert!(!speaks("videotoolbox", "p1") && speaks("qsv", "4"));
+    }
 }

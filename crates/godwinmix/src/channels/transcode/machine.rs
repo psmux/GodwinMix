@@ -83,6 +83,11 @@ impl Machine {
         self.audio_encoders.iter().find(|e| audio_codec(&e.codec) == codec)
     }
 
+    /// The best encoder for a codec that takes this many channels.
+    pub fn audio_encoder_for(&self, codec: AudioCodec, channels: u8) -> Option<&AudioEntry> {
+        self.audio_encoders.iter().find(|e| audio_codec(&e.codec) == codec && e.max_channels.is_none_or(|m| channels <= m))
+    }
+
     pub fn audio_decoder(&self, codec: AudioCodec) -> Option<&AudioEntry> {
         self.audio_decoders.iter().find(|e| audio_codec(&e.codec) == codec)
     }

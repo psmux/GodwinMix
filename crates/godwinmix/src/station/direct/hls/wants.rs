@@ -61,6 +61,15 @@ fn source_of(st: &Station, show: &str, d: &StoredDestination, relay: Option<&(St
         _ => {}
     }
     let main = row["stream"].as_str().unwrap_or("main");
-    let key = format!("{main}|{}|{}", video.unwrap_or("-"), audio.unwrap_or("-"));
+    let mut key = format!("{main}|{}|{}", video.unwrap_or("-"), audio.unwrap_or("-"));
+    // A pair that converts every sound track is published with the nodes of
+    // the tracks after the first on its name, as the ingest plugin's
+    // `transcode::output_key_with` writes it. Read without them, the name
+    // was one nobody published, and every such channel waited for ever.
+    let tracks: Vec<&str> = row["audio_tracks"].as_array().into_iter().flatten().filter_map(|t| t.as_str()).collect();
+    if !tracks.is_empty() {
+        key.push('|');
+        key.push_str(&tracks.join(","));
+    }
     (Some(Source { relay, path: format!("{app}/{key}") }), None)
 }

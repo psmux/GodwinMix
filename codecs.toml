@@ -580,6 +580,7 @@ accel = "software"
 rank = 110
 encoder = "voaacenc"
 parser = "aacparse"
+max_channels = 2
 requires = []
 license = "Apache-2.0"
 container = ["flv", "mpegts", "mp4", "matroska"]

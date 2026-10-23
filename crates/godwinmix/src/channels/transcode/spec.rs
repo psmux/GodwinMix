@@ -99,7 +99,7 @@ pub fn fps_pair(fps: Fps) -> Value {
 }
 
 fn audio_encoder(shape: &AudioShape, machine: &Machine) -> Option<Value> {
-    let e = machine.audio_encoder(shape.codec)?;
+    let e = machine.audio_encoder_for(shape.codec, shape.channels)?;
     let vars = Vars { audio_bitrate_kbps: i64::from(shape.bitrate_kbps), ..Vars::default() };
     let mut props = resolve(&e.properties, &vars);
     // A converted stream's sound keeps the times it came with. Stamped by
