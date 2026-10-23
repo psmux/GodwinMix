@@ -1791,6 +1791,59 @@ class GovernorStatus(TypedDict, total=False):
     # What arrives: every channel stream and every direct show's input, as last counted. Zero on a core with no station.
     shed: List[ShedNote]
 
+class GpuDevice(TypedDict, total=False):
+    """One GPU: what it is, its newest reading and the ones before it."""
+
+    driver: Optional[str]
+    history: List[GpuSample]
+    # One a second, oldest first, the last two minutes at most.
+    index: int
+    name: str
+    # `NVIDIA GeForce RTX 3060`.
+    now: GpuSample
+
+class GpuSample(TypedDict, total=False):
+    """One reading of one GPU. A number the driver would not give is left out."""
+
+    at_ms: int
+    # Unix milliseconds.
+    decoder_pct: Optional[int]
+    # NVDEC, percent.
+    encoder_fps: Optional[int]
+    # The sessions' average frame rate.
+    encoder_pct: Optional[int]
+    # NVENC, percent.
+    encoder_sessions: Optional[int]
+    # Open NVENC sessions, every process on the machine.
+    fan_pct: Optional[int]
+    gpu_pct: Optional[int]
+    # The 3D and compute engines, percent of the last sample period.
+    graphics_mhz: Optional[int]
+    memory_mhz: Optional[int]
+    memory_total_mib: Optional[int]
+    memory_used_mib: Optional[int]
+    power_limit_w: Optional[float]
+    power_w: Optional[float]
+    temperature_c: Optional[int]
+    video_mhz: Optional[int]
+
+class GpuStatus(TypedDict, total=False):
+    """`gpu.status`'s answer."""
+
+    every_ms: int
+    # How often a reading is taken while someone asks.
+    gpus: List[GpuDevice]
+    note: Optional[str]
+    # Why there are no GPUs, or what is missing, in one sentence.
+    source: str
+    # `nvml`, `nvidia-smi`, or `none`.
+
+class GpuStatusRequest(TypedDict, total=False):
+    """`gpu.status`."""
+
+    since_ms: Optional[int]
+    # Only the history after this time, unix milliseconds: what a client that already holds the rest asks for. Left out, the whole history.
+
 class GraphicListing(TypedDict, total=False):
     """`scene.graphic.list`."""
 
@@ -1963,6 +2016,8 @@ class InputStats(TypedDict, total=False):
 
     audio_channels: int
     audio_codec: Optional[str]
+    audio_peak_db: Optional[float]
+    # The first sound track's peak in dBFS over a short burst, measured about once a second while the show's alarms are on or its picture is asked for; -120 is digital silence. Left out while unmeasured.
     cc_errors: int
     fps: float
     height: int
@@ -2197,6 +2252,22 @@ class LogSetRequest(TypedDict, total=False):
     # `off`, `error`, `warn`, `info`, `debug`, `trace`, or `default` to stop overriding this one.
     target: Optional[str]
     # A module path prefix such as `godwinmix::mixer`. The longest match wins, so a more specific override still beats a broader one.
+
+class MachineStatus(TypedDict, total=False):
+    """`machine.status`'s answer: the box, not one process."""
+
+    cores: int
+    cpu_pct: Optional[float]
+    # Every process on the machine, percent of all cores, over the last second. Left out until two readings have been taken.
+    host_name: str
+    load_average: Optional[List[float]]
+    # One, five and fifteen minutes, where the system keeps them.
+    memory_available_mib: Optional[int]
+    memory_total_mib: Optional[int]
+    process_uptime_secs: int
+    # Since this process started.
+    uptime_secs: Optional[int]
+    # Since the machine booted.
 
 class MarkRequest(TypedDict, total=False):
     """`scene.history.mark`."""
@@ -4576,9 +4647,11 @@ METHODS = (
     {"name": "gallery.show", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/gallery/show"), "summary": 'Show a placed gallery item on air, or hide it, taking its scene when that scene is not on air. For a set, take its scene.'},
     {"name": "governor.calibrate", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/governor/calibrate"), "summary": "Measure this machine's encoders again, in the background, a few seconds of every core. Refused while anything is on air unless `confirm` is true."},
     {"name": "governor.status", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/governor/status"), "summary": 'The resource governor: when this machine was measured, what is in use and free on the CPU and each GPU encoder, and what was shed to keep the programme whole.'},
+    {"name": "gpu.status", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/gpu/status"), "summary": 'Every NVIDIA GPU on this machine: encoder, decoder and 3D use, video memory, encoder sessions, temperature, power and clocks, now and over the last two minutes. Read once a second from NVML or nvidia-smi while a client keeps asking, and not at all otherwise. No GPUs, and a note, on a machine without one.'},
     {"name": "log.gst", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/log/gst"), "summary": "Raise GStreamer's own debug categories for a while, then let them fall back on their own."},
     {"name": "log.levels", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/log/levels"), "summary": 'Every log level override in force, and the GStreamer categories still raised.'},
     {"name": "log.set", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/log/set"), "summary": "Change one instance's or one module's log level while the mixer runs."},
+    {"name": "machine.status", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/machine/status"), "summary": 'The machine itself: its name, cores, CPU use of every process, memory, how long it and this process have been up, and its load average.'},
     {"name": "media.convert", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/media/{id}/convert"), "summary": 'Transcode a library file to a web safe copy, in the background.'},
     {"name": "media.folder.add", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/media/folder/add"), "summary": 'Make a folder in the media library, inside another when the name has a / in it.'},
     {"name": "media.folder.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/media/folder/list"), "summary": 'Every folder in the media library with how many files are in it, and every tag in use.'},
@@ -5886,6 +5959,17 @@ class GeneratedMethods:
         params: Dict[str, Any] = {}
         return await self._call("governor.status", params)
 
+    async def gpu_status(
+        self,
+        *,
+        since_ms: Optional[int] = None,
+    ) -> GpuStatus:
+        """Every NVIDIA GPU on this machine: encoder, decoder and 3D use, video memory, encoder sessions, temperature, power and clocks, now and over the last two minutes. Read once a second from NVML or nvidia-smi while a client keeps asking, and not at all otherwise. No GPUs, and a note, on a machine without one."""
+        params: Dict[str, Any] = {}
+        if since_ms is not None:
+            params["since_ms"] = since_ms
+        return await self._call("gpu.status", params)
+
     async def log_gst(
         self,
         categories: str,
@@ -5924,6 +6008,13 @@ class GeneratedMethods:
         if target is not None:
             params["target"] = target
         return await self._call("log.set", params)
+
+    async def machine_status(
+        self,
+    ) -> MachineStatus:
+        """The machine itself: its name, cores, CPU use of every process, memory, how long it and this process have been up, and its load average."""
+        params: Dict[str, Any] = {}
+        return await self._call("machine.status", params)
 
     async def media_convert(
         self,

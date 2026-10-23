@@ -131,6 +131,8 @@ pub const KEYS: &[Key] = &[
     Key::new("hardware.graphics", "Hardware compositing", Restart).choices(ACCEL),
     Key::new("governor.reserve_cores", "Cores to keep free for other programs", Restart).range(0, 1024).unit("cores"),
     Key::new("governor.uplink_kbps", "Upload speed", Restart).range(0, 100_000_000).unit("kbit/s"),
+    Key::new("governor.nvenc_session_probe", "NVENC sessions to probe for", Restart).range(1, 256).unit("sessions"),
+    Key::new("governor.nvenc_sessions", "NVENC session limit", Restart).range(1, 256).unit("sessions"),
     Key::new("media.dir", "Media folder", Restart),
     Key::new("media.max_depth", "Folder depth to list", Restart).range(0, 32),
     Key::new("media.max_files", "Most files to list", Restart).range(1, 100_000),
