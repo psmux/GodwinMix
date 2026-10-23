@@ -32,7 +32,7 @@
 //! channel has RTMP on, so an address handed to a source stays good whatever
 //! protocols are switched on.
 
-use std::sync::{Arc, Mutex, OnceLock, RwLock};
+use std::sync::{Arc, Mutex, RwLock};
 
 use godwinmix_sdk::plugin::Reporter;
 use godwinmix_sdk::wire::{Candidate, Health, ToolResult};
@@ -121,7 +121,7 @@ impl Discover {
             hub: Hub::new(),
             table: Arc::new(RwLock::new(table)),
             open_app: settings.app.clone(),
-            relay: OnceLock::new(),
+            relay: RwLock::default(),
             reporter: reporter.clone(),
             on_air: Default::default(),
         });
@@ -182,7 +182,7 @@ impl Discover {
     }
 
     fn relay(&self) -> String {
-        self.gate.relay.get().cloned().unwrap_or_default()
+        self.gate.relay_address()
     }
 
     /// Run the direct shows the table asks for, and no others.
@@ -308,7 +308,7 @@ fn direct_host(gate: &Arc<ChannelGate>, reporter: Option<Reporter>) -> Arc<crate
         }
     });
     let g = gate.clone();
-    let relay: crate::direct::Relay = Arc::new(move || g.relay.get().cloned().unwrap_or_default());
+    let relay: crate::direct::Relay = Arc::new(move || g.relay_address());
     crate::direct::Host::new(gate.hub.clone(), emit, relay)
 }
 
