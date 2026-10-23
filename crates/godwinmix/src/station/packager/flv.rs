@@ -1,4 +1,4 @@
-//! A hub reader on the ingest plugin's relay: `GMXHUB <app>/<stream>` on
+//! A hub reader on the ingest plugin's relay: `GMXHUB <app>/<stream> tracks=all` on
 //! its loopback port, and FLV tags back.
 //!
 //! The relay writes the FLV header, then the stream's headers, then tags
@@ -6,7 +6,10 @@
 //! whole off a buffered socket on the packager's own thread; nothing else
 //! waits on it.
 
-use std::io::{BufReader, Read, Write};
+use bytes::Bytes;
+use std::io::{BufRead, BufReader, Read, Write};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Instant;
 use std::net::{SocketAddr, TcpStream};
 use std::time::Duration;
 
@@ -23,12 +26,14 @@ pub enum Kind {
     Script,
 }
 
-/// One tag: what it is, its time in milliseconds and its body.
+/// One tag: what it is, which track, its time in milliseconds and its body.
 #[derive(Debug, Clone)]
 pub struct Tag {
     pub kind: Kind,
+    /// 0 for the picture and the first sound, 1, 2, 3 for further sounds.
+    pub track: u8,
     pub ms: u32,
-    pub body: Vec<u8>,
+    pub body: Bytes,
 }
 
 pub struct Reader {
@@ -36,7 +41,7 @@ pub struct Reader {
 }
 
 impl Reader {
-    /// Ask the relay at `relay` for `app/stream`. `wait` bounds the connect
+    /// Ask the relay at `relay` for `app/stream`, every track of it. `wait` bounds the connect
     /// and every read after it, so a quiet stream wakes the caller to look
     /// at its stop flag.
     pub fn open(relay: SocketAddr, path: &str, wait: Duration) -> std::io::Result<Reader> {
@@ -46,7 +51,7 @@ impl Reader {
         // gets longer than a read between tags does.
         sock.set_read_timeout(Some(wait.max(HELLO_WAIT)))?;
         sock.set_nodelay(true)?;
-        sock.write_all(format!("GMXHUB {path}\n").as_bytes())?;
+        sock.write_all(super::tracks::request_line(path).as_bytes())?;
         let mut io = BufReader::with_capacity(256 * 1024, sock);
         let mut header = [0u8; 13];
         io.read_exact(&mut header)?;
@@ -55,6 +60,25 @@ impl Reader {
         }
         io.get_ref().set_read_timeout(Some(wait))?;
         Ok(Reader { io })
+    }
+
+    /// Wait up to `patience` for the next tag to begin, without taking a
+    /// byte of it, looking at `stop` after every quiet read. False when
+    /// stopped; a timeout is `TimedOut` and the stream ending
+    /// `UnexpectedEof`. Waiting here rather than in `next` means a quiet
+    /// spell never cuts a tag in half.
+    pub fn ready(&mut self, patience: Duration, stop: &AtomicBool) -> std::io::Result<bool> {
+        let since = Instant::now();
+        loop {
+            match self.io.fill_buf() {
+                Ok([]) => return Err(std::io::ErrorKind::UnexpectedEof.into()),
+                Ok(_) => return Ok(true),
+                Err(e) if !matches!(e.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut) => return Err(e),
+                Err(_) if stop.load(Ordering::Relaxed) => return Ok(false),
+                Err(e) if since.elapsed() >= patience => return Err(std::io::Error::new(std::io::ErrorKind::TimedOut, e)),
+                Err(_) => {}
+            }
+        }
     }
 
     /// The next tag. A timeout is `WouldBlock` or `TimedOut`, and the
@@ -76,12 +100,13 @@ pub fn read_tag(io: &mut impl Read) -> std::io::Result<Tag> {
     let mut body = vec![0u8; size + 4];
     io.read_exact(&mut body)?;
     body.truncate(size);
+    let track = super::tracks::track_of(&head);
     let kind = match head[0] & 0x1f {
         8 => Kind::Audio,
         9 => Kind::Video,
         _ => Kind::Script,
     };
-    Ok(Tag { kind, ms, body })
+    Ok(Tag { kind, track, ms, body: Bytes::from(body) })
 }
 
 #[cfg(test)]
@@ -104,7 +129,7 @@ mod tests {
         let v = read_tag(&mut io).unwrap();
         assert_eq!((v.kind, v.ms, v.body.len()), (Kind::Video, 0x0100_0203, 6));
         let a = read_tag(&mut io).unwrap();
-        assert_eq!((a.kind, a.ms, a.body), (Kind::Audio, 40, vec![0xaf, 1, 7]));
+        assert_eq!((a.kind, a.track, a.ms, &a.body[..]), (Kind::Audio, 0, 40, &[0xaf, 1, 7][..]));
         assert_eq!(read_tag(&mut io).unwrap_err().kind(), std::io::ErrorKind::UnexpectedEof);
     }
 }

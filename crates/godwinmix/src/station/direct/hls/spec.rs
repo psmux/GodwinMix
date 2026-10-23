@@ -43,6 +43,9 @@ pub fn address(name: &str, params: Option<&HlsOutputParams>) -> Result<String, R
     put("low_latency", p.low_latency.map(|v| v.to_string()));
     put("window", p.window.map(|v| v.to_string()));
     put("viewer_key", p.viewer_key.clone());
+    put("segments", p.segments.clone());
+    put("access", p.access.clone());
+    put("open_public", p.open_public.map(|v| v.to_string()));
     Ok(if q.is_empty() { format!("hls://{name}") } else { format!("hls://{name}?{}", q.join("&")) })
 }
 
@@ -67,8 +70,15 @@ fn table(p: &HlsOutputParams) -> Params {
     num("segment_ms", p.segment_ms);
     num("part_ms", p.part_ms);
     num("window", p.window);
-    if let Some(on) = p.low_latency {
-        t.insert("low_latency".into(), toml::Value::Boolean(on));
+    for (k, on) in [("low_latency", p.low_latency), ("open_public", p.open_public)] {
+        if let Some(on) = on {
+            t.insert(k.into(), toml::Value::Boolean(on));
+        }
+    }
+    for (k, word) in [("segments", &p.segments), ("access", &p.access)] {
+        if let Some(w) = word {
+            t.insert(k.into(), toml::Value::String(w.clone()));
+        }
     }
     t
 }
@@ -84,6 +94,9 @@ pub fn read(uri: &str) -> HlsSpec {
             "window" => p.window = v.parse().ok(),
             "low_latency" => p.low_latency = v.parse().ok(),
             "viewer_key" => p.viewer_key = Some(v.to_string()),
+            "segments" => p.segments = Some(v.to_string()),
+            "access" => p.access = Some(v.to_string()),
+            "open_public" => p.open_public = v.parse().ok(),
             _ => {}
         }
     }
@@ -113,8 +126,15 @@ mod tests {
         let p: HlsOutputParams = serde_json::from_value(json!({"segment_ms": 1000, "part_ms": 250, "window": 6})).unwrap();
         let a = address("viewers", Some(&p)).unwrap();
         assert_eq!(a, "hls://viewers?segment_ms=1000&part_ms=250&window=6");
-        assert_eq!(read(&a).params, HlsParams { segment_ms: 1000, part_ms: 250, window_s: 6 });
+        assert_eq!(read(&a).params, HlsParams { segment_ms: 1000, part_ms: 250, window_s: 6, ..HlsParams::default() });
         assert_eq!(read("hls://viewers").params, HlsParams::default());
+        let open: HlsOutputParams = serde_json::from_value(json!({"segments": "both", "access": "open"})).unwrap();
+        let a = address("ch", Some(&open)).unwrap();
+        assert_eq!(a, "hls://ch?segments=both&access=open");
+        let back = read(&a).params;
+        assert_eq!((back.segments, back.access), (godwinmix_core::hls::Segments::Both, godwinmix_core::hls::Access::Open));
+        let wrong: HlsOutputParams = serde_json::from_value(json!({"segments": "mp4"})).unwrap();
+        assert!(address("ch", Some(&wrong)).unwrap_err().message.contains("cmaf, ts or both"));
         assert_eq!(name_of("hls://Front Door?x=1").as_deref(), Some("front-door"));
         assert_eq!(name_of("udp://h:1"), None);
     }

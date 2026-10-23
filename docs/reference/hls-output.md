@@ -45,6 +45,9 @@ A custom rung asking for a codec other than H.264 is refused with that reason.
 | `part_ms` | 0 | 0, or 100 to half a segment | part length; any value but 0 turns LL-HLS on |
 | `window` | 30 | three segments to 600 | seconds of the past each rung keeps and lists |
 | `viewer_key` | derived | 16 characters or more | the key a viewer's link carries (see below) |
+| `segments` | `cmaf` | `cmaf`, `ts` or `both` | which segments are made: CMAF, MPEG-TS beside them, or MPEG-TS alone. Only a show without compositing makes MPEG-TS so far |
+| `access` | `keyed` | `keyed` or `open` | whether a player needs the viewer key (see [Who may read](#who-may-read)) |
+| `open_public` | false | true or false | with `access = "open"`, answer players outside loopback and the private networks too |
 
 A frame rate that does not divide a part makes the parts a little longer: at
 30 fps a 250 ms part is 8 frames, 267 ms, and `PART-TARGET` says 0.267.
@@ -61,6 +64,9 @@ All on the control port.
 | `GET /hls/{output}/{rung}/init.mp4` | init segment (`init1.mp4` and on after a rebuild) | `max-age=<2 x window>, immutable` |
 | `GET /hls/{output}/{rung}/{n}.m4s` | CMAF segment `n` | the same |
 | `GET /hls/{output}/{rung}/{n}.{p}.m4s` | LL-HLS part `p` of segment `n` | the same |
+| `GET /hls/{output}/master-ts.m3u8` | the MPEG-TS multivariant playlist, with `segments` `ts` or `both` | `no-store` |
+| `GET /hls/{output}/{rendition}/ts.m3u8` | an MPEG-TS media playlist: `main`, or `audio1`, `audio2` for a further sound | `no-store` |
+| `GET /hls/{output}/{rendition}/{start_ms}.ts` | one MPEG-TS segment, `video/mp2t`, named by the UTC millisecond its first frame was made | `max-age=<2 x window>, immutable` |
 
 Segments are `video/mp4`, or `audio/mp4` on the `audio` rung, and carry a
 `Content-Length`. Every viewer is handed the same bytes the ring holds; nothing
@@ -84,8 +90,24 @@ The multivariant playlist has one `EXT-X-STREAM-INF` per video rung with
 `BANDWIDTH` (the peak measured over the window, or what the rung asked for if
 that is higher, plus the audio), `AVERAGE-BANDWIDTH`, `CODECS` (RFC 6381, from
 the encoder's caps), `RESOLUTION`, `FRAME-RATE` and `AUDIO="aud"`, and one
-`EXT-X-MEDIA:TYPE=AUDIO` for the shared sound. An audio only output is a
-single variant.
+`EXT-X-MEDIA:TYPE=AUDIO` per sound track, all in the group `aud`. An audio
+only output is a single variant.
+
+Every sound track is its own rendition (`audio` for the first, then
+`audio1`, `audio2` in the order the input's PMT lists them). Its
+`EXT-X-MEDIA` has:
+
+* `NAME`: the language in English when the PMT's ISO 639 code is one this
+  build knows (`English`, `Spanish`), else the code itself, else `Track N`.
+  Two tracks of one language are `English` and `English 2`.
+* `LANGUAGE`: the code as RFC 5646 wants it, the two letter form where
+  there is one (`eng` and `en` both give `en`), left out when the PMT gave
+  none or `und`.
+* `DEFAULT=YES` on the first track and `NO` on the others, `AUTOSELECT=YES`
+  on all of them, and `CHANNELS`.
+
+`BANDWIDTH` on each variant adds the largest sound track's, and `CODECS`
+names every sound codec once.
 
 A media playlist carries `EXT-X-PROGRAM-DATE-TIME` on every segment, the
 wall clock when its first frame was made. With LL-HLS it adds
@@ -119,9 +141,50 @@ latency (about three segments) whatever `low_latency` says. After a rebuild
 of the output, or a restart of its feed, it lists only the segments since the
 newest break and decoded by the newest init segment.
 
+## MPEG-TS
+
+With `segments = "ts"` or `"both"`, an output of a show without compositing
+also makes MPEG-TS segments, for players that take nothing else. They are
+written in Rust from the frames the packager already reads (no GStreamer
+muxer), cut at the same keyframes as the CMAF picture and given its numbers,
+so `main/ts.m3u8` and `main/index.m3u8` list the same segments with the same
+`EXT-X-MEDIA-SEQUENCE` and the same `EXT-X-PROGRAM-DATE-TIME`.
+
+| Rendition | Carries |
+|---|---|
+| `main` | the picture and the first sound track in one stream, for a player that cannot take separate sound |
+| `audio1`, `audio2`, ... | each further sound track alone |
+
+The TS multivariant playlist lists the first sound as an `EXT-X-MEDIA`
+without a `URI` (it is in `main`) and each further one with its playlist.
+Every segment starts with a PAT and a PMT; a segment of `main` then starts
+with a keyframe and its parameter sets. The continuity counters run on
+from one segment to the next, so two segments back to back are one clean
+stream. Sound is ADTS AAC. PIDs are fixed: PMT 0x1000, picture 0x100, sound
+0x101.
+
+The TS playlists are plain HLS whatever `low_latency` says: no parts and no
+blocking reloads. `EXT-X-TARGETDURATION` follows the same rule as CMAF's.
+A segment's name is its start in UTC milliseconds, so a name is never used
+twice for one output, not after a restart either, and a cache that keeps
+segments by path can keep them for as long as it likes.
+
+With `segments = "ts"` the CMAF playlists answer 404 and say where the TS
+one is. The picture is still cut as CMAF inside the packager, since that is
+what decides where segments end, but no CMAF sound is made.
+
 ## Who may read
 
-Two ways in, and nothing else on the port changes:
+An output with `access = "open"` answers a player on loopback or a private
+network (10/8, 172.16/12, 192.168/16, 100.64/10, link local, IPv6 ULA and
+link local) with no key and no token. It is meant for an output behind a
+gateway that checks a signature of its own. A player anywhere else gets a
+403 that says so, and still gets in with the key or a token. Add
+`open_public = true` to answer everyone; then it is open to the internet if
+the port is. This applies to CMAF, LL-HLS, DASH and MPEG-TS alike.
+
+Otherwise (`access = "keyed"`, the default) there are two ways in, and
+nothing else on the port changes:
 
 * the output's **viewer key**, as `?key=` on the URL. It opens this output's
   playlists and segments and nothing else: not another output, not
@@ -188,7 +251,7 @@ process of the station) and served from the station's port. It is added with
 | Added with | `output.add {type: "hls/output"}` | `show.output.add {uri: "hls://<name>"}` |
 | Its id | the output's `id` | the name in `hls://<name>`, or `output` |
 | `params` | the table above | the same names, defaults and limits |
-| Rungs | `programme`, or one per ladder rung, and `audio` | `main` and `audio` |
+| Rungs | `programme`, or one per ladder rung, and `audio` | `main`, and `audio`, `audio1`, `audio2` for each sound track |
 | `rendition` | none, a preset or a ladder | none (a copy), or one rendition; a ladder is refused with `data.ladder: true` |
 | Served by | the show, relayed by the station | the station's port: the station lets the player in, its HLS packager answers |
 | Link | `playback.master_url_path` in `output.list` | `playback.master_url_path` on the output in `show.list` |
@@ -206,6 +269,11 @@ input's own keyframes, so a feed with a keyframe every second and
 `segment_ms = 2000` gets two second segments; a longer GOP gives longer
 segments. With a rendition the output reads the pair the plan made, admitted
 by the governor like any other.
+
+Every sound track the input carries is packaged, each as its own rung,
+named and tagged from the language `direct.input` lists for it. The
+packager reads them all from the relay (`GMXHUB <app>/<stream> tracks=all`,
+each tag's track in the FLV stream id).
 
 HLS here carries AAC sound and nothing else. An input whose sound is MPEG
 audio (layer II or MP3), AC-3 or E-AC-3 is refused rather than packaged into
@@ -246,7 +314,29 @@ The egress of these outputs is not yet counted in
 `godwinmix_core::hls::stream::egress_kbps()`, so the governor's uplink budget
 does not see it.
 
+### MPEG-TS for a caller inside the station
+
+The station's Flussonic facade serves an output's MPEG-TS under its own
+paths and names, without a viewer key. It calls three methods on
+`station.direct.hls` (`station/direct/hls/facade.rs`), each one request to
+the packager on loopback:
+
+| Call | Answers |
+|---|---|
+| `ts_master(&st, show, output)` | `ts::Master`: `main` and every sound track, as data |
+| `ts_media(&st, show, output, rendition)` | `ts::Media`: the window, each segment's number, discontinuity, UTC start in ms and length |
+| `ts_segment(&st, show, output, rendition, at)` | the segment's bytes; `at` is `ts::At::Msn`, `Start` (ms), `Second` or `Clock { unix_s, duration_ms }` |
+
+`ts::Master::render` and `ts::Media::render` write the playlists with the
+caller's own URIs, and `ts::clock_name` and `ts::parse_clock` make and read
+names of the form `2026/10/23/08/04/12-2000.ts`. A refusal is a
+`TsRefusal` with the HTTP status to answer and the sentence.
+
 ## Not here yet
+
+MPEG-TS from an `hls/output` of a show that composites: its rungs arrive
+as GStreamer pads rather than the hub's frames, so `segments` other than
+`cmaf` is refused there, with that reason.
 
 Low latency DASH (chunked transfer of the part being written) is not served;
 the MPD lists whole segments.

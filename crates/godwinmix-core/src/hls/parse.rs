@@ -1,7 +1,7 @@
 //! The two things the packager learns from caps: which parser to put in
 //! front of `cmafmux`, and what a playlist says about the rung.
 
-use super::track::Track;
+use super::track::{Track, TrackInfo};
 use crate::gstutil::make;
 use anyhow::{Context, Result};
 use gstreamer as gst;
@@ -21,17 +21,25 @@ pub fn watch_caps(mux: &gst::Element, track: Arc<Track>) {
 }
 
 fn describe(track: &Track, caps: &gst::CapsRef) {
-    let Some(s) = caps.structure(0) else { return };
-    let codecs = gstreamer_pbutils::functions::codec_utils_caps_get_mime_codec(caps)
-        .map(|c| c.to_string())
-        .unwrap_or_default();
+    let Some(i) = info_of(caps) else { return };
     track.update_info(|info| {
-        info.codecs = codecs;
-        info.width = s.get::<i32>("width").unwrap_or(0).max(0) as u32;
-        info.height = s.get::<i32>("height").unwrap_or(0).max(0) as u32;
-        info.fps = s.get::<gst::Fraction>("framerate").ok().map(|f| (f.numer(), f.denom()));
-        info.channels = s.get::<i32>("channels").unwrap_or(0).max(0) as u32;
+        (info.codecs, info.width, info.height, info.fps, info.channels) = (i.codecs, i.width, i.height, i.fps, i.channels);
     });
+}
+
+/// What caps say for a playlist: the RFC 6381 codec, the size, the rate
+/// and the channels. Every other field is left at its default.
+pub fn info_of(caps: &gst::CapsRef) -> Option<TrackInfo> {
+    let s = caps.structure(0)?;
+    let codecs = gstreamer_pbutils::functions::codec_utils_caps_get_mime_codec(caps).map(|c| c.to_string()).unwrap_or_default();
+    Some(TrackInfo {
+        codecs,
+        width: s.get::<i32>("width").unwrap_or(0).max(0) as u32,
+        height: s.get::<i32>("height").unwrap_or(0).max(0) as u32,
+        fps: s.get::<gst::Fraction>("framerate").ok().map(|f| (f.numer(), f.denom())),
+        channels: s.get::<i32>("channels").unwrap_or(0).max(0) as u32,
+        ..TrackInfo::default()
+    })
 }
 
 /// The parser that turns what an encoder or a demuxer wrote into what

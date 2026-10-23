@@ -12,7 +12,8 @@
 //! request for `/hls` names its show in [`SHOW_HEADER`] and the player's
 //! address in [`PEER_HEADER`], which the viewer count is kept by.
 
-use godwinmix_core::hls::HlsParams;
+use super::tracks::Sound;
+use godwinmix_core::hls::{Access, HlsParams, Segments};
 use godwinmix_protocol::destination::DestinationLive;
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
@@ -53,12 +54,21 @@ pub struct Want {
     pub segment_ms: u32,
     pub part_ms: u32,
     pub window_s: u32,
+    #[serde(default)]
+    pub segments: Segments,
+    #[serde(default)]
+    pub access: Access,
     pub viewer_key: String,
+    /// Every sound track the input names, with its language. Empty when it
+    /// names none, and then whatever the relay gives is packaged unnamed.
+    #[serde(default)]
+    pub sounds: Vec<Sound>,
 }
 
 impl Want {
     pub fn params(&self) -> HlsParams {
-        HlsParams { segment_ms: self.segment_ms, part_ms: self.part_ms, window_s: self.window_s }
+        let (segment_ms, part_ms, window_s, segments, access) = (self.segment_ms, self.part_ms, self.window_s, self.segments, self.access);
+        HlsParams { segment_ms, part_ms, window_s, segments, access }
     }
 }
 

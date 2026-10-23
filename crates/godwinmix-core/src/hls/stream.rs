@@ -11,13 +11,16 @@ pub use super::registry::{egress_kbps, get, ids, publish, withdraw};
 
 #[path = "stream_align.rs"]
 mod align;
+#[path = "stream_status.rs"]
+mod status;
+#[path = "stream_ts.rs"]
+mod ts;
 
 use super::playlist::{self, Report, Variant};
 use super::track::{Track, TrackKind};
 use super::viewers::Viewers;
 use super::HlsParams;
 use parking_lot::RwLock;
-use serde_json::{json, Value};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -29,6 +32,8 @@ pub struct Stream {
     /// shared without the control token that runs the mixer.
     pub viewer_key: String,
     tracks: RwLock<Vec<Arc<Track>>>,
+    /// The MPEG-TS renditions, when `segments` asks for them.
+    ts: RwLock<Vec<Arc<super::ts::TsTrack>>>,
     pub viewers: Viewers,
 }
 
@@ -41,6 +46,7 @@ impl Stream {
             params,
             viewer_key: viewer_key.to_string(),
             tracks: RwLock::new(Vec::new()),
+            ts: RwLock::new(Vec::new()),
             viewers: Viewers::new(horizon),
         }
     }
@@ -113,19 +119,25 @@ impl Stream {
     /// What a playlist or an MPD says about one track. Peak bandwidth is what
     /// was measured over the window, or what the rendition asked for if that
     /// is higher.
-    fn variant(t: &Arc<Track>) -> Variant {
+    pub fn variant(t: &Arc<Track>) -> Variant {
         let info = t.info();
         let declared = u64::from(info.declared_kbps) * 1000;
         let (peak, average) = t.measured_bps().map(|(p, a)| (p, Some(a))).unwrap_or((0, None));
         Variant { id: t.id.clone(), bandwidth: peak.max(declared).max(1), average, info }
     }
 
+    /// Every sound track, in track order.
+    pub fn sounds(&self) -> Vec<Variant> {
+        let mut audio: Vec<Variant> = self.tracks().iter().filter(|t| t.kind == TrackKind::Audio).map(Self::variant).collect();
+        audio.sort_by_key(|a| a.info.sound);
+        audio
+    }
+
     /// The multivariant playlist.
     pub fn master(&self) -> String {
         let tracks = self.tracks();
         let video: Vec<Variant> = tracks.iter().filter(|t| t.kind == TrackKind::Video).map(Self::variant).collect();
-        let audio = tracks.iter().find(|t| t.kind == TrackKind::Audio).map(Self::variant);
-        playlist::master(&video, audio.as_ref())
+        playlist::master(&video, &self.sounds())
     }
 
     /// The same tracks as a DASH MPD, with `query` on every URL. None until
@@ -142,43 +154,6 @@ impl Stream {
     }
 
     pub fn memory(&self) -> usize {
-        self.tracks().iter().map(|t| t.memory()).sum()
-    }
-
-    /// What `output.list` shows for this output.
-    pub fn status(&self) -> Value {
-        let rungs: Vec<Value> = self
-            .tracks()
-            .iter()
-            .map(|t| {
-                let info = t.info();
-                json!({
-                    "id": t.id,
-                    "kind": if t.kind == TrackKind::Video { "video" } else { "audio" },
-                    "codecs": info.codecs,
-                    "width": info.width,
-                    "height": info.height,
-                    "segments": t.view().segments.iter().filter(|s| s.complete).count(),
-                    "last_msn": t.position().newest(),
-                    "memory_bytes": t.memory(),
-                })
-            })
-            .collect();
-        let viewers = self.viewers.count();
-        json!({
-            "playback": {
-                "master_url_path": self.master_url_path(),
-                "dash_url_path": format!("/hls/{}/manifest.mpd?key={}", self.id, self.viewer_key),
-                "viewers": viewers,
-            },
-            "low_latency": self.params.low_latency(),
-            "segment_ms": self.params.segment_ms,
-            "part_ms": self.params.part_ms,
-            "window": self.params.window_s,
-            "viewers": viewers,
-            "egress_kbps": self.viewers.egress_kbps(),
-            "memory_bytes": self.memory(),
-            "rungs": rungs,
-        })
+        self.tracks().iter().map(|t| t.memory()).sum::<usize>() + self.ts_tracks().iter().map(|t| t.memory()).sum::<usize>()
     }
 }

@@ -14,6 +14,7 @@ mod health_main;
 mod hls_channel;
 mod hls_channel_restart;
 mod hls_direct;
+mod hls_ts_open;
 #[cfg(unix)]
 mod hls_isolation;
 // Its one test installs examples/zero-dep, a shell plugin whose platforms

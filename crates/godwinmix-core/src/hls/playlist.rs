@@ -9,7 +9,7 @@
 use super::ring::{SegmentView, View};
 use super::track::TrackInfo;
 use super::HlsParams;
-pub use super::master::{master, with_query};
+pub use super::master::{audio_group, master, stream_inf, with_query};
 use std::fmt::Write;
 
 /// Another rung's position, for `EXT-X-RENDITION-REPORT`.
@@ -21,7 +21,7 @@ pub struct Report {
 }
 
 /// One entry of the multivariant playlist.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Variant {
     pub id: String,
     pub info: TrackInfo,

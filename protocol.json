@@ -7031,8 +7031,22 @@
       "additionalProperties": false,
       "description": "An `hls://` output's params, as an `hls/output` takes them.",
       "properties": {
+        "access": {
+          "description": "`keyed` (the default) or `open`: whether a player needs the viewer key.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "low_latency": {
           "description": "true: parts of 333 ms.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "open_public": {
+          "description": "With `access = \"open\"`, answer players outside loopback and the\nprivate networks too.",
           "type": [
             "boolean",
             "null"
@@ -7053,6 +7067,13 @@
           "minimum": 0,
           "type": [
             "integer",
+            "null"
+          ]
+        },
+        "segments": {
+          "description": "`cmaf` (the default), `ts` or `both`: which segments are made.",
+          "type": [
+            "string",
             "null"
           ]
         },
@@ -22820,7 +22841,7 @@
     },
     {
       "method": "GET",
-      "note": "an hls/output's multivariant playlist. Readable with the output's viewer key as ?key= (output.list playback.master_url_path) or a token with read",
+      "note": "an hls/output's multivariant playlist. Readable with the output's viewer key as ?key= (output.list playback.master_url_path) or a token with read, or with nothing from loopback and private networks when params.access is open",
       "path": "/hls/{output}/master.m3u8"
     },
     {
@@ -22835,8 +22856,18 @@
     },
     {
       "method": "GET",
-      "note": "init.mp4, a CMAF segment {n}.m4s or an LL-HLS part {n}.{p}.m4s, from memory",
+      "note": "init.mp4, a CMAF segment {n}.m4s or an LL-HLS part {n}.{p}.m4s, or an MPEG-TS segment {start_ms}.ts, from memory",
       "path": "/hls/{output}/{rung}/{file}"
+    },
+    {
+      "method": "GET",
+      "note": "an hls/output's MPEG-TS multivariant playlist, with params.segments ts or both: main carries the picture and the first sound, each further sound is its own rendition. The same keys as master.m3u8",
+      "path": "/hls/{output}/master-ts.m3u8"
+    },
+    {
+      "method": "GET",
+      "note": "an MPEG-TS media playlist, main or audio<n>; segments named by their UTC start in ms",
+      "path": "/hls/{output}/{rung}/ts.m3u8"
     }
   ]
 }

@@ -5,7 +5,7 @@ use crate::control::presented_token;
 use axum::extract::{ConnectInfo, Request};
 use axum::http::{header, StatusCode};
 use axum::response::Response;
-use godwinmix_core::hls::Stream;
+use godwinmix_core::hls::{Access, Stream};
 use godwinmix_protocol::scope::Scope;
 use serde_json::json;
 use std::net::SocketAddr;
@@ -60,8 +60,9 @@ pub fn value<'a>(pairs: &[(&'a str, &'a str)], key: &str) -> Option<&'a str> {
 pub fn admit(door: &impl Door, stream: &Stream, req: &Request) -> Result<Viewer, Box<Response>> {
     let pairs = pairs(req);
     let key = value(&pairs, "key");
-    if !key.is_some_and(|k| stream.admits(k)) {
-        check_token(door, stream, req, key.is_some())?;
+    let peer = req.extensions().get::<ConnectInfo<SocketAddr>>().map(|c| c.0.ip());
+    if !key.is_some_and(|k| stream.admits(k)) && !stream.params.access.lets_in(peer) {
+        check_token(door, stream, req, key.is_some()).map_err(|r| if stream.params.access == Access::Open { not_local(stream, peer) } else { r })?;
     }
     let query = pairs
         .iter()
@@ -113,3 +114,19 @@ fn check_token(door: &impl Door, stream: &Stream, req: &Request, had_key: bool) 
     }
     Ok(())
 }
+
+/// An open output asked for from outside loopback and the private networks,
+/// with no key: say why, and what changes it.
+fn not_local(stream: &Stream, peer: Option<std::net::IpAddr>) -> Box<Response> {
+    let at = peer.map_or_else(|| "an unknown address".to_string(), |p| p.to_string());
+    let message = format!(
+        "`{}` is open to loopback and private networks only, and this request came from {at}. Open it with its \
+         viewer key, or set params.open_public = true if the output is meant to be open to everyone.",
+        stream.id
+    );
+    Box::new(refuse(StatusCode::FORBIDDEN, message, json!({ "output": stream.id, "needs": "key", "access": "open" })))
+}
+
+#[cfg(test)]
+#[path = "auth_tests.rs"]
+mod tests;

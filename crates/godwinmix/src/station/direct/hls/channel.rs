@@ -40,7 +40,7 @@ pub fn wants(st: &Station) -> BTreeMap<(String, String), Want> {
 fn want(w: &WatchWant) -> Want {
     let source = w.source.as_ref().and_then(|(relay, path)| Some(Source { relay: relay.parse().ok()?, path: path.clone() }));
     let why_not = source.is_none().then(|| format!("waiting for a stream on {} to go live", w.channel));
-    Want { spec: spec::read(&w.server), source, why_not }
+    Want { spec: spec::read(&w.server), source, why_not, sounds: Vec::new() }
 }
 
 impl Packagers {
