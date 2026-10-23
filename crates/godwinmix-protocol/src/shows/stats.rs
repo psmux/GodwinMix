@@ -56,6 +56,27 @@ pub struct OutputStats {
     pub encoder: Option<String>,
     #[serde(default)]
     pub cpu_millicores: u32,
+    /// What its picture goes through, in order: the decode, the scale and
+    /// the encode, for an output that converts. Empty for a copy.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub steps: Vec<OutputStep>,
+}
+
+/// One step of an output's conversion.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct OutputStep {
+    /// `decode`, `scale` or `encode`.
+    pub kind: String,
+    /// The GStreamer element that does it, `nvh264enc`, where the plan
+    /// names one. A scale on the CPU leaves the choice to the host.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub element: Option<String>,
+    /// Whether it runs on a GPU, its pictures in the GPU's memory.
+    #[serde(default)]
+    pub gpu: bool,
+    /// The hardware family, `nvidia`, for a step that uses some.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub accel: Option<String>,
 }
 
 /// What a show does to make its outputs, which is what its load pays for.

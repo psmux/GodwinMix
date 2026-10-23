@@ -89,6 +89,16 @@ pub struct Playback {
     pub dash_url_path: String,
     /// Players that fetched something in the last two windows.
     pub viewers: u32,
+    /// Which segments a player can fetch: `cmaf`, `ts` or `both`. Left out
+    /// where the server does not say.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub segments: String,
+    /// `keyed` (a player needs the viewer key) or `open`.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub access: String,
+    /// The length segments are cut to, in milliseconds.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub segment_ms: Option<u32>,
 }
 
 /// What a running destination reports. The restreamer fills it in.
@@ -284,5 +294,16 @@ mod tests {
         assert_eq!(yt.url(), "rtmp://a.rtmp.youtube.com/live2/k");
         assert_eq!(yt.policy(), RetryPolicy::Cdn);
         assert_eq!(stored("custom", "rtmp://h/a/s", None).policy(), RetryPolicy::Own);
+    }
+
+    #[test]
+    fn a_playback_says_what_it_serves_only_when_told() {
+        let bare = Playback { master_url_path: "/m".into(), ..Default::default() };
+        let json = serde_json::to_value(&bare).unwrap();
+        assert!(json.get("segments").is_none() && json.get("access").is_none() && json.get("segment_ms").is_none(), "{json}");
+        let told = Playback { segments: "both".into(), access: "open".into(), segment_ms: Some(3400), ..bare };
+        let json = serde_json::to_value(&told).unwrap();
+        assert_eq!((&json["segments"], &json["access"], &json["segment_ms"]), (&serde_json::json!("both"), &serde_json::json!("open"), &serde_json::json!(3400)));
+        assert_eq!(serde_json::from_value::<Playback>(json).unwrap(), told);
     }
 }

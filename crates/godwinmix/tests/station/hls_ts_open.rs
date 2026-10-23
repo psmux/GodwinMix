@@ -54,8 +54,11 @@ async fn an_open_output_serves_cmaf_and_ts_without_a_key_and_a_keyed_one_with_it
     assert!(added.get("error").is_none(), "{added}");
     let asked = call(&mut ws, 3, "plugin.add", json!({"source": source.to_string_lossy()})).await;
     assert!(asked.get("error").is_none(), "{asked}");
-    until(&mut ws, "feed", "open", "live", Duration::from_secs(90)).await;
+    let open = until(&mut ws, "feed", "open", "live", Duration::from_secs(90)).await;
     let keyed = until(&mut ws, "feed", "keyed", "live", Duration::from_secs(90)).await;
+    // The list says what each serves and to whom, for a map to draw.
+    assert_eq!((&open["playback"]["segments"], &open["playback"]["access"], &open["playback"]["segment_ms"]), (&json!("both"), &json!("open"), &json!(1000)), "{open}");
+    assert_eq!(keyed["playback"]["access"], "keyed", "{keyed}");
 
     // Open: no key, no token, from loopback.
     let (status, cmaf) = text(&st, "/hls/open/master.m3u8?show=feed").await;

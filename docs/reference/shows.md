@@ -78,7 +78,7 @@ with a `channel:<id>` scope.
 | `error` | why it is not running, when a person did not ask for that |
 | `compositing` | `true` for a show with scenes and a programme in a process of its own; `false` for a show without compositing (below) |
 | `input` | what the show takes in, `{uri, program?, params?, backup?}`. Absent for a show that has none. An SRT passphrase reads `__secret__` here (see [Input passphrases](#input-passphrases)) |
-| `outputs` | a show without compositing's outputs, each as a channel destination is shown: `id`, `platform`, `label`, `uri_host`, `has_key`, `enabled`, `state`, `kbps`, `reconnects`, `error`, `rendition`, `plan` or `refused` when it converts, and `playback` (`master_url_path`, `dash_url_path`, `viewers`) on an HLS output. Absent for a show that composites |
+| `outputs` | a show without compositing's outputs, each as a channel destination is shown: `id`, `platform`, `label`, `uri_host`, `has_key`, `enabled`, `state`, `kbps`, `reconnects`, `error`, `rendition`, `plan` or `refused` when it converts, and `playback` (`master_url_path`, `dash_url_path`, `viewers`, and `segments`, `access` and `segment_ms`: which segments it serves, `cmaf`, `ts` or `both`, whether a player needs the viewer key, `keyed` or `open`, and the length it cuts) on an HLS output. Absent for a show that composites |
 | `health` | `{state, alarms}`, see [Health](#health) |
 
 For a show without compositing, `state` is `running` unless it was stopped,
@@ -291,6 +291,19 @@ and only while the show's alarms are on or its picture is asked for; -120
 is digital silence. A show that composites has
 its health and, when it has an input, the input's numbers; its outputs are
 read with `output.list` and `?show=<id>`.
+
+An output that converts has `steps`, what its picture goes through in
+order, as the plan handed it to the host:
+
+```json
+"steps": [{"kind": "decode", "element": "nvmpeg2videodec", "gpu": true, "accel": "nvidia"},
+          {"kind": "scale", "element": "cudaconvertscale", "gpu": true},
+          {"kind": "encode", "element": "nvh264enc", "gpu": true, "accel": "nvidia"}]
+```
+
+`gpu` is true for a step whose pictures stay in the GPU's memory or that
+runs on a hardware decoder or encoder. A scale on the CPU has no `element`:
+the host picks it. A copy has no `steps`.
 
 `work` says what the show does to make its outputs: `mix` for a show that
 composites (it always encodes a programme), `transcode` for a direct show

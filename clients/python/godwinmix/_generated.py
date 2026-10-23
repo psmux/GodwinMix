@@ -2602,6 +2602,8 @@ class OutputStats(TypedDict, total=False):
     # `copy`, or what the plan gave it, such as `h264 1280x720`.
     state: str
     # waiting, connecting, live, reconnecting, failed, or off.
+    steps: List[OutputStep]
+    # What its picture goes through, in order: the decode, the scale and the encode, for an output that converts. Empty for a copy.
 
 class OutputStatus(TypedDict, total=False):
     error: Union[OutputError, None]
@@ -2618,6 +2620,18 @@ class OutputStatus(TypedDict, total=False):
     # Why the governor has this output's rendition stopped just now, while it has. The output stays connected and resumes by itself.
     state: OutputState
     uri_host: str
+
+class OutputStep(TypedDict, total=False):
+    """One step of an output's conversion."""
+
+    accel: Optional[str]
+    # The hardware family, `nvidia`, for a step that uses some.
+    element: Optional[str]
+    # The GStreamer element that does it, `nvh264enc`, where the plan names one. A scale on the CPU leaves the choice to the host.
+    gpu: bool
+    # Whether it runs on a GPU, its pictures in the GPU's memory.
+    kind: str
+    # `decode`, `scale` or `encode`.
 
 class Override(TypedDict, total=False):
     """A sparse change to one item of a referenced scene."""
@@ -2796,10 +2810,16 @@ class PlanView(TypedDict, total=False):
 class Playback(TypedDict, total=False):
     """The links of an output served as HLS from the control port, each with the output's viewer key on it. A channel's watch link is one too: `/hls/channel/<channel>/<destination>/index.m3u8?key=...`."""
 
+    access: str
+    # `keyed` (a player needs the viewer key) or `open`.
     dash_url_path: str
     # The same segments as a DASH MPD.
     master_url_path: str
     # `/hls/viewers/master.m3u8?show=bbc-one&key=...`.
+    segment_ms: Optional[int]
+    # The length segments are cut to, in milliseconds.
+    segments: str
+    # Which segments a player can fetch: `cmaf`, `ts` or `both`. Left out where the server does not say.
     viewers: int
     # Players that fetched something in the last two windows.
 
