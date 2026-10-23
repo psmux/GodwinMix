@@ -1049,11 +1049,15 @@ mod tests {
     /// panels through `import()` as well, but unconditionally and before it
     /// mounts the shell, so those are seeded in: they are eager in the only
     /// sense that matters, which is what a browser waits for on a first paint.
+    /// Only the `PANELS` list is seeded. A later `import()` in `boot.js` that
+    /// runs on some pages only, like the headend station's view, is lazy.
     fn eager_set() -> std::collections::BTreeSet<&'static str> {
         let mut seen = std::collections::BTreeSet::new();
         let mut stack: Vec<&'static str> = vec!["boot.js"];
         let boot = source_of("boot.js").unwrap_or("");
-        for line in boot.lines() {
+        let panels = boot.split("const PANELS = [").nth(1).and_then(|rest| rest.split("];").next()).unwrap_or("");
+        assert!(panels.contains("./panels/"), "boot.js has no PANELS list to seed the eager set from");
+        for line in panels.lines() {
             if let Some(path) = quoted(line).filter(|p| p.starts_with("./panels/")) {
                 if let Some(found) = known(&path[2..]) {
                     stack.push(found);
@@ -1136,7 +1140,7 @@ mod tests {
     }
 
     #[test]
-    fn the_page_a_volunteer_opens_stays_under_396_kb() {
+    fn the_page_a_volunteer_opens_stays_under_397_kb() {
         // The budget from 07 Phase 3, against the set it was written about:
         // what a browser fetches to put a usable mixer on screen.
         //
@@ -1149,6 +1153,16 @@ mod tests {
         // eager set is what is measured here, the whole directory is measured
         // below, and `the_designer_is_not_in_the_eager_set` keeps the line
         // between them where it is.
+        //
+        // Raised to 397 kB in 0.3.17, by 1 kB, for what a mixer page needs
+        // now that its show tabs behave like a browser's: Ctrl+Tab, Ctrl+PageDown
+        // and Cmd+Shift+] step through the shows, which needs a key listener
+        // on the page before show-actions.js has loaded, and a redraw keeps the
+        // keyboard on its tab (991 bytes). The rest is the Flow map and the
+        // Flussonic import in the menus and the one line that sends a headend
+        // station's page to its view. The headend view, the flow map and the
+        // station check itself all load only when opened: measured at 405683
+        // bytes, 1413 over 0.3.16.
         //
         // Down to 379 kB with the backup source in, by taking a tile's icon,
         // colour and kind out of client/kinds.js (client/kind-look.js), so
@@ -1184,8 +1198,8 @@ mod tests {
             bytes += source_of(extra).map(|b| b.len()).unwrap_or(0);
         }
         assert!(
-            bytes < 396 * 1024,
-            "the page loads {} files and {bytes} bytes, over the 396 kB budget",
+            bytes < 397 * 1024,
+            "the page loads {} files and {bytes} bytes, over the 397 kB budget",
             eager.len()
         );
     }
@@ -1209,7 +1223,7 @@ mod tests {
     }
 
     #[test]
-    fn the_page_with_the_composer_open_stays_under_504_kb() {
+    fn the_page_with_the_composer_open_stays_under_505_kb() {
         // The other half of the rule: the lazy set is not somewhere to hide
         // things. This is the heaviest thing a session can become, the page
         // plus the whole designer and the two kits only it uses, and it is the
@@ -1223,8 +1237,10 @@ mod tests {
         for extra in ["index.html", "themes/base.css", "themes/dock.css", "themes/touch.css", "themes/dark.css", "panels/composer/composer.css"] {
             bytes += source_of(extra).map(|b| b.len()).unwrap_or(0);
         }
-        // Raised to 504 kB with the page's own budget, for the same four.
-        assert!(bytes < 504 * 1024, "the page with the composer open is {bytes} bytes, over the 504 kB budget");
+        // Raised to 504 kB with the page's own budget, for the same four, and
+        // to 505 kB with it in 0.3.17, for the show tabs' keys: the composer's
+        // own files did not grow. Measured at 516509 bytes.
+        assert!(bytes < 505 * 1024, "the page with the composer open is {bytes} bytes, over the 505 kB budget");
     }
 
     #[test]
@@ -1310,6 +1326,8 @@ mod tests {
         reachable.extend(closure_of("panels/wall/view.js"));
         reachable.extend(closure_of("panels/wall/bulk.js"));
         reachable.extend(closure_of("panels/wall/detail.js"));
+        // A headend station's page, which boot.js opens on the headend view.
+        reachable.extend(closure_of("panels/headend/station.js"));
         // View > Headend, or Headend view on the wall.
         reachable.extend(closure_of("panels/headend/view.js"));
         // File > Import a Flussonic config, or the button on the headend's band.
@@ -1388,6 +1406,9 @@ mod tests {
         let eager = eager_set();
         for (path, who) in [
             ("panels/composer/composer.js", "a double tap on a scene tile"),
+            ("panels/headend/station.js", "a headend station's page"),
+            ("panels/headend/view.js", "View > Headend"),
+            ("panels/flowmap/view.js", "View > Flow map"),
             ("shell/dock-menu.js", "workspace or panel actions"),
             ("shell/phone.js", "a screen 760px wide or less"),
             ("shell/picker.js", "adding a source or dropping a URI"),

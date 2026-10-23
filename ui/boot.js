@@ -94,14 +94,15 @@ async function main() {
   // once the socket is open: asked before, it was refused, and a set up mixer
   // opened on the first run chooser as though nobody had set it up.
   await client.opened();
-  await applyCoreDefaults(client);
+  const info = await applyCoreDefaults(client);
   watchCoreDefaults(client);
 
   installGlobal();
   await Promise.all(PANELS.map((path) => import(path).catch((e) => console.error(`panel ${path} failed`, e))));
 
   await mountShell(client);
-  await import("./panels/headend/station.js").then((m) => m.openIfHeadend(client)).catch(console.error);
+  // A headend station's page opens on the headend view; no other fetches it.
+  if (info?.features?.includes("headend")) await import("./panels/headend/station.js").then((m) => m.openIfHeadend(client)).catch(console.error);
 
   if (client.legacy) {
     console.info("this mixer has no /rpc yet, so the page is talking to the REST API through the legacy adapter");
