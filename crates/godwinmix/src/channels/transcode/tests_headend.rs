@@ -82,3 +82,32 @@ fn forty_six_channels_all_go_to_nvdec_and_nvenc_and_stay_on_the_gpu() {
         assert_eq!(row["audio_tracks"].as_array().map_or(0, Vec::len), n % 3, "{id}: {row}");
     }
 }
+
+/// The encoder's own keyframe property for one programme at `fps`, planned
+/// on `machine`: (element, value).
+fn keyframe_prop(machine: Machine, fps: f64) -> (String, Value) {
+    let governor = Governor::with_machine(GovernorConfig::default(), Profile::uncalibrated(), 48, 64 * 1024);
+    let t = Transcode::with(machine, governor);
+    let mut l = Live::from_plugin(&json!({
+        "channel": "ch", "app": "ch", "stream": "main", "since_ms": 1,
+        "video": {"codec": "mpeg2", "width": 1280, "height": 720, "fps": fps, "kbps": 8000, "frame_rate": fps},
+        "audio": {"codec": "ac3", "channels": 2, "sample_rate": 48000, "kbps": 192},
+    }))
+    .unwrap();
+    l.channel = "ch".into();
+    t.replan(&[record("ch")], &[l], |r| vec![channel(&r.id)]);
+    let nodes = t.streams("ch").unwrap()[0]["nodes"].as_array().unwrap().clone();
+    let e = nodes.iter().find(|n| n["kind"] == "encode").unwrap();
+    let element = e["element"].as_str().unwrap().to_string();
+    let prop = if element == "nvh264enc" { "gop-size" } else { "key-int-max" };
+    (element, e["props"][prop].clone())
+}
+
+#[test]
+fn a_gop_of_50_is_a_keyframe_every_50_frames_on_nvenc_and_x264_at_29_97_and_59_94() {
+    let x264 = || Machine::probe(&Catalogue::shipped().unwrap(), &FakeRegistry::with(&["x264enc", "h264parse", "avdec_mpeg2video", "a52dec", "ac3parse", "avenc_aac", "aacparse"]));
+    for fps in [29.97, 59.94] {
+        assert_eq!(keyframe_prop(nvidia(), fps), ("nvh264enc".to_string(), json!(50)), "NVENC at {fps}");
+        assert_eq!(keyframe_prop(x264(), fps), ("x264enc".to_string(), json!(50)), "x264 at {fps}");
+    }
+}

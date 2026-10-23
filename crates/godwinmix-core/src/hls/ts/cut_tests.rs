@@ -95,3 +95,12 @@ fn a_further_sound_alone_is_cut_beside_the_picture_and_each_segment_has_its_tabl
         assert_eq!((p[0].0, p[1].0, p[2].0), (0, 0x1000, 0x101), "PAT, PMT, then the sound");
     }
 }
+
+#[test]
+fn sound_behind_the_picture_does_not_make_the_queue_look_held_for_ever() {
+    use super::span;
+    let unit = |kind, ms| Unit { kind, ms, cts_ms: 0, key: kind == UnitKind::Video, data: bytes::Bytes::new() };
+    let q: VecDeque<Unit> = [unit(UnitKind::Video, 10_000), unit(UnitKind::Audio, 9_300), unit(UnitKind::Video, 10_033)].into_iter().collect();
+    assert_eq!(span(&q), 33, "the newest time in the queue less the front's, never a wrap");
+    assert_eq!(span(&VecDeque::new()), 0);
+}

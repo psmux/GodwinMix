@@ -137,11 +137,20 @@ impl TsCut {
     }
 
     fn held(&self) -> u32 {
-        match (self.queue.front(), self.queue.back()) {
-            (Some(a), Some(b)) => b.ms.wrapping_sub(a.ms),
-            _ => 0,
-        }
+        span(&self.queue)
     }
+}
+
+/// How far the queue reaches past its front, in ms: the newest time in it
+/// less the front's. Not the back's: units come in the order the hub gave
+/// them, and a converted channel's sound comes some 700 ms behind the
+/// picture of the same time, so the back is often older than the front.
+/// Taken as back less front, that wrapped to four billion, every keyframe
+/// that had to wait for the CMAF cut was dropped as held too long, and a
+/// TS segment ran on for a minute with one keyframe in it.
+pub(super) fn span(queue: &VecDeque<Unit>) -> u32 {
+    let Some(front) = queue.front() else { return 0 };
+    queue.iter().map(|u| u.ms.saturating_sub(front.ms)).max().unwrap_or(0)
 }
 
 #[cfg(test)]
