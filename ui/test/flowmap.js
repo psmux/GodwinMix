@@ -50,16 +50,16 @@ export async function flowmapTests(test, eq, ok) {
   });
 
   const { tip } = await import("../panels/flowmap/tip.js");
-  const box = document.createElement("div");
-  document.body.append(box);
-  const card = tip(box);
+  const tipBox = document.createElement("div");
+  document.body.append(tipBox);
+  const card = tip(tipBox);
   card.show({ kind: "link", id: "src:main:cam1>show:main" }, 10, 10, { graph: g });
   test("a link's hover card has no stray null line when it has no technical part", () => {
     ok(!card.node.hidden, "the card is up");
     ok(!/null/.test(card.node.textContent), card.node.textContent);
     ok(/From/.test(card.node.textContent), "it has its rows");
   });
-  box.remove();
+  tipBox.remove();
 
   test("a mixed show with two renditions draws each one, and its on air source is marked", () => {
     eq(kinds("proc").filter((n) => n.show === "main").map((n) => n.title).sort(), ["1080p H.264", "720p H.264"]);
