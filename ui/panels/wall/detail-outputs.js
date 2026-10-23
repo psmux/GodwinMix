@@ -1,5 +1,7 @@
 // A direct show's outputs in its detail: each with its state, what it is
-// sent as and its bitrate; change its format with the same Format step the
+// sent as and its bitrate; Edit its address, key and format in the same
+// form the Outputs panel uses (outputs/destination.js); change its format
+// alone with the same Format step the
 // Add destination form uses, an HLS output's settings (detail-hls.js), turn
 // it off, remove it, or add another. A governor refusal stays in the form,
 // with what would fit as buttons, rather than going by as a toast.
@@ -61,6 +63,11 @@ export function outputsSection(client, show, stats, reread) {
     slot.replaceChildren(el("div.wl-dbox", {}, [f.step.node, el("div.wl-dbtns", {}, [f.cancel, f.save])]));
   }
 
+  async function edit(o) {
+    const { editShowOutput } = await import("../outputs/destination.js");
+    return editShowOutput(client, o, { show: show().id, shape: inputShape(stats()), onDone: reread });
+  }
+
   async function settings(o) {
     // `params` has every setting; `playback` (older stations) the ones it serves.
     const p = o.params || (o.playback && o.playback.segments ? { segments: o.playback.segments, access: o.playback.access, segment_ms: o.playback.segment_ms } : null);
@@ -102,6 +109,7 @@ export function outputsSection(client, show, stats, reread) {
         el("span.wl-doutname", {}, [el("strong", { text: outName(o) }), el("span.wl-sub", { text: o.uri || o.uri_host || "platform" })]),
         el("span.wl-doutfmt", { text: [outFormat(o, st), isHls(o) ? hlsWords(o) : "", st && st.kbps ? kbps(st.kbps) : "", o.enabled === false ? "off" : state].filter(Boolean).join(" · ") }),
         el("span.wl-doutbtns", {}, [
+          isHls(o) ? null : el("button.btn", { type: "button", text: "Edit", title: `Change where ${outName(o)} goes, its key or its format`, onclick: () => edit(o) }),
           el("button.btn", { type: "button", text: "Format", onclick: () => change(o) }),
           isHls(o) ? el("button.btn", { type: "button", text: "HLS settings", onclick: () => settings(o) }) : null,
           el("button.btn", { type: "button", text: o.enabled === false ? "Turn on" : "Turn off", onclick: () => call("show.output.set", { output: o.id, enabled: o.enabled === false }, `${outName(o)} did not change`) }),

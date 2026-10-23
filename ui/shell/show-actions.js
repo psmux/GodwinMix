@@ -107,6 +107,9 @@ function tabMenu(view, show, x, y) {
   contextMenu(x, y, [
     show.id !== view.current && { label: "Switch to this show", run: () => switchTo(show.id) },
     { label: "Rename", key: "F2", run: () => rename(view, show) },
+    // A show without compositing has no page of its own to hold an Outputs
+    // panel, so its outputs, input and settings open from its tab.
+    show.compositing === false && { label: "Outputs and settings…", run: () => import("../panels/wall/detail.js").then((m) => m.showDetail(view.client, show)) },
     { kind: "separator" },
     running
       ? { label: busy ? "Stop starting" : "Stop show", run: () => startStop(view, show, "show.stop") }

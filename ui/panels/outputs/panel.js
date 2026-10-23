@@ -22,6 +22,7 @@ import { addChannel } from "../channels/entry.js";
 import { failureLabel, failureAdvice, failureOf } from "./failure.js";
 const addDestination = lazyAction(() => import("./destination.js").then(m => m.addDestination), "Add destination");
 const editDestination = lazyAction(() => import("./destination.js").then(m => m.editDestination), "Edit destination");
+const editHls = lazyAction(() => import("../renditions/hls-add.js").then(m => m.editHls), "Edit");
 // Resources, plan lines and the HLS card: see views.js.
 const views = () => import("./views.js");
 
@@ -278,11 +279,10 @@ class OutputsPanel extends HTMLElement {
         el("strong", { text: output.id }),
         label,
         el("span.grow"),
-        // An HLS output has no address or key to edit; a new ladder is a new
-        // output, so it has no Edit.
-        hls ? null : el("button.btn.icon" + (needsKey ? ".primary" : ""), {
-          text: needsKey ? "Add key" : "Edit",
-          onclick: () => editDestination(this.client, current),
+        // An HLS output's Edit is its own form: sizes and settings, no key.
+        el("button.btn.icon" + (needsKey && !hls ? ".primary" : ""), {
+          text: needsKey && !hls ? "Add key" : "Edit",
+          onclick: () => (hls ? editHls : editDestination)(this.client, current),
         }),
         // Stop keeps the destination and its key; Remove forgets both.
         el("button.btn.icon" + (output.state === "stopped" ? ".primary" : ".danger"), {
