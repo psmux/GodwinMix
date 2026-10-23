@@ -189,6 +189,10 @@ pub struct AudioEntry {
     pub container: Vec<String>,
     #[serde(default)]
     pub license: Option<String>,
+    /// The most channels this encoder takes; any when left out. voaacenc
+    /// encodes mono and stereo only, and a 5.1 track goes to the next one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_channels: Option<u8>,
     /// Encoder delay this encoder does not take out of its own timestamps, so
     /// audio leaves it that much late relative to video. The programme holds
     /// the video back by it.

@@ -65,6 +65,12 @@ pub fn encode(node: &NodeSpec) -> Result<Built, String> {
     let mut elements = vec![leaky_queue()?];
     if !node.cuda() {
         elements.push(make("videoconvert")?);
+        // 4:2:0, which every player decodes: given the choice, x264 took
+        // the 4:2:2 a converter offered first and made High 4:2:2, which a
+        // browser does not play.
+        if node.text("codec").unwrap_or("h264") == "h264" {
+            elements.push(caps("video/x-raw,format=I420")?);
+        }
     }
     elements.push(enc);
     if let Some(p) = node.text("parser") {

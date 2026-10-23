@@ -84,6 +84,7 @@ That is the whole change. No rebuild, no core release.
 | `keyframe` | The property that carries the keyframe interval, and its unit. |
 | `properties` | Everything else to set on the encoder. |
 | `decode_properties` | Properties set on the decoder, as `properties` are on the encoder. Video entries only. |
+| `max_channels` | The most sound channels this encoder takes, for an audio entry; any when left out. A track with more goes to the next entry. |
 | `profile` | The H.264 or HEVC profile asked of the encoder through the caps after it, `high` or `main`. A converted channel's encode only. Left out, the encoder picks; NVENC picks Baseline. |
 | `arch_properties` | Properties for one CPU architecture, laid over `properties`. Video entries only. See below. |
 | `verified` | Reports from people who ran `gmx codec test` on real hardware. |
