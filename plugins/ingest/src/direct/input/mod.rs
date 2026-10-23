@@ -8,7 +8,7 @@
 //! | `rist://` | `rist` | RIST Simple Profile, listening |
 //! | `rtsp://` | `rtsp` | a camera or an encoder, over TCP or UDP |
 //! | `http(s)://` | `pull` | HLS or DASH |
-//! | `rtmp://` | `pull` | someone else's RTMP server, played |
+//! | `rtmp://` | `pull_rtmp` | someone else's RTMP server, played |
 //! | `file://` | `pull` | a TS or MP4 file, looped at its own pace |
 //! | `channel:` | `channel` | a channel's stream, off the hub |
 //!
@@ -25,6 +25,7 @@ mod numbering;
 mod outlet;
 mod pads;
 mod pull;
+mod pull_rtmp;
 mod rist;
 mod rtsp;
 mod runner;
@@ -72,7 +73,7 @@ fn one(spec: &InputSpec, ctx: &Context) -> Result<Box<dyn Input>, InputError> {
         Kind::Rist => Box::new(Gst(rist::Rist::new(spec)?, spec.carry)),
         Kind::Rtsp => Box::new(Gst(rtsp::Rtsp::new(spec)?, spec.carry)),
         Kind::Http => Box::new(Gst(pull::Uri::new(spec, true), spec.carry)),
-        Kind::Rtmp => Box::new(Gst(pull::Uri::new(spec, false), spec.carry)),
+        Kind::Rtmp => Box::new(Gst(pull_rtmp::Rtmp::new(spec), spec.carry)),
         Kind::File => Box::new(Gst(pull::File::new(spec)?, spec.carry)),
         Kind::Channel => Box::new(channel::Channel::new(spec, ctx.hub.as_ref())?),
     })

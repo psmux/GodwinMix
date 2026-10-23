@@ -1,8 +1,8 @@
-//! The inputs that pull: HLS and DASH, someone else's RTMP server, and a
-//! file played in a loop. RTSP is `rtsp.rs`.
+//! The inputs that pull: HLS and DASH, and a file played in a loop. RTSP
+//! is `rtsp.rs` and RTMP `pull_rtmp.rs`.
 //!
 //! ```text
-//!   urisourcebin (hls, dash, rtmp) ──► parsebin ──► tags
+//!   urisourcebin (hls, dash) ──► parsebin ──► tags
 //!   filesrc ──► parsebin ──► tags, at the clock's pace, again from the top at the end
 //! ```
 
@@ -18,7 +18,7 @@ use super::pads::{make, parse_into, Pads};
 use super::runner::Plan;
 use super::spec::{InputError, InputSpec};
 
-/// HLS, DASH and RTMP, through `urisourcebin`.
+/// HLS and DASH, through `urisourcebin`.
 pub struct Uri {
     uri: String,
     /// HLS and DASH hand over a segment at a time; pacing them to the clock
