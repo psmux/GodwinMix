@@ -25,6 +25,7 @@ export function totals(all, data, box) {
     live: all.filter((r) => LIVE.has(r.state)).length,
     problems: all.filter((r) => r.state !== "live").length,
     box: box.box,
+    follow: box.follow,
     inK: gov.ingress_kbps || inHist.at(-1),
     outK: gov.egress_kbps || outHist.at(-1),
     inHist,

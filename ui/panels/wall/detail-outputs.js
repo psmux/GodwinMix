@@ -1,10 +1,13 @@
 // A direct show's outputs in its detail: each with its state, what it is
 // sent as and its bitrate; change its format with the same Format step the
-// Add destination form uses, turn it off, remove it, or add another.
+// Add destination form uses, an HLS output's settings (detail-hls.js), turn
+// it off, remove it, or add another. A governor refusal stays in the form,
+// with what would fit as buttons, rather than going by as a toast.
 
 import { el } from "../../shell/dom.js";
 import { errorToast } from "../../shell/toast.js";
 import { outFormat, outName } from "./cells.js";
+import { hlsBlock, hlsWords, isHls } from "./detail-hls.js";
 import { kbps } from "./model.js";
 
 /** The input as a StreamInfo, so the format step can say when copy is enough. */
@@ -23,12 +26,21 @@ export function inputShape(st) {
 export function outputsSection(client, show, stats, reread) {
   const list = el("div.wl-douts");
   const slot = el("div.wl-dform");
-  const call = async (method, params, what) => {
+  const refusedIn = el("div", { hidden: true });
+  // `form`: the call is a form's Save, which closes on success and keeps a
+  // refusal inside it.
+  const call = async (method, params, what, form) => {
     try {
       await client.call(method, { id: show().id, ...params });
+      if (form) slot.replaceChildren();
       await reread();
+      return true;
     } catch (e) {
-      errorToast(e, what);
+      const { isRefusal, showRefusal } = await import("../renditions/refusal.js");
+      if (!form || !isRefusal(e)) return errorToast(e, what), false;
+      if (!refusedIn.isConnected) slot.prepend(refusedIn);
+      showRefusal(refusedIn, e, (rendition) => call(method, { ...params, rendition }, what, form));
+      return false;
     }
   };
   const formatFor = async (current, title, editing) => {
@@ -43,22 +55,36 @@ export function outputsSection(client, show, stats, reread) {
     const f = await formatFor(o.rendition || undefined, outName(o), true);
     f.save.onclick = () => {
       const v = f.step.value();
-      slot.replaceChildren();
-      if (v !== undefined || o.rendition) call("show.output.set", { output: o.id, rendition: v === undefined ? o.rendition : v }, `${outName(o)} keeps its format`);
+      if (v === undefined && !o.rendition) return slot.replaceChildren();
+      call("show.output.set", { output: o.id, rendition: v === undefined ? o.rendition : v }, `${outName(o)} keeps its format`, true);
     };
     slot.replaceChildren(el("div.wl-dbox", {}, [f.step.node, el("div.wl-dbtns", {}, [f.cancel, f.save])]));
+  }
+
+  async function settings(o) {
+    const h = await hlsBlock(o.params || null);
+    const off = o.params ? null : el("p.wl-sub.wl-wrap", { text: "This output is off, so what it was given is not read back. Saving gives it these settings." });
+    const save = el("button.btn.primary", { type: "button", text: "Save settings", onclick: () => call("show.output.set", { output: o.id, params: h.read() }, `${outName(o)} keeps its settings`, true) });
+    const cancel = el("button.btn", { type: "button", text: "Cancel", onclick: () => slot.replaceChildren() });
+    slot.replaceChildren(el("div.wl-dbox", {}, [el("strong", { text: `HLS settings of ${o.id}` }), off, h.node, el("div.wl-dbtns", {}, [cancel, save])]));
   }
 
   async function add() {
     const uri = el("input", { type: "text", placeholder: "udp://10.0.0.50:6000, srt://host:port, rtmp://host/app/key", "aria-label": "Where to send it", spellcheck: "false" });
     const f = await formatFor(undefined, "", false);
+    const h = await hlsBlock(null);
+    const hls = () => /^hls:\/\//i.test(uri.value.trim());
+    uri.addEventListener("input", () => { h.node.hidden = !hls(); });
+    h.node.hidden = true;
     f.save.onclick = () => {
       if (!uri.value.trim()) return uri.focus();
       const v = f.step.value();
-      slot.replaceChildren();
-      call("show.output.add", { uri: uri.value.trim(), rendition: v === undefined ? null : v }, "The output was not added");
+      const params = { uri: uri.value.trim(), rendition: v === undefined ? null : v };
+      if (hls()) params.params = h.read();
+      call("show.output.add", params, "The output was not added", true);
     };
-    slot.replaceChildren(el("div.wl-dbox", {}, [el("label.wl-dfield", {}, [el("span", { text: "Send to" }), uri]), f.step.node, el("div.wl-dbtns", {}, [f.cancel, f.save])]));
+    const hint = "udp://, srt:// and rtmp:// send it on; hls://name serves it as HLS from this station.";
+    slot.replaceChildren(el("div.wl-dbox", {}, [el("label.wl-dfield", {}, [el("span", { text: "Send to" }), uri, el("small.wl-sub", { text: hint })]), h.node, f.step.node, el("div.wl-dbtns", {}, [f.cancel, f.save])]));
     uri.focus();
   }
 
@@ -72,9 +98,10 @@ export function outputsSection(client, show, stats, reread) {
       return el(`div.wl-dout.${state}`, {}, [
         el("span.wl-dot"),
         el("span.wl-doutname", {}, [el("strong", { text: outName(o) }), el("span.wl-sub", { text: o.uri || "platform" })]),
-        el("span.wl-doutfmt", { text: `${outFormat(o, st)}${st && st.kbps ? ` · ${kbps(st.kbps)}` : ""} · ${o.enabled === false ? "off" : state}` }),
+        el("span.wl-doutfmt", { text: [outFormat(o, st), isHls(o) ? hlsWords(o) : "", st && st.kbps ? kbps(st.kbps) : "", o.enabled === false ? "off" : state].filter(Boolean).join(" · ") }),
         el("span.wl-doutbtns", {}, [
           el("button.btn", { type: "button", text: "Format", onclick: () => change(o) }),
+          isHls(o) ? el("button.btn", { type: "button", text: "HLS settings", onclick: () => settings(o) }) : null,
           el("button.btn", { type: "button", text: o.enabled === false ? "Turn on" : "Turn off", onclick: () => call("show.output.set", { output: o.id, enabled: o.enabled === false }, `${outName(o)} did not change`) }),
           el("button.btn.icon", { type: "button", text: "×", title: `Remove ${outName(o)}`, "aria-label": `Remove ${outName(o)}`, onclick: () => call("show.output.remove", { output: o.id }, `${outName(o)} was not removed`) }),
         ]),

@@ -133,11 +133,15 @@ pub fn all_tools<C>(registry: &Registry<C>) -> Vec<Value> {
 /// True for a method one show answers, as against the station in front of
 /// the shows. Those tools take a `show` argument naming which show, and the
 /// MCP server sends it as `?show=<id>`; the station's own methods (`show.*`,
-/// `channel.*`, the governor) are about every show and take none.
+/// `channel.*`, the governor, the headend and the machine) are about every
+/// show and take none.
 pub fn addresses_one_show(method: &str) -> bool {
     !(method.starts_with("show.")
         || method.starts_with("channel.")
-        || method.starts_with("governor."))
+        || method.starts_with("governor.")
+        || method.starts_with("headend.")
+        || method == "gpu.status"
+        || method == "machine.status")
 }
 
 /// The `show` argument, added to an inlined input schema.

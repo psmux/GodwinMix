@@ -112,6 +112,7 @@ function commands(client) {
     cmd("show.new", "New show", "Show"),
     cmd("show.add-many", "New shows from a list", "Show"),
     cmd("show.switch", "Switch show", "Show"),
+    cmd("show.import-flussonic", "Import a Flussonic config", "Show"),
     cmd("view.routing", "Routing", "View"),
     cmd("view.wall", "Monitoring wall", "View"),
     cmd("view.plugins", "More plugins", "Sources"),

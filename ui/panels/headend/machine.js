@@ -2,6 +2,7 @@
 // view is open and the tab is visible. The station reads the GPU only
 // while something asks, so closing the view stops that too, ten seconds
 // later. Each gpu.status after the first asks only for what is new.
+// headend.status, which Flussonic config the station follows, every ten.
 
 import { noMethod } from "../wall/data.js";
 
@@ -17,6 +18,8 @@ export class MachineWatch {
     this.missing = false;
     this.cpu = [];
     this.busy = false;
+    this.follow = null;
+    this.n = 0;
   }
 
   start() {
@@ -33,7 +36,7 @@ export class MachineWatch {
     if (this.busy || this.stopped || this.missing || document.hidden) return;
     this.busy = true;
     try {
-      const [gpu, box] = await Promise.all([this.read("gpu.status", this.since()), this.read("machine.status", {})]);
+      const [gpu, box] = await Promise.all([this.read("gpu.status", this.since()), this.read("machine.status", {}), this.followed()]);
       this.merge(gpu);
       if (box) {
         this.box = box;
@@ -53,6 +56,12 @@ export class MachineWatch {
       if (noMethod(e)) this.missing = true;
       return null;
     }
+  }
+
+  /** Which Flussonic config the station follows, if any. A station without the method follows none. */
+  async followed() {
+    if (this.n++ % 10) return;
+    this.follow = await this.client.call("headend.status", {}).catch(() => null);
   }
 
   since() {

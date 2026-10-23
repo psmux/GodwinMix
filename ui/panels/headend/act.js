@@ -24,6 +24,7 @@ export function act(view, what, value) {
   const o = view.opts;
   if (what === "close") return view.close();
   if (what === "full") return full(view.root);
+  if (what === "import") return import("./import.js").then((m) => m.importFlussonic(view.client, { following: view.box.follow }));
   if (what === "problems") o.problems = !o.problems;
   else if (what === "state") o.state = o.state === value ? "" : value;
   else if (what in o) o[what] = value;

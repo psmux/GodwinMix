@@ -6,8 +6,10 @@ use super::child::Proc;
 use super::{Book, Packagers};
 use crate::station::packager::wire::{Report, Want};
 use crate::station::state::Station;
+use godwinmix_core::hls::access::Access;
 use godwinmix_core::hls::Stream;
 use godwinmix_protocol::destination::{DestinationLive, DestinationState, Playback};
+use godwinmix_protocol::shows::HlsOutputParams;
 use std::net::SocketAddr;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
@@ -61,6 +63,20 @@ impl Packagers {
             viewers: report.map(|r| r.viewers).unwrap_or(0),
         };
         Some((live, playback))
+    }
+
+    /// What one output was given, as `show.output.set` takes it, less its
+    /// viewer key, so a client can show and change it.
+    pub fn params(&self, show: &str, output: &str) -> Option<HlsOutputParams> {
+        let book = self.book.lock();
+        let w = &book.cards.get(&(show.to_string(), output.to_string()))?.want;
+        let (access, open_public) = match w.access {
+            Access::Keyed => ("keyed", None),
+            Access::Open => ("open", None),
+            Access::OpenPublic => ("open", Some(true)),
+        };
+        let (segment_ms, part_ms, window) = (Some(w.segment_ms), Some(w.part_ms), Some(w.window_s));
+        Some(HlsOutputParams { segment_ms, part_ms, window, segments: Some(w.segments.as_str().into()), access: Some(access.into()), open_public, ..Default::default() })
     }
 
     /// Whether the keeper should end: nothing wanted, or the station is

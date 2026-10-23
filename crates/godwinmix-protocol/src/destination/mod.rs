@@ -76,6 +76,10 @@ pub struct Destination {
     /// Where a player opens it, for an output this machine serves as HLS.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub playback: Option<Playback>,
+    /// What an `hls://` output of a show without compositing was given, as
+    /// `show.output.set` takes it, less the viewer key. Read while it runs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub params: Option<crate::shows::HlsOutputParams>,
 }
 
 /// The links of an output served as HLS from the control port, each with
@@ -203,6 +207,7 @@ impl StoredDestination {
             plan: None,
             refused: None,
             playback: None,
+            params: None,
         }
     }
 }

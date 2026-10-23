@@ -20,16 +20,21 @@ mod api;
 mod apply;
 mod bridge;
 mod bridge_parse;
+pub mod calls;
 mod facade;
 mod ingest;
 mod live;
 mod live_tracks;
 mod media;
+pub mod methods;
 mod picture;
+mod report;
 mod saved;
 mod state;
 mod ts_bridge;
 mod watch;
+
+pub use state::Headend;
 
 use anyhow::{Context, Result};
 use godwinmix_core::config::Config;

@@ -20,6 +20,10 @@ pub struct Headend {
     pub st: Arc<Station>,
     /// Flussonic's config, as last read and applied.
     pub file: PathBuf,
+    /// Where Flussonic's URLs and API answer, as bound.
+    pub addrs: Vec<String>,
+    /// The Flussonic style log, when one is written.
+    pub log_path: Option<PathBuf>,
     pub doc: Mutex<Document>,
     /// Every stream that runs as a show, by Flussonic's name.
     pub running: Mutex<Running>,
@@ -73,6 +77,8 @@ pub async fn start(st: Arc<Station>, s: Settings) -> Result<()> {
         segments: Arc::new(super::ts_bridge::Ts::new(st.clone())),
         st,
         file: s.file.clone(),
+        addrs: bound.iter().filter_map(|l| l.local_addr().ok()).map(|a| a.to_string()).collect(),
+        log_path: s.log.clone(),
         doc: Mutex::new(doc),
         running: Mutex::new(running),
         live: RwLock::new(BTreeMap::new()),
@@ -82,6 +88,9 @@ pub async fn start(st: Arc<Station>, s: Settings) -> Result<()> {
         applying: tokio::sync::Mutex::new(()),
         changed: tokio::sync::Notify::new(),
     });
+    // The station's own methods read it for headend.status. Weak, since the
+    // headend holds the station.
+    let _ = h.st.headend.set(Arc::downgrade(&h));
     for l in bound {
         let addr = l.local_addr()?;
         info!(%addr, file = %s.file.display(), "headend: Flussonic's URLs and API");

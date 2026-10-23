@@ -70,6 +70,7 @@
 .wl-doutname strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wl-doutfmt { color: var(--dim); font-size: var(--fs-sm); white-space: nowrap; }
 .wl-dbox { display: grid; gap: 10px; padding: 12px; border: var(--border) solid var(--line); border-radius: var(--radius); }
+.wl-dhls { display: grid; gap: 8px; }
 @media (max-width: 760px) {
   .wl-detail { min-width: 0; }
   .wl-dgrid, .wl-dgrid.four { grid-template-columns: 1fr 1fr; }

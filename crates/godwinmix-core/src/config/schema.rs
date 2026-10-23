@@ -63,7 +63,8 @@ fn property(key: &Key, derived: Value, default: Option<&Value>) -> Value {
     } else if let Some(default) = default.filter(|d| !d.is_null()) {
         p.insert("default".into(), default.clone());
     }
-    p.insert("x-gmx-group".into(), key.section().into());
+    p.insert("x-gmx-group".into(), key.group().into());
+    p.insert("x-gmx-section".into(), key.section().into());
     p.insert("x-gmx-applies".into(), key.applies.as_str().into());
     Value::Object(p)
 }

@@ -1,7 +1,8 @@
 // The header band: the box's totals at a glance. Channels live of total,
 // CPU and memory as rings, what comes in and goes out with two minutes of
-// it, how long the machine and the station have been up, and the buttons
-// for full screen and close.
+// it, how long the machine and the station have been up, the Flussonic
+// config the station follows when it follows one, and the buttons for
+// importing a Flussonic config, full screen and close.
 
 import { el, svg } from "../../shell/dom.js";
 import { kbps } from "../wall/model.js";
@@ -24,16 +25,17 @@ export function band(act) {
   const outS = spark("out", 140, 30);
   const v = () => el("strong.he-big");
   const [inV, outV, upV, upSub, host, problems] = [v(), v(), v(), el("span.he-small"), el("span.he-host"), el("span.he-problems")];
+  const follow = el("span.he-host.he-follow", { hidden: true });
   const button = (key, icon, title) => el("button.btn.he-btn", { type: "button", "data-act": key, title, "aria-label": title }, [svg(icon, 18)]);
   const node = el("header.he-band", {}, [
-    el("div.he-brand", {}, [el("h2", { text: "Headend" }), host, problems]),
+    el("div.he-brand", {}, [el("h2", { text: "Headend" }), host, follow, problems]),
     el("div.he-cell.ring", {}, [chans.node]),
     el("div.he-cell.ring", {}, [cpu.node]),
     el("div.he-cell.ring", {}, [mem.node]),
     el("div.he-cell.net", {}, [el("span.he-k", { text: "Network in" }), inV, inS.node]),
     el("div.he-cell.net", {}, [el("span.he-k", { text: "Network out" }), outV, outS.node]),
     el("div.he-cell.up", {}, [el("span.he-k", { text: "Up" }), upV, upSub]),
-    el("div.he-cell.acts", {}, [button("full", "M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5", "Full screen"), button("close", "M6 6l12 12M18 6L6 18", "Close the headend view (Escape)")]),
+    el("div.he-cell.acts", {}, [button("import", "M12 4v11M7 10l5 5 5-5M5 20h14", "Import a Flussonic config"), button("full", "M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5", "Full screen"), button("close", "M6 6l12 12M18 6L6 18", "Close the headend view (Escape)")]),
   ]);
   node.addEventListener("click", (e) => {
     const b = e.target.closest("[data-act]");
@@ -55,6 +57,12 @@ export function band(act) {
       upV.textContent = upFor(b.uptime_secs) || "...";
       upSub.textContent = b.process_uptime_secs != null ? `station ${upFor(b.process_uptime_secs)}` : "";
       host.textContent = [b.host_name, b.cores ? `${b.cores} cores` : "", b.load_average ? `load ${b.load_average[0]}` : ""].filter(Boolean).join(" · ");
+      const f = t.follow;
+      follow.hidden = !(f && f.following);
+      if (f && f.following) {
+        follow.textContent = `Follows ${f.file}${f.listeners && f.listeners.length ? `, Flussonic URLs on ${f.listeners.join(", ")}` : ""}`;
+        follow.title = `${f.shows} of ${f.streams} streams run as shows. ${f.note}`;
+      }
       problems.textContent = t.problems ? `${t.problems} ${t.problems === 1 ? "channel needs" : "channels need"} a look` : "Every channel is live";
       problems.classList.toggle("bad", !!t.problems);
     },

@@ -34,6 +34,10 @@
           "title": "Switch show…"
         },
         {
+          "command": "show.import-flussonic",
+          "title": "Import a Flussonic config…"
+        },
+        {
           "separator": true
         },
         {

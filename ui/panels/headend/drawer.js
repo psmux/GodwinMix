@@ -1,7 +1,8 @@
 // One channel's detail, in a drawer at the side (a sheet from the bottom
 // on a phone): a player for its HLS, every track in and out, the
 // transcoder settings, the input's history since the page opened, and
-// Restart and Disable. The player is made once when the drawer opens; the
+// Restart, Disable and Settings (the wall's detail: input, outputs, their
+// format and HLS settings, alarms). The player is made once when the drawer opens; the
 // rest is redrawn each second from what the view already holds.
 
 import { el } from "../../shell/dom.js";
@@ -36,6 +37,7 @@ export function drawer(view) {
   async function act(what) {
     const show = view.data.find(id);
     if (!show) return;
+    if (what === "settings") return import("../wall/detail.js").then((m) => m.showDetail(view.client, show));
     if (what === "stop" && armed < Date.now()) {
       armed = Date.now() + 4000;
       return draw();
@@ -72,6 +74,7 @@ export function drawer(view) {
     const on = show.state === "running" || show.state === "live" || show.state === "starting";
     acts.replaceChildren(
       el("span.he-dnums", { text: [kbps(i.kbps || 0), i.cc_errors ? `${i.cc_errors} CC errors in all` : "", i.packets_lost ? `${i.packets_lost} packets lost` : "", i.keyframe_ms ? `keyframe every ${(i.keyframe_ms / 1000).toFixed(1)} s` : ""].filter(Boolean).join(" · ") }),
+      el("button.btn", { type: "button", "data-dact": "settings", text: "Settings", title: "Input, outputs, format, HLS settings and alarms" }),
       on ? el("button.btn", { type: "button", "data-dact": "restart", text: "Restart" }) : null,
       on ? el("button.btn.he-danger", { type: "button", "data-dact": "stop", text: armed > Date.now() ? "Press again to disable" : "Disable" }) : el("button.btn.primary", { type: "button", "data-dact": "start", text: "Enable" }),
     );

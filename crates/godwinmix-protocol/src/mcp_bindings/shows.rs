@@ -44,8 +44,12 @@ pub const BINDINGS: &[Binding] = &[
         tier: Headend,
         description: "Change one output of a show without compositing: `id` is the show, \
             `output` the output. On or off, where it goes, or its format: rendition null copies \
-            the input's own bytes (almost free); {preset: <id>} from rendition_presets \
-            re-encodes, admitted by the governor or refused with what it would cost.",
+            the input's own bytes (almost free); {preset: <id>} from rendition_presets, or \
+            {video: {codec, width, height, bitrate_kbps, keyframe_frames, fit: pad|crop|stretch, \
+            pad_color, deinterlace: off|on|auto, preset, bframes}, audio: {codec, bitrate_kbps, \
+            tracks: first|all}}, re-encodes, admitted by the governor or refused with what it \
+            would cost. An hls:// output takes params {segments: cmaf|ts|both, access: \
+            keyed|open, segment_ms, window}, which replace all its params.",
     },
     Binding {
         method: "show.add",
