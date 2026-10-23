@@ -716,6 +716,7 @@ export interface Destination {
   kbps: number;
   key_hint?: string | null;
   label: string;
+  params?: HlsOutputParams | null;
   plan?: DestinationPlan | null;
   platform: string;
   playback?: Playback | null;
@@ -1606,6 +1607,37 @@ export interface GroupSourcesRequest {
   sources: string[];
 }
 
+/** `headend.import`'s answer: the report, then what was made. */
+export interface HeadendImportReport {
+  converted: number;
+  copied: number;
+  disabled: number;
+  dry_run: boolean;
+  following?: string | null;
+  notes: ImportNote[];
+  shows: ShowAddManyResult;
+  source: string;
+  streams: ImportedStream[];
+}
+
+/** `headend.import`. One of `text` and `path`. */
+export interface HeadendImportRequest {
+  dry_run?: boolean | null;
+  path?: string | null;
+  text?: string | null;
+}
+
+/** `headend.status`: whether this station runs in headend mode. */
+export interface HeadendStatus {
+  file?: string | null;
+  following: boolean;
+  listeners?: string[];
+  log?: string | null;
+  note: string;
+  shows: number;
+  streams: number;
+}
+
 /**
  * Everything in the document that is not a scene or an item: the name, the
  * canvas, the collection's parameters, the transitions it carries, the assets
@@ -1690,6 +1722,14 @@ export interface IdRequest {
   id: string;
 }
 
+/** A line the import read and does not act on, or acts on differently. */
+export interface ImportNote {
+  kind: string;
+  line: number;
+  scope: string;
+  what: string;
+}
+
 export interface ImportObsRequest {
   add_sources?: boolean;
   content?: string | null;
@@ -1728,6 +1768,16 @@ export interface ImportedReport {
   missing_plugins?: string[];
   relink?: Relink[];
   scenes: string[];
+}
+
+/** One `stream` of the config, as the show it becomes. */
+export interface ImportedStream {
+  copy: boolean;
+  disabled: boolean;
+  input: unknown;
+  name: string;
+  outputs: unknown[];
+  title?: string | null;
 }
 
 /**
@@ -4010,6 +4060,8 @@ export interface MethodParams {
   "governor.calibrate": CalibrateRequest;
   "governor.status": Record<string, never>;
   "gpu.status": GpuStatusRequest;
+  "headend.import": HeadendImportRequest;
+  "headend.status": Record<string, never>;
   "log.gst": LogGstRequest;
   "log.levels": Record<string, never>;
   "log.set": LogSetRequest;
@@ -4249,6 +4301,8 @@ export interface MethodResults {
   "governor.calibrate": CalibrateResult;
   "governor.status": GovernorStatus;
   "gpu.status": GpuStatus;
+  "headend.import": HeadendImportReport;
+  "headend.status": HeadendStatus;
   "log.gst": LogGstResult;
   "log.levels": Record<string, unknown>;
   "log.set": Record<string, unknown>;
@@ -4543,6 +4597,8 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "governor.calibrate", summary: "Measure this machine's encoders again, in the background, a few seconds of every core. Refused while anything is on air unless `confirm` is true.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/governor/calibrate" } },
   { name: "governor.status", summary: "The resource governor: when this machine was measured, what is in use and free on the CPU and each GPU encoder, and what was shed to keep the programme whole.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/governor/status" } },
   { name: "gpu.status", summary: "Every NVIDIA GPU on this machine: encoder, decoder and 3D use, video memory, encoder sessions, temperature, power and clocks, now and over the last two minutes. Read once a second from NVML or nvidia-smi while a client keeps asking, and not at all otherwise. No GPUs, and a note, on a machine without one.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/gpu/status" } },
+  { name: "headend.import", summary: "Make a Flussonic config into shows without compositing, one per stream, each with its input, one HLS output and the transcoder line as its rendition. Takes the config's text or a path on the station's machine. A dry run, the default, answers the report (every stream, every line not carried, what the shows would cost) and makes nothing.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/headend/import" } },
+  { name: "headend.status", summary: "Whether this station follows a Flussonic config, which file, where Flussonic's URLs and API answer, and how many of its streams run as shows.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/headend/status" } },
   { name: "log.gst", summary: "Raise GStreamer's own debug categories for a while, then let them fall back on their own.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/log/gst" } },
   { name: "log.levels", summary: "Every log level override in force, and the GStreamer categories still raised.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/log/levels" } },
   { name: "log.set", summary: "Change one instance's or one module's log level while the mixer runs.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/log/set" } },
@@ -5125,6 +5181,16 @@ export class GeneratedMethods {
   /** Every NVIDIA GPU on this machine: encoder, decoder and 3D use, video memory, encoder sessions, temperature, power and clocks, now and over the last two minutes. Read once a second from NVML or nvidia-smi while a client keeps asking, and not at all otherwise. No GPUs, and a note, on a machine without one. */
   gpuStatus(params: GpuStatusRequest = {}): Promise<GpuStatus> {
     return this._call("gpu.status", params as unknown as Record<string, unknown>) as Promise<GpuStatus>;
+  }
+
+  /** Make a Flussonic config into shows without compositing, one per stream, each with its input, one HLS output and the transcoder line as its rendition. Takes the config's text or a path on the station's machine. A dry run, the default, answers the report (every stream, every line not carried, what the shows would cost) and makes nothing. */
+  headendImport(params: HeadendImportRequest = {}): Promise<HeadendImportReport> {
+    return this._call("headend.import", params as unknown as Record<string, unknown>) as Promise<HeadendImportReport>;
+  }
+
+  /** Whether this station follows a Flussonic config, which file, where Flussonic's URLs and API answer, and how many of its streams run as shows. */
+  headendStatus(): Promise<HeadendStatus> {
+    return this._call("headend.status", {}) as Promise<HeadendStatus>;
   }
 
   /** Raise GStreamer's own debug categories for a while, then let them fall back on their own. */

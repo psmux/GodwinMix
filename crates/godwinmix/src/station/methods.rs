@@ -53,7 +53,8 @@ pub async fn call(st: &Arc<Station>, token: &Token, method: &str, params: Value)
         m if m.starts_with("token.") => crate::devices::call(&st.tokens, m, params).await,
         m if m.starts_with("show.") => super::shows_call::call(st, m, params).await,
         m if m.starts_with("channel.") => super::channel_calls::call(st, token, m, params).await,
-        m if m.starts_with("headend.") => crate::headend::calls::call(st, token, m, params).await,
+        // Boxed: an import calls show.add_many back through here.
+        m if m.starts_with("headend.") => Box::pin(crate::headend::calls::call(st, token, m, params)).await,
         "governor.status" => {
             let mut status = status::governor_status(&st.render, &[]);
             status.ingress_kbps = ingress_kbps(st);

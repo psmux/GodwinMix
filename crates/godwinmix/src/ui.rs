@@ -245,6 +245,8 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/headend/grid.js", include_str!("../../../ui/panels/headend/grid.js")),
     ("panels/headend/groups.js", include_str!("../../../ui/panels/headend/groups.js")),
     ("panels/headend/headend.css", include_str!("../../../ui/panels/headend/headend.css")),
+    ("panels/headend/import-report.js", include_str!("../../../ui/panels/headend/import-report.js")),
+    ("panels/headend/import.js", include_str!("../../../ui/panels/headend/import.js")),
     ("panels/headend/machine.js", include_str!("../../../ui/panels/headend/machine.js")),
     ("panels/headend/model.js", include_str!("../../../ui/panels/headend/model.js")),
     ("panels/headend/parts.js", include_str!("../../../ui/panels/headend/parts.js")),
@@ -268,6 +270,7 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/wall/channel-model.js", include_str!("../../../ui/panels/wall/channel-model.js")),
     ("panels/wall/channel-rows.js", include_str!("../../../ui/panels/wall/channel-rows.js")),
     ("panels/wall/data.js", include_str!("../../../ui/panels/wall/data.js")),
+    ("panels/wall/detail-hls.js", include_str!("../../../ui/panels/wall/detail-hls.js")),
     ("panels/wall/detail-outputs.js", include_str!("../../../ui/panels/wall/detail-outputs.js")),
     ("panels/wall/detail.js", include_str!("../../../ui/panels/wall/detail.js")),
     ("panels/wall/dialogs.css", include_str!("../../../ui/panels/wall/dialogs.css")),
@@ -281,9 +284,11 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/wall/virtual.js", include_str!("../../../ui/panels/wall/virtual.js")),
     ("panels/wall/wall.css", include_str!("../../../ui/panels/wall/wall.css")),
     ("panels/renditions/custom.js", include_str!("../../../ui/panels/renditions/custom.js")),
+    ("panels/renditions/custom-advanced.js", include_str!("../../../ui/panels/renditions/custom-advanced.js")),
     ("panels/renditions/format-step.js", include_str!("../../../ui/panels/renditions/format-step.js")),
     ("panels/renditions/hls-add.js", include_str!("../../../ui/panels/renditions/hls-add.js")),
     ("panels/renditions/hls-card.js", include_str!("../../../ui/panels/renditions/hls-card.js")),
+    ("panels/renditions/hls-settings.js", include_str!("../../../ui/panels/renditions/hls-settings.js")),
     ("panels/renditions/ladder.js", include_str!("../../../ui/panels/renditions/ladder.js")),
     ("panels/renditions/model.js", include_str!("../../../ui/panels/renditions/model.js")),
     ("panels/renditions/plan-feed.js", include_str!("../../../ui/panels/renditions/plan-feed.js")),
@@ -475,6 +480,7 @@ const LEGACY: &str = include_str!("../../../ui/legacy/index.html");
 /// puts it back at `/test/`, which is what a developer running the harness
 /// sets and what CI sets.
 const DEV_ASSETS: &[(&str, &str)] = &[
+    ("test/headend-advanced.js", include_str!("../../../ui/test/headend-advanced.js")),
     ("test/index.html", include_str!("../../../ui/test/index.html")),
     ("test/run.js", include_str!("../../../ui/test/run.js")),
     ("test/store.js", include_str!("../../../ui/test/store.js")),
@@ -1275,6 +1281,8 @@ mod tests {
         reachable.extend(closure_of("panels/wall/detail.js"));
         // View > Headend, or Headend view on the wall.
         reachable.extend(closure_of("panels/headend/view.js"));
+        // File > Import a Flussonic config, or the button on the headend's band.
+        reachable.extend(closure_of("panels/headend/import.js"));
         // Not imported: the headend player adds it with a <script>, when a
         // browser that cannot play HLS opens a channel's drawer.
         reachable.insert("vendor/hls.light.min.js");

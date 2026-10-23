@@ -826,6 +826,8 @@ class Destination(TypedDict, total=False):
     key_hint: Optional[str]
     # The key's last four characters, as a channel key's `hint`, so a person can see which key is saved. Left out for a key under eight characters, where four would be half of it. Never the key itself.
     label: str
+    params: Union[HlsOutputParams, None]
+    # What an `hls://` output of a show without compositing was given, as `show.output.set` takes it, less the viewer key. Read while it runs.
     plan: Union[DestinationPlan, None]
     # What the plan gave it, while its stream is live.
     platform: str
@@ -1869,6 +1871,50 @@ class GroupSourcesRequest(TypedDict, total=False):
     # The tray folder to put them in. Null takes them out of the one they are in.
     sources: List[str]
 
+class HeadendImportReport(TypedDict, total=False):
+    """`headend.import`'s answer: the report, then what was made."""
+
+    converted: int
+    copied: int
+    disabled: int
+    dry_run: bool
+    following: Optional[str]
+    # The Flussonic config this station follows, when it follows one. A show made by an import is not in that file, and the file's own streams are not touched.
+    notes: List[ImportNote]
+    shows: ShowAddManyResult
+    # `show.add_many`'s answer for these shows: on a dry run what would be made, what it costs and what would be refused; otherwise what was.
+    source: str
+    # `pasted text`, or the path that was read.
+    streams: List[ImportedStream]
+
+class HeadendImportRequest(TypedDict, total=False):
+    """`headend.import`. One of `text` and `path`."""
+
+    dry_run: Optional[bool]
+    # Left out: true. Read the config, price its shows and make nothing. False makes them.
+    path: Optional[str]
+    # Or a file on the station's machine, such as `/etc/flussonic/flussonic.conf`, read by the station.
+    text: Optional[str]
+    # The config's text, as pasted.
+
+class HeadendStatus(TypedDict, total=False):
+    """`headend.status`: whether this station runs in headend mode."""
+
+    file: Optional[str]
+    # The file it follows.
+    following: bool
+    # True while the station follows a Flussonic config (`godwinmix headend --flussonic FILE`).
+    listeners: List[str]
+    # Where Flussonic's URLs and API answer, `address:port`.
+    log: Optional[str]
+    # The Flussonic style log, when one is written.
+    note: str
+    # What a reader of this answer can do next, in one sentence.
+    shows: int
+    # Of those, the ones running as a show.
+    streams: int
+    # Streams in the file as last read.
+
 class Header(TypedDict, total=False):
     """Everything in the document that is not a scene or an item: the name, the canvas, the collection's parameters, the transitions it carries, the assets and the source labels. It is not a record and it has no id, so it cannot be diffed the way the tree is. It is carried whole, because it is small and because the alternative is that a command touching only the header produces an empty patch and is thrown away by `edit`, which is exactly what used to happen to `scene.params.set`, `source.set` and `source.group`: all three answered with the change and none of them kept it."""
 
@@ -1942,6 +1988,17 @@ class IdRequest(TypedDict, total=False):
 
     id: str
 
+class ImportNote(TypedDict, total=False):
+    """A line the import read and does not act on, or acts on differently."""
+
+    kind: str
+    # `ignored`: nothing in GodwinMix uses it. `not_carried`: understood, and GodwinMix does something else, which `what` says.
+    line: int
+    # 0 when the note is about the whole config.
+    scope: str
+    # `global`, or `stream NAME`.
+    what: str
+
 class ImportObsRequest(TypedDict, total=False):
     add_sources: bool
     # Add the sources the scenes draw, each through `source.add`. Left out, only the scenes are added and the answer carries a `[[sources]]` block in `config_toml` instead.
@@ -1998,6 +2055,21 @@ class ImportedReport(TypedDict, total=False):
     # Assets that did not come across, with the items that draw them. Empty when everything landed.
     scenes: List[str]
     # The scenes that were added, by the names they ended up with.
+
+class ImportedStream(TypedDict, total=False):
+    """One `stream` of the config, as the show it becomes."""
+
+    copy: bool
+    # No `transcoder`: the input is served as it comes.
+    disabled: bool
+    # `disabled true`: the show is made and stopped.
+    input: Any
+    # The show's input, as `show.add` takes it, with any password in an address shown as `***`.
+    name: str
+    # Flussonic's name, the show's name when it is made.
+    outputs: List[Any]
+    # The show's outputs: the HLS output with its params and rendition, then one per `push`.
+    title: Optional[str]
 
 class InputSpec(TypedDict, total=False):
     """What a show without compositing takes in. A show that composites makes its input its one source."""
@@ -4648,6 +4720,8 @@ METHODS = (
     {"name": "governor.calibrate", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/governor/calibrate"), "summary": "Measure this machine's encoders again, in the background, a few seconds of every core. Refused while anything is on air unless `confirm` is true."},
     {"name": "governor.status", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/governor/status"), "summary": 'The resource governor: when this machine was measured, what is in use and free on the CPU and each GPU encoder, and what was shed to keep the programme whole.'},
     {"name": "gpu.status", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/gpu/status"), "summary": 'Every NVIDIA GPU on this machine: encoder, decoder and 3D use, video memory, encoder sessions, temperature, power and clocks, now and over the last two minutes. Read once a second from NVML or nvidia-smi while a client keeps asking, and not at all otherwise. No GPUs, and a note, on a machine without one.'},
+    {"name": "headend.import", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/headend/import"), "summary": "Make a Flussonic config into shows without compositing, one per stream, each with its input, one HLS output and the transcoder line as its rendition. Takes the config's text or a path on the station's machine. A dry run, the default, answers the report (every stream, every line not carried, what the shows would cost) and makes nothing."},
+    {"name": "headend.status", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/headend/status"), "summary": "Whether this station follows a Flussonic config, which file, where Flussonic's URLs and API answer, and how many of its streams run as shows."},
     {"name": "log.gst", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/log/gst"), "summary": "Raise GStreamer's own debug categories for a while, then let them fall back on their own."},
     {"name": "log.levels", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/log/levels"), "summary": 'Every log level override in force, and the GStreamer categories still raised.'},
     {"name": "log.set", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/log/set"), "summary": "Change one instance's or one module's log level while the mixer runs."},
@@ -5969,6 +6043,30 @@ class GeneratedMethods:
         if since_ms is not None:
             params["since_ms"] = since_ms
         return await self._call("gpu.status", params)
+
+    async def headend_import(
+        self,
+        *,
+        dry_run: Optional[bool] = None,
+        path: Optional[str] = None,
+        text: Optional[str] = None,
+    ) -> HeadendImportReport:
+        """Make a Flussonic config into shows without compositing, one per stream, each with its input, one HLS output and the transcoder line as its rendition. Takes the config's text or a path on the station's machine. A dry run, the default, answers the report (every stream, every line not carried, what the shows would cost) and makes nothing."""
+        params: Dict[str, Any] = {}
+        if dry_run is not None:
+            params["dry_run"] = dry_run
+        if path is not None:
+            params["path"] = path
+        if text is not None:
+            params["text"] = text
+        return await self._call("headend.import", params)
+
+    async def headend_status(
+        self,
+    ) -> HeadendStatus:
+        """Whether this station follows a Flussonic config, which file, where Flussonic's URLs and API answer, and how many of its streams run as shows."""
+        params: Dict[str, Any] = {}
+        return await self._call("headend.status", params)
 
     async def log_gst(
         self,

@@ -104,6 +104,8 @@ Keys accepted on every method, handled before a method runs.
 | `governor.calibrate` | `POST /api/v1/governor/calibrate` | admin |  | 1 | Measure this machine's encoders again, in the background, a few seconds of every core. Refused while anything is on air unless `confirm` is true. |
 | `governor.status` | `GET /api/v1/governor/status` | read |  | 1 | The resource governor: when this machine was measured, what is in use and free on the CPU and each GPU encoder, and what was shed to keep the programme whole. |
 | `gpu.status` | `GET /api/v1/gpu/status` | read |  | 1 | Every NVIDIA GPU on this machine: encoder, decoder and 3D use, video memory, encoder sessions, temperature, power and clocks, now and over the last two minutes. Read once a second from NVML or nvidia-smi while a client keeps asking, and not at all otherwise. No GPUs, and a note, on a machine without one. |
+| `headend.import` | `POST /api/v1/headend/import` | admin |  | 1 | Make a Flussonic config into shows without compositing, one per stream, each with its input, one HLS output and the transcoder line as its rendition. Takes the config's text or a path on the station's machine. A dry run, the default, answers the report (every stream, every line not carried, what the shows would cost) and makes nothing. |
+| `headend.status` | `GET /api/v1/headend/status` | read |  | 1 | Whether this station follows a Flussonic config, which file, where Flussonic's URLs and API answer, and how many of its streams run as shows. |
 | `log.gst` | `POST /api/v1/log/gst` | admin |  | 1 | Raise GStreamer's own debug categories for a while, then let them fall back on their own. |
 | `log.levels` | `GET /api/v1/log/levels` | read |  | 1 | Every log level override in force, and the GStreamer categories still raised. |
 | `log.set` | `POST /api/v1/log/set` | admin |  | 1 | Change one instance's or one module's log level while the mixer runs. |
@@ -1438,6 +1440,8 @@ MCP tool `governor_status` in the `search` profile: readOnlyHint true, destructi
 
 Every NVIDIA GPU on this machine: encoder, decoder and 3D use, video memory, encoder sessions, temperature, power and clocks, now and over the last two minutes. Read once a second from NVML or nvidia-smi while a client keeps asking, and not at all otherwise. No GPUs, and a note, on a machine without one.
 
+MCP tool `gpu_status` in the `headend` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+
 ```json
 {
   "params": {
@@ -1445,6 +1449,42 @@ Every NVIDIA GPU on this machine: encoder, decoder and 3D use, video memory, enc
   },
   "result": {
     "$ref": "#/$defs/GpuStatus"
+  }
+}
+```
+
+#### `headend.import`
+
+Make a Flussonic config into shows without compositing, one per stream, each with its input, one HLS output and the transcoder line as its rendition. Takes the config's text or a path on the station's machine. A dry run, the default, answers the report (every stream, every line not carried, what the shows would cost) and makes nothing.
+
+MCP tool `import_flussonic` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint false.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/HeadendImportRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/HeadendImportReport"
+  }
+}
+```
+
+#### `headend.status`
+
+Whether this station follows a Flussonic config, which file, where Flussonic's URLs and API answer, and how many of its streams run as shows.
+
+MCP tool `headend_status` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "$ref": "#/$defs/HeadendStatus"
   }
 }
 ```
@@ -1499,6 +1539,8 @@ Change one instance's or one module's log level while the mixer runs.
 #### `machine.status`
 
 The machine itself: its name, cores, CPU use of every process, memory, how long it and this process have been up, and its load average.
+
+MCP tool `machine_status` in the `headend` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
 
 ```json
 {

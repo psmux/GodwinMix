@@ -1,6 +1,6 @@
-//! The headend profile's own tools: the GPU, the machine, and a Flussonic
-//! config made into shows. An agent running a box of many channels needs
-//! all of them without a search, and none of them picks a show.
+//! The headend profile's own tools: the GPU and the machine, hot, and a
+//! Flussonic config made into shows, one search away. None of them picks a
+//! show: the station answers them for the whole machine.
 
 use super::*;
 
@@ -21,13 +21,16 @@ fn the_machine_tools_are_hot_and_read_only() {
         assert!(t["inputSchema"]["properties"].get("show").is_none(), "{name} is the station's, not a show's");
     }
     let gpu = tool(&s, "gpu_status");
-    assert_eq!(gpu["inputSchema"]["properties"]["since_ms"]["type"], "integer");
+    let since = serde_json::to_string(&gpu["inputSchema"]["properties"]["since_ms"]["type"]).unwrap();
+    assert!(since.contains("integer"), "since_ms is a number of milliseconds: {since}");
 }
 
 #[test]
-fn the_import_takes_text_or_a_path_and_a_dry_run() {
+fn the_import_takes_text_or_a_path_and_a_dry_run_and_a_search_finds_it() {
     let s = server();
-    let t = tool(&s, "import_flussonic");
+    let found = mcp_tools::search(&s.registry, "import a flussonic config", 5);
+    assert_eq!(found.first().map(|t| t["name"].clone()), Some(json!("import_flussonic")), "{found:?}");
+    let t = mcp_tools::all_tools(&s.registry).into_iter().find(|t| t["name"] == "import_flussonic").expect("a tool");
     let props = &t["inputSchema"]["properties"];
     for p in ["text", "path", "dry_run"] {
         assert!(props.get(p).is_some(), "import_flussonic has no {p}: {props}");

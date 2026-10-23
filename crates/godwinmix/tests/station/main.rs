@@ -10,6 +10,7 @@ mod direct;
 mod direct_live;
 mod direct_restart;
 mod gallery_install;
+mod headend_import;
 mod health_main;
 mod hls_channel;
 mod hls_channel_restart;
