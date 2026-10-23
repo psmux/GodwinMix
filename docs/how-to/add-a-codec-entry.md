@@ -74,6 +74,7 @@ That is the whole change. No rebuild, no core release.
 | `codec` | `h264`, `h265`, `av1`, `aac`, `opus`. Containers are matched against this. |
 | `accel` | The backend family. `software`, or a vendor name an operator can pin with `[hardware] encode`. |
 | `rank` | Higher wins among the entries that are installed. |
+| `convert_rank` | The decoder's rank when a stream is converted for a rendition, in place of `rank`. The converter builds its decoder alone, with no `decodebin` behind it, so a decoder that takes only part of a codec goes lower here. openh264 has 25, under libav's 30. Video entries only. |
 | `encoder`, `decoder` | Element names. An entry may have only one of them; encode and decode are chosen separately. |
 | `parser` | What goes between the encoder and the muxer. `h264parse`, `aacparse`, `av1parse`. The mixer takes the name from here and never writes one itself. |
 | `download` | Element that pulls frames out of this backend's memory into system memory, for a hardware decoder handing out GPU surfaces. |
