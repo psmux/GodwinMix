@@ -26,7 +26,7 @@ pub mod direct;
 pub mod child;
 mod files;
 mod host;
-mod ingest;
+pub(crate) mod ingest;
 pub mod packager;
 pub mod list;
 pub mod methods;

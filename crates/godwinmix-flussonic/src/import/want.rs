@@ -2,24 +2,17 @@
 //! the import names rendition fields, so a rename on the media side is a
 //! change here and nowhere else.
 //!
-//! `codec`, `width`, `height`, `fps` and `bitrate_kbps` are
-//! `VideoWant`'s today; `codec` and `bitrate_kbps` are `AudioWant`'s. The
-//! rest are the fields `wip/headend-media` adds (`fit` with its pad colour,
-//! `deinterlace`, `keyframe_frames`, `preset`, `bframes`,
-//! `AudioWant.tracks`). `hw=nvenc` and `deviceid` have no field: the planner
-//! already takes a hardware encoder first, in catalogue rank order, and a
-//! station that must never encode in software pins it with `[hardware]`. They are written here under the names
-//! that branch plans; until it lands the station reads the request without
-//! them, and each one is listed in the import report as waiting, so nothing
-//! is dropped without a word.
+//! Every field written here is `VideoWant`'s or `AudioWant`'s and acted on.
+//! `hw=nvenc` and `deviceid` have no field: the planner already takes a
+//! hardware encoder first, in catalogue rank order, and a station that must
+//! never encode in software pins it with `[hardware]`. What GodwinMix does
+//! differently is a note: a pad colour other than black, one picture per
+//! field, and deinterlacing, which runs on the CPU.
 
 use super::codecs::{audio_codec, fps_of, video_codec};
 use super::Note;
 use crate::model::{Bitrate, Deinterlace, DeinterlaceRate, Hw, SizeMode, Transcoder};
 use serde_json::{json, Map, Value};
-
-/// Fields this import writes that the station does not read yet.
-pub const WAITING: &[&str] = &["fit", "pad_color", "deinterlace", "keyframe_frames", "preset", "bframes", "tracks"];
 
 /// The NVENC preset for a transcoder line that names none. The catalogue's
 /// own default (p4) is tuned for one encode; a headend runs dozens on one
@@ -76,6 +69,9 @@ fn video(t: &Transcoder, line: usize, notes: &mut Vec<Note>) -> Option<Value> {
         Deinterlace::Auto => "auto",
     };
     v.insert("deinterlace".into(), json!(deinterlace));
+    if t.deinterlace != Deinterlace::Off {
+        notes.push(Note::not_carried(line, format!("deinterlace={deinterlace}: the deinterlacing runs on the CPU, between the GPU decode and the encode")));
+    }
     if t.deinterlace_rate == DeinterlaceRate::Field && t.deinterlace != Deinterlace::Off {
         notes.push(Note::not_carried(line, "deinterlace_rate=field (one picture per field): pictures are kept at the source's frame rate".into()));
     }

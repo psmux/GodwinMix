@@ -21,6 +21,7 @@ mod apply;
 mod bridge;
 mod bridge_parse;
 mod facade;
+mod ingest;
 mod live;
 mod live_tracks;
 mod media;
@@ -65,6 +66,10 @@ pub struct Settings {
     pub port: Option<u16>,
     pub address: Option<String>,
     pub log: Option<PathBuf>,
+    /// The GodwinMix config's plugin trust settings, for installing the
+    /// ingest plugin.
+    pub allow_unsigned: bool,
+    pub marketplaces_only: Vec<String>,
 }
 
 fn table_path(cfg: &Config, key: &str) -> Option<PathBuf> {
@@ -77,7 +82,14 @@ pub fn settings(args: &Args, cfg: Option<&Config>) -> Result<Settings> {
         "headend mode needs Flussonic's config: give --flussonic /etc/flussonic/flussonic.conf, or set flussonic in a [headend] table",
     )?;
     let port = args.port.or_else(|| cfg.and_then(|c| c.extra.get("headend")?.get("port")?.as_integer()).and_then(|p| u16::try_from(p).ok()));
-    Ok(Settings { file, port, address: args.address.clone(), log: args.flussonic_log.clone().or_else(|| from_table("flussonic_log")) })
+    Ok(Settings {
+        file,
+        port,
+        address: args.address.clone(),
+        log: args.flussonic_log.clone().or_else(|| from_table("flussonic_log")),
+        allow_unsigned: cfg.is_none_or(|c| c.plugins.allow_unsigned),
+        marketplaces_only: cfg.map(|c| c.marketplaces_only()).unwrap_or_default(),
+    })
 }
 
 /// `--check`: the import's plan and notes, as text.
@@ -98,7 +110,6 @@ pub fn check(s: &Settings) -> Result<String> {
         let kind = match n.kind {
             godwinmix_flussonic::import::NoteKind::Ignored => "ignored",
             godwinmix_flussonic::import::NoteKind::NotCarried => "not carried",
-            godwinmix_flussonic::import::NoteKind::Waiting => "waiting",
         };
         match n.line {
             0 => out.push_str(&format!("{scope}, {kind}: {}\n", n.what)),
