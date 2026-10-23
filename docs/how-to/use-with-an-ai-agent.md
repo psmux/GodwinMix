@@ -57,9 +57,9 @@ A tool list is charged for on every single call, so there are three of them.
 
 | | Tools | About |
 |---|---|---|
-| `--profile standard` (default) | 14 | about 17,800 bytes, roughly 4,500 tokens |
-| `--profile minimal` | 6 | about 5,800 bytes, roughly 1,500 tokens, for a small context |
-| `--profile headend` | 11 | about 16,600 bytes, for many shows at once |
+| `--profile standard` (default) | 14 | about 18,400 bytes, roughly 4,600 tokens |
+| `--profile minimal` | 6 | about 5,900 bytes, roughly 1,500 tokens, for a small context |
+| `--profile headend` | 13 | about 18,200 bytes, for many shows at once |
 
 ```sh
 godwinmix mcp --profile minimal          # or GODWINMIX_MCP_PROFILE=minimal
@@ -70,8 +70,8 @@ godwinmix mcp --profile minimal          # or GODWINMIX_MCP_PROFILE=minimal
 `revert`, `set_source`, `list_templates`, `save_template`,
 `create_scene_from`, `add_scene_item`, `set_scene_item` and `snapshot`.
 `headend` adds the shows instead (`list_shows`, `add_shows`, `show_stats`,
-`set_show`, `set_show_output`); start it with `godwinmix mcp --profile
-headend`.
+`set_show`, `set_show_output`) and the machine they run on (`gpu_status`,
+`machine_status`); start it with `godwinmix mcp --profile headend`.
 
 Everything else is one call away: outputs, media, ad breaks, seeking, audio,
 codecs, channels and their destinations, the governor, the project file, and
@@ -159,6 +159,26 @@ because the model is charged for every space.
 A person does the same from a terminal with `gmx shows add --from feeds.csv
 --dry-run`, then without `--dry-run`, and `gmx shows stats --watch`; see
 [`docs/reference/cli.md`](../reference/cli.md#many-shows).
+
+### From a Flussonic config, and the box under it
+
+A box moving off Flussonic is one tool away from its channels:
+`search_tools {"query": "import a flussonic config"}` finds
+`import_flussonic`, and through `call_tool` it takes `{"path":
+"/etc/flussonic/flussonic.conf"}` (a file on the station's machine) or
+`{"text": "..."}`. The first call is a dry run: every stream as the show it
+becomes, every line not carried, and what `show.add_many` would refuse. The
+same call with `"dry_run": false` makes them. `headend_status` says whether
+the station already follows such a file.
+
+Every setting the page has is in `set_show_output`: `params` takes the HLS
+output's `segments` (`cmaf`, `ts`, `both`), `access` (`keyed`, or `open` for
+an output behind a gateway that checks its own signature), `segment_ms` and
+`window`, and replaces every param; `rendition` takes the encode's
+`keyframe_frames`, `fit`, `pad_color`, `deinterlace`, `preset` and `bframes`,
+and the sound's `tracks: "all"` and `bitrate_kbps`. `gpu_status` and
+`machine_status` are hot in this profile: read them before adding
+conversions, and when channels fail on the GPU.
 
 ## Install the skills first
 

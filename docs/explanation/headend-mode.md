@@ -96,6 +96,8 @@ hub. Other transports keep their current inputs.
   `bframes`. `AudioWant` gains `tracks` (first or all).
 * Governor: the NVENC session probe goes past 8 when the driver allows it,
   up to a configured limit, with a manual override.
+* On the page these are the Custom format's Advanced group, and the two
+  NVENC settings are under Advanced in Mixer settings.
 * Every encoded frame keeps its source frame's time, so sound and picture
   stay together whatever the encoder's load.
 * One CUDA context per process, shared by every decoder and encoder, and
@@ -111,6 +113,8 @@ hub. Other transports keep their current inputs.
 * `access = "keyed" | "open"`. Open is for an output behind a gateway that
   checks its own signature, and answers only on loopback and LAN addresses
   unless told otherwise.
+* On the page, an output's HLS settings: low latency as one click, the
+  rest under Advanced. `show.list` reads each direct output's params back.
 
 ### 5. Flussonic compatibility (`godwinmix-flussonic`)
 
@@ -127,6 +131,9 @@ hub. Other transports keep their current inputs.
   from `edit_auth`; `PUT` and `DELETE` edit the config through the lossless
   writer.
 * Log lines in Flussonic's format when asked.
+* `headend.import` makes a config's streams into shows once, from the page
+  or an agent, with the report first; `headend.status` says which file a
+  station follows.
 
 ### 6. The headend wall
 

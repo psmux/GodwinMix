@@ -36,7 +36,34 @@ of fifty channels at 720p asks for:
 The source's frame rate is kept: leave `fps` out. The H.264 comes out in
 Main profile (the catalogue's `profile` for NVENC): High's 8x8 transform
 costs NVENC enough that a card carrying fifty channels runs out, and Main
-keeps most of its gain over Baseline.
+keeps most of its gain over Baseline. The profile is the catalogue's, not
+part of the request, so neither the page nor `set_show_output` asks for it.
+
+### From the page
+
+Press **Format** on the output's row in the show's detail (the wall's row,
+or **Settings** in a channel's drawer on the headend view), then **Custom**.
+Codec, size, rate, bitrate, keyframe seconds and sound are the form as it
+always was; a rate of **Same as the source** leaves `fps` out. The rest is
+under **Advanced**:
+
+| Field | In the request |
+|---|---|
+| Another shape | `fit`: pad, crop or stretch. Pad is the default and is not sent |
+| Bar colour | `pad_color`, for a pad; black is not sent |
+| Deinterlace | `deinterlace`: off (not sent), on, or auto |
+| Keyframe every, in frames | `keyframe_frames`, taken over the seconds |
+| Encoder preset | `preset`, in the encoder's words |
+| B frames | `bframes` |
+| Sound tracks | `tracks: all`, or the first only (not sent) |
+| Sound bitrate | `audio.bitrate_kbps`, in place of the Sound choice's |
+
+An output that already asks for any of these opens with Advanced open, so a
+rendition made by a Flussonic import is edited as it is. The Custom card's
+badge follows the form, and a format the governor refuses stays open with
+the formats that would fit.
+
+![The Custom form with Advanced open, dark theme](../media/headend/custom-advanced-dark.png)
 
 ## What the machine needs
 
@@ -56,6 +83,13 @@ keeps most of its gain over Baseline.
 [governor]
 nvenc_session_probe = 128
 ```
+
+Both NVENC settings are in **File > Mixer settings** under **Advanced**,
+closed until opened: **NVENC sessions to probe for** is
+`nvenc_session_probe`, and **NVENC session limit** is `nvenc_sessions`, a
+known limit in place of the probe. Each waits for a restart, and says so.
+
+![Mixer settings with Advanced open, light theme](../media/headend/mixer-advanced-light.png)
 
 ## In a container, ask for the GPU through CDI
 

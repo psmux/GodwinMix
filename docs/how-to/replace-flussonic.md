@@ -52,6 +52,30 @@ says what GodwinMix does instead: a pad colour other than black, one picture
 per field, deinterlacing (which runs on the CPU), a DVR. Every other option
 of a `transcoder` line is acted on.
 
+### From the page, or an agent
+
+The same check is **File > Import a Flussonic config**, or the import button
+on the headend view's band. Paste the config, or give the path of the file
+on the station's machine (the station reads it, so it is that machine's
+path), and press **Read it**. Nothing is made yet: the report lists every
+stream as the show it becomes, with its input, what its HLS output serves
+and its rendition, which streams would be refused and why, and every line
+not carried under **Lines not carried**. **Make N shows** then makes them.
+
+![The import's report, light theme](../media/headend/import-report-light.png)
+![The same at phone width, dark theme](../media/headend/phone-import-report-dark.png)
+
+This is `headend.import` (an agent's `import_flussonic`, one `search_tools`
+away in the `headend` profile): `{"path": "/etc/flussonic/flussonic.conf"}`
+is a dry run that answers the report, and `"dry_run": false` makes the
+shows. A stream whose show is already there from an earlier import is
+refused rather than made twice.
+
+An import makes the shows once. It does not watch the file or answer
+Flussonic's URLs and API; `godwinmix headend` below does both. On a station
+that already follows a file, the dialog says which, and a show it makes is
+not in that file.
+
 ## Run it beside Flussonic
 
 Give it another port, so Flussonic keeps 8090 and both run from the same
@@ -129,6 +153,17 @@ Edit `flussonic.conf` as before, by hand or through the API (`PUT` and
 `DELETE /streamer/api/v3/streams/<name>`). GodwinMix notices within a second
 and restarts only the streams that changed. A file with a mistake changes
 nothing, and the log says which line.
+
+The headend view's band says which file the station follows and where
+Flussonic's URLs answer, from `headend.status`:
+
+![The band of a station that follows a Flussonic config, dark theme](../media/headend/band-follows-dark.png)
+
+A station in headend mode does not start the show `main`, and the page
+reaches a station through its first show, so the page shows
+"Disconnected" until `main` runs. Start it with
+`curl -X POST http://127.0.0.1:8080/api/v1/shows/main/start` (with your
+token) and open the page again; the streams carry on either way.
 
 ## Go back
 

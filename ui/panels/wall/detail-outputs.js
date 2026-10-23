@@ -66,7 +66,7 @@ export function outputsSection(client, show, stats, reread) {
     const off = o.params ? null : el("p.wl-sub.wl-wrap", { text: "This output is off, so what it was given is not read back. Saving gives it these settings." });
     const save = el("button.btn.primary", { type: "button", text: "Save settings", onclick: () => call("show.output.set", { output: o.id, params: h.read() }, `${outName(o)} keeps its settings`, true) });
     const cancel = el("button.btn", { type: "button", text: "Cancel", onclick: () => slot.replaceChildren() });
-    slot.replaceChildren(el("div.wl-dbox", {}, [el("strong", { text: `HLS settings of ${o.id}` }), off, h.node, el("div.wl-dbtns", {}, [cancel, save])]));
+    slot.replaceChildren(el("div.wl-dbox", {}, [el("strong", { text: `HLS settings of ${o.uri_host || o.uri || o.id}` }), off, h.node, el("div.wl-dbtns", {}, [cancel, save])]));
   }
 
   async function add() {
@@ -97,7 +97,7 @@ export function outputsSection(client, show, stats, reread) {
       const state = (st && st.state) || o.state || "idle";
       return el(`div.wl-dout.${state}`, {}, [
         el("span.wl-dot"),
-        el("span.wl-doutname", {}, [el("strong", { text: outName(o) }), el("span.wl-sub", { text: o.uri || "platform" })]),
+        el("span.wl-doutname", {}, [el("strong", { text: outName(o) }), el("span.wl-sub", { text: o.uri || o.uri_host || "platform" })]),
         el("span.wl-doutfmt", { text: [outFormat(o, st), isHls(o) ? hlsWords(o) : "", st && st.kbps ? kbps(st.kbps) : "", o.enabled === false ? "off" : state].filter(Boolean).join(" · ") }),
         el("span.wl-doutbtns", {}, [
           el("button.btn", { type: "button", text: "Format", onclick: () => change(o) }),

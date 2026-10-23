@@ -294,16 +294,17 @@ in front of you can do, and there are three shapes of it:
 
 | | tools | about |
 |---|---|---|
-| `--profile standard` (default) | 14 | about 17,800 bytes, roughly 4,500 tokens |
-| `--profile minimal` | 6 | about 5,800 bytes, roughly 1,500 tokens, for a small context |
-| `--profile headend` | 11 | about 16,600 bytes, for many shows at once |
+| `--profile standard` (default) | 14 | about 18,400 bytes, roughly 4,600 tokens |
+| `--profile minimal` | 6 | about 5,900 bytes, roughly 1,500 tokens, for a small context |
+| `--profile headend` | 13 | about 18,200 bytes, for many shows at once |
 
 `minimal` is `agent_state`, `take`, `add_source`, `list_sources`,
 `call_tool` and `search_tools`. `standard` adds what people ask an agent for:
 `revert`, `set_source`, `list_templates`, `save_template`,
 `create_scene_from`, `add_scene_item`, `set_scene_item` and `snapshot`.
 `headend` adds the shows instead (`list_shows`, `add_shows`, `show_stats`,
-`set_show`, `set_show_output`). Everything else (outputs, media, ad breaks,
+`set_show`, `set_show_output`) and the machine they run on (`gpu_status`,
+`machine_status`). Everything else (outputs, media, ad breaks,
 seeking, audio, codecs, channels, the governor, the project file and the
 rest of the show tools) is found with `search_tools {"query": "..."}` in plain
 words and run with `call_tool {"name": "...", "arguments": {...}}`. That second

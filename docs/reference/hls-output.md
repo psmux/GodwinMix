@@ -52,6 +52,12 @@ A custom rung asking for a codec other than H.264 is refused with that reason.
 A frame rate that does not divide a part makes the parts a little longer: at
 30 fps a 250 ms part is 8 frames, 267 ms, and `PART-TARGET` says 0.267.
 
+On the page, the add dialog (**HLS for viewers**) keeps low latency as one
+click and puts `access`, `open_public`, `segment_ms`, `window`, `part_ms`
+and `viewer_key` under **Advanced**. `segments` is offered only for a show
+without compositing, in its detail's **HLS settings**
+([Serve HLS to viewers](../how-to/serve-hls.md#from-the-page-1)).
+
 ## Routes
 
 All on the control port.
@@ -255,6 +261,7 @@ process of the station) and served from the station's port. It is added with
 | `rendition` | none, a preset or a ladder | none (a copy), or one rendition; a ladder is refused with `data.ladder: true` |
 | Served by | the show, relayed by the station | the station's port: the station lets the player in, its HLS packager answers |
 | Link | `playback.master_url_path` in `output.list` | `playback.master_url_path` on the output in `show.list` |
+| Its params, read back | `low_latency`, `segment_ms`, `part_ms`, `window` in `output.list` | `params` on the output in `show.list`, as `show.output.set` takes them, less the viewer key, while the output runs |
 
 The routes are the ones above with `show=<id>` in the query, which every URI
 a playlist hands out carries on:
