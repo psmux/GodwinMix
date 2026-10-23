@@ -57,6 +57,8 @@ export function openFlowMap(client) {
   document.body.append(root);
 
   const map = new FlowMap(canvas);
+  // For a test or a screenshot to find the map from the page.
+  canvas.flow = view;
   const card = tip(stage);
   let frame = 0;
   view.later = () => { cancelAnimationFrame(frame); frame = requestAnimationFrame(() => view.draw()); };

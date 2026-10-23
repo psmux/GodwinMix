@@ -34,6 +34,7 @@ import { installTests } from "./install.js";
 import { showTests } from "./shows.js";
 import { wallTests } from "./wall.js";
 import { wallChannelTests } from "./wall-channels.js";
+import { flowmapTests } from "./flowmap.js";
 import { browserDeviceTests } from "./browser-devices.js";
 import { presenceTests } from "./presence.js";
 import { lanDeviceTests } from "./lan-devices.js";
@@ -3041,6 +3042,12 @@ tileLevelTests(test, eq, ok)
   .catch((e) => {
     failed += 1;
     line("fail", "the wall channels suite threw: " + e.message);
+    console.error(e);
+  })
+  .then(() => flowmapTests(test, eq, ok))
+  .catch((e) => {
+    failed += 1;
+    line("fail", "the flow map suite threw: " + e.message);
     console.error(e);
   })
   .then(() => browserDeviceTests(test, eq, ok))
