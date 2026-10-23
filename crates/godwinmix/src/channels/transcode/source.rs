@@ -55,11 +55,21 @@ pub fn same_shape(a: &StreamInfo, b: &StreamInfo) -> bool {
     v(a) == v(b) && s(a) == s(b) && t(a) == t(b) && a.interlaced == b.interlaced
 }
 
+/// The rates a measured one is rounded to, whole because a second of
+/// frames cannot tell 29.97 from 30.
+const STANDARD: &[f64] = &[10.0, 12.0, 15.0, 20.0, 24.0, 25.0, 30.0, 48.0, 50.0, 60.0, 90.0, 100.0, 120.0];
+
 /// A frame rate as a fraction. A stated one is taken as stated, with the
-/// NTSC rates made exact; a measured one is rounded to a whole number,
-/// because a second of frames cannot tell 29.97 from 30.
+/// NTSC rates made exact. A measured one is rounded to the nearest standard
+/// rate: counted on a busy machine a 25 fps feed read anything from 22 to
+/// 36, and a rendition made at that rate played wrong. Under 10 fps, a
+/// slide show or a camera that stutters, it is rounded to a whole number.
 pub fn rate(fps: f64, stated: bool) -> Fps {
     let whole = fps.round();
+    if !stated && fps >= 9.5 {
+        let near = |r: &&f64| ((fps - **r).abs() / **r * 1e6) as u64;
+        return Fps::whole(STANDARD.iter().min_by_key(near).copied().unwrap_or(whole) as u32);
+    }
     if !stated || (fps - whole).abs() < 0.01 {
         return Fps::whole(whole.max(1.0) as u32);
     }
@@ -107,5 +117,14 @@ mod tests {
         assert_eq!(rate(30.0, true), Fps::whole(30));
         assert_eq!(rate(29.91, false), Fps::whole(30));
         assert_eq!(rate(12.5, true), Fps { num: 12500, den: 1000 });
+    }
+
+    #[test]
+    fn a_measured_rate_is_rounded_to_a_standard_one() {
+        assert_eq!(rate(23.2, false), Fps::whole(24));
+        assert_eq!(rate(26.4, false), Fps::whole(25));
+        assert_eq!(rate(33.0, false), Fps::whole(30));
+        assert_eq!(rate(57.0, false), Fps::whole(60));
+        assert_eq!(rate(5.2, false), Fps::whole(5));
     }
 }
