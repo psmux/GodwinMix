@@ -131,15 +131,26 @@ pub fn read_audio(tag: &MediaTag) -> Audio {
     }
 }
 
+/// The frame rate an H.264 sequence header's SPS declares, when it does.
+pub fn declared_rate(tag: &MediaTag) -> Option<f64> {
+    let body = &tag.payload[..];
+    if tag.kind != TagKind::Video || enhanced(*body.first()?) || video_codec(body) != "h264" {
+        return None;
+    }
+    crate::sps::frame_rate(first_sps(body.get(5..)?)?)
+}
+
 /// The picture size out of an AVCDecoderConfigurationRecord's first SPS.
 fn avc_size(record: &[u8]) -> Option<(u32, u32)> {
-    let count = *record.get(5)? & 0x1f;
-    if count == 0 {
+    crate::sps::size(first_sps(record)?)
+}
+
+fn first_sps(record: &[u8]) -> Option<&[u8]> {
+    if *record.get(5)? & 0x1f == 0 {
         return None;
     }
     let len = u16::from_be_bytes([*record.get(6)?, *record.get(7)?]) as usize;
-    let sps = record.get(8..8 + len)?;
-    crate::sps::size(sps)
+    record.get(8..8 + len)
 }
 
 #[cfg(test)]
@@ -198,5 +209,6 @@ mod tests {
         body.extend_from_slice(&sps);
         let video = read_video(&tag(TagKind::Video, &body));
         assert_eq!(video, Video { codec: "h264".into(), width: 1280, height: 720 });
+        assert_eq!(declared_rate(&tag(TagKind::Video, &body)), Some(30.0), "and the rate its timing declares");
     }
 }

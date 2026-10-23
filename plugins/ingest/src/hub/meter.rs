@@ -101,6 +101,11 @@ impl Meter {
                 let read = codec::read_video(tag);
                 news = self.video.as_ref() != Some(&read);
                 self.video = Some(read);
+                // The SPS's own timing says the rate the source runs at, which
+                // an arrival count on a busy machine does not.
+                if let Some(fps) = codec::declared_rate(tag).filter(|f| self.declared_fps != Some(*f)) {
+                    (self.declared_fps, news) = (Some(fps), true);
+                }
             }
             TagKind::Audio if tag.sequence_header => {
                 let read = codec::read_audio(tag);
