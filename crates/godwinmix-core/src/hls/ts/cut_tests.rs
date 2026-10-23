@@ -141,3 +141,12 @@ fn sound_arriving_late_does_not_cost_a_waiting_keyframe_its_cut() {
         assert!(leader.contains(&e.msn), "the CMAF picture's numbers");
     }
 }
+
+#[test]
+fn sound_behind_the_picture_does_not_make_the_queue_look_held_for_ever() {
+    use super::span;
+    let unit = |kind, ms| Unit { kind, ms, cts_ms: 0, key: kind == UnitKind::Video, data: bytes::Bytes::new() };
+    let q: std::collections::VecDeque<Unit> = [unit(UnitKind::Video, 10_000), unit(UnitKind::Audio, 9_300), unit(UnitKind::Video, 10_033)].into_iter().collect();
+    assert_eq!(span(&q), 33, "the newest time in the queue less the front's, never a wrap");
+    assert_eq!(span(&std::collections::VecDeque::new()), 0);
+}

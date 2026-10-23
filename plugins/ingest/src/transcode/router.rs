@@ -67,6 +67,15 @@ pub(super) struct Inner {
     pub(super) nodes: HashMap<String, Value>,
 }
 
+/// Whether every AAC encoder a pair's sound comes from has given its header.
+/// A pair starts on a keyframe only once they have: started on NVENC's
+/// first keyframe, which comes before the first AAC frame, a reader (the
+/// HLS packager) began without the sound, built its pipeline again when the
+/// header came, and its MPEG-TS cutter never lined up with the CMAF after.
+fn sound_ready(o: &Output, encodes: &[String], headers: &[String]) -> bool {
+    o.audio.iter().chain(&o.tracks).filter(|n| encodes.contains(n)).all(|n| headers.contains(n))
+}
+
 /// Where a converted stream's decoded pictures go, when someone asked.
 pub type Tap = std::sync::Arc<dyn Fn(&gstreamer::Sample) + Send + Sync>;
 
@@ -163,6 +172,8 @@ impl Route for Router {
         if tag.sequence_header {
             inner.headers.insert(node.to_string(), tag.clone());
         }
+        let headers: Vec<String> = inner.headers.keys().cloned().collect();
+        let encodes: Vec<String> = inner.nodes.iter().filter(|(_, v)| v["kind"] == "aencode").map(|(k, _)| k.clone()).collect();
         for o in inner.open.iter_mut() {
             let video = o.output.video.as_deref() == Some(node);
             let Some(n) = o.output.track_of(node) else { continue };
@@ -170,7 +181,7 @@ impl Route for Router {
             if tag.sequence_header {
                 o.publication.push(numbered(&tag, n));
             } else if video {
-                if o.started.is_none() && !tag.keyframe {
+                if o.started.is_none() && (!tag.keyframe || !sound_ready(&o.output, &encodes, &headers)) {
                     continue;
                 }
                 o.started.get_or_insert(tag.timestamp_ms);

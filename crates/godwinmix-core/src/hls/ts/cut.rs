@@ -85,7 +85,7 @@ impl TsCut {
                     Cut::Starts { msn, disc, pdt_ms } => Some(Some((msn, disc, pdt_ms))),
                     Cut::Inside => Some(None),
                     Cut::Drop => None,
-                    Cut::Wait if self.held() <= self.hold_ms => break,
+                    Cut::Wait if span(&self.queue) <= self.hold_ms => break,
                     Cut::Wait => None,
                 },
                 (false, false) => Some(None),
@@ -93,10 +93,10 @@ impl TsCut {
                     Place::In(msn) if self.open.as_ref().is_some_and(|o| o.msn >= msn) => Some(None),
                     Place::In(msn) => match leader.meta(msn) {
                         Some((disc, pdt_ms)) => Some(Some((msn, disc, pdt_ms))),
-                        None if self.held() <= self.hold_ms => break,
+                        None if span(&self.queue) <= self.hold_ms => break,
                         None => None,
                     },
-                    Place::Wait if self.held() <= self.hold_ms => break,
+                    Place::Wait if span(&self.queue) <= self.hold_ms => break,
                     Place::Wait | Place::Drop => None,
                 },
             };
@@ -132,17 +132,16 @@ impl TsCut {
         (ms >= 0).then(|| ms as u64 * MS)
     }
 
-    /// How long the front frame has waited: the newest time queued less
-    /// its own. Sound comes up to a second behind the picture of the same
-    /// moment (0.7 s from a GPU encoder), so the frame queued last can be
-    /// older than the front. Taken as last less first, that wrapped to four
-    /// billion, the waiting keyframe was dropped as stale and its frames
-    /// joined the segment before: TS segments of a minute where CMAF cut
-    /// every 1.668 s.
-    fn held(&self) -> u32 {
-        let newest = self.queue.iter().map(|u| u.ms).max().unwrap_or(0);
-        self.queue.front().map_or(0, |f| newest.saturating_sub(f.ms))
-    }
+}
+
+/// How long the front of the queue has waited: the newest time in it less
+/// the front's. Sound comes some 700 ms behind the picture of the same time
+/// from a GPU encoder, so the back is often older than the front; taken as
+/// back less front, that wrapped, every keyframe waiting for the CMAF cut
+/// was dropped, and a TS segment ran on for a minute.
+pub(super) fn span(queue: &VecDeque<Unit>) -> u32 {
+    let Some(front) = queue.front() else { return 0 };
+    queue.iter().map(|u| u.ms.saturating_sub(front.ms)).max().unwrap_or(0)
 }
 
 #[cfg(test)]
