@@ -22,6 +22,14 @@ port, so there is nothing to open on the router.
    further behind.
 6. Press **Start serving**.
 
+Everything else is under **Advanced**, closed until you open it: who may
+play the link (with its key, or open behind a gateway), the segment length,
+the playlist window, the low latency part and a viewer key of your own. Left
+alone, the dialog sends what it always did: 2 second segments, a 30 second
+window, and the key this machine makes.
+
+![HLS for viewers with Advanced open, in the light theme](../media/headend/hls-add-advanced-light.png)
+
 Every size is its own encode, so a ladder of four costs more than one
 destination. If the machine has no room for it, the form says what it needs
 and offers what fits, as for any other destination.
@@ -103,6 +111,31 @@ curl -X POST http://127.0.0.1:8080/api/v1/shows/bbc-one/output \
 
 One rendition is the most such an output carries; a ladder of sizes needs
 the show to composite.
+
+### From the page
+
+Open the show from its row on the monitoring wall, or press **Settings** in
+a channel's drawer on the headend view. Under **Outputs**:
+
+* **Add output** with an address of `hls://<name>` shows the HLS settings
+  under it before the format.
+* **HLS settings** on an `hls://` output's row opens what it has now: low
+  latency as one click, and under **Advanced** the segments (CMAF, CMAF and
+  MPEG-TS, or MPEG-TS alone), who may play it, the segment length, the
+  window, the part and the viewer key. **Save settings** sends them all with
+  `show.output.set`, which replaces every param, and the output starts again
+  on the same link.
+* **Format** changes the rendition, with the encoder's finer settings under
+  the Custom card's **Advanced** ([Convert broadcast feeds on the
+  GPU](convert-broadcast-feeds-on-the-gpu.md)). A format the governor
+  refuses stays open with what would fit.
+
+The row says what the output makes, such as `CMAF and TS, open on the
+network`. What it was given is read back from the running output, so an
+output that is off opens on the defaults and says so.
+
+![An HLS output's settings in a show's detail, dark theme](../media/headend/hls-settings-dark.png)
+![The same at phone width, light theme](../media/headend/phone-hls-settings-light.png)
 
 The packaging runs in a process of its own beside the station, started
 while such an output is on. If it stops, the output shows `reconnecting`

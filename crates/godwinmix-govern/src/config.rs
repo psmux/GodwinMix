@@ -17,15 +17,14 @@ pub struct GovernorConfig {
     /// governor does not refuse on bandwidth.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub uplink_kbps: Option<u32>,
-    /// Advanced. How many sessions the calibration opens on a hardware
-    /// encoder before it calls the device unlimited. 8 when absent, which
-    /// finds a consumer NVIDIA card's limit; a card with the limit lifted
-    /// (a headend's) sets it higher, up to `MAX_SESSION_PROBE`, to find the
-    /// real one.
+    /// How many sessions the calibration opens on a hardware encoder before
+    /// it calls the device unlimited. 8 when absent, which finds a consumer
+    /// NVIDIA card's limit; a card with the limit lifted (a headend's) sets
+    /// it higher, up to 256, to find the real one.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub nvenc_session_probe: Option<u32>,
-    /// Advanced. The number of encoder sessions an NVIDIA device takes, in
-    /// place of what calibration found. For a driver whose limit is known.
+    /// The number of encoder sessions an NVIDIA device takes, in place of
+    /// what calibration found. For a driver whose limit is known.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub nvenc_sessions: Option<u32>,
     /// The page runs on this machine too (the desktop app). Set by the

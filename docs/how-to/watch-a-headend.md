@@ -27,7 +27,13 @@ The band along the top is the box:
 * **Up** is how long the machine has been running, and under it the
   station.
 
-The line under the name says how many channels need a look.
+The line under the name says how many channels need a look. On a station
+that follows a Flussonic config (`godwinmix headend`), the line above it says
+which file and where Flussonic's URLs answer.
+
+The first button on the right imports a Flussonic config: the report
+first, then the shows ([Replace Flussonic with
+GodwinMix](replace-flussonic.md#from-the-page-or-an-agent)).
 
 ## Read the GPU strip
 
@@ -107,6 +113,9 @@ Click a tile, or tab to it and press Enter. The drawer has:
 * the transcoder settings of each output that converts, as they were set;
 * the input's history since the page was opened: continuity errors per
   second over two minutes, and each alarm raised and cleared;
+* **Settings**, the channel's detail from the monitoring wall: its input
+  and backup, its outputs with their format and HLS settings, and its
+  alarms;
 * **Restart**, which stops the show and starts it again, and **Disable**,
   which stops it (press twice: the first press asks). A disabled channel
   has **Enable** instead.

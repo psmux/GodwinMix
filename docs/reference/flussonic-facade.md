@@ -76,6 +76,58 @@ the CPU between the GPU decode and the encode. `vb=copy`
 copies the video and `ab=copy` the sound. A second `vb=` (a ladder) is not
 carried: the HLS output of a show without compositing has one rendition.
 
+## From the page and the API: `headend.import` and `headend.status`
+
+The same import, made once, on any station: `headend.import` takes the
+config as `text` or as a `path` on the station's machine, and a `dry_run`
+that is true unless it is sent false. Admin scope. On the page it is
+**File > Import a Flussonic config**, or the import button on the headend
+view's band; for an agent it is `import_flussonic`, behind `search_tools`.
+
+```json
+{"path": "/etc/flussonic/flussonic.conf"}
+```
+
+```json
+{"source": "/etc/flussonic/flussonic.conf", "dry_run": true,
+ "converted": 1, "copied": 1, "disabled": 0,
+ "streams": [{"name": "CH117", "title": "News", "disabled": false, "copy": false,
+              "input": {"uri": "udp://@239.10.0.1:2001", "program": 7, "params": {"interface": "eth1"}},
+              "outputs": [{"id": "flussonic", "uri": "hls://flussonic",
+                           "params": {"segments": "both", "access": "open", "segment_ms": 3400},
+                           "rendition": {"video": {"...": "..."}, "audio": {"...": "..."}}}]},
+             {"name": "RELAY1", "disabled": false, "copy": true, "...": "..."}],
+ "notes": [{"scope": "global", "line": 0, "kind": "not_carried", "what": "dvr archive: GodwinMix keeps the live window only"}],
+ "shows": {"added": ["ch117", "relay1"], "refused": [], "plan": {"fits": true, "...": "..."}, "dry_run": true}}
+```
+
+| Field | Meaning |
+|---|---|
+| `streams` | each `stream` as the show it becomes, as `show.add_many` takes it; a password in an address reads `***` |
+| `notes` | every line the import does not carry, as `--check` prints them; `kind` is `ignored` or `not_carried` |
+| `shows` | `show.add_many`'s answer for these shows: what would be made, what it costs and what would be refused, or on `dry_run: false` what was |
+| `following` | the file this station follows, when it follows one |
+
+A stream whose show is there already, by its id or its name, is refused
+with that reason rather than made a second time. A `disabled` stream is made
+and stopped, and a `title` becomes its show's name, as the headend's own
+apply does. Nothing follows the config afterwards and no Flussonic port is
+opened: for that, run `godwinmix headend`. A config that does not parse is
+refused with `data.line`.
+
+`headend.status` (read scope, `headend_status` for an agent) says whether
+the station follows a Flussonic config:
+
+```json
+{"following": true, "file": "/etc/flussonic/flussonic.conf", "listeners": ["0.0.0.0:8090"],
+ "log": "/var/log/flussonic/flussonic.log", "streams": 52, "shows": 52,
+ "note": "The station applies every change to this file within a second. ..."}
+```
+
+On a station started without `headend`, `following` is false and `note`
+says how to import or follow a file. The headend view's band shows the file
+and the listeners.
+
 ## Changes to the file
 
 The file is looked at once a second. When it changes it is read again and

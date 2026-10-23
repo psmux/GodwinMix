@@ -53,7 +53,7 @@ def video(c, pid):
     speed = "" if c["frozen"] or c["black"] else " horizontal-speed=2"
     clock = "" if c["frozen"] or not TEXT else " ! timeoverlay halignment=right valignment=bottom font-desc=\"Sans 14\""
     label = "" if c["black"] or not TEXT else f" ! textoverlay text=\"{c['n']}  {c['name']}\" valignment=top halignment=left font-desc=\"Sans Bold 22\""
-    return (f"videotestsrc is-live=true pattern={pat}{speed} ! video/x-raw,width=320,height=180,framerate=25/1{label}{clock} "
+    return (f"videotestsrc is-live=true pattern={pat}{speed} ! video/x-raw,format=I420,width=320,height=180,framerate=25/1{label}{clock} "
             f"! x264enc tune=zerolatency speed-preset=ultrafast key-int-max=50 bitrate={c['kbps']} ! h264parse ! m.sink_{pid}")
 
 

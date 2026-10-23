@@ -5,6 +5,10 @@ headend view. Both answer on `/rpc` and as `GET /api/v1/gpu/status` and
 `GET /api/v1/machine/status`, with the read scope. A station answers them
 itself; a single process core answers them too.
 
+For an agent they are `gpu_status` and `machine_status`, hot in the MCP
+server's `headend` profile and found by `search_tools` from the others.
+Neither takes `show`: the station answers them for the machine.
+
 Nothing is read until one of them is called. The first call starts one
 thread that reads every GPU and the CPU once a second and keeps two
 minutes of GPU readings; it ends once neither has been called for ten

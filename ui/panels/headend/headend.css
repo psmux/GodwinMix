@@ -148,3 +148,9 @@
 .he-imp-notes { margin-top: 10px; font-size: var(--fs-sm); }
 .he-imp-notes summary { cursor: pointer; }
 .he-imp-notes ul { margin: 6px 0 0; padding-left: 18px; color: var(--dim); }
+@media (max-width: 600px) {
+  .he-imp-table thead { display: none; }
+  .he-imp-table, .he-imp-table tbody, .he-imp-table tr, .he-imp-table td { display: block; width: 100%; }
+  .he-imp-table tr { padding: 6px 0; border-bottom: var(--border) solid var(--line-soft); }
+  .he-table.he-imp-table td { min-width: 0; padding: 2px 8px; border: 0; }
+}
