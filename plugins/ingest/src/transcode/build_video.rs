@@ -38,6 +38,10 @@ pub fn scale(node: &NodeSpec) -> Result<Built, String> {
     }
     let fit = node.text("fit").unwrap_or("pad");
     if fit == "crop" {
+        // Raw video in front of the crop: straight after the queue, whose
+        // caps before anything flows are ANY, `aspectratiocrop` answers a
+        // caps query with nothing, and it would not link to the scaler.
+        elements.push(caps("video/x-raw")?);
         let crop = make("aspectratiocrop")?;
         crop.set_property("aspect-ratio", gst::Fraction::new(width as i32, height.max(1) as i32));
         elements.push(crop);
