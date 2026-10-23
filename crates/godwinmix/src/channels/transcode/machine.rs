@@ -38,7 +38,8 @@ impl Machine {
                 .filter(|e| !e.disabled && e.element(role).is_some() && present(e.needs(role), reg))
                 .cloned()
                 .collect();
-            v.sort_by_key(|e| std::cmp::Reverse(e.rank));
+            // A converter ranks its decoders by `convert_rank`.
+            v.sort_by_key(|e| std::cmp::Reverse(if role == Role::Decode { e.convert_rank() } else { e.rank }));
             v
         };
         let audio = |role: Role| {
@@ -126,5 +127,26 @@ mod tests {
         let cpu = Machine::probe(&cat, &reg);
         assert!(cpu.slots().iter().all(|s| !s.hardware), "{:?}", cpu.slots());
         assert!(!cpu.decodes_in_hardware(VideoCodec::H264));
+    }
+
+    fn h264_decoder(names: &[&str]) -> String {
+        let m = Machine::probe(&Catalogue::shipped().unwrap(), &FakeRegistry::with(names));
+        m.decoder(VideoCodec::H264).and_then(|e| e.decoder.clone()).unwrap_or_default()
+    }
+
+    /// openh264 refuses 4:4:4, 4:2:2, 10 bit and interlaced H.264, and a
+    /// converter has no decodebin to fall back on: libav converts where it
+    /// is installed, openh264 only where it is not, and NVDEC beats both.
+    #[test]
+    fn a_converter_decodes_h264_with_libav_before_openh264_and_nvdec_before_either() {
+        let cpu = ["h264parse", "x264enc", "openh264enc", "openh264dec", "avdec_h264", "avenc_aac", "avdec_aac", "aacparse"];
+        assert_eq!(h264_decoder(&cpu), "avdec_h264");
+        assert_eq!(h264_decoder(&["h264parse", "openh264enc", "openh264dec"]), "openh264dec");
+        let gpu: Vec<&str> = cpu.iter().copied().chain(["nvh264enc", "nvh264dec", "cudadownload"]).collect();
+        assert_eq!(h264_decoder(&gpu), "nvh264dec");
+        // The mixer's own selection, which decodebin backs, is not moved.
+        let mixer: Vec<&str> = cpu.iter().copied().chain(["compositor", "videoconvert", "flvmux"]).collect();
+        let sel = Catalogue::shipped().unwrap().select(&Default::default(), &FakeRegistry::with(&mixer)).unwrap();
+        assert_eq!(sel.video_decode.element, "openh264dec");
     }
 }

@@ -374,6 +374,7 @@ id = "h264-software-openh264"
 codec = "h264"
 accel = "software"
 rank = 64
+convert_rank = 25
 encoder = "openh264enc"
 decoder = "openh264dec"
 parser = "h264parse"
@@ -382,7 +383,7 @@ license = "BSD-2-Clause"
 container = ["flv", "mpegts", "mp4", "matroska"]
 keyframe = { property = "gop-size", unit = "frames" }
 verified = []
-comment = "The permissive fallback. Cisco's openh264 is BSD licensed, so it ships in every build including a closed custom one, and it is what the GPU free CI runner exercises on every commit. Its decoder is the software H.264 decoder ahead of libav. It takes 4:2:0 8 bit streams (baseline, main and high); a High 10 or 4:2:2 stream does not match its caps and goes to avdec_h264. It does not decode interlaced coding, and it runs on one thread: on a 1080p30 high profile stream it cost about 1.5 times avdec_h264's CPU time. A machine taking interlaced broadcast feeds, or decoding several cameras on the CPU, wants `GMX_CODEC_RANK=h264-software-decode=70`."
+comment = "The permissive fallback. Cisco's openh264 is BSD licensed, so it ships in every build including a closed custom one, and it is what the GPU free CI runner exercises on every commit. Its decoder is the software H.264 decoder ahead of libav. It takes 4:2:0 8 bit streams (baseline, main and high); a High 10 or 4:2:2 stream does not match its caps and goes to avdec_h264. It does not decode interlaced coding, and it runs on one thread: on a 1080p30 high profile stream it cost about 1.5 times avdec_h264's CPU time. A machine taking interlaced broadcast feeds, or decoding several cameras on the CPU, wants `GMX_CODEC_RANK=h264-software-decode=70`. Converting a stream for a rendition it goes after libav (`convert_rank`): the converter builds its decoder alone, and a 4:4:4 or High 10 stream into openh264 failed as not negotiated."
 properties = { complexity = "low", "rate-control" = "bitrate", bitrate = { unit = "bit", from = "video.bitrate_kbps" }, "multi-thread" = { unit = "count", from = "cpu.count" } }
 
 [[video]]

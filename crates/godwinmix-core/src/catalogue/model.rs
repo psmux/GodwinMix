@@ -95,6 +95,13 @@ pub struct VideoEntry {
     pub encoder: Option<String>,
     #[serde(default)]
     pub decoder: Option<String>,
+    /// The decoder's rank when a stream is converted for a rendition, in
+    /// place of `rank`. The converter builds the decoder on its own, with no
+    /// `decodebin` to fall back on, so a decoder that takes only part of a
+    /// codec (openh264: 4:2:0, 8 bit, progressive) goes after one that takes
+    /// all of it, or a stream it refuses fails to convert.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub convert_rank: Option<i32>,
     /// Element that pulls frames from this backend's memory back into system
     /// memory. Hardware decoders hand out GPU surfaces and most of the graph
     /// works in system memory.
@@ -146,6 +153,11 @@ pub struct VideoEntry {
 pub const ARCHES: &[&str] = &["x86_64", "aarch64"];
 
 impl VideoEntry {
+    /// The rank a converter ranks this decoder by.
+    pub fn convert_rank(&self) -> i32 {
+        self.convert_rank.unwrap_or(self.rank)
+    }
+
     /// Lay this machine's `arch_properties` over `properties`. Running it
     /// twice changes nothing, so every catalogue that is loaded can run it.
     pub fn resolve_arch(&mut self, arch: &str) {
