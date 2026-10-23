@@ -34,9 +34,10 @@ fn a_headend_config_is_51_renditions_and_one_copy() {
     let relay = i.shows.iter().find(|s| s.name == "RELAY1").unwrap();
     assert!(relay.copy && relay.outputs[0].get("rendition").is_none());
     assert_eq!(relay.outputs[0]["uri"], "hls://flussonic");
-    // The DVR is not carried, and every transcoded stream says which fields wait.
+    // The DVR is not carried. Every field of the line is acted on, so the
+    // sample's 51 transcoders, black pads and no deinterlacing, say nothing.
     assert!(i.notes.iter().any(|(_, n)| n.what.starts_with("dvr archive")));
-    assert_eq!(i.notes.iter().filter(|(_, n)| n.kind == NoteKind::Waiting).count(), 51);
+    assert_eq!(i.notes.len(), 1, "{:?}", i.notes);
 }
 
 #[test]

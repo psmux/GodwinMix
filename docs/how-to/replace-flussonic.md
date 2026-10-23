@@ -16,9 +16,12 @@ path and field.
 
 ## Install
 
-Install GodwinMix and its ingest plugin as for any headend ([take headend
-feeds into direct shows](headend-feeds.md)). The ingest plugin runs the
-inputs; without it every stream waits.
+Install GodwinMix as for any headend ([take headend feeds into direct
+shows](headend-feeds.md)). The ingest plugin, which runs the inputs, ships
+beside the binary, and `godwinmix headend` installs it into the plugins
+folder at start when the folder has none, with the same checks
+`gmx plugin add` makes. `gmx plugin add` itself is a mixed show's call and
+answers that no show runs, because a headend runs none.
 
 The user GodwinMix runs as needs to read `/etc/flussonic/flussonic.conf`,
 and to write it only if you will edit streams through the API.
@@ -35,12 +38,19 @@ nothing:
 ```text
 /etc/flussonic/flussonic.conf: 52 streams, 51 converted and 1 copied, 0 off
 global, not carried: dvr archive: GodwinMix keeps the live window only
-line 12, stream CH117, waiting: rendition fields deinterlace, device, fit, hardware, keyframe_frames, pad_color, tracks are passed on, and this build does not act on them yet
+```
+
+A stream that asks for something done differently gets a line of its own:
+
+```text
+line 40, stream CH455, not carried: pad colour #102030: the bars are drawn black
+line 40, stream CH455, not carried: deinterlace=auto: the deinterlacing runs on the CPU, between the GPU decode and the encode
 ```
 
 `ignored` is a directive or option GodwinMix has no use for. `not carried`
-says what GodwinMix does instead. `waiting` names transcoder options that
-are passed on for the GPU conversion, which this build does not have yet.
+says what GodwinMix does instead: a pad colour other than black, one picture
+per field, deinterlacing (which runs on the CPU), a DVR. Every other option
+of a `transcoder` line is acted on.
 
 ## Run it beside Flussonic
 
@@ -132,11 +142,6 @@ every line it did not change, so Flussonic reads them too.
 
 ## What is not there yet
 
-* Segments are fragmented MP4. MPEG-TS segments, `tracks-v1a1` with the
-  video and the first sound in one stream, and `/<name>/mpegts` come with
-  the TS packaging; until then those two paths answer 501.
-* One sound track per stream. Every sound track as its own `EXT-X-MEDIA`
-  comes with carrying every track of an input.
-* MPEG-2 sources need the GPU conversion, which is not in this build: a
-  stream whose source is MPEG-2 video waits, and says so.
-* No DVR.
+* No DVR: GodwinMix keeps the live window only.
+* One rendition per stream: a `transcoder` line with a second `vb=` (a
+  ladder) makes the first.
