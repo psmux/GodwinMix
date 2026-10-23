@@ -45,12 +45,13 @@ export function hlsParams(id, ladder, lowLatency, params) {
  * stays: no low latency is a part of 0, and keyed access is "keyed".
  */
 export function hlsEditParams(id, ladder, params) {
-  if (ladder.error) return { error: ladder.error };
+  if (ladder && ladder.error) return { error: ladder.error };
   const p = { ...params };
   if (!p.part_ms) p.part_ms = 0;
   if (p.access !== "open") Object.assign(p, { access: "keyed", open_public: false });
   else if (!p.open_public) p.open_public = false;
-  return { params: { id, rendition: ladder, ...p } };
+  // No ladder picked keeps the programme as it is, in one size.
+  return { params: ladder ? { id, rendition: ladder, ...p } : { id, ...p } };
 }
 
 /**
@@ -80,7 +81,7 @@ async function hlsForm(client, output, onDone) {
   stylesheet();
   const editing = !!output;
   const presets = (await loadPresets(client)) || [];
-  const picker = ladderPicker(presets, editing ? output.rendition : undefined);
+  const picker = ladderPicker(presets, editing ? output.rendition || null : undefined);
   const saved = editing ? savedParams(output) : {};
   const name = el("input", { type: "text", value: editing ? output.id : "viewers", autocomplete: "off", spellcheck: false, disabled: editing });
   const low = el("input", { type: "checkbox", checked: editing && Number(output.part_ms) > 0 });
@@ -91,7 +92,7 @@ async function hlsForm(client, output, onDone) {
   const body = el("div.form.rnd-hlsform", {}, [
     el("p.dim.sm", { style: { marginTop: "0" }, text: editing ? "Saving rebuilds the output, so players load the link again after a few seconds." : "Players pick the size that suits their connection, and switch as it changes." }),
     el("label.field", {}, [el("span.lbl", { text: "Name" }), name, el("span.hint", { text: editing ? "Part of the link, so it stays as it is." : "It becomes part of the link." })]),
-    el("section.rnd-step", {}, [el("div.rnd-steph", {}, [el("span.rnd-kicker", { text: "Sizes" }), el("span.rnd-dim", { text: "Each one is a separate encode" })]), picker.node]),
+    el("section.rnd-step", {}, [el("div.rnd-steph", {}, [el("span.rnd-kicker", { text: "Sizes" }), el("span.rnd-dim", { text: editing && !output.rendition ? "It serves the programme as it is, in one size. Pick sizes to make a ladder." : "Each one is a separate encode" })]), picker.node]),
     el("label.rnd-check", {}, [low, el("span", { text: "Low latency (about two seconds behind, for players that support it)" })]),
     advanced.el,
     refused,

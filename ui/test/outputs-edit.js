@@ -100,6 +100,7 @@ async function hlsEditTests(test, eq, ok) {
   test("an edit says every HLS setting, so one turned back to its default is not kept", () => {
     const p = hls.hlsEditParams("viewers", { preset: "abr-ladder-3" }, { segment_ms: 2000, window: 30 }).params;
     eq(p, { id: "viewers", rendition: { preset: "abr-ladder-3" }, segment_ms: 2000, window: 30, part_ms: 0, access: "keyed", open_public: false });
+    eq(hls.hlsEditParams("viewers", undefined, { segment_ms: 2000, window: 30 }).params.rendition, undefined, "no ladder picked keeps the programme as it is");
     eq(hls.savedParams(HLS), { window: 30, access: "keyed", open_public: false }, "the low latency click covers 1000 and 200");
   });
 
