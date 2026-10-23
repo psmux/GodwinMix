@@ -28,12 +28,16 @@ pub struct Report {
     rtp_before: u64,
     /// Scrambled packets at the last report.
     scrambled: u64,
+    /// The video's tags and fields at the last report, and whether the
+    /// last second was coded as fields.
+    pictures: (u64, u64),
+    fields: bool,
 }
 
 impl Report {
     pub fn new(program: Option<u16>, sub: &Subscription) -> Report {
         let stats = InputStats { program, ..InputStats::default() };
-        Report { stats, asked: program, rate: (0, Instant::now()), rtp_before: sub.group.counters.rtp_lost.load(Relaxed), scrambled: 0 }
+        Report { stats, asked: program, rate: (0, Instant::now()), rtp_before: sub.group.counters.rtp_lost.load(Relaxed), scrambled: 0, pictures: (0, 0), fields: false }
     }
 
     /// Fill and hand on this second's numbers.
@@ -59,7 +63,13 @@ impl Report {
         let rtp = g.counters.rtp_lost.load(Relaxed).saturating_sub(self.rtp_before);
         let lost = if rtp > 0 { rtp } else { demux.counts.ts_lost } + sub.dropped.load(Relaxed);
         let programs = programs(g);
+        let frames = self.frames(demux.pictures());
+        let fields = self.fields;
         out.publish_with(&mut self.stats, |s| {
+            // The meter counts tags, and a field coded stream has a tag per
+            // field: the planner keeps the rate it reads, so it must read
+            // frames.
+            s.fps = (s.fps * frames * 100.0).round() / 100.0;
             if let Some(k) = kbps {
                 s.kbps = k;
             }
@@ -69,7 +79,20 @@ impl Report {
                 s.programs = p;
             }
             s.tracks = tracks::infos(&demux.picks);
+            s.tracks.iter_mut().filter(|t| t.kind == "video").for_each(|t| t.field_coded = fields);
         });
+    }
+
+    /// Frames per video tag since the last call: 1 for frames, 0.5 for a
+    /// stream of fields, between for one that mixes them.
+    fn frames(&mut self, now: (u64, u64)) -> f64 {
+        let (tags, fields) = (now.0.saturating_sub(self.pictures.0), now.1.saturating_sub(self.pictures.1));
+        self.pictures = now;
+        if tags == 0 {
+            return if self.fields { 0.5 } else { 1.0 };
+        }
+        self.fields = fields * 2 > tags;
+        1.0 - fields as f64 / tags as f64 / 2.0
     }
 
     /// The program's rate since the last call, stuffing left out.

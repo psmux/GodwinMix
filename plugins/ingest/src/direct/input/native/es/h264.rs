@@ -3,11 +3,11 @@
 //! access unit with four byte lengths in front of its NAL units.
 
 use super::annexb::{push_sized, units};
+use super::h264_key::Seen;
 use super::{cts_ms, Parser, Pes, Said, Unit};
 use crate::media_tag::TagKind;
 use crate::tagger::prefix;
 
-const IDR: u8 = 5;
 const SPS: u8 = 7;
 const PPS: u8 = 8;
 
@@ -17,22 +17,29 @@ pub struct H264 {
     pps: Option<Vec<u8>>,
     /// The `avcC` last sent as a header.
     sent: Option<Vec<u8>>,
+    layout: Option<crate::sps::Layout>,
+    /// Access units handed on, and how many of them were fields.
+    counted: (u64, u64),
 }
 
 impl Parser for H264 {
     fn pes(&mut self, pes: &Pes, out: &mut Vec<Unit>) {
         let Some(at) = pes.at() else { return };
         let mut au = Vec::with_capacity(pes.data.len() + 16);
-        let mut keyframe = false;
+        let mut seen = Seen::default();
         for nal in units(pes.data) {
             match nal[0] & 0x1F {
-                SPS => self.sps = Some(nal.to_vec()),
+                SPS if self.sps.as_deref() != Some(nal) => {
+                    self.layout = crate::sps::layout(nal);
+                    self.sps = Some(nal.to_vec());
+                }
                 PPS => self.pps = Some(nal.to_vec()),
-                IDR => keyframe = true,
                 _ => {}
             }
+            seen.nal(nal, self.layout.as_ref());
             push_sized(&mut au, nal);
         }
+        let keyframe = seen.keyframe();
         // `h264parse` hands on nothing before it has the parameter sets.
         let Some(config) = avcc(self.sps.as_deref(), self.pps.as_deref()) else { return };
         if au.is_empty() {
@@ -45,10 +52,15 @@ impl Parser for H264 {
         let mut body = prefix(TagKind::Video, keyframe, false, cts_ms(pes));
         body.extend_from_slice(&au);
         out.push(Unit { at, body, keyframe, header: false });
+        self.counted = (self.counted.0 + 1, self.counted.1 + u64::from(seen.field));
     }
 
     fn said(&self) -> Said {
         Said { codec: "h264", ..Said::default() }
+    }
+
+    fn pictures(&self) -> (u64, u64) {
+        self.counted
     }
 }
 
@@ -94,3 +106,4 @@ fn high(sps: &[u8]) -> Option<(u8, u8, u8)> {
     }
     Some((chroma as u8, b.ue()? as u8, b.ue()? as u8))
 }
+

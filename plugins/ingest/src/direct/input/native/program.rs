@@ -134,6 +134,11 @@ impl Demux {
         }
     }
 
+    /// The video's tags so far, and how many were single fields.
+    pub fn pictures(&self) -> (u64, u64) {
+        self.es.iter().find(|e| e.codec.video()).map_or((0, 0), |e| e.parser.pictures())
+    }
+
     /// Everything left out right now, joined for a message.
     pub fn notes(&self) -> String {
         self.picks.iter().filter_map(|p| p.note.clone()).collect::<Vec<_>>().join("; ")

@@ -34,6 +34,7 @@ pub fn tracks(all: &[Stream]) -> Vec<TrackInfo> {
             kind: if s.slot == Slot::Video { "video" } else { "audio" },
             pid: s.meta.pid,
             lang: s.meta.lang.clone(),
+            field_coded: false,
         })
         .collect();
     out.sort_by_key(|t| (t.kind != "video", t.track));
