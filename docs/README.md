@@ -253,6 +253,7 @@ Start here if you have never run it.
 * [Converting a channel's stream for one destination](explanation/channel-transcoding.md)
 * [The direct host](explanation/direct-host.md)
 * [The resource governor](explanation/resource-governor.md)
+* [Headend mode: GodwinMix as a channel server](explanation/headend-mode.md)
 
 
 ## For AI agents
