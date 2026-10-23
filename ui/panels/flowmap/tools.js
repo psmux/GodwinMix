@@ -15,7 +15,7 @@ const ICON = {
 const button = (key, title) => el("button.btn.fm-btn", { type: "button", "data-fm": key, title, "aria-label": title }, [svg(ICON[key], 18)]);
 
 export function toolBar(o, act) {
-  const search = el("input.fm-search", { type: "search", placeholder: "Find a show, a source, an address", "aria-label": "Find on the map", value: o.text || "" });
+  const search = el("input.fm-search", { type: "search", placeholder: "Find a show or an address", "aria-label": "Find on the map", value: o.text || "" });
   const problems = el("button.btn.fm-tog", { type: "button", "data-fm": "problems", "aria-pressed": String(!!o.problems), text: "Problems only" });
   const group = el("select.fm-select", { "aria-label": "Input" });
   const family = el("select.fm-select", { "aria-label": "Kind of output" });

@@ -35,11 +35,11 @@ export function addDirect(g, show, st, series) {
   }
 }
 
-/** What a conversion makes, in a broadcaster's words: "720p H.264 1.5 Mbit/s". */
+/** What a conversion makes, in a broadcaster's words: "720p H.264", and at what rate. */
 export function made(o) {
   const v = (o.plan && o.plan.video) || (o.rendition && o.rendition.request && o.rendition.request.video) || (o.rendition && o.rendition.video) || null;
-  if (!v) return o.rendition && o.rendition.preset ? o.rendition.preset : "Converted";
-  return [picture(v.width, v.height, v.fps), v.codec && codec(v.codec), rate(v.bitrate_kbps)].filter(Boolean).join(" ");
+  if (!v) return { title: o.rendition && o.rendition.preset ? o.rendition.preset : "Converted", kbps: 0 };
+  return { title: [picture(v.width, v.height, v.fps), v.codec && codec(v.codec)].filter(Boolean).join(" ") || "Converted", kbps: v.bitrate_kbps || 0 };
 }
 
 function addOutput(g, show, o, s, from, inK) {
@@ -53,8 +53,9 @@ function addOutput(g, show, o, s, from, inK) {
     up = `proc:${show.id}:${s.rendition_text || o.id}`;
     const gpu = steps.length ? steps.some((x) => x.gpu) : /nv|cuda|vaapi|qsv|videotoolbox|amf/i.test(s.encoder || (o.plan && o.plan.encoder) || "");
     const had = g.nodes.get(up);
-    g.node({ id: up, col: 2, kind: "proc", show: show.id, tone: o.refused ? "bad" : toneOf(state === "live" ? "live" : state), title: made(o), gpu, steps,
-      lines: [gpu ? "GPU" : "CPU", steps.length ? steps.map((x) => x.kind).join(", ") : "decode, scale, encode"], serves: (had ? had.serves : []).concat(o.id), encoder: s.encoder || (o.plan && o.plan.encoder), cpu: s.cpu_millicores, reason: o.plan && o.plan.encoder_reason, refused: o.refused });
+    const m = made(o);
+    g.node({ id: up, col: 2, kind: "proc", show: show.id, tone: o.refused ? "bad" : toneOf(state === "live" ? "live" : state), title: m.title, makes: [m.title, rate(m.kbps)].filter(Boolean).join(" "), gpu, steps,
+      lines: [gpu ? "GPU" : "CPU", [rate(m.kbps), steps.length ? steps.map((x) => x.kind).join(", ") : "decode, scale, encode"].filter(Boolean).join(" · ")], serves: (had ? had.serves : []).concat(o.id), encoder: s.encoder || (o.plan && o.plan.encoder), cpu: s.cpu_millicores, reason: o.plan && o.plan.encoder_reason, refused: o.refused });
     g.link(`${from}>${up}`, from, up, inK, toneOf(state === "failed" ? "live" : state));
   }
   const p = o.playback || null;

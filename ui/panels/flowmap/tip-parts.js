@@ -58,7 +58,7 @@ export function procRows(n, ctx) {
   const gpu = ctx.gpu && ctx.gpu.gpus && ctx.gpu.gpus[0];
   const g = (gpu && gpu.now) || {};
   return {
-    top: yes([["Makes", n.title], ["Runs on", n.gpu ? (gpu ? gpu.name : "the GPU") : "the CPU"], ["For", (n.serves || []).join(", ")],
+    top: yes([["Makes", n.makes || n.title], ["Runs on", n.gpu ? (gpu ? gpu.name : "the GPU") : "the CPU"], ["For", (n.serves || []).join(", ")],
       n.gpu && gpu ? ["GPU load", `encoder ${g.encoder_pct ?? "n/a"}%, decoder ${g.decoder_pct ?? "n/a"}%, ${g.encoder_sessions ?? 0} sessions`] : null, n.refused ? ["Refused", n.refused.message] : null, n.shed ? ["Paused", n.shed] : null]),
     tech: yes([...(n.steps || []).map((s) => [STEP[s.kind] || s.kind, `${s.element || "chosen by the host"}${s.gpu ? ", on the GPU" : ""}`]), ["Encoder", n.encoder], ["Why", n.reason], ["CPU", n.cpu ? `${(n.cpu / 10).toFixed(0)}% of a core` : ""]]),
   };

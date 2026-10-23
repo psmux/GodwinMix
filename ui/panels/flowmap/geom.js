@@ -1,6 +1,6 @@
 // The shape of each link: a curve from the right edge of one card to the
 // left edge of the next, sampled into points once per snapshot so a frame
-// only reads them. The GPU's links drop from its foot to each conversion.
+// only reads them. The GPU's links bow out beside its column.
 
 const STEPS = 20;
 
@@ -13,8 +13,11 @@ function bez(c, t) {
 export function shape(l, a, b) {
   let c;
   if (l.uses) {
-    const p = { x: a.x, y: a.y + a.h / 2 }, q = { x: b.x, y: b.y - b.h / 2 };
-    c = [p, { x: p.x, y: p.y + (q.y - p.y) * 0.5 }, { x: q.x, y: q.y - (q.y - p.y) * 0.5 }, q];
+    // Out of the GPU's right side and into the conversion's, bowed into
+    // the gap beside the column so it crosses no card.
+    const p = { x: a.x + a.w / 2, y: a.y }, q = { x: b.x + b.w / 2, y: b.y };
+    const bow = Math.min(44, 12 + Math.abs(q.y - p.y) * 0.04);
+    c = [p, { x: p.x + bow, y: p.y }, { x: q.x + bow, y: q.y }, q];
   } else {
     const p = { x: a.x + a.w / 2, y: a.y }, q = { x: b.x - b.w / 2, y: b.y };
     const dx = (q.x - p.x) * 0.5;

@@ -28,7 +28,7 @@ export function tip(root) {
       const rows = n ? ROWS[n.kind](n, ctx) : linkRows(l, ctx);
       const tone = (n || l).tone;
       const head = n
-        ? [el("span.fm-tkind", { text: KIND[n.kind] }), el("strong", { text: n.num ? `${n.num} ${n.title}` : n.title }), el(`span.fm-tstate.t-${tone}`, { text: n.kind === "source" && n.tally === "program" ? "On air" : n.state ? stateWord(n.state === "running" ? "live" : n.state) : TONE_WORD[tone] })]
+        ? [el("span.fm-tkind", { text: KIND[n.kind] }), el("strong", { text: n.num && !String(n.title).includes(n.num) ? `${n.num} ${n.title}` : n.title }), el(`span.fm-tstate.t-${tone}`, { text: n.kind === "source" && n.tally === "program" ? "On air" : n.state ? stateWord(n.state === "running" ? "live" : n.state) : TONE_WORD[tone] })]
         : [el("span.fm-tkind", { text: "Link" }), el("strong", { text: `${(g.nodes.get(l.a) || {}).title} to ${(g.nodes.get(l.b) || {}).title}` })];
       node.replaceChildren(
         el("div.fm-thead", {}, head),
