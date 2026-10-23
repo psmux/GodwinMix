@@ -1,6 +1,6 @@
 # Headend mode
 
-Status: plan and work in progress on `feat/headend`.
+Status: shipped in 0.3.17.
 
 ## Why
 

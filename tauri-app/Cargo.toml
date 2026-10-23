@@ -1,6 +1,6 @@
 [package]
 name = "godwinmix-desktop"
-version = "0.3.16"
+version = "0.3.17"
 edition = "2021"
 
 # Its own workspace: this crate is built separately from the mixer daemon and
