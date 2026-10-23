@@ -3020,6 +3020,17 @@
         "label": {
           "type": "string"
         },
+        "params": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/HlsOutputParams"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "What an `hls://` output of a show without compositing was given, as\n`show.output.set` takes it, less the viewer key. Read while it runs."
+        },
         "plan": {
           "anyOf": [
             {
@@ -6864,6 +6875,148 @@
       ],
       "type": "object"
     },
+    "HeadendImportReport": {
+      "description": "`headend.import`'s answer: the report, then what was made.",
+      "properties": {
+        "converted": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "copied": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "disabled": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "dry_run": {
+          "type": "boolean"
+        },
+        "following": {
+          "description": "The Flussonic config this station follows, when it follows one. A\nshow made by an import is not in that file, and the file's own\nstreams are not touched.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "notes": {
+          "items": {
+            "$ref": "#/$defs/ImportNote"
+          },
+          "type": "array"
+        },
+        "shows": {
+          "$ref": "#/$defs/ShowAddManyResult",
+          "description": "`show.add_many`'s answer for these shows: on a dry run what would be\nmade, what it costs and what would be refused; otherwise what was."
+        },
+        "source": {
+          "description": "`pasted text`, or the path that was read.",
+          "type": "string"
+        },
+        "streams": {
+          "items": {
+            "$ref": "#/$defs/ImportedStream"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "source",
+        "dry_run",
+        "streams",
+        "converted",
+        "copied",
+        "disabled",
+        "notes",
+        "shows"
+      ],
+      "type": "object"
+    },
+    "HeadendImportRequest": {
+      "additionalProperties": false,
+      "description": "`headend.import`. One of `text` and `path`.",
+      "properties": {
+        "dry_run": {
+          "description": "Left out: true. Read the config, price its shows and make nothing.\nFalse makes them.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "path": {
+          "description": "Or a file on the station's machine, such as\n`/etc/flussonic/flussonic.conf`, read by the station.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "text": {
+          "description": "The config's text, as pasted.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "HeadendStatus": {
+      "description": "`headend.status`: whether this station runs in headend mode.",
+      "properties": {
+        "file": {
+          "description": "The file it follows.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "following": {
+          "description": "True while the station follows a Flussonic config\n(`godwinmix headend --flussonic FILE`).",
+          "type": "boolean"
+        },
+        "listeners": {
+          "description": "Where Flussonic's URLs and API answer, `address:port`.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "log": {
+          "description": "The Flussonic style log, when one is written.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "note": {
+          "description": "What a reader of this answer can do next, in one sentence.",
+          "type": "string"
+        },
+        "shows": {
+          "description": "Of those, the ones running as a show.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "streams": {
+          "description": "Streams in the file as last read.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "following",
+        "streams",
+        "shows",
+        "note"
+      ],
+      "type": "object"
+    },
     "Header": {
       "description": "Everything in the document that is not a scene or an item: the name, the\ncanvas, the collection's parameters, the transitions it carries, the assets\nand the source labels.\n\nIt is not a record and it has no id, so it cannot be diffed the way the\ntree is. It is carried whole, because it is small and because the\nalternative is that a command touching only the header produces an empty\npatch and is thrown away by `edit`, which is exactly what used to happen to\n`scene.params.set`, `source.set` and `source.group`: all three answered with\nthe change and none of them kept it.",
       "properties": {
@@ -7113,6 +7266,35 @@
       ],
       "type": "object"
     },
+    "ImportNote": {
+      "description": "A line the import read and does not act on, or acts on differently.",
+      "properties": {
+        "kind": {
+          "description": "`ignored`: nothing in GodwinMix uses it. `not_carried`: understood,\nand GodwinMix does something else, which `what` says.",
+          "type": "string"
+        },
+        "line": {
+          "description": "0 when the note is about the whole config.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "scope": {
+          "description": "`global`, or `stream NAME`.",
+          "type": "string"
+        },
+        "what": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "scope",
+        "line",
+        "kind",
+        "what"
+      ],
+      "type": "object"
+    },
     "ImportObsRequest": {
       "properties": {
         "add_sources": {
@@ -7300,6 +7482,45 @@
         "scenes",
         "items",
         "bundle"
+      ],
+      "type": "object"
+    },
+    "ImportedStream": {
+      "description": "One `stream` of the config, as the show it becomes.",
+      "properties": {
+        "copy": {
+          "description": "No `transcoder`: the input is served as it comes.",
+          "type": "boolean"
+        },
+        "disabled": {
+          "description": "`disabled true`: the show is made and stopped.",
+          "type": "boolean"
+        },
+        "input": {
+          "description": "The show's input, as `show.add` takes it, with any password in an\naddress shown as `***`."
+        },
+        "name": {
+          "description": "Flussonic's name, the show's name when it is made.",
+          "type": "string"
+        },
+        "outputs": {
+          "description": "The show's outputs: the HLS output with its params and rendition,\nthen one per `push`.",
+          "items": true,
+          "type": "array"
+        },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "disabled",
+        "copy",
+        "input",
+        "outputs"
       ],
       "type": "object"
     },
@@ -18939,6 +19160,13 @@
     {
       "destructive": false,
       "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "headend",
+        "readOnlyHint": true,
+        "tool": "gpu_status"
+      },
       "mutating": false,
       "name": "gpu.status",
       "params": {
@@ -18954,6 +19182,60 @@
       "scope": "read",
       "since": "1",
       "summary": "Every NVIDIA GPU on this machine: encoder, decoder and 3D use, video memory, encoder sessions, temperature, power and clocks, now and over the last two minutes. Read once a second from NVML or nvidia-smi while a client keeps asking, and not at all otherwise. No GPUs, and a note, on a machine without one."
+    },
+    {
+      "destructive": false,
+      "idempotent": false,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "profile": "search",
+        "readOnlyHint": false,
+        "tool": "import_flussonic"
+      },
+      "mutating": true,
+      "name": "headend.import",
+      "params": {
+        "$ref": "#/$defs/HeadendImportRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/headend/import"
+      },
+      "result": {
+        "$ref": "#/$defs/HeadendImportReport"
+      },
+      "scope": "admin",
+      "since": "1",
+      "summary": "Make a Flussonic config into shows without compositing, one per stream, each with its input, one HLS output and the transcoder line as its rendition. Takes the config's text or a path on the station's machine. A dry run, the default, answers the report (every stream, every line not carried, what the shows would cost) and makes nothing."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "search",
+        "readOnlyHint": true,
+        "tool": "headend_status"
+      },
+      "mutating": false,
+      "name": "headend.status",
+      "params": {
+        "additionalProperties": false,
+        "properties": {},
+        "type": "object"
+      },
+      "rest": {
+        "method": "GET",
+        "path": "/api/v1/headend/status"
+      },
+      "result": {
+        "$ref": "#/$defs/HeadendStatus"
+      },
+      "scope": "read",
+      "since": "1",
+      "summary": "Whether this station follows a Flussonic config, which file, where Flussonic's URLs and API answer, and how many of its streams run as shows."
     },
     {
       "destructive": false,
@@ -19017,6 +19299,13 @@
     {
       "destructive": false,
       "idempotent": true,
+      "mcp": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "profile": "headend",
+        "readOnlyHint": true,
+        "tool": "machine_status"
+      },
       "mutating": false,
       "name": "machine.status",
       "params": {

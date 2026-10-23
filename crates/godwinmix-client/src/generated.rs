@@ -1352,6 +1352,10 @@ pub struct Destination {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub key_hint: Option<String>,
     pub label: String,
+    /// What an `hls://` output of a show without compositing was given, as
+    /// `show.output.set` takes it, less the viewer key. Read while it runs.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub params: Option<HlsOutputParams>,
     /// What the plan gave it, while its stream is live.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub plan: Option<DestinationPlan>,
@@ -2974,6 +2978,68 @@ pub struct GroupSourcesRequest {
     pub sources: Vec<String>,
 }
 
+/// `headend.import`'s answer: the report, then what was made.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct HeadendImportReport {
+    pub converted: i64,
+    pub copied: i64,
+    pub disabled: i64,
+    pub dry_run: bool,
+    /// The Flussonic config this station follows, when it follows one. A
+    /// show made by an import is not in that file, and the file's own
+    /// streams are not touched.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub following: Option<String>,
+    pub notes: Vec<ImportNote>,
+    /// `show.add_many`'s answer for these shows: on a dry run what would be
+    /// made, what it costs and what would be refused; otherwise what was.
+    pub shows: ShowAddManyResult,
+    /// `pasted text`, or the path that was read.
+    pub source: String,
+    pub streams: Vec<ImportedStream>,
+}
+
+/// `headend.import`. One of `text` and `path`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct HeadendImportRequest {
+    /// Left out: true. Read the config, price its shows and make nothing.
+    /// False makes them.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dry_run: Option<bool>,
+    /// Or a file on the station's machine, such as
+    /// `/etc/flussonic/flussonic.conf`, read by the station.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+    /// The config's text, as pasted.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
+}
+
+/// `headend.status`: whether this station runs in headend mode.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct HeadendStatus {
+    /// The file it follows.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file: Option<String>,
+    /// True while the station follows a Flussonic config
+    /// (`godwinmix headend --flussonic FILE`).
+    pub following: bool,
+    /// Where Flussonic's URLs and API answer, `address:port`.
+    pub listeners: Vec<String>,
+    /// The Flussonic style log, when one is written.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub log: Option<String>,
+    /// What a reader of this answer can do next, in one sentence.
+    pub note: String,
+    /// Of those, the ones running as a show.
+    pub shows: i64,
+    /// Streams in the file as last read.
+    pub streams: i64,
+}
+
 /// Everything in the document that is not a scene or an item: the name, the
 /// canvas, the collection's parameters, the transitions it carries, the assets
 /// and the source labels.
@@ -3099,6 +3165,20 @@ pub struct IdRequest {
     pub id: String,
 }
 
+/// A line the import read and does not act on, or acts on differently.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ImportNote {
+    /// `ignored`: nothing in GodwinMix uses it. `not_carried`: understood,
+    /// and GodwinMix does something else, which `what` says.
+    pub kind: String,
+    /// 0 when the note is about the whole config.
+    pub line: i64,
+    /// `global`, or `stream NAME`.
+    pub scope: String,
+    pub what: String,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ImportObsRequest {
@@ -3191,6 +3271,26 @@ pub struct ImportedReport {
     pub relink: Vec<Relink>,
     /// The scenes that were added, by the names they ended up with.
     pub scenes: Vec<String>,
+}
+
+/// One `stream` of the config, as the show it becomes.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ImportedStream {
+    /// No `transcoder`: the input is served as it comes.
+    pub copy: bool,
+    /// `disabled true`: the show is made and stopped.
+    pub disabled: bool,
+    /// The show's input, as `show.add` takes it, with any password in an
+    /// address shown as `***`.
+    pub input: Value,
+    /// Flussonic's name, the show's name when it is made.
+    pub name: String,
+    /// The show's outputs: the HLS output with its params and rendition,
+    /// then one per `push`.
+    pub outputs: Vec<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
 }
 
 /// What a show without compositing takes in. A show that composites makes
@@ -7070,7 +7170,7 @@ pub struct MethodInfo {
     pub rest: Option<(&'static str, &'static str)>,
 }
 
-pub const METHODS: [MethodInfo; 235] = [
+pub const METHODS: [MethodInfo; 237] = [
     MethodInfo { name: "adbreak.end", summary: "Cut a running ad short, or disarm one that is scheduled.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/end")) },
     MethodInfo { name: "adbreak.start", summary: "Interrupt the programme with a clip, then rejoin live when it ends.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/start")) },
     MethodInfo { name: "agent.setup", summary: "Set an AI agent tool up to use this mixer: its MCP config gets one entry, godwinmix, that runs this mixer's own executable, and its skills folder gets the GodwinMix skills. Other entries are kept and a changed file is copied aside first. dry_run answers every file it would write. The answer says how to start the tool and a first thing to ask it.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/agent/setup")) },
@@ -7141,6 +7241,8 @@ pub const METHODS: [MethodInfo; 235] = [
     MethodInfo { name: "governor.calibrate", summary: "Measure this machine's encoders again, in the background, a few seconds of every core. Refused while anything is on air unless `confirm` is true.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/governor/calibrate")) },
     MethodInfo { name: "governor.status", summary: "The resource governor: when this machine was measured, what is in use and free on the CPU and each GPU encoder, and what was shed to keep the programme whole.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/governor/status")) },
     MethodInfo { name: "gpu.status", summary: "Every NVIDIA GPU on this machine: encoder, decoder and 3D use, video memory, encoder sessions, temperature, power and clocks, now and over the last two minutes. Read once a second from NVML or nvidia-smi while a client keeps asking, and not at all otherwise. No GPUs, and a note, on a machine without one.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/gpu/status")) },
+    MethodInfo { name: "headend.import", summary: "Make a Flussonic config into shows without compositing, one per stream, each with its input, one HLS output and the transcoder line as its rendition. Takes the config's text or a path on the station's machine. A dry run, the default, answers the report (every stream, every line not carried, what the shows would cost) and makes nothing.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/headend/import")) },
+    MethodInfo { name: "headend.status", summary: "Whether this station follows a Flussonic config, which file, where Flussonic's URLs and API answer, and how many of its streams run as shows.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/headend/status")) },
     MethodInfo { name: "log.gst", summary: "Raise GStreamer's own debug categories for a while, then let them fall back on their own.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/log/gst")) },
     MethodInfo { name: "log.levels", summary: "Every log level override in force, and the GStreamer categories still raised.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/log/levels")) },
     MethodInfo { name: "log.set", summary: "Change one instance's or one module's log level while the mixer runs.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/log/set")) },
@@ -7994,6 +8096,16 @@ impl Client {
     /// Every NVIDIA GPU on this machine: encoder, decoder and 3D use, video memory, encoder sessions, temperature, power and clocks, now and over the last two minutes. Read once a second from NVML or nvidia-smi while a client keeps asking, and not at all otherwise. No GPUs, and a note, on a machine without one.
     pub async fn gpu_status(&self, params: &GpuStatusRequest) -> Result<GpuStatus> {
         self.call("gpu.status", params).await
+    }
+
+    /// Make a Flussonic config into shows without compositing, one per stream, each with its input, one HLS output and the transcoder line as its rendition. Takes the config's text or a path on the station's machine. A dry run, the default, answers the report (every stream, every line not carried, what the shows would cost) and makes nothing.
+    pub async fn headend_import(&self, params: &HeadendImportRequest) -> Result<HeadendImportReport> {
+        self.call("headend.import", params).await
+    }
+
+    /// Whether this station follows a Flussonic config, which file, where Flussonic's URLs and API answer, and how many of its streams run as shows.
+    pub async fn headend_status(&self) -> Result<HeadendStatus> {
+        self.call("headend.status", &serde_json::json!({})).await
     }
 
     /// Raise GStreamer's own debug categories for a while, then let them fall back on their own.

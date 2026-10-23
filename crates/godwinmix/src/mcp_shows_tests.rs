@@ -56,7 +56,6 @@ fn the_headend_hot_list_is_the_shows() {
     hot_list(Profile::Headend, &[
         ("agent.state", "agent_state"),
         ("gpu.status", "gpu_status"),
-        ("headend.import", "import_flussonic"),
         ("machine.status", "machine_status"),
         ("program.take", "take"),
         ("show.add_many", "add_shows"),
