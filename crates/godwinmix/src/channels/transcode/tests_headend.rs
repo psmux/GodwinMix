@@ -74,7 +74,7 @@ fn forty_six_channels_all_go_to_nvdec_and_nvenc_and_stay_on_the_gpu() {
         let streams = t.streams(id).unwrap_or_else(|| panic!("{id} has no plan: {:?}", t.view(id, &format!("{id}-hls"))));
         let nodes = streams[0]["nodes"].as_array().unwrap();
         let of = |kind: &'static str| nodes.iter().filter(move |v| v["kind"] == kind);
-        assert!(of("encode").all(|e| e["element"] == "nvh264enc" && e["memory"] == "cuda" && e["keyframe_frames"] == 50), "{id}: {:?}", t.view(id, &format!("{id}-hls")).0.and_then(|p| p.encoder_reason));
+        assert!(of("encode").all(|e| e["element"] == "nvh264enc" && e["memory"] == "cuda" && e["keyframe_frames"] == 50 && e["profile"] == "high"), "{id}: {:?}", t.view(id, &format!("{id}-hls")).0.and_then(|p| p.encoder_reason));
         assert!(of("decode").filter(|d| d["track"] == "video").all(|d| d["element"] == "nvmpeg2videodec" && d["memory"] == "cuda"), "{id}");
         assert!(of("scale").all(|s| s["element"] == "cudaconvertscale" && s["rate"] == false), "{id}");
         assert_eq!(of("aencode").count(), 1 + n % 3, "{id}: one AAC encode per track");

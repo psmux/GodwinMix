@@ -52,6 +52,7 @@ decoder = "nvh264dec"
 download = "cudadownload"
 parser = "h264parse"
 memory = "system"
+profile = "high"
 requires = ["nvh264enc"]
 license = "LGPL-2.1-or-later"
 container = ["flv", "mpegts", "mp4", "matroska"]

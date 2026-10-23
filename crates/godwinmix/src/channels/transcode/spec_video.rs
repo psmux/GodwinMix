@@ -72,5 +72,8 @@ pub fn video_encoder(id: &str, shape: &VideoShape, keyframe_ms: u32, preset: Opt
     if let Some(p) = &e.parser {
         v["parser"] = json!(p);
     }
+    if let Some(p) = &e.profile {
+        v["profile"] = json!(p);
+    }
     Some(v)
 }
