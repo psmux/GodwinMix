@@ -39,7 +39,7 @@ the three names `params.transport` with `data.allowed`.
 | `rist://@0.0.0.0:5004` | RIST Simple Profile, listening. The port must be even: RTCP is on the next one up | none |
 | `rtsp://user:pass@camera/stream1` | RTSP pull from a camera or an encoder | `transport`: `tcp`, `udp` or `auto` (UDP first, the default); `latency_ms` (default 200) |
 | `https://host/live.m3u8`, `https://host/live.mpd` | HLS or DASH pull, handed on at the clock's pace | none |
-| `rtmp://host/app/key`, `rtmps://...` | RTMP play from someone else's server | none |
+| `rtmp://host/app/key`, `rtmps://...` | RTMP play from someone else's server. Connections take turns between GStreamer's two RTMP clients, librtmp's `rtmpsrc` first where it is installed and then `rtmp2src`, because neither plays from every server: `rtmp2src` hears nothing from `ffmpeg -listen 1`, which sends on stream 0, and MediaMTX closes it at `createStream` | none |
 | `file:///clips/loop.ts`, `/clips/loop.mp4` | a file, played at its own pace and from the top again at its end | none |
 | `channel:church/main` | a channel's stream, read off the hub with no demux at all | none |
 
