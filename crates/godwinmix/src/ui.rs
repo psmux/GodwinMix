@@ -317,6 +317,7 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/renditions/refusal.js", include_str!("../../../ui/panels/renditions/refusal.js")),
     ("panels/renditions/renditions.css", include_str!("../../../ui/panels/renditions/renditions.css")),
     ("panels/renditions/resources.js", include_str!("../../../ui/panels/renditions/resources.js")),
+    ("panels/renditions/rung-advanced.js", include_str!("../../../ui/panels/renditions/rung-advanced.js")),
     ("panels/renditions/shared.js", include_str!("../../../ui/panels/renditions/shared.js")),
     ("panels/renditions/usage.js", include_str!("../../../ui/panels/renditions/usage.js")),
     ("panels/renditions/words.js", include_str!("../../../ui/panels/renditions/words.js")),
@@ -504,6 +505,7 @@ const LEGACY: &str = include_str!("../../../ui/legacy/index.html");
 /// sets and what CI sets.
 const DEV_ASSETS: &[(&str, &str)] = &[
     ("test/headend-advanced.js", include_str!("../../../ui/test/headend-advanced.js")),
+    ("test/outputs-edit.js", include_str!("../../../ui/test/outputs-edit.js")),
     ("test/headend-station.js", include_str!("../../../ui/test/headend-station.js")),
     ("test/index.html", include_str!("../../../ui/test/index.html")),
     ("test/run.js", include_str!("../../../ui/test/run.js")),
