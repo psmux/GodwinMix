@@ -6,7 +6,8 @@
 .fm {
   --s-live: var(--ok); --s-silent: var(--warn); --s-frozen: var(--warn); --s-black: var(--bad);
   --s-nopicture: var(--bad); --s-offline: var(--faint); --s-starting: var(--accent); --s-scrambled: var(--kind-stream);
-  --deep: color-mix(in srgb, var(--bg) 80%, #000 20%);
+  /* Darker than the page in a dark theme, lighter in a light one. */
+  --deep: color-mix(in srgb, var(--bg) 72%, var(--overlay));
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
   display: flex; flex-direction: column; min-height: 0;
   background: var(--deep); color: var(--text);
@@ -24,9 +25,9 @@
 .fm .s-scrambled { --sc: var(--s-scrambled); }
 
 .fm-bar { display: flex; align-items: center; gap: 8px 16px; padding: 8px 14px; background: var(--panel); border-bottom: var(--border) solid var(--line-soft); flex-wrap: wrap; }
-.fm-brand { display: grid; gap: 1px; min-width: 0; margin-right: auto; }
+.fm-brand { display: grid; gap: 1px; min-width: 0; flex: 1 1 0; }
 .fm-brand h2 { margin: 0; font-size: 18px; letter-spacing: 0.02em; }
-.fm-sums { color: var(--dim); font-size: var(--fs-sm); }
+.fm-sums { color: var(--dim); font-size: var(--fs-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .fm-filters { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .fm-search[type=search] { width: 240px; max-width: 100%; }
 .fm-select { width: auto; max-width: 200px; }
@@ -73,7 +74,8 @@
 .t-off { --tc: var(--faint); }
 
 .fm-legend {
-  position: absolute; left: 12px; bottom: 10px; right: 12px; display: flex; flex-wrap: wrap; gap: 4px 14px;
+  position: absolute; left: 10px; bottom: 8px; max-width: calc(100% - 20px); display: flex; flex-wrap: wrap; gap: 4px 14px;
+  padding: 5px 10px; border-radius: 8px; background: color-mix(in srgb, var(--deep) 84%, transparent);
   font-size: 11px; color: var(--dim); pointer-events: none;
 }
 .fm-legend i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; background: var(--tc); }
@@ -85,9 +87,12 @@
 /* A phone: the bar wraps under its name, the hint goes, the drawer is a
    sheet from the bottom. */
 .fm.narrow .fm-bar { padding: 6px 10px; gap: 6px; }
-.fm.narrow .fm-filters { width: 100%; order: 3; }
+.fm.narrow .fm-filters { width: 100%; order: 3; gap: 6px; }
+.fm.narrow .fm-brand h2 { font-size: 16px; }
 .fm.narrow .fm-search[type=search] { width: 100%; }
 .fm.narrow .fm-select { flex: 1; min-width: 0; }
+.fm.narrow .fm-tog { flex: none; }
+.fm.narrow .fm-legend { gap: 2px 10px; font-size: 10px; }
 .fm.narrow .fm-hint { display: none; }
 .fm.narrow .fm-tip { max-width: calc(100% - 12px); }
 .fm.narrow .he-drawer { position: absolute; inset: auto 0 0 0; width: auto; max-height: 82%; border-left: 0; border-top: var(--border) solid var(--line); border-radius: 14px 14px 0 0; }

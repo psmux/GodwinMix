@@ -85,6 +85,7 @@ export function openFlowMap(client) {
       mixed.follow(shows, data.missing ? "" : data.current);
       const graph = build({ shows, stats: data.stats, series: data.series, mixed: mixed.detail, gpu: box.gpu, missing: false });
       map.set(graph, narrow);
+      map.cap = narrow ? 33 : 0;
       if (!view.fitted && graph.nodes.size) {
         // The whole map when it reads at that size, else its width from the top.
         view.fitted = true;

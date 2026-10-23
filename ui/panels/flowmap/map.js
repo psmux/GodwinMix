@@ -30,6 +30,9 @@ export class FlowMap {
     this.reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
     this.tSnap = 0;
     this.budget = 1;
+    // Milliseconds between frames; 0 draws every frame the screen shows.
+    this.cap = 0;
+    this.drawn = 0;
     this.colours();
   }
 
@@ -133,7 +136,8 @@ export class FlowMap {
     this.last = performance.now();
     const loop = (t) => {
       if (!this.running) return;
-      if (!this.reduced || this.dirty || this.pulses.length) frame(this, t, this.reduced);
+      const due = !this.cap || t - this.drawn >= this.cap - 4;
+      if (due && (!this.reduced || this.dirty || this.pulses.length)) (this.drawn = t), frame(this, t, this.reduced);
       this.raf = requestAnimationFrame(loop);
     };
     this.raf = requestAnimationFrame(loop);

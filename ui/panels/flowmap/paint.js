@@ -35,10 +35,10 @@ export function paintLinks(g, links, v, col, look) {
     g.beginPath();
     g.moveTo(l.c[0].x, l.c[0].y);
     g.bezierCurveTo(l.c[1].x, l.c[1].y, l.c[2].x, l.c[2].y, l.c[3].x, l.c[3].y);
-    g.setLineDash(dead || l.uses ? [5, 5] : []);
-    g.lineWidth = (lit ? 2.6 : l.straight ? 1.4 : 1.8) / Math.max(0.6, v.s);
+    g.setLineDash(l.uses ? [2, 4] : dead ? [5, 5] : []);
+    g.lineWidth = (l.uses ? 1 : lit ? 2.6 : l.straight ? 1.4 : 1.8) / Math.max(0.6, v.s);
     g.strokeStyle = l.tone === "warn" || l.tone === "bad" ? toneColour(col, l.tone) : lit ? col.accent : dead ? col.faint : col.link;
-    g.globalAlpha = (dim ? 0.18 : 1) * (dead ? 0.6 : lit ? 1 : 0.85);
+    g.globalAlpha = (dim ? 0.18 : 1) * (l.uses ? 0.55 : dead ? 0.6 : lit ? 1 : 0.85);
     g.stroke();
   }
   g.setLineDash([]);
@@ -46,6 +46,8 @@ export function paintLinks(g, links, v, col, look) {
 }
 
 export function paintCards(g, nodes, v, col, look, font) {
+  const f = v.w < 760 ? 0.88 : 1;
+  const sized = (w, px, kind) => font(w, px * f, kind);
   g.setTransform(v.dpr, 0, 0, v.dpr, 0, 0);
   g.clearRect(0, 0, v.w, v.h);
   g.translate(v.tx, v.ty);
@@ -53,7 +55,7 @@ export function paintCards(g, nodes, v, col, look, font) {
   for (const n of nodes) {
     if (n.hidden || !onScreen([n.x - n.w / 2, n.y - n.h / 2, n.x + n.w / 2, n.y + n.h / 2], v)) continue;
     g.globalAlpha = look.dims(n.id) || (look.lit && !look.lit.has(n.id)) ? 0.28 : 1;
-    card(g, n, v.s, col, font, look.hover === n.id || look.selected === n.id);
+    card(g, n, v.s, col, sized, look.hover === n.id || look.selected === n.id);
   }
   g.globalAlpha = 1;
 }
@@ -67,7 +69,7 @@ function card(g, n, s, col, font, hot) {
   g.fill();
   g.lineWidth = (hot ? 2 : n.tone === "ok" ? 1 : 1.5) / s;
   g.strokeStyle = hot ? col.accent : n.tone === "ok" || n.tone === "off" ? col.line : tc;
-  g.setLineDash(n.tone === "off" ? [4, 3] : []);
+  g.setLineDash(n.tone === "off" ? [4, 3] : n.tone === "busy" ? [3, 3] : []);
   g.stroke();
   g.setLineDash([]);
   g.fillStyle = n.tally === "program" ? col.live : tc;
