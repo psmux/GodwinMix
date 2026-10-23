@@ -1,20 +1,16 @@
-//! One MPEG-TS rendition's cutter: frames in, in the order the hub gave
-//! them, whole segments into its [`TsTrack`] out.
+//! One MPEG-TS rendition's cutter: the hub's frames in, in its order.
 //!
 //! ```text
 //!   Unit ─► queue ─► placed on the CMAF picture's ring ─► Muxer ─► segment bytes ─► TsTrack
 //!                    (Ring::cut_at for a keyframe, Ring::place for sound alone)
 //! ```
 //!
-//! A frame is muxed only once it is known which segment it is in, so a
-//! segment starts with its own PAT and PMT and, for `main`, its keyframe
-//! with the parameter sets. Frames wait here, never on a lock, until the
-//! picture's muxer has cut far enough to say; for a window at most. One
-//! muxer serves the cutter's life, so continuity counters and the clock
-//! carry on from one segment to the next.
+//! A frame is muxed once its segment is known, so a segment starts with its
+//! own PAT and PMT and, for `main`, a keyframe with its parameter sets.
+//! Frames wait here, never on a lock, for a window at most. One muxer serves
+//! the cutter's life, so the continuity counters carry on.
 
-use super::mux::{Muxer, Unit, UnitKind};
-use super::ring::TsTrack;
+use super::{mux::{Muxer, Unit, UnitKind}, ring::TsTrack};
 use crate::hls::ring::{Cut, Place};
 use crate::hls::stream::Stream;
 use std::collections::VecDeque;
@@ -89,7 +85,7 @@ impl TsCut {
                     Cut::Starts { msn, disc, pdt_ms } => Some(Some((msn, disc, pdt_ms))),
                     Cut::Inside => Some(None),
                     Cut::Drop => None,
-                    Cut::Wait if self.held() <= self.hold_ms => break,
+                    Cut::Wait if span(&self.queue) <= self.hold_ms => break,
                     Cut::Wait => None,
                 },
                 (false, false) => Some(None),
@@ -97,10 +93,10 @@ impl TsCut {
                     Place::In(msn) if self.open.as_ref().is_some_and(|o| o.msn >= msn) => Some(None),
                     Place::In(msn) => match leader.meta(msn) {
                         Some((disc, pdt_ms)) => Some(Some((msn, disc, pdt_ms))),
-                        None if self.held() <= self.hold_ms => break,
+                        None if span(&self.queue) <= self.hold_ms => break,
                         None => None,
                     },
-                    Place::Wait if self.held() <= self.hold_ms => break,
+                    Place::Wait if span(&self.queue) <= self.hold_ms => break,
                     Place::Wait | Place::Drop => None,
                 },
             };
@@ -136,18 +132,13 @@ impl TsCut {
         (ms >= 0).then(|| ms as u64 * MS)
     }
 
-    fn held(&self) -> u32 {
-        span(&self.queue)
-    }
 }
 
-/// How far the queue reaches past its front, in ms: the newest time in it
-/// less the front's. Not the back's: units come in the order the hub gave
-/// them, and a converted channel's sound comes some 700 ms behind the
-/// picture of the same time, so the back is often older than the front.
-/// Taken as back less front, that wrapped to four billion, every keyframe
-/// that had to wait for the CMAF cut was dropped as held too long, and a
-/// TS segment ran on for a minute with one keyframe in it.
+/// How long the front of the queue has waited: the newest time in it less
+/// the front's. Sound comes some 700 ms behind the picture of the same time
+/// from a GPU encoder, so the back is often older than the front; taken as
+/// back less front, that wrapped, every keyframe waiting for the CMAF cut
+/// was dropped, and a TS segment ran on for a minute.
 pub(super) fn span(queue: &VecDeque<Unit>) -> u32 {
     let Some(front) = queue.front() else { return 0 };
     queue.iter().map(|u| u.ms.saturating_sub(front.ms)).max().unwrap_or(0)
