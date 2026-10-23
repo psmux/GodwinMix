@@ -5,8 +5,6 @@
 //! two ticks to a frame, so 60000 and 1001 is 29.97 frames a second whether
 //! the frames are coded as frames or as fields.
 
-use super::Bits;
-
 /// The frame rate the SPS declares, or none when it declares no timing.
 /// `nal` starts with the NAL header byte.
 pub fn frame_rate(nal: &[u8]) -> Option<f64> {
