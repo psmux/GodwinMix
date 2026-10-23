@@ -12,21 +12,26 @@ until it is open and stops reading when it closes (Escape, or the cross at
 the top right). The button beside the cross puts it full screen, for a
 monitor on the wall.
 
-![The flow map in the dark theme: a mixed show with its sources and renditions at the top, then fifty channels grouped under their multicast inputs](../media/flowmap/overview-dark.png)
+![The flow map in the dark theme: a mixed show with its sources, program and outputs at the top, then fifty channels grouped under their multicast inputs](../media/flowmap/overview-dark.png)
+
+![The flow map moving: dots run along each link at its bit rate, and hovering the show lights its path](../media/flowmap/flowmap.gif)
+
+The same capture is [a WebM](../media/flowmap/flowmap.webm), smaller.
 
 ## The four columns
 
 Read it left to right.
 
 1. **Coming in.** For a mixed show, each of its sources: a camera, a test
-   picture, an SRT or RTMP feed, a file, a browser source, a graphic. For
+   pattern, an SRT or RTMP feed, a file, a browser source, a graphic. For
    channels, each address they read. A multicast group that carries six
    programmes is one tall card beside the six channels it feeds, with its
    rate and how many continuity errors it had in the last minute.
 2. **Shows.** Every show on the station. A channel's card has its number
-   and name, the picture it gets (`1080i MPEG-2 AC-3`) and its rate. A
-   mixed show's card says how many sources go into its scenes and sound,
-   what is on air and what is in preview.
+   and name, the picture it gets (`1080i MPEG-2 AC-3`) and its rate, and
+   when something is wrong it says what first (`Frozen`, `Black`). A mixed
+   show's card says how many sources go into its scenes and sound, what is
+   on air and what is in preview.
 3. **Processing.** What is done to the picture before it goes out. A
    conversion says what it makes (`720p H.264`, `1.5 Mbit/s`) and where it
    runs: **GPU** when the picture stays on the graphics card from decode to
@@ -40,7 +45,7 @@ Read it left to right.
    RTMP server, SRT, UDP or multicast, a recording, the multiview. Each says
    where it goes, its rate, and for HLS how many players are watching.
 
-![One mixed show and nothing else: six sources into the show, the program in two renditions, four outputs](../media/flowmap/one-show.png)
+![One mixed show and nothing else: three sources into its scenes and sound, the program, and four outputs, one of them failing to connect](../media/flowmap/one-show.png)
 
 ## What the colours and the dots say
 
@@ -54,6 +59,10 @@ Read it left to right.
 | red card | a fault: a group with nothing arriving, a channel with no picture, an output that failed |
 | grey dashed link, no dots | nothing flowing on it: the feed was cut, the show is stopped |
 | a ring that grows and fades once | that card just changed state |
+
+When a feed is cut, its link goes grey and still within a second or two,
+the channel's card turns red and says **Nothing arriving**, a ring goes
+round it once, and every output after it follows.
 
 A source's own rate is not measured, so its dots run at a steady pace
 that says only whether it is live and whether it is on air. Every other
@@ -84,13 +93,19 @@ what is under the words above: the show and output ids, the elements a
 conversion runs (`nvmpeg2videodec`, `cudaconvertscale`, `nvh264enc`), the
 encoder, the address.
 
-![Hovering a channel lights its input, its conversion on the GPU and its output](../media/flowmap/hover-channel.png)
+![Hovering an input: what it is, its rate, its errors and the six channels it feeds](../media/flowmap/hover-input.png)
 
-![Hovering an output: its format, access, segment length, where it goes and who is watching](../media/flowmap/hover-output.png)
+![Hovering a channel on a station with a GPU: its input, its conversion on the GPU and its output light up, with the GPU it uses](../media/flowmap/hover-channel.png)
+
+![Hovering an output: its format, its access, its segment length, where it goes and who is watching](../media/flowmap/hover-output.png)
+
+![Hovering the GPU lights every channel it converts](../media/flowmap/hover-gpu.png)
 
 Click a channel for the headend view's detail drawer beside the map, with
 its player, its tracks and its history. Click a mixed show to open it,
 where its own panels are.
+
+![A channel's detail open beside the map](../media/flowmap/drawer.png)
 
 ## Find what matters
 
@@ -115,6 +130,8 @@ width from the top when it is not, as with two hundred channels.
 
 Zoomed out, cards lose their words before they lose their colour, so a
 wall of two hundred channels still shows which are in trouble.
+
+![Two hundred channels zoomed out: one dead group in red, a group with errors in amber](../media/flowmap/two-hundred.png)
 
 ## In a light room and on a phone
 

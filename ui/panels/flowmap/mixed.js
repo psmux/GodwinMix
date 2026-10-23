@@ -58,8 +58,13 @@ export class MixedWatch {
   }
 
   async read(id, link) {
+    // The status for every show, this page's too, since what an output has
+    // sent is counted there; what is armed and the scene's own name only this
+    // page's state knows.
     const page = id === this.current;
-    const s = page ? this.client.state || {} : await quiet(link.call("core.status", {}));
+    const got = await quiet(link.call("core.status", {}));
+    const own = page ? this.client.state || {} : {};
+    const s = got ? { ...got, preview: own.preview, sceneName: own.sceneName, tally: own.tally || got.tally } : page ? own : null;
     if (!s) return;
     const was = this.detail.get(id) || {};
     // The plan changes only when an output does: every third read is enough.

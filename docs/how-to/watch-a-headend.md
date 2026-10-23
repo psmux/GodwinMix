@@ -11,6 +11,9 @@ Open it from **View > Headend**, or with **Headend view** on the
 monitoring wall's top bar. It reads nothing until it is open and stops
 reading when it closes (Escape, or the cross at the top right). The
 button beside the cross puts it full screen, for a monitor on the wall.
+The first of the three buttons at the top right opens the flow map, which draws every input,
+channel, conversion and output as one picture with its rates
+([Read the flow map](read-the-flow-map.md)).
 
 ![The headend view in the dark theme: the band of totals, the GPU strip, the input groups and fifty channels, one of them open in the drawer](../media/headend/drawer-dark.png)
 

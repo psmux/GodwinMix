@@ -101,6 +101,9 @@ def mixer(port, folder):
         print(wall.post(port, f"sources{q}", body).get("error") or f"source {body['name']} added")
     print(wall.post(port, f"program/take{q}", {"source": "cam1"}).get("error") or "Camera 1 on air")
     print(wall.post(port, f"outputs{q}", {"id": "youtube", "uri": "rtmp://127.0.0.1:9/live2/stream-key"}).get("error") or "an RTMP output added")
+    print(wall.post(port, f"outputs{q}", {"id": "web", "uri": "hls://web", "type": "hls/output"}).get("error") or "an HLS output added")
+    rec = {"id": "recording", "uri": "record://programme", "type": "record/output", "params": {"format": "mp4", "directory": folder}}
+    print(wall.post(port, f"outputs{q}", rec).get("error") or "a recording started")
 
 
 def main():

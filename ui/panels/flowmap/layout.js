@@ -4,7 +4,7 @@
 // the same graph always lands in the same places. On a phone the processing
 // column folds into the links, so three columns fit across.
 
-const WIDE = { w: [212, 196, 188, 222], gap: 96, row: 34, card: 28, mixRow: 50, mixCard: 42, between: 16, top: 54 };
+const WIDE = { w: [212, 196, 188, 222], gap: 96, row: 34, card: 28, mixRow: 56, mixCard: 46, between: 16, top: 54 };
 const NARROW = { w: [118, 124, 0, 118], gap: 26, row: 36, card: 30, mixRow: 44, mixCard: 38, between: 12, top: 40 };
 
 export function columns(narrow) {

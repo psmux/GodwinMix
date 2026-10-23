@@ -58,7 +58,7 @@ export function outputFamily(o) {
   const p = String(o.platform || "");
   const host = String(o.uri_host || o.uri || "").toLowerCase();
   if (p === "hls" || host.startsWith("hls:")) return "hls";
-  if (p === "file" || /^file:|record/.test(host) || o.kind === "record") return "record";
+  if (p === "file" || /^(file|record):/.test(host) || o.type === "record/output" || o.kind === "record") return "record";
   if (p === "srt" || host.startsWith("srt:")) return "srt";
   if (/^(udp|rtp|rist):/.test(host) || p === "udp") return "udp";
   if (/^rtmps?:/.test(host) || platform(p)) return "rtmp";
@@ -93,6 +93,7 @@ export function hlsFormat(p) {
 export function where(o) {
   const h = String(o.uri_host || o.uri || "");
   if (/^hls:/.test(h) || o.platform === "hls") return "this station";
+  if (outputFamily(o) === "record") return (o.file && o.file.name) || "a file on this station";
   return h.replace(/^[a-z]+:\/\//i, "").replace(/\/.*$/, "");
 }
 
