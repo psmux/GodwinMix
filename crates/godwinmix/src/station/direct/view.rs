@@ -22,7 +22,7 @@ impl super::Direct {
         r.outputs
             .iter()
             .map(|d| {
-                let live = seen.output(&d.id, d.enabled && !r.compositing);
+                let live = super::outputs::unreadable(id, &d.id).unwrap_or_else(|| seen.output(&d.id, d.enabled && !r.compositing));
                 let mut view = Destination {
                     id: d.id.clone(),
                     platform: d.platform.clone(),
@@ -68,7 +68,7 @@ impl super::Direct {
                 if let Some(l) = &hls {
                     (row.state, row.kbps, row.reconnects) = (String::new(), l.kbps, l.reconnects);
                 }
-                let live = hls.unwrap_or_else(|| seen.output(&o.id, true));
+                let live = super::outputs::unreadable(id, &o.id).or(hls).unwrap_or_else(|| seen.output(&o.id, true));
                 if row.state.is_empty() {
                     row.state = serde_json::to_value(live.state).ok().and_then(|v| v.as_str().map(str::to_string)).unwrap_or_default();
                 }
