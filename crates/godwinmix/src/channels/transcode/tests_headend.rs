@@ -111,3 +111,22 @@ fn a_gop_of_50_is_a_keyframe_every_50_frames_on_nvenc_and_x264_at_29_97_and_59_9
         assert_eq!(keyframe_prop(x264(), fps), ("x264enc".to_string(), json!(50)), "x264 at {fps}");
     }
 }
+
+/// One channel planned on `machine`, and what its output's steps say.
+fn steps_on(machine: Machine) -> Vec<(String, Option<String>, bool)> {
+    let governor = Governor::with_machine(GovernorConfig::default(), Profile::uncalibrated(), 48, 64 * 1024);
+    let t = Transcode::with(machine, governor);
+    t.replan(&[record("ch0")], &[programme("ch0", 0)], |r| vec![channel(&r.id)]);
+    t.steps("ch0", "ch0-hls").into_iter().map(|s| (s.kind, s.element, s.gpu)).collect()
+}
+
+#[test]
+fn a_converted_output_names_its_steps_and_where_each_runs() {
+    let on = |k: &str, e: &str| (k.to_string(), Some(e.to_string()), true);
+    assert_eq!(steps_on(nvidia()), vec![on("decode", "nvmpeg2videodec"), on("scale", "cudaconvertscale"), on("encode", "nvh264enc")]);
+    let names = ["x264enc", "avdec_mpeg2video", "a52dec", "ac3parse", "avenc_aac", "aacparse", "h264parse"];
+    let cpu = steps_on(Machine::probe(&Catalogue::shipped().unwrap(), &FakeRegistry::with(&names)));
+    assert_eq!(cpu.iter().map(|s| s.0.as_str()).collect::<Vec<_>>(), ["decode", "scale", "encode"], "{cpu:?}");
+    assert!(cpu.iter().all(|s| !s.2), "nothing runs on a GPU the machine does not have: {cpu:?}");
+    assert_eq!(cpu[2].1.as_deref(), Some("x264enc"));
+}

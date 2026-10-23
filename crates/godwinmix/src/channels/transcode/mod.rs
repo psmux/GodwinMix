@@ -36,6 +36,7 @@ mod source;
 mod spec;
 mod spec_video;
 mod state;
+mod steps;
 mod watch;
 
 #[cfg(test)]

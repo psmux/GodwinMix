@@ -79,6 +79,7 @@ impl super::Direct {
                     (Some(_), Some(plan)) => text_of(&plan),
                     (Some(_), None) => "waiting for the input".into(),
                 };
+                row.steps = o.rendition.as_ref().map(|_| self.transcode.steps(id, &o.id)).unwrap_or_default();
                 row
             })
             .collect();

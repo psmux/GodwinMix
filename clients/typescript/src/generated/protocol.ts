@@ -2336,6 +2336,7 @@ export interface OutputStats {
   reconnects?: number;
   rendition_text?: string;
   state?: string;
+  steps?: OutputStep[];
 }
 
 export interface OutputStatus {
@@ -2349,6 +2350,14 @@ export interface OutputStatus {
   state: OutputState;
   uri_host: string;
   [key: string]: unknown;
+}
+
+/** One step of an output's conversion. */
+export interface OutputStep {
+  accel?: string | null;
+  element?: string | null;
+  gpu?: boolean;
+  kind: string;
 }
 
 /** A sparse change to one item of a referenced scene. */
@@ -2566,8 +2575,11 @@ export interface PlanView {
  * `/hls/channel/<channel>/<destination>/index.m3u8?key=...`.
  */
 export interface Playback {
+  access?: string;
   dash_url_path: string;
   master_url_path: string;
+  segment_ms?: number | null;
+  segments?: string;
   viewers: number;
 }
 

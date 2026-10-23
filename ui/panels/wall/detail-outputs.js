@@ -62,8 +62,10 @@ export function outputsSection(client, show, stats, reread) {
   }
 
   async function settings(o) {
-    const h = await hlsBlock(o.params || null);
-    const off = o.params ? null : el("p.wl-sub.wl-wrap", { text: "This output is off, so what it was given is not read back. Saving gives it these settings." });
+    // `params` has every setting; `playback` (older stations) the ones it serves.
+    const p = o.params || (o.playback && o.playback.segments ? { segments: o.playback.segments, access: o.playback.access, segment_ms: o.playback.segment_ms } : null);
+    const h = await hlsBlock(p);
+    const off = p ? null : el("p.wl-sub.wl-wrap", { text: "This output is off, so what it was given is not read back. Saving gives it these settings." });
     const save = el("button.btn.primary", { type: "button", text: "Save settings", onclick: () => call("show.output.set", { output: o.id, params: h.read() }, `${outName(o)} keeps its settings`, true) });
     const cancel = el("button.btn", { type: "button", text: "Cancel", onclick: () => slot.replaceChildren() });
     slot.replaceChildren(el("div.wl-dbox", {}, [el("strong", { text: `HLS settings of ${o.uri_host || o.uri || o.id}` }), off, h.node, el("div.wl-dbtns", {}, [cancel, save])]));
