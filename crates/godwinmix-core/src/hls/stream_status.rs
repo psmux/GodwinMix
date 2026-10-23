@@ -1,5 +1,6 @@
 //! What `output.list` and `show.list` say of one HLS output.
 
+use super::super::access::Access;
 use super::super::track::TrackKind;
 use super::Stream;
 use serde_json::{json, Value};
@@ -35,6 +36,10 @@ impl Stream {
             "segment_ms": self.params.segment_ms,
             "part_ms": self.params.part_ms,
             "window": self.params.window_s,
+            // Who may play it, as `params` takes it, so an edit form opens on
+            // what is in force rather than on the default.
+            "access": if self.params.access == Access::Keyed { "keyed" } else { "open" },
+            "open_public": self.params.access == Access::OpenPublic,
             "viewers": viewers,
             "egress_kbps": self.viewers.egress_kbps(),
             "memory_bytes": self.memory(),
