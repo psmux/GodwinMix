@@ -199,3 +199,23 @@ fn unknown_sources_duplicates_and_empty_requests_are_refused_with_next_steps() {
         "nothing-asked"
     );
 }
+
+#[test]
+fn a_custom_ladder_rung_gets_its_own_fit_preset_and_b_frames() {
+    // What the HLS form's Advanced group for one rung asks: the top rung
+    // cropped on the encoder's p4 with two B frames, the lower one as it was.
+    let mut top = keyframed("r720", 720, 3000, Some(2000));
+    let v = top.video.as_mut().unwrap();
+    v.fit = Some(godwinmix_protocol::rendition::Fit::Crop);
+    v.preset = Some("p4".into());
+    v.bframes = Some(2);
+    let ladder = godwinmix_protocol::rendition::RenditionChoice::Ladder(godwinmix_protocol::rendition::LadderRef {
+        ladder: vec![top, keyframed("r360", 360, 800, Some(2000))],
+    });
+    let rungs = presets::expand("viewers", &ladder).unwrap().unwrap();
+    let plan = plan(&sources(&[("cam", h264_1080p30())]), &on("cam", rungs), &software()).unwrap();
+    let ids: Vec<&str> = plan.nodes.iter().map(|n| n.id.as_str()).collect();
+    assert!(ids.iter().any(|id| id.starts_with("scale:cam:1280x720") && id.ends_with(":crop")), "{ids:?}");
+    assert!(ids.iter().any(|id| id.starts_with("encode:cam:h264:1280x720") && id.ends_with(":pp4:b2")), "{ids:?}");
+    assert!(ids.iter().any(|id| id.starts_with("encode:cam:h264:640x360") && !id.contains(":pp4")), "{ids:?}");
+}
