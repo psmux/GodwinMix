@@ -61,14 +61,18 @@ becomes:
 ```json
 {"video": {"codec": "h264", "bitrate_kbps": 1500, "width": 1280, "height": 720,
            "fit": "pad", "pad_color": "#000000", "deinterlace": "off",
-           "keyframe_frames": 50, "hardware": "nvenc", "device": 0},
+           "keyframe_frames": 50, "preset": "p1"},
  "audio": {"codec": "aac", "bitrate_kbps": 128, "tracks": "all"}}
 ```
 
-`codec`, `width`, `height`, `fps` and `bitrate_kbps` are acted on now.
-`fit`, `pad_color`, `deinterlace`, `keyframe_frames`, `preset`, `bframes`,
-`hardware`, `device` and `tracks` are passed on for the GPU conversion, which
-this build does not have yet; `--check` lists them as `waiting`. `vb=copy`
+Every field is acted on. `hw=nvenc` and `deviceid` have no field of their
+own: the planner takes a hardware encoder first, and `[hardware]` in the
+GodwinMix config pins it. A line with `hw=nvenc` and no `preset=` gets
+NVENC's `p1`, which leaves room for many channels on one card. Three things
+are done differently, and `--check` says so as `not carried`: a pad colour
+other than black (the bars are black), `deinterlace_rate=field` (pictures
+keep the source's frame rate), and `deinterlace` on or `auto`, which runs on
+the CPU between the GPU decode and the encode. `vb=copy`
 copies the video and `ab=copy` the sound. A second `vb=` (a ladder) is not
 carried: the HLS output of a show without compositing has one rendition.
 
@@ -110,12 +114,14 @@ A segment's name comes from the wall clock time its first frame was taken,
 so a name is never handed out twice, not after a restart either. A cache in
 front may keep segments by path for as long as it likes.
 
-What this build serves: the segments are fragmented MP4 (`.m4s`, with an
-`init-<id>.mp4`), so the master names `tracks-v1/mono.m3u8` for the picture
-and `tracks-a1/mono.m3u8` for the sound, and `tracks-v1a1` and `/mpegts`
-answer 501. MPEG-TS segments (`.ts`, with `tracks-v1a1` muxed and the first
-sound inside the variant) come with the TS packaging, which is not in this
-build yet. Until a stream runs a path answers 404 with why; while its
+The segments are MPEG-TS (`.ts`). The master names `tracks-v1a1/mono.m3u8`,
+the picture with the first sound muxed in, and every further sound as
+`tracks-a<n>/mono.m3u8`, so a player that reads `EXT-X-MEDIA` can switch
+sound tracks and one that does not plays the first. An output that makes no
+TS (`segments = "cmaf"` on it) is served as fragmented MP4 instead: `.m4s`
+segments with an `init-<id>.mp4`, the picture at `tracks-v1/mono.m3u8` and
+each sound at `tracks-a<n>/mono.m3u8`, and `tracks-v1a1` and `/mpegts`
+answer 501. Until a stream runs a path answers 404 with why; while its
 output starts it answers 503 with `Retry-After: 2`.
 
 Caching headers: playlists `no-cache`, segments and init segments

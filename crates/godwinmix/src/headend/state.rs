@@ -94,6 +94,10 @@ pub async fn start(st: Arc<Station>, s: Settings) -> Result<()> {
             }
         });
     }
+    // Beside the port, not before it: an install from a checkout builds
+    // the plugin first, and the API answers meanwhile.
+    let (st, settings) = (h.st.clone(), s.clone());
+    tokio::spawn(async move { super::ingest::ensure(&st, &settings).await });
     super::apply::apply_file(&h, true).await;
     tokio::spawn(super::watch::watch(h.clone()));
     tokio::spawn(super::live::keep(h.clone()));
