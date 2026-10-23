@@ -255,6 +255,27 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/headend/tools.js", include_str!("../../../ui/panels/headend/tools.js")),
     ("panels/headend/totals.js", include_str!("../../../ui/panels/headend/totals.js")),
     ("panels/headend/view.js", include_str!("../../../ui/panels/headend/view.js")),
+    ("panels/flowmap/act.js", include_str!("../../../ui/panels/flowmap/act.js")),
+    ("panels/flowmap/data.js", include_str!("../../../ui/panels/flowmap/data.js")),
+    ("panels/flowmap/dots.js", include_str!("../../../ui/panels/flowmap/dots.js")),
+    ("panels/flowmap/flowmap.css", include_str!("../../../ui/panels/flowmap/flowmap.css")),
+    ("panels/flowmap/frame.js", include_str!("../../../ui/panels/flowmap/frame.js")),
+    ("panels/flowmap/geom.js", include_str!("../../../ui/panels/flowmap/geom.js")),
+    ("panels/flowmap/graph-direct.js", include_str!("../../../ui/panels/flowmap/graph-direct.js")),
+    ("panels/flowmap/graph-mixed.js", include_str!("../../../ui/panels/flowmap/graph-mixed.js")),
+    ("panels/flowmap/graph.js", include_str!("../../../ui/panels/flowmap/graph.js")),
+    ("panels/flowmap/layout.js", include_str!("../../../ui/panels/flowmap/layout.js")),
+    ("panels/flowmap/map.js", include_str!("../../../ui/panels/flowmap/map.js")),
+    ("panels/flowmap/mixed.js", include_str!("../../../ui/panels/flowmap/mixed.js")),
+    ("panels/flowmap/paint.js", include_str!("../../../ui/panels/flowmap/paint.js")),
+    ("panels/flowmap/path.js", include_str!("../../../ui/panels/flowmap/path.js")),
+    ("panels/flowmap/pointer.js", include_str!("../../../ui/panels/flowmap/pointer.js")),
+    ("panels/flowmap/tip-parts.js", include_str!("../../../ui/panels/flowmap/tip-parts.js")),
+    ("panels/flowmap/tip.js", include_str!("../../../ui/panels/flowmap/tip.js")),
+    ("panels/flowmap/tone.js", include_str!("../../../ui/panels/flowmap/tone.js")),
+    ("panels/flowmap/tools.js", include_str!("../../../ui/panels/flowmap/tools.js")),
+    ("panels/flowmap/view.js", include_str!("../../../ui/panels/flowmap/view.js")),
+    ("panels/flowmap/words.js", include_str!("../../../ui/panels/flowmap/words.js")),
     // hls.js 1.6.15, light build, Apache-2.0 (ui/vendor/hls.js-LICENSE.txt): the
     // headend drawer's player where a browser cannot play HLS itself, added
     // by a <script> the first time a drawer opens a player.
@@ -563,6 +584,12 @@ const DEV_ASSETS: &[(&str, &str)] = &[
     ("test/wall-stub.js", include_str!("../../../ui/test/wall-stub.js")),
     ("test/wall.html", include_str!("../../../ui/test/wall.html")),
     ("test/wall.js", include_str!("../../../ui/test/wall.js")),
+    // The flow map against a station of every kind of thing:
+    // /test/flowmap.html?n=48, ?mixed=1, ?n=200.
+    ("test/flowmap.js", include_str!("../../../ui/test/flowmap.js")),
+    ("test/flowmap-stub.js", include_str!("../../../ui/test/flowmap-stub.js")),
+    ("test/flowmap-preview.js", include_str!("../../../ui/test/flowmap-preview.js")),
+    ("test/flowmap.html", include_str!("../../../ui/test/flowmap.html")),
     // This browser's camera: the publisher's parts and the browser channel,
     // against stubs. No camera and no socket.
     ("test/browser-devices.js", include_str!("../../../ui/test/browser-devices.js")),
