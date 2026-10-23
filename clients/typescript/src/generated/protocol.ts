@@ -1544,6 +1544,47 @@ export interface GovernorStatus {
   shed: ShedNote[];
 }
 
+/** One GPU: what it is, its newest reading and the ones before it. */
+export interface GpuDevice {
+  driver?: string | null;
+  history?: GpuSample[];
+  index: number;
+  name: string;
+  now: GpuSample;
+}
+
+/** One reading of one GPU. A number the driver would not give is left out. */
+export interface GpuSample {
+  at_ms: number;
+  decoder_pct?: number | null;
+  encoder_fps?: number | null;
+  encoder_pct?: number | null;
+  encoder_sessions?: number | null;
+  fan_pct?: number | null;
+  gpu_pct?: number | null;
+  graphics_mhz?: number | null;
+  memory_mhz?: number | null;
+  memory_total_mib?: number | null;
+  memory_used_mib?: number | null;
+  power_limit_w?: number | null;
+  power_w?: number | null;
+  temperature_c?: number | null;
+  video_mhz?: number | null;
+}
+
+/** `gpu.status`'s answer. */
+export interface GpuStatus {
+  every_ms: number;
+  gpus: GpuDevice[];
+  note?: string | null;
+  source: string;
+}
+
+/** `gpu.status`. */
+export interface GpuStatusRequest {
+  since_ms?: number | null;
+}
+
 /** `scene.graphic.list`. */
 export interface GraphicListing {
   graphics: GraphicType[];
@@ -1704,6 +1745,7 @@ export interface InputSpec {
 export interface InputStats {
   audio_channels?: number;
   audio_codec?: string | null;
+  audio_peak_db?: number | null;
   cc_errors?: number;
   fps?: number;
   height?: number;
@@ -1915,6 +1957,18 @@ export interface LogSetRequest {
   instance?: string | null;
   level: string;
   target?: string | null;
+}
+
+/** `machine.status`'s answer: the box, not one process. */
+export interface MachineStatus {
+  cores: number;
+  cpu_pct?: number | null;
+  host_name: string;
+  load_average?: number[] | null;
+  memory_available_mib?: number | null;
+  memory_total_mib?: number | null;
+  process_uptime_secs: number;
+  uptime_secs?: number | null;
 }
 
 /** `scene.history.mark`. */
@@ -3955,9 +4009,11 @@ export interface MethodParams {
   "gallery.show": GalleryShowRequest;
   "governor.calibrate": CalibrateRequest;
   "governor.status": Record<string, never>;
+  "gpu.status": GpuStatusRequest;
   "log.gst": LogGstRequest;
   "log.levels": Record<string, never>;
   "log.set": LogSetRequest;
+  "machine.status": Record<string, never>;
   "media.convert": NameRequest;
   "media.folder.add": MediaFolderAddRequest;
   "media.folder.list": Record<string, never>;
@@ -4192,9 +4248,11 @@ export interface MethodResults {
   "gallery.show": GalleryShown;
   "governor.calibrate": CalibrateResult;
   "governor.status": GovernorStatus;
+  "gpu.status": GpuStatus;
   "log.gst": LogGstResult;
   "log.levels": Record<string, unknown>;
   "log.set": Record<string, unknown>;
+  "machine.status": MachineStatus;
   "media.convert": ConversionState;
   "media.folder.add": Record<string, unknown>;
   "media.folder.list": MediaFolders;
@@ -4484,9 +4542,11 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "gallery.show", summary: "Show a placed gallery item on air, or hide it, taking its scene when that scene is not on air. For a set, take its scene.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/gallery/show" } },
   { name: "governor.calibrate", summary: "Measure this machine's encoders again, in the background, a few seconds of every core. Refused while anything is on air unless `confirm` is true.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/governor/calibrate" } },
   { name: "governor.status", summary: "The resource governor: when this machine was measured, what is in use and free on the CPU and each GPU encoder, and what was shed to keep the programme whole.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/governor/status" } },
+  { name: "gpu.status", summary: "Every NVIDIA GPU on this machine: encoder, decoder and 3D use, video memory, encoder sessions, temperature, power and clocks, now and over the last two minutes. Read once a second from NVML or nvidia-smi while a client keeps asking, and not at all otherwise. No GPUs, and a note, on a machine without one.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/gpu/status" } },
   { name: "log.gst", summary: "Raise GStreamer's own debug categories for a while, then let them fall back on their own.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/log/gst" } },
   { name: "log.levels", summary: "Every log level override in force, and the GStreamer categories still raised.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/log/levels" } },
   { name: "log.set", summary: "Change one instance's or one module's log level while the mixer runs.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/log/set" } },
+  { name: "machine.status", summary: "The machine itself: its name, cores, CPU use of every process, memory, how long it and this process have been up, and its load average.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/machine/status" } },
   { name: "media.convert", summary: "Transcode a library file to a web safe copy, in the background.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/media/{id}/convert" } },
   { name: "media.folder.add", summary: "Make a folder in the media library, inside another when the name has a / in it.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/media/folder/add" } },
   { name: "media.folder.list", summary: "Every folder in the media library with how many files are in it, and every tag in use.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/media/folder/list" } },
@@ -5062,6 +5122,11 @@ export class GeneratedMethods {
     return this._call("governor.status", {}) as Promise<GovernorStatus>;
   }
 
+  /** Every NVIDIA GPU on this machine: encoder, decoder and 3D use, video memory, encoder sessions, temperature, power and clocks, now and over the last two minutes. Read once a second from NVML or nvidia-smi while a client keeps asking, and not at all otherwise. No GPUs, and a note, on a machine without one. */
+  gpuStatus(params: GpuStatusRequest = {}): Promise<GpuStatus> {
+    return this._call("gpu.status", params as unknown as Record<string, unknown>) as Promise<GpuStatus>;
+  }
+
   /** Raise GStreamer's own debug categories for a while, then let them fall back on their own. */
   logGst(params: LogGstRequest): Promise<LogGstResult> {
     return this._call("log.gst", params as unknown as Record<string, unknown>) as Promise<LogGstResult>;
@@ -5075,6 +5140,11 @@ export class GeneratedMethods {
   /** Change one instance's or one module's log level while the mixer runs. */
   logSet(params: LogSetRequest): Promise<Record<string, unknown>> {
     return this._call("log.set", params as unknown as Record<string, unknown>) as Promise<Record<string, unknown>>;
+  }
+
+  /** The machine itself: its name, cores, CPU use of every process, memory, how long it and this process have been up, and its load average. */
+  machineStatus(): Promise<MachineStatus> {
+    return this._call("machine.status", {}) as Promise<MachineStatus>;
   }
 
   /** Transcode a library file to a web safe copy, in the background. */

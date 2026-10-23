@@ -2860,6 +2860,85 @@ pub struct GovernorStatus {
     pub shed: Vec<ShedNote>,
 }
 
+/// One GPU: what it is, its newest reading and the ones before it.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct GpuDevice {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub driver: Option<String>,
+    /// One a second, oldest first, the last two minutes at most.
+    pub history: Vec<GpuSample>,
+    pub index: u32,
+    /// `NVIDIA GeForce RTX 3060`.
+    pub name: String,
+    pub now: GpuSample,
+}
+
+/// One reading of one GPU. A number the driver would not give is left out.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct GpuSample {
+    /// Unix milliseconds.
+    pub at_ms: u64,
+    /// NVDEC, percent.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub decoder_pct: Option<u32>,
+    /// The sessions' average frame rate.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub encoder_fps: Option<u32>,
+    /// NVENC, percent.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub encoder_pct: Option<u32>,
+    /// Open NVENC sessions, every process on the machine.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub encoder_sessions: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fan_pct: Option<u32>,
+    /// The 3D and compute engines, percent of the last sample period.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gpu_pct: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub graphics_mhz: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub memory_mhz: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub memory_total_mib: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub memory_used_mib: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub power_limit_w: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub power_w: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub temperature_c: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub video_mhz: Option<u32>,
+}
+
+/// `gpu.status`'s answer.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct GpuStatus {
+    /// How often a reading is taken while someone asks.
+    pub every_ms: u32,
+    pub gpus: Vec<GpuDevice>,
+    /// Why there are no GPUs, or what is missing, in one sentence.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+    /// `nvml`, `nvidia-smi`, or `none`.
+    pub source: String,
+}
+
+/// `gpu.status`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct GpuStatusRequest {
+    /// Only the history after this time, unix milliseconds: what a client
+    /// that already holds the rest asks for. Left out, the whole history.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub since_ms: Option<u64>,
+}
+
 /// `scene.graphic.list`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -3144,6 +3223,11 @@ pub struct InputStats {
     pub audio_channels: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub audio_codec: Option<String>,
+    /// The first sound track's peak in dBFS over a short burst, measured
+    /// about once a second while the show's alarms are on or its picture is
+    /// asked for; -120 is digital silence. Left out while unmeasured.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub audio_peak_db: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cc_errors: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -3515,6 +3599,30 @@ pub struct LogSetRequest {
     /// wins, so a more specific override still beats a broader one.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub target: Option<String>,
+}
+
+/// `machine.status`'s answer: the box, not one process.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct MachineStatus {
+    pub cores: u32,
+    /// Every process on the machine, percent of all cores, over the last
+    /// second. Left out until two readings have been taken.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cpu_pct: Option<f64>,
+    pub host_name: String,
+    /// One, five and fifteen minutes, where the system keeps them.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub load_average: Option<Vec<f64>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub memory_available_mib: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub memory_total_mib: Option<u64>,
+    /// Since this process started.
+    pub process_uptime_secs: u64,
+    /// Since the machine booted.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub uptime_secs: Option<u64>,
 }
 
 /// `scene.history.mark`.
@@ -6962,7 +7070,7 @@ pub struct MethodInfo {
     pub rest: Option<(&'static str, &'static str)>,
 }
 
-pub const METHODS: [MethodInfo; 233] = [
+pub const METHODS: [MethodInfo; 235] = [
     MethodInfo { name: "adbreak.end", summary: "Cut a running ad short, or disarm one that is scheduled.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/end")) },
     MethodInfo { name: "adbreak.start", summary: "Interrupt the programme with a clip, then rejoin live when it ends.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/start")) },
     MethodInfo { name: "agent.setup", summary: "Set an AI agent tool up to use this mixer: its MCP config gets one entry, godwinmix, that runs this mixer's own executable, and its skills folder gets the GodwinMix skills. Other entries are kept and a changed file is copied aside first. dry_run answers every file it would write. The answer says how to start the tool and a first thing to ask it.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/agent/setup")) },
@@ -7032,9 +7140,11 @@ pub const METHODS: [MethodInfo; 233] = [
     MethodInfo { name: "gallery.show", summary: "Show a placed gallery item on air, or hide it, taking its scene when that scene is not on air. For a set, take its scene.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/gallery/show")) },
     MethodInfo { name: "governor.calibrate", summary: "Measure this machine's encoders again, in the background, a few seconds of every core. Refused while anything is on air unless `confirm` is true.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/governor/calibrate")) },
     MethodInfo { name: "governor.status", summary: "The resource governor: when this machine was measured, what is in use and free on the CPU and each GPU encoder, and what was shed to keep the programme whole.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/governor/status")) },
+    MethodInfo { name: "gpu.status", summary: "Every NVIDIA GPU on this machine: encoder, decoder and 3D use, video memory, encoder sessions, temperature, power and clocks, now and over the last two minutes. Read once a second from NVML or nvidia-smi while a client keeps asking, and not at all otherwise. No GPUs, and a note, on a machine without one.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/gpu/status")) },
     MethodInfo { name: "log.gst", summary: "Raise GStreamer's own debug categories for a while, then let them fall back on their own.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/log/gst")) },
     MethodInfo { name: "log.levels", summary: "Every log level override in force, and the GStreamer categories still raised.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/log/levels")) },
     MethodInfo { name: "log.set", summary: "Change one instance's or one module's log level while the mixer runs.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/log/set")) },
+    MethodInfo { name: "machine.status", summary: "The machine itself: its name, cores, CPU use of every process, memory, how long it and this process have been up, and its load average.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/machine/status")) },
     MethodInfo { name: "media.convert", summary: "Transcode a library file to a web safe copy, in the background.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/media/{id}/convert")) },
     MethodInfo { name: "media.folder.add", summary: "Make a folder in the media library, inside another when the name has a / in it.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/media/folder/add")) },
     MethodInfo { name: "media.folder.list", summary: "Every folder in the media library with how many files are in it, and every tag in use.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/media/folder/list")) },
@@ -7881,6 +7991,11 @@ impl Client {
         self.call("governor.status", &serde_json::json!({})).await
     }
 
+    /// Every NVIDIA GPU on this machine: encoder, decoder and 3D use, video memory, encoder sessions, temperature, power and clocks, now and over the last two minutes. Read once a second from NVML or nvidia-smi while a client keeps asking, and not at all otherwise. No GPUs, and a note, on a machine without one.
+    pub async fn gpu_status(&self, params: &GpuStatusRequest) -> Result<GpuStatus> {
+        self.call("gpu.status", params).await
+    }
+
     /// Raise GStreamer's own debug categories for a while, then let them fall back on their own.
     pub async fn log_gst(&self, params: &LogGstRequest) -> Result<LogGstResult> {
         self.call("log.gst", params).await
@@ -7894,6 +8009,11 @@ impl Client {
     /// Change one instance's or one module's log level while the mixer runs.
     pub async fn log_set(&self, params: &LogSetRequest) -> Result<BTreeMap<String, Value>> {
         self.call("log.set", params).await
+    }
+
+    /// The machine itself: its name, cores, CPU use of every process, memory, how long it and this process have been up, and its load average.
+    pub async fn machine_status(&self) -> Result<MachineStatus> {
+        self.call("machine.status", &serde_json::json!({})).await
     }
 
     /// Transcode a library file to a web safe copy, in the background.
