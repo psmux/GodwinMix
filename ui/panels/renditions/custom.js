@@ -5,6 +5,10 @@
 // rather than a width and a height, and the sound is one choice of codec and
 // rate. `requestFrom` turns the answers back into the wire's shape, and the
 // form itself is the schema kit's, so it looks like every other form here.
+// The encoder's finer settings are its Advanced group (custom-advanced.js),
+// closed until somebody opens it.
+
+import { advancedFrom, advancedInto, advancedProps, advancedRules, usesAdvanced } from "./custom-advanced.js";
 
 const SIZES = [
   ["3840x2160", "3840×2160 (4K)"],
@@ -41,14 +45,16 @@ export function customSchema(codecs) {
     properties: {
       codec: { type: "string", title: "Video codec", oneOf: choice(CODECS, keep), default: "h264" },
       size: { type: "string", title: "Picture size", oneOf: choice(SIZES), default: "1280x720" },
-      fps: { type: "number", title: "Frame rate", oneOf: [60, 50, 30, 25].map((n) => ({ const: n, title: `${n} fps` })), default: 30 },
+      fps: { type: "number", title: "Frame rate", oneOf: [...[60, 50, 30, 25].map((n) => ({ const: n, title: `${n} fps` })), { const: 0, title: "Same as the source" }], default: 30 },
       bitrate_kbps: { type: "integer", title: "Video bitrate", minimum: 200, maximum: 50000, default: 3000, "x-gmx-unit": "kb/s" },
       keyframe_s: {
         type: "number", title: "Keyframe every", minimum: 0.5, maximum: 10, default: 2, "x-gmx-unit": "s",
         description: "Two seconds is what the platforms ask for.",
       },
       sound: { type: "string", title: "Sound", oneOf: choice(SOUND), default: "aac-160" },
+      ...advancedProps(),
     },
+    allOf: advancedRules,
   };
 }
 
@@ -62,18 +68,21 @@ export function requestFrom(v, id) {
       codec: v.codec || "h264",
       width: w,
       height: h,
-      fps: { num: Number(v.fps) || 30, den: 1 },
+      fps: { num: Number(v.fps), den: 1 },
       bitrate_kbps: Math.round(Number(v.bitrate_kbps) || 3000),
       keyframe_ms: Math.round((Number(v.keyframe_s) || 2) * 1000),
     },
   };
+  // 0 is Same as the source: no rate asked for. Left out of the form, 30.
+  if (v.fps === 0 || v.fps === "0") delete req.video.fps;
+  else if (!Number(v.fps)) req.video.fps.num = 30;
   const sound = v.sound || "aac-160";
   if (sound === "none") req.no_audio = true;
   else if (sound !== "copy") {
     const [codec, kbps] = sound.split("-");
     req.audio = { codec, bitrate_kbps: Number(kbps) };
   }
-  return req;
+  return advancedInto(req, v);
 }
 
 /** The answers a request fills the form with, so an edit opens on what is set. */
@@ -84,11 +93,16 @@ export function valuesFrom(req) {
   if (v.codec) out.codec = v.codec;
   if (v.width && v.height) out.size = `${v.width}x${v.height}`;
   if (v.fps) out.fps = Math.round(v.fps.num / (v.fps.den || 1));
+  else if (req && req.video) out.fps = 0;
   if (v.bitrate_kbps) out.bitrate_kbps = v.bitrate_kbps;
   if (v.keyframe_ms) out.keyframe_s = v.keyframe_ms / 1000;
   if (req && req.no_audio) out.sound = "none";
-  else if (a.codec) out.sound = `${a.codec}-${a.bitrate_kbps || 128}`;
-  return out;
+  else if (a.codec) {
+    out.sound = `${a.codec}-${a.bitrate_kbps || 128}`;
+    // A rate the Sound choice does not offer is kept in Advanced.
+    if (!SOUND.some(([id]) => id === out.sound)) Object.assign(out, { sound: `${a.codec}-128`, audio_kbps: a.bitrate_kbps });
+  }
+  return { ...out, ...advancedFrom(req) };
 }
 
 /** The form, built by the schema kit on first use. */
@@ -96,5 +110,8 @@ export async function customForm(opts = {}) {
   const { SchemaInspector } = await import("../../kits/schema/index.js");
   const form = new SchemaInspector({ schema: customSchema(opts.codecs), value: valuesFrom(opts.request), onChange: opts.onChange });
   form.el.classList.add("rnd-customform");
+  // An edit of a request that uses the Advanced settings opens on them.
+  const adv = form.el.querySelector("details:not([open])");
+  if (adv && usesAdvanced(opts.request)) adv.open = true;
   return { el: form.el, request: (id) => requestFrom(form.read(), id) };
 }

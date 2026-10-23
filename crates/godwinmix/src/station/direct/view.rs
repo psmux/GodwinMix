@@ -38,9 +38,11 @@ impl super::Direct {
                     plan: None,
                     refused: None,
                     playback: None,
+                    params: None,
                 };
                 if let Some((live, playback)) = self.hls.view(id, &d.id).filter(|_| d.enabled && !r.compositing) {
                     (view.live, view.playback) = (live, Some(playback));
+                    view.params = self.hls.params(id, &d.id);
                 }
                 if d.rendition.is_some() && d.enabled && !r.compositing {
                     let (plan, refused) = self.transcode.view(id, &d.id);

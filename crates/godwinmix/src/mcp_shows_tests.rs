@@ -55,6 +55,9 @@ fn the_standard_hot_list_is_the_live_mix_and_its_graphics() {
 fn the_headend_hot_list_is_the_shows() {
     hot_list(Profile::Headend, &[
         ("agent.state", "agent_state"),
+        ("gpu.status", "gpu_status"),
+        ("headend.import", "import_flussonic"),
+        ("machine.status", "machine_status"),
         ("program.take", "take"),
         ("show.add_many", "add_shows"),
         ("show.list", "list_shows"),

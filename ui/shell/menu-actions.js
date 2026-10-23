@@ -48,6 +48,7 @@ const ACTIONS = {
   "project.save": (client) => project().then((m) => m.saveProject(client)),
   "show.new": (client) => shows().then((m) => m.newShow(client)),
   "show.switch": (client, id) => shows().then((m) => m.switchShow(client, id)),
+  "show.import-flussonic": (client) => import("../panels/headend/import.js").then((m) => m.importFlussonic(client)),
   "view.routing": (client) => import("../panels/routing/view.js").then((m) => m.toggleRouting(client)),
   "view.plugins": (client) => import("../panels/plugins/view.js").then((m) => m.toggleGallery(client)),
   "view.wall": (client) => import("../panels/wall/view.js").then((m) => m.toggleWall(client)),

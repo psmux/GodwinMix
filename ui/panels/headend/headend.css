@@ -130,3 +130,21 @@
 .he.narrow .he-gauges { flex-wrap: wrap; }
 .he.narrow .he-facts { margin: 0; grid-template-columns: auto 1fr; width: 100%; }
 .he.narrow .he-gpu { min-width: 0; width: 100%; }
+
+/* Import a Flussonic config: a dialog, so outside .he. */
+.he-follow { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 52ch; }
+.he-imp { display: grid; gap: 12px; min-width: 0; }
+.he-imp-ask { display: grid; gap: 10px; }
+.he-imp-tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+.he-imp-text { width: 100%; min-height: 180px; resize: vertical; font-family: var(--mono, ui-monospace, monospace); font-size: var(--fs-sm); }
+.he-imp-warn { margin: 0; padding: 8px 10px; border-left: 3px solid var(--warn); border-radius: var(--radius); background: var(--panel2); font-size: var(--fs-sm); }
+.he-imp-sum { margin: 0 0 8px; font-weight: 600; }
+.he-imp-scroll { max-height: 48vh; overflow: auto; border: var(--border) solid var(--line-soft); border-radius: var(--radius); }
+.he-imp-table td { vertical-align: top; }
+.he-imp-table .he-sub { white-space: normal; }
+.he-imp-wrap { min-width: 150px; white-space: normal !important; }
+.he-imp-refused td { background: color-mix(in srgb, var(--bad) 12%, transparent); }
+.he-imp-why { margin-top: 2px; color: var(--bad); font-size: var(--fs-sm); }
+.he-imp-notes { margin-top: 10px; font-size: var(--fs-sm); }
+.he-imp-notes summary { cursor: pointer; }
+.he-imp-notes ul { margin: 6px 0 0; padding-left: 18px; color: var(--dim); }
