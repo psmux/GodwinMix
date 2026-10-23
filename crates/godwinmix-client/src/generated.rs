@@ -4283,6 +4283,9 @@ pub struct OutputStats {
     /// waiting, connecting, live, reconnecting, failed, or off.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub state: Option<String>,
+    /// What its picture goes through, in order: the decode, the scale and
+    /// the encode, for an output that converts. Empty for a copy.
+    pub steps: Vec<OutputStep>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -4320,6 +4323,24 @@ pub struct OutputStatus {
     /// Anything this build does not know a name for.
     #[serde(flatten)]
     pub extra: BTreeMap<String, Value>,
+}
+
+/// One step of an output's conversion.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct OutputStep {
+    /// The hardware family, `nvidia`, for a step that uses some.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub accel: Option<String>,
+    /// The GStreamer element that does it, `nvh264enc`, where the plan
+    /// names one. A scale on the CPU leaves the choice to the host.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub element: Option<String>,
+    /// Whether it runs on a GPU, its pictures in the GPU's memory.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gpu: Option<bool>,
+    /// `decode`, `scale` or `encode`.
+    pub kind: String,
 }
 
 /// A sparse change to one item of a referenced scene.
@@ -4606,10 +4627,20 @@ pub struct PlanView {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Playback {
+    /// `keyed` (a player needs the viewer key) or `open`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub access: Option<String>,
     /// The same segments as a DASH MPD.
     pub dash_url_path: String,
     /// `/hls/viewers/master.m3u8?show=bbc-one&key=...`.
     pub master_url_path: String,
+    /// The length segments are cut to, in milliseconds.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub segment_ms: Option<u32>,
+    /// Which segments a player can fetch: `cmaf`, `ts` or `both`. Left out
+    /// where the server does not say.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub segments: Option<String>,
     /// Players that fetched something in the last two windows.
     pub viewers: u32,
 }

@@ -9582,6 +9582,13 @@
             "default": "",
             "description": "waiting, connecting, live, reconnecting, failed, or off.",
             "type": "string"
+          },
+          "steps": {
+            "description": "What its picture goes through, in order: the decode, the scale and\nthe encode, for an output that converts. Empty for a copy.",
+            "items": {
+              "$ref": "#/components/schemas/OutputStep"
+            },
+            "type": "array"
           }
         },
         "required": [
@@ -9652,6 +9659,38 @@
           "state",
           "reconnects",
           "queue_secs"
+        ],
+        "type": "object"
+      },
+      "OutputStep": {
+        "description": "One step of an output's conversion.",
+        "properties": {
+          "accel": {
+            "description": "The hardware family, `nvidia`, for a step that uses some.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "element": {
+            "description": "The GStreamer element that does it, `nvh264enc`, where the plan\nnames one. A scale on the CPU leaves the choice to the host.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "gpu": {
+            "default": false,
+            "description": "Whether it runs on a GPU, its pictures in the GPU's memory.",
+            "type": "boolean"
+          },
+          "kind": {
+            "description": "`decode`, `scale` or `encode`.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind"
         ],
         "type": "object"
       },
@@ -10454,12 +10493,29 @@
       "Playback": {
         "description": "The links of an output served as HLS from the control port, each with\nthe output's viewer key on it. A channel's watch link is one too:\n`/hls/channel/<channel>/<destination>/index.m3u8?key=...`.",
         "properties": {
+          "access": {
+            "description": "`keyed` (a player needs the viewer key) or `open`.",
+            "type": "string"
+          },
           "dash_url_path": {
             "description": "The same segments as a DASH MPD.",
             "type": "string"
           },
           "master_url_path": {
             "description": "`/hls/viewers/master.m3u8?show=bbc-one&key=...`.",
+            "type": "string"
+          },
+          "segment_ms": {
+            "description": "The length segments are cut to, in milliseconds.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "segments": {
+            "description": "Which segments a player can fetch: `cmaf`, `ts` or `both`. Left out\nwhere the server does not say.",
             "type": "string"
           },
           "viewers": {

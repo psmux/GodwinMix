@@ -28,6 +28,7 @@ export function checked(item) {
   if (item.check === "routing") return !!document.querySelector(".routing");
   if (item.check === "wall") return !!document.querySelector(".wall");
   if (item.check === "headend") return !!document.querySelector(".he");
+  if (item.check === "flowmap") return !!document.querySelector(".fm");
   return null;
 }
 
@@ -53,6 +54,7 @@ const ACTIONS = {
   "view.plugins": (client) => import("../panels/plugins/view.js").then((m) => m.toggleGallery(client)),
   "view.wall": (client) => import("../panels/wall/view.js").then((m) => m.toggleWall(client)),
   "view.headend": (client) => import("../panels/headend/view.js").then((m) => m.toggleHeadend(client)),
+  "view.flowmap": (client) => import("../panels/flowmap/view.js").then((m) => m.toggleFlowMap(client)),
   "show.add-many": (client) => import("../panels/wall/bulk.js").then((m) => m.bulkAdd(client)),
   "edit.delete": () => {
     const which = ["tray.delete", "scenes.remove"].find((id) => {

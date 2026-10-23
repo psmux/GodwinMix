@@ -35,7 +35,7 @@ export function band(act) {
     el("div.he-cell.net", {}, [el("span.he-k", { text: "Network in" }), inV, inS.node]),
     el("div.he-cell.net", {}, [el("span.he-k", { text: "Network out" }), outV, outS.node]),
     el("div.he-cell.up", {}, [el("span.he-k", { text: "Up" }), upV, upSub]),
-    el("div.he-cell.acts", {}, [button("import", "M12 4v11M7 10l5 5 5-5M5 20h14", "Import a Flussonic config"), button("full", "M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5", "Full screen"), button("close", "M6 6l12 12M18 6L6 18", "Close the headend view (Escape)")]),
+    el("div.he-cell.acts", {}, [button("import", "M12 4v11M7 10l5 5 5-5M5 20h14", "Import a Flussonic config"), button("flow", "M4 6h4v4H4zM4 14h4v4H4zM16 10h4v4h-4zM8 8c4 0 4 4 8 4M8 16c4 0 4-4 8-4", "Flow map: what is connected to what"), button("full", "M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5", "Full screen"), button("close", "M6 6l12 12M18 6L6 18", "Close the headend view (Escape)")]),
   ]);
   node.addEventListener("click", (e) => {
     const b = e.target.closest("[data-act]");

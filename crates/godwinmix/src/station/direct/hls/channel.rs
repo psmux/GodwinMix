@@ -53,7 +53,7 @@ impl Packagers {
         let links = Playback {
             master_url_path: format!("{base}/index.m3u8?key={key}"),
             dash_url_path: format!("{base}/manifest.mpd?key={key}"),
-            viewers: playback.viewers,
+            ..playback
         };
         Some((live, links))
     }

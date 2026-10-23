@@ -164,6 +164,11 @@
           "check": "headend"
         },
         {
+          "command": "view.flowmap",
+          "title": "Flow map",
+          "check": "flowmap"
+        },
+        {
           "command": "view.reset-layout",
           "title": "Reset layout"
         },
