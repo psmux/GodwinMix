@@ -14,6 +14,7 @@ mod health_main;
 mod hls_channel;
 mod hls_channel_restart;
 mod hls_direct;
+mod hls_ts_late_sound;
 mod hls_ts_open;
 #[cfg(unix)]
 mod hls_isolation;
@@ -23,6 +24,7 @@ mod hls_isolation;
 mod home;
 #[cfg(unix)]
 mod isolation;
+mod late_sound;
 mod many;
 #[cfg(unix)]
 mod orphans;

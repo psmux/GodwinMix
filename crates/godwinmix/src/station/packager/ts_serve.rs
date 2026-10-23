@@ -55,7 +55,16 @@ fn not_yet(what: &str) -> Response {
 
 async fn master(State(door): State<PackagerDoor>, headers: HeaderMap, Query(ask): Query<Ask>) -> Response {
     match find(&door, &headers, &ask) {
-        Ok(s) => s.ts_master().map_or_else(|| not_yet("The first MPEG-TS segment"), |m| Json(m).into_response()),
+        Ok(s) => match s.ts_master() {
+            Some(m) => Json(m).into_response(),
+            // Say which half is behind, so a 503 names where to look.
+            None if s.ready() => refuse(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "CMAF has segments and MPEG-TS has none yet: the TS cutter has not reached a keyframe CMAF cut at. The CMAF playlists play meanwhile.".into(),
+                json!({ "retry_after_s": 2, "cmaf": true }),
+            ),
+            None => not_yet("The first MPEG-TS segment"),
+        },
         Err(r) => *r,
     }
 }
