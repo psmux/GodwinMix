@@ -31,7 +31,20 @@ pub fn stored(show: &str, records: &[OutputRecord]) -> Vec<StoredDestination> {
     records
         .iter()
         .map(|o| {
-            let sealed: Sealed = secrets().get(&scope(show), &o.id).and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default();
+            let sealed: Sealed = secrets().get(&scope(show), &o.id).and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_else(|| {
+                // The address is only in the store, so a store opened with
+                // another key (a container whose home was not kept) leaves
+                // every output with none, and the host leaves them all out.
+                static SAID: std::sync::Mutex<Vec<(String, String)>> = std::sync::Mutex::new(Vec::new());
+                let mut said = SAID.lock().unwrap_or_else(|e| e.into_inner());
+                if said.iter().any(|(s, i)| s == show && i == &o.id) {
+                    return Sealed::default();
+                }
+                said.push((show.to_string(), o.id.clone()));
+                tracing::error!(show, output = %o.id, "this output's address could not be read from the secret store, so it sends nothing; \
+                    the store's key is not the one it was written with. Keep GODWINMIX_HOME across restarts, and add the output again");
+                Sealed::default()
+            });
             StoredDestination {
                 id: o.id.clone(),
                 platform: o.platform.clone(),
