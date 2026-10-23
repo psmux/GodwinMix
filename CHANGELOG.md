@@ -19,6 +19,17 @@ Headend mode: GodwinMix runs a box of off air channels on one GPU in place of Fl
 * Converters decode H.264 with libav before openh264, which refuses 4:4:4, 4:2:2, 10 bit and interlaced streams. A rendition with no frame rate asked for keeps the rate the source declares. The crop fit links at the source's own rate. An `rtmp://` pull uses librtmp where it is installed, which plays from `ffmpeg -listen` and MediaMTX where rtmp2src did not.
 * Clicking another show's tab switches to it again.
 
+Fixed from a test of an early 0.3.17 build on a Windows 11 desktop:
+
+* View > Headend did nothing at all. Its command was in the menu but never registered, so the click ran nothing. It opens the headend view now, on any station.
+* A direct show's HLS output could sit in Reconnecting for ever with "nothing came from the relay for 30 s". The ingest plugin took 127.0.0.1 on its RTMP port as the relay without checking that it reached the plugin, and on Windows (macOS too) another program can hold that port on loopback beside it: a GodwinMix or an ingest plugin left running from an earlier start, which answered with nothing. The plugin now asks that address which server it reached, and when it is not its own, or the RTMP port is taken, it opens the relay on a loopback port of its own and says so in the log. Every direct output's state and reason are now written to the log when they change, and a wrong path under `/hls/<output>/` names the playlists that work.
+* HLS for viewers with a ladder was refused with "needs 0.0 cores and 0.0 cores is free" on a machine 40 to 50% busy. The governor counted a spike from another program twice, once in that program's peak and again in the reserve, which on a desktop with a browser open could add up to more than the machine. It is counted once now, and a refusal of under a tenth of a core says it in hundredths.
+* Each custom rung in the HLS dialog has an Advanced group (fit, bar colour, deinterlace, preset, B frames), and the ladder has one sound bitrate for every rung. A rung's keyframes stay on the segment length, so every rung's segments line up.
+* An output can be edited after it is saved: Edit on an HLS row of the Outputs panel opens the HLS dialog filled in, an output to a plain address (`udp://239.10.0.1:5001`) edits as an address, and each output in a direct show's detail has Edit. A direct show's tab menu has Outputs and settings.
+* The flow map's hover card for a link no longer ends in a line reading null, and a mixer's own HLS output is drawn as HLS, not RTMP.
+* Sources > Test pattern and the other kinds put the new source into the scene on screen, as the tray's own Add does.
+* In the desktop app on Windows, a maximized window that leaves full screen (the flow map's, for one) is maximized again instead of reaching under the taskbar.
+
 ## 0.3.16 (2026-10-21)
 
 From tester issue 24: Interact shows a web page sharp enough to read, so YouTube's quality can be picked there. And a page with a looping clip can no longer fill the disk.
