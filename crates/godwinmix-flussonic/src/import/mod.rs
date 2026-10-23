@@ -83,6 +83,13 @@ fn hls_params(cfg: &Config, s: &Stream) -> Option<Value> {
     let mut p = Map::new();
     p.insert("segments".into(), json!("both"));
     p.insert("access".into(), json!("open"));
+    // A segment is cut at a keyframe, never past the target, so 3400 ms
+    // gives two GOPs of 50 frames at 29.97 and four at 59.94: 3.3 s either
+    // way. Two second segments meant 0.8 s ones at 59.94, too many requests
+    // for a cache over a lossy uplink.
+    if duration.is_none() {
+        p.insert("segment_ms".into(), json!(3400));
+    }
     if let Some(d) = duration {
         p.insert("segment_ms".into(), json!(((d * 1000.0).round() as u32).clamp(500, 10_000)));
     }
