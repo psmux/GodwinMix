@@ -503,6 +503,7 @@ const LEGACY: &str = include_str!("../../../ui/legacy/index.html");
 /// sets and what CI sets.
 const DEV_ASSETS: &[(&str, &str)] = &[
     ("test/headend-advanced.js", include_str!("../../../ui/test/headend-advanced.js")),
+    ("test/headend-station.js", include_str!("../../../ui/test/headend-station.js")),
     ("test/index.html", include_str!("../../../ui/test/index.html")),
     ("test/run.js", include_str!("../../../ui/test/run.js")),
     ("test/store.js", include_str!("../../../ui/test/store.js")),
