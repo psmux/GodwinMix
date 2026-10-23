@@ -102,6 +102,10 @@ fn rung(mut r: RenditionRequest, segment_ms: u32) -> Result<RenditionRequest> {
         anyhow::ensure!((144..=2160).contains(&h), "rung {} is {h} lines high; a ladder takes 144 to 2160", r.id);
     }
     v.keyframe_ms = Some(segment_ms);
+    // A keyframe interval in frames is taken over the one in milliseconds,
+    // so one left on a rung would cut its segments off the boundaries every
+    // other rung keeps. The segment decides for every rung.
+    v.keyframe_frames = None;
     r.container = Container::Hls;
     Ok(r)
 }

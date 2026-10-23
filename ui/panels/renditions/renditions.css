@@ -44,6 +44,10 @@
 .rnd-rung { display: grid; grid-template-columns: 90px 110px auto 1fr; gap: 8px; align-items: center; }
 .rnd-rung .btn.icon { justify-self: end; }
 .rnd-addrung { margin-top: 8px; }
+.rnd-rungmore .form { padding: 0; }
+.rnd-rungmore details > summary { font-size: 12px; }
+.rnd-rungsound { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+.rnd-rungsound input { width: 90px; }
 .rnd-check { display: flex; gap: 8px; align-items: center; margin-top: 12px; font-size: var(--fs-sm); }
 .rnd-check input { width: auto; }
 .rnd-hlsform .field { max-width: 320px; }

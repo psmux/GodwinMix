@@ -62,3 +62,29 @@ fn a_rung_is_named_by_what_follows_the_output() {
     assert_eq!(rung_slug("viewers", "viewers", Some(480)), "480p");
     assert_eq!(rung_slug("viewers", "viewers", None), "programme");
 }
+
+#[test]
+fn a_custom_rung_keeps_its_advanced_settings_and_the_segment_keeps_its_keyframes() {
+    // What the HLS form's Advanced group for one rung sends: a fit, bars of a
+    // colour, deinterlacing, an encoder preset and B frames. Each is the
+    // rung's own and reaches the planner as it was asked; a keyframe interval
+    // in frames does not, since it would win over the segment's.
+    let text = r##"
+        [[params.rendition.ladder]]
+        id = "720p"
+        video = { codec = "h264", height = 720, bitrate_kbps = 3000, fit = "crop", deinterlace = "auto", preset = "p4", bframes = 2, keyframe_frames = 50 }
+        audio = { codec = "aac", bitrate_kbps = 96 }
+        [[params.rendition.ladder]]
+        id = "360p"
+        video = { height = 360, fit = "pad", pad_color = "#102030" }
+        audio = { codec = "aac", bitrate_kbps = 96 }
+    "##;
+    let r = rungs(&output(text));
+    let top = r[0].video.as_ref().unwrap();
+    assert_eq!(top.fit, Some(godwinmix_protocol::rendition::Fit::Crop));
+    assert_eq!(top.deinterlace, Some(godwinmix_protocol::rendition::Deinterlace::Auto));
+    assert_eq!((top.preset.as_deref(), top.bframes), (Some("p4"), Some(2)));
+    assert_eq!((top.keyframe_ms, top.keyframe_frames), (Some(2000), None), "the segment decides");
+    assert_eq!(r[0].audio.as_ref().unwrap().bitrate_kbps, Some(96));
+    assert_eq!(r[1].video.as_ref().unwrap().pad_color.as_deref(), Some("#102030"));
+}
