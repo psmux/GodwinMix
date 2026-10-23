@@ -59,6 +59,9 @@ impl Packagers {
             master_url_path: format!("/hls/{output}/master.m3u8?{q}"),
             dash_url_path: format!("/hls/{output}/manifest.mpd?{q}"),
             viewers: report.map(|r| r.viewers).unwrap_or(0),
+            segments: card.want.segments.as_str().into(),
+            access: card.want.access.as_str().into(),
+            segment_ms: Some(card.want.segment_ms).filter(|ms| *ms > 0),
         };
         Some((live, playback))
     }
