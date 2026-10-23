@@ -155,3 +155,48 @@ fn a_shows_measured_work_is_not_counted_twice_by_its_station() {
     g.load_cell().store(&crate::load::Window::new(10).push(r.with_elsewhere(g.load_cell().elsewhere())));
     assert_eq!(g.headroom(None).cpu_millicores, 8000 - 666 - 3100, "once, as the station's own");
 }
+
+/// Sixteen cores with the page on them, the load as a sampler would leave
+/// it after ten readings of `(system, own)`.
+fn desktop_with(readings: &[(u32, u32)]) -> Governor {
+    let config = GovernorConfig { desktop: true, ..GovernorConfig::default() };
+    let g = Governor::with_machine(config, profile(), 16, 32_768);
+    let mut w = crate::load::Window::new(10);
+    for &(system, own) in readings {
+        let r = crate::load::Reading { system_millicores: system, own_millicores: own, ..Default::default() };
+        g.load_cell().store(&w.push(r));
+    }
+    g
+}
+
+#[test]
+fn a_three_rung_ladder_on_a_busy_desktop_whose_browser_spikes_is_granted() {
+    // 40 to 50% of sixteen cores, two spikes to 70% in the window, this
+    // process steady at half a core. Counting the spike again as jitter made
+    // the reserve 3.2 + 3.7 cores, which with other programs at 11 cores and
+    // this process came to more than the machine: free read 0, and the top
+    // rung's GPU encode, priced at a few hundredths of a core, was refused
+    // with "needs 0.0 cores and 0.0 cores is free".
+    let g = desktop_with(&[(7000, 500), (6500, 500), (11_500, 500), (7000, 500), (6400, 500), (8000, 500), (7200, 500), (11_000, 500), (6600, 500), (7000, 500)]);
+    assert_eq!(g.reserve(), 3200, "the spike is in other programs' peak, not in the reserve as well");
+    assert_eq!(g.headroom(None).cpu_millicores, 16_000 - 3200 - 11_000 - 500);
+    let mut held = Vec::new();
+    for (w, h) in [(1280, 720), (854, 480), (640, 360)] {
+        let what = format!("the {h}p30 H.264 rendition for hls");
+        let t = g.admit_encode(&gpu(), &shape(w, h, 30), &what, Kind::Rung { index: 0 }).granted();
+        held.push(t.unwrap_or_else(|| panic!("{what} refused")));
+        let scale = g.admit(cpu(180), &format!("{w}x{h} scaling for hls")).granted();
+        held.push(scale.unwrap_or_else(|| panic!("the scale for {h}p refused")));
+    }
+    assert_eq!(g.held().len(), 6);
+}
+
+#[test]
+fn a_refusal_of_a_few_hundredths_of_a_core_says_so() {
+    // Free really is nothing here: other programs take the machine.
+    let g = governor();
+    still(&g, 0, 8000);
+    let Admit::Refused { have, advice, .. } = g.admit(cpu(28), "the 360p30 H.264 rendition") else { panic!("nothing is free") };
+    assert_eq!(have.cpu_millicores, 0);
+    assert!(advice.text.starts_with("the 360p30 H.264 rendition needs 0.03 cores and 0 cores is free."), "{}", advice.text);
+}

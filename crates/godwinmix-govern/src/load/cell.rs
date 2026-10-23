@@ -16,7 +16,9 @@ pub struct Load {
     pub own_millicores: u32,
     /// Everything that is not this process, at its peak over the window.
     pub others_peak_millicores: u32,
-    /// How far the machine's load has jumped above its mean in the window.
+    /// How far the machine's peak in the window was above other programs'
+    /// peak and this process's average together: the burst the headroom
+    /// does not already take off. Another program's spike is in its peak.
     pub jitter_millicores: u32,
     pub available_mib: Option<u64>,
     pub devices: Vec<(String, u32)>,

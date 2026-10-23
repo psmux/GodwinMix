@@ -45,14 +45,22 @@ impl Window {
         let others = |r: &Reading| r.system_millicores.saturating_sub(r.own_millicores);
         let others_peak = self.readings.iter().map(others).max().unwrap_or(0);
         let peak = self.readings.iter().map(|r| r.system_millicores).max().unwrap_or(0);
-        let mean = self.readings.iter().map(|r| f64::from(r.system_millicores)).sum::<f64>()
-            / self.readings.len().max(1) as f64;
+        // The jump the headroom does not already allow for. Other programs
+        // are taken off at their peak and this process at its average, so
+        // only the part of the machine's peak above those two is a burst
+        // still to keep room for. Peak less mean, as this was, counted a
+        // spiking browser twice: once in the peak of other programs and
+        // again in the reserve. On a sixteen core desktop at 40 to 50% with
+        // the odd spike to 70%, the two together came to more than the
+        // machine and a three rung ladder was refused with "0.0 cores is
+        // free".
+        let burst = f64::from(peak) - f64::from(others_peak) - self.own_avg;
         let last = self.readings.back();
         Load {
             system_millicores: self.system_avg.round() as u32,
             own_millicores: self.own_avg.round() as u32,
             others_peak_millicores: others_peak,
-            jitter_millicores: (f64::from(peak) - mean).max(0.0).round() as u32,
+            jitter_millicores: burst.max(0.0).round() as u32,
             available_mib: last.and_then(|r| r.available_mib),
             devices: last.map(|r| r.devices.clone()).unwrap_or_default(),
             samples: self.samples,
@@ -104,6 +112,32 @@ mod tests {
             l = w.push(r(3000, 0));
         }
         assert!(l.system_millicores > 2600, "{l:?}");
-        assert!(l.jitter_millicores > 0);
+    }
+
+    #[test]
+    fn another_programs_spike_is_counted_once_in_its_peak_not_again_as_jitter() {
+        // Sixteen cores, 40 to 50% busy, a browser that spikes to 70% every
+        // few seconds, this process steady at half a core.
+        let mut w = Window::new(10);
+        let mut l = w.push(r(7000, 500));
+        for system in [6500, 11_500, 7000, 6400, 8000, 7200, 11_000, 6600, 7000] {
+            l = w.push(r(system, 500));
+        }
+        assert_eq!(l.others_peak_millicores, 11_000, "{l:?}");
+        assert_eq!(l.jitter_millicores, 0, "the spike is in the peak of other programs already: {l:?}");
+    }
+
+    #[test]
+    fn a_burst_of_this_process_above_its_average_is_still_jitter() {
+        // Other programs steady; this process jumps from half a core to three
+        // for one second, which its moving average does not show yet.
+        let mut w = Window::new(10);
+        let mut l = w.push(r(2500, 500));
+        for own in [500, 500, 3000, 500, 500] {
+            l = w.push(r(2000 + own, own));
+        }
+        assert_eq!(l.others_peak_millicores, 2000, "{l:?}");
+        assert!(l.jitter_millicores > 1500, "{l:?}");
+        assert!(l.jitter_millicores < 2500, "{l:?}");
     }
 }
