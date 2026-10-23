@@ -85,7 +85,17 @@ fn output(st: &Arc<Station>, v: &Value) {
     if !on {
         return;
     }
-    if with_seen(st, &id, |s| s.take_output(&out, v)) {
+    let moved = with_seen(st, &id, |s| {
+        let was = s.outputs.get(&out).map(|(l, _)| l.clone());
+        let moved = s.take_output(&out, v);
+        if moved {
+            if let Some((now, _)) = s.outputs.get(&out) {
+                super::seen::log_output(&id, &out, was.as_ref(), now);
+            }
+        }
+        moved
+    });
+    if moved {
         st.announce(&id);
         st.direct.announce_health(st, &id);
     }

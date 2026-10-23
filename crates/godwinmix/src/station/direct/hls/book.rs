@@ -10,6 +10,7 @@ use godwinmix_core::hls::access::Access;
 use godwinmix_core::hls::Stream;
 use godwinmix_protocol::destination::{DestinationLive, DestinationState, Playback};
 use godwinmix_protocol::shows::HlsOutputParams;
+use std::collections::BTreeMap;
 use std::net::SocketAddr;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
@@ -115,7 +116,13 @@ impl Packagers {
     pub(super) fn reported(&self, reports: Vec<Report>) {
         let mut book = self.book.lock();
         let Book { cards, reports: kept, .. } = &mut *book;
-        *kept = reports.into_iter().map(|r| ((r.show.clone(), r.output.clone()), r)).filter(|(k, _)| cards.contains_key(k)).collect();
+        let fresh: BTreeMap<_, _> = reports.into_iter().map(|r| ((r.show.clone(), r.output.clone()), r)).filter(|(k, _)| cards.contains_key(k)).collect();
+        // What the packager says of each output reaches the station's log:
+        // its own process writes nothing about an output's state.
+        for (key, r) in &fresh {
+            crate::station::direct::seen::log_output(&key.0, &key.1, kept.get(key).map(|k| &k.live), &r.live);
+        }
+        *kept = fresh;
     }
 
     /// The packager is gone: say so on every output, with what happens next.

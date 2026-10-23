@@ -101,10 +101,49 @@ impl Seen {
     }
 }
 
+/// The log line for an output whose state or error moved: a warning while
+/// it is down with a reason, and a note when it goes live or waits. None
+/// when neither moved, so a steady output writes nothing. The tiles said
+/// why an output was down and the station's log said nothing at all.
+pub fn told(was: Option<&DestinationLive>, now: &DestinationLive) -> Option<(bool, String)> {
+    if was.is_some_and(|w| w.state == now.state && w.error == now.error) {
+        return None;
+    }
+    let state = serde_json::to_value(now.state).ok().and_then(|v| v.as_str().map(str::to_string)).unwrap_or_default();
+    let down = matches!(now.state, DestinationState::Reconnecting | DestinationState::Failed);
+    let text = match &now.error {
+        Some(why) => format!("{state}: {why}"),
+        None => state,
+    };
+    Some((down && now.error.is_some(), text))
+}
+
+/// Write [`told`]'s line, if any, for one output of one show.
+pub fn log_output(show: &str, output: &str, was: Option<&DestinationLive>, now: &DestinationLive) {
+    match told(was, now) {
+        Some((true, text)) => tracing::warn!(show, output, reconnects = now.reconnects, "output {text}"),
+        Some((false, text)) => tracing::info!(show, output, "output {text}"),
+        None => {}
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn an_output_is_logged_when_its_state_or_error_moves_and_not_otherwise() {
+        let down = |error: &str| DestinationLive { state: DestinationState::Reconnecting, reconnects: 3, error: Some(error.into()), ..Default::default() };
+        let lost = down("nothing came from the relay for 30 s");
+        let (warn, text) = told(None, &lost).expect("a first report is told");
+        assert!(warn, "down with a reason is a warning");
+        assert_eq!(text, "reconnecting: nothing came from the relay for 30 s");
+        assert!(told(Some(&lost), &DestinationLive { reconnects: 4, ..lost.clone() }).is_none(), "one more reconnect alone is not a line");
+        assert!(told(Some(&lost), &down("the relay at 127.0.0.1:1935 did not answer")).is_some(), "a new reason is");
+        let live = DestinationLive { state: DestinationState::Live, ..Default::default() };
+        assert_eq!(told(Some(&lost), &live), Some((false, "live".into())));
+    }
 
     #[test]
     fn an_output_report_moves_only_on_state_error_or_reconnects() {
