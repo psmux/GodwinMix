@@ -140,6 +140,7 @@ Start here if you have never run it.
 * [Convert broadcast feeds on the GPU](how-to/convert-broadcast-feeds-on-the-gpu.md)
 * [Watch many shows at once](how-to/monitor-many-shows.md)
 * [Watch a headend of many channels](how-to/watch-a-headend.md)
+* [Read the flow map: what comes in, what each show does with it, what goes out](how-to/read-the-flow-map.md)
 * [Send a channel on to YouTube, Facebook or Twitch](how-to/restream-a-channel.md)
 * [Record a channel and share a watch link](how-to/record-a-channel.md)
 * [Save and open a project](how-to/save-and-open-a-project.md)

@@ -38,7 +38,7 @@ export function showRows(n, ctx) {
   if (n.mixed) {
     const d = ctx.mixed.get(n.show) || {};
     return {
-      top: yes([["State", stateWord(show.state === "running" ? "live" : show.state)], ["On air", d.sceneName || d.scene || d.program || "black"], ["Preview", d.previewName || ""], ["Sources", String((d.sources || []).length)],
+      top: yes([["State", stateWord(show.state === "running" ? "live" : show.state)], ["On air", n.onAir || "black"], ["Preview", n.preview || ""], ["Sources", String((d.sources || []).length)],
         ["Outputs", String((d.outputs || []).length)], ["Sending", rate(show.programme_kbps)], ["Up", upFor(d.uptime_secs)]]),
       tech: yes([["Show", show.id], ["CPU", show.cpu_millicores != null ? `${(show.cpu_millicores / 10).toFixed(0)}% of a core` : ""], ["Memory", show.memory_mib ? `${show.memory_mib} MiB` : ""], ["Restarts", show.restarts ? String(show.restarts) : ""], ["Encoder", d.backend && d.backend.video_encoder]]),
     };

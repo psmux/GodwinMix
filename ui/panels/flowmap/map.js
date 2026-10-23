@@ -99,7 +99,7 @@ export class FlowMap {
     if (this.box) paintHeads(g, this.box.cols, this.v, this.col, this.font, HEADS);
   }
 
-  /** Fit the whole map, or its width only when the rows would be too small to read. */
+  /** Fit the whole map near the top, or its width only when its rows would be too small to read. */
   fit(all = true) {
     if (!this.box) return;
     const pad = 16;
@@ -107,7 +107,7 @@ export class FlowMap {
     const s = Math.max(0.15, Math.min(1.25, all ? Math.min(sx, sy) : Math.min(sx, 1.1)));
     this.v.s = s;
     this.v.tx = (this.v.w - this.box.width * s) / 2;
-    this.v.ty = all && sy >= sx ? (this.v.h - this.box.height * s) / 2 : 8;
+    this.v.ty = all && sy >= sx ? Math.min((this.v.h - this.box.height * s) / 2, 40) : 8;
     this.dirty = true;
   }
 
