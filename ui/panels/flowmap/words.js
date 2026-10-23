@@ -57,7 +57,8 @@ export function inputKind(uri) {
 export function outputFamily(o) {
   const p = String(o.platform || "");
   const host = String(o.uri_host || o.uri || "").toLowerCase();
-  if (p === "hls" || host.startsWith("hls:")) return "hls";
+  // A mixer's own HLS output says so in its type and has no scheme.
+  if (p === "hls" || host.startsWith("hls:") || o.type === "hls/output") return "hls";
   if (p === "file" || /^(file|record):/.test(host) || o.type === "record/output" || o.kind === "record") return "record";
   if (p === "srt" || host.startsWith("srt:")) return "srt";
   if (/^(udp|rtp|rist):/.test(host) || p === "udp") return "udp";
@@ -92,7 +93,7 @@ export function hlsFormat(p) {
 /** Where an output goes, without a key: the host and port, or a file's name. */
 export function where(o) {
   const h = String(o.uri_host || o.uri || "");
-  if (/^hls:/.test(h) || o.platform === "hls") return "this station";
+  if (outputFamily(o) === "hls") return "this station";
   if (outputFamily(o) === "record") return (o.file && o.file.name) || "a file on this station";
   return h.replace(/^[a-z]+:\/\//i, "").replace(/\/.*$/, "");
 }

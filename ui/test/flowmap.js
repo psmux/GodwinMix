@@ -13,6 +13,10 @@ export async function flowmapTests(test, eq, ok) {
     eq([w.picture(1280, 720, 25), w.picture(1920, 1080, 29.97, true), w.picture(1280, 720, 59.94)], ["720p", "1080i", "720p60"]);
     eq([{ platform: "youtube", uri_host: "rtmp://a.rtmp.youtube.com" }, { platform: "hls" }, { uri_host: "file:///rec" }, { uri_host: "udp://239.20.0.1:6000" }, { uri_host: "srt://h:9000" }].map(w.outputKind), ["YouTube", "HLS", "Recording", "Multicast", "SRT"]);
     eq(w.hlsFormat({ segments: "both", access: "open" }), "CMAF and TS, open");
+    // A mixer's own HLS output, as core.status lists it: its type says HLS
+    // and its address has no scheme. It was drawn as RTMP.
+    const own = { id: "viewers", type: "hls/output", uri_host: "", playback: { viewers: 0 } };
+    eq([w.outputKind(own), w.outputFamily(own), w.where(own)], ["HLS", "hls", "this station"]);
     eq([w.sourceKind({ type: "camera", uri: "v4l2:///dev/video0" }), w.sourceKind({ type: "srt", uri: "srt://0.0.0.0:9000" }), w.sourceKind({ type: "browser", uri: "https://x" })], ["Camera", "SRT", "Browser"]);
   });
 
@@ -44,6 +48,18 @@ export async function flowmapTests(test, eq, ok) {
     ok(g.links.get("show:ch101>out:ch101:hls").straight, "ch101 copies");
     ok(g.links.has(`gpu:0~${p.id}`), "the GPU is linked to what it converts");
   });
+
+  const { tip } = await import("../panels/flowmap/tip.js");
+  const box = document.createElement("div");
+  document.body.append(box);
+  const card = tip(box);
+  card.show({ kind: "link", id: "src:main:cam1>show:main" }, 10, 10, { graph: g });
+  test("a link's hover card has no stray null line when it has no technical part", () => {
+    ok(!card.node.hidden, "the card is up");
+    ok(!/null/.test(card.node.textContent), card.node.textContent);
+    ok(/From/.test(card.node.textContent), "it has its rows");
+  });
+  box.remove();
 
   test("a mixed show with two renditions draws each one, and its on air source is marked", () => {
     eq(kinds("proc").filter((n) => n.show === "main").map((n) => n.title).sort(), ["1080p H.264", "720p H.264"]);
