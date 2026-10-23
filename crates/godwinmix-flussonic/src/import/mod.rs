@@ -3,15 +3,14 @@
 //! rendition, or a copy when there is no transcoder.
 //!
 //! Nothing is silently ignored. Every directive the typed view does not know,
-//! every transcoder option without a home and every field still waiting on
-//! another branch is a [`Note`] with its line, in [`Import::notes`].
+//! every transcoder option without a home and everything GodwinMix does
+//! differently is a [`Note`] with its line, in [`Import::notes`].
 
 mod codecs;
 mod input;
 mod want;
 
 pub use input::redact;
-pub use want::WAITING;
 
 use crate::model::{Config, Stream};
 use serde::Serialize;
@@ -27,9 +26,6 @@ pub enum NoteKind {
     Ignored,
     /// Understood, but GodwinMix does something else, said in the note.
     NotCarried,
-    /// Written into the request under the name the media branch plans; the
-    /// station does not read it yet.
-    Waiting,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -144,27 +140,11 @@ pub fn import(cfg: &Config) -> Import {
     for s in &cfg.streams {
         let mut notes = Vec::new();
         if let Some(p) = plan(cfg, s, &mut notes) {
-            waiting(&p, s.line, &mut notes);
             out.shows.push(p);
         }
         out.notes.extend(notes.into_iter().map(|n| (format!("stream {}", s.name), n)));
     }
     out
-}
-
-/// One note per stream naming the fields the station does not read yet.
-fn waiting(p: &ShowPlan, line: usize, notes: &mut Vec<Note>) {
-    let r = &p.outputs[0]["rendition"];
-    let mut held: Vec<&str> = Vec::new();
-    for part in ["video", "audio"] {
-        if let Some(m) = r[part].as_object() {
-            held.extend(m.keys().map(String::as_str).filter(|k| WAITING.contains(k)));
-        }
-    }
-    if !held.is_empty() {
-        let what = format!("rendition fields {} are passed on, and this build does not act on them yet", held.join(", "));
-        notes.push(Note { line, kind: NoteKind::Waiting, what });
-    }
 }
 
 #[cfg(test)]
