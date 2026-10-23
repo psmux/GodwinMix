@@ -74,7 +74,7 @@ const ACTIONS = {
   "view.studio": () => setSetting("producer", !settings().producer),
   "view.reset-layout": () => workspace()?.reset(),
   "view.theme": (client, id) => applyTheme(id),
-  "source.add-kind": (client, category) => openPicker(client, "source", { category }),
+  "source.add-kind": (client, category) => addOfKind(client, category),
   "data.open": (client) => import("../panels/data/dialog.js").then((m) => m.openLiveData(client)),
   "output.record": (client) => import("../panels/outputs/recording.js").then((m) => m.startRecording(client)),
   "output.stop-recording": (client) => import("../panels/outputs/record-stop.js").then((m) => m.stopRecording(client)),
@@ -88,6 +88,16 @@ const ACTIONS = {
   "help.docs": () => window.open(DOCS, "_blank", "noopener"),
   "help.about": (client) => about(client),
 };
+
+/** Sources > Test pattern and the rest: through the tray's own Add, so the
+ * source goes into the scene on screen as it does from the tray. The picker
+ * opened on its own only made the source, and it sat in the pool. */
+export async function addOfKind(client, category, tray = () => document.querySelector("gmx-sources")) {
+  if (!tray()) await show("core/sources");
+  const t = tray();
+  if (t && typeof t.addSource === "function") return t.addSource({ category });
+  return openPicker(client, "source", { category });
+}
 
 /** The commands done here, each of which the menu bar has to register. */
 export const handled = () => Object.keys(ACTIONS);
