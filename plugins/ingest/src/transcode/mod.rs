@@ -35,6 +35,8 @@ mod tee;
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_fit;
 
 use std::collections::HashMap;
 use std::sync::{Mutex, MutexGuard};
