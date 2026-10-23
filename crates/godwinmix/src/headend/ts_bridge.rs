@@ -1,7 +1,9 @@
 //! [`Segments`] over an output's MPEG-TS rings, through the station's
 //! `ts_master`, `ts_media` and `ts_segment` (`station::direct::hls::facade`).
 //! An output that makes no TS (`segments = "cmaf"`) is answered by the CMAF
-//! bridge instead, so swapping this in changes nothing for one.
+//! bridge instead, so swapping this in changes nothing for one, and so is
+//! an output whose TS has nothing to list yet, or a selection TS does not
+//! carry: a player gets CMAF rather than a 503 while CMAF has segments.
 //!
 //! | Selection | TS rendition |
 //! |---|---|
@@ -74,7 +76,10 @@ impl Segments for Ts {
             return self.cmaf.tracks(at);
         }
         Box::pin(async move {
-            let m = self.st.direct.hls.ts_master(&self.st, &at.show, &at.output).await.map_err(missing)?;
+            let m = match self.st.direct.hls.ts_master(&self.st, &at.show, &at.output).await {
+                Ok(m) => m,
+                Err(_) => return self.cmaf.tracks(at).await,
+            };
             let mut tracks: Vec<Track> = m.main.iter().map(|v| track(v, Kind::Video)).collect();
             tracks.extend(m.sounds.iter().map(|v| track(v, Kind::Audio)));
             Ok(Tracks { tracks, muxed: true })
@@ -86,7 +91,11 @@ impl Segments for Ts {
             return self.cmaf.window(at, sel);
         }
         Box::pin(async move {
-            let media = self.st.direct.hls.ts_media(&self.st, &at.show, &at.output, &rendition(sel)?).await.map_err(missing)?;
+            let Ok(r) = rendition(sel) else { return self.cmaf.window(at, sel).await };
+            let media = match self.st.direct.hls.ts_media(&self.st, &at.show, &at.output, &r).await {
+                Ok(m) if !m.segments.is_empty() => m,
+                _ => return self.cmaf.window(at, sel).await,
+            };
             let sequence = media.segments.first().map_or(0, |e| e.msn);
             let mut disc = media.segments.first().map(|e| e.disc);
             let segments = media
@@ -107,17 +116,17 @@ impl Segments for Ts {
             return self.cmaf.segment(at, sel, start_s);
         }
         Box::pin(async move {
-            let r = rendition(sel)?;
-            let bytes = self.st.direct.hls.ts_segment(&self.st, &at.show, &at.output, &r, TsAt::Second(start_s)).await.map_err(missing)?;
-            Ok(bytes.to_vec())
+            let Ok(r) = rendition(sel) else { return self.cmaf.segment(at, sel, start_s).await };
+            match self.st.direct.hls.ts_segment(&self.st, &at.show, &at.output, &r, TsAt::Second(start_s)).await {
+                Ok(bytes) => Ok(bytes.to_vec()),
+                Err(e) => self.cmaf.segment(at, sel, start_s).await.map_err(|_| missing(e)),
+            }
         })
     }
 
     fn init<'a>(&'a self, at: &'a At, sel: Select, id: &'a str) -> Fut<'a, Result<Vec<u8>, Missing>> {
-        if !self.makes_ts(at) {
-            return self.cmaf.init(at, sel, id);
-        }
-        Box::pin(async move { Err(Missing::Gone("MPEG-TS segments need no init segment".into())) })
+        // Only a CMAF window names an init segment, TS or not.
+        self.cmaf.init(at, sel, id)
     }
 }
 

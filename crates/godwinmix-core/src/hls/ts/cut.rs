@@ -1,20 +1,16 @@
-//! One MPEG-TS rendition's cutter: frames in, in the order the hub gave
-//! them, whole segments into its [`TsTrack`] out.
+//! One MPEG-TS rendition's cutter: the hub's frames in, in its order.
 //!
 //! ```text
 //!   Unit ─► queue ─► placed on the CMAF picture's ring ─► Muxer ─► segment bytes ─► TsTrack
 //!                    (Ring::cut_at for a keyframe, Ring::place for sound alone)
 //! ```
 //!
-//! A frame is muxed only once it is known which segment it is in, so a
-//! segment starts with its own PAT and PMT and, for `main`, its keyframe
-//! with the parameter sets. Frames wait here, never on a lock, until the
-//! picture's muxer has cut far enough to say; for a window at most. One
-//! muxer serves the cutter's life, so continuity counters and the clock
-//! carry on from one segment to the next.
+//! A frame is muxed once its segment is known, so a segment starts with its
+//! own PAT and PMT and, for `main`, a keyframe with its parameter sets.
+//! Frames wait here, never on a lock, for a window at most. One muxer serves
+//! the cutter's life, so the continuity counters carry on.
 
-use super::mux::{Muxer, Unit, UnitKind};
-use super::ring::TsTrack;
+use super::{mux::{Muxer, Unit, UnitKind}, ring::TsTrack};
 use crate::hls::ring::{Cut, Place};
 use crate::hls::stream::Stream;
 use std::collections::VecDeque;
@@ -136,11 +132,16 @@ impl TsCut {
         (ms >= 0).then(|| ms as u64 * MS)
     }
 
+    /// How long the front frame has waited: the newest time queued less
+    /// its own. Sound comes up to a second behind the picture of the same
+    /// moment (0.7 s from a GPU encoder), so the frame queued last can be
+    /// older than the front. Taken as last less first, that wrapped to four
+    /// billion, the waiting keyframe was dropped as stale and its frames
+    /// joined the segment before: TS segments of a minute where CMAF cut
+    /// every 1.668 s.
     fn held(&self) -> u32 {
-        match (self.queue.front(), self.queue.back()) {
-            (Some(a), Some(b)) => b.ms.wrapping_sub(a.ms),
-            _ => 0,
-        }
+        let newest = self.queue.iter().map(|u| u.ms).max().unwrap_or(0);
+        self.queue.front().map_or(0, |f| newest.saturating_sub(f.ms))
     }
 }
 
