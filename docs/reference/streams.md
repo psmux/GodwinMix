@@ -362,5 +362,7 @@ dashboard can tell "none" from "not scraped yet".
 | `whep` | `webrtcbin` and libnice's `nicesrc` are installed |
 | `local-preview` | `preview.open` can make a socket here |
 | `multiview` | `[multiview] enabled = true`, so there is a mosaic to cut from |
+| `station` | the station answered, because no show is running behind this request ([shows](shows.md#addressing-a-show)) |
+| `headend` | with `station`: the station follows a Flussonic config, and the page opens on the headend view |
 
 Branch on a feature rather than on a 404 you have to provoke first.

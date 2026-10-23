@@ -65,6 +65,7 @@ pub async fn run(opts: Options) -> Result<()> {
     let exe = std::env::current_exe().context("finding this program, to start the shows with")?;
     let launch = Launch { exe, common: opts.common.clone(), calibration: Some(runtime.clone()) };
     let st = Station::new(Registry::open(&opts.config)?, events.clone(), tokens, render.clone(), launch);
+    stand_in(&st, &opts, &cfg, &bind);
     super::direct::inputs::seal_written(&st);
     let addr = link::listen(Arc::new(Linked(st.clone()))).await.context("opening the show link")?;
     let _ = st.link.set(addr);
@@ -107,6 +108,16 @@ pub async fn run(opts: Options) -> Result<()> {
     let _ = tokio::task::spawn_blocking(move || ingest.shutdown()).await;
     serving.abort();
     Ok(())
+}
+
+/// What the station answers for a show that is not running: its own
+/// `core.info` and its config file (`alone.rs`).
+fn stand_in(st: &Station, opts: &Options, cfg: &Config, bind: &str) {
+    let path = std::path::absolute(&opts.config).unwrap_or_else(|_| opts.config.clone());
+    let overrides: &[(&str, &str)] = if bind != cfg.control.bind { &[("control.bind", "--bind")] } else { &[] };
+    crate::control::methods::config::configure(cfg, overrides);
+    crate::control::methods::presets::configure(&path, cfg.ui.clone());
+    let _ = st.alone.set(super::alone::Own::new(path, cfg, opts.rehearsal));
 }
 
 /// SIGTERM (a service manager) or SIGHUP (the terminal closed): stop every

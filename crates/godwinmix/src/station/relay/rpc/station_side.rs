@@ -1,7 +1,7 @@
 //! The station's half of a relayed `/rpc`: its own methods, answered on a
 //! task of their own, and its own events, written between the show's.
 
-use super::super::super::methods;
+use super::super::super::{alone, methods};
 use super::Relay;
 use godwinmix_protocol::rpc;
 use serde_json::{json, Value};
@@ -14,6 +14,22 @@ impl Relay {
         let (st, token) = (self.st.clone(), self.token.clone());
         tokio::spawn(async move {
             let answer = methods::call(&st, &token, &method, params).await;
+            let Some(id) = id else { return };
+            let frame = match answer {
+                Ok(v) => rpc::result_frame(&id, v),
+                Err(e) => rpc::error_frame(&id, &e, &godwinmix_protocol::trace::new_id()),
+            };
+            let _ = answers.send(frame).await;
+        });
+    }
+
+    /// Answer in place of a show that is not running (`alone.rs`).
+    pub(super) fn stand_in(&self, id: Option<Value>, method: String, params: Value, answers: mpsc::Sender<Value>) {
+        let (st, token) = (self.st.clone(), self.token.clone());
+        let client = alone::client_name(&token, self.uri.query());
+        let events = self.sub.as_ref().map(|s| s.patterns.clone()).unwrap_or_default();
+        tokio::spawn(async move {
+            let answer = alone::call(&st, &token, &client, &method, params, &events).await;
             let Some(id) = id else { return };
             let frame = match answer {
                 Ok(v) => rpc::result_frame(&id, v),

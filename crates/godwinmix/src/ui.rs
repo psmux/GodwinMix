@@ -252,6 +252,7 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/headend/parts.js", include_str!("../../../ui/panels/headend/parts.js")),
     ("panels/headend/player.js", include_str!("../../../ui/panels/headend/player.js")),
     ("panels/headend/sheet.js", include_str!("../../../ui/panels/headend/sheet.js")),
+    ("panels/headend/station.js", include_str!("../../../ui/panels/headend/station.js")),
     ("panels/headend/tiles.css", include_str!("../../../ui/panels/headend/tiles.css")),
     ("panels/headend/tile.js", include_str!("../../../ui/panels/headend/tile.js")),
     ("panels/headend/tools.js", include_str!("../../../ui/panels/headend/tools.js")),

@@ -159,11 +159,9 @@ Flussonic's URLs answer, from `headend.status`:
 
 ![The band of a station that follows a Flussonic config, dark theme](../media/headend/band-follows-dark.png)
 
-A station in headend mode does not start the show `main`, and the page
-reaches a station through its first show, so the page shows
-"Disconnected" until `main` runs. Start it with
-`curl -X POST http://127.0.0.1:8080/api/v1/shows/main/start` (with your
-token) and open the page again; the streams carry on either way.
+A station in headend mode starts no mixer, and its page opens on the
+headend view. Mixer settings and the Flussonic import work there as on any
+station; the settings are the station's own config file.
 
 ## Go back
 
