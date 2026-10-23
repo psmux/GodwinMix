@@ -77,10 +77,16 @@ pub struct Import {
 }
 
 /// The HLS output's params from `segment_duration` and `segment_count`.
+/// Every stream's HLS output makes MPEG-TS beside CMAF, because Flussonic's
+/// paths serve TS segments, and answers without a viewer key, because
+/// Flussonic served playback with none and whatever sits in front of it does
+/// its own checking. `open` still answers only loopback and private addresses.
 fn hls_params(cfg: &Config, s: &Stream) -> Option<Value> {
     let duration = s.segment_duration.or(cfg.segment_duration);
     let count = s.segment_count.or(cfg.segment_count);
     let mut p = Map::new();
+    p.insert("segments".into(), json!("both"));
+    p.insert("access".into(), json!("open"));
     if let Some(d) = duration {
         p.insert("segment_ms".into(), json!(((d * 1000.0).round() as u32).clamp(500, 10_000)));
     }
@@ -88,7 +94,7 @@ fn hls_params(cfg: &Config, s: &Stream) -> Option<Value> {
         let window = (f64::from(c) * duration.unwrap_or(2.0)).ceil() as u32;
         p.insert("window".into(), json!(window.max(1)));
     }
-    (!p.is_empty()).then_some(Value::Object(p))
+    Some(Value::Object(p))
 }
 
 fn plan(cfg: &Config, s: &Stream, notes: &mut Vec<Note>) -> Option<ShowPlan> {

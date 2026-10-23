@@ -29,6 +29,8 @@ fn a_headend_config_is_51_renditions_and_one_copy() {
     );
     assert_eq!((r["audio"]["codec"].as_str(), r["audio"]["bitrate_kbps"].as_u64()), (Some("aac"), Some(128)));
     assert_eq!(r["audio"]["tracks"], "all");
+    // Flussonic's paths serve TS without a key, so every output makes TS beside CMAF, open.
+    assert_eq!((ch.outputs[0]["params"]["segments"].as_str(), ch.outputs[0]["params"]["access"].as_str()), (Some("both"), Some("open")));
     let relay = i.shows.iter().find(|s| s.name == "RELAY1").unwrap();
     assert!(relay.copy && relay.outputs[0].get("rendition").is_none());
     assert_eq!(relay.outputs[0]["uri"], "hls://flussonic");
@@ -54,7 +56,7 @@ fn a_second_input_is_the_backup_and_pushes_are_outputs() {
     let text = "stream A {\n  title The A channel;\n  disabled true;\n  segment_duration 4;\n  segment_count 5;\n  input rtmp://h/app/a;\n  input udp://239.0.0.1:1;\n  push srt://10.0.0.9:9000;\n}\n";
     let s = &of(text).shows[0];
     assert_eq!(s.input["backup"], json!({"uri": "udp://@239.0.0.1:1"}));
-    assert_eq!(s.outputs[0]["params"], json!({"segment_ms": 4000, "window": 20}));
+    assert_eq!(s.outputs[0]["params"], json!({"segments": "both", "access": "open", "segment_ms": 4000, "window": 20}));
     assert_eq!(s.outputs[1], json!({"id": "push-1", "uri": "srt://10.0.0.9:9000"}));
     assert!(s.disabled && s.copy);
     assert_eq!(s.title.as_deref(), Some("The A channel"));
