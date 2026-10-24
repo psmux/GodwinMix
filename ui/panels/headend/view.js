@@ -6,7 +6,10 @@
 //
 // show.stats for every channel once a second (data.js), gpu.status and
 // machine.status once a second (machine.js), pictures for the tiles on
-// screen only, every two seconds (../wall/thumbs.js).
+// screen only, every two seconds (../wall/thumbs.js). headend.channel.list
+// once when it opens and after each change made here, so the drawer knows
+// which shows are channels the station keeps. With no channels, the empty
+// grid offers the three ways to a first one: add, scan or import.
 
 import { el } from "../../shell/dom.js";
 import { sheet } from "./sheet.js";
@@ -23,6 +26,20 @@ import { Grid } from "./grid.js";
 import { drawer } from "./drawer.js";
 import { act, keyed, prefs, savePrefs } from "./act.js";
 import { totals } from "./totals.js";
+
+/** What an empty headend offers: three ways to its first channel. */
+function firstRun(go) {
+  const way = (what, title, words) => el("button.he-way", { type: "button", "data-way": what, onclick: () => go(what) }, [el("strong", { text: title }), el("span", { text: words })]);
+  return el("div.he-first", { hidden: true }, [
+    el("h3.he-firsth", { text: "No channels yet" }),
+    el("p.he-firstp", { text: "Set up the channels this headend runs. Each one takes a feed, converts it if you want, and serves it as HLS." }),
+    el("div.he-ways", {}, [
+      way("add", "Add a channel", "One feed by hand: UDP or RTP multicast, SRT, RTMP, RTSP, HLS or a file."),
+      way("scan", "Scan a multicast feed", "List the programs in a group and port, and add the ones you tick."),
+      way("import", "Import a Flussonic config", "Each stream becomes a channel the station keeps and you can edit."),
+    ]),
+  ]);
+}
 
 let open = null;
 
@@ -46,7 +63,8 @@ export function openHeadend(client) {
   const tools = toolBar(opts, (what, value) => act(view, what, value));
   const body = el("div.he-body");
   const empty = el("p.he-empty", { hidden: true });
-  const scroll = el("div.he-scroll", { tabindex: "0", "aria-label": "Channels" }, [body, empty]);
+  const ways = firstRun((what) => act(view, what));
+  const scroll = el("div.he-scroll", { tabindex: "0", "aria-label": "Channels" }, [body, empty, ways]);
   const strips = el("div.he-strips", {}, [gpu.node, grps.node]);
   const root = el("section.he", { role: "region", "aria-label": "Headend" }, [top.node, strips, tools.node, el("div.he-main", {}, [scroll])]);
   const bar = document.querySelector(".slot-header, gmx-header");
@@ -81,9 +99,11 @@ export function openHeadend(client) {
       grid.set(rows);
       view.fetch();
       if (side.id) side.draw();
-      const text = !data.loaded ? "Reading the channels on this station" : data.missing ? "This station keeps one show, so there are no channels to watch here." : !data.shows.length ? "No channels yet. Add shows on the monitoring wall makes them." : !rows.length ? "No channel matches that filter." : "";
+      const none = data.loaded && !data.missing && !data.shows.length;
+      const text = !data.loaded ? "Reading the channels on this station" : data.missing ? "This station keeps one show, so there are no channels to watch here." : none ? "" : !rows.length ? "No channel matches that filter." : "";
       empty.hidden = !text;
       empty.textContent = text;
+      ways.hidden = !none;
     },
     /** Patch the tiles on screen and ask for their pictures, and no others. */
     fetch(patch = true) {
@@ -91,6 +111,17 @@ export function openHeadend(client) {
       const pics = shown.filter((r) => pictured(r.show) && r.state !== "offline");
       thumbs.blank(shown.filter((r) => !pics.includes(r)).map((r) => r.show.id));
       thumbs.visible(pics.map((r) => r.show.id));
+    },
+    /** headend.channel.list again, after a change made on this page. */
+    async reload() {
+      view.setup = await client.call("headend.channel.list", {}).catch(() => null);
+      data.read().catch(() => {});
+      view.later();
+      return view.setup;
+    },
+    /** The channel the station keeps for a show, if it keeps one. */
+    entry(showId) {
+      return ((view.setup && view.setup.channels) || []).find((e) => e.show === showId) || null;
     },
     pick(id) {
       view.selected = id;
@@ -127,6 +158,7 @@ export function openHeadend(client) {
   resize.observe(root);
   data.start();
   box.start();
+  view.reload();
   styled.then(() => { view.styled = true; view.later(); });
   return view;
 }
