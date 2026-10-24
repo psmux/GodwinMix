@@ -60,11 +60,35 @@ fn refresh_one(name: &str, version: &str, from: &Path, name_dir: &Path) -> io::R
 }
 
 /// Whether the copy in `dir` was installed from `from`, by its trust record.
+///
+/// Or from the same plugin in another install of this app: a record marked
+/// `shipped` whose source is `.../plugins/<name>`. The installer can move the
+/// app (the old setup.exe put it under the user's folder, the .msi puts it in
+/// Program Files), and a copy installed from the old place is still this app's
+/// to replace. An operator's own install is never marked shipped.
 fn came_from(dir: &Path, from: &Path) -> bool {
     let Ok(text) = fs::read_to_string(dir.join(".gmx-trust.json")) else { return false };
     let Ok(record) = serde_json::from_str::<serde_json::Value>(&text) else { return false };
     let source = record.get("source").and_then(|s| s.as_str()).unwrap_or_default();
-    same_place(Path::new(source), from)
+    if same_place(Path::new(source), from) {
+        return true;
+    }
+    let shipped = record.get("shipped").and_then(|s| s.as_bool()).unwrap_or(false);
+    shipped && same_tail(source, from)
+}
+
+/// Whether `source` ends in the same `plugins/<name>` as `from`.
+fn same_tail(source: &str, from: &Path) -> bool {
+    let tail = |s: &str| {
+        let s = s.replace('\\', "/");
+        let mut parts = s.trim_end_matches('/').rsplit('/');
+        let name = parts.next().unwrap_or_default().to_string();
+        let parent = parts.next().unwrap_or_default().to_string();
+        let pair = format!("{parent}/{name}");
+        if cfg!(windows) { pair.to_lowercase() } else { pair }
+    };
+    let want = tail(&from.to_string_lossy());
+    !want.starts_with('/') && tail(source) == want
 }
 
 /// Two spellings of one directory: `\\?\` and case are not differences on
@@ -141,6 +165,31 @@ mod tests {
         // Nothing to do the second time.
         refresh(&shipped, &dest).unwrap();
         assert!(new.join(STAMP).is_file());
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_copy_from_the_app_installed_somewhere_else_follows_the_app_too() {
+        let root = std::env::temp_dir().join(format!("gmx-shipped-moved-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let (shipped, dest) = (root.join("new-place").join("plugins"), root.join("data"));
+        plugin(&shipped.join("ingest"), "0.1.0", "new build");
+        plugin(&shipped.join("udp"), "0.1.0", "new udp");
+        // Installed by an older app that lived in another folder.
+        let old = dest.join("ingest").join("0.1.0");
+        plugin(&old, "0.1.0", "old build");
+        let source = root.join("old-place").join("plugins").join("ingest");
+        fs::write(old.join(".gmx-trust.json"), trust_record(&source)).unwrap();
+        // The same tail, but not marked shipped: the operator's own.
+        let theirs = dest.join("udp").join("0.1.0");
+        plugin(&theirs, "0.1.0", "their build");
+        let mine = root.join("mine").join("plugins").join("udp");
+        fs::write(theirs.join(".gmx-trust.json"), serde_json::json!({ "source": mine.display().to_string() }).to_string()).unwrap();
+
+        refresh(&shipped, &dest).unwrap();
+        assert_eq!(fs::read_to_string(old.join("bin").join("x")).unwrap(), "new build");
+        assert!(old.join(STAMP).is_file());
+        assert_eq!(fs::read_to_string(theirs.join("bin").join("x")).unwrap(), "their build");
         let _ = fs::remove_dir_all(&root);
     }
 
