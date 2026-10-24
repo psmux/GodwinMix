@@ -29,7 +29,7 @@
 //!   fx.rs           transitions and effects imported from packs
 //!   gallery.rs      the graphics gallery: every designed asset, in one list
 //!   health.rs       a show health and its alarms
-//!   headend.rs      a Flussonic config imported as shows, and headend.status
+//!   headend/        the headend: channels set up here, profiles, a feed scan, and a Flussonic import
 //!   idempotency.rs  the 24 hour replay cache
 //!   trace.rs        one trace id per call
 //!   mcp_tools.rs    the tool list, generated, in two profiles

@@ -60,7 +60,7 @@ fn with_seen<T>(st: &Station, id: &str, f: impl FnOnce(&mut Seen) -> T) -> T {
 
 fn input(st: &Arc<Station>, v: &Value) {
     let id = v["show"].as_str().unwrap_or_default().to_string();
-    if !known(st, &id) {
+    if st.direct.probes.take_input(&id, v) || !known(st, &id) {
         return;
     }
     let moved = with_seen(st, &id, |s| s.take_input(v));

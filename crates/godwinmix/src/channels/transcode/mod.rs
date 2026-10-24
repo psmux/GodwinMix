@@ -107,6 +107,11 @@ impl Transcode {
         self.governor.use_station(governor)
     }
 
+    /// The video encoders this machine has, as the planner sees them.
+    pub fn slots(&self) -> Vec<godwinmix_protocol::rendition::EncoderSlot> {
+        self.machine().slots()
+    }
+
     fn machine(&self) -> &Machine {
         self.machine.get_or_init(|| {
             let cat = godwinmix_core::catalogue::global();

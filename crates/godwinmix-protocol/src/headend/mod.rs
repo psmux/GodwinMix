@@ -1,10 +1,25 @@
-//! `headend.import` and `headend.status`: a Flussonic config made into
-//! shows from the page or an agent, and whether this station follows one.
+//! The headend: many channels, each a direct show, set up on the station.
+//!
+//! * `channel.rs`: channels kept by the station (`headend.channel.*`), set
+//!   up on the headend screen or by an agent with no Flussonic file at all.
+//! * `profile.rs`: transcode profiles many channels share (`headend.profile.*`).
+//! * `scan.rs`: what a multiplex carries (`headend.scan`).
+//! * Here: `headend.import` and `headend.status`, a Flussonic config made
+//!   into channels from the page or an agent, and whether this station
+//!   follows one.
 //!
 //! The import is the one `godwinmix headend` runs (`godwinmix-flussonic`):
 //! each `stream` a show without compositing, its `input` the show's input,
 //! one HLS output with the `transcoder` line as its rendition, and every
-//! line it does not carry listed. These types are only its report.
+//! line it does not carry listed. A channel set up here makes the same show.
+
+pub mod channel;
+pub mod profile;
+pub mod scan;
+
+pub use channel::*;
+pub use profile::{ProfileChange, ProfileRemoveRequest, ProfileSaveRequest, TranscodeProfile};
+pub use scan::*;
 
 use crate::shows::ShowAddManyResult;
 use schemars::JsonSchema;
@@ -75,8 +90,8 @@ pub struct HeadendImportReport {
     /// made, what it costs and what would be refused; otherwise what was.
     pub shows: ShowAddManyResult,
     /// The Flussonic config this station follows, when it follows one. A
-    /// show made by an import is not in that file, and the file's own
-    /// streams are not touched.
+    /// channel made by an import is kept by the station, not in that file,
+    /// and the file's own streams are not touched.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub following: Option<String>,
 }

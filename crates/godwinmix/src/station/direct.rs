@@ -25,6 +25,7 @@ mod intake;
 mod mixed;
 pub mod outputs;
 mod plan;
+pub mod probe;
 mod rate;
 mod seen;
 mod table;
@@ -60,6 +61,8 @@ pub struct Direct {
     plugins: OnceLock<Arc<Supervisor>>,
     /// What the host last said about each show.
     pub(crate) seen: Mutex<BTreeMap<String, Seen>>,
+    /// Inputs opened for `headend.scan` only.
+    pub(crate) probes: probe::Probes,
     /// The renditions of direct outputs, planned and admitted like a
     /// channel's, against the station's governor.
     pub(crate) transcode: Transcode,
@@ -77,6 +80,7 @@ impl Direct {
         Direct {
             plugins: OnceLock::new(),
             seen: Mutex::new(BTreeMap::new()),
+            probes: probe::Probes::default(),
             transcode: Transcode::new(data_dir),
             hls: hls::Packagers::default(),
             gens: Mutex::new((0, 0)),

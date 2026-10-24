@@ -180,6 +180,8 @@ fn open_channels(st: &Arc<Station>, cfg: &Config, config: &std::path::Path, even
     let _ = st.channels.set(channels);
     super::direct::Direct::attach(st, supervisor.clone());
     super::direct::hls::channel::Links::attach(st);
+    // The headend channels the station keeps, if it keeps any.
+    crate::headend::native::start(st);
     let (starting, station) = (supervisor.clone(), st.clone());
     std::thread::spawn(move || {
         if plugin::loader::get(crate::channels::PLUGIN).is_none() {

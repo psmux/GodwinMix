@@ -70,6 +70,16 @@ pub enum Deinterlace {
     Auto,
 }
 
+/// Where a rendition's picture is encoded, when it must be one or the other.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum EncoderPick {
+    /// A hardware encoder: NVENC, Quick Sync, VideoToolbox or VA-API.
+    Gpu,
+    /// A software encoder, such as x264.
+    Cpu,
+}
+
 /// Which sound tracks a rendition converts.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
