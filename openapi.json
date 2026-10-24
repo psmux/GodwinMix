@@ -12577,6 +12577,11 @@
             ],
             "description": "The alarms a person set for it, when they set any."
           },
+          "closed": {
+            "default": false,
+            "description": "Closed from its tab: the page leaves it out of the tab row until\n`show.open`. Nothing of it is deleted. A show closed with\n`keep_running` is still running, and its `state` says so.",
+            "type": "boolean"
+          },
           "compositing": {
             "default": true,
             "description": "true: scenes, transitions and a programme encode, in a process of\nits own. false: one input straight to its outputs, in the shared\ndirect host, with no compositor.",
@@ -12811,6 +12816,23 @@
         },
         "required": [
           "name"
+        ],
+        "type": "object"
+      },
+      "ShowCloseRequest": {
+        "description": "`show.close`.",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "keep_running": {
+            "default": false,
+            "description": "true: it leaves the tab row and carries on, on air and sending, the\nway the desktop app keeps running in the background. Left out or\nfalse: it stops as well, and stays stopped across a restart of the\nstation until `show.open`.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id"
         ],
         "type": "object"
       },
@@ -13205,6 +13227,11 @@
               }
             ],
             "description": "The alarms a person set for it, when they set any."
+          },
+          "closed": {
+            "default": false,
+            "description": "Closed from its tab: the page leaves it out of the tab row until\n`show.open`. Nothing of it is deleted. A show closed with\n`keep_running` is still running, and its `state` says so.",
+            "type": "boolean"
           },
           "compositing": {
             "default": true,
@@ -22739,6 +22766,104 @@
           "show"
         ],
         "x-destructive": true,
+        "x-idempotent": true,
+        "x-scope": "admin"
+      }
+    },
+    "/api/v1/shows/{id}/close": {
+      "post": {
+        "description": "JSON-RPC method `show.close`. Needs the `admin` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "show.close",
+        "parameters": [
+          {
+            "description": "The id, as listed by the matching list call.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShowCloseRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Show"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Close a show from the page's tab row, as quitting closes the app: nothing of it is deleted. It stops, and stays stopped across a restart of the station, unless keep_running, when it carries on in the background. Refused for the last open show. show.open brings it back.",
+        "tags": [
+          "show"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "admin"
+      }
+    },
+    "/api/v1/shows/{id}/open": {
+      "post": {
+        "description": "JSON-RPC method `show.open`. Needs the `admin` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "show.open",
+        "parameters": [
+          {
+            "description": "The id, as listed by the matching list call.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IdRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Show"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Put a closed show back in the tab row. One that closing stopped starts again.",
+        "tags": [
+          "show"
+        ],
+        "x-destructive": false,
         "x-idempotent": true,
         "x-scope": "admin"
       }

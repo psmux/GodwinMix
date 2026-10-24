@@ -3152,6 +3152,7 @@ export interface ShedNote {
 /** One show, as `show.list` and `event/show.changed` carry it. */
 export interface Show {
   alarms?: AlarmSettings | null;
+  closed?: boolean;
   compositing?: boolean;
   cpu_millicores: number;
   error?: string | null;
@@ -3202,6 +3203,12 @@ export interface ShowAddRequest {
 /** `event/show.changed`. */
 export interface ShowChanged {
   show: Show;
+}
+
+/** `show.close`. */
+export interface ShowCloseRequest {
+  id: string;
+  keep_running?: boolean;
 }
 
 /** What a new show starts from. */
@@ -3314,6 +3321,7 @@ export interface ShowSetRequest {
 /** `show.set`'s answer: the show, and what a switch of compositing did. */
 export interface ShowSetResult {
   alarms?: AlarmSettings | null;
+  closed?: boolean;
   compositing?: boolean;
   cpu_millicores: number;
   error?: string | null;
@@ -4194,7 +4202,9 @@ export interface MethodParams {
   "setup.start": SetupRequest2;
   "show.add": ShowAddRequest;
   "show.add_many": ShowAddManyRequest;
+  "show.close": ShowCloseRequest;
   "show.list": Record<string, never>;
+  "show.open": IdRequest;
   "show.output.add": ShowOutputAddRequest;
   "show.output.remove": ShowOutputRemoveRequest;
   "show.output.set": ShowOutputSetRequest;
@@ -4435,7 +4445,9 @@ export interface MethodResults {
   "setup.start": SetupStatus;
   "show.add": Show;
   "show.add_many": ShowAddManyResult;
+  "show.close": Show;
   "show.list": ShowList;
+  "show.open": Show;
   "show.output.add": Show;
   "show.output.remove": Show;
   "show.output.set": Show;
@@ -4731,7 +4743,9 @@ export const METHODS: readonly MethodInfo[] = [
   { name: "setup.start", summary: "Set a piece up now, or join the set up already running, and answer at once with where it stands. Progress follows as `event/setup.changed`. Sources waiting on the piece start by themselves when it is ready.", scope: "operate", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/setup/start" } },
   { name: "show.add", summary: "Make another show and start it: empty, a copy of a show (without its outputs, so nothing goes out twice), or from a project file.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/shows" } },
   { name: "show.add_many", summary: "Make many shows in one call, such as every channel of a headend. The whole batch is checked first. With dry_run (the default) nothing is made: the answer says what would be, what its renditions would cost and whether the governor would admit them. Without it, every show that fits is made and the rest are refused with why; a show is made whole or not at all.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/shows/add_many" } },
+  { name: "show.close", summary: "Close a show from the page's tab row, as quitting closes the app: nothing of it is deleted. It stops, and stays stopped across a restart of the station, unless keep_running, when it carries on in the background. Refused for the last open show. show.open brings it back.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/shows/{id}/close" } },
   { name: "show.list", summary: "Every show on this machine: its name, whether it is running, what is on air, what its outputs send and what its process costs. `current` is the show a client reaches when it names none.", scope: "read", mutating: false, destructive: false, rest: { method: "GET", path: "/api/v1/shows" } },
+  { name: "show.open", summary: "Put a closed show back in the tab row. One that closing stopped starts again.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/shows/{id}/open" } },
   { name: "show.output.add", summary: "Send a show without compositing to another place: an address (SRT, RTMP, UDP, RTP or RIST), a platform and its key, or hls://<name> to serve it as HLS from this port. Left without a rendition it copies the input's bytes; with one it is planned and admitted by the governor. The key is write only.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/shows/{id}/output/add" } },
   { name: "show.output.remove", summary: "Stop one output of a show without compositing and forget it, key and all.", scope: "admin", mutating: true, destructive: true, rest: { method: "POST", path: "/api/v1/shows/{id}/output/remove" } },
   { name: "show.output.set", summary: "Change one output of a show without compositing, naming only what moves: another address, a new key, on or off, copy or a rendition.", scope: "admin", mutating: true, destructive: false, rest: { method: "POST", path: "/api/v1/shows/{id}/output" } },
@@ -5805,9 +5819,19 @@ export class GeneratedMethods {
     return this._call("show.add_many", params as unknown as Record<string, unknown>) as Promise<ShowAddManyResult>;
   }
 
+  /** Close a show from the page's tab row, as quitting closes the app: nothing of it is deleted. It stops, and stays stopped across a restart of the station, unless keep_running, when it carries on in the background. Refused for the last open show. show.open brings it back. */
+  showClose(params: ShowCloseRequest): Promise<Show> {
+    return this._call("show.close", params as unknown as Record<string, unknown>) as Promise<Show>;
+  }
+
   /** Every show on this machine: its name, whether it is running, what is on air, what its outputs send and what its process costs. `current` is the show a client reaches when it names none. */
   showList(): Promise<ShowList> {
     return this._call("show.list", {}) as Promise<ShowList>;
+  }
+
+  /** Put a closed show back in the tab row. One that closing stopped starts again. */
+  showOpen(params: IdRequest): Promise<Show> {
+    return this._call("show.open", params as unknown as Record<string, unknown>) as Promise<Show>;
   }
 
   /** Send a show without compositing to another place: an address (SRT, RTMP, UDP, RTP or RIST), a platform and its key, or hls://<name> to serve it as HLS from this port. Left without a rendition it copies the input's bytes; with one it is planned and admitted by the governor. The key is write only. */

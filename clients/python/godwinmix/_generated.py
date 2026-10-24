@@ -3528,6 +3528,8 @@ class Show(TypedDict, total=False):
 
     alarms: Union[AlarmSettings, None]
     # The alarms a person set for it, when they set any.
+    closed: bool
+    # Closed from its tab: the page leaves it out of the tab row until `show.open`. Nothing of it is deleted. A show closed with `keep_running` is still running, and its `state` says so.
     compositing: bool
     # true: scenes, transitions and a programme encode, in a process of its own. false: one input straight to its outputs, in the shared direct host, with no compositor.
     cpu_millicores: int
@@ -3588,6 +3590,13 @@ class ShowChanged(TypedDict, total=False):
     """`event/show.changed`."""
 
     show: Show
+
+class ShowCloseRequest(TypedDict, total=False):
+    """`show.close`."""
+
+    id: str
+    keep_running: bool
+    # true: it leaves the tab row and carries on, on air and sending, the way the desktop app keeps running in the background. Left out or false: it stops as well, and stays stopped across a restart of the station until `show.open`.
 
 class ShowHealthEvent(TypedDict, total=False):
     """`event/show.health`."""
@@ -3714,6 +3723,8 @@ class ShowSetResult(TypedDict, total=False):
 
     alarms: Union[AlarmSettings, None]
     # The alarms a person set for it, when they set any.
+    closed: bool
+    # Closed from its tab: the page leaves it out of the tab row until `show.open`. Nothing of it is deleted. A show closed with `keep_running` is still running, and its `state` says so.
     compositing: bool
     # true: scenes, transitions and a programme encode, in a process of its own. false: one input straight to its outputs, in the shared direct host, with no compositor.
     cpu_millicores: int
@@ -4862,7 +4873,9 @@ METHODS = (
     {"name": "setup.start", "scope": "operate", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/setup/start"), "summary": 'Set a piece up now, or join the set up already running, and answer at once with where it stands. Progress follows as `event/setup.changed`. Sources waiting on the piece start by themselves when it is ready.'},
     {"name": "show.add", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/shows"), "summary": 'Make another show and start it: empty, a copy of a show (without its outputs, so nothing goes out twice), or from a project file.'},
     {"name": "show.add_many", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/shows/add_many"), "summary": 'Make many shows in one call, such as every channel of a headend. The whole batch is checked first. With dry_run (the default) nothing is made: the answer says what would be, what its renditions would cost and whether the governor would admit them. Without it, every show that fits is made and the rest are refused with why; a show is made whole or not at all.'},
+    {"name": "show.close", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/shows/{id}/close"), "summary": "Close a show from the page's tab row, as quitting closes the app: nothing of it is deleted. It stops, and stays stopped across a restart of the station, unless keep_running, when it carries on in the background. Refused for the last open show. show.open brings it back."},
     {"name": "show.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/shows"), "summary": 'Every show on this machine: its name, whether it is running, what is on air, what its outputs send and what its process costs. `current` is the show a client reaches when it names none.'},
+    {"name": "show.open", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/shows/{id}/open"), "summary": 'Put a closed show back in the tab row. One that closing stopped starts again.'},
     {"name": "show.output.add", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/shows/{id}/output/add"), "summary": "Send a show without compositing to another place: an address (SRT, RTMP, UDP, RTP or RIST), a platform and its key, or hls://<name> to serve it as HLS from this port. Left without a rendition it copies the input's bytes; with one it is planned and admitted by the governor. The key is write only."},
     {"name": "show.output.remove", "scope": "admin", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/shows/{id}/output/remove"), "summary": 'Stop one output of a show without compositing and forget it, key and all.'},
     {"name": "show.output.set", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/shows/{id}/output"), "summary": 'Change one output of a show without compositing, naming only what moves: another address, a new key, on or off, copy or a rendition.'},
@@ -7779,12 +7792,34 @@ class GeneratedMethods:
             params["dry_run"] = dry_run
         return await self._call("show.add_many", params)
 
+    async def show_close(
+        self,
+        id: str,
+        *,
+        keep_running: Optional[bool] = None,
+    ) -> Show:
+        """Close a show from the page's tab row, as quitting closes the app: nothing of it is deleted. It stops, and stays stopped across a restart of the station, unless keep_running, when it carries on in the background. Refused for the last open show. show.open brings it back."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        if keep_running is not None:
+            params["keep_running"] = keep_running
+        return await self._call("show.close", params)
+
     async def show_list(
         self,
     ) -> ShowList:
         """Every show on this machine: its name, whether it is running, what is on air, what its outputs send and what its process costs. `current` is the show a client reaches when it names none."""
         params: Dict[str, Any] = {}
         return await self._call("show.list", params)
+
+    async def show_open(
+        self,
+        id: str,
+    ) -> Show:
+        """Put a closed show back in the tab row. One that closing stopped starts again."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        return await self._call("show.open", params)
 
     async def show_output_add(
         self,

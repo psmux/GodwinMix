@@ -226,7 +226,9 @@ Keys accepted on every method, handled before a method runs.
 | `setup.start` | `POST /api/v1/setup/start` | operate |  | 1 | Set a piece up now, or join the set up already running, and answer at once with where it stands. Progress follows as `event/setup.changed`. Sources waiting on the piece start by themselves when it is ready. |
 | `show.add` | `POST /api/v1/shows` | admin |  | 1 | Make another show and start it: empty, a copy of a show (without its outputs, so nothing goes out twice), or from a project file. |
 | `show.add_many` | `POST /api/v1/shows/add_many` | admin |  | 1 | Make many shows in one call, such as every channel of a headend. The whole batch is checked first. With dry_run (the default) nothing is made: the answer says what would be, what its renditions would cost and whether the governor would admit them. Without it, every show that fits is made and the rest are refused with why; a show is made whole or not at all. |
+| `show.close` | `POST /api/v1/shows/{id}/close` | admin |  | 1 | Close a show from the page's tab row, as quitting closes the app: nothing of it is deleted. It stops, and stays stopped across a restart of the station, unless keep_running, when it carries on in the background. Refused for the last open show. show.open brings it back. |
 | `show.list` | `GET /api/v1/shows` | read |  | 1 | Every show on this machine: its name, whether it is running, what is on air, what its outputs send and what its process costs. `current` is the show a client reaches when it names none. |
+| `show.open` | `POST /api/v1/shows/{id}/open` | admin |  | 1 | Put a closed show back in the tab row. One that closing stopped starts again. |
 | `show.output.add` | `POST /api/v1/shows/{id}/output/add` | admin |  | 1 | Send a show without compositing to another place: an address (SRT, RTMP, UDP, RTP or RIST), a platform and its key, or hls://<name> to serve it as HLS from this port. Left without a rendition it copies the input's bytes; with one it is planned and admitted by the governor. The key is write only. |
 | `show.output.remove` | `POST /api/v1/shows/{id}/output/remove` | admin | yes | 1 | Stop one output of a show without compositing and forget it, key and all. |
 | `show.output.set` | `POST /api/v1/shows/{id}/output` | admin |  | 1 | Change one output of a show without compositing, naming only what moves: another address, a new key, on or off, copy or a rendition. |
@@ -3455,6 +3457,21 @@ MCP tool `add_shows` in the `headend` profile: readOnlyHint false, destructiveHi
 }
 ```
 
+#### `show.close`
+
+Close a show from the page's tab row, as quitting closes the app: nothing of it is deleted. It stops, and stays stopped across a restart of the station, unless keep_running, when it carries on in the background. Refused for the last open show. show.open brings it back.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ShowCloseRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/Show"
+  }
+}
+```
+
 #### `show.list`
 
 Every show on this machine: its name, whether it is running, what is on air, what its outputs send and what its process costs. `current` is the show a client reaches when it names none.
@@ -3470,6 +3487,21 @@ MCP tool `list_shows` in the `headend` profile: readOnlyHint true, destructiveHi
   },
   "result": {
     "$ref": "#/$defs/ShowList"
+  }
+}
+```
+
+#### `show.open`
+
+Put a closed show back in the tab row. One that closing stopped starts again.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/IdRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/Show"
   }
 }
 ```

@@ -12887,6 +12887,11 @@
           ],
           "description": "The alarms a person set for it, when they set any."
         },
+        "closed": {
+          "default": false,
+          "description": "Closed from its tab: the page leaves it out of the tab row until\n`show.open`. Nothing of it is deleted. A show closed with\n`keep_running` is still running, and its `state` says so.",
+          "type": "boolean"
+        },
         "compositing": {
           "default": true,
           "description": "true: scenes, transitions and a programme encode, in a process of\nits own. false: one input straight to its outputs, in the shared\ndirect host, with no compositor.",
@@ -13133,6 +13138,23 @@
       },
       "required": [
         "show"
+      ],
+      "type": "object"
+    },
+    "ShowCloseRequest": {
+      "description": "`show.close`.",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "keep_running": {
+          "default": false,
+          "description": "true: it leaves the tab row and carries on, on air and sending, the\nway the desktop app keeps running in the background. Left out or\nfalse: it stops as well, and stays stopped across a restart of the\nstation until `show.open`.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id"
       ],
       "type": "object"
     },
@@ -13555,6 +13577,11 @@
             }
           ],
           "description": "The alarms a person set for it, when they set any."
+        },
+        "closed": {
+          "default": false,
+          "description": "Closed from its tab: the page leaves it out of the tab row until\n`show.open`. Nothing of it is deleted. A show closed with\n`keep_running` is still running, and its `state` says so.",
+          "type": "boolean"
         },
         "compositing": {
           "default": true,
@@ -22007,6 +22034,25 @@
     {
       "destructive": false,
       "idempotent": true,
+      "mutating": true,
+      "name": "show.close",
+      "params": {
+        "$ref": "#/$defs/ShowCloseRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/shows/{id}/close"
+      },
+      "result": {
+        "$ref": "#/$defs/Show"
+      },
+      "scope": "admin",
+      "since": "1",
+      "summary": "Close a show from the page's tab row, as quitting closes the app: nothing of it is deleted. It stops, and stays stopped across a restart of the station, unless keep_running, when it carries on in the background. Refused for the last open show. show.open brings it back."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
       "mcp": {
         "destructiveHint": false,
         "idempotentHint": true,
@@ -22031,6 +22077,25 @@
       "scope": "read",
       "since": "1",
       "summary": "Every show on this machine: its name, whether it is running, what is on air, what its outputs send and what its process costs. `current` is the show a client reaches when it names none."
+    },
+    {
+      "destructive": false,
+      "idempotent": true,
+      "mutating": true,
+      "name": "show.open",
+      "params": {
+        "$ref": "#/$defs/IdRequest"
+      },
+      "rest": {
+        "method": "POST",
+        "path": "/api/v1/shows/{id}/open"
+      },
+      "result": {
+        "$ref": "#/$defs/Show"
+      },
+      "scope": "admin",
+      "since": "1",
+      "summary": "Put a closed show back in the tab row. One that closing stopped starts again."
     },
     {
       "destructive": false,

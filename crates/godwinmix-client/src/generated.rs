@@ -5633,6 +5633,11 @@ pub struct Show {
     /// The alarms a person set for it, when they set any.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub alarms: Option<AlarmSettings>,
+    /// Closed from its tab: the page leaves it out of the tab row until
+    /// `show.open`. Nothing of it is deleted. A show closed with
+    /// `keep_running` is still running, and its `state` says so.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub closed: Option<bool>,
     /// true: scenes, transitions and a programme encode, in a process of
     /// its own. false: one input straight to its outputs, in the shared
     /// direct host, with no compositor.
@@ -5733,6 +5738,19 @@ pub struct ShowAddRequest {
 #[serde(default)]
 pub struct ShowChanged {
     pub show: Show,
+}
+
+/// `show.close`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ShowCloseRequest {
+    pub id: String,
+    /// true: it leaves the tab row and carries on, on air and sending, the
+    /// way the desktop app keeps running in the background. Left out or
+    /// false: it stops as well, and stays stopped across a restart of the
+    /// station until `show.open`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub keep_running: Option<bool>,
 }
 
 /// What a new show starts from.
@@ -5927,6 +5945,11 @@ pub struct ShowSetResult {
     /// The alarms a person set for it, when they set any.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub alarms: Option<AlarmSettings>,
+    /// Closed from its tab: the page leaves it out of the tab row until
+    /// `show.open`. Nothing of it is deleted. A show closed with
+    /// `keep_running` is still running, and its `state` says so.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub closed: Option<bool>,
     /// true: scenes, transitions and a programme encode, in a process of
     /// its own. false: one input straight to its outputs, in the shared
     /// direct host, with no compositor.
@@ -7201,7 +7224,7 @@ pub struct MethodInfo {
     pub rest: Option<(&'static str, &'static str)>,
 }
 
-pub const METHODS: [MethodInfo; 237] = [
+pub const METHODS: [MethodInfo; 239] = [
     MethodInfo { name: "adbreak.end", summary: "Cut a running ad short, or disarm one that is scheduled.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/end")) },
     MethodInfo { name: "adbreak.start", summary: "Interrupt the programme with a clip, then rejoin live when it ends.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/adbreak/start")) },
     MethodInfo { name: "agent.setup", summary: "Set an AI agent tool up to use this mixer: its MCP config gets one entry, godwinmix, that runs this mixer's own executable, and its skills folder gets the GodwinMix skills. Other entries are kept and a changed file is copied aside first. dry_run answers every file it would write. The answer says how to start the tool and a first thing to ask it.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/agent/setup")) },
@@ -7394,7 +7417,9 @@ pub const METHODS: [MethodInfo; 237] = [
     MethodInfo { name: "setup.start", summary: "Set a piece up now, or join the set up already running, and answer at once with where it stands. Progress follows as `event/setup.changed`. Sources waiting on the piece start by themselves when it is ready.", scope: "operate", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/setup/start")) },
     MethodInfo { name: "show.add", summary: "Make another show and start it: empty, a copy of a show (without its outputs, so nothing goes out twice), or from a project file.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/shows")) },
     MethodInfo { name: "show.add_many", summary: "Make many shows in one call, such as every channel of a headend. The whole batch is checked first. With dry_run (the default) nothing is made: the answer says what would be, what its renditions would cost and whether the governor would admit them. Without it, every show that fits is made and the rest are refused with why; a show is made whole or not at all.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/shows/add_many")) },
+    MethodInfo { name: "show.close", summary: "Close a show from the page's tab row, as quitting closes the app: nothing of it is deleted. It stops, and stays stopped across a restart of the station, unless keep_running, when it carries on in the background. Refused for the last open show. show.open brings it back.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/shows/{id}/close")) },
     MethodInfo { name: "show.list", summary: "Every show on this machine: its name, whether it is running, what is on air, what its outputs send and what its process costs. `current` is the show a client reaches when it names none.", scope: "read", mutating: false, destructive: false, rest: Some(("GET", "/api/v1/shows")) },
+    MethodInfo { name: "show.open", summary: "Put a closed show back in the tab row. One that closing stopped starts again.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/shows/{id}/open")) },
     MethodInfo { name: "show.output.add", summary: "Send a show without compositing to another place: an address (SRT, RTMP, UDP, RTP or RIST), a platform and its key, or hls://<name> to serve it as HLS from this port. Left without a rendition it copies the input's bytes; with one it is planned and admitted by the governor. The key is write only.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/shows/{id}/output/add")) },
     MethodInfo { name: "show.output.remove", summary: "Stop one output of a show without compositing and forget it, key and all.", scope: "admin", mutating: true, destructive: true, rest: Some(("POST", "/api/v1/shows/{id}/output/remove")) },
     MethodInfo { name: "show.output.set", summary: "Change one output of a show without compositing, naming only what moves: another address, a new key, on or off, copy or a rendition.", scope: "admin", mutating: true, destructive: false, rest: Some(("POST", "/api/v1/shows/{id}/output")) },
@@ -8739,9 +8764,19 @@ impl Client {
         self.call("show.add_many", params).await
     }
 
+    /// Close a show from the page's tab row, as quitting closes the app: nothing of it is deleted. It stops, and stays stopped across a restart of the station, unless keep_running, when it carries on in the background. Refused for the last open show. show.open brings it back.
+    pub async fn show_close(&self, params: &ShowCloseRequest) -> Result<Show> {
+        self.call("show.close", params).await
+    }
+
     /// Every show on this machine: its name, whether it is running, what is on air, what its outputs send and what its process costs. `current` is the show a client reaches when it names none.
     pub async fn show_list(&self) -> Result<ShowList> {
         self.call("show.list", &serde_json::json!({})).await
+    }
+
+    /// Put a closed show back in the tab row. One that closing stopped starts again.
+    pub async fn show_open(&self, params: &IdRequest) -> Result<Show> {
+        self.call("show.open", params).await
     }
 
     /// Send a show without compositing to another place: an address (SRT, RTMP, UDP, RTP or RIST), a platform and its key, or hls://<name> to serve it as HLS from this port. Left without a rendition it copies the input's bytes; with one it is planned and admitted by the governor. The key is write only.
