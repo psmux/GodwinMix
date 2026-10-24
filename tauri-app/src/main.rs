@@ -35,6 +35,7 @@ mod commands;
 mod core_link;
 mod displays;
 mod fullscreen;
+mod geometry;
 mod lan;
 mod lan_menu;
 mod output;

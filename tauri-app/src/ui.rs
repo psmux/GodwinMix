@@ -76,8 +76,33 @@ pub fn build_window(app: &AppHandle) -> tauri::Result<WebviewWindow> {
     if let Ok(url) = window.url() {
         *app.state::<Shell>().app_url.lock().unwrap() = Some(url.to_string());
     }
-    let _ = window.restore_state(StateFlags::POSITION | StateFlags::SIZE | StateFlags::MAXIMIZED);
+    // Maximized last, so the size it comes back to when it is restored down
+    // has been fitted to the screen first.
+    let _ = window.restore_state(StateFlags::POSITION | StateFlags::SIZE);
+    keep_on_screen(&window);
+    let _ = window.restore_state(StateFlags::MAXIMIZED);
     Ok(window)
+}
+
+/// A window put back bigger than its screen, or partly off it, is moved and
+/// shrunk into the monitor's work area. See `geometry`.
+fn keep_on_screen(window: &WebviewWindow) {
+    let (Ok(at), Ok(outer), Ok(inner)) = (window.outer_position(), window.outer_size(), window.inner_size()) else { return };
+    let monitor = window.current_monitor().ok().flatten().or_else(|| window.primary_monitor().ok().flatten());
+    let Some(monitor) = monitor else { return };
+    let area = monitor.work_area();
+    let work = (area.position.x, area.position.y, area.size.width, area.size.height);
+    let Some((x, y, w, h)) = crate::geometry::fit((at.x, at.y, outer.width, outer.height), work, 8) else { return };
+    // The size the runtime sets is the inner one, so the frame, title bar
+    // and menu bar come off what the outer frame may take.
+    let frame_w = outer.width.saturating_sub(inner.width);
+    let frame_h = outer.height.saturating_sub(inner.height);
+    eprintln!(
+        "[desktop] the window was put back at {},{} {}x{}, past the screen's work area; it is moved to {x},{y} {w}x{h}",
+        at.x, at.y, outer.width, outer.height
+    );
+    let _ = window.set_position(tauri::PhysicalPosition::new(x, y));
+    let _ = window.set_size(tauri::PhysicalSize::new(w.saturating_sub(frame_w), h.saturating_sub(frame_h)));
 }
 
 /// The one channel a page has into this shell: navigating to a scheme the
