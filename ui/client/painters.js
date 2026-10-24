@@ -8,20 +8,6 @@
 import { nextFrame } from "./next-frame.js";
 
 /**
- * Where a cell lies on this sheet. A layout's cells are in its own pixels,
- * and a sheet can come at another size than the layout last told: the mosaic
- * is built at the widest any page asks, and it is rebuilt when a page that
- * asked wider goes, as one does on every show tab switch, before the new
- * layout reaches this page. Cut at the layout's pixels, the cell then fell
- * off the sheet or on the wrong part of it. Scaled, it is the same cell.
- */
-export function cellOn(bitmap, layout, cell) {
-  const sx = layout && layout.width > 0 && bitmap.width ? bitmap.width / layout.width : 1;
-  const sy = layout && layout.height > 0 && bitmap.height ? bitmap.height / layout.height : 1;
-  return [cell.x * sx, cell.y * sy, cell.w * sx, cell.h * sy];
-}
-
-/**
  * Holds the newest sheet as one ImageBitmap and paints cells out of it.
  *
  * One decode per frame for the whole mosaic, then a canvas blit per visible
@@ -118,8 +104,7 @@ export class SheetPainter {
     if (!cell || !w || !h) return;
     const ctx = canvas.getContext("2d", { alpha: false });
     if (!ctx) return;
-    const [x, y, cw, ch] = cellOn(this.bitmap, this.layout, cell);
-    ctx.drawImage(this.bitmap, x, y, cw, ch, 0, 0, w, h);
+    ctx.drawImage(this.bitmap, cell.x, cell.y, cell.w, cell.h, 0, 0, w, h);
     this.painted.set(canvas, stamp);
   }
 
