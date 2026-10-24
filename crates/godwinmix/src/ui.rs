@@ -584,6 +584,7 @@ const DEV_ASSETS: &[(&str, &str)] = &[
     // as tests and as a page to look at: /test/shows.html?scene=routing.
     ("test/shows.js", include_str!("../../../ui/test/shows.js")),
     ("test/shows-switch.js", include_str!("../../../ui/test/shows-switch.js")),
+    ("test/shows-close.js", include_str!("../../../ui/test/shows-close.js")),
     ("test/shows-stub.js", include_str!("../../../ui/test/shows-stub.js")),
     ("test/shows-preview.js", include_str!("../../../ui/test/shows-preview.js")),
     ("test/shows.html", include_str!("../../../ui/test/shows.html")),

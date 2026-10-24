@@ -113,6 +113,7 @@ export function methods(stub) {
     "show.output.set": (p) => { const s = find(p.id || p.show); const o = s.outputs.find((x) => x.id === p.output); for (const k of ["uri", "enabled", "rendition", "params"]) if (k in p) o[k] = p[k]; changed(s); return o; },
     "show.output.remove": (p) => { const s = find(p.id || p.show); s.outputs = s.outputs.filter((x) => x.id !== p.output); changed(s); return { removed: p.output }; },
     "show.add_many": (p) => addMany(stub, p),
+    "show.open": (p) => { const s = find(p.id); s.closed = false; if (s.state === "stopped") s.state = "running"; changed(s); return s; },
   };
 }
 

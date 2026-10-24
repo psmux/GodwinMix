@@ -15,7 +15,8 @@ import { modal } from "./modal.js";
 import { toast, errorToast } from "./toast.js";
 import { switchTo, nav } from "./show-actions.js";
 
-const DESKTOP = /GodwinMix-Desktop/.test(navigator.userAgent);
+/** Whether the desktop app is around this page; a test says so itself. */
+export const shell = { desktop: /GodwinMix-Desktop/.test(navigator.userAgent) };
 export const LAST = "gmx.shows.closed";
 
 export async function close(view, show) {
@@ -32,7 +33,7 @@ export async function close(view, show) {
  * tab. A page in a browser has no app to quit, so it says what to do.
  */
 function last(show) {
-  if (DESKTOP) return nav.go("godwinmix://quit");
+  if (shell.desktop) return nav.go("godwinmix://quit");
   toast({ text: `${show.name} is the only open show, so its tab stays. Closing this page leaves the station and the show running; to stop the show, use Stop show in its tab's menu.` });
 }
 
