@@ -1145,7 +1145,7 @@ mod tests {
     }
 
     #[test]
-    fn the_page_a_volunteer_opens_stays_under_397_kb() {
+    fn the_page_a_volunteer_opens_stays_under_398_kb() {
         // The budget from 07 Phase 3, against the set it was written about:
         // what a browser fetches to put a usable mixer on screen.
         //
@@ -1158,6 +1158,14 @@ mod tests {
         // eager set is what is measured here, the whole directory is measured
         // below, and `the_designer_is_not_in_the_eager_set` keeps the line
         // between them where it is.
+        //
+        // Raised to 398 kB in 0.3.17, by 1 kB more, for closing a show from
+        // its tab: the × on every tab and its styles (visible on the chosen
+        // tab, under the pointer, and always under a finger), a middle click,
+        // closed shows kept out of the row, and Ctrl+Shift+T for Reopen
+        // closed show. What closing asks and does loads only when a show is
+        // closed (shell/show-close.js). Measured at 407243 bytes, 1087 of
+        // them for this.
         //
         // Raised to 397 kB in 0.3.17, by 1 kB, for what a mixer page needs
         // now that its show tabs behave like a browser's: Ctrl+Tab, Ctrl+PageDown
@@ -1203,8 +1211,8 @@ mod tests {
             bytes += source_of(extra).map(|b| b.len()).unwrap_or(0);
         }
         assert!(
-            bytes < 397 * 1024,
-            "the page loads {} files and {bytes} bytes, over the 397 kB budget",
+            bytes < 398 * 1024,
+            "the page loads {} files and {bytes} bytes, over the 398 kB budget",
             eager.len()
         );
     }
@@ -1228,7 +1236,7 @@ mod tests {
     }
 
     #[test]
-    fn the_page_with_the_composer_open_stays_under_505_kb() {
+    fn the_page_with_the_composer_open_stays_under_507_kb() {
         // The other half of the rule: the lazy set is not somewhere to hide
         // things. This is the heaviest thing a session can become, the page
         // plus the whole designer and the two kits only it uses, and it is the
@@ -1244,8 +1252,10 @@ mod tests {
         }
         // Raised to 504 kB with the page's own budget, for the same four, and
         // to 505 kB with it in 0.3.17, for the show tabs' keys: the composer's
-        // own files did not grow. Measured at 516509 bytes.
-        assert!(bytes < 505 * 1024, "the page with the composer open is {bytes} bytes, over the 505 kB budget");
+        // own files did not grow. Measured at 516509 bytes. Raised to 507 kB
+        // with the page's own budget, for closing a show from its tab, and
+        // again the composer's files did not grow: measured at 518135 bytes.
+        assert!(bytes < 507 * 1024, "the page with the composer open is {bytes} bytes, over the 507 kB budget");
     }
 
     #[test]

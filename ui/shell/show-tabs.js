@@ -41,7 +41,7 @@ export function showTabs(client) {
   for (const t of ["focusin", "pointerover"]) row.addEventListener(t, () => actions().catch(() => {}), { once: true });
   for (const type of ["click", "dblclick", "keydown", "contextmenu", "auxclick", "mousedown"]) {
     row.addEventListener(type, (e) => {
-      // A middle press would start the browser's autoscroll; its click closes.
+      // A middle press starts a browser's autoscroll; its click closes.
       if (type === "mousedown") return e.button === 1 && e.preventDefault();
       // Not the page's F2 or Delete, which act on scenes.
       if (type === "contextmenu" || /^(F2|Arrow|Home|End|ContextMenu|Delete)/.test(e.key)) e.preventDefault(), e.stopPropagation();

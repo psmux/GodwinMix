@@ -494,9 +494,9 @@ label { display: block; }
 .showtab-state.starting::before { content: "◌"; color: var(--warn); }
 .showtab-state.failed::before { content: "!"; color: var(--bad); font-weight: 700; }
 .showtab:has(.showtab-state) .showtab-name { color: var(--faint); }
-/* Close, as on a browser's tab: on the chosen tab, and on any under the pointer or the keyboard. */
-.showtab-x { visibility: hidden; display: grid; place-items: center; width: 18px; height: 18px; margin-right: -6px; border-radius: var(--radius-sm); color: var(--faint); }
-.shows:not(.one) .showtab[aria-selected="true"] .showtab-x, .showtab:hover .showtab-x, .showtab:focus-visible .showtab-x { visibility: visible; }
+/* Close, as on a browser's tab: shown on the chosen tab and under the pointer. */
+.showtab-x { visibility: hidden; width: 18px; margin-right: -6px; text-align: center; border-radius: var(--radius-sm); color: var(--faint); }
+.shows:not(.one) [aria-selected="true"] .showtab-x, .showtab:hover .showtab-x, .showtab:focus-visible .showtab-x { visibility: visible; }
 .showtab-x:hover { background: var(--line); color: var(--text); }
 .project-counts { align-self: flex-start; border-collapse: collapse; }
 .project-counts th, .project-counts td { text-align: left; padding: 2px 24px 2px 0; }
