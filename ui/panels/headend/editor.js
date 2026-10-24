@@ -38,7 +38,7 @@ export async function editChannel(client, opts = {}) {
   const ch = entry ? (opts.copy ? duplicateOf(entry.channel, names) : structuredClone(entry.channel)) : structuredClone(BLANK);
   const hls = { segments: "both", access: "open", segment_ms: 3400, ...(ch.hls || {}) };
 
-  const name = text(ch.name, "News", "Name", { pattern: NAME.source, maxlength: "64" });
+  const name = text(ch.name, "News", "Name", { maxlength: "64" });
   const title = text(ch.title || "", "News HD", "Title");
   const on = tick(ch.enabled !== false, "Running", "The channel runs");
   const main = inputBox(ch.input, "Input");
