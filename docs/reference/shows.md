@@ -90,6 +90,7 @@ refused as above.
 | `input` | what the show takes in, `{uri, program?, params?, backup?}`. Absent for a show that has none. An SRT passphrase reads `__secret__` here (see [Input passphrases](#input-passphrases)) |
 | `outputs` | a show without compositing's outputs, each as a channel destination is shown: `id`, `platform`, `label`, `uri_host`, `has_key`, `enabled`, `state`, `kbps`, `reconnects`, `error`, `rendition`, `plan` or `refused` when it converts, and `playback` (`master_url_path`, `dash_url_path`, `viewers`, and `segments`, `access` and `segment_ms`: which segments it serves, `cmaf`, `ts` or `both`, whether a player needs the viewer key, `keyed` or `open`, and the length it cuts) on an HLS output. Absent for a show that composites |
 | `health` | `{state, alarms}`, see [Health](#health) |
+| `closed` | `true` once closed from its tab with `show.close`: the page leaves it out of the tab row until `show.open`. Nothing of it is deleted, and `state` still says whether it runs |
 
 For a show without compositing, `state` is `running` unless it was stopped,
 `on_air` is `"input"` while its input arrives, and `programme_kbps` is what
@@ -138,6 +139,18 @@ Admin. A stopped show keeps its config and stays stopped across a restart of
 the station until `show.start`. A show that failed starts again with
 `show.start`. A show without compositing that is stopped is taken out of the
 direct host's table, so its input is closed and its outputs stop.
+
+### `show.close {id, keep_running?}` and `show.open {id}`
+
+Admin. What a show tab's `×` does, as quitting does for the desktop app:
+nothing is deleted. `show.close` marks the show closed, so the page leaves it
+out of the tab row, and stops it as `show.stop` does unless `keep_running` is
+`true`, when it carries on, on air and sending. Both are kept in the list of
+shows: a closed show does not start with the station, and one closed with
+`keep_running` comes back running and still closed. Refused for the last
+open show, because a page needs one to stand on; `main` closes like any
+other. `show.open` clears it and starts the show if closing stopped it. Both
+answer with the show and send `event/show.changed`.
 
 ### `show.set {id, name?, input?, compositing?}`
 
