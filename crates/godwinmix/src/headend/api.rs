@@ -75,11 +75,13 @@ async fn one(State(h): St, ConnectInfo(peer): ConnectInfo<SocketAddr>, headers: 
     }
 }
 
+fn no_file() -> Response {
+    refuse(StatusCode::CONFLICT, "this headend follows no Flussonic config, so there is no file to edit. Set its channels up on the headend screen, or with headend.channel.add on the station's control port.")
+}
+
 /// Write the document back to the file, atomically, and apply it.
 async fn save(h: &Arc<Headend>) -> Result<(), Box<Response>> {
-    let Some(file) = &h.file else {
-        return Err(Box::new(refuse(StatusCode::CONFLICT, "this headend follows no Flussonic config, so there is no file to edit. Set its channels up on the headend screen, or with headend.channel.add on the station's control port.")));
-    };
+    let Some(file) = &h.file else { return Err(Box::new(no_file())) };
     let text = h.doc.lock().text();
     let tmp = file.with_extension("conf.godwinmix-tmp");
     std::fs::write(&tmp, &text)
@@ -93,6 +95,9 @@ async fn save(h: &Arc<Headend>) -> Result<(), Box<Response>> {
 async fn put(State(h): St, ConnectInfo(peer): ConnectInfo<SocketAddr>, headers: HeaderMap, Path(name): Path<String>, body: axum::body::Bytes) -> Response {
     if let Err(r) = allowed(&h, &headers, peer, Access::Edit) {
         return *r;
+    }
+    if h.file.is_none() {
+        return no_file();
     }
     let Ok(v) = serde_json::from_slice::<Value>(&body) else { return refuse(StatusCode::BAD_REQUEST, "the body is not JSON") };
     let edited = {
@@ -112,6 +117,9 @@ async fn put(State(h): St, ConnectInfo(peer): ConnectInfo<SocketAddr>, headers: 
 async fn delete(State(h): St, ConnectInfo(peer): ConnectInfo<SocketAddr>, headers: HeaderMap, Path(name): Path<String>) -> Response {
     if let Err(r) = allowed(&h, &headers, peer, Access::Edit) {
         return *r;
+    }
+    if h.file.is_none() {
+        return no_file();
     }
     if let Err(e) = h.doc.lock().remove_stream(&name) {
         return refuse(StatusCode::NOT_FOUND, e.to_string());
