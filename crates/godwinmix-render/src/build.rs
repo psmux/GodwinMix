@@ -196,8 +196,15 @@ impl<'m> Builder<'m> {
         if self.share(&id, r.id()) {
             return Ok(id);
         }
-        let only: Vec<EncoderSlot> = self.encoders.iter().filter(|e| want.encoder.is_none_or(|p| e.hardware == (p == EncoderPick::Gpu))).cloned().collect();
-        let choice = match choose(self.model, &only, target, &self.used) {
+        let picked: Vec<EncoderSlot>;
+        let only = match want.encoder {
+            None => &self.encoders,
+            Some(p) => {
+                picked = self.encoders.iter().filter(|e| e.hardware == (p == EncoderPick::Gpu)).cloned().collect();
+                &picked
+            }
+        };
+        let choice = match choose(self.model, only, target, &self.used) {
             Ok(choice) => choice,
             Err(tried) => return Err(self.no_encoder(r, target, tried)),
         };
