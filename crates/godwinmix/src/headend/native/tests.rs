@@ -135,3 +135,16 @@ fn the_export_reads_back_as_the_same_plans() {
     assert_eq!(media(&back[0]), media(&plan(&a, &profiles).unwrap()), "{}", out.text);
     assert_eq!(media(&back[1]), media(&plan(&b, &profiles).unwrap()), "{}", out.text);
 }
+
+#[test]
+fn a_scan_takes_the_picture_from_the_numbers_when_the_event_has_only_sound() {
+    use godwinmix_protocol::headend::ScannedProgram;
+    let mut p = ScannedProgram { number: 2, streams: vec!["h264".into(), "aac".into()], ..ScannedProgram::default() };
+    let stats = json!({"video_codec": "h264", "width": 640, "height": 360, "fps": 25.0, "audio_codec": "aac", "audio_channels": 1, "kbps": 900});
+    let event = json!({"tracks": [{"track": 0, "kind": "audio", "codec": "aac", "channels": 1, "lang": "eng"}]});
+    super::scan_read::fill(&mut p, Some(&stats), Some(&event));
+    let kinds: Vec<(&str, Option<u32>)> = p.tracks.iter().map(|t| (t.kind.as_str(), t.width)).collect();
+    assert_eq!(kinds, [("video", Some(640)), ("audio", None)]);
+    assert_eq!(p.tracks[1].lang.as_deref(), Some("eng"), "the event's own track is kept");
+    assert!(super::scan_read::heard(&p, Some(&stats)));
+}

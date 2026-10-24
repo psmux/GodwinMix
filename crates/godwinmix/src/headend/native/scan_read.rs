@@ -60,21 +60,20 @@ fn track(t: &Value) -> ScannedTrack {
     }
 }
 
-/// One program's probe, read into its program: the tracks the host saw,
-/// or the one video and one sound its numbers say when it lists none.
+/// One program's probe, read into its program: the tracks the host said in
+/// its last `direct.input`, with the picture or sound its numbers have and
+/// that event did not yet, since the event can be a second behind.
 pub fn fill(p: &mut ScannedProgram, input: Option<&Value>, event: Option<&Value>) {
     let Some(i) = input else { return };
     p.kbps = num(&i["kbps"]);
     p.scrambled = i["scrambled"].as_u64().unwrap_or(0) > 0 || event.is_some_and(|e| e["scrambled"].as_u64().unwrap_or(0) > 0);
-    let tracks: Vec<ScannedTrack> = event.and_then(|e| e["tracks"].as_array()).into_iter().flatten().map(track).collect();
-    if !tracks.is_empty() {
-        p.tracks = tracks;
-        return;
+    p.tracks = event.and_then(|e| e["tracks"].as_array()).into_iter().flatten().map(track).collect();
+    let has = |p: &ScannedProgram, kind: &str| p.tracks.iter().any(|t| t.kind == kind);
+    if let Some(codec) = i["video_codec"].as_str().filter(|c| !c.is_empty() && !has(p, "video")) {
+        let v = ScannedTrack { kind: "video".into(), codec: codec.into(), width: num(&i["width"]), height: num(&i["height"]), fps: i["fps"].as_f64().filter(|f| *f > 0.0), ..ScannedTrack::default() };
+        p.tracks.insert(0, v);
     }
-    if let Some(codec) = i["video_codec"].as_str().filter(|c| !c.is_empty()) {
-        p.tracks.push(ScannedTrack { kind: "video".into(), codec: codec.into(), width: num(&i["width"]), height: num(&i["height"]), fps: i["fps"].as_f64().filter(|f| *f > 0.0), ..ScannedTrack::default() });
-    }
-    if let Some(codec) = i["audio_codec"].as_str().filter(|c| !c.is_empty()) {
+    if let Some(codec) = i["audio_codec"].as_str().filter(|c| !c.is_empty() && !has(p, "audio")) {
         p.tracks.push(ScannedTrack { kind: "audio".into(), codec: codec.into(), channels: num(&i["audio_channels"]), ..ScannedTrack::default() });
     }
 }
