@@ -10,7 +10,17 @@ export PATH="$HOME/.cargo/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
 cd "$(dirname "$0")/.."
 : "${CEF_PATH:=$HOME/.cache/gmx-cef}"
 export CEF_PATH
-cargo build --release 2>&1 | grep -E '^(error|\s+-->)' -A6 | head -20 || true
+# Quiet on success. On a failure, show the end of cargo's output: the cef
+# crate's download of CEF happens in this build, and a failed download used
+# to leave only "no CEF framework" below with the reason thrown away.
+log="$(mktemp)"
+if ! cargo build --release >"$log" 2>&1; then
+    tail -40 "$log"
+    rm -f "$log"
+    echo "cargo build --release failed in browser/" >&2
+    exit 1
+fi
+rm -f "$log"
 NAME=godwinmix-browser
 REL=target/release
 FW="$(find "$CEF_PATH" -maxdepth 3 -type d -name 'Chromium Embedded Framework.framework' | head -1)"
