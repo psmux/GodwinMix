@@ -448,6 +448,7 @@ const ASSETS: &[(&str, &str)] = &[
     ("shell/direct-page.js", include_str!("../../../ui/shell/direct-page.js")),
     ("shell/show-file.js", include_str!("../../../ui/shell/show-file.js")),
     ("shell/show-remove.js", include_str!("../../../ui/shell/show-remove.js")),
+    ("shell/show-close.js", include_str!("../../../ui/shell/show-close.js")),
     ("shell/show-rename.js", include_str!("../../../ui/shell/show-rename.js")),
     ("shell/shows.css", include_str!("../../../ui/shell/shows.css")),
     ("shell/settings-dialog.js", include_str!("../../../ui/shell/settings-dialog.js")),

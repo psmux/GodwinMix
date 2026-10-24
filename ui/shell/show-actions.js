@@ -1,6 +1,6 @@
 // What a person does to a show tab: switch to it, rename it, start or stop
-// it, remove it, and make a new one. Fetched the first time any of that is
-// asked for; show-tabs.js only draws.
+// it, close it, remove it, and make a new one. Fetched the first time any of
+// that is asked for; show-tabs.js only draws.
 //
 // Switching loads the page again on the other show's socket (`?show=<id>`,
 // the one contract every panel already follows), so no panel is left showing
@@ -11,6 +11,7 @@ import { el } from "./dom.js";
 import { contextMenu } from "./menu.js";
 import { errorToast } from "./toast.js";
 import { remove } from "./show-remove.js";
+import { close } from "./show-close.js";
 import { draw } from "./show-tabs.js";
 import { rename } from "./show-rename.js";
 
@@ -30,6 +31,11 @@ export function handle(view, e) {
   if (e.type === "click" && e.target.closest("[data-act=new]")) return import("./show-file.js").then((m) => m.newShow(view.client));
   if (e.type === "click" && e.target.closest("[data-act=wall]")) return import("../panels/wall/view.js").then((m) => m.toggleWall(view.client));
   if (!show || e.target.closest("input")) return;
+  // The × and a middle click close the show, as they close a browser's tab,
+  // and never switch to it first. A quick second click on the × is not a
+  // rename either.
+  if (e.type === "auxclick") return e.button === 1 && close(view, show);
+  if (e.target.closest(".showtab-x") && (e.type === "click" || e.type === "dblclick")) return e.type === "click" && close(view, show);
   if (e.type === "click") return clicked(view, show, e);
   // A double click renames this show only. On another show's tab the first
   // click has already switched, as a browser's tab does.
@@ -125,6 +131,7 @@ function tabMenu(view, show, x, y) {
       ? { label: busy ? "Stop starting" : "Stop show", run: () => startStop(view, show, "show.stop") }
       : { label: "Start show", run: () => startStop(view, show, "show.start") },
     { kind: "separator" },
+    { label: "Close show", run: () => close(view, show) },
     { label: "Remove show…", key: "Delete", run: () => remove(view, show) },
   ]);
 }

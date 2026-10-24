@@ -1,5 +1,5 @@
-// File > New show and File > Switch show, which the + on the show tabs and
-// the palette use as well. New show makes an empty show, a copy of the one
+// File > New show, File > Switch show and File > Reopen closed show, which
+// the + on the show tabs and the palette use as well. New show makes an empty show, a copy of the one
 // this page is on, or one from a saved project file, with `show.add`.
 
 import { el } from "./dom.js";
@@ -83,15 +83,39 @@ export async function newShow(client) {
   };
 }
 
-/** A menu of every show, or straight to one by id. */
+/** A menu of every show, closed ones too, or straight to one by id. */
 export async function switchShow(client, id) {
   if (id) return switchTo(id);
   const answer = await list(client, "Switch show");
   if (!answer) return;
   const current = here(answer);
+  menuOf(answer.shows || [], current, (s) => (s.closed ? reopen(client, s.id) : s.id !== current && switchTo(s.id)));
+}
+
+function menuOf(shows, current, run) {
   const row = document.querySelector(".shows")?.getBoundingClientRect();
-  contextMenu(row ? row.left : 80, row ? row.bottom + 4 : 60, (answer.shows || []).map((s) => ({
-    label: `${s.id === current ? "✓ " : ""}${s.name}${s.on_air ? ", on air" : s.state !== "running" ? `, ${s.state}` : ""}`,
-    run: () => s.id !== current && switchTo(s.id),
+  contextMenu(row ? row.left : 80, row ? row.bottom + 4 : 60, shows.map((s) => ({
+    label: `${s.id === current ? "✓ " : ""}${s.name}${s.closed ? `, closed${s.state === "running" ? ", running" : ""}` : s.on_air ? ", on air" : s.state !== "running" ? `, ${s.state}` : ""}`,
+    run: () => run(s),
   })));
+}
+
+const reopen = (client, id) => import("./show-close.js").then((m) => m.reopen(client, id));
+
+/**
+ * The show closed last, as a browser's Ctrl+Shift+T brings back its last
+ * tab. Which one that was is this browser's memory; the station only knows
+ * which are closed, so with that forgotten and several closed it asks.
+ */
+export async function reopenShow(client) {
+  const answer = await list(client, "Reopen closed show");
+  if (!answer) return;
+  const closed = (answer.shows || []).filter((s) => s.closed);
+  if (!closed.length) return toast({ text: "No show is closed. A show closed from its tab comes back from here." });
+  const { LAST } = await import("./show-close.js");
+  let last = null;
+  try { last = localStorage.getItem(LAST); } catch { /* asked instead */ }
+  const one = closed.length === 1 ? closed[0] : closed.find((s) => s.id === last);
+  if (one) return reopen(client, one.id);
+  menuOf(closed, null, (s) => reopen(client, s.id));
 }

@@ -21,9 +21,11 @@ export function showTabs(client) {
   const row = el("div.shows", { hidden: true }, [list, add, wall]);
   const view = { client, row, list, shows: [], current: null };
   view.read = () => client.call("show.list", {}).then((a) => {
-    view.shows = a.shows || [];
+    // A closed show is kept, and listed, but has no tab.
+    view.all = a.shows || [];
+    view.shows = view.all.filter((s) => !s.closed);
     view.current = new URLSearchParams(location.search).get("show") || a.current;
-    // This page's show was removed, here or elsewhere: go to the first one.
+    // This page's show was removed or closed, here or elsewhere: go to the first one.
     const has = (id) => view.shows.some((s) => s.id === id);
     if (view.shows.length && !has(view.current)) return actions().then((m) => m.switchTo(has(a.current) ? a.current : view.shows[0].id));
     draw(view);
@@ -37,8 +39,10 @@ export function showTabs(client) {
   window.addEventListener("keydown", onKey, true);
   const stop = () => { held(); offs.forEach((f) => f()); window.removeEventListener("keydown", onKey, true); row.remove(); };
   for (const t of ["focusin", "pointerover"]) row.addEventListener(t, () => actions().catch(() => {}), { once: true });
-  for (const type of ["click", "dblclick", "keydown", "contextmenu"]) {
+  for (const type of ["click", "dblclick", "keydown", "contextmenu", "auxclick", "mousedown"]) {
     row.addEventListener(type, (e) => {
+      // A middle press would start the browser's autoscroll; its click closes.
+      if (type === "mousedown") return e.button === 1 && e.preventDefault();
       // Not the page's F2 or Delete, which act on scenes.
       if (type === "contextmenu" || /^(F2|Arrow|Home|End|ContextMenu|Delete)/.test(e.key)) e.preventDefault(), e.stopPropagation();
       if (type !== "keydown" || e.key !== "Tab") actions().then((m) => m.handle(view, e));
@@ -62,6 +66,7 @@ export function draw(view) {
       s.on_air ? el("span.dot.onair", { "aria-label": "on air" }) : null,
       el("span.showtab-name", { text: s.name }),
       WORD[s.state] ? el(`span.showtab-state.${s.state}`, { text: WORD[s.state] }) : null,
+      el("span.showtab-x", { text: "×", title: "Close show", "aria-hidden": "true" }),
     ]);
   }));
   if (keep) view.list.querySelector(`[data-show="${CSS.escape(keep)}"]`)?.focus();
