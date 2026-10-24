@@ -106,3 +106,12 @@ async fn a_headend_with_no_file_serves_its_own_channels_on_flussonics_urls() {
     assert_eq!(put.status().as_u16(), 409, "no file to edit");
     let _ = dir;
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_headend_with_no_file_and_no_port_binds_nothing_more() {
+    let (dir, port) = folder("headend-bare");
+    let st = start(dir.clone(), port, &["headend"]).await;
+    let mut ws = rpc(&st, "").await;
+    let status = ok(&call(&mut ws, 1, "headend.status", json!({})).await).clone();
+    assert!(status["listeners"].as_array().is_none_or(Vec::is_empty), "{status}");
+}

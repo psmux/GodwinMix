@@ -84,7 +84,11 @@ pub async fn start(st: Arc<Station>, s: Settings) -> Result<()> {
         Some(f) => read(f)?,
         None => Document::parse("").map_err(|e| anyhow::anyhow!("an empty config: {e}"))?,
     };
-    let listeners = super::facade::listeners(&doc.config, s.port, s.address.as_deref());
+    // With no file, Flussonic's URLs answer only where a port was asked for.
+    let listeners = match (&s.file, s.port) {
+        (None, None) => Vec::new(),
+        _ => super::facade::listeners(&doc.config, s.port, s.address.as_deref()),
+    };
     let mut bound = Vec::new();
     for addr in &listeners {
         let l = tokio::net::TcpListener::bind(addr).await.with_context(|| format!("binding {addr} for Flussonic's URLs and API"))?;
