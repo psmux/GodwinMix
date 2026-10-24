@@ -92,6 +92,18 @@ export async function switchTests(test, eq, ok, { row, key, until, wait }) {
   });
   r.node.remove();
 
+  r = await fresh();
+  const headend = await import("../panels/headend/view.js");
+  headend.toggleHeadend(showStub());
+  await until(() => document.querySelector("section.he"));
+  r.tab("kids").dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 }));
+  await until(() => went.length);
+  test("with the headend page open, a click on another show's tab closes it and switches", () => {
+    ok(!document.querySelector("[data-cover]"), "no page left over the show");
+    ok(/[?&]show=kids\b/.test(went[0] || ""), went[0]);
+  });
+  r.node.remove();
+
   const stub = showStub();
   const node = await row(stub);
   node.querySelector('[data-show="kids"]').focus();

@@ -55,6 +55,9 @@ export function openFlowMap(client) {
   const bar = document.querySelector(".slot-header, gmx-header");
   root.style.top = `${bar ? Math.round(bar.getBoundingClientRect().bottom) : 44}px`;
   document.body.append(root);
+  // A show tab closes this page, since it covers the show's own page.
+  root.dataset.cover = "";
+  root.leave = () => view.close();
 
   const map = new FlowMap(canvas);
   // For a test or a screenshot to find the map from the page.

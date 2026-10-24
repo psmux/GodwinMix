@@ -53,6 +53,9 @@ export function openWall(client) {
   const bar = document.querySelector(".slot-header, gmx-header");
   root.style.top = `${bar ? Math.round(bar.getBoundingClientRect().bottom) : 44}px`;
   document.body.append(root);
+  // A show tab closes this page, since it covers the show's own page.
+  root.dataset.cover = "";
+  root.leave = () => view.close();
 
   let frame = 0;
   const later = () => { cancelAnimationFrame(frame); frame = requestAnimationFrame(() => view.draw()); };

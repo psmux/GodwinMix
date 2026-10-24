@@ -47,6 +47,9 @@ export function openGallery(client, opts = {}) {
   const header = document.querySelector(".slot-header, gmx-header");
   root.style.top = `${header ? Math.round(header.getBoundingClientRect().bottom) : 44}px`;
   document.body.append(root);
+  // A show tab closes this page, since it covers the show's own page.
+  root.dataset.cover = "";
+  root.leave = () => view.close();
   const store = makeStore(client, { reload: () => load(false), leave: () => view.close(), arrive: opts.arrive });
   const detail = (p) => openDetail(client, p, () => load(false), store);
 
