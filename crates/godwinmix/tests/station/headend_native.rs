@@ -124,7 +124,17 @@ async fn a_channel_set_up_here_and_one_imported_are_the_same_show() {
                         "audio": {"codec": "aac", "bitrate_kbps": 128, "tracks": "all"}});
     let by_hand = json!({"name": "CH202", "input": {"uri": "udp://@239.0.0.9:2001", "program": 7, "interface": "eth1"}, "profile": "custom", "custom": custom});
     ok(&call(&mut ws, 2, "headend.channel.add", json!({"channels": [by_hand]})).await);
-    let list = call(&mut ws, 3, "show.list", json!({})).await;
+    // An HLS output's params are read back once the packager has it, which
+    // for the show made second can take a moment.
+    let mut list = Value::Null;
+    for id in 0..40 {
+        list = call(&mut ws, 100 + id, "show.list", json!({})).await;
+        let handed = |s: &str| show(ok(&list), s).is_some_and(|x| x["outputs"][0]["params"].is_object());
+        if handed("ch201") && handed("ch202") {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(250)).await;
+    }
     let (a, b) = (show(ok(&list), "ch201").expect("the import's show"), show(ok(&list), "ch202").expect("the channel's show"));
     assert_eq!(a["input"], b["input"], "{a}\n{b}");
     assert_eq!(a["compositing"], b["compositing"]);
