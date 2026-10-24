@@ -27,16 +27,20 @@
 #   pwsh -File dev/windows-firewall.ps1 -Path C:\gm-test   # also allow builds under that folder
 #   pwsh -File dev/windows-firewall.ps1 -List              # print what it would do, change nothing
 #   pwsh -File dev/windows-firewall.ps1 -Remove            # take its allow rules out
+#
+# It finds the builds in the checkout it sits in. A copy saved anywhere else
+# needs -Repo <checkout> (or CARGO_TARGET_DIR). It also allows gst-launch-1.0
+# when it is on PATH, since the tests run GStreamer pipelines that listen.
 
 param(
     [switch]$Remove,
     [switch]$List,
-    [string[]]$Path = @()
+    [string[]]$Path = @(),
+    [string]$Repo = (Split-Path -Parent $PSScriptRoot)
 )
 
 $group = "GodwinMix dev builds"
-$repo = Split-Path -Parent $PSScriptRoot
-$target = if ($env:CARGO_TARGET_DIR) { $env:CARGO_TARGET_DIR } else { Join-Path $repo "target" }
+$target = if ($env:CARGO_TARGET_DIR) { $env:CARGO_TARGET_DIR } else { Join-Path $Repo "target" }
 $names = '^(godwinmix|gmx)[-_].*\.exe$|^(godwinmix|gmx)\.exe$'
 
 if ($Remove) {
@@ -48,15 +52,21 @@ if ($Remove) {
 # Block rules Windows made from a prompt for one of our programs. Prompt rules
 # have no group; rules a person or another tool wrote on purpose usually do,
 # and those are left alone.
-$blocks = Get-NetFirewallRule -Action Block -ErrorAction SilentlyContinue |
+# One call for every rule's program, joined on the rule's id; asking rule by
+# rule takes minutes on a machine with a few thousand rules.
+$programOf = @{}
+foreach ($filter in Get-NetFirewallApplicationFilter -ErrorAction SilentlyContinue) {
+    $programOf[$filter.InstanceID] = $filter.Program
+}
+$blocks = @(Get-NetFirewallRule -Action Block -ErrorAction SilentlyContinue |
     Where-Object { -not $_.Group } |
     Where-Object {
-        $program = ($_ | Get-NetFirewallApplicationFilter).Program
+        $program = $programOf[$_.InstanceID]
         $program -and (Split-Path -Leaf $program) -match $names
-    }
+    })
 
-$programs = @(foreach ($profile in "debug", "release") {
-    foreach ($dir in (Join-Path $target $profile), (Join-Path $target "$profile\deps")) {
+$programs = @(foreach ($build in "debug", "release") {
+    foreach ($dir in (Join-Path $target $build), (Join-Path $target "$build\deps")) {
         if (Test-Path $dir) { Get-ChildItem $dir -Filter *.exe | Where-Object Name -match $names | ForEach-Object FullName }
     }
 })
@@ -72,7 +82,7 @@ $programs = @($programs | Sort-Object -Unique)
 
 if ($List) {
     "would remove $(@($blocks).Count) prompt block rules:"
-    $blocks | ForEach-Object { "  $($_.DisplayName) [$($_.Profile)]: $(($_ | Get-NetFirewallApplicationFilter).Program)" }
+    $blocks | ForEach-Object { "  $($_.DisplayName) [$($_.Profile)]: $($programOf[$_.InstanceID])" }
     "would allow $($programs.Count) programs:"
     $programs | ForEach-Object { "  $_" }
     return
@@ -84,7 +94,7 @@ $blocks | Remove-NetFirewallRule
 # builds go.
 $kept = @{}
 foreach ($rule in Get-NetFirewallRule -Group $group -ErrorAction SilentlyContinue) {
-    $program = ($rule | Get-NetFirewallApplicationFilter).Program
+    $program = $programOf[$rule.InstanceID]
     if ($program -and (Test-Path -LiteralPath $program) -and -not $kept[$program]) { $kept[$program] = $true }
     else { $rule | Remove-NetFirewallRule }
 }
