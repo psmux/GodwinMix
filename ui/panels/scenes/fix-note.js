@@ -24,9 +24,18 @@ export function nameOf(client, id) {
   return (source && source.name) || id;
 }
 
-/** "3 sources here are not running", or "Lyrics is not running". */
+/** A source the mixer does not have at all: removed since the scene was made. */
+const gone = (client, id) => !(client && client.store && client.store.source(id));
+
+/**
+ * "3 sources here are not running", "Lyrics is not running", or for one
+ * that is gone "slides-2 is no longer in this mixer": a source removed
+ * since is not one that can be started, and "is not running" sent a tester
+ * looking for a source that was not there.
+ */
 export function summaryLine(client, ids) {
-  if (ids.length === 1) return `${nameOf(client, ids[0])} is not running`;
+  if (ids.length === 1) return `${nameOf(client, ids[0])} ${gone(client, ids[0]) ? "is no longer in this mixer" : "is not running"}`;
+  if (ids.every((id) => gone(client, id))) return `${ids.length} sources here are no longer in this mixer`;
   return `${ids.length} sources here are not running`;
 }
 
