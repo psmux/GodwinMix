@@ -20,8 +20,8 @@
 # need none of this.
 #
 # Run it from an elevated PowerShell after a build that added test binaries,
-# or after unpacking a test build somewhere. It replaces its own rules each
-# time.
+# or after unpacking a test build somewhere. It keeps its own rules for
+# programs that still exist and drops the rest.
 #
 #   pwsh -File dev/windows-firewall.ps1                    # clear blocks, add or refresh
 #   pwsh -File dev/windows-firewall.ps1 -Path C:\gm-test   # also allow builds under that folder
@@ -79,10 +79,18 @@ if ($List) {
 }
 
 $blocks | Remove-NetFirewallRule
-Get-NetFirewallRule -Group $group -ErrorAction SilentlyContinue | Remove-NetFirewallRule
-foreach ($program in $programs) {
+# Keep this script's rules for programs that still exist, so a run from
+# another folder or another checkout does not drop them; rules for deleted
+# builds go.
+$kept = @{}
+foreach ($rule in Get-NetFirewallRule -Group $group -ErrorAction SilentlyContinue) {
+    $program = ($rule | Get-NetFirewallApplicationFilter).Program
+    if ($program -and (Test-Path -LiteralPath $program) -and -not $kept[$program]) { $kept[$program] = $true }
+    else { $rule | Remove-NetFirewallRule }
+}
+foreach ($program in $programs | Where-Object { -not $kept[$_] }) {
     New-NetFirewallRule -DisplayName "GodwinMix dev: $(Split-Path $program -Leaf)" -Group $group `
         -Direction Inbound -Action Allow -Program $program -RemoteAddress LocalSubnet `
         -Profile Private, Public | Out-Null
 }
-"removed $(@($blocks).Count) prompt block rules, allowed $($programs.Count) programs from the local subnet under '$group'"
+"removed $(@($blocks).Count) prompt block rules, kept $($kept.Count) and allowed $(@($programs | Where-Object { -not $kept[$_] }).Count) more programs from the local subnet under '$group'"
