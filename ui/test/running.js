@@ -57,6 +57,7 @@ const press = (root, text) => [...root.querySelectorAll("button")].find((b) => b
 
 export async function runningTests(test, eq, ok) {
   document.querySelectorAll(".still-running").forEach((b) => b.remove());
+  try { sessionStorage.removeItem("gmx.running.answered"); } catch {}
 
   test("the model lists what streams, records and receives, and leaves out what is stopped", () => {
     const items = runningThings({ outputs: [YOUTUBE, RECORDING, STOPPED, NO_KEY] }, [CHANNEL], { youtube: 4400 }, 1000000 + 90000);
@@ -160,6 +161,23 @@ export async function runningTests(test, eq, ok) {
   test("Stop all on the banner stops the stream and the recording", () => {
     eq(left.sent.map(([m]) => m).filter((m) => m !== "channel.list"), ["output.stop", "output.remove"]);
   });
+
+  // Answered once, the banner does not come back for the same things when
+  // the page loads again, as it does on every show tab switch.
+  const kept = standIn([{ ...YOUTUBE, id: "kept" }]);
+  const first = showBanner(kept, runningThings(kept.state));
+  press(first, "Keep");
+  test("a banner answered with Keep does not come back for the same outputs", () => {
+    ok(!first.isConnected, "Keep closes it");
+    eq(showBanner(kept, runningThings(kept.state)), null);
+  });
+  const more = standIn([{ ...YOUTUBE, id: "kept" }, { ...YOUTUBE, id: "other", uri_host: "rtmp://live.twitch.tv/…" }]);
+  const again = showBanner(more, runningThings(more.state));
+  test("something new still raises it, about the new thing alone", () => {
+    ok(again && again.textContent.includes("Twitch") && !again.textContent.includes("YouTube"), again && again.textContent);
+  });
+  again.remove();
+  document.querySelectorAll(".toast").forEach((t) => t.remove());
 
   // Stop streaming and Start streaming on an Outputs row.
   window.godwinmixPanels ||= [];
