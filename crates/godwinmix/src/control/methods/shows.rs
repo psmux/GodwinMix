@@ -14,7 +14,7 @@ use godwinmix_protocol::error::RpcError;
 use godwinmix_protocol::method::{no_params, schema_of, MethodDef, Registry, Tier};
 use godwinmix_protocol::requests::IdRequest;
 use godwinmix_protocol::scope::Scope;
-use godwinmix_protocol::shows::{Show, ShowAddRequest, ShowList, ShowRemoved, ShowRenameRequest, ShowState};
+use godwinmix_protocol::shows::{Show, ShowAddRequest, ShowCloseRequest, ShowList, ShowRemoved, ShowRenameRequest, ShowState};
 
 pub fn register(reg: &mut Registry<Call>) {
     reg.register(
@@ -85,6 +85,29 @@ pub fn register(reg: &mut Registry<Call>) {
         .params(schema_of::<IdRequest>)
         .result(schema_of::<Show>),
     );
+    reg.register(
+        MethodDef::new(
+            "show.close",
+            Scope::Admin,
+            "Close a show from the page's tab row, as quitting closes the app: nothing of it \
+             is deleted. It stops, and stays stopped across a restart of the station, unless \
+             keep_running, when it carries on in the background. Refused for the last open \
+             show. show.open brings it back.",
+            handler(|_call: Call, _| async move { Err::<serde_json::Value, _>(needs_station("show.close")) }),
+        )
+        .params(schema_of::<ShowCloseRequest>)
+        .result(schema_of::<Show>),
+    );
+    reg.register(
+        MethodDef::new(
+            "show.open",
+            Scope::Admin,
+            "Put a closed show back in the tab row. One that closing stopped starts again.",
+            handler(|_call: Call, _| async move { Err::<serde_json::Value, _>(needs_station("show.open")) }),
+        )
+        .params(schema_of::<IdRequest>)
+        .result(schema_of::<Show>),
+    );
     direct::register(reg);
 }
 
@@ -116,6 +139,7 @@ async fn alone(call: &Call) -> Result<ShowList, RpcError> {
         outputs: Vec::new(),
         health: Default::default(),
         alarms: None,
+        closed: false,
     };
     Ok(ShowList { shows: vec![show], current: id })
 }

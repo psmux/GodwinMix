@@ -19,6 +19,8 @@ pub async fn call(st: &Arc<Station>, method: &str, params: Value) -> Result<Valu
         "show.remove" => super::shows_api::remove(st, &id()?).await,
         "show.start" => super::shows_api::start(st, &id()?).await,
         "show.stop" => super::shows_api::stop(st, &id()?).await,
+        "show.close" => super::shows_api::close(st, parse(method, params.clone())?).await,
+        "show.open" => super::shows_api::open(st, &id()?).await,
         "show.set" => super::shows_set::set(st, parse(method, params)?).await,
         "show.add_many" => super::shows_bulk::add_many(st, parse(method, params)?).await,
         "show.remove_many" => super::shows_bulk::remove_many(st, parse(method, params)?).await,

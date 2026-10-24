@@ -76,7 +76,7 @@ export async function studioNextTests(test, eq, ok) {
     ok(layer.textContent.includes('Nothing to preview yet'), layer.textContent);
   });
   test('a source the mixer does not have, or one that failed, says so', () => {
-    eq(sourceTrouble({ sources }, 'gone'), 'not in this mixer');
+    eq(sourceTrouble({ sources }, 'gone'), 'removed, left out of the take');
     eq(sourceTrouble({ sources: [{ id: 'x', state: 'failed' }] }, 'x'), 'failed, trying again');
     eq(sourceTrouble({ sources }, 'cam-wide'), null);
   });

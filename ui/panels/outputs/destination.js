@@ -87,12 +87,70 @@ export async function addDestination(client, opts = {}) {
   return m;
 }
 
+/** Schemes that are a whole address with no key: UDP, RTP, RIST and the like. */
+const KEYED = ["rtmp", "rtmps", "srt"];
+const schemeOf = (uri) => (String(uri || "").match(/^([a-z][a-z0-9+.-]*):\/\//i) || [])[1]?.toLowerCase() || "";
+
+/**
+ * An output whose address is all there is to it, such as udp://239.10.0.1:5001.
+ * It is no platform on the table, so the edit form gets one of its own: an
+ * address of the same scheme, and no key.
+ */
+export function addressPlatform(scheme) {
+  return {
+    id: scheme,
+    title: `${scheme.toUpperCase()} address`,
+    where: "The whole address goes in the box. Left empty, the one in use is kept.",
+    provides: `${scheme}/output`,
+    fixed: false,
+    key: false,
+    hosts: [],
+    policy: "own",
+  };
+}
+
+/** The platform an edit form opens with, from what the record says. */
+export function platformFor(output) {
+  const named = output.platform && platform(output.platform);
+  if (named) return named;
+  const scheme = schemeOf(output.uri_host) || (output.platform && output.platform !== "custom" ? output.platform : "");
+  if (scheme && !KEYED.includes(scheme)) return addressPlatform(scheme);
+  return platformOfHost(output.uri_host);
+}
+
 /**
  * Change a destination that already exists, with the platform recognised from
  * the masked host, which is all a client is ever given.
  */
 export function editDestination(client, output, opts = {}) {
-  return openForm(client, platformOfHost(output.uri_host), output, opts.onDone);
+  return openForm(client, platformFor(output), output, opts.onDone);
+}
+
+/**
+ * Change one output of a show without compositing, from its row in the
+ * show's detail: the same form, saved with `show.output.set`. Its address
+ * and key are kept apart there, as a channel's are, and it has no reconnect
+ * policy or buffer of its own.
+ *
+ * @param {{show: string, shape?: object|null, onDone?: () => any}} opts
+ *   `shape` is the show's input, for the Format step to say when a copy is enough
+ */
+export function editShowOutput(client, output, opts) {
+  return openForm(client, platformFor(output), output, opts.onDone, opts.show, opts.shape);
+}
+
+/** `show.output.set`'s params for the form's answers, naming only what moved. */
+export function showParamsFor(p, output, show, values) {
+  const params = { id: show, output: output.id };
+  const server = String(values.server || "").trim();
+  const key = values.key === undefined ? "" : String(values.key).trim();
+  if (p.key && key) params.key = key;
+  if (server && server !== prefilledServer(p)) {
+    const wrong = schemeError(p, server);
+    if (wrong) return { error: wrong, field: "server" };
+    params.uri = server;
+  }
+  return { params };
 }
 
 /**
@@ -241,7 +299,8 @@ export function paramsFor(p, output, values) {
  * whoever is calling `output.add` directly.
  */
 export function schemeError(p, uri) {
-  const want = p.provides === "srt/output" ? ["srt://"] : ["rtmp://", "rtmps://"];
+  const kind = String(p.provides || "rtmp/output").split("/")[0];
+  const want = kind === "rtmp" ? ["rtmp://", "rtmps://"] : [`${kind}://`];
   const address = String(uri || "").trim();
   if (want.some((s) => address.toLowerCase().startsWith(s))) return null;
   const wanted = want.join(" or ");
@@ -255,10 +314,13 @@ function prefilledServer(p) {
   return p.fixed ? p.server : "";
 }
 
-async function openForm(client, p, output, onDone) {
+async function openForm(client, p, output, onDone, show, shape) {
   const { SchemaForm } = await import("../../client/schema-form.js");
   const editing = !!output;
-  const form = new SchemaForm(schemaFor(p, output), {});
+  const schema = schemaFor(p, output);
+  // A show's output keeps no policy or buffer of its own.
+  if (show) for (const k of ["policy", "queue_secs"]) delete schema.properties[k];
+  const form = new SchemaForm(schema, {});
   const save = el("button.btn.primary", { text: editing ? "Save" : "Start sending" });
   // The Format step and the place a refusal goes. Both live in renditions/,
   // which a core without renditions never makes do anything.
@@ -266,13 +328,13 @@ async function openForm(client, p, output, onDone) {
   const format = formatStep(client, {
     platform: p.id,
     platformTitle: p.title,
-    shape: programmeShape(client),
+    shape: show ? shape || null : programmeShape(client),
     current: editing ? output.rendition || { preset: "copy" } : undefined,
     id: () => (editing ? output.id : String(form.read().id || p.id).trim()),
   });
   const refused = el("div", { hidden: true });
   const m = modal({
-    title: editing ? `Edit ${output.id}` : p.title,
+    title: editing ? `Edit ${show ? output.label || output.id : output.id}` : p.title,
     body: el("div", {}, [el("p.dim.sm", { text: p.where, style: { marginTop: "0" } }), form.el, refused]),
     footer: [el("button.btn", { text: "Cancel", onclick: () => m.close() }), save],
   });
@@ -307,7 +369,7 @@ async function openForm(client, p, output, onDone) {
       toast({ kind: "warning", text: "Fill in the fields outlined in red." });
       return;
     }
-    const asked = paramsFor(p, output, form.read());
+    const asked = show ? showParamsFor(p, output, show, form.read()) : paramsFor(p, output, form.read());
     if (asked.error) {
       // The same red outline `validate` draws round an empty required box, so
       // a refusal points at the box it is about rather than only at the toast.
@@ -322,6 +384,7 @@ async function openForm(client, p, output, onDone) {
     await format.ready;
     const rendition = format.value();
     if (rendition !== undefined) asked.params.rendition = rendition;
+    if (show && Object.keys(asked.params).length === 2) return m.close();
     save.disabled = true;
     const sent = await send(asked.params);
     if (!sent) save.disabled = false;
@@ -330,7 +393,7 @@ async function openForm(client, p, output, onDone) {
   /** One add or set. A governor refusal stays in the form with its advice. */
   async function send(params) {
     try {
-      await client.call(editing ? "output.set" : "output.add", params);
+      await client.call(show ? "show.output.set" : editing ? "output.set" : "output.add", params);
     } catch (e) {
       const { isRefusal, showRefusal } = await import("../renditions/refusal.js");
       if (!isRefusal(e)) {
@@ -343,8 +406,9 @@ async function openForm(client, p, output, onDone) {
     m.close();
     // Accepted is not connected. Say what is happening, and say it again
     // when it is live; a failure arrives as the core's own alert.
-    toast({ text: editing ? `${params.id} saved. It reconnects now.` : `Connecting to ${p.title}. Outputs shows when it is live, or why not.` });
-    if (params.uri !== undefined) followStart(client, params.id, (text) => toast({ kind: "info", text }));
+    const name = show ? output.label || output.id : params.id;
+    toast({ text: editing ? `${name} saved. It reconnects now.` : `Connecting to ${p.title}. Outputs shows when it is live, or why not.` });
+    if (params.uri !== undefined && !show) followStart(client, params.id, (text) => toast({ kind: "info", text }));
     if (onDone) await onDone();
     return true;
   }

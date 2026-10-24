@@ -2,6 +2,7 @@
 //! and how much of the past is kept.
 
 use crate::config::Params;
+use super::access::{Access, Segments};
 use anyhow::{bail, Result};
 
 /// What one HLS output was asked for, with the defaults filled in.
@@ -15,11 +16,15 @@ pub struct HlsParams {
     pub part_ms: u32,
     /// Seconds of the past each rung keeps in memory and lists.
     pub window_s: u32,
+    /// CMAF, MPEG-TS or both.
+    pub segments: Segments,
+    /// A viewer key, or open.
+    pub access: Access,
 }
 
 impl Default for HlsParams {
     fn default() -> Self {
-        HlsParams { segment_ms: 2000, part_ms: 0, window_s: 30 }
+        HlsParams { segment_ms: 2000, part_ms: 0, window_s: 30, segments: Segments::Cmaf, access: Access::Keyed }
     }
 }
 
@@ -27,7 +32,8 @@ impl HlsParams {
     /// The part length LL-HLS gets when `low_latency = true` names no other.
     pub const PART_MS: u32 = 333;
 
-    /// Read `segment_ms`, `part_ms`, `low_latency` and `window` from an
+    /// Read `segment_ms`, `part_ms`, `low_latency`, `window`, `segments`,
+    /// `access` and `open_public` from an
     /// output's params. Low latency is on when `part_ms` is given or
     /// `low_latency = true`, and plain HLS otherwise. Anything else in the
     /// table is left for the output's other readers.
@@ -47,6 +53,7 @@ impl HlsParams {
         if let Some(v) = number(params, "window")? {
             out.window_s = v;
         }
+        (out.segments, out.access) = super::access::from_params(params)?;
         out.check()?;
         Ok(out)
     }
@@ -160,9 +167,9 @@ mod tests {
     fn a_fragment_is_a_whole_number_of_chunks() {
         let p = HlsParams { part_ms: 333, ..HlsParams::default() };
         assert_eq!(p.mux_durations(), (1_999_999_998, Some(333_333_333)));
-        let p = HlsParams { segment_ms: 1000, part_ms: 250, window_s: 6 };
+        let p = HlsParams { segment_ms: 1000, part_ms: 250, window_s: 6, ..HlsParams::default() };
         assert_eq!(p.mux_durations(), (1_000_000_000, Some(250_000_000)));
-        let p = HlsParams { segment_ms: 1000, part_ms: 200, window_s: 6 };
+        let p = HlsParams { segment_ms: 1000, part_ms: 200, window_s: 6, ..HlsParams::default() };
         assert_eq!(p.mux_durations(), (1_000_000_000, Some(200_000_000)));
         assert_eq!(HlsParams::default().mux_durations(), (2_000_000_000, None));
     }

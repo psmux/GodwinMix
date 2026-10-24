@@ -25,21 +25,79 @@ moves to the new show once it is made. A new empty show opens on an empty
 desk; the welcome tiles are under Settings, Show the welcome tiles again, if
 you want a preset.
 
-To switch, click the other show's tab. The page loads again on that show, with
-`?show=<id>` in its address, and your panels stay where you put them. File,
-Switch show lists every show with its state, which is quicker when there are
-many.
+To switch, click the other show's tab, once, as you would a browser's tab.
+The tab shows as chosen at once and the page loads again on that show, with
+`?show=<id>` in its address, so a reload stays there, and your panels stay
+where you put them. A double click or a double tap switches too. Switching
+only changes which show this page controls: nothing on air in any show is
+touched. `Ctrl+Tab` and `Ctrl+Shift+Tab` go to the next show and the one
+before, as do `Ctrl+PageDown` and `Ctrl+PageUp`, and `Cmd+Shift+]` and
+`Cmd+Shift+[` on a Mac. A browser keeps some of those for its own tabs, so
+in a browser window they may switch the browser's tab instead; the desktop
+app passes them all to the page. In a browser, `Tab` to the show tabs, move
+with the arrow keys and press `Enter`. File, Switch show lists every show
+with its state, which is quicker when there are many.
+
+Up to 0.3.16 a click waited a quarter second to see whether a second one
+followed, and a double click on another show's tab opened its name for
+renaming and never switched:
+
+![Before: a double click on Kids hall left the page on Main with Kids hall's name open for editing](../media/show-tabs/before-double-click.png)
+![After: the same double click is on Kids hall](../media/show-tabs/after-double-click.png)
 
 Click the tab of the show you are on, or right click any tab, for its menu:
-Rename, Start show or Stop show, and Remove show. Double click a tab, or press
-`F2` on it, to rename it where it is; `Enter` keeps the name and `Escape` puts
-the old one back. Remove asks first. The page will not remove the last show,
-or `main`, and says why when you try. If you remove the show you are on, the
+Rename, Start show or Stop show, Close show and Remove show. Double click the
+tab of the show you are on, or press `F2` on any tab, to rename it where it
+is; `Enter` keeps the name and `Escape` puts the old one back.
+
+### Close a show
+
+Each tab has a `×`, as a browser's tab does. It shows on the tab you are on
+and on any tab under the pointer, and always on a phone or a narrow window.
+A middle click on a tab does the same. Neither switches to the tab first.
+
+Closing a show is what quitting the desktop app is to the whole machine.
+Nothing is deleted: its scenes, sources and outputs are kept as they are and
+come back when it is opened again. With nothing of it live it closes at once.
+When something is live (it is on air, it streams to a destination, it serves
+a watch link, it records, or an encoder is sending in to it) the page asks
+first and lists what is running:
+
+* **Stop it and close** stops every stream and recording of that show, stops
+  the show and takes its tab away. It stays stopped when the station starts
+  again.
+* **Close and keep it running** takes its tab away and leaves it on air, the
+  way Keep running in the background leaves the desktop app running. It comes
+  back running after a restart of the station, and still closed.
+* **Cancel**, `Escape` or a click outside the question leaves it alone. Cancel
+  is where the keyboard starts.
+
+Closed is kept by the station, so a show closed here is closed in every
+browser. To open one again use File, Switch show, which lists closed shows
+with ", closed" after the name, or File, Reopen closed show (`Ctrl+Shift+T`
+in the desktop app; a browser keeps that key for its own tabs), which brings
+back the show you closed last. The monitoring wall shows closed shows as
+closed, with an Open button. A show that closing stopped starts again when
+it is opened.
+
+The last open tab cannot be closed from the page, since the page needs a
+show to stand on. In the desktop app its `×` is the app's own Quit, with the
+same question about anything live, the way a browser closes its window with
+its last tab. In a browser it says the station keeps running, and Stop show
+in the tab's menu stops the show. `main` closes like any other show while
+another is open. If you close the show you are on, the page moves to the tab
+next to it.
+
+### Remove a show
+
+Remove show in the tab's menu deletes the show, with its scenes, sources,
+outputs and folder. It asks first. The page will not remove the last show, or
+`main`, and says why when you try. If you remove the show you are on, the
 page moves to another one.
 
 The tabs are reachable from the keyboard: `Tab` lands on the show you are on,
-the arrow keys move along the row, `Enter` switches or opens the menu, and
-`Delete` removes. The [keyboard reference](../reference/keyboard.md#the-show-tabs)
+the arrow keys move along the row, `Enter` switches or opens the menu, the
+menu key opens the menu with Close show in it, and `Delete` removes. The [keyboard reference](../reference/keyboard.md#the-show-tabs)
 has the whole table.
 
 To see every show's outputs next to every channel's, open View, Routing: see
@@ -190,7 +248,7 @@ going. In a test with two shows recording their programmes, killing one with
 in 20.77 seconds with no gap. A show that keeps dying is left `failed` after
 the seventh time in a row; `show.start` tries again.
 
-## Stop, rename and remove
+## Stop, close, rename and remove
 
 ```sh
 curl -X POST localhost:8080/api/v1/shows/second-room/stop
@@ -199,7 +257,11 @@ curl -X DELETE localhost:8080/api/v1/shows/second-room
 ```
 
 A stopped show keeps its config and stays stopped until `show.start`, even
-across a restart. Removing a show deletes its folder. `main` cannot be
+across a restart. `show.close` (`POST /api/v1/shows/second-room/close`) is
+the tab's `×`: it stops the show unless `keep_running` is true, takes it out of
+the page's tab row, and deletes nothing; `closed` in `show.list` says so, and
+`show.open` (`POST /api/v1/shows/second-room/open`) puts it back, starting it
+again if closing stopped it. The last open show cannot be closed. Removing a show deletes its folder. `main` cannot be
 removed, because its config is the one the station was started with; stop it
 instead.
 

@@ -78,13 +78,7 @@ fn build(app: &AppHandle, definition: &Definition) -> tauri::Result<Menu<Wry>> {
     for page in &definition.menus {
         menu = menu.item(&submenu(app, page)?);
     }
-    let window = SubmenuBuilder::new(app, "Window")
-        .items(&[
-            &PredefinedMenuItem::minimize(app, None)?,
-            &PredefinedMenuItem::maximize(app, None)?,
-            &PredefinedMenuItem::fullscreen(app, None)?,
-        ])
-        .build()?;
+    let window = crate::fullscreen::window_menu(app)?;
     menu.item(&window).build()
 }
 

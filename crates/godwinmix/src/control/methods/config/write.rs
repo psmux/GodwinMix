@@ -62,6 +62,12 @@ pub struct ConfigSetResult {
 
 pub(super) async fn set(call: Call, params: Value) -> Result<Value, RpcError> {
     let req: ConfigSetRequest = call.params(&params)?;
+    set_in(&config_file(&call)?, req, call.dry_run, Some(&call)).await
+}
+
+/// `config.set` on one file. `live` is the core to hand what applies now;
+/// a station with no show running has none, and its keys wait for a start.
+pub async fn set_in(path: &std::path::Path, req: ConfigSetRequest, dry_run: bool, live: Option<&Call>) -> Result<Value, RpcError> {
     if req.values.is_empty() {
         return Err(RpcError::invalid_params(
             "config.set was sent no values. Send `values` with at least one dotted key, \
@@ -78,11 +84,16 @@ pub(super) async fn set(call: Call, params: Value) -> Result<Value, RpcError> {
         }
         changes.push(settable::check(key, value).map_err(refusal)?);
     }
-    commit(&call, changes, unchanged, req.dry_run || call.dry_run).await
+    commit(path, live, changes, unchanged, req.dry_run || dry_run).await
 }
 
 pub(super) async fn reset(call: Call, params: Value) -> Result<Value, RpcError> {
     let req: ConfigResetRequest = call.params(&params)?;
+    reset_in(&config_file(&call)?, req, call.dry_run, Some(&call)).await
+}
+
+/// `config.reset` on one file, as [`set_in`].
+pub async fn reset_in(path: &std::path::Path, req: ConfigResetRequest, dry_run: bool, live: Option<&Call>) -> Result<Value, RpcError> {
     if req.keys.is_empty() {
         return Err(RpcError::invalid_params(
             "config.reset was sent no keys. Send `keys` with the dotted keys to put back, \
@@ -94,12 +105,12 @@ pub(super) async fn reset(call: Call, params: Value) -> Result<Value, RpcError> 
         settable::settable(key).map_err(refusal)?;
         changes.push((key.clone(), None));
     }
-    commit(&call, changes, Vec::new(), req.dry_run || call.dry_run).await
+    commit(path, live, changes, Vec::new(), req.dry_run || dry_run).await
 }
 
 /// Write the changes, apply the live ones, and say what waits.
-async fn commit(call: &Call, changes: Vec<Change>, unchanged: Vec<String>, dry_run: bool) -> Result<Value, RpcError> {
-    let path = config_file(call)?;
+async fn commit(path: &std::path::Path, live: Option<&Call>, changes: Vec<Change>, unchanged: Vec<String>, dry_run: bool) -> Result<Value, RpcError> {
+    let path = path.to_path_buf();
     let written = {
         let path = path.clone();
         let changes = changes.clone();
@@ -111,7 +122,7 @@ async fn commit(call: &Call, changes: Vec<Change>, unchanged: Vec<String>, dry_r
         .map_err(|e| RpcError::internal(format!("writing {}: {e:#}", path.display())))?
         .map_err(refusal)?;
     let rows: Vec<&keys::Key> = changes.iter().filter_map(|(k, _)| keys::find(k)).collect();
-    if !dry_run && rows.iter().any(|k| k.applies != Applies::Restart) {
+    if let Some(call) = live.filter(|_| !dry_run && rows.iter().any(|k| k.applies != Applies::Restart)) {
         apply_live(call, &new).await?;
     }
     let state = FileState::read(&path)?;

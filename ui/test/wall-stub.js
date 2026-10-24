@@ -110,9 +110,10 @@ export function methods(stub) {
     "task.get": (p) => stub.tasks[p.task_id] || (() => { throw new RpcError(-32004, `There is no task "${p.task_id}".`, { kind: "task" }); })(),
     // `id` is the show and `output` the output, as channel.destination.* name them; `show` is another name for `id`.
     "show.output.add": (p) => { const s = find(p.id || p.show); const o = { id: p.output || `out-${s.outputs.length + 1}`, uri: p.uri, platform: p.platform, enabled: true, rendition: p.rendition ?? null, state: "connecting" }; s.outputs.push(o); changed(s); return o; },
-    "show.output.set": (p) => { const s = find(p.id || p.show); const o = s.outputs.find((x) => x.id === p.output); for (const k of ["uri", "enabled", "rendition"]) if (k in p) o[k] = p[k]; changed(s); return o; },
+    "show.output.set": (p) => { const s = find(p.id || p.show); const o = s.outputs.find((x) => x.id === p.output); for (const k of ["uri", "enabled", "rendition", "params"]) if (k in p) o[k] = p[k]; changed(s); return o; },
     "show.output.remove": (p) => { const s = find(p.id || p.show); s.outputs = s.outputs.filter((x) => x.id !== p.output); changed(s); return { removed: p.output }; },
     "show.add_many": (p) => addMany(stub, p),
+    "show.open": (p) => { const s = find(p.id); s.closed = false; if (s.state === "stopped") s.state = "running"; changed(s); return s; },
   };
 }
 

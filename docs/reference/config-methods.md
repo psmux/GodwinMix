@@ -121,11 +121,18 @@ table and the structs to the same set of keys.
   "type": "integer", "format": "uint32", "title": "Video bitrate",
   "description": "Video bitrate in kbit/s for the outgoing program stream.",
   "default": 6000, "minimum": 100, "maximum": 100000,
-  "x-gmx-unit": "kbit/s", "x-gmx-group": "program", "x-gmx-applies": "restart"
+  "x-gmx-unit": "kbit/s", "x-gmx-group": "program", "x-gmx-section": "program",
+  "x-gmx-applies": "restart"
 }
 ```
 
 A secret has `"format": "secret"` and no default.
+
+`x-gmx-section` is the key's section, the part before the dot.
+`x-gmx-group` is where a form shows it: the section, or `advanced` for a key
+few people need, which Mixer settings puts last under **Advanced**, closed.
+`governor.nvenc_session_probe` and `governor.nvenc_sessions` are the
+advanced keys today.
 
 ## Not covered
 

@@ -82,7 +82,7 @@ mod tests {
     use crate::media_tag::TagKind;
 
     fn tag(body: Vec<u8>, header: bool) -> MediaTag {
-        MediaTag { kind: TagKind::Audio, timestamp_ms: 0, keyframe: false, sequence_header: header, payload: Arc::from(body) }
+        MediaTag { track: 0, kind: TagKind::Audio, timestamp_ms: 0, keyframe: false, sequence_header: header, payload: Arc::from(body) }
     }
 
     fn mp2() -> MediaTag {

@@ -2,8 +2,8 @@
   "note": "The hot MCP tool list, measured by `gmx agent cost`. CI fails on a growth of more than 5 percent against these numbers, because a tool list is charged for on every call. Move them with `gmx agent cost --write-baseline` when the growth is deliberate.",
   "tools": {
     "headend": {
-      "count": 11,
-      "bytes": 16785
+      "count": 13,
+      "bytes": 18217
     },
     "minimal": {
       "count": 6,
@@ -11,7 +11,7 @@
     },
     "standard": {
       "count": 14,
-      "bytes": 18244
+      "bytes": 18433
     }
   }
 }

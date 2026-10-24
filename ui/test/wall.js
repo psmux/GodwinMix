@@ -6,7 +6,7 @@
 import { wallStub, headend } from "./wall-stub.js";
 import { wait, until, sent, openOn } from "./wall-help.js";
 import { actTests } from "./wall-act.js";
-import { bulkTests, detailTests } from "./wall-dialogs.js";
+import { bulkTests, detailTests, playlistTests } from "./wall-dialogs.js";
 
 export async function wallTests(test, eq, ok) {
   await modelTests(test, eq, ok);
@@ -15,6 +15,7 @@ export async function wallTests(test, eq, ok) {
   await actTests(test, eq, ok);
   await bulkTests(test, eq, ok);
   await detailTests(test, eq, ok);
+  await playlistTests(test, eq, ok);
 }
 
 async function modelTests(test, eq, ok) {

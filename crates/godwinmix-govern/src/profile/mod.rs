@@ -19,7 +19,6 @@ use godwinmix_protocol::rendition::{Cost, EncoderSlot, VideoCodec, VideoShape};
 struct Enc {
     cal: EncoderCal,
     cpu: Line,
-    wall: Line,
     /// Speed presets, fastest first, as a ratio to the configured one.
     presets: Vec<(String, f64)>,
 }
@@ -86,7 +85,7 @@ impl Profile {
             if slot.hardware {
                 return Cost {
                     cpu_millicores: (guess / 10).max(1),
-                    device_millis: (guess / 6).clamp(1, 1000),
+                    device_millis: hardware_share(shape.codec, x),
                     device_sessions: 1,
                     memory_mib,
                     egress_kbps: 0,
@@ -101,7 +100,7 @@ impl Profile {
         }
         Cost {
             cpu_millicores: cpu,
-            device_millis: (e.wall.at(x).round() as u32).clamp(1, 1000),
+            device_millis: hardware_share(shape.codec, x),
             device_sessions: 1,
             memory_mib,
             egress_kbps: 0,
@@ -134,7 +133,9 @@ impl Profile {
 fn enc_of(cal: &EncoderCal, margin: f64) -> Option<Enc> {
     let m = if cal.slot.hardware { 1.0 } else { margin };
     let cpu = Line::through(&cal.points.iter().map(|p| (p.mpix(), f64::from(p.cpu_millicores) * m)).collect::<Vec<_>>())?;
-    let wall = Line::through(&cal.points.iter().map(|p| (p.mpix(), f64::from(p.wall_ms))).collect::<Vec<_>>())?;
+    // Wall time is kept in the calibration for the record; a hardware
+    // encode's share of its device is priced by `hardware_share`.
+    Line::through(&cal.points.iter().map(|p| (p.mpix(), f64::from(p.wall_ms))).collect::<Vec<_>>())?;
     let presets = cal
         .presets
         .iter()
@@ -143,8 +144,23 @@ fn enc_of(cal: &EncoderCal, margin: f64) -> Option<Enc> {
             (pp.preset.clone(), f64::from(pp.point.cpu_millicores) * m / base)
         })
         .collect();
-    Some(Enc { cal: cal.clone(), cpu, wall, presets })
+    Some(Enc { cal: cal.clone(), cpu, presets })
 }
 
 #[cfg(test)]
 mod tests;
+
+/// A hardware encode's share of its device, in thousandths, at `x` megapixels
+/// a second. Not the calibration's: one session timed flat out measures how
+/// long a frame takes to come back, and an engine keeps many in flight. On an
+/// RTX 3060 class card with forty six broadcast channels at once (fifty two
+/// 720p30 encodes' worth, at NVENC's fastest preset) the engine read 85 to
+/// 92% busy, so a 720p30 H.264 encode is about 15 thousandths of it, and the
+/// rest in proportion to pixels per second. HEVC costs half as much again.
+fn hardware_share(codec: godwinmix_protocol::rendition::VideoCodec, x: f64) -> u32 {
+    let per_mpix = match codec {
+        godwinmix_protocol::rendition::VideoCodec::H265 => 0.82,
+        _ => 0.55,
+    };
+    ((per_mpix * x).round() as u32).clamp(1, 1000)
+}

@@ -25,6 +25,7 @@ export function savePrefs(o) {
 export function press(view, what, value) {
   const o = view.opts;
   if (what === "close") return view.close();
+  if (what === "headend") return view.close(), import("../headend/view.js").then((m) => m.showHeadend(view.client));
   if (what === "add") return import("./bulk.js").then((m) => m.bulkAdd(view.client, { onDone: () => view.data.read() }));
   if (what === "group") o.group = !o.group;
   else if (what === "rows" || what === "tiles") o.mode = what;
@@ -74,10 +75,20 @@ export async function compositing(view, id) {
   }
 }
 
-/** A mixed show opens in the mixer; a direct one opens its detail. */
+/** A mixed show opens in the mixer; a direct one opens its detail. A closed
+ * show is opened first, back into the tab row, the way Switch show does. */
 export async function openShow(view, id) {
   const show = view.data.find(id);
   if (!show) return;
+  if (show.closed && mixed(show)) return (await import("../../shell/show-close.js")).reopen(view.client, id);
+  if (show.closed) {
+    try {
+      await view.client.call("show.open", { id });
+    } catch (e) {
+      return errorToast(e, `Opening ${show.name}`);
+    }
+    view.data.read();
+  }
   if (mixed(show)) return (await import("../../shell/show-actions.js")).switchTo(id);
   const { showDetail } = await import("./detail.js");
   showDetail(view.client, show, { data: view.data });

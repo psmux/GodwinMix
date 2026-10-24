@@ -3,12 +3,12 @@
 //!
 //! | Address | Module | What it does |
 //! |---|---|---|
-//! | `udp://`, `rtp://` | `ts_in` | MPEG-TS, bare or in RTP, unicast or multicast, one program |
+//! | `udp://`, `rtp://` | `native` | MPEG-TS, bare or in RTP, unicast or multicast, one program, one socket per group shared by every show on it; `ts_in` with `params.engine = "gstreamer"` |
 //! | `srt://` | `ts_in` | SRT caller, or listener for `srt://@:port` |
 //! | `rist://` | `rist` | RIST Simple Profile, listening |
 //! | `rtsp://` | `rtsp` | a camera or an encoder, over TCP or UDP |
 //! | `http(s)://` | `pull` | HLS or DASH |
-//! | `rtmp://` | `pull` | someone else's RTMP server, played |
+//! | `rtmp://` | `pull_rtmp` | someone else's RTMP server, played |
 //! | `file://` | `pull` | a TS or MP4 file, looped at its own pace |
 //! | `channel:` | `channel` | a channel's stream, off the hub |
 //!
@@ -20,9 +20,12 @@ mod channel;
 mod frames;
 mod loss;
 mod meter;
+mod native;
+mod numbering;
 mod outlet;
 mod pads;
 mod pull;
+mod pull_rtmp;
 mod rist;
 mod rtsp;
 mod runner;
@@ -35,8 +38,14 @@ mod ts_in;
 use super::{Input, Sink, StopSignal};
 use crate::hub::Hub;
 pub use pull::redact;
-pub use spec::{InputError, InputSpec, Kind};
-pub use stats::InputStats;
+pub use spec::{Carry, InputError, InputSpec, Kind};
+pub use stats::{InputStats, TrackInfo};
+
+/// Every multicast group the native inputs have open, one row per socket,
+/// for `direct.groups`.
+pub fn groups() -> Vec<serde_json::Value> {
+    native::registry::snapshot()
+}
 
 /// What an input may need from the host it runs in.
 #[derive(Clone, Default)]
@@ -57,23 +66,25 @@ pub fn open(spec: &InputSpec, ctx: &Context) -> Result<Box<dyn Input>, InputErro
 
 fn one(spec: &InputSpec, ctx: &Context) -> Result<Box<dyn Input>, InputError> {
     Ok(match spec.kind()? {
-        Kind::Udp => Box::new(Gst(ts_in::Udp::new(spec)?)),
-        Kind::Srt => Box::new(Gst(ts_in::Srt::new(spec))),
-        Kind::Rist => Box::new(Gst(rist::Rist::new(spec)?)),
-        Kind::Rtsp => Box::new(Gst(rtsp::Rtsp::new(spec)?)),
-        Kind::Http => Box::new(Gst(pull::Uri::new(spec, true))),
-        Kind::Rtmp => Box::new(Gst(pull::Uri::new(spec, false))),
-        Kind::File => Box::new(Gst(pull::File::new(spec)?)),
+        // The native path unless asked for the old one (`docs/reference/direct-inputs.md`).
+        Kind::Udp if spec.param("engine").as_deref() == Some("gstreamer") => Box::new(Gst(ts_in::Udp::new(spec)?, spec.carry)),
+        Kind::Udp => Box::new(native::Native::new(spec)?),
+        Kind::Srt => Box::new(Gst(ts_in::Srt::new(spec), spec.carry)),
+        Kind::Rist => Box::new(Gst(rist::Rist::new(spec)?, spec.carry)),
+        Kind::Rtsp => Box::new(Gst(rtsp::Rtsp::new(spec)?, spec.carry)),
+        Kind::Http => Box::new(Gst(pull::Uri::new(spec, true), spec.carry)),
+        Kind::Rtmp => Box::new(Gst(pull_rtmp::Rtmp::new(spec), spec.carry)),
+        Kind::File => Box::new(Gst(pull::File::new(spec)?, spec.carry)),
         Kind::Channel => Box::new(channel::Channel::new(spec, ctx.hub.as_ref())?),
     })
 }
 
-/// A GStreamer backed input: its plan, run by the runner.
-struct Gst<P: runner::Plan>(P);
+/// A GStreamer backed input: its plan, run by the runner, and what it carries.
+struct Gst<P: runner::Plan>(P, Carry);
 
 impl<P: runner::Plan> Input for Gst<P> {
     fn run(self: Box<Self>, out: Sink, stop: StopSignal) {
-        runner::run(self.0, out, stop);
+        runner::run(self.0, self.1, out, stop);
     }
 }
 

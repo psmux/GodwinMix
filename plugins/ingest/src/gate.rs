@@ -19,7 +19,7 @@
 //! and each publisher is announced as `ingest.publisher`.
 
 use std::net::TcpStream;
-use std::sync::{Arc, OnceLock, RwLock};
+use std::sync::{Arc, RwLock};
 
 use godwinmix_sdk::plugin::Reporter;
 use serde_json::{json, Value};
@@ -39,8 +39,9 @@ pub struct ChannelGate {
     /// `app` from the settings: the one application the open door takes, or
     /// any when empty. Not used once there are channels.
     pub open_app: String,
-    /// `127.0.0.1:<port>`, where a source reads a stream. Set once bound.
-    pub relay: OnceLock<String>,
+    /// `127.0.0.1:<port>`, where a source reads a stream. Set once bound,
+    /// and moved only when that port turns out to reach another process.
+    pub relay: RwLock<String>,
     pub reporter: Option<Reporter>,
     pub on_air: Arc<OnAir>,
 }
@@ -123,8 +124,12 @@ impl ChannelGate {
         }
     }
 
-    fn relay_address(&self) -> String {
-        self.relay.get().cloned().unwrap_or_default()
+    pub fn relay_address(&self) -> String {
+        self.relay.read().unwrap_or_else(|e| e.into_inner()).clone()
+    }
+
+    pub fn set_relay(&self, address: String) {
+        *self.relay.write().unwrap_or_else(|e| e.into_inner()) = address;
     }
 
     fn refuse(&self, channel: &str, stream: &str, peer: &str, why: String) -> String {

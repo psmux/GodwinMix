@@ -1,10 +1,11 @@
-//! `show.add`, `show.rename`, `show.remove`, `show.start` and `show.stop`.
+//! `show.add`, `show.rename`, `show.remove`, `show.start`, `show.stop`,
+//! `show.close` and `show.open`.
 
 use super::registry::{Record, MAIN};
 use super::state::Station;
 use super::{files, supervise};
 use godwinmix_protocol::error::RpcError;
-use godwinmix_protocol::shows::{Show, ShowAddRequest, ShowFrom, ShowRemoved, ShowRenameRequest};
+use godwinmix_protocol::shows::{Show, ShowAddRequest, ShowCloseRequest, ShowFrom, ShowRemoved, ShowRenameRequest};
 use godwinmix_protocol::types::Event;
 use serde_json::Value;
 use std::sync::Arc;
@@ -144,6 +145,58 @@ pub async fn stop(st: &Arc<Station>, id: &str) -> Result<Value, RpcError> {
     saved(st)?;
     supervise::stop(st, id).await;
     st.direct.hand_over();
+    st.announce(id);
+    shown(st, id)
+}
+
+/// Closing a show is what quitting the desktop app is to the whole machine:
+/// nothing is deleted, and it comes back as it was. It only leaves the tab
+/// row. Without keep_running it stops too and stays stopped across a restart
+/// of the station; with it, it carries on in the background. The page needs
+/// one open show to stand on, so the last one open stays open.
+pub async fn close(st: &Arc<Station>, req: ShowCloseRequest) -> Result<Value, RpcError> {
+    let id = req.id.as_str();
+    known(st, id)?;
+    let others = st.registry.lock().records.iter().any(|r| r.id != id && !r.closed);
+    if !others {
+        return Err(RpcError::not_in_state(format!(
+            "show {id} is the only open show, and a page needs one to stand on. Open another show first, or stop this one with show.stop."
+        ))
+        .with("show", id));
+    }
+    if let Some(r) = st.registry.lock().get_mut(id) {
+        r.closed = true;
+        if !req.keep_running {
+            r.stopped = true;
+        }
+    }
+    saved(st)?;
+    if !req.keep_running {
+        supervise::stop(st, id).await;
+        st.direct.hand_over();
+    }
+    st.announce(id);
+    shown(st, id)
+}
+
+/// Back in the tab row. A show that closing stopped starts again, the way a
+/// reopened browser tab loads its page; one kept running is left running.
+pub async fn open(st: &Arc<Station>, id: &str) -> Result<Value, RpcError> {
+    known(st, id)?;
+    let start = match st.registry.lock().get_mut(id) {
+        Some(r) => {
+            let start = r.closed && r.stopped;
+            r.closed = false;
+            r.stopped &= !start;
+            start
+        }
+        None => false,
+    };
+    saved(st)?;
+    if start {
+        supervise::start(st, id);
+        st.direct.hand_over();
+    }
     st.announce(id);
     shown(st, id)
 }

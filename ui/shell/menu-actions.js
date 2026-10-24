@@ -27,6 +27,8 @@ export function checked(item) {
   if (item.check === "theme") return currentTheme() === item.arg;
   if (item.check === "routing") return !!document.querySelector(".routing");
   if (item.check === "wall") return !!document.querySelector(".wall");
+  if (item.check === "headend") return !!document.querySelector(".he");
+  if (item.check === "flowmap") return !!document.querySelector(".fm");
   return null;
 }
 
@@ -47,9 +49,13 @@ const ACTIONS = {
   "project.save": (client) => project().then((m) => m.saveProject(client)),
   "show.new": (client) => shows().then((m) => m.newShow(client)),
   "show.switch": (client, id) => shows().then((m) => m.switchShow(client, id)),
+  "show.reopen": (client) => shows().then((m) => m.reopenShow(client)),
+  "show.import-flussonic": (client) => import("../panels/headend/import.js").then((m) => m.importFlussonic(client)),
   "view.routing": (client) => import("../panels/routing/view.js").then((m) => m.toggleRouting(client)),
   "view.plugins": (client) => import("../panels/plugins/view.js").then((m) => m.toggleGallery(client)),
   "view.wall": (client) => import("../panels/wall/view.js").then((m) => m.toggleWall(client)),
+  "view.headend": (client) => import("../panels/headend/view.js").then((m) => m.toggleHeadend(client)),
+  "view.flowmap": (client) => import("../panels/flowmap/view.js").then((m) => m.toggleFlowMap(client)),
   "show.add-many": (client) => import("../panels/wall/bulk.js").then((m) => m.bulkAdd(client)),
   "edit.delete": () => {
     const which = ["tray.delete", "scenes.remove"].find((id) => {
@@ -69,7 +75,7 @@ const ACTIONS = {
   "view.studio": () => setSetting("producer", !settings().producer),
   "view.reset-layout": () => workspace()?.reset(),
   "view.theme": (client, id) => applyTheme(id),
-  "source.add-kind": (client, category) => openPicker(client, "source", { category }),
+  "source.add-kind": (client, category) => addOfKind(client, category),
   "data.open": (client) => import("../panels/data/dialog.js").then((m) => m.openLiveData(client)),
   "output.record": (client) => import("../panels/outputs/recording.js").then((m) => m.startRecording(client)),
   "output.stop-recording": (client) => import("../panels/outputs/record-stop.js").then((m) => m.stopRecording(client)),
@@ -83,6 +89,19 @@ const ACTIONS = {
   "help.docs": () => window.open(DOCS, "_blank", "noopener"),
   "help.about": (client) => about(client),
 };
+
+/** Sources > Test pattern and the rest: through the tray's own Add, so the
+ * source goes into the scene on screen as it does from the tray. The picker
+ * opened on its own only made the source, and it sat in the pool. */
+export async function addOfKind(client, category, tray = () => document.querySelector("gmx-sources")) {
+  if (!tray()) await show("core/sources");
+  const t = tray();
+  if (t && typeof t.addSource === "function") return t.addSource({ category });
+  return openPicker(client, "source", { category });
+}
+
+/** The commands done here, each of which the menu bar has to register. */
+export const handled = () => Object.keys(ACTIONS);
 
 export function act(client, id, arg) {
   const fn = ACTIONS[id];

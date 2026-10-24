@@ -16,7 +16,7 @@ const STATES = {
 /** "connecting", "failed"; null for a source that has a picture to show. */
 export function sourceTrouble(s, id) {
   const source = (s.sources || []).find((x) => x.id === id);
-  if (!source) return "not in this mixer";
+  if (!source) return "removed, left out of the take";
   if (source.state && source.state !== "live") return STATES[source.state] || source.state;
   if (source.has_video === false) return "no video";
   return null;

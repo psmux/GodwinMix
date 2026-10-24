@@ -34,6 +34,8 @@ mod close;
 mod commands;
 mod core_link;
 mod displays;
+mod fullscreen;
+mod geometry;
 mod lan;
 mod lan_menu;
 mod output;
@@ -121,6 +123,7 @@ fn main() {
             // running. When something is, it asks: stop everything and quit,
             // keep running in the background, or cancel. It never hides the
             // window into the tray without that answer. See `close`.
+            RunEvent::WindowEvent { label, event: WindowEvent::Resized(_), .. } if label == "main" => fullscreen::resized(app),
             RunEvent::WindowEvent { label, event: WindowEvent::CloseRequested { api, .. }, .. } => {
                 if label == "main" {
                     api.prevent_close();

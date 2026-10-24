@@ -15,7 +15,7 @@ const VIDEO_HEADER: &[u8] = &[0x17, 0x00, 0, 0, 0, 0x01, 0x64, 0x00, 0x28];
 const AUDIO_HEADER: &[u8] = &[0xaf, 0x00, 0x12, 0x10];
 
 fn tag(kind: TagKind, ts: u32, keyframe: bool, header: bool, body: &[u8]) -> MediaTag {
-    MediaTag { kind, timestamp_ms: ts, keyframe, sequence_header: header, payload: Arc::from(body) }
+    MediaTag { track: 0, kind, timestamp_ms: ts, keyframe, sequence_header: header, payload: Arc::from(body) }
 }
 
 /// Headers, then 30 frames a second with a keyframe every ten, and audio

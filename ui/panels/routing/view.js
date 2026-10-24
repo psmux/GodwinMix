@@ -39,6 +39,9 @@ export function openRouting(client) {
   const header = document.querySelector(".slot-header, gmx-header");
   root.style.top = `${header ? Math.round(header.getBoundingClientRect().bottom) : 44}px`;
   document.body.append(root);
+  // A show tab closes this page, since it covers the show's own page.
+  root.dataset.cover = "";
+  root.leave = () => view.close();
 
   const collapsed = new Set();
   const seen = new Map();

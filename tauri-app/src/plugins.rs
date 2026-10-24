@@ -27,6 +27,7 @@
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 
 use tauri::{AppHandle, Manager};
 
@@ -35,6 +36,24 @@ use tauri::{AppHandle, Manager};
 /// directory as this app's to replace: a plugin the operator installed has no
 /// such file and is never touched.
 pub(crate) const STAMP: &str = ".gmx-bundled";
+
+/// What the operator should hear about the plugins at this launch, kept
+/// until the mixer's log is opened. Seeding runs before the mixer starts,
+/// and a released app on Windows has no console, so a line only printed
+/// would reach nobody. `sidecar` writes these under the mixer's start line.
+static NOTES: Mutex<Vec<String>> = Mutex::new(Vec::new());
+
+/// The notes since the last time they were written to the log.
+pub fn take_notes() -> Vec<String> {
+    std::mem::take(&mut *NOTES.lock().unwrap())
+}
+
+fn note(lines: Vec<String>) {
+    for line in &lines {
+        eprintln!("[desktop] {line}");
+    }
+    NOTES.lock().unwrap().extend(lines);
+}
 
 /// The plugins directory the mixer should be started against, with the
 /// bundled plugins in it.
@@ -46,16 +65,18 @@ pub fn ensure(app: &AppHandle) -> Option<PathBuf> {
     let dest = crate::settings::plugins_dir(app)
         .map_err(|e| eprintln!("[desktop] no plugins directory: {e}"))
         .ok()?;
-    if let Err(e) = seed(&bundled, &dest) {
+    match seed(&bundled, &dest) {
+        Ok(notes) => note(notes),
         // Not fatal. The mixer starts either way, and a mixer with no camera
         // plugin is a great deal better than a mixer that would not start.
-        eprintln!("[desktop] could not put the bundled plugins in place: {e}");
+        Err(e) => note(vec![format!("could not put the bundled plugins in place: {e}")]),
     }
     // The plugins installed on first use, from the flat folder beside the
     // device plugins, follow the app too. See `shipped`.
     if let Some(root) = app.path().resource_dir().ok().map(|d| d.join("plugins")) {
-        if let Err(e) = crate::shipped::refresh(&root, &dest) {
-            eprintln!("[desktop] could not bring the installed plugins up to date: {e}");
+        match crate::shipped::refresh(&root, &dest) {
+            Ok(notes) => note(notes),
+            Err(e) => note(vec![format!("could not bring the installed plugins up to date: {e}")]),
         }
     }
     Some(dest)
@@ -99,8 +120,10 @@ pub fn versions(root: &Path) -> Vec<(String, String, PathBuf)> {
 }
 
 /// Put the bundled plugins in the operator's plugins directory, and take this
-/// app's older copies away again.
-fn seed(bundled: &Path, dest: &Path) -> io::Result<()> {
+/// app's older copies away again. Answers a line for each copy of a bundled
+/// plugin the operator installed, which this app leaves alone and which may
+/// then be what runs.
+fn seed(bundled: &Path, dest: &Path) -> io::Result<Vec<String>> {
     fs::create_dir_all(dest)?;
     for (name, version, from) in versions(bundled) {
         let stamp = stamp_of(&from);
@@ -133,7 +156,51 @@ fn seed(bundled: &Path, dest: &Path) -> io::Result<()> {
         retire_older(&dest.join(&name), &version)?;
         eprintln!("[desktop] put {name} {version} in {}", dest.display());
     }
-    Ok(())
+    let mut notes = Vec::new();
+    for (name, version, _) in versions(bundled) {
+        notes.extend(theirs_beside(&name, &version, &dest.join(&name), |dir| dir.join(STAMP).is_file()));
+    }
+    Ok(notes)
+}
+
+/// A line for each version of `name` in `name_dir` that `ours` does not
+/// claim: a copy the operator installed, by hand or with `gmx plugin add`.
+/// Theirs wins and is never touched, which is the rule, but a hand copy
+/// older than the app's ran in place of it without a word, and an HLS
+/// output then failed for a reason fixed in the copy that was not running.
+/// So the line names it, says where it is and how to use ours instead.
+pub(crate) fn theirs_beside(name: &str, version: &str, name_dir: &Path, ours: impl Fn(&Path) -> bool) -> Vec<String> {
+    let Ok(entries) = fs::read_dir(name_dir) else { return Vec::new() };
+    let (mut theirs, mut ours_there) = (Vec::new(), false);
+    for entry in entries.flatten() {
+        let dir = entry.path();
+        if !dir.join("gmx-plugin.toml").is_file() {
+            continue;
+        }
+        if ours(&dir) {
+            ours_there = true;
+        } else {
+            theirs.push((entry.file_name().to_string_lossy().into_owned(), dir));
+        }
+    }
+    theirs.sort();
+    theirs
+        .into_iter()
+        .map(|(v, dir)| {
+            // With ours of another version beside it, the mixer reads both
+            // and either may be the one that runs.
+            let runs = if v == version || !ours_there {
+                format!("the {name} {version} this app carries is not used")
+            } else {
+                format!("the mixer may run it in place of the {name} {version} this app carries")
+            };
+            format!(
+                "{name} {v} at {} was installed by the operator, not by this app, so it is kept and {runs}. \
+                 To use the bundled copy, move that folder out of the plugins folder and restart the mixer.",
+                dir.display()
+            )
+        })
+        .collect()
 }
 
 /// What is in a bundled plugin directory, in one line: enough to notice a new
@@ -295,9 +362,32 @@ name = \"camera\"
         // Theirs: same name, same version, no stamp, because they built it.
         write(&dest.join("camera/0.1.0/gmx-plugin.toml"), "[plugin]\nname = \"theirs\"\n");
 
-        seed(&from, &dest).unwrap();
+        let notes = seed(&from, &dest).unwrap();
         let text = fs::read_to_string(dest.join("camera/0.1.0/gmx-plugin.toml")).unwrap();
         assert!(text.contains("theirs"), "the app replaced a plugin it did not install");
+        assert_eq!(notes.len(), 1, "one line for the copy that was kept: {notes:?}");
+        assert!(notes[0].contains("camera 0.1.0 at "), "{}", notes[0]);
+        assert!(notes[0].contains(&dest.join("camera/0.1.0").display().to_string()), "{}", notes[0]);
+        assert!(notes[0].contains("is not used"), "{}", notes[0]);
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn an_older_hand_copy_beside_the_bundled_one_is_named_and_ours_is_not() {
+        let root = fixture("plugins-theirs-older");
+        let from = root.join("bundle");
+        let dest = root.join("data");
+        write(&from.join("ingest/0.1.1/gmx-plugin.toml"), "[plugin]\n");
+        write(&dest.join("ingest/0.1.0/gmx-plugin.toml"), "[plugin]\n");
+        let notes = seed(&from, &dest).unwrap();
+        assert!(dest.join("ingest/0.1.1").join(STAMP).is_file(), "ours is put in place beside it");
+        assert!(dest.join("ingest/0.1.0/gmx-plugin.toml").is_file(), "theirs is never removed");
+        assert_eq!(notes.len(), 1, "{notes:?}");
+        assert!(notes[0].starts_with("ingest 0.1.0 at "), "{}", notes[0]);
+        assert!(notes[0].contains("ingest 0.1.1 this app carries"), "{}", notes[0]);
+        // Nothing to say about a plugin with only this app's copy.
+        fs::remove_dir_all(dest.join("ingest/0.1.0")).unwrap();
+        assert!(seed(&from, &dest).unwrap().is_empty());
         let _ = fs::remove_dir_all(&root);
     }
 

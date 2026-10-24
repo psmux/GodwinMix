@@ -73,10 +73,21 @@ pub fn write(tag: &MediaTag) -> Vec<u8> {
 /// The same, straight into a writer, so the payload is never copied into a
 /// buffer of its own on the way to a socket.
 pub fn write_to(out: &mut impl std::io::Write, tag: &MediaTag) -> std::io::Result<()> {
+    write_track_to(out, tag, 0)
+}
+
+/// The same with the tag's `track` in the FLV stream id, which is always
+/// zero otherwise. Only the relay writes it, and only to a reader that asked
+/// for every track: no FLV reader elsewhere ever sees a stream id but zero.
+pub fn write_with_track(out: &mut impl std::io::Write, tag: &MediaTag) -> std::io::Result<()> {
+    write_track_to(out, tag, tag.track)
+}
+
+fn write_track_to(out: &mut impl std::io::Write, tag: &MediaTag, track: u8) -> std::io::Result<()> {
     let size = tag.payload.len() as u32;
     let ts = tag.timestamp_ms.to_be_bytes();
     let s = size.to_be_bytes();
-    let head = [kind_byte(tag.kind), s[1], s[2], s[3], ts[1], ts[2], ts[3], ts[0], 0, 0, 0];
+    let head = [kind_byte(tag.kind), s[1], s[2], s[3], ts[1], ts[2], ts[3], ts[0], 0, 0, track];
     out.write_all(&head)?;
     out.write_all(&tag.payload)?;
     out.write_all(&(11 + size).to_be_bytes())
@@ -175,6 +186,7 @@ mod tests {
         let Amf0Value::Object(props) = &values[1] else { panic!("{values:?}") };
         assert_eq!(props["width"], Amf0Value::Number(1920.0));
         let t = write(&MediaTag {
+            track: 0,
             kind: TagKind::Script,
             timestamp_ms: 0,
             keyframe: false,
@@ -187,6 +199,7 @@ mod tests {
     #[test]
     fn writing_into_a_writer_gives_the_same_bytes_as_building_the_tag() {
         let tag = MediaTag {
+            track: 0,
             kind: TagKind::Video,
             timestamp_ms: 0x0102_0304,
             keyframe: true,

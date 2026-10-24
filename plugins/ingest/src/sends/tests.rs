@@ -13,7 +13,7 @@ use crate::media_tag::{MediaTag, TagKind};
 use crate::restream::test_gate::listen;
 
 fn tag(kind: TagKind, ts: u32, keyframe: bool, header: bool, body: &[u8]) -> MediaTag {
-    MediaTag { kind, timestamp_ms: ts, keyframe, sequence_header: header, payload: Arc::from(body) }
+    MediaTag { track: 0, kind, timestamp_ms: ts, keyframe, sequence_header: header, payload: Arc::from(body) }
 }
 
 /// Publish on the hub until `stop`: headers, then a keyframe every ten frames.

@@ -130,7 +130,7 @@ fn multivariant_playlist_for_a_four_rung_ladder() {
         bandwidth: 128_000,
         average: Some(128_000),
     };
-    golden("master.m3u8", &master(&video, Some(&audio)));
+    golden("master.m3u8", &master(&video, &[audio]));
 }
 
 #[test]
@@ -141,7 +141,25 @@ fn audio_only_is_one_variant() {
         bandwidth: 128_000,
         average: None,
     };
-    golden("audio-only.m3u8", &master(&[], Some(&audio)));
+    golden("audio-only.m3u8", &master(&[], &[audio]));
+}
+
+#[test]
+fn every_sound_track_is_a_rendition_with_its_language() {
+    let video = [variant("main", "avc1.64001f", 1280, 720, 1500)];
+    let sound = |id: &str, sound: u8, lang: &str, channels: u32| Variant {
+        id: id.into(),
+        info: TrackInfo { codecs: "mp4a.40.2".into(), channels, sound, lang: lang.into(), ..TrackInfo::default() },
+        bandwidth: 128_000 + u64::from(sound) * 64_000,
+        average: Some(128_000),
+    };
+    let audio = [sound("audio", 0, "eng", 2), sound("audio1", 1, "spa", 6), sound("audio2", 2, "", 2), sound("audio3", 3, "eng", 2)];
+    let text = master(&video, &audio);
+    golden("master-tracks.m3u8", &text);
+    assert_eq!(text.matches("TYPE=AUDIO").count(), 4);
+    assert_eq!(text.matches("DEFAULT=YES").count(), 1);
+    assert!(text.contains("NAME=\"English 2\""), "{text}");
+    assert!(text.contains("BANDWIDTH=1820000"), "the largest sound track is counted: {text}");
 }
 
 #[test]

@@ -51,6 +51,16 @@ The station answers these itself, whatever `show` says: `show.*`,
 `channel.*`, `governor.status`, `governor.calibrate`, and `rendition.plan`
 with a `channel:<id>` scope.
 
+While the show a request names has no process (it is stopped or failed, or
+it is a show without compositing, which never has one) the station also
+answers `core.info`, `core.subscribe`, `config.get`, `config.schema`,
+`config.set` and `config.reset` in its place, so a page stands up on a
+headend that runs no mixer. Its `core.info` lists the feature `station`,
+and `headend` when it follows a Flussonic config. The config methods read
+and write the station's own config file; a change that a running show would
+take live waits for a show to start. Every other call to that show is still
+refused as above.
+
 ## Methods
 
 ### `show.list {}`
@@ -78,8 +88,9 @@ with a `channel:<id>` scope.
 | `error` | why it is not running, when a person did not ask for that |
 | `compositing` | `true` for a show with scenes and a programme in a process of its own; `false` for a show without compositing (below) |
 | `input` | what the show takes in, `{uri, program?, params?, backup?}`. Absent for a show that has none. An SRT passphrase reads `__secret__` here (see [Input passphrases](#input-passphrases)) |
-| `outputs` | a show without compositing's outputs, each as a channel destination is shown: `id`, `platform`, `label`, `uri_host`, `has_key`, `enabled`, `state`, `kbps`, `reconnects`, `error`, `rendition`, `plan` or `refused` when it converts, and `playback` (`master_url_path`, `dash_url_path`, `viewers`) on an HLS output. Absent for a show that composites |
+| `outputs` | a show without compositing's outputs, each as a channel destination is shown: `id`, `platform`, `label`, `uri_host`, `has_key`, `enabled`, `state`, `kbps`, `reconnects`, `error`, `rendition`, `plan` or `refused` when it converts, and `playback` (`master_url_path`, `dash_url_path`, `viewers`, and `segments`, `access` and `segment_ms`: which segments it serves, `cmaf`, `ts` or `both`, whether a player needs the viewer key, `keyed` or `open`, and the length it cuts) on an HLS output. Absent for a show that composites |
 | `health` | `{state, alarms}`, see [Health](#health) |
+| `closed` | `true` once closed from its tab with `show.close`: the page leaves it out of the tab row until `show.open`. Nothing of it is deleted, and `state` still says whether it runs |
 
 For a show without compositing, `state` is `running` unless it was stopped,
 `on_air` is `"input"` while its input arrives, and `programme_kbps` is what
@@ -128,6 +139,18 @@ Admin. A stopped show keeps its config and stays stopped across a restart of
 the station until `show.start`. A show that failed starts again with
 `show.start`. A show without compositing that is stopped is taken out of the
 direct host's table, so its input is closed and its outputs stop.
+
+### `show.close {id, keep_running?}` and `show.open {id}`
+
+Admin. What a show tab's `×` does, as quitting does for the desktop app:
+nothing is deleted. `show.close` marks the show closed, so the page leaves it
+out of the tab row, and stops it as `show.stop` does unless `keep_running` is
+`true`, when it carries on, on air and sending. Both are kept in the list of
+shows: a closed show does not start with the station, and one closed with
+`keep_running` comes back running and still closed. Refused for the last
+open show, because a page needs one to stand on; `main` closes like any
+other. `show.open` clears it and starts the show if closing stopped it. Both
+answer with the show and send `event/show.changed`.
 
 ### `show.set {id, name?, input?, compositing?}`
 
@@ -273,7 +296,7 @@ is left out, narrowed by `fields` to any of `health`, `input`, `outputs`:
   "work": "copy", "cpu_millicores": 0,
   "input": {"kbps": 6100, "fps": 25.0, "width": 1920, "height": 1080, "video_codec": "h264",
             "audio_codec": "aac", "audio_channels": 2, "cc_errors": 0, "packets_lost": 0,
-            "keyframe_ms": 1000, "last_frame_ms": 12},
+            "keyframe_ms": 1000, "last_frame_ms": 12, "audio_peak_db": -14.2},
   "outputs": [{"id": "srt", "state": "live", "kbps": 6050, "reconnects": 0,
                "rendition_text": "copy", "cpu_millicores": 0}]}]}
 ```
@@ -285,9 +308,25 @@ A field the host has not counted yet is left out. `fps` is read off the
 stream's own clock over the last second, and reads 0 for a second in which
 the input stalled (two frames more than a second apart, as when a sender
 restarts); `keyframe_ms` keeps the interval from before the stall rather
-than measuring across it. A show that composites has
+than measuring across it. `audio_peak_db` is the first sound track's
+peak over the few frames the silence alarm measures, about once a second,
+and only while the show's alarms are on or its picture is asked for; -120
+is digital silence. A show that composites has
 its health and, when it has an input, the input's numbers; its outputs are
 read with `output.list` and `?show=<id>`.
+
+An output that converts has `steps`, what its picture goes through in
+order, as the plan handed it to the host:
+
+```json
+"steps": [{"kind": "decode", "element": "nvmpeg2videodec", "gpu": true, "accel": "nvidia"},
+          {"kind": "scale", "element": "cudaconvertscale", "gpu": true},
+          {"kind": "encode", "element": "nvh264enc", "gpu": true, "accel": "nvidia"}]
+```
+
+`gpu` is true for a step whose pictures stay in the GPU's memory or that
+runs on a hardware decoder or encoder. A scale on the CPU has no `element`:
+the host picks it. A copy has no `steps`.
 
 `work` says what the show does to make its outputs: `mix` for a show that
 composites (it always encodes a programme), `transcode` for a direct show

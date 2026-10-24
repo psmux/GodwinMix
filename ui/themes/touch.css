@@ -32,6 +32,7 @@
   .tile .strip { position: static; opacity: 1; background: var(--panel); }
   .rt-cell .rt-offer { opacity: 0.7; border-color: var(--line); }
   .wl-bdel { opacity: 1; }
+  .showtab .showtab-x { visibility: visible; }
   /* A long press is a menu here, not a word to select or a link to share. */
   .tile, .scene-tabs, .showtabs, .dock-title, .menu, .menubar-wrap, .btn, .rt-route, .chn-tile {
     -webkit-touch-callout: none; -webkit-user-select: none; user-select: none;
@@ -57,6 +58,7 @@
   .scene-tabs button.scene-edit:not(.btn) { width: 44px; height: 44px; }
   .showtab, .shows-add { min-height: 44px; }
   .shows-add { min-width: 44px; justify-content: center; }
+  .showtab-x { width: 32px; line-height: 32px; margin-right: -8px; }
   .palette li { min-height: 44px; align-items: center; padding: 10px 12px; }
   summary { padding-block: 12px; }
   .panel-section > summary { padding: 13px 12px; }

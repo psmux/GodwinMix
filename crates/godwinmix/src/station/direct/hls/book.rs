@@ -6,8 +6,11 @@ use super::child::Proc;
 use super::{Book, Packagers};
 use crate::station::packager::wire::{Report, Want};
 use crate::station::state::Station;
+use godwinmix_core::hls::access::Access;
 use godwinmix_core::hls::Stream;
 use godwinmix_protocol::destination::{DestinationLive, DestinationState, Playback};
+use godwinmix_protocol::shows::HlsOutputParams;
+use std::collections::BTreeMap;
 use std::net::SocketAddr;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
@@ -59,8 +62,25 @@ impl Packagers {
             master_url_path: format!("/hls/{output}/master.m3u8?{q}"),
             dash_url_path: format!("/hls/{output}/manifest.mpd?{q}"),
             viewers: report.map(|r| r.viewers).unwrap_or(0),
+            segments: card.want.segments.as_str().into(),
+            access: card.want.access.as_str().into(),
+            segment_ms: Some(card.want.segment_ms).filter(|ms| *ms > 0),
         };
         Some((live, playback))
+    }
+
+    /// What one output was given, as `show.output.set` takes it, less its
+    /// viewer key, so a client can show and change it.
+    pub fn params(&self, show: &str, output: &str) -> Option<HlsOutputParams> {
+        let book = self.book.lock();
+        let w = &book.cards.get(&(show.to_string(), output.to_string()))?.want;
+        let (access, open_public) = match w.access {
+            Access::Keyed => ("keyed", None),
+            Access::Open => ("open", None),
+            Access::OpenPublic => ("open", Some(true)),
+        };
+        let (segment_ms, part_ms, window) = (Some(w.segment_ms), Some(w.part_ms), Some(w.window_s));
+        Some(HlsOutputParams { segment_ms, part_ms, window, segments: Some(w.segments.as_str().into()), access: Some(access.into()), open_public, ..Default::default() })
     }
 
     /// Whether the keeper should end: nothing wanted, or the station is
@@ -96,7 +116,13 @@ impl Packagers {
     pub(super) fn reported(&self, reports: Vec<Report>) {
         let mut book = self.book.lock();
         let Book { cards, reports: kept, .. } = &mut *book;
-        *kept = reports.into_iter().map(|r| ((r.show.clone(), r.output.clone()), r)).filter(|(k, _)| cards.contains_key(k)).collect();
+        let fresh: BTreeMap<_, _> = reports.into_iter().map(|r| ((r.show.clone(), r.output.clone()), r)).filter(|(k, _)| cards.contains_key(k)).collect();
+        // What the packager says of each output reaches the station's log:
+        // its own process writes nothing about an output's state.
+        for (key, r) in &fresh {
+            crate::station::direct::seen::log_output(&key.0, &key.1, kept.get(key).map(|k| &k.live), &r.live);
+        }
+        *kept = fresh;
     }
 
     /// The packager is gone: say so on every output, with what happens next.

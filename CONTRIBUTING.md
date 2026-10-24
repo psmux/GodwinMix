@@ -72,8 +72,16 @@ Windows Firewall asks once for every program that listens on all interfaces,
 and each cargo build of a new test binary is a new program to it. Loopback is
 never filtered, so the prompts do not break a test, but they pile up. From an
 elevated PowerShell, `pwsh -File dev/windows-firewall.ps1` allows this
-workspace's builds from the local subnet only, and `-Remove` takes the rules
-out again. Run it again after a build adds test binaries.
+workspace's builds and the app's plugin copies from the local subnet only, and
+`-Remove` takes the rules out again. Run it again after a build adds test
+binaries, and add `-Path <folder>` for an unpacked or test install elsewhere.
+
+Cancelling one of those prompts is worse than leaving it open. Windows then
+writes a Block rule for that program, and a Block rule wins over every Allow
+rule, the installer's included, so a source on the local network just never
+connects. The same script removes the Block rules Windows made from prompts
+for GodwinMix programs and leaves every other rule alone. `-List` shows what
+it would change.
 
 ### The crates
 

@@ -124,6 +124,7 @@ impl Station {
             outputs: Vec::new(),
             health: self.direct.health_of(self, id),
             alarms: record.alarms.clone(),
+            closed: record.closed,
         };
         if !record.compositing {
             show.state = if record.stopped { ShowState::Stopped } else { ShowState::Running };

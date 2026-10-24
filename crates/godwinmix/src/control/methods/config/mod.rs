@@ -16,8 +16,8 @@ use crate::control::call::Call;
 use godwinmix_protocol::method::{any_object, schema_of, MethodDef, Registry};
 use godwinmix_protocol::scope::Scope;
 
-pub use read::{configure, ConfigGetRequest, ConfigGetResult, ConfigKey};
-pub use write::{ConfigChanged, ConfigResetRequest, ConfigSetRequest, ConfigSetResult};
+pub use read::{configure, file_at, get_in, ConfigGetRequest, ConfigGetResult, ConfigKey};
+pub use write::{reset_in, set_in, ConfigChanged, ConfigResetRequest, ConfigSetRequest, ConfigSetResult};
 
 pub fn register(reg: &mut Registry<Call>) {
     reg.register(

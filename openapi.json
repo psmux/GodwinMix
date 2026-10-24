@@ -965,6 +965,17 @@
               "integer",
               "null"
             ]
+          },
+          "tracks": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Tracks"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The first sound track alone (when left out), or every one the source\ncarries, each converted on its own at its own channel count unless\n`channels` says otherwise."
           }
         },
         "type": "object"
@@ -2951,6 +2962,23 @@
         ],
         "type": "object"
       },
+      "Deinterlace": {
+        "description": "Whether an interlaced picture is made progressive.",
+        "oneOf": [
+          {
+            "enum": [
+              "off",
+              "on"
+            ],
+            "type": "string"
+          },
+          {
+            "const": "auto",
+            "description": "Only pictures the stream marks as interlaced.",
+            "type": "string"
+          }
+        ]
+      },
       "Destination": {
         "description": "One destination as a client sees it. The key never appears: `has_key`\nsays whether there is one.",
         "properties": {
@@ -2997,6 +3025,17 @@
           },
           "label": {
             "type": "string"
+          },
+          "params": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HlsOutputParams"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What an `hls://` output of a show without compositing was given, as\n`show.output.set` takes it, less the viewer key. Read while it runs."
           },
           "plan": {
             "anyOf": [
@@ -4485,6 +4524,26 @@
         "type": "object"
       },
       "Fit": {
+        "description": "How a picture goes into a size of another shape.",
+        "oneOf": [
+          {
+            "const": "pad",
+            "description": "Keep the whole picture and fill the rest with bars.",
+            "type": "string"
+          },
+          {
+            "const": "crop",
+            "description": "Fill the frame and cut what overhangs.",
+            "type": "string"
+          },
+          {
+            "const": "stretch",
+            "description": "Fill the frame and change the picture's shape.",
+            "type": "string"
+          }
+        ]
+      },
+      "Fit2": {
         "description": "How content fills its frame. SVG's vocabulary, which replaces OBS's seven\nbounds types and maps onto `sizing-policy` on a `glvideomixer` pad.",
         "oneOf": [
           {
@@ -6447,6 +6506,222 @@
         ],
         "type": "object"
       },
+      "GpuDevice": {
+        "description": "One GPU: what it is, its newest reading and the ones before it.",
+        "properties": {
+          "driver": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "history": {
+            "default": [],
+            "description": "One a second, oldest first, the last two minutes at most.",
+            "items": {
+              "$ref": "#/components/schemas/GpuSample"
+            },
+            "type": "array"
+          },
+          "index": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "name": {
+            "description": "`NVIDIA GeForce RTX 3060`.",
+            "type": "string"
+          },
+          "now": {
+            "$ref": "#/components/schemas/GpuSample"
+          }
+        },
+        "required": [
+          "index",
+          "name",
+          "now"
+        ],
+        "type": "object"
+      },
+      "GpuSample": {
+        "description": "One reading of one GPU. A number the driver would not give is left out.",
+        "properties": {
+          "at_ms": {
+            "description": "Unix milliseconds.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "decoder_pct": {
+            "description": "NVDEC, percent.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "encoder_fps": {
+            "description": "The sessions' average frame rate.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "encoder_pct": {
+            "description": "NVENC, percent.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "encoder_sessions": {
+            "description": "Open NVENC sessions, every process on the machine.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "fan_pct": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "gpu_pct": {
+            "description": "The 3D and compute engines, percent of the last sample period.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "graphics_mhz": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "memory_mhz": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "memory_total_mib": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "memory_used_mib": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "power_limit_w": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "power_w": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "temperature_c": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "video_mhz": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "at_ms"
+        ],
+        "type": "object"
+      },
+      "GpuStatus": {
+        "description": "`gpu.status`'s answer.",
+        "properties": {
+          "every_ms": {
+            "description": "How often a reading is taken while someone asks.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "gpus": {
+            "items": {
+              "$ref": "#/components/schemas/GpuDevice"
+            },
+            "type": "array"
+          },
+          "note": {
+            "description": "Why there are no GPUs, or what is missing, in one sentence.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "source": {
+            "description": "`nvml`, `nvidia-smi`, or `none`.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "every_ms",
+          "gpus"
+        ],
+        "type": "object"
+      },
+      "GpuStatusRequest": {
+        "description": "`gpu.status`.",
+        "properties": {
+          "since_ms": {
+            "description": "Only the history after this time, unix milliseconds: what a client\nthat already holds the rest asks for. Left out, the whole history.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
       "GraphicListing": {
         "description": "`scene.graphic.list`.",
         "properties": {
@@ -6514,6 +6789,148 @@
         },
         "required": [
           "sources"
+        ],
+        "type": "object"
+      },
+      "HeadendImportReport": {
+        "description": "`headend.import`'s answer: the report, then what was made.",
+        "properties": {
+          "converted": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "copied": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "disabled": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "dry_run": {
+            "type": "boolean"
+          },
+          "following": {
+            "description": "The Flussonic config this station follows, when it follows one. A\nshow made by an import is not in that file, and the file's own\nstreams are not touched.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "notes": {
+            "items": {
+              "$ref": "#/components/schemas/ImportNote"
+            },
+            "type": "array"
+          },
+          "shows": {
+            "$ref": "#/components/schemas/ShowAddManyResult",
+            "description": "`show.add_many`'s answer for these shows: on a dry run what would be\nmade, what it costs and what would be refused; otherwise what was."
+          },
+          "source": {
+            "description": "`pasted text`, or the path that was read.",
+            "type": "string"
+          },
+          "streams": {
+            "items": {
+              "$ref": "#/components/schemas/ImportedStream"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "source",
+          "dry_run",
+          "streams",
+          "converted",
+          "copied",
+          "disabled",
+          "notes",
+          "shows"
+        ],
+        "type": "object"
+      },
+      "HeadendImportRequest": {
+        "additionalProperties": false,
+        "description": "`headend.import`. One of `text` and `path`.",
+        "properties": {
+          "dry_run": {
+            "description": "Left out: true. Read the config, price its shows and make nothing.\nFalse makes them.",
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "path": {
+            "description": "Or a file on the station's machine, such as\n`/etc/flussonic/flussonic.conf`, read by the station.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "text": {
+            "description": "The config's text, as pasted.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "HeadendStatus": {
+        "description": "`headend.status`: whether this station runs in headend mode.",
+        "properties": {
+          "file": {
+            "description": "The file it follows.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "following": {
+            "description": "True while the station follows a Flussonic config\n(`godwinmix headend --flussonic FILE`).",
+            "type": "boolean"
+          },
+          "listeners": {
+            "description": "Where Flussonic's URLs and API answer, `address:port`.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "log": {
+            "description": "The Flussonic style log, when one is written.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "note": {
+            "description": "What a reader of this answer can do next, in one sentence.",
+            "type": "string"
+          },
+          "shows": {
+            "description": "Of those, the ones running as a show.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "streams": {
+            "description": "Streams in the file as last read.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "following",
+          "streams",
+          "shows",
+          "note"
         ],
         "type": "object"
       },
@@ -6672,8 +7089,22 @@
         "additionalProperties": false,
         "description": "An `hls://` output's params, as an `hls/output` takes them.",
         "properties": {
+          "access": {
+            "description": "`keyed` (the default) or `open`: whether a player needs the viewer key.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "low_latency": {
             "description": "true: parts of 333 ms.",
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "open_public": {
+            "description": "With `access = \"open\"`, answer players outside loopback and the\nprivate networks too.",
             "type": [
               "boolean",
               "null"
@@ -6694,6 +7125,13 @@
             "minimum": 0,
             "type": [
               "integer",
+              "null"
+            ]
+          },
+          "segments": {
+            "description": "`cmaf` (the default), `ts` or `both`: which segments are made.",
+            "type": [
+              "string",
               "null"
             ]
           },
@@ -6730,6 +7168,35 @@
         },
         "required": [
           "id"
+        ],
+        "type": "object"
+      },
+      "ImportNote": {
+        "description": "A line the import read and does not act on, or acts on differently.",
+        "properties": {
+          "kind": {
+            "description": "`ignored`: nothing in GodwinMix uses it. `not_carried`: understood,\nand GodwinMix does something else, which `what` says.",
+            "type": "string"
+          },
+          "line": {
+            "description": "0 when the note is about the whole config.",
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "scope": {
+            "description": "`global`, or `stream NAME`.",
+            "type": "string"
+          },
+          "what": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "scope",
+          "line",
+          "kind",
+          "what"
         ],
         "type": "object"
       },
@@ -6923,6 +7390,45 @@
         ],
         "type": "object"
       },
+      "ImportedStream": {
+        "description": "One `stream` of the config, as the show it becomes.",
+        "properties": {
+          "copy": {
+            "description": "No `transcoder`: the input is served as it comes.",
+            "type": "boolean"
+          },
+          "disabled": {
+            "description": "`disabled true`: the show is made and stopped.",
+            "type": "boolean"
+          },
+          "input": {
+            "description": "The show's input, as `show.add` takes it, with any password in an\naddress shown as `***`."
+          },
+          "name": {
+            "description": "Flussonic's name, the show's name when it is made.",
+            "type": "string"
+          },
+          "outputs": {
+            "description": "The show's outputs: the HLS output with its params and rendition,\nthen one per `push`.",
+            "items": true,
+            "type": "array"
+          },
+          "title": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "disabled",
+          "copy",
+          "input",
+          "outputs"
+        ],
+        "type": "object"
+      },
       "InputSpec": {
         "description": "What a show without compositing takes in. A show that composites makes\nits input its one source.",
         "properties": {
@@ -6977,6 +7483,14 @@
           "audio_codec": {
             "type": [
               "string",
+              "null"
+            ]
+          },
+          "audio_peak_db": {
+            "description": "The first sound track's peak in dBFS over a short burst, measured\nabout once a second while the show's alarms are on or its picture is\nasked for; -120 is digital silence. Left out while unmeasured.",
+            "format": "double",
+            "type": [
+              "number",
               "null"
             ]
           },
@@ -7822,6 +8336,77 @@
         },
         "required": [
           "level"
+        ],
+        "type": "object"
+      },
+      "MachineStatus": {
+        "description": "`machine.status`'s answer: the box, not one process.",
+        "properties": {
+          "cores": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "cpu_pct": {
+            "description": "Every process on the machine, percent of all cores, over the last\nsecond. Left out until two readings have been taken.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "host_name": {
+            "type": "string"
+          },
+          "load_average": {
+            "description": "One, five and fifteen minutes, where the system keeps them.",
+            "items": {
+              "format": "double",
+              "type": "number"
+            },
+            "maxItems": 3,
+            "minItems": 3,
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "memory_available_mib": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "memory_total_mib": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "process_uptime_secs": {
+            "description": "Since this process started.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "uptime_secs": {
+            "description": "Since the machine booted.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "host_name",
+          "cores",
+          "process_uptime_secs"
         ],
         "type": "object"
       },
@@ -8997,6 +9582,13 @@
             "default": "",
             "description": "waiting, connecting, live, reconnecting, failed, or off.",
             "type": "string"
+          },
+          "steps": {
+            "description": "What its picture goes through, in order: the decode, the scale and\nthe encode, for an output that converts. Empty for a copy.",
+            "items": {
+              "$ref": "#/components/schemas/OutputStep"
+            },
+            "type": "array"
           }
         },
         "required": [
@@ -9067,6 +9659,38 @@
           "state",
           "reconnects",
           "queue_secs"
+        ],
+        "type": "object"
+      },
+      "OutputStep": {
+        "description": "One step of an output's conversion.",
+        "properties": {
+          "accel": {
+            "description": "The hardware family, `nvidia`, for a step that uses some.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "element": {
+            "description": "The GStreamer element that does it, `nvh264enc`, where the plan\nnames one. A scale on the CPU leaves the choice to the host.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "gpu": {
+            "default": false,
+            "description": "Whether it runs on a GPU, its pictures in the GPU's memory.",
+            "type": "boolean"
+          },
+          "kind": {
+            "description": "`decode`, `scale` or `encode`.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind"
         ],
         "type": "object"
       },
@@ -9869,12 +10493,29 @@
       "Playback": {
         "description": "The links of an output served as HLS from the control port, each with\nthe output's viewer key on it. A channel's watch link is one too:\n`/hls/channel/<channel>/<destination>/index.m3u8?key=...`.",
         "properties": {
+          "access": {
+            "description": "`keyed` (a player needs the viewer key) or `open`.",
+            "type": "string"
+          },
           "dash_url_path": {
             "description": "The same segments as a DASH MPD.",
             "type": "string"
           },
           "master_url_path": {
             "description": "`/hls/viewers/master.m3u8?show=bbc-one&key=...`.",
+            "type": "string"
+          },
+          "segment_ms": {
+            "description": "The length segments are cut to, in milliseconds.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "segments": {
+            "description": "Which segments a player can fetch: `cmaf`, `ts` or `both`. Left out\nwhere the server does not say.",
             "type": "string"
           },
           "viewers": {
@@ -11936,6 +12577,11 @@
             ],
             "description": "The alarms a person set for it, when they set any."
           },
+          "closed": {
+            "default": false,
+            "description": "Closed from its tab: the page leaves it out of the tab row until\n`show.open`. Nothing of it is deleted. A show closed with\n`keep_running` is still running, and its `state` says so.",
+            "type": "boolean"
+          },
           "compositing": {
             "default": true,
             "description": "true: scenes, transitions and a programme encode, in a process of\nits own. false: one input straight to its outputs, in the shared\ndirect host, with no compositor.",
@@ -12170,6 +12816,23 @@
         },
         "required": [
           "name"
+        ],
+        "type": "object"
+      },
+      "ShowCloseRequest": {
+        "description": "`show.close`.",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "keep_running": {
+            "default": false,
+            "description": "true: it leaves the tab row and carries on, on air and sending, the\nway the desktop app keeps running in the background. Left out or\nfalse: it stops as well, and stays stopped across a restart of the\nstation until `show.open`.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id"
         ],
         "type": "object"
       },
@@ -12564,6 +13227,11 @@
               }
             ],
             "description": "The alarms a person set for it, when they set any."
+          },
+          "closed": {
+            "default": false,
+            "description": "Closed from its tab: the page leaves it out of the tab row until\n`show.open`. Nothing of it is deleted. A show closed with\n`keep_running` is still running, and its `state` says so.",
+            "type": "boolean"
           },
           "compositing": {
             "default": true,
@@ -14089,6 +14757,14 @@
         ],
         "type": "object"
       },
+      "Tracks": {
+        "description": "Which sound tracks a rendition converts.",
+        "enum": [
+          "first",
+          "all"
+        ],
+        "type": "string"
+      },
       "Transform": {
         "additionalProperties": false,
         "description": "Where an item sits and how it is sized.",
@@ -14106,7 +14782,7 @@
             "description": "Normalised 0 to 1 within the item's own box: (0,0) top left, (0.5,0.5)\ncentre, (1,1) bottom right."
           },
           "fit": {
-            "$ref": "#/components/schemas/Fit",
+            "$ref": "#/components/schemas/Fit2",
             "default": "none"
           },
           "frame": {
@@ -14496,6 +15172,16 @@
       "VideoWant": {
         "description": "The video an output wants. Every field left out is taken from the source.",
         "properties": {
+          "bframes": {
+            "description": "B frames between references. The catalogue's (none, for live) when\nleft out.",
+            "format": "uint8",
+            "maximum": 255,
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
           "bitrate_kbps": {
             "description": "Target bitrate. A copy is kept when the source is within\n`bitrate_tolerance` of it.",
             "format": "uint32",
@@ -14523,6 +15209,28 @@
               }
             ]
           },
+          "deinterlace": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Deinterlace"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Off when left out: an interlaced picture is scaled as it comes."
+          },
+          "fit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Fit"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "How a picture of another shape goes into the size asked for. Pad when\nleft out, in black, which is what scaling has always done."
+          },
           "fps": {
             "anyOf": [
               {
@@ -14541,12 +15249,35 @@
               "null"
             ]
           },
+          "keyframe_frames": {
+            "description": "Keyframe interval in frames of the source's own rate, as Flussonic's\n`gop` is written. Taken over `keyframe_ms` when both are set.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
           "keyframe_ms": {
             "description": "Keyframe interval. Renditions in one ladder share it.",
             "format": "uint32",
             "minimum": 0,
             "type": [
               "integer",
+              "null"
+            ]
+          },
+          "pad_color": {
+            "description": "The colour of the bars a pad fit adds, `#rrggbb`. Black when left out.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "preset": {
+            "description": "The encoder's speed and quality preset in its own words (`p4` on\nNVENC, `veryfast` on x264). The catalogue's when left out.",
+            "type": [
+              "string",
               "null"
             ]
           },
@@ -17263,6 +17994,100 @@
         "x-scope": "read"
       }
     },
+    "/api/v1/gpu/status": {
+      "get": {
+        "description": "JSON-RPC method `gpu.status`. Needs the `read` scope.",
+        "operationId": "gpu.status",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GpuStatus"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Every NVIDIA GPU on this machine: encoder, decoder and 3D use, video memory, encoder sessions, temperature, power and clocks, now and over the last two minutes. Read once a second from NVML or nvidia-smi while a client keeps asking, and not at all otherwise. No GPUs, and a note, on a machine without one.",
+        "tags": [
+          "gpu"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
+    "/api/v1/headend/import": {
+      "post": {
+        "description": "JSON-RPC method `headend.import`. Needs the `admin` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "headend.import",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HeadendImportRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HeadendImportReport"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Make a Flussonic config into shows without compositing, one per stream, each with its input, one HLS output and the transcoder line as its rendition. Takes the config's text or a path on the station's machine. A dry run, the default, answers the report (every stream, every line not carried, what the shows would cost) and makes nothing.",
+        "tags": [
+          "headend"
+        ],
+        "x-destructive": false,
+        "x-idempotent": false,
+        "x-scope": "admin"
+      }
+    },
+    "/api/v1/headend/status": {
+      "get": {
+        "description": "JSON-RPC method `headend.status`. Needs the `read` scope.",
+        "operationId": "headend.status",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HeadendStatus"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Whether this station follows a Flussonic config, which file, where Flussonic's URLs and API answer, and how many of its streams run as shows.",
+        "tags": [
+          "headend"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
+      }
+    },
     "/api/v1/log/gst": {
       "post": {
         "description": "JSON-RPC method `log.gst`. Needs the `admin` scope. Accepts `idempotency_key`, honoured for 24 hours.",
@@ -17365,6 +18190,34 @@
         "x-destructive": false,
         "x-idempotent": true,
         "x-scope": "admin"
+      }
+    },
+    "/api/v1/machine/status": {
+      "get": {
+        "description": "JSON-RPC method `machine.status`. Needs the `read` scope.",
+        "operationId": "machine.status",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MachineStatus"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "The machine itself: its name, cores, CPU use of every process, memory, how long it and this process have been up, and its load average.",
+        "tags": [
+          "machine"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "read"
       }
     },
     "/api/v1/media": {
@@ -21913,6 +22766,104 @@
           "show"
         ],
         "x-destructive": true,
+        "x-idempotent": true,
+        "x-scope": "admin"
+      }
+    },
+    "/api/v1/shows/{id}/close": {
+      "post": {
+        "description": "JSON-RPC method `show.close`. Needs the `admin` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "show.close",
+        "parameters": [
+          {
+            "description": "The id, as listed by the matching list call.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShowCloseRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Show"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Close a show from the page's tab row, as quitting closes the app: nothing of it is deleted. It stops, and stays stopped across a restart of the station, unless keep_running, when it carries on in the background. Refused for the last open show. show.open brings it back.",
+        "tags": [
+          "show"
+        ],
+        "x-destructive": false,
+        "x-idempotent": true,
+        "x-scope": "admin"
+      }
+    },
+    "/api/v1/shows/{id}/open": {
+      "post": {
+        "description": "JSON-RPC method `show.open`. Needs the `admin` scope. Accepts `idempotency_key`, honoured for 24 hours.",
+        "operationId": "show.open",
+        "parameters": [
+          {
+            "description": "The id, as listed by the matching list call.",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IdRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Show"
+                }
+              }
+            },
+            "description": "the full resulting object, so no follow up read is needed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "summary": "Put a closed show back in the tab row. One that closing stopped starts again.",
+        "tags": [
+          "show"
+        ],
+        "x-destructive": false,
         "x-idempotent": true,
         "x-scope": "admin"
       }

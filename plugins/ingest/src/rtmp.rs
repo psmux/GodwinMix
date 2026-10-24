@@ -37,9 +37,11 @@
 //! which is how a mixer source in another process reads the hub. See
 //! `src/relay.rs`.
 
-use std::net::{TcpListener, TcpStream};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::io::{BufRead, BufReader, Read, Write};
+use std::net::{SocketAddr, TcpListener, TcpStream};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
+use std::time::Duration;
 
 use crate::media_tag::MediaTag;
 
@@ -86,9 +88,18 @@ pub trait Gate: Send + Sync {
     fn note(&self, message: String);
 }
 
+/// What a loopback client sends to ask a server which one it is. The server
+/// answers with its [`Server`]'s own token on a line.
+pub const WHO: &[u8] = b"GMXWHO\n";
+
+/// How often the accept loop looks at its stop flag.
+const ACCEPT_TICK: Duration = Duration::from_millis(50);
+
 /// A listening RTMP server.
 pub struct Server {
     port: u16,
+    /// Says which server this is to a loopback client that sends [`WHO`].
+    who: Arc<str>,
     stop: Arc<AtomicBool>,
     thread: Option<std::thread::JoinHandle<()>>,
 }
@@ -187,26 +198,59 @@ impl Server {
             .local_addr()
             .map(|a| a.port())
             .map_err(|e| format!("the listener has no address: {e}"))?;
+        // Accepted without blocking, so stopping never has to connect to the
+        // port to wake the loop: a connection to 127.0.0.1 may reach another
+        // process (see `answers_on_loopback`), and the join then waited for ever.
+        listener
+            .set_nonblocking(true)
+            .map_err(|e| format!("the RTMP listener on {bind}:{port} would not stop blocking: {e}"))?;
         let stop = Arc::new(AtomicBool::new(false));
-        let thread = spawn_accept(listener, gate, tls, Arc::clone(&stop));
-        Ok(Server { port, stop, thread: Some(thread) })
+        let who: Arc<str> = token().into();
+        let thread = spawn_accept(listener, gate, tls, Arc::clone(&stop), who.clone());
+        Ok(Server { port, who, stop, thread: Some(thread) })
     }
 
     /// The port actually bound.
     pub fn port(&self) -> u16 {
         self.port
     }
+
+    /// Whether a client on this machine that dials `127.0.0.1:<port>`, as
+    /// every hub reader does, reaches this server.
+    ///
+    /// Not always so. On Windows a port bound on every interface and the
+    /// same port bound on 127.0.0.1 by another process can both be held,
+    /// and loopback connections go to the other one. An ingest plugin left
+    /// running from an earlier start, holding the port on loopback, then
+    /// answered every reader with an FLV header and never a frame, so a
+    /// direct show's HLS output waited on the relay for ever.
+    pub fn answers_on_loopback(&self) -> bool {
+        let addr = SocketAddr::from(([127, 0, 0, 1], self.port));
+        let Ok(mut socket) = TcpStream::connect_timeout(&addr, Duration::from_secs(1)) else { return false };
+        let _ = socket.set_read_timeout(Some(Duration::from_secs(2)));
+        if socket.write_all(WHO).is_err() {
+            return false;
+        }
+        let mut line = String::new();
+        let _ = BufReader::new(socket).take(256).read_line(&mut line);
+        line.trim_end() == &*self.who
+    }
 }
 
 impl Drop for Server {
     fn drop(&mut self) {
         self.stop.store(true, Ordering::Relaxed);
-        // Connect to our own port so the blocking accept returns at once.
-        let _ = TcpStream::connect(("127.0.0.1", self.port));
         if let Some(thread) = self.thread.take() {
             let _ = thread.join();
         }
     }
+}
+
+/// A token no other server, in this process or another, has.
+fn token() -> String {
+    static NEXT: AtomicU64 = AtomicU64::new(0);
+    let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
+    format!("gmx-{}-{nanos}-{}", std::process::id(), NEXT.fetch_add(1, Ordering::Relaxed))
 }
 
 fn spawn_accept(
@@ -214,21 +258,36 @@ fn spawn_accept(
     gate: Arc<dyn Gate>,
     tls: Option<Arc<rustls::ServerConfig>>,
     stop: Arc<AtomicBool>,
+    who: Arc<str>,
 ) -> std::thread::JoinHandle<()> {
     std::thread::Builder::new()
         .name("gmx-rtmp-accept".into())
         .spawn(move || {
-            for incoming in listener.incoming() {
-                if stop.load(Ordering::Relaxed) {
-                    return;
+            while !stop.load(Ordering::Relaxed) {
+                let stream = match listener.accept() {
+                    Ok((stream, _)) => stream,
+                    Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                        std::thread::sleep(ACCEPT_TICK);
+                        continue;
+                    }
+                    Err(_) => {
+                        std::thread::sleep(ACCEPT_TICK);
+                        continue;
+                    }
+                };
+                // A socket accepted from a non blocking listener is non
+                // blocking itself on Windows and macOS; the connection reads
+                // with timeouts of its own.
+                if stream.set_nonblocking(false).is_err() {
+                    continue;
                 }
-                let Ok(stream) = incoming else { continue };
                 let gate = Arc::clone(&gate);
                 let stop = Arc::clone(&stop);
                 let tls = tls.clone();
+                let who = who.clone();
                 let _ = std::thread::Builder::new()
                     .name("gmx-rtmp-conn".into())
-                    .spawn(move || conn::serve(stream, tls, gate, &stop));
+                    .spawn(move || conn::serve(stream, tls, gate, &stop, &who));
             }
         })
         .expect("could not start the RTMP accept thread")

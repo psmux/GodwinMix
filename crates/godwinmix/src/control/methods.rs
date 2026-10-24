@@ -114,6 +114,8 @@ pub fn registry() -> Registry<Call> {
     config::register(&mut reg);
     devices::register(&mut reg);
     vitals::register(&mut reg);
+    crate::machine::methods::register(&mut reg);
+    crate::headend::methods::register(&mut reg);
     feeds::register(&mut reg);
     setup::register(&mut reg);
     crate::observe::register(&mut reg);

@@ -1,9 +1,12 @@
 // The ladder picker for HLS: which sizes a viewer's player may switch
 // between. Each ladder is drawn as its rungs, nested, to scale, so four
-// steps looks like four steps before anyone reads a number.
+// steps looks like four steps before anyone reads a number. A custom rung
+// has an Advanced group of its own (rung-advanced.js), and the sound every
+// rung shares has one bitrate for the ladder.
 
 import { el } from "../../shell/dom.js";
 import { describe, ladders, usable, rate } from "./model.js";
+import { keepAdvanced, rungAdvanced } from "./rung-advanced.js";
 
 const HEIGHTS = [1080, 720, 540, 480, 360, 240];
 const BITRATE = { 1080: 6000, 720: 3000, 540: 2000, 480: 1400, 360: 800, 240: 400 };
@@ -17,6 +20,31 @@ export function rung(height, kbps) {
     video: { codec: "h264", width, height, bitrate_kbps: kbps || BITRATE[height] || 1000, keyframe_ms: 2000 },
     audio: { codec: "aac", bitrate_kbps: 128 },
   };
+}
+
+/**
+ * A saved ladder's rungs, as the picker keeps them: each one with the
+ * container and audio the picker writes, and whatever else it asked for.
+ */
+export function rungsFrom(ladder) {
+  return (ladder || []).filter((r) => r && r.video && r.video.height).map((r) => {
+    const made = keepAdvanced(rung(r.video.height, r.video.bitrate_kbps), r);
+    if (r.video.codec) made.video.codec = r.video.codec;
+    return made;
+  });
+}
+
+/** The sound bitrate of a saved ladder: its top rung's, 128 when it names none. */
+export function soundOf(ladder) {
+  const a = ((ladder || [])[0] || {}).audio;
+  return (a && a.bitrate_kbps) || 128;
+}
+
+/** The rungs to send, each with the ladder's one sound bitrate. */
+export function withSound(rungs, kbps) {
+  const n = Math.round(Number(kbps));
+  const sound = n >= 32 && n <= 512 ? n : 128;
+  return rungs.map((r) => ({ ...r, video: { ...r.video }, audio: { codec: "aac", bitrate_kbps: sound } }));
 }
 
 /** What is wrong with a custom ladder, or "". */
@@ -47,15 +75,20 @@ export function ladderArt(requests) {
 
 /**
  * @param {object[]} presets  from `rendition.presets`
- * @returns {{node, value: () => ({preset: string}|{ladder: object[]}|{error: string})}}
+ * @param {object|null} [current]  the `rendition` an edit opens on; null for
+ *   an output serving the programme as it is, which opens with no card picked
+ * @returns {{node, value: () => ({preset: string}|{ladder: object[]}|{error: string}|undefined)}}
  */
-export function ladderPicker(presets) {
+export function ladderPicker(presets, current) {
   const offered = ladders(presets);
   const cards = el("div.rnd-cards.rnd-ladders", { role: "radiogroup", "aria-label": "Sizes for viewers" });
   const rows = el("div.rnd-rungs");
-  const custom = el("div.rnd-customwrap", { hidden: true }, [rows, el("button.btn.rnd-addrung", { type: "button", text: "Add a rung", onclick: () => addRung() })]);
-  let choice = (offered.find(usable) || {}).id || "custom";
-  let rungs = (offered.find((p) => p.id === "abr-ladder-3") || offered[0] || { ladder: [rung(720), rung(480), rung(360)] }).ladder.map((r) => rung(r.video.height, r.video.bitrate_kbps));
+  const saved = current && current.ladder && current.ladder.length ? current.ladder : null;
+  const sound = el("input", { type: "number", min: "32", max: "512", step: "16", value: String(soundOf(saved)), "aria-label": "Sound bitrate in kb/s" });
+  const soundRow = el("label.rnd-rungsound", {}, [el("span", { text: "Sound" }), sound, el("span.rnd-dim", { text: "kb/s, one track every size shares" })]);
+  const custom = el("div.rnd-customwrap", { hidden: true }, [rows, soundRow, el("button.btn.rnd-addrung", { type: "button", text: "Add a rung", onclick: () => addRung() })]);
+  let choice = saved ? "custom" : current && current.preset ? current.preset : current === null ? null : (offered.find(usable) || {}).id || "custom";
+  let rungs = saved ? rungsFrom(saved) : (offered.find((p) => p.id === "abr-ladder-3") || offered[0] || { ladder: [rung(720), rung(480), rung(360)] }).ladder.map((r) => rung(r.video.height, r.video.bitrate_kbps));
 
   const pick = (id) => {
     choice = id;
@@ -74,22 +107,28 @@ export function ladderPicker(presets) {
   function rungRow(r, i) {
     const size = el("select", { "aria-label": "Height" }, HEIGHTS.map((h) => el("option", { value: String(h), text: `${h}p`, selected: h === r.video.height })));
     const kbps = el("input", { type: "number", min: "200", max: "20000", step: "100", value: String(r.video.bitrate_kbps), "aria-label": "Bitrate in kb/s" });
-    size.onchange = () => { rungs[i] = rung(Number(size.value)); drawRungs(); };
-    kbps.onchange = () => { rungs[i] = rung(r.video.height, Number(kbps.value)); drawRungs(); };
+    // A new size or bitrate keeps what the rung's Advanced group says.
+    size.onchange = () => { rungs[i] = keepAdvanced(rung(Number(size.value)), r); drawRungs(); };
+    kbps.onchange = () => { rungs[i] = keepAdvanced(rung(r.video.height, Number(kbps.value)), r); drawRungs(); };
     const remove = el("button.btn.icon", { type: "button", text: "×", title: "Remove this rung", "aria-label": `Remove ${r.video.height}p`, onclick: () => { rungs.splice(i, 1); drawRungs(); } });
-    return el("div.rnd-rung", {}, [size, kbps, el("span.rnd-dim", { text: "kb/s" }), remove]);
+    const more = el("div.rnd-rungmore");
+    rungAdvanced(r, (next) => { rungs[i] = next; }).then((form) => more.appendChild(form));
+    return el("div.rnd-rungbox", {}, [el("div.rnd-rung", {}, [size, kbps, el("span.rnd-dim", { text: "kb/s" }), remove]), more]);
   }
 
   for (const p of offered) cards.appendChild(ladderCard(p, p.id, p.title, p.ladder, pick));
+  // A saved preset this machine no longer lists still opens on Custom.
+  if (choice && choice !== "custom" && !offered.some((p) => p.id === choice)) choice = "custom";
   cards.appendChild(ladderCard({}, "custom", "Custom", rungs, pick));
   drawRungs();
   pick(choice);
   return {
     node: el("div", {}, [cards, custom]),
     value() {
+      if (!choice) return undefined;
       if (choice !== "custom") return { preset: choice };
       const wrong = ladderError(rungs);
-      return wrong ? { error: wrong } : { ladder: rungs };
+      return wrong ? { error: wrong } : { ladder: withSound(rungs, sound.value) };
     },
   };
 }

@@ -11,7 +11,7 @@ fn tag(kind: TagKind, ms: u32, keyframe: bool, header: bool, size: usize) -> Med
         TagKind::Script => 0x02,
     };
     body[1] = if header { 0 } else { 1 };
-    MediaTag { kind, timestamp_ms: ms, keyframe, sequence_header: header, payload: Arc::from(body) }
+    MediaTag { track: 0, kind, timestamp_ms: ms, keyframe, sequence_header: header, payload: Arc::from(body) }
 }
 
 /// A publisher's opening: metadata, the two headers.
@@ -157,4 +157,25 @@ fn a_blocked_reader_does_not_slow_the_publisher_or_the_other_reader() {
     assert!(worst < Duration::from_millis(200), "one second of media took {worst:?}");
     assert_eq!(delivered, 3 + 60 * 60, "the reader that kept up got every tag");
     assert!(lost > 0, "the stuck reader lost GOPs rather than holding anyone up");
+}
+
+#[test]
+fn only_a_reader_that_asked_is_given_the_sound_tracks_after_the_first() {
+    let hub = Hub::new();
+    let p = hub.publish("direct.x", "main", "udp", None).unwrap();
+    let (plain, all) = (hub.subscribe("direct.x", "main"), hub.subscribe_all("direct.x", "main"));
+    opening(&p);
+    let mut extra = tag(TagKind::Audio, 0, false, true, 4);
+    extra.track = 2;
+    p.push(extra.clone());
+    second(&p, 0, 30);
+    for ms in [0, 33] {
+        p.push(MediaTag { timestamp_ms: ms, sequence_header: false, ..extra.clone() });
+    }
+    let (a, b) = (drain(&plain), drain(&all));
+    assert!(a.iter().all(|t| t.track == 0), "a reader that did not ask gets track 0 alone");
+    assert_eq!(b.iter().filter(|t| t.track == 2).count(), 3, "the header, then two frames");
+    assert_eq!(a.len() + 3, b.len());
+    let tracks = hub.stream("direct.x", "main").unwrap()["tracks"].clone();
+    assert_eq!(tracks.as_array().unwrap().iter().map(|t| t["track"].as_u64().unwrap()).collect::<Vec<_>>(), [0, 0, 2]);
 }

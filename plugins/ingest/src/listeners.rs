@@ -43,6 +43,12 @@ pub struct Listeners {
     problems: BTreeMap<String, String>,
     /// Direct shows read through the relay by the station (`direct::readers`).
     pub readers: Vec<String>,
+    /// A loopback port of the relay's own, opened when the RTMP port could
+    /// not be bound or does not reach this process from 127.0.0.1. Kept
+    /// once open, so the relay's address does not move again.
+    own_relay: Option<Server>,
+    /// Why it was opened, kept for the relay's row.
+    relay_why: Option<String>,
 }
 
 impl Listeners {
@@ -58,6 +64,8 @@ impl Listeners {
             wants: Wants::default(),
             problems: BTreeMap::new(),
             readers: Vec::new(),
+            own_relay: None,
+            relay_why: None,
         }
     }
 
@@ -66,6 +74,9 @@ impl Listeners {
         self.wants = Wants::of(table, self.settings.open_door);
         self.wants.relay.extend(self.readers.iter().map(|id| format!("direct.{id}")));
         self.problems.clear();
+        if let Some(why) = &self.relay_why {
+            self.problems.insert("relay".into(), why.clone());
+        }
         self.apply_rtmp();
         self.apply_srt();
         self.apply_rtmps(table.tls.as_ref());
@@ -89,11 +100,47 @@ impl Listeners {
         match Server::bind(&bind, self.rtmp_port, gate) {
             Ok(server) => {
                 self.rtmp_port = server.port();
-                let _ = self.gate.relay.set(format!("127.0.0.1:{}", self.rtmp_port));
                 self.note(format!("RTMP port {} open on {bind}", self.rtmp_port));
+                if server.answers_on_loopback() {
+                    if self.own_relay.is_none() {
+                        self.gate.set_relay(format!("127.0.0.1:{}", self.rtmp_port));
+                    }
+                } else {
+                    let why = format!(
+                        "127.0.0.1:{} reaches another program, not this plugin: another GodwinMix, or an ingest plugin \
+                         left running from an earlier start, holds the port on loopback. Publishers on the network still \
+                         reach this one; stop the other program to free the port.",
+                        self.rtmp_port
+                    );
+                    self.fail("relay", why.clone());
+                    self.relay_why = Some(why);
+                    self.relay_of_its_own();
+                }
                 self.rtmp = Some((server, wide));
             }
-            Err(e) => self.fail("rtmp", e),
+            Err(e) => {
+                self.fail("rtmp", e);
+                // The shows and sources on this machine still read the hub.
+                self.relay_of_its_own();
+            }
+        }
+    }
+
+    /// Open the relay on a loopback port of its own, once, and say where.
+    fn relay_of_its_own(&mut self) {
+        if self.own_relay.is_some() {
+            return;
+        }
+        let gate = Arc::new(Via(self.gate.clone(), Protocol::Rtmp));
+        match Server::bind("127.0.0.1", 0, gate) {
+            Ok(server) if server.answers_on_loopback() => {
+                let at = format!("127.0.0.1:{}", server.port());
+                self.note(format!("the relay for this machine's readers is on {at} instead"));
+                self.gate.set_relay(at);
+                self.own_relay = Some(server);
+            }
+            Ok(server) => self.fail("relay", format!("the relay's own port {} does not answer from 127.0.0.1 either", server.port())),
+            Err(e) => self.fail("relay", e),
         }
     }
 
@@ -152,7 +199,11 @@ impl Listeners {
             Wants::row("rtmp", "tcp", self.rtmp_port, wide, &w.rtmp),
             Wants::row("srt", "udp", self.settings.srt_port, self.srt.is_some(), &w.srt),
         ];
-        if self.rtmp.is_some() && !wide {
+        if let Some(own) = &self.own_relay {
+            let mut relay = Wants::row("relay", "tcp", own.port(), true, &w.relay);
+            relay["loopback"] = json!(true);
+            rows.push(relay);
+        } else if self.rtmp.is_some() && !wide {
             let mut relay = Wants::row("relay", "tcp", self.rtmp_port, true, &w.relay);
             relay["loopback"] = json!(true);
             rows.push(relay);

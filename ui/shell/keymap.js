@@ -60,6 +60,7 @@ export const DEFAULT_MAP = {
   "Ctrl+,": "shell.settings",
   "Ctrl+O": "project.open",
   "Ctrl+S": "project.save",
+  "Ctrl+Shift+T": "show.reopen",
   "?": "shell.shortcuts",
 };
 

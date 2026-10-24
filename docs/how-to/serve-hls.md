@@ -22,6 +22,14 @@ port, so there is nothing to open on the router.
    further behind.
 6. Press **Start serving**.
 
+Everything else is under **Advanced**, closed until you open it: who may
+play the link (with its key, or open behind a gateway), the segment length,
+the playlist window, the low latency part and a viewer key of your own. Left
+alone, the dialog sends what it always did: 2 second segments, a 30 second
+window, and the key this machine makes.
+
+![HLS for viewers with Advanced open, in the light theme](../media/headend/hls-add-advanced-light.png)
+
 Every size is its own encode, so a ladder of four costs more than one
 destination. If the machine has no room for it, the form says what it needs
 and offers what fits, as for any other destination.
@@ -104,11 +112,81 @@ curl -X POST http://127.0.0.1:8080/api/v1/shows/bbc-one/output \
 One rendition is the most such an output carries; a ladder of sizes needs
 the show to composite.
 
+### From the page
+
+Open the show from its row on the monitoring wall, or press **Settings** in
+a channel's drawer on the headend view. Under **Outputs**:
+
+* **Add output** with an address of `hls://<name>` shows the HLS settings
+  under it before the format.
+* **HLS settings** on an `hls://` output's row opens what it has now: low
+  latency as one click, and under **Advanced** the segments (CMAF, CMAF and
+  MPEG-TS, or MPEG-TS alone), who may play it, the segment length, the
+  window, the part and the viewer key. **Save settings** sends them all with
+  `show.output.set`, which replaces every param, and the output starts again
+  on the same link.
+* **Format** changes the rendition, with the encoder's finer settings under
+  the Custom card's **Advanced** ([Convert broadcast feeds on the
+  GPU](convert-broadcast-feeds-on-the-gpu.md)). A format the governor
+  refuses stays open with what would fit.
+
+The row says what the output makes, such as `CMAF and TS, open on the
+network`. What it was given is read back from the running output, so an
+output that is off opens on the defaults and says so.
+
+![An HLS output's settings in a show's detail, dark theme](../media/headend/hls-settings-dark.png)
+![The same at phone width, light theme](../media/headend/phone-hls-settings-light.png)
+
 The packaging runs in a process of its own beside the station, started
 while such an output is on. If it stops, the output shows `reconnecting`
 in `show.list` with the reason, and comes back on the same link once the
 station has started it again, usually within a few seconds; the rest of the
 station carries on. `docs/reference/hls-output.md` has the rest.
+
+### Every sound track
+
+A broadcast feed often has two to four sound tracks, one per language. An
+HLS output of such a show carries all of them, each as its own rendition
+named from the language the feed gives it, the first one the default. A
+player that builds its audio menu from the playlist (Safari's, or
+`hls.audioTracks` in hls.js) lists them all and switches between them.
+
+### MPEG-TS for older players
+
+Some set top boxes and older players take MPEG-TS segments and nothing
+else. Ask for them beside CMAF:
+
+```sh
+curl -X POST http://127.0.0.1:8080/api/v1/shows/bbc-one/output/add \
+  -H "authorization: Bearer $GODWINMIX_TOKEN" -H 'content-type: application/json' \
+  -d '{"uri":"hls://viewers","params":{"segments":"both"}}'
+```
+
+The TS link is the CMAF one with `master-ts.m3u8` in place of
+`master.m3u8`:
+
+```
+/hls/viewers/master-ts.m3u8?show=bbc-one&key=...
+```
+
+Its `main` rendition has the picture and the first sound track in one
+stream, and each further sound track is a rendition of its own. The TS and
+CMAF playlists number and time the same segments. `"segments": "ts"`
+serves MPEG-TS alone.
+
+### Behind a gateway
+
+When a gateway in front of the station checks its own signature on every
+path, the viewer key is in the way. Make the output open:
+
+```sh
+-d '{"uri":"hls://viewers","params":{"segments":"both","access":"open"}}'
+```
+
+An open output answers any player on loopback or a private network
+without a key, which is where the gateway is. A request from anywhere else
+still needs the key, and is told so. Add `"open_public": true` only if the
+output is meant to be open to everyone who can reach the port.
 
 ## Play it
 
