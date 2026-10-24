@@ -1948,6 +1948,38 @@
         ],
         "type": "object"
       },
+      "ChannelBackup": {
+        "additionalProperties": false,
+        "description": "A channel's backup input: an input with no backup of its own.",
+        "properties": {
+          "interface": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "params": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "program": {
+            "format": "uint16",
+            "maximum": 65535,
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "uri": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "uri"
+        ],
+        "type": "object"
+      },
       "ChannelBulkRequest": {
         "additionalProperties": false,
         "description": "`headend.channel.bulk`: the same change to many channels.",
@@ -2156,13 +2188,13 @@
           "backup": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/ChannelInput"
+                "$ref": "#/components/schemas/ChannelBackup"
               },
               {
                 "type": "null"
               }
             ],
-            "description": "A second input, taken when this one stops and let go when it comes\nback. A backup has no backup of its own."
+            "description": "A second input, taken when this one stops and let go when it comes\nback."
           },
           "interface": {
             "description": "The network card a multicast group is joined on, by name or by one\nof its IPv4 addresses. Left out: the one the default route uses.",

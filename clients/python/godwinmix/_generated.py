@@ -533,6 +533,14 @@ class ChannelAdded(TypedDict, total=False):
     channel: Channel
     key: NewKey
 
+class ChannelBackup(TypedDict, total=False):
+    """A channel's backup input: an input with no backup of its own."""
+
+    interface: Optional[str]
+    params: Dict[str, Any]
+    program: Optional[int]
+    uri: str
+
 class ChannelBulkRequest(TypedDict, total=False):
     """`headend.channel.bulk`: the same change to many channels."""
 
@@ -598,8 +606,8 @@ class ChannelHls(TypedDict, total=False):
 class ChannelInput(TypedDict, total=False):
     """Where a channel's programme comes from."""
 
-    backup: Union[ChannelInput, None]
-    # A second input, taken when this one stops and let go when it comes back. A backup has no backup of its own.
+    backup: Union[ChannelBackup, None]
+    # A second input, taken when this one stops and let go when it comes back.
     interface: Optional[str]
     # The network card a multicast group is joined on, by name or by one of its IPv4 addresses. Left out: the one the default route uses.
     params: Dict[str, Any]

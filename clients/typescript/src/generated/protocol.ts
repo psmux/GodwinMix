@@ -468,6 +468,14 @@ export interface ChannelAdded {
   key: NewKey;
 }
 
+/** A channel's backup input: an input with no backup of its own. */
+export interface ChannelBackup {
+  interface?: string | null;
+  params?: Record<string, unknown>;
+  program?: number | null;
+  uri: string;
+}
+
 /** `headend.channel.bulk`: the same change to many channels. */
 export interface ChannelBulkRequest {
   custom?: TranscodeProfile | null;
@@ -514,7 +522,7 @@ export interface ChannelHls {
 
 /** Where a channel's programme comes from. */
 export interface ChannelInput {
-  backup?: ChannelInput | null;
+  backup?: ChannelBackup | null;
   interface?: string | null;
   params?: Record<string, unknown>;
   program?: number | null;

@@ -868,6 +868,18 @@ pub struct ChannelAdded {
     pub key: NewKey,
 }
 
+/// A channel's backup input: an input with no backup of its own.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ChannelBackup {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub interface: Option<String>,
+    pub params: BTreeMap<String, Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub program: Option<u16>,
+    pub uri: String,
+}
+
 /// `headend.channel.bulk`: the same change to many channels.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -968,9 +980,9 @@ pub struct ChannelHls {
 #[serde(default)]
 pub struct ChannelInput {
     /// A second input, taken when this one stops and let go when it comes
-    /// back. A backup has no backup of its own.
+    /// back.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub backup: Option<ChannelInput>,
+    pub backup: Option<ChannelBackup>,
     /// The network card a multicast group is joined on, by name or by one
     /// of its IPv4 addresses. Left out: the one the default route uses.
     #[serde(skip_serializing_if = "Option::is_none")]
