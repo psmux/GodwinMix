@@ -238,9 +238,14 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/routing/view.js", include_str!("../../../ui/panels/routing/view.js")),
     ("panels/headend/act.js", include_str!("../../../ui/panels/headend/act.js")),
     ("panels/headend/band.js", include_str!("../../../ui/panels/headend/band.js")),
+    ("panels/headend/channel-parts.js", include_str!("../../../ui/panels/headend/channel-parts.js")),
+    ("panels/headend/channels.js", include_str!("../../../ui/panels/headend/channels.js")),
     ("panels/headend/charts.js", include_str!("../../../ui/panels/headend/charts.js")),
+    ("panels/headend/conv.js", include_str!("../../../ui/panels/headend/conv.js")),
     ("panels/headend/data.js", include_str!("../../../ui/panels/headend/data.js")),
     ("panels/headend/drawer.js", include_str!("../../../ui/panels/headend/drawer.js")),
+    ("panels/headend/editor.js", include_str!("../../../ui/panels/headend/editor.js")),
+    ("panels/headend/form.js", include_str!("../../../ui/panels/headend/form.js")),
     ("panels/headend/gpu.js", include_str!("../../../ui/panels/headend/gpu.js")),
     ("panels/headend/grid.js", include_str!("../../../ui/panels/headend/grid.js")),
     ("panels/headend/groups.js", include_str!("../../../ui/panels/headend/groups.js")),
@@ -251,10 +256,14 @@ const ASSETS: &[(&str, &str)] = &[
     ("panels/headend/model.js", include_str!("../../../ui/panels/headend/model.js")),
     ("panels/headend/parts.js", include_str!("../../../ui/panels/headend/parts.js")),
     ("panels/headend/player.js", include_str!("../../../ui/panels/headend/player.js")),
+    ("panels/headend/profiles.js", include_str!("../../../ui/panels/headend/profiles.js")),
+    ("panels/headend/scan.js", include_str!("../../../ui/panels/headend/scan.js")),
+    ("panels/headend/setup.css", include_str!("../../../ui/panels/headend/setup.css")),
+    ("panels/headend/setup.js", include_str!("../../../ui/panels/headend/setup.js")),
     ("panels/headend/sheet.js", include_str!("../../../ui/panels/headend/sheet.js")),
     ("panels/headend/station.js", include_str!("../../../ui/panels/headend/station.js")),
-    ("panels/headend/tiles.css", include_str!("../../../ui/panels/headend/tiles.css")),
     ("panels/headend/tile.js", include_str!("../../../ui/panels/headend/tile.js")),
+    ("panels/headend/tiles.css", include_str!("../../../ui/panels/headend/tiles.css")),
     ("panels/headend/tools.js", include_str!("../../../ui/panels/headend/tools.js")),
     ("panels/headend/totals.js", include_str!("../../../ui/panels/headend/totals.js")),
     ("panels/headend/view.js", include_str!("../../../ui/panels/headend/view.js")),
@@ -509,6 +518,8 @@ const DEV_ASSETS: &[(&str, &str)] = &[
     ("test/headend-advanced.js", include_str!("../../../ui/test/headend-advanced.js")),
     ("test/outputs-edit.js", include_str!("../../../ui/test/outputs-edit.js")),
     ("test/headend-station.js", include_str!("../../../ui/test/headend-station.js")),
+    ("test/headend-setup.js", include_str!("../../../ui/test/headend-setup.js")),
+    ("test/headend-stub.js", include_str!("../../../ui/test/headend-stub.js")),
     ("test/index.html", include_str!("../../../ui/test/index.html")),
     ("test/run.js", include_str!("../../../ui/test/run.js")),
     ("test/store.js", include_str!("../../../ui/test/store.js")),
@@ -1349,6 +1360,12 @@ mod tests {
         reachable.extend(closure_of("panels/headend/view.js"));
         // File > Import a Flussonic config, or the button on the headend's band.
         reachable.extend(closure_of("panels/headend/import.js"));
+        // The headend's setup: Add a channel, Scan a multicast feed, the
+        // channel list and the profiles, each fetched by import() from the
+        // band, the empty grid, the drawer or the channel list.
+        for entry in ["panels/headend/editor.js", "panels/headend/scan.js", "panels/headend/channels.js", "panels/headend/profiles.js"] {
+            reachable.extend(closure_of(entry));
+        }
         // View > Flow map, or its button on the headend view's bar.
         reachable.extend(closure_of("panels/flowmap/view.js"));
         // Not imported: the headend player adds it with a <script>, when a
@@ -1489,6 +1506,11 @@ mod tests {
             ("panels/flowmap/view.js", "View > Flow map"),
             ("panels/flowmap/map.js", "View > Flow map"),
             ("panels/headend/tile.js", "View > Headend"),
+            ("panels/headend/editor.js", "Add a channel or Edit channel in the headend view"),
+            ("panels/headend/scan.js", "Scan a multicast feed in the headend view"),
+            ("panels/headend/channels.js", "the channel list in the headend view"),
+            ("panels/headend/profiles.js", "Profiles in the headend view"),
+            ("panels/headend/setup.js", "the headend's setup dialogs"),
             ("vendor/hls.light.min.js", "a channel's drawer in the headend view"),
             ("panels/wall/data.js", "View > Monitoring wall"),
             ("panels/wall/task.js", "View > Monitoring wall"),

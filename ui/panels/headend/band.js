@@ -2,7 +2,8 @@
 // CPU and memory as rings, what comes in and goes out with two minutes of
 // it, how long the machine and the station have been up, the Flussonic
 // config the station follows when it follows one, and the buttons for
-// importing a Flussonic config, full screen and close.
+// adding a channel, scanning a feed, the channel list, importing a
+// Flussonic config, the flow map, full screen and close.
 
 import { el, svg } from "../../shell/dom.js";
 import { kbps } from "../wall/model.js";
@@ -35,7 +36,7 @@ export function band(act) {
     el("div.he-cell.net", {}, [el("span.he-k", { text: "Network in" }), inV, inS.node]),
     el("div.he-cell.net", {}, [el("span.he-k", { text: "Network out" }), outV, outS.node]),
     el("div.he-cell.up", {}, [el("span.he-k", { text: "Up" }), upV, upSub]),
-    el("div.he-cell.acts", {}, [button("import", "M12 4v11M7 10l5 5 5-5M5 20h14", "Import a Flussonic config"), button("flow", "M4 6h4v4H4zM4 14h4v4H4zM16 10h4v4h-4zM8 8c4 0 4 4 8 4M8 16c4 0 4-4 8-4", "Flow map: what is connected to what"), button("full", "M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5", "Full screen"), button("close", "M6 6l12 12M18 6L6 18", "Close the headend view (Escape)")]),
+    el("div.he-cell.acts", {}, [button("add", "M12 5v14M5 12h14", "Add a channel"), button("scan", "M4 12a8 8 0 0 1 16 0M7.5 12a4.5 4.5 0 0 1 9 0M12 12l4-6M4 18h16", "Scan a multicast feed for its programs"), button("channels", "M4 6h16M4 12h16M4 18h10M18 16l2 2-2 2", "Channels: edit, change many at once, profiles"), button("import", "M12 4v11M7 10l5 5 5-5M5 20h14", "Import a Flussonic config"), button("flow", "M4 6h4v4H4zM4 14h4v4H4zM16 10h4v4h-4zM8 8c4 0 4 4 8 4M8 16c4 0 4-4 8-4", "Flow map: what is connected to what"), button("full", "M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5", "Full screen"), button("close", "M6 6l12 12M18 6L6 18", "Close the headend view (Escape)")]),
   ]);
   node.addEventListener("click", (e) => {
     const b = e.target.closest("[data-act]");

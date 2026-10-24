@@ -1,6 +1,10 @@
 // What a press or a key does in the headend view: filter, sort, pick a
-// group, full screen, close. The order and problems only are this
+// group, full screen, close, and the setup dialogs (add, edit, scan, the
+// channel list, profiles, import), each fetched by import() when first
+// pressed. The order and problems only are this
 // browser's and are remembered; the rest starts fresh each time.
+
+import { WORD, stateOf } from "./model.js";
 
 const KEY = "gmx.headend";
 
@@ -24,7 +28,13 @@ export function act(view, what, value) {
   const o = view.opts;
   if (what === "close") return view.close();
   if (what === "full") return full(view.root);
-  if (what === "import") return import("./import.js").then((m) => m.importFlussonic(view.client, { following: view.box.follow }));
+  const done = () => view.reload();
+  const setup = view.setup || undefined;
+  if (what === "import") return import("./import.js").then((m) => m.importFlussonic(view.client, { following: view.box.follow, onDone: done }));
+  if (what === "add" || what === "edit") return import("./editor.js").then((m) => m.editChannel(view.client, { setup, entry: what === "edit" ? value : null, onDone: done }));
+  if (what === "scan") return import("./scan.js").then((m) => m.scanFeed(view.client, { setup, onDone: done }));
+  if (what === "profiles") return import("./profiles.js").then((m) => m.manageProfiles(view.client, { setup, onChange: done }));
+  if (what === "channels") return import("./channels.js").then((m) => m.channelList(view.client, { onChange: done, stateOf: (id) => stateWord(view, id) }));
   if (what === "flow") return import("../flowmap/view.js").then((m) => m.showFlowMap(view.client));
   if (what === "problems") o.problems = !o.problems;
   else if (what === "state") o.state = o.state === value ? "" : value;
@@ -32,6 +42,12 @@ export function act(view, what, value) {
   savePrefs(o);
   view.scroll.scrollTop = 0;
   view.later();
+}
+
+/** A channel's state word, from the tiles' own numbers. */
+function stateWord(view, id) {
+  const show = view.data.find(id);
+  return show ? WORD[stateOf(show, view.data.stats.get(id))] : "";
 }
 
 function full(root) {
