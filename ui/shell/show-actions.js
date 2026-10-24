@@ -33,12 +33,14 @@ export function handle(view, e) {
   if (e.type === "click") return clicked(view, show, e);
   // A double click renames this show only. On another show's tab the first
   // click has already switched, as a browser's tab does.
-  if (e.type === "dblclick") return show.id === view.current && !view.switching && rename(view, show);
+  // Not when the first click of it was the one that closed the wall.
+  if (e.type === "dblclick") return show.id === view.current && !view.switching && e.timeStamp - wallClosed > 800 && rename(view, show);
   if (e.type === "contextmenu") return tabMenu(view, show, e.clientX, e.clientY);
   if (e.type === "keydown") return key(view, show, tab, e);
 }
 
 let pending = null;
+let wallClosed = -Infinity;
 
 /**
  * A click on another show switches to it at once, the way a browser's tab
@@ -47,10 +49,18 @@ let pending = null;
  * rename, and a double click (a habit from opening things) renamed the
  * other show and never switched. A click on this show's own tab opens its
  * menu, unless a second click makes it a rename; Enter on the selected tab
- * opens the menu from the keyboard.
+ * opens the menu from the keyboard. With the monitoring wall open, a click
+ * on this show's tab closes the wall instead.
  */
 function clicked(view, show, e) {
   clearTimeout(pending);
+  // The wall covers the page. A click on this show's tab takes it away and
+  // shows the page again; on another show's tab the page moves as well.
+  if (document.querySelector("section.wall")) {
+    import("../panels/wall/view.js").then((m) => m.closeWall());
+    wallClosed = e.timeStamp;
+    if (show.id === view.current) return;
+  }
   if (view.switching) return;
   if (show.id !== view.current) return go(view, show.id);
   if (e.detail > 1) return;

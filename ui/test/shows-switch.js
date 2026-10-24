@@ -74,6 +74,24 @@ export async function switchTests(test, eq, ok, { row, key, until, wait }) {
   test("arrow keys move along the tabs, and Enter on the one reached switches to it", () => ok(/[?&]show=kids\b/.test(went[0] || ""), went[0]));
   r.node.remove();
 
+  r = await fresh();
+  const wall = await import("../panels/wall/view.js");
+  wall.toggleWall(showStub());
+  await until(() => document.querySelector("section.wall"));
+  const main = r.tab("main");
+  main.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 }));
+  main.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 2 }));
+  main.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, detail: 2 }));
+  await until(() => !document.querySelector("section.wall"));
+  await wait(400);
+  test("with the wall open, a click or double click on this show's tab closes the wall, and renames nothing", () => {
+    ok(!document.querySelector("section.wall"), "the wall is gone");
+    ok(!r.node.querySelector(".showtab-input"), "no rename box");
+    eq(went.length, 0);
+    ok(!document.querySelector(".ctx-menu, [role=menu]"), "no tab menu");
+  });
+  r.node.remove();
+
   const stub = showStub();
   const node = await row(stub);
   node.querySelector('[data-show="kids"]').focus();

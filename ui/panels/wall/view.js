@@ -27,6 +27,11 @@ export function toggleWall(client) {
   return open;
 }
 
+/** Close it, when it is open. A show's tab does this: the wall is over the page. */
+export function closeWall() {
+  if (open) open.close();
+}
+
 /** Open, or bring forward when already open. */
 export function showWall(client) {
   return open || toggleWall(client);
