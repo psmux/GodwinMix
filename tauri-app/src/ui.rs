@@ -116,13 +116,7 @@ pub fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
             &PredefinedMenuItem::select_all(app, None)?,
         ])
         .build()?;
-    let window = SubmenuBuilder::new(app, "Window")
-        .items(&[
-            &PredefinedMenuItem::minimize(app, None)?,
-            &PredefinedMenuItem::maximize(app, None)?,
-            &PredefinedMenuItem::fullscreen(app, None)?,
-        ])
-        .build()?;
+    let window = crate::fullscreen::window_menu(app)?;
     MenuBuilder::new(app).items(&[&app_menu, &edit, &window]).build()
 }
 
@@ -202,6 +196,7 @@ pub fn on_menu(app: &AppHandle, id: &str) {
         "updates" => check_for_updates(app.clone()),
         "restart" => crate::restart::from_page(app),
         crate::lan::MENU_ID => crate::lan::toggle(app),
+        crate::fullscreen::MENU_ID => crate::fullscreen::toggle(app),
         "quit" => crate::close::request(app, false),
         "quit-all" => crate::close::request(app, true),
         crate::tray::STOP_ALL_ID => crate::background::stop_all(app),

@@ -8,9 +8,41 @@
 //! the whole work area or more and is not maximized, it is maximized, which
 //! is what it was. The menu bar is hidden while it is full screen, as the
 //! programme's own full screen does (`output::main_fullscreen`).
+//!
+//! It also owns the Window menu's Toggle Full Screen. The runtime's own item
+//! for it is a macOS one: on Windows and Linux it is listed as unsupported
+//! and does nothing, so the menu item and F11 did nothing there either. Off
+//! macOS the item is the shell's own, and the shell puts the window in and
+//! out of full screen itself.
 
 use std::sync::atomic::{AtomicBool, Ordering};
-use tauri::{AppHandle, Manager};
+use tauri::menu::{MenuItemBuilder, PredefinedMenuItem, Submenu, SubmenuBuilder};
+use tauri::{AppHandle, Manager, Wry};
+
+/// The shell's own Toggle Full Screen, off macOS.
+pub const MENU_ID: &str = "window-fullscreen";
+
+/// The Window submenu, the same in the shell's menu and the page's.
+pub fn window_menu(app: &AppHandle) -> tauri::Result<Submenu<Wry>> {
+    let sub = SubmenuBuilder::new(app, "Window")
+        .item(&PredefinedMenuItem::minimize(app, None)?)
+        .item(&PredefinedMenuItem::maximize(app, None)?);
+    if cfg!(target_os = "macos") {
+        return sub.item(&PredefinedMenuItem::fullscreen(app, None)?).build();
+    }
+    let toggle = MenuItemBuilder::with_id(MENU_ID, "Toggle Full Screen").accelerator("F11").build(app)?;
+    sub.item(&toggle).build()
+}
+
+/// Toggle Full Screen was picked. The menu bar is hidden and shown again by
+/// `resized`, which sees the change whichever way it was made.
+pub fn toggle(app: &AppHandle) {
+    let Some(w) = app.get_webview_window("main") else { return };
+    let on = !w.is_fullscreen().unwrap_or(false);
+    if let Err(e) = w.set_fullscreen(on) {
+        eprintln!("[desktop] the window could not go {} full screen: {e}", if on { "into" } else { "out of" });
+    }
+}
 
 static FULL: AtomicBool = AtomicBool::new(false);
 
