@@ -1,5 +1,5 @@
 // A direct show's outputs in its detail: each with its state, what it is
-// sent as and its bitrate; Edit its address, key and format in the same
+// sent as and its bitrate, and for HLS its CMAF and MPEG-TS playlists; Edit its address, key and format in the same
 // form the Outputs panel uses (outputs/destination.js); change its format
 // alone with the same Format step the
 // Add destination form uses, an HLS output's settings (detail-hls.js), turn
@@ -9,7 +9,7 @@
 import { el } from "../../shell/dom.js";
 import { errorToast } from "../../shell/toast.js";
 import { outFormat, outName } from "./cells.js";
-import { hlsBlock, hlsWords, isHls } from "./detail-hls.js";
+import { hlsBlock, hlsWords, isHls, playlistLinks } from "./detail-hls.js";
 import { kbps } from "./model.js";
 
 /** The input as a StreamInfo, so the format step can say when copy is enough. */
@@ -115,6 +115,7 @@ export function outputsSection(client, show, stats, reread) {
           el("button.btn", { type: "button", text: o.enabled === false ? "Turn on" : "Turn off", onclick: () => call("show.output.set", { output: o.id, enabled: o.enabled === false }, `${outName(o)} did not change`) }),
           el("button.btn.icon", { type: "button", text: "×", title: `Remove ${outName(o)}`, "aria-label": `Remove ${outName(o)}`, onclick: () => call("show.output.remove", { output: o.id }, `${outName(o)} was not removed`) }),
         ]),
+        isHls(o) ? playlistLinks(o, (client.transport && client.transport.base) || location.origin) : null,
       ]);
     }));
     if (!outs.length) list.append(el("p.wl-calm", { text: "No outputs yet. The input is read but sent nowhere." }));
