@@ -57,8 +57,10 @@ fn without_carry_the_input_is_what_it_was_one_sound_and_no_mpeg2() {
     }
     let rx = start_carrying(&file_url(&mpeg2_clip()), Carry::default());
     assert!(eventually(10, || rx.got.frames(TagKind::Audio) >= 30), "no sound");
+    // The stats come on their own clock, and on a busy macOS runner thirty
+    // sound frames could arrive before the first stats that name the error.
+    let error = || rx.got.0.lock().unwrap().stats.last().and_then(|s| s.error.clone()).unwrap_or_default();
+    assert!(eventually(10, || error().contains("video/mpeg")), "the error names what is left out: {}", error());
     let got = rx.got.0.lock().unwrap();
     assert!(got.tags.iter().all(|t| t.track == 0 && t.kind != TagKind::Video));
-    let error = got.stats.last().and_then(|s| s.error.clone()).unwrap_or_default();
-    assert!(error.contains("video/mpeg"), "the error names what is left out: {error}");
 }
