@@ -44,6 +44,9 @@ impl super::Direct {
                     (view.live, view.playback) = (live, Some(playback));
                     view.params = self.hls.params(id, &d.id);
                 }
+                if !r.compositing {
+                    view.live = super::seen::behind_input(view.live, seen.input_down());
+                }
                 if d.rendition.is_some() && d.enabled && !r.compositing {
                     let (plan, refused) = self.transcode.view(id, &d.id);
                     view.plan = plan;
@@ -73,6 +76,13 @@ impl super::Direct {
                 let live = super::outputs::unreadable(id, &o.id).or(hls).unwrap_or_else(|| seen.output(&o.id, true));
                 if row.state.is_empty() {
                     row.state = serde_json::to_value(live.state).ok().and_then(|v| v.as_str().map(str::to_string)).unwrap_or_default();
+                }
+                // Its state follows the input, as in the list (`behind_input`).
+                if !compositing && seen.input_down() {
+                    row.kbps = 0;
+                    if row.state == "live" {
+                        row.state = "waiting".into();
+                    }
                 }
                 row.rendition_text = match (&o.rendition, self.transcode.view(id, &o.id).0) {
                     (None, _) => "copy".into(),

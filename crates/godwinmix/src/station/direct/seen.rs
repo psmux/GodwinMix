@@ -44,6 +44,12 @@ impl Seen {
         self.input.as_ref().is_some_and(|v| v["state"] == "live")
     }
 
+    /// The host has said what the input is doing and it is not live. Not
+    /// heard of yet is not down: a show just started has said nothing.
+    pub fn input_down(&self) -> bool {
+        self.input.as_ref().is_some_and(|v| v["state"] != "live")
+    }
+
     /// Where a hub reader asks for the input, when the host said.
     pub fn relay(&self) -> Option<(String, String)> {
         let v = self.input.as_ref()?;
@@ -101,6 +107,25 @@ impl Seen {
     }
 }
 
+/// An output of a direct show as it is while the input is down. The HLS
+/// packager, and an output holding its connection open, go on saying live
+/// with the last bitrate they counted after the input stops: the headend's
+/// output table read "live 2.1 Mb/s" for a channel whose input had gone.
+/// Nothing goes out of a direct show while its input is down, so a live
+/// output waits, with that as the reason, and none of them counts a rate.
+pub fn behind_input(live: DestinationLive, input_down: bool) -> DestinationLive {
+    if !input_down {
+        return live;
+    }
+    if live.state == DestinationState::Live {
+        return DestinationLive { state: DestinationState::Waiting, kbps: 0, error: Some(INPUT_DOWN.into()), ..live };
+    }
+    DestinationLive { kbps: 0, ..live }
+}
+
+/// The reason [`behind_input`] gives.
+pub const INPUT_DOWN: &str = "the input is not live, so nothing is sent";
+
 /// The log line for an output whose state or error moved: a warning while
 /// it is down with a reason, and a note when it goes live or waits. None
 /// when neither moved, so a steady output writes nothing. The tiles said
@@ -143,6 +168,26 @@ mod tests {
         assert!(told(Some(&lost), &down("the relay at 127.0.0.1:1935 did not answer")).is_some(), "a new reason is");
         let live = DestinationLive { state: DestinationState::Live, ..Default::default() };
         assert_eq!(told(Some(&lost), &live), Some((false, "live".into())));
+    }
+
+    #[test]
+    fn an_output_follows_the_input_down_and_back() {
+        let live = DestinationLive { state: DestinationState::Live, kbps: 2100, ..Default::default() };
+        assert_eq!(behind_input(live.clone(), false), live, "a live input changes nothing");
+        let held = behind_input(live.clone(), true);
+        assert_eq!(held.state, DestinationState::Waiting);
+        assert_eq!(held.kbps, 0, "no rate is counted with nothing coming in");
+        assert_eq!(held.error.as_deref(), Some(INPUT_DOWN));
+        let failing = DestinationLive { state: DestinationState::Reconnecting, kbps: 40, error: Some("refused".into()), ..Default::default() };
+        let still = behind_input(failing, true);
+        assert_eq!((still.state, still.kbps, still.error.as_deref()), (DestinationState::Reconnecting, 0, Some("refused")), "its own reason stays");
+
+        let mut seen = Seen::default();
+        assert!(!seen.input_down(), "an input not heard of yet is not down");
+        seen.input = Some(json!({"state": "live"}));
+        assert!(!seen.input_down());
+        seen.input = Some(json!({"state": "idle"}));
+        assert!(seen.input_down());
     }
 
     #[test]
