@@ -73,3 +73,24 @@ fn set_show_output_names_the_hls_params_and_the_encode_wants_it_takes() {
     .expect("every want the manual names is a field of the request");
     assert_eq!(want.video.unwrap().keyframe_frames, Some(50));
 }
+
+/// A headend set up from nothing by an agent: every tool for it is one
+/// search away, and takes what its manual says.
+#[test]
+fn an_agent_can_set_a_headend_up_with_no_flussonic_file() {
+    let s = server();
+    let all = mcp_tools::all_tools(&s.registry);
+    let schema = |name: &str| all.iter().find(|t| t["name"] == name).unwrap_or_else(|| panic!("no tool {name}"))["inputSchema"].clone();
+    for (query, name) in [
+        ("add headend channels", "add_headend_channels"),
+        ("list the headend channels and profiles", "headend_channels"),
+        ("scan a multicast feed for its programs", "scan_feed"),
+        ("transcode profile for many channels", "save_transcode_profile"),
+    ] {
+        let found = mcp_tools::search(&s.registry, query, 5);
+        assert!(found.iter().any(|t| t["name"] == name), "{query}: {found:?}");
+        assert!(schema(name)["properties"].get("show").is_none(), "{name} is the station's");
+    }
+    assert!(schema("add_headend_channels")["properties"].get("channels").is_some());
+    assert_eq!(schema("scan_feed")["required"], json!(["uri"]));
+}

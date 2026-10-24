@@ -265,6 +265,10 @@ fn the_table_matches_the_scopes_in_the_protocol_document() {
             "fx.remove",
             // A graphic deleted takes its files with it, like a clip.
             "gallery.remove",
+            // A headend channel removed takes its show with it, as
+            // show.remove does, and a removed profile is gone.
+            "headend.channel.remove",
+            "headend.profile.remove",
             "media.remove",
             // It restarts the mixer on a new address, as core.restart does.
             "network.share",

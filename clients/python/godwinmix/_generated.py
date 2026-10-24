@@ -520,11 +520,52 @@ class ChannelAddRequest(TypedDict, total=False):
     secret: Optional[str]
     # The first key's secret, when encoders already send one (the password after `?psk=`): 6 to 128 letters, digits, `-`, `_`, `.`, `~` or single spaces between them. Left out, the mixer makes one.
 
+class ChannelAddRequest2(TypedDict, total=False):
+    """`headend.channel.add`: one channel or many, made in one go."""
+
+    channels: List[HeadendChannel]
+    dry_run: bool
+    # True: check them and price them, and make nothing. Left out: false.
+
 class ChannelAdded(TypedDict, total=False):
     """What `channel.add` answers: the channel and its first key."""
 
     channel: Channel
     key: NewKey
+
+class ChannelBulkRequest(TypedDict, total=False):
+    """`headend.channel.bulk`: the same change to many channels."""
+
+    custom: Union[TranscodeProfile, None]
+    # With `profile` `custom`: the conversion every one of them takes.
+    enabled: Optional[bool]
+    interface: Optional[str]
+    # Join every multicast input on this card. Empty: the default route's.
+    names: List[str]
+    profile: Optional[str]
+    # A profile for every one of them.
+
+class ChannelChange(TypedDict, total=False):
+    """What an add, an update or a removal did."""
+
+    done: List[str]
+    # The channels made, changed or removed, by name.
+    dry_run: bool
+    refused: List[ShowRefused]
+    # Each one that was not, with why. `index` is its place in the request.
+    restarted: List[str]
+    # Channels whose show had to be made again (input or conversion moved).
+
+class ChannelEntry(TypedDict, total=False):
+    """A channel as `headend.channel.list` answers it."""
+
+    channel: HeadendChannel
+    detached_from: Optional[str]
+    # Set for a channel that came from the followed file and was edited here: the file it no longer follows. `headend.channel.follow` hands it back.
+    follows: Optional[str]
+    # Set for a stream of the Flussonic config this station follows: the file. An edit here takes the channel out of the file's hands (see `headend.channel.update`).
+    show: Optional[str]
+    # The show it runs as, once made.
 
 class ChannelFeed(TypedDict, total=False):
     """A channel's feed as a list shows it."""
@@ -541,6 +582,32 @@ class ChannelFeed(TypedDict, total=False):
     state: FeedState
     uri_host: Optional[str]
     # Scheme, host and port of the pull address, for `pull`.
+
+class ChannelHls(TypedDict, total=False):
+    """The channel's HLS output, which every channel has."""
+
+    access: str
+    # `open` (the default): no viewer key, answered on loopback and private addresses only, for a gateway or cache that checks its own. `keyed`: a viewer key in every link.
+    segment_ms: int
+    # The longest a segment may be, in milliseconds. Cut at a keyframe.
+    segments: str
+    # `both` (MPEG-TS and CMAF, the default), `ts` or `cmaf`.
+    window: Optional[int]
+    # Seconds of segments kept in the playlist. Left out: the packager's.
+
+class ChannelInput(TypedDict, total=False):
+    """Where a channel's programme comes from."""
+
+    backup: Union[ChannelInput, None]
+    # A second input, taken when this one stops and let go when it comes back. A backup has no backup of its own.
+    interface: Optional[str]
+    # The network card a multicast group is joined on, by name or by one of its IPv4 addresses. Left out: the one the default route uses.
+    params: Dict[str, Any]
+    # Further params the input takes, as `docs/reference/direct-inputs.md` lists them: `passphrase` and `latency_ms` for SRT, `transport` for RTSP, `stall_ms` and `return_ms` for the switch to the backup.
+    program: Optional[int]
+    # The MPEG-TS program number to take from a feed that carries several. Left out: the first.
+    uri: str
+    # The address, as a direct show's input takes it: `udp://@239.0.0.1:5000` (multicast), `udp://0.0.0.0:5000` (unicast to this machine), `rtp://@239.0.0.1:5000`, `srt://192.0.2.10:9000`, `srt://@:9000`, `rtmp://host/app/key`, `rtsp://192.0.2.20/stream1`, `https://example.com/live/index.m3u8` or `file:///clips/loop.ts`.
 
 class ChannelKey(TypedDict, total=False):
     """One key, as a list shows it."""
@@ -585,6 +652,21 @@ class ChannelList(TypedDict, total=False):
     listeners: List[Listener]
     # Every listener a channel needs, open or not, and why: the ports this mixer has open for ingest, and the channels each is open for.
     rtmp: RtmpInfo
+
+class ChannelNames(TypedDict, total=False):
+    """`headend.channel.remove` and `headend.channel.follow`."""
+
+    names: List[str]
+
+class ChannelOutput(TypedDict, total=False):
+    """One output beside the HLS one: a UDP multicast or unicast out, an SRT or RTMP push."""
+
+    copy: bool
+    # True: sent as the input comes, whatever the channel's profile. Left out: the same conversion as the HLS output.
+    id: str
+    # A slug, unique in the channel. Left out: `push-1`, `push-2` in order.
+    uri: str
+    # `udp://239.0.1.1:5000`, `srt://192.0.2.30:9000`, `rtmp://host/app/key`.
 
 class ChannelPublish(TypedDict, total=False):
     """Where an encoder is pointed."""
@@ -641,6 +723,14 @@ class ChannelThumbnailRequest(TypedDict, total=False):
     # Which of its streams. The first live one when left out.
     width: Optional[int]
     # Pixels across, 16 to 640, made even. 320 when left out.
+
+class ChannelUpdateRequest(TypedDict, total=False):
+    """`headend.channel.update`: one channel, replaced whole."""
+
+    channel: HeadendChannel
+    # What it becomes. A different `name` renames it, which changes its public path and makes its show again.
+    name: str
+    # The channel's name now.
 
 class ConfigChanged(TypedDict, total=False):
     """One key this call changed, and when the change takes effect."""
@@ -1871,6 +1961,42 @@ class GroupSourcesRequest(TypedDict, total=False):
     # The tray folder to put them in. Null takes them out of the one they are in.
     sources: List[str]
 
+class HeadendChannel(TypedDict, total=False):
+    """One channel."""
+
+    custom: Union[TranscodeProfile, None]
+    # The conversion, when `profile` is `custom`. A Flussonic `transcoder` line is imported as one of these.
+    enabled: bool
+    # False: kept, and its show stopped.
+    hls: ChannelHls
+    input: ChannelInput
+    name: str
+    # The channel's public name: letters, digits, `-`, `_` and `.`, up to 64. It is the path every player and gateway uses, `/<name>/index.m3u8`, so it never changes once viewers have it. The show's id is made from it.
+    origin: Optional[str]
+    # Where it came from: `added here`, `import of <source>`, or `<file>, edited here`. Set by the station; ignored when sent.
+    outputs: List[ChannelOutput]
+    profile: str
+    # A profile's id from `headend.channel.list` (`copy` passes the input through as it comes), or `custom` with `custom` set.
+    title: Optional[str]
+    # What the screen and the show list call it. Left out: the name.
+
+class HeadendEncoder(TypedDict, total=False):
+    """An encoder this machine has, for the profile editor's choice."""
+
+    codec: str
+    # `h264`, `h265`.
+    id: str
+    # The catalogue's id, `h264-nvidia`, `x264`.
+    on: str
+    # `gpu` or `cpu`.
+
+class HeadendExport(TypedDict, total=False):
+    """`headend.export`: the channels kept here in Flussonic's config language."""
+
+    notes: List[str]
+    # What the text cannot say, one line each: a profile setting Flussonic has no word for.
+    text: str
+
 class HeadendImportReport(TypedDict, total=False):
     """`headend.import`'s answer: the report, then what was made."""
 
@@ -1879,7 +2005,7 @@ class HeadendImportReport(TypedDict, total=False):
     disabled: int
     dry_run: bool
     following: Optional[str]
-    # The Flussonic config this station follows, when it follows one. A show made by an import is not in that file, and the file's own streams are not touched.
+    # The Flussonic config this station follows, when it follows one. A channel made by an import is kept by the station, not in that file, and the file's own streams are not touched.
     notes: List[ImportNote]
     shows: ShowAddManyResult
     # `show.add_many`'s answer for these shows: on a dry run what would be made, what it costs and what would be refused; otherwise what was.
@@ -1896,6 +2022,18 @@ class HeadendImportRequest(TypedDict, total=False):
     # Or a file on the station's machine, such as `/etc/flussonic/flussonic.conf`, read by the station.
     text: Optional[str]
     # The config's text, as pasted.
+
+class HeadendSetup(TypedDict, total=False):
+    """`headend.channel.list`."""
+
+    channels: List[ChannelEntry]
+    # Every channel: the ones kept here, then the followed file's.
+    encoders: List[HeadendEncoder]
+    # The video encoders the planner may pick, GPU ones first.
+    following: Optional[str]
+    # The Flussonic config this station follows, when it follows one.
+    profiles: List[TranscodeProfile]
+    # The built in profiles, then the ones saved here.
 
 class HeadendStatus(TypedDict, total=False):
     """`headend.status`: whether this station runs in headend mode."""
@@ -3060,6 +3198,25 @@ class PreviewSocket(TypedDict, total=False):
     transport: str
     # What is on the far end, so a client knows what to expect before it connects.
 
+class ProfileChange(TypedDict, total=False):
+    """`headend.profile.save` and `headend.profile.remove`."""
+
+    channels: List[str]
+    # The channels that take it, whose shows follow the change.
+    id: str
+
+class ProfileRemoveRequest(TypedDict, total=False):
+    """`headend.profile.remove`."""
+
+    id: str
+    move_to: Optional[str]
+    # The profile the channels that take this one move to. Left out, a profile some channel takes is not removed.
+
+class ProfileSaveRequest(TypedDict, total=False):
+    """`headend.profile.save`."""
+
+    profile: TranscodeProfile
+
 class ProgramState(TypedDict, total=False):
     """What `program.get` answers with, and what `program.take` returns so that no follow up read is needed."""
 
@@ -3278,6 +3435,60 @@ class SaveRequest(TypedDict, total=False):
     # The new preset's name. A slug: lower case letters, digits and hyphens.
     out: Optional[str]
     # Where to write it. Defaults to `~/.godwinmix/presets/<name>`.
+
+class ScanRequest(TypedDict, total=False):
+    """`headend.scan`."""
+
+    interface: Optional[str]
+    # The card to join a multicast group on.
+    uri: str
+    # The feed: `udp://@239.0.0.1:5000`, `rtp://@239.0.0.1:5000`, a unicast `udp://0.0.0.0:5000`, or any other MPEG-TS input a channel takes.
+    wait_ms: Optional[int]
+    # The longest to listen, in milliseconds, 2000 to 20000. Left out: 8000.
+
+class ScanResult(TypedDict, total=False):
+    """`headend.scan`'s answer."""
+
+    error: Optional[str]
+    # Set when nothing was read: what the input said, and what to check.
+    listened_ms: int
+    # How long it listened.
+    programs: List[ScannedProgram]
+    uri: str
+
+class ScannedProgram(TypedDict, total=False):
+    """One program of the multiplex."""
+
+    channel: Optional[str]
+    # The channel that already takes this program from this feed.
+    kbps: Optional[int]
+    name: str
+    # From the SDT, when the feed sends one.
+    number: int
+    provider: str
+    scrambled: bool
+    # Scrambled packets seen: a program whose key is missing here.
+    streams: List[str]
+    # What the PMT lists, in its order: `h264`, `aac`, `teletext`.
+    tracks: List[ScannedTrack]
+    # The video and sound tracks with what their frames said in the time listened. Empty when the program sent no frame in that time.
+
+class ScannedTrack(TypedDict, total=False):
+    """One elementary stream of a program, as its PMT names it and its frames show it."""
+
+    channels: Optional[int]
+    codec: str
+    # `h264`, `mpeg2`, `aac`, `ac3`.
+    fps: Optional[float]
+    height: Optional[int]
+    interlaced: bool
+    # The picture is sent as fields (1080i, 480i).
+    kind: str
+    # `video` or `audio`.
+    lang: Optional[str]
+    # ISO 639 code from the PMT, `eng`.
+    pid: Optional[int]
+    width: Optional[int]
 
 class SceneListing(TypedDict, total=False):
     """`scene.list`."""
@@ -4187,6 +4398,18 @@ class ToolCallRequest(TypedDict, total=False):
     source: Optional[str]
     # A source id, for a tool of a source plugin. A source plugin runs one process per source, and this says which one answers: `skip` on the playlist called `lobby`, not on every playlist.
 
+class TranscodeProfile(TypedDict, total=False):
+    """One conversion. `video` and `audio` are a rendition's wants: left out, that half is passed through as it comes, so a profile with neither is a pass through."""
+
+    audio: Union[AudioWant, None]
+    builtin: bool
+    # True for a built in profile, which cannot be changed or removed. Set by the station; ignored when sent.
+    id: str
+    # A slug. The built in ones are listed by `headend.channel.list`.
+    name: str
+    # What the screen calls it.
+    video: Union[VideoWant, None]
+
 class Transform(TypedDict, total=False):
     """Where an item sits and how it is sized."""
 
@@ -4317,6 +4540,8 @@ class VideoWant(TypedDict, total=False):
     codec: Union[VideoCodec, None]
     deinterlace: Union[Deinterlace, None]
     # Off when left out: an interlaced picture is scaled as it comes.
+    encoder: Union[EncoderPick, None]
+    # Only a GPU encoder, or only one on the CPU. Left out, the planner takes a GPU encoder first and the CPU when the GPU is full or has none of this codec.
     fit: Union[Fit, None]
     # How a picture of another shape goes into the size asked for. Pad when left out, in black, which is what scaling has always done.
     fps: Union[Fps, None]
@@ -4539,6 +4764,9 @@ DestinationMode = Literal['copy', 'transcode']
 # Where a destination has got to.
 DestinationState = Literal['off', 'waiting', 'connecting', 'live', 'reconnecting', 'failed']
 
+# Where a rendition's picture is encoded, when it must be one or the other.
+EncoderPick = Literal['gpu', 'cpu']
+
 # How the body is read. `auto` decides from the content type and the first byte; `sse` reads an `http(s)` address as a Server-Sent Events stream.
 FeedFormat = Union[Literal['auto', 'json'], Literal['rss'], Literal['csv'], Literal['text'], Literal['sse']]
 
@@ -4751,7 +4979,17 @@ METHODS = (
     {"name": "governor.calibrate", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/governor/calibrate"), "summary": "Measure this machine's encoders again, in the background, a few seconds of every core. Refused while anything is on air unless `confirm` is true."},
     {"name": "governor.status", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/governor/status"), "summary": 'The resource governor: when this machine was measured, what is in use and free on the CPU and each GPU encoder, and what was shed to keep the programme whole.'},
     {"name": "gpu.status", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/gpu/status"), "summary": 'Every NVIDIA GPU on this machine: encoder, decoder and 3D use, video memory, encoder sessions, temperature, power and clocks, now and over the last two minutes. Read once a second from NVML or nvidia-smi while a client keeps asking, and not at all otherwise. No GPUs, and a note, on a machine without one.'},
-    {"name": "headend.import", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/headend/import"), "summary": "Make a Flussonic config into shows without compositing, one per stream, each with its input, one HLS output and the transcoder line as its rendition. Takes the config's text or a path on the station's machine. A dry run, the default, answers the report (every stream, every line not carried, what the shows would cost) and makes nothing."},
+    {"name": "headend.channel.add", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/headend/channel/add"), "summary": "Add channels: each a direct show with its input (UDP or RTP multicast or unicast MPEG-TS with a program, SRT, RTMP, RTSP, HLS or a file, and a backup), a profile (copy, a built in or saved one, or custom), its HLS output and any pushes. Checked and priced by show.add_many's dry run first; with dry_run nothing is made. Kept by the station across restarts."},
+    {"name": "headend.channel.bulk", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/headend/channel/bulk"), "summary": 'The same change to many channels at once: a profile (or custom settings), enabled, or the network card every multicast input joins on.'},
+    {"name": "headend.channel.follow", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/headend/channel/follow"), "summary": 'Give channels taken over from the followed Flussonic config back to it: the station stops keeping them and runs them as the file says.'},
+    {"name": "headend.channel.list", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/headend/channel/list"), "summary": 'Every headend channel: the ones the station keeps (set up here, or imported), then the streams of the Flussonic config it follows, each with its input, profile, HLS settings, outputs and the show it runs as. Also every transcode profile, built in and saved, and the video encoders this machine has.'},
+    {"name": "headend.channel.remove", "scope": "admin", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/headend/channel/remove"), "summary": 'Remove channels and their shows. A stream of the followed Flussonic config is hidden from it, not deleted from the file; headend.channel.follow brings it back.'},
+    {"name": "headend.channel.update", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/headend/channel/update"), "summary": "Replace one channel whole. Only a change of input, profile or outputs makes its show again; a title or enabled moves in place. A stream of the followed Flussonic config is taken over: the station keeps it from then on and the file's later edits to it are not applied until headend.channel.follow."},
+    {"name": "headend.export", "scope": "read", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/headend/export"), "summary": "The channels the station keeps, written in Flussonic's config language, with a note for each setting Flussonic has no word for."},
+    {"name": "headend.import", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/headend/import"), "summary": "Make a Flussonic config into headend channels the station keeps, one per stream, each a show without compositing with its input, one HLS output and the transcoder line as its rendition, editable afterwards like any channel set up here. Takes the config's text or a path on the station's machine. A dry run, the default, answers the report (every stream, every line not carried, what the shows would cost) and makes nothing."},
+    {"name": "headend.profile.remove", "scope": "admin", "mutating": True, "destructive": True, "rest": ("POST", "/api/v1/headend/profile/remove"), "summary": 'Remove a saved profile. One some channel takes is refused unless move_to names the profile those channels take instead.'},
+    {"name": "headend.profile.save", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/headend/profile/save"), "summary": 'Save a transcode profile (codec, size and fit, bitrate, keyframes, deinterlace, the encoder on the GPU or the CPU, sound codec, bitrate and tracks), new or changed. Every channel that takes it follows the change.'},
+    {"name": "headend.scan", "scope": "admin", "mutating": False, "destructive": False, "rest": ("POST", "/api/v1/headend/scan"), "summary": "Listen to a multiplex (a multicast group and port, and the card) for a few seconds and list its programs: number, name and provider from the SDT, the PMT's streams, and the picture size, frame rate, sound codecs, channels and languages each one sent. Then add the ones wanted with headend.channel.add."},
     {"name": "headend.status", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/headend/status"), "summary": "Whether this station follows a Flussonic config, which file, where Flussonic's URLs and API answer, and how many of its streams run as shows."},
     {"name": "log.gst", "scope": "admin", "mutating": True, "destructive": False, "rest": ("POST", "/api/v1/log/gst"), "summary": "Raise GStreamer's own debug categories for a while, then let them fall back on their own."},
     {"name": "log.levels", "scope": "read", "mutating": False, "destructive": False, "rest": ("GET", "/api/v1/log/levels"), "summary": 'Every log level override in force, and the GStreamer categories still raised.'},
@@ -6077,6 +6315,84 @@ class GeneratedMethods:
             params["since_ms"] = since_ms
         return await self._call("gpu.status", params)
 
+    async def headend_channel_add(
+        self,
+        channels: List[HeadendChannel],
+        *,
+        dry_run: Optional[bool] = None,
+    ) -> ChannelChange:
+        """Add channels: each a direct show with its input (UDP or RTP multicast or unicast MPEG-TS with a program, SRT, RTMP, RTSP, HLS or a file, and a backup), a profile (copy, a built in or saved one, or custom), its HLS output and any pushes. Checked and priced by show.add_many's dry run first; with dry_run nothing is made. Kept by the station across restarts."""
+        params: Dict[str, Any] = {}
+        params["channels"] = channels
+        if dry_run is not None:
+            params["dry_run"] = dry_run
+        return await self._call("headend.channel.add", params)
+
+    async def headend_channel_bulk(
+        self,
+        names: List[str],
+        *,
+        custom: Optional[Union[TranscodeProfile, None]] = None,
+        enabled: Optional[bool] = None,
+        interface: Optional[str] = None,
+        profile: Optional[str] = None,
+    ) -> ChannelChange:
+        """The same change to many channels at once: a profile (or custom settings), enabled, or the network card every multicast input joins on."""
+        params: Dict[str, Any] = {}
+        params["names"] = names
+        if custom is not None:
+            params["custom"] = custom
+        if enabled is not None:
+            params["enabled"] = enabled
+        if interface is not None:
+            params["interface"] = interface
+        if profile is not None:
+            params["profile"] = profile
+        return await self._call("headend.channel.bulk", params)
+
+    async def headend_channel_follow(
+        self,
+        names: List[str],
+    ) -> ChannelChange:
+        """Give channels taken over from the followed Flussonic config back to it: the station stops keeping them and runs them as the file says."""
+        params: Dict[str, Any] = {}
+        params["names"] = names
+        return await self._call("headend.channel.follow", params)
+
+    async def headend_channel_list(
+        self,
+    ) -> HeadendSetup:
+        """Every headend channel: the ones the station keeps (set up here, or imported), then the streams of the Flussonic config it follows, each with its input, profile, HLS settings, outputs and the show it runs as. Also every transcode profile, built in and saved, and the video encoders this machine has."""
+        params: Dict[str, Any] = {}
+        return await self._call("headend.channel.list", params)
+
+    async def headend_channel_remove(
+        self,
+        names: List[str],
+    ) -> ChannelChange:
+        """Remove channels and their shows. A stream of the followed Flussonic config is hidden from it, not deleted from the file; headend.channel.follow brings it back."""
+        params: Dict[str, Any] = {}
+        params["names"] = names
+        return await self._call("headend.channel.remove", params)
+
+    async def headend_channel_update(
+        self,
+        channel: HeadendChannel,
+        name: str,
+    ) -> ChannelChange:
+        """Replace one channel whole. Only a change of input, profile or outputs makes its show again; a title or enabled moves in place. A stream of the followed Flussonic config is taken over: the station keeps it from then on and the file's later edits to it are not applied until headend.channel.follow."""
+        params: Dict[str, Any] = {}
+        params["channel"] = channel
+        params["name"] = name
+        return await self._call("headend.channel.update", params)
+
+    async def headend_export(
+        self,
+    ) -> HeadendExport:
+        """The channels the station keeps, written in Flussonic's config language, with a note for each setting Flussonic has no word for."""
+        params: Dict[str, Any] = {}
+        return await self._call("headend.export", params)
+
     async def headend_import(
         self,
         *,
@@ -6084,7 +6400,7 @@ class GeneratedMethods:
         path: Optional[str] = None,
         text: Optional[str] = None,
     ) -> HeadendImportReport:
-        """Make a Flussonic config into shows without compositing, one per stream, each with its input, one HLS output and the transcoder line as its rendition. Takes the config's text or a path on the station's machine. A dry run, the default, answers the report (every stream, every line not carried, what the shows would cost) and makes nothing."""
+        """Make a Flussonic config into headend channels the station keeps, one per stream, each a show without compositing with its input, one HLS output and the transcoder line as its rendition, editable afterwards like any channel set up here. Takes the config's text or a path on the station's machine. A dry run, the default, answers the report (every stream, every line not carried, what the shows would cost) and makes nothing."""
         params: Dict[str, Any] = {}
         if dry_run is not None:
             params["dry_run"] = dry_run
@@ -6093,6 +6409,44 @@ class GeneratedMethods:
         if text is not None:
             params["text"] = text
         return await self._call("headend.import", params)
+
+    async def headend_profile_remove(
+        self,
+        id: str,
+        *,
+        move_to: Optional[str] = None,
+    ) -> ProfileChange:
+        """Remove a saved profile. One some channel takes is refused unless move_to names the profile those channels take instead."""
+        params: Dict[str, Any] = {}
+        params["id"] = id
+        if move_to is not None:
+            params["move_to"] = move_to
+        return await self._call("headend.profile.remove", params)
+
+    async def headend_profile_save(
+        self,
+        profile: TranscodeProfile,
+    ) -> ProfileChange:
+        """Save a transcode profile (codec, size and fit, bitrate, keyframes, deinterlace, the encoder on the GPU or the CPU, sound codec, bitrate and tracks), new or changed. Every channel that takes it follows the change."""
+        params: Dict[str, Any] = {}
+        params["profile"] = profile
+        return await self._call("headend.profile.save", params)
+
+    async def headend_scan(
+        self,
+        uri: str,
+        *,
+        interface: Optional[str] = None,
+        wait_ms: Optional[int] = None,
+    ) -> ScanResult:
+        """Listen to a multiplex (a multicast group and port, and the card) for a few seconds and list its programs: number, name and provider from the SDT, the PMT's streams, and the picture size, frame rate, sound codecs, channels and languages each one sent. Then add the ones wanted with headend.channel.add."""
+        params: Dict[str, Any] = {}
+        params["uri"] = uri
+        if interface is not None:
+            params["interface"] = interface
+        if wait_ms is not None:
+            params["wait_ms"] = wait_ms
+        return await self._call("headend.scan", params)
 
     async def headend_status(
         self,

@@ -104,7 +104,17 @@ Keys accepted on every method, handled before a method runs.
 | `governor.calibrate` | `POST /api/v1/governor/calibrate` | admin |  | 1 | Measure this machine's encoders again, in the background, a few seconds of every core. Refused while anything is on air unless `confirm` is true. |
 | `governor.status` | `GET /api/v1/governor/status` | read |  | 1 | The resource governor: when this machine was measured, what is in use and free on the CPU and each GPU encoder, and what was shed to keep the programme whole. |
 | `gpu.status` | `GET /api/v1/gpu/status` | read |  | 1 | Every NVIDIA GPU on this machine: encoder, decoder and 3D use, video memory, encoder sessions, temperature, power and clocks, now and over the last two minutes. Read once a second from NVML or nvidia-smi while a client keeps asking, and not at all otherwise. No GPUs, and a note, on a machine without one. |
-| `headend.import` | `POST /api/v1/headend/import` | admin |  | 1 | Make a Flussonic config into shows without compositing, one per stream, each with its input, one HLS output and the transcoder line as its rendition. Takes the config's text or a path on the station's machine. A dry run, the default, answers the report (every stream, every line not carried, what the shows would cost) and makes nothing. |
+| `headend.channel.add` | `POST /api/v1/headend/channel/add` | admin |  | 1 | Add channels: each a direct show with its input (UDP or RTP multicast or unicast MPEG-TS with a program, SRT, RTMP, RTSP, HLS or a file, and a backup), a profile (copy, a built in or saved one, or custom), its HLS output and any pushes. Checked and priced by show.add_many's dry run first; with dry_run nothing is made. Kept by the station across restarts. |
+| `headend.channel.bulk` | `POST /api/v1/headend/channel/bulk` | admin |  | 1 | The same change to many channels at once: a profile (or custom settings), enabled, or the network card every multicast input joins on. |
+| `headend.channel.follow` | `POST /api/v1/headend/channel/follow` | admin |  | 1 | Give channels taken over from the followed Flussonic config back to it: the station stops keeping them and runs them as the file says. |
+| `headend.channel.list` | `GET /api/v1/headend/channel/list` | read |  | 1 | Every headend channel: the ones the station keeps (set up here, or imported), then the streams of the Flussonic config it follows, each with its input, profile, HLS settings, outputs and the show it runs as. Also every transcode profile, built in and saved, and the video encoders this machine has. |
+| `headend.channel.remove` | `POST /api/v1/headend/channel/remove` | admin | yes | 1 | Remove channels and their shows. A stream of the followed Flussonic config is hidden from it, not deleted from the file; headend.channel.follow brings it back. |
+| `headend.channel.update` | `POST /api/v1/headend/channel/update` | admin |  | 1 | Replace one channel whole. Only a change of input, profile or outputs makes its show again; a title or enabled moves in place. A stream of the followed Flussonic config is taken over: the station keeps it from then on and the file's later edits to it are not applied until headend.channel.follow. |
+| `headend.export` | `POST /api/v1/headend/export` | read |  | 1 | The channels the station keeps, written in Flussonic's config language, with a note for each setting Flussonic has no word for. |
+| `headend.import` | `POST /api/v1/headend/import` | admin |  | 1 | Make a Flussonic config into headend channels the station keeps, one per stream, each a show without compositing with its input, one HLS output and the transcoder line as its rendition, editable afterwards like any channel set up here. Takes the config's text or a path on the station's machine. A dry run, the default, answers the report (every stream, every line not carried, what the shows would cost) and makes nothing. |
+| `headend.profile.remove` | `POST /api/v1/headend/profile/remove` | admin | yes | 1 | Remove a saved profile. One some channel takes is refused unless move_to names the profile those channels take instead. |
+| `headend.profile.save` | `POST /api/v1/headend/profile/save` | admin |  | 1 | Save a transcode profile (codec, size and fit, bitrate, keyframes, deinterlace, the encoder on the GPU or the CPU, sound codec, bitrate and tracks), new or changed. Every channel that takes it follows the change. |
+| `headend.scan` | `POST /api/v1/headend/scan` | admin |  | 1 | Listen to a multiplex (a multicast group and port, and the card) for a few seconds and list its programs: number, name and provider from the SDT, the PMT's streams, and the picture size, frame rate, sound codecs, channels and languages each one sent. Then add the ones wanted with headend.channel.add. |
 | `headend.status` | `GET /api/v1/headend/status` | read |  | 1 | Whether this station follows a Flussonic config, which file, where Flussonic's URLs and API answer, and how many of its streams run as shows. |
 | `log.gst` | `POST /api/v1/log/gst` | admin |  | 1 | Raise GStreamer's own debug categories for a while, then let them fall back on their own. |
 | `log.levels` | `GET /api/v1/log/levels` | read |  | 1 | Every log level override in force, and the GStreamer categories still raised. |
@@ -1455,9 +1465,132 @@ MCP tool `gpu_status` in the `headend` profile: readOnlyHint true, destructiveHi
 }
 ```
 
+#### `headend.channel.add`
+
+Add channels: each a direct show with its input (UDP or RTP multicast or unicast MPEG-TS with a program, SRT, RTMP, RTSP, HLS or a file, and a backup), a profile (copy, a built in or saved one, or custom), its HLS output and any pushes. Checked and priced by show.add_many's dry run first; with dry_run nothing is made. Kept by the station across restarts.
+
+MCP tool `add_headend_channels` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint false.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ChannelAddRequest2"
+  },
+  "result": {
+    "$ref": "#/$defs/ChannelChange"
+  }
+}
+```
+
+#### `headend.channel.bulk`
+
+The same change to many channels at once: a profile (or custom settings), enabled, or the network card every multicast input joins on.
+
+MCP tool `bulk_edit_headend_channels` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ChannelBulkRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/ChannelChange"
+  }
+}
+```
+
+#### `headend.channel.follow`
+
+Give channels taken over from the followed Flussonic config back to it: the station stops keeping them and runs them as the file says.
+
+MCP tool `follow_flussonic_again` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ChannelNames"
+  },
+  "result": {
+    "$ref": "#/$defs/ChannelChange"
+  }
+}
+```
+
+#### `headend.channel.list`
+
+Every headend channel: the ones the station keeps (set up here, or imported), then the streams of the Flussonic config it follows, each with its input, profile, HLS settings, outputs and the show it runs as. Also every transcode profile, built in and saved, and the video encoders this machine has.
+
+MCP tool `headend_channels` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "$ref": "#/$defs/HeadendSetup"
+  }
+}
+```
+
+#### `headend.channel.remove`
+
+Remove channels and their shows. A stream of the followed Flussonic config is hidden from it, not deleted from the file; headend.channel.follow brings it back.
+
+MCP tool `remove_headend_channels` in the `search` profile: readOnlyHint false, destructiveHint true, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ChannelNames"
+  },
+  "result": {
+    "$ref": "#/$defs/ChannelChange"
+  }
+}
+```
+
+#### `headend.channel.update`
+
+Replace one channel whole. Only a change of input, profile or outputs makes its show again; a title or enabled moves in place. A stream of the followed Flussonic config is taken over: the station keeps it from then on and the file's later edits to it are not applied until headend.channel.follow.
+
+MCP tool `update_headend_channel` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ChannelUpdateRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/ChannelChange"
+  }
+}
+```
+
+#### `headend.export`
+
+The channels the station keeps, written in Flussonic's config language, with a note for each setting Flussonic has no word for.
+
+MCP tool `export_flussonic` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+  },
+  "result": {
+    "$ref": "#/$defs/HeadendExport"
+  }
+}
+```
+
 #### `headend.import`
 
-Make a Flussonic config into shows without compositing, one per stream, each with its input, one HLS output and the transcoder line as its rendition. Takes the config's text or a path on the station's machine. A dry run, the default, answers the report (every stream, every line not carried, what the shows would cost) and makes nothing.
+Make a Flussonic config into headend channels the station keeps, one per stream, each a show without compositing with its input, one HLS output and the transcoder line as its rendition, editable afterwards like any channel set up here. Takes the config's text or a path on the station's machine. A dry run, the default, answers the report (every stream, every line not carried, what the shows would cost) and makes nothing.
 
 MCP tool `import_flussonic` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint false.
 
@@ -1468,6 +1601,57 @@ MCP tool `import_flussonic` in the `search` profile: readOnlyHint false, destruc
   },
   "result": {
     "$ref": "#/$defs/HeadendImportReport"
+  }
+}
+```
+
+#### `headend.profile.remove`
+
+Remove a saved profile. One some channel takes is refused unless move_to names the profile those channels take instead.
+
+MCP tool `remove_transcode_profile` in the `search` profile: readOnlyHint false, destructiveHint true, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ProfileRemoveRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/ProfileChange"
+  }
+}
+```
+
+#### `headend.profile.save`
+
+Save a transcode profile (codec, size and fit, bitrate, keyframes, deinterlace, the encoder on the GPU or the CPU, sound codec, bitrate and tracks), new or changed. Every channel that takes it follows the change.
+
+MCP tool `save_transcode_profile` in the `search` profile: readOnlyHint false, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ProfileSaveRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/ProfileChange"
+  }
+}
+```
+
+#### `headend.scan`
+
+Listen to a multiplex (a multicast group and port, and the card) for a few seconds and list its programs: number, name and provider from the SDT, the PMT's streams, and the picture size, frame rate, sound codecs, channels and languages each one sent. Then add the ones wanted with headend.channel.add.
+
+MCP tool `scan_feed` in the `search` profile: readOnlyHint true, destructiveHint false, idempotentHint true.
+
+```json
+{
+  "params": {
+    "$ref": "#/$defs/ScanRequest"
+  },
+  "result": {
+    "$ref": "#/$defs/ScanResult"
   }
 }
 ```
