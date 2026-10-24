@@ -62,6 +62,7 @@ import {
   SheetPainter,
   PicturePainter,
 } from "../client/frames.js";
+import { cellOn } from "../client/painters.js";
 import { Store, programLabel } from "../client/store.js";
 import { SchemaForm } from "../client/schema-form.js";
 import { Client } from "../client/index.js";
@@ -382,6 +383,14 @@ test("control sections collapse without destroying their panels", () => {
 });
 
 // ---------------------------------------------------------------- frames
+
+test("a cell is cut at the sheet's own size when the sheet and its layout differ", () => {
+  const layout = { width: 1280, height: 720, cells: [] };
+  const cell = { index: 0, x: 0, y: 0, w: 640, h: 360 };
+  eq(cellOn({ width: 1280, height: 720 }, layout, cell), [0, 0, 640, 360], "the same size is cut as it says");
+  eq(cellOn({ width: 640, height: 360 }, layout, { ...cell, x: 640, y: 360 }), [320, 180, 320, 180], "a smaller sheet, the same cell on it");
+  eq(cellOn({ width: 640, height: 360 }, { cells: [] }, cell), [0, 0, 640, 360], "a layout with no size is taken as it is");
+});
 
 test("a frame header is sixteen little endian bytes then JPEG", () => {
   const buf = new ArrayBuffer(HEADER_BYTES + 3);

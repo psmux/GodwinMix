@@ -16,6 +16,7 @@
 // Its own module, so panel.js stays about the programme monitor.
 
 import { el } from "../../shell/dom.js";
+import { cellOn } from "../../client/painters.js";
 import { settings, setSetting } from "../../shell/settings.js";
 
 export const RATE_CHOICES = [0, 30, 25, 15, 10, 5];
@@ -106,5 +107,5 @@ function drawCell(canvas, bitmap, layout, index) {
   const cell = (layout.cells || []).find((c) => c.index === index);
   if (!cell || !canvas.width || !canvas.height) return;
   const ctx = canvas.getContext("2d", { alpha: false });
-  if (ctx) ctx.drawImage(bitmap, cell.x, cell.y, cell.w, cell.h, 0, 0, canvas.width, canvas.height);
+  if (ctx) ctx.drawImage(bitmap, ...cellOn(bitmap, layout, cell), 0, 0, canvas.width, canvas.height);
 }
