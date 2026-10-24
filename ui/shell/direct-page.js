@@ -4,9 +4,10 @@
 // direct show the tab header said "black" and "No destinations", and the
 // Outputs panel "Nothing is being sent anywhere", while its HLS output was
 // live. Here the show's own outputs are read from show.list and show.stats
-// and handed to the header and the Outputs panel as `window.gmxDirect`,
-// with a `gmx-direct` event each time they are read again. Fetched only on
-// a station's page, and it reads nothing more unless the show is direct.
+// and put in the page's state as `direct`, so the header and the Outputs
+// panel draw them on the render they already have, with nothing more in
+// the page every volunteer opens. Fetched only on a station's page, and it
+// reads nothing more unless the show is direct.
 
 import { el } from "./dom.js";
 
@@ -57,8 +58,7 @@ export async function followDirect(client) {
   let stats = null;
   let reads = 0;
   const publish = () => {
-    window.gmxDirect = { show, stats, outputs: directOutputs(show, stats), tally: directTally(show, stats) };
-    window.dispatchEvent(new CustomEvent("gmx-direct"));
+    client.store.patch({ direct: { show, stats, outputs: directOutputs(show, stats), tally: directTally(show, stats) } });
   };
   const readList = async () => {
     const got = await client.call("show.list", {}).catch(() => null);
@@ -79,8 +79,22 @@ export async function followDirect(client) {
   return () => {
     clearInterval(timer);
     off();
-    window.gmxDirect = null;
+    client.store.patch({ direct: null });
   };
+}
+
+/**
+ * The Outputs panel on a direct show, which has no output in its status:
+ * the show's own, drawn again only when what they say changes, for the
+ * reason the panel's `render` gives.
+ */
+export function intoOutputs(panel, d) {
+  const said = JSON.stringify([d.show.name, d.outputs]);
+  panel.count.textContent = d.outputs.length ? String(d.outputs.length) : "";
+  if (said === panel.directShape || panel.client.state.direct !== d) return;
+  panel.directShape = said;
+  panel.rows.clear();
+  panel.list.replaceChildren(directSummary(panel.client, d));
 }
 
 /** The Outputs panel's body on a direct show: each output, and the detail. */

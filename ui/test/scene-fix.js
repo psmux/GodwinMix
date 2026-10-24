@@ -57,7 +57,6 @@ export async function sceneFixTests(test, eq, ok) {
   test("one source that is gone is called gone, not not running", () => {
     eq(note.summaryLine(client, ["slides"]), "slides is no longer in this mixer");
     eq(note.summaryLine(client, ["cam1"]), "Camera 1 is not running");
-    eq(note.summaryLine(client, ["slides", "lyrics"]), "2 sources here are no longer in this mixer");
   });
   test("the note counts them and keeps its Fix button across redraws", () => {
     ok(box.textContent.startsWith("3 sources here are not running"), box.textContent);

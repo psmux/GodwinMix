@@ -128,12 +128,8 @@ class OutputsPanel extends HTMLElement {
       ]),
       this.list
     );
-    // A direct show's outputs, from `shell/direct-page.js`.
-    const direct = () => this.render(this.client.state);
-    window.addEventListener("gmx-direct", direct);
     this.offs = [
       this.client.onRender((s) => this.render(s)),
-      () => window.removeEventListener("gmx-direct", direct),
       registerAll([
         { id: "output.add-destination", title: "Add a destination", group: "Outputs", run: () => this.add() },
       ]),
@@ -223,8 +219,8 @@ class OutputsPanel extends HTMLElement {
     this.follow(outputs.length > 0);
     if (outputs.length ? !this.unplan : this.unplan) views().then((m) => m.followPlan(this, outputs.length > 0));
     this.rows = this.rows || new Map();
-    const d = !outputs.length && window.gmxDirect;
-    if (d) return this.renderDirect(d);
+    const d = !outputs.length && s.direct;
+    if (d) return import("../../shell/direct-page.js").then((m) => m.intoOutputs(this, d));
     this.directShape = null;
     if (!outputs.length) {
       if (this.rows.size || !this.list.firstChild) {
@@ -262,24 +258,6 @@ class OutputsPanel extends HTMLElement {
       if (row.node !== before) this.list.insertBefore(row.node, before);
       before = row.node.nextSibling;
     }
-  }
-
-  /**
-   * A direct show: no mixer, so no output of the status. Its own outputs,
-   * read from the station, and the way to their detail. Drawn again only
-   * when what it says changes, for the reason `render` gives.
-   */
-  renderDirect(d) {
-    const said = JSON.stringify([d.show.name, d.outputs]);
-    this.count.textContent = d.outputs.length ? String(d.outputs.length) : "";
-    if (said === this.directShape) return;
-    this.directShape = said;
-    this.rows.clear();
-    import("../../shell/direct-page.js").then((m) => {
-      if (this.directShape !== said) return;
-      clear(this.list);
-      this.list.appendChild(m.directSummary(this.client, d));
-    });
   }
 
   /** One row and the function that writes a newer status into it. */
