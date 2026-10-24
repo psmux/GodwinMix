@@ -6,6 +6,7 @@
 mod channel_custom;
 mod channel_feed;
 mod channel_off;
+mod close;
 mod direct;
 mod direct_live;
 mod direct_restart;

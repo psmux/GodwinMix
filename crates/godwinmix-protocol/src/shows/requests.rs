@@ -148,6 +148,18 @@ fn present<'de, D: Deserializer<'de>>(d: D) -> Result<Option<Option<RenditionCho
     Option::<RenditionChoice>::deserialize(d).map(Some)
 }
 
+/// `show.close`.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+pub struct ShowCloseRequest {
+    pub id: String,
+    /// true: it leaves the tab row and carries on, on air and sending, the
+    /// way the desktop app keeps running in the background. Left out or
+    /// false: it stops as well, and stays stopped across a restart of the
+    /// station until `show.open`.
+    #[serde(default)]
+    pub keep_running: bool,
+}
+
 /// `show.output.remove`.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct ShowOutputRemoveRequest {

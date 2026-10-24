@@ -231,7 +231,7 @@ fn the_table_matches_the_scopes_in_the_protocol_document() {
     // Shows: seeing them is a read, changing which exist is the machine's.
     assert_eq!(scope("show.list"), Scope::Read);
     assert_eq!(scope("show.stats"), Scope::Read);
-    for name in ["show.add", "show.rename", "show.remove", "show.start", "show.stop", "show.set", "show.add_many", "show.remove_many"] {
+    for name in ["show.add", "show.rename", "show.remove", "show.start", "show.stop", "show.close", "show.open", "show.set", "show.add_many", "show.remove_many"] {
         assert_eq!(scope(name), Scope::Admin, "{name}");
     }
     // Device tokens hand out access, so only an admin makes, lists or takes one back.
