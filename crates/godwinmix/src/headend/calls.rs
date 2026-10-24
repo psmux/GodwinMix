@@ -41,13 +41,15 @@ pub fn status(st: &Station) -> HeadendStatus {
         let note = "This headend follows no Flussonic config: its channels are set up on the headend screen or with headend.channel.add, and Flussonic's URLs and API answer on the listeners.";
         return HeadendStatus { listeners, log, shows: h.shows().len(), note: note.into(), ..Default::default() };
     };
+    let streams = h.doc.lock().config.streams.len();
+    let shows = h.keep.running.lock().len();
     HeadendStatus {
         following: true,
         file: Some(file.display().to_string()),
         listeners,
         log,
-        streams: h.doc.lock().config.streams.len(),
-        shows: h.keep.running.lock().len(),
+        streams,
+        shows,
         note: "The station applies every change to this file within a second. Edit the file, or PUT \
                to Flussonic's API on the listener, to change its streams. A stream edited on the \
                headend screen is kept by the station from then on."
